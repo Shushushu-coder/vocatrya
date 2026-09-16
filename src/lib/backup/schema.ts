@@ -5,6 +5,7 @@ export const BACKUP_FORMAT_VERSION = 1;
 export const ManifestSchema = z.object({
   formatVersion: z.literal(BACKUP_FORMAT_VERSION),
   appVersion: z.string(),
+  appName: z.string().optional(),
   exportedAt: z.string(),
   sourceEmail: z.string(),
   counts: z.record(z.string(), z.number()),

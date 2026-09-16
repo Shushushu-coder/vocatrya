@@ -31,12 +31,12 @@ export function SupportDialog({
           <DialogTitle>Support</DialogTitle>
           <DialogDescription>
             <a
-              href="https://github.com/Gsync/jobsync/issues"
+              href="https://github.com/Shushushu-coder/vocatrya/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              https://github.com/Gsync/jobsync/issues
+              https://github.com/Shushushu-coder/vocatrya/issues
             </a>
           </DialogDescription>
         </DialogHeader>
@@ -58,18 +58,31 @@ export function SupportDialog({
             )}
           </div>
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Copyright</h3>
+            <h3 className="text-sm font-semibold">About & Copyright</h3>
             <p className="text-sm text-muted-foreground">
-              © {currentYear} JobSync. All rights reserved.
+              © {currentYear} Vocatrya. Derived from JobSync (© 2024–{currentYear} gsync).
             </p>
-            <a
-              href="https://jobsync.ca/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline"
-            >
-              https://jobsync.ca/
-            </a>
+            <div className="flex flex-col gap-1 text-sm">
+              <a
+                href="https://github.com/Shushushu-coder/vocatrya"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                https://github.com/Shushushu-coder/vocatrya
+              </a>
+              <span className="text-xs text-muted-foreground">
+                Upstream base:{" "}
+                <a
+                  href="https://github.com/Gsync/jobsync"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  https://github.com/Gsync/jobsync
+                </a>
+              </span>
+            </div>
           </div>
         </div>
       </DialogContent>

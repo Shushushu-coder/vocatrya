@@ -35,6 +35,7 @@ export function buildManifest(
 ): BackupManifest {
   return {
     formatVersion: BACKUP_FORMAT_VERSION,
+    appName: "Vocatrya",
     appVersion: pkg.version,
     exportedAt: new Date().toISOString(),
     sourceEmail,
@@ -94,7 +95,7 @@ export async function readManifest(zip: JSZip): Promise<BackupManifest> {
   if (!parsed.success) {
     if (found !== undefined && found !== BACKUP_FORMAT_VERSION) {
       throw new BackupError(
-        `This backup was made by a different version of JobSync. Expected format version ${BACKUP_FORMAT_VERSION}, found ${String(found)}.`,
+        `This backup was made by a different version of Vocatrya. Expected format version ${BACKUP_FORMAT_VERSION}, found ${String(found)}.`,
       );
     }
     throw new BackupError("manifest.json is missing required fields.");

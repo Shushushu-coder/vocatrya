@@ -1,24 +1,26 @@
-# JobSync
+# Vocatrya
 
-<p align="center"><strong>The self-hosted job search assistant with AI-powered resume review, job matching, and automated discovery</strong></p>
+<p align="center"><strong>The self-hosted career companion with AI-powered resume review, job matching, and automated discovery</strong></p>
 
 <p align="center">
-  <a href="https://demo.jobsync.ca">Live Demo</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="#ai-assistant-in-app-chat">AI Assistant</a> ·
   <a href="#mcp-server-ai-agent-integration">MCP Setup</a> ·
-  <a href="https://github.com/Gsync/jobsync/wiki">Help</a>
+  <a href="https://github.com/Shushushu-coder/vocatrya/wiki">Help</a>
 </p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Gsync/jobsync" alt="License"></a>
-  <a href="https://github.com/Gsync/jobsync/stargazers"><img src="https://img.shields.io/github/stars/Gsync/jobsync?style=social" alt="GitHub Stars"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Shushushu-coder/vocatrya" alt="License"></a>
+  <a href="https://github.com/Shushushu-coder/vocatrya/stargazers"><img src="https://img.shields.io/github/stars/Shushushu-coder/vocatrya?style=social" alt="GitHub Stars"></a>
   <img src="https://img.shields.io/badge/self--hosted-Docker-blue" alt="Self-hosted with Docker">
 </p>
 
-JobSync is a free, open-source companion for your job search: track applications, manage and export resumes, and ask a built-in AI assistant to review a resume, match it against a job, write a cover letter, or add a job from a posting you paste in — all self-hosted on your own server, so your data stays under your control. AI features can run entirely locally via Ollama or through your choice of cloud provider, and JobSync's built-in MCP server lets AI agents like Claude Desktop add jobs and interview questions straight from your chat.
+> **Upstream Attribution:**
+> Vocatrya is an open-source project derived from [JobSync](https://github.com/Gsync/jobsync) (created by [Gsync](https://github.com/Gsync) under the MIT License). The original copyright notice and license are preserved in [LICENSE](./LICENSE).
 
-![App Snapshot](./screenshots/jobsync-dashboard.png?raw=true "Jobsync dashboard")
+Vocatrya is a free, open-source companion for your job search: track applications, manage and export resumes, and ask a built-in AI assistant to review a resume, match it against a job, write a cover letter, or add a job from a posting you paste in — all self-hosted on your own server, so your data stays under your control. AI features can run entirely locally via Ollama or through your choice of cloud provider, and Vocatrya's built-in MCP server lets AI agents like Claude Desktop add jobs and interview questions straight from your chat.
+
+![App Snapshot](./screenshots/jobsync-dashboard.png?raw=true "Vocatrya dashboard")
 
 ## Key Features
 - **Application Tracker:** Keep a detailed record of all your job applications, including company details, job titles, application dates, and current status.
@@ -39,7 +41,7 @@ JobSync is a free, open-source companion for your job search: track applications
 
 - **Question Bank:** Build a library of interview questions with your answers, tagged by skill, so your preparation is in one place when the next interview comes up.
 
-- **Data Backup & Restore:** Download every job, resume, task, activity, contact and question — plus your uploaded resume files — as one zip from **Settings > Data**, and import it back on any JobSync instance. Backups never contain API keys, MCP tokens or passwords, and every import first saves a snapshot so you can undo it.
+- **Data Backup & Restore:** Download every job, resume, task, activity, contact and question — plus your uploaded resume files — as one zip from **Settings > Data**, and import it back on any Vocatrya instance. Backups never contain API keys, MCP tokens or passwords, and every import first saves a snapshot so you can undo it.
 
 - **AI Assistant:** A chat panel that stays docked beside whatever page you're on. Ask it to review a resume, score how well it matches the job you're viewing, write a tailored cover letter, or add a job straight from a posting you paste in — it asks for your confirmation before saving anything. See [Features in Detail](#ai-assistant-in-app-chat) below.
 
@@ -50,8 +52,8 @@ JobSync is a free, open-source companion for your job search: track applications
 Make sure [Docker](https://www.docker.com) is installed and running, then:
 
 ```sh
-git clone https://github.com/Gsync/jobsync.git
-cd jobsync
+git clone https://github.com/Shushushu-coder/vocatrya.git
+cd vocatrya
 docker compose up
 ```
 
@@ -70,7 +72,7 @@ Environment variables can be set in `docker-compose.yml`:
 | `TZ` | Your timezone (e.g. `America/Edmonton`). **Set this on remote servers** to avoid activity time shifts. |
 | `AUTH_SECRET` | Auto-generated if not set. To set manually: `openssl rand -base64 32` |
 | `ENCRYPTION_KEY` | Encrypts the API keys you save in Settings. **Set your own** (`openssl rand -base64 32`) before adding any keys, and never change it afterwards — a new value makes every stored API key unrecoverable. |
-| `NEXTAUTH_URL` | The address you open JobSync at. Defaults to `http://localhost:3737`; on a homelab server, use the server's IP or hostname. |
+| `NEXTAUTH_URL` | The address you open Vocatrya at. Defaults to `http://localhost:3737`; on a homelab server, use the server's IP or hostname. |
 | `MCP_ENABLED` | Set to `false` to turn off the [MCP server](#mcp-server-ai-agent-integration). Enabled by default in `docker-compose.yml`. |
 
 ### Updating
@@ -78,7 +80,7 @@ Environment variables can be set in `docker-compose.yml`:
 From the project directory, run the deploy script to pull the latest changes and rebuild:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Gsync/jobsync/main/deploy.sh | sudo bash -s
+curl -fsSL https://raw.githubusercontent.com/Shushushu-coder/vocatrya/main/deploy.sh | sudo bash -s
 ```
 
 On **Windows**, run the PowerShell equivalent from the project directory instead (`deploy.sh` needs WSL or Git Bash; `deploy.ps1` runs natively):
@@ -93,7 +95,7 @@ On **Windows**, run the PowerShell equivalent from the project directory instead
 
 ### AI Assistant (In-App Chat)
 
-All of JobSync's AI features live in one place: a chat panel that docks to the side of the app instead of taking it over, so the page you were on stays visible and usable while the assistant works.
+All of Vocatrya's AI features live in one place: a chat panel that docks to the side of the app instead of taking it over, so the page you were on stays visible and usable while the assistant works.
 
 Open it from the **AI Assistant** button in the header, or let the app open it for you — the **Review** button on a resume and the **Match with AI** and **Cover Letter** buttons on a job all start the matching request in the panel.
 
@@ -134,13 +136,13 @@ More job board sources are on the way. Discovered jobs are surfaced for review �
 
 ### MCP Server (AI Agent Integration)
 
-JobSync exposes an MCP server so AI agents (Claude Desktop, Hermes, OpenClaw, etc.) can add job applications and Question Bank entries directly, with your approval.
+Vocatrya exposes an MCP server so AI agents (Claude Desktop, Hermes, OpenClaw, etc.) can add job applications and Question Bank entries directly, with your approval.
 
 #### Use Case
 
 Browsing a job posting or reading an interview question elsewhere and don't want to break your flow to log it manually? Just ask your connected AI agent, for example:
 
-- *"Add this job to JobSync (copy/paste the complete job details or try providing a link): Senior Backend Engineer at Acme Corp, JobType, location, Job description... "*
+- *"Add this job to Vocatrya (copy/paste the complete job details or try providing a link): Senior Backend Engineer at Acme Corp, JobType, location, Job description... "*
 - *"I just got asked this in an interview — add it to my Question Bank: 'How would you design a rate limiter?' with my answer: ..."*
 
 The agent resolves or creates the company, title, location, and tags by name, and reports back what it matched versus created — so your data stays de-duplicated without you having to switch to the app.
@@ -149,7 +151,7 @@ When you add a job with a substantial description and you've set a **default res
 
 #### 1. Generate a token
 
-1. Sign in to JobSync and go to **Settings > MCP Access**.
+1. Sign in to Vocatrya and go to **Settings > MCP Access**.
 2. Click **Generate**, give it a name (e.g. the client you'll connect, like "Claude Desktop"), and pick an expiry.
 3. Copy the token and config snippets shown — the full token is only displayed once.
 
@@ -164,11 +166,11 @@ When you add a job with a substantial description and you've set a **default res
 ```json
 {
   "mcpServers": {
-    "jobsync": {
+    "vocatrya": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://<your-jobsync-url>/api/mcp",
+        "http://<your-vocatrya-url>/api/mcp",
         "--header",
         "Authorization: Bearer <your-token>"
       ]
@@ -179,7 +181,7 @@ When you add a job with a substantial description and you've set a **default res
 
 3. Save and fully restart Claude Desktop (quit, not just close the window).
 
-> **Note:** Claude Desktop only supports local (stdio) MCP servers directly, so `mcp-remote` is required as a bridge to JobSync's remote endpoint.
+> **Note:** Claude Desktop only supports local (stdio) MCP servers directly, so `mcp-remote` is required as a bridge to Vocatrya's remote endpoint.
 
 </details>
 
@@ -191,9 +193,9 @@ Clients that support `streamable-http` natively can connect directly without `mc
 ```json
 {
   "mcpServers": {
-    "jobsync": {
+    "vocatrya": {
       "type": "streamable-http",
-      "url": "http://<your-jobsync-url>/api/mcp",
+      "url": "http://<your-vocatrya-url>/api/mcp",
       "headers": { "Authorization": "Bearer <your-token>" }
     }
   }
@@ -202,19 +204,20 @@ Clients that support `streamable-http` natively can connect directly without `mc
 
 </details>
 
-> **Self-hosting on a home network?** If your JobSync URL is a plain `http://` LAN address (not `localhost` or HTTPS), add `--allow-http` to the `mcp-remote` args — it refuses non-HTTPS URLs by default. The Settings page adds this flag automatically when it detects a non-localhost HTTP URL.
+> **Self-hosting on a home network?** If your Vocatrya URL is a plain `http://` LAN address (not `localhost` or HTTPS), add `--allow-http` to the `mcp-remote` args — it refuses non-HTTPS URLs by default. The Settings page adds this flag automatically when it detects a non-localhost HTTP URL.
 
 
 ## Help
 
-In-app usage guides — getting started, jobs, automations, and MCP access — live in the [GitHub Wiki](https://github.com/Gsync/jobsync/wiki).
+In-app usage guides — getting started, jobs, automations, and MCP access — live in the [GitHub Wiki](https://github.com/Shushushu-coder/vocatrya/wiki).
 
 ## Contributing
 
 We welcome contributions! Please read our [Contributing Guidelines](./CONTRIBUTING.md) to get started. This project follows a [Code of Conduct](./CODE_OF_CONDUCT.md) — by participating, you agree to uphold its standards.
 
-### Credits
+### Credits & Upstream
 
+- **Base Project:** [JobSync](https://github.com/Gsync/jobsync) — created by [Gsync](https://github.com/Gsync) (MIT License, Copyright © 2024 gsync)
 - <a href="https://github.com/facebook/react">React</a>
 - <a href="https://github.com/vercel/next.js">Next</a>
 - <a href="https://github.com/shadcn-ui/ui">Shadcn</a>
@@ -243,7 +246,7 @@ Works with [Ollama](https://ollama.com) to run AI models locally on your machine
 - AI settings will show a list of available models based on what you have downloaded in Ollama
 - **Recommended:** Increase the Ollama context length from the default 4k to 16k — this helps automated job matching avoid truncating longer resume/job description prompts. The AI Assistant, resume review, job match and cover letter features aren't affected: they ask Ollama for the context size they need on every call, so raising this setting won't change them. Don't raise it much further either — a very large default costs you noticeably slower responses for no benefit
 - No API key required — runs entirely on your hardware
-- If you are running jobsync on a homelab server, you can expose ollama to network from Ollama settings on your local machine. Also make sure your ollama base url is pointed to your local system IP under API keys section of settings.
+- If you are running Vocatrya on a homelab server, you can expose ollama to network from Ollama settings on your local machine. Also make sure your ollama base url is pointed to your local system IP under API keys section of settings.
 
 </details>
 
@@ -292,7 +295,7 @@ Access a wide range of AI models from multiple providers through a single API.
 
 ## Support the Project
 
-If JobSync has been helpful in your job search, consider giving it a star on GitHub! It helps others discover the project and motivates continued development.
+If Vocatrya has been helpful in your job search, consider giving it a star on GitHub! It helps others discover the project and motivates continued development.
 
 Every star means a lot — thank you for your support!
 

@@ -22,6 +22,7 @@ import { toastError, toastSuccess } from "@/lib/toast";
 interface PreflightResult {
   manifest: {
     formatVersion: number;
+    appName?: string;
     appVersion: string;
     exportedAt: string;
     sourceEmail: string;
@@ -231,8 +232,8 @@ export default function DataSettings() {
               <div className="text-sm">
                 <p>
                   Exported{" "}
-                  {format(new Date(preflight.manifest.exportedAt), "PPp")} from
-                  JobSync {preflight.manifest.appVersion}
+                  {format(new Date(preflight.manifest.exportedAt), "PPp")} from{" "}
+                  {preflight.manifest.appName || "JobSync"} {preflight.manifest.appVersion}
                 </p>
                 <p className="text-muted-foreground">
                   Source account: {preflight.manifest.sourceEmail}

@@ -61,4 +61,4 @@ Jobs that already have a score show the score instead. To re-run a match on one 
 
 ## How do I export my jobs to CSV?
 
-Click **Export** in the Jobs card header. Your jobs download as a CSV file named `jobsync-YYYY-MM-DD.csv`. The export covers your jobs, not the reference lists behind them — for a complete, restorable copy of everything including resumes, tasks and activities, use **Settings → Data** instead.
+Click **Export** in the Jobs card header. Your jobs download as a CSV file named `vocatrya-YYYY-MM-DD.csv`. The export covers your jobs, not the reference lists behind them — for a complete, restorable copy of everything including resumes, tasks and activities, use **Settings → Data** instead.

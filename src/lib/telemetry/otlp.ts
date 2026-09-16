@@ -163,7 +163,7 @@ export function buildTracePayload(spans: QueuedSpan[]) {
       {
         resource: resource(),
         scopeSpans: [
-          { scope: { name: "jobsync" }, spans: encodeEach(spans, encodeSpan) },
+          { scope: { name: "vocatrya" }, spans: encodeEach(spans, encodeSpan) },
         ],
       },
     ],
@@ -177,7 +177,7 @@ export function buildLogPayload(records: QueuedLog[]) {
         resource: resource(),
         scopeLogs: [
           {
-            scope: { name: "jobsync" },
+            scope: { name: "vocatrya" },
             logRecords: encodeEach(records, encodeLog),
           },
         ],
