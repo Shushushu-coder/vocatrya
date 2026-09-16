@@ -46,8 +46,12 @@ export function WatchMergeDialog({ pending, onConfirm, onCancel }: Props) {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Link board</AlertDialogAction>
+          <AlertDialogCancel onClick={onCancel}>
+            {t("common.cancel")}
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>
+            {t("companies.linkBoard")}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

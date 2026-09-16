@@ -23,6 +23,7 @@ import { AlertDialog } from "@/models/alertDialog.model";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { deleteContactRoleById } from "@/actions/contactRole.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { useI18n } from "@/i18n";
 
 type ContactRolesTableProps = {
   roles: ContactRole[];
@@ -30,6 +31,7 @@ type ContactRolesTableProps = {
 };
 
 function ContactRolesTable({ roles, reloadRoles }: ContactRolesTableProps) {
+  const { t } = useI18n();
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -41,14 +43,20 @@ function ContactRolesTable({ roles, reloadRoles }: ContactRolesTableProps) {
     if (links > 0 || holders > 0) {
       setAlert({
         openState: true,
-        title: "Associated contacts exist!",
+        title: t("library.associatedContactsExist"),
         description: links
-          ? `This role is used by ${links} contact link${
-              links === 1 ? "" : "s"
-            }. Remove those links before deleting the role.`
-          : `This role is set on ${holders} contact${
-              holders === 1 ? "" : "s"
-            }. Change their role before deleting it.`,
+          ? t(
+              links === 1
+                ? "library.roleUsedByLinksOne"
+                : "library.roleUsedByLinksMany",
+              { count: links },
+            )
+          : t(
+              holders === 1
+                ? "library.roleUsedByContactsOne"
+                : "library.roleUsedByContactsMany",
+              { count: holders },
+            ),
         deleteAction: false,
       });
     } else {
@@ -60,7 +68,7 @@ function ContactRolesTable({ roles, reloadRoles }: ContactRolesTableProps) {
     if (roleId) {
       const { success, message } = await deleteContactRoleById(roleId);
       if (success) {
-        toastSuccess("Contact role has been deleted successfully");
+        toastSuccess(t("library.contactRoleDeleted"));
         reloadRoles();
       } else {
         toastError(message);
@@ -73,11 +81,13 @@ function ContactRolesTable({ roles, reloadRoles }: ContactRolesTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Role</TableHead>
-            <TableHead className="hidden sm:table-cell">Value</TableHead>
-            <TableHead>Contacts Linked</TableHead>
+            <TableHead>{t("common.role")}</TableHead>
+            <TableHead className="hidden sm:table-cell">
+              {t("library.value")}
+            </TableHead>
+            <TableHead>{t("library.contactsLinked")}</TableHead>
             <TableHead>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -97,17 +107,17 @@ function ContactRolesTable({ roles, reloadRoles }: ContactRolesTableProps) {
                     <DropdownMenuTrigger asChild>
                       <Button aria-haspopup="true" size="icon" variant="ghost">
                         <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">Toggle menu</span>
+                        <span className="sr-only">{t("common.toggleMenu")}</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                       <DropdownMenuItem
                         className="text-red-600 cursor-pointer"
                         onClick={() => onDeleteRole(role)}
                       >
                         <Trash className="mr-2 h-4 w-4" />
-                        Delete
+                        {t("common.delete")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

@@ -21,6 +21,7 @@ import { deleteActivityTypeById } from "@/actions/activity.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { AlertDialog } from "@/models/alertDialog.model";
+import { useI18n } from "@/i18n";
 
 type ActivityTypeRow = {
   id: string;
@@ -39,6 +40,7 @@ function ActivityTypesTable({
   activityTypes,
   reloadActivityTypes,
 }: ActivityTypesTableProps) {
+  const { t } = useI18n();
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -50,16 +52,32 @@ function ActivityTypesTable({
 
     if (activityCount > 0 || taskCount > 0) {
       const links = [
-        activityCount > 0 ? `${activityCount} activity(ies)` : "",
-        taskCount > 0 ? `${taskCount} task(s)` : "",
+        activityCount > 0
+          ? t(
+              activityCount === 1
+                ? "library.activityCountOne"
+                : "library.activityCountMany",
+              { count: activityCount },
+            )
+          : "",
+        taskCount > 0
+          ? t(taskCount === 1 ? "library.taskCountOne" : "library.taskCountMany", {
+              count: taskCount,
+            })
+          : "",
       ]
         .filter(Boolean)
-        .join(" and ");
+        .join(t("library.listSeparator"));
 
       setAlert({
         openState: true,
-        title: "Activity type is in use!",
-        description: `This activity type is linked to ${links} and cannot be deleted.`,
+        title: t("library.itemInUseTitle", {
+          item: t("library.activityTypeItem"),
+        }),
+        description: t("library.itemInUseDescription", {
+          item: t("library.activityTypeItem"),
+          links,
+        }),
         deleteAction: false,
       });
     } else {
@@ -75,7 +93,7 @@ function ActivityTypesTable({
     if (!id) return;
     const { success, message } = await deleteActivityTypeById(id);
     if (success) {
-      toastSuccess("Activity type has been deleted successfully");
+      toastSuccess(t("library.activityTypeDeleted"));
       reloadActivityTypes();
     } else {
       toastError(message);
@@ -92,12 +110,14 @@ function ActivityTypesTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Label</TableHead>
-            <TableHead className="hidden sm:table-cell">Value</TableHead>
-            <TableHead># Activities</TableHead>
-            <TableHead># Tasks</TableHead>
-            <TableHead>Total Hours</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>{t("common.label")}</TableHead>
+            <TableHead className="hidden sm:table-cell">
+              {t("library.value")}
+            </TableHead>
+            <TableHead>{t("library.activitiesCount")}</TableHead>
+            <TableHead>{t("library.tasksCount")}</TableHead>
+            <TableHead>{t("library.totalHours")}</TableHead>
+            <TableHead>{t("common.actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -114,24 +134,26 @@ function ActivityTypesTable({
                 {at._count?.Tasks ?? 0}
               </TableCell>
               <TableCell className="font-medium">
-                {formatHours(at.totalDuration)} hrs
+                {t("common.hoursValue", {
+                  count: formatHours(at.totalDuration),
+                })}
               </TableCell>
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button aria-haspopup="true" size="icon" variant="ghost">
                       <MoreVertical className="h-4 w-4" />
-                      <span className="sr-only">Toggle menu</span>
+                      <span className="sr-only">{t("common.toggleMenu")}</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                     <DropdownMenuItem
                       className="text-red-600 cursor-pointer"
                       onClick={() => onDelete(at)}
                     >
                       <Trash className="mr-2 h-4 w-4" />
-                      Delete
+                      {t("common.delete")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

@@ -188,7 +188,9 @@ function AddContact({
         : await createContact(values);
       const name = values.name.trim();
       toastActionResult(res, {
-        success: `Contact has been ${editContact ? "updated" : "created"} successfully`,
+        success: editContact
+          ? t("contacts.updatedSuccess")
+          : t("contacts.createdSuccess"),
         onSuccess: () => {
           onSaved?.({ id: res.data.id, label: name, value: name.toLowerCase() });
           reset();
@@ -212,7 +214,7 @@ function AddContact({
         >
           <PlusCircle className="h-3.5 w-3.5" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            New Contact
+            {t("contacts.newContact")}
           </span>
         </Button>
       )}
@@ -235,7 +237,7 @@ function AddContact({
                   <FormItem>
                     <FormLabel>{t("contacts.name")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Dana Whitfield" {...field} />
+                      <Input placeholder={t("contacts.namePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -249,7 +251,7 @@ function AddContact({
                   <FormItem>
                     <FormLabel>{t("common.title")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Engineering Manager" {...field} />
+                      <Input placeholder={t("contacts.titlePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -265,7 +267,7 @@ function AddContact({
                     <FormControl>
                       <Input
                         type="email"
-                        placeholder="name@company.com"
+                        placeholder={t("contacts.emailPlaceholder")}
                         {...field}
                       />
                     </FormControl>
@@ -281,7 +283,7 @@ function AddContact({
                   <FormItem>
                     <FormLabel>{t("contacts.phone")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. +1 416 555 0134" {...field} />
+                      <Input placeholder={t("contacts.phonePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -297,7 +299,7 @@ function AddContact({
                       <FormLabel>{t("contacts.linkedinUrl")}</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="https://www.linkedin.com/in/..."
+                          placeholder={t("contacts.linkedinPlaceholder")}
                           {...field}
                         />
                       </FormControl>
@@ -307,7 +309,7 @@ function AddContact({
                 />
               </div>
 
-              <SectionHeading>Where they work</SectionHeading>
+              <SectionHeading>{t("contacts.whereTheyWork")}</SectionHeading>
 
               <FormField
                 control={form.control}
@@ -356,7 +358,7 @@ function AddContact({
 
               {isReference && (
                 <>
-                  <SectionHeading>How you know them</SectionHeading>
+                  <SectionHeading>{t("contacts.howYouKnowThem")}</SectionHeading>
 
                   <FormField
                     control={form.control}
@@ -365,7 +367,10 @@ function AddContact({
                       <FormItem>
                         <FormLabel>{t("common.relationship")}</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g. my manager, peer" {...field} />
+                          <Input
+                            placeholder={t("contacts.relationshipPlaceholder")}
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -430,7 +435,7 @@ function AddContact({
                 </>
               )}
 
-              <SectionHeading>Follow-up</SectionHeading>
+              <SectionHeading>{t("contacts.followUp")}</SectionHeading>
 
               <FormField
                 control={form.control}
@@ -461,7 +466,7 @@ function AddContact({
                       <FormControl>
                         <Textarea
                           className="min-h-24"
-                          placeholder="How you met, what to follow up on..."
+                          placeholder={t("contacts.notesPlaceholder")}
                           {...field}
                         />
                       </FormControl>

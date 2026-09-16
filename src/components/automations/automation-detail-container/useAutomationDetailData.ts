@@ -15,9 +15,11 @@ import type {
   DiscoveryStatus,
 } from "@/models/automation.model";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { useI18n } from "@/i18n";
 
 // Owns the automation record plus its paginated runs and discovered jobs.
 export function useAutomationDetailData(automationId: string) {
+  const { t } = useI18n();
   const router = useRouter();
 
   const [automation, setAutomation] = useState<AutomationWithResume | null>(
@@ -77,7 +79,7 @@ export function useAutomationDetailData(automationId: string) {
           setAutomation(automationResult.data);
           setRuns(automationResult.data.runs || []);
         } else {
-          toastError(automationResult.message || "Automation not found");
+          toastError(automationResult.message || t("automations.notFound"));
           router.push("/dashboard/automations");
           return;
         }
@@ -96,12 +98,12 @@ export function useAutomationDetailData(automationId: string) {
             setJobStatusCounts(jobsResult.statusCounts);
           }
         }
-      } catch (error) {
-        toastError("Failed to load automation details");
+      } catch {
+        toastError(t("automations.failedToLoadDetails"));
       }
       if (showLoading) setLoading(false);
     },
-    [automationId, router, fetchJobs],
+    [automationId, router, fetchJobs, t],
   );
 
   useEffect(() => {

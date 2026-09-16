@@ -14,6 +14,7 @@ import { getAtsCompanyCount } from "@/actions/atsCompany.actions";
 import { ATS_BOARDS } from "@/models/automation.model";
 import { PROVIDER_META } from "@/components/automations/ats-search-step/types";
 import type { CompanyScope } from "./useCompanyScope";
+import { useI18n } from "@/i18n";
 
 type Props = {
   scope: CompanyScope;
@@ -21,6 +22,7 @@ type Props = {
 };
 
 export function CompaniesScopeSelect({ scope, onScopeChange }: Props) {
+  const { t } = useI18n();
   // Counts are decoration; fetched on first open so a visit that never
   // touches Browse pays no round-trips.
   const [counts, setCounts] = useState<Record<string, number> | null>(null);
@@ -45,17 +47,20 @@ export function CompaniesScopeSelect({ scope, onScopeChange }: Props) {
       onValueChange={(v) => onScopeChange(v as CompanyScope)}
       onOpenChange={onOpenChange}
     >
-      <SelectTrigger aria-label="Select company scope" className="h-8 w-[180px]">
+      <SelectTrigger
+        aria-label={t("companies.selectScope")}
+        className="h-8 w-[180px]"
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
-          <SelectLabel>Library</SelectLabel>
-          <SelectItem value="mine">My Companies</SelectItem>
-          <SelectItem value="watchlist">Watchlist</SelectItem>
+          <SelectLabel>{t("nav.library")}</SelectLabel>
+          <SelectItem value="mine">{t("companies.myCompanies")}</SelectItem>
+          <SelectItem value="watchlist">{t("companies.watchlist")}</SelectItem>
         </SelectGroup>
         <SelectGroup>
-          <SelectLabel>Browse boards</SelectLabel>
+          <SelectLabel>{t("companies.browseBoards")}</SelectLabel>
           {ATS_BOARDS.map((provider) => (
             <SelectItem key={provider} value={`board:${provider}`}>
               {PROVIDER_META[provider].label}

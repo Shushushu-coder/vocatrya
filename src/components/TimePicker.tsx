@@ -13,6 +13,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { FormControl } from "./ui/form";
+import { useI18n } from "@/i18n";
 
 const HOURS = Array.from({ length: 12 }, (_, i) =>
   String(i + 1).padStart(2, "0")
@@ -95,6 +96,7 @@ interface TimePickerProps {
 }
 
 export function TimePicker({ field }: TimePickerProps) {
+  const { t } = useI18n();
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
   const { hour, minute, meridiem } = parseTime(field.value);
 
@@ -131,19 +133,19 @@ export function TimePicker({ field }: TimePickerProps) {
               )}
             >
               <Clock className="mr-2 h-4 w-4" />
-              {field.value ? field.value : <span>Pick a time</span>}
+              {field.value ? field.value : <span>{t("common.pickTime")}</span>}
             </Button>
           </FormControl>
         </PopoverTrigger>
         <PopoverContent className="flex w-auto gap-2 p-2" align="start">
           <TimeColumn
-            label="Hour"
+            label={t("common.hour")}
             options={HOURS}
             selected={hour}
             onSelect={(value) => update({ hour: value })}
           />
           <TimeColumn
-            label="Minute"
+            label={t("common.minute")}
             options={MINUTES}
             selected={minute}
             onSelect={(value) => update({ minute: value })}
@@ -160,7 +162,7 @@ export function TimePicker({ field }: TimePickerProps) {
         type="button"
         variant="outline"
         size="icon"
-        aria-label={`${STEP_MINUTES} minutes earlier`}
+        aria-label={t("common.minutesEarlier", { count: STEP_MINUTES })}
         className="shrink-0 rounded-none border-l-0"
         onClick={() => shift(-STEP_MINUTES)}
       >
@@ -170,7 +172,7 @@ export function TimePicker({ field }: TimePickerProps) {
         type="button"
         variant="outline"
         size="icon"
-        aria-label={`${STEP_MINUTES} minutes later`}
+        aria-label={t("common.minutesLater", { count: STEP_MINUTES })}
         className="shrink-0 rounded-l-none border-l-0"
         onClick={() => shift(STEP_MINUTES)}
       >

@@ -24,6 +24,7 @@ import { formatUrl } from "@/lib/utils";
 import type { Company } from "@/models/job.model";
 import type { LeverHost } from "@/models/automation.model";
 import { hostnameOf } from "./hostname";
+import { useI18n } from "@/i18n";
 
 type CompanyDetailsHeaderProps = {
   company: Company;
@@ -40,6 +41,7 @@ export function CompanyDetailsHeader({
   onEdit,
   onDelete,
 }: CompanyDetailsHeaderProps) {
+  const { t } = useI18n();
   const subtitle = [company.industry, hostnameOf(company.websiteUrl)]
     .filter(Boolean)
     .join(" · ");
@@ -52,16 +54,22 @@ export function CompanyDetailsHeader({
         })
       : null;
   const links = [
-    { label: "Open website", href: company.websiteUrl ? formatUrl(company.websiteUrl) : null },
-    { label: "Open careers page", href: company.careersUrl ? formatUrl(company.careersUrl) : null },
-    { label: "Open job board", href: boardUrl },
+    {
+      label: t("companies.openWebsite"),
+      href: company.websiteUrl ? formatUrl(company.websiteUrl) : null,
+    },
+    {
+      label: t("companies.openCareersPage"),
+      href: company.careersUrl ? formatUrl(company.careersUrl) : null,
+    },
+    { label: t("companies.openJobBoard"), href: boardUrl },
   ].filter((link): link is { label: string; href: string } => !!link.href);
 
   return (
     <div className="flex flex-col gap-4 @5xl/main:flex-row @5xl/main:items-center">
       <div className="flex flex-1 min-w-0 items-center gap-4">
-        <Button variant="ghost" size="icon" title="Go Back" asChild>
-          <Link href={backHref} aria-label="Back to Companies">
+        <Button variant="ghost" size="icon" title={t("common.back")} asChild>
+          <Link href={backHref} aria-label={t("companies.backToCompanies")}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -82,13 +90,15 @@ export function CompanyDetailsHeader({
             <Eye className="h-4 w-4 sm:mr-2" />
           )}
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            {company.watched ? "Unwatch" : "Watch"}
+            {company.watched
+              ? t("companies.unwatch")
+              : t("companies.watch")}
           </span>
         </Button>
         <Button variant="outline" className="cursor-pointer" onClick={onEdit}>
           <Pencil className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            Edit
+            {t("common.edit")}
           </span>
         </Button>
         <Button
@@ -98,7 +108,7 @@ export function CompanyDetailsHeader({
         >
           <Trash2 className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            Delete
+            {t("common.delete")}
           </span>
         </Button>
         {links.length > 0 && (
@@ -106,11 +116,11 @@ export function CompanyDetailsHeader({
             <DropdownMenuTrigger asChild>
               <Button aria-haspopup="true" size="icon" variant="ghost">
                 <MoreVertical className="h-4 w-4" />
-                <span className="sr-only">More links</span>
+                <span className="sr-only">{t("companies.moreLinks")}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[200px]">
-              <DropdownMenuLabel>Links</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("companies.links")}</DropdownMenuLabel>
               {links.map((link) => (
                 <DropdownMenuItem key={link.label} className="cursor-pointer" asChild>
                   <a href={link.href} target="_blank" rel="noopener noreferrer">

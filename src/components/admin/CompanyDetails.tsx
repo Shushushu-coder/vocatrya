@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { useTabQueryParam } from "@/hooks/useTabQueryParam";
 import { CompanyJobsTab } from "./company-details/CompanyJobsTab";
 import { CompanyContactsTab } from "./company-details/CompanyContactsTab";
+import { useI18n } from "@/i18n";
 
 const LIBRARY_COMPANIES = "/dashboard/admin?tab=companies";
 const COMPANY_DETAIL_TABS = ["jobs", "contacts"] as const;
@@ -27,16 +28,8 @@ type CompanyDetailsProps = {
   details: CompanyDetailsData;
 };
 
-function blockedDescription(total: number, dismissed: number) {
-  const jobs = `This company has ${total} associated job${total === 1 ? "" : "s"} (applied or not).`;
-  const hidden =
-    dismissed > 0
-      ? ` ${dismissed} of them ${dismissed === 1 ? "was" : "were"} dismissed by automations; pick Dismissed (discovered) on the Jobs page to see them.`
-      : "";
-  return `${jobs}${hidden} Remove or reassign them before deleting this company.`;
-}
-
 function CompanyDetails({ details }: CompanyDetailsProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const backHref =
@@ -65,8 +58,8 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
     if (res.success) {
       toastSuccess(
         next
-          ? `${details.label} added to your watchlist`
-          : `${details.label} removed from your watchlist. It stays in your Library.`,
+          ? t("companies.addedToWatchlist", { name: details.label })
+          : t("companies.removedFromWatchlist", { name: details.label }),
       );
       router.refresh();
     } else {
@@ -86,11 +79,26 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
   const onDelete = () => {
     const total = jobs.length + dismissedJobsCount;
     if (total > 0) {
+      const jobsText = t(
+        total === 1
+          ? "companies.hasAssociatedJobsOne"
+          : "companies.hasAssociatedJobsMany",
+        { count: total },
+      );
+      const dismissedText =
+        dismissedJobsCount > 0
+          ? t(
+              dismissedJobsCount === 1
+                ? "companies.dismissedHiddenOne"
+                : "companies.dismissedHiddenMany",
+              { count: dismissedJobsCount },
+            )
+          : "";
       setAlert({
         openState: true,
         deleteAction: false,
-        title: "Associated jobs exist!",
-        description: blockedDescription(total, dismissedJobsCount),
+        title: t("companies.associatedJobsExist"),
+        description: `${jobsText}${dismissedText}${t("companies.removeBeforeDelete")}`,
       });
     } else {
       setAlert({ openState: true, deleteAction: true, itemId: details.id });
@@ -100,7 +108,7 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
   const deleteCompany = async () => {
     const { success, message } = await deleteCompanyById(details.id);
     if (success) {
-      toastSuccess("Company has been deleted successfully");
+      toastSuccess(t("companies.deletedSuccess"));
       router.push(backHref);
     } else {
       toastError(message);
@@ -128,7 +136,7 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="jobs">
-              Jobs
+              {t("common.jobs")}
               {jobs.length > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   {jobs.length}
@@ -136,7 +144,7 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
               )}
             </TabsTrigger>
             <TabsTrigger value="contacts">
-              Contacts
+              {t("library.contacts")}
               {contactsCount > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   {contactsCount}

@@ -27,6 +27,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { toastInfo } from "@/lib/toast";
+import { useI18n } from "@/i18n";
 import {
   clearChatConversation,
   saveChatConversation,
@@ -77,6 +78,7 @@ function createdJobToolCallIds(messages: UIMessage[]): string[] {
 }
 
 function useAgentChatValue(initialMessages: UIMessage[]) {
+  const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const { holder, requestOpen, close: releaseRail } = useRightRail();
@@ -220,11 +222,11 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
       setInterruptedTurn(true);
       // The one abort the user gets no on-screen signal for — the panel they
       // would have read it in is the thing that just went away.
-      toastInfo("Generation stopped. Reopen the assistant to continue.");
+      toastInfo(t("agent.generationStoppedReopen"));
     }
     setIsOpen(false);
     releaseRail(AGENT_CHAT_PANEL_ID);
-  }, [chat, releaseRail]);
+  }, [chat, releaseRail, t]);
 
   const runPreflight = useCallback(async () => {
     const settings = await getUserSettings();
@@ -296,8 +298,8 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
     setToolStreams({});
     setQueued(undefined);
     // Clearing an idle conversation aborted nothing worth reporting.
-    if (wasStreaming) toastInfo("Conversation cleared and generation stopped.");
-  }, [chat]);
+    if (wasStreaming) toastInfo(t("agent.conversationClearedStopped"));
+  }, [chat, t]);
 
   const approvalPending = useMemo(
     () => hasPendingApproval(chat.messages),

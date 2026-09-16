@@ -7,8 +7,12 @@ import StarterKit from "@tiptap/starter-kit";
 import { ControllerRenderProps } from "react-hook-form";
 import { Toggle } from "./ui/toggle";
 import { Bold, Heading2, Italic, List, ListOrdered } from "lucide-react";
+import { useI18n } from "@/i18n";
+import { useState } from "react";
 
 const Tiptap = ({ field }: { field: ControllerRenderProps<any, any> }) => {
+  const { t } = useI18n();
+  const [isEmpty, setIsEmpty] = useState(!field.value);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -37,7 +41,11 @@ const Tiptap = ({ field }: { field: ControllerRenderProps<any, any> }) => {
       },
     },
     content: field.value,
+    onCreate: ({ editor }) => {
+      setIsEmpty(editor.isEmpty);
+    },
     onUpdate: ({ editor }) => {
+      setIsEmpty(editor.isEmpty);
       field.onChange(editor.getHTML());
     },
   });
@@ -89,11 +97,21 @@ const Tiptap = ({ field }: { field: ControllerRenderProps<any, any> }) => {
           </Toggle>
         </div>
       )}
-      <EditorContent
-        aria-labelledby="job-description-label"
-        placeholder="enter here..."
-        editor={editor}
-      />
+      <div className="relative">
+        {editor && isEmpty && (
+          <span
+            className="pointer-events-none absolute left-3 top-2 text-muted-foreground"
+            aria-hidden="true"
+          >
+            {t("common.editorPlaceholder")}
+          </span>
+        )}
+        <EditorContent
+          aria-labelledby="job-description-label"
+          data-placeholder={t("common.editorPlaceholder")}
+          editor={editor}
+        />
+      </div>
     </div>
   );
 };

@@ -16,6 +16,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { JobTabEmptyState } from "@/components/myjobs/job-details/JobTabEmptyState";
 import { getJobStatusBadgeColor } from "@/lib/badge-colors";
 import type { CompanyJobRow } from "@/models/companyDetails.model";
+import { useI18n } from "@/i18n";
 
 type CompanyJobsTabProps = {
   jobs: CompanyJobRow[];
@@ -23,12 +24,13 @@ type CompanyJobsTabProps = {
 
 // Read-only on purpose: every job action already lives on the job's own page
 export function CompanyJobsTab({ jobs }: CompanyJobsTabProps) {
+  const { t } = useI18n();
   if (jobs.length === 0) {
     return (
       <JobTabEmptyState
         icon={Briefcase}
-        title="No jobs at this company yet"
-        description="Jobs you add or accept from an automation for this company show up here."
+        title={t("companies.noJobsYet")}
+        description={t("companies.noJobsDescription")}
       />
     );
   }
@@ -37,12 +39,18 @@ export function CompanyJobsTab({ jobs }: CompanyJobsTabProps) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Title</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="hidden md:table-cell">Location</TableHead>
-          <TableHead className="hidden md:table-cell">Applied</TableHead>
-          <TableHead>Match</TableHead>
-          <TableHead className="hidden md:table-cell">Source</TableHead>
+          <TableHead>{t("jobs.jobTitle")}</TableHead>
+          <TableHead>{t("common.status")}</TableHead>
+          <TableHead className="hidden md:table-cell">
+            {t("common.location")}
+          </TableHead>
+          <TableHead className="hidden md:table-cell">
+            {t("companies.applied")}
+          </TableHead>
+          <TableHead>{t("jobs.matchScore")}</TableHead>
+          <TableHead className="hidden md:table-cell">
+            {t("library.sources")}
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -68,7 +76,7 @@ export function CompanyJobsTab({ jobs }: CompanyJobsTabProps) {
             <TableCell className="hidden md:table-cell">
               {job.appliedDate
                 ? format(new Date(job.appliedDate), "PP")
-                : "Not applied"}
+                : t("companies.notApplied")}
             </TableCell>
             <TableCell>
               {job.matchScore != null ? (

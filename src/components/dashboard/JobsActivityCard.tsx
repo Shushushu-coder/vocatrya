@@ -220,7 +220,8 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
                 roomyTotal ? "text-xl" : "text-base",
               )}
             >
-              {totalHours}h
+              {totalHours}
+              {t("common.hoursShort")}
             </span>
             <span
               className={cn(
@@ -228,7 +229,12 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
                 roomyTotal ? "text-sm" : "text-xs",
               )}
             >
-              {jobsApplied} {jobsApplied === 1 ? "job" : "jobs"}
+              {t(
+                jobsApplied === 1
+                  ? "dashboard.jobCountOne"
+                  : "dashboard.jobCountMany",
+                { count: jobsApplied },
+              )}
             </span>
             {jobsTrend !== 0 && roomyTotal && (
               <span

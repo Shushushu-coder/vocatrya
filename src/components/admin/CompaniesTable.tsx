@@ -33,6 +33,7 @@ import { toastSuccess, toastError } from "@/lib/toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { BoardCell } from "./BoardCell";
+import { useI18n } from "@/i18n";
 
 type CompaniesTableProps = {
   companies: Company[];
@@ -47,6 +48,7 @@ function CompaniesTable({
   editCompany,
   scope = "mine",
 }: CompaniesTableProps) {
+  const { t } = useI18n();
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -57,10 +59,13 @@ function CompaniesTable({
     if (totalJobs > 0) {
       setAlert({
         openState: true,
-        title: "Associated jobs exist!",
-        description: `This company has ${totalJobs} associated job${
-          totalJobs === 1 ? "" : "s"
-        } (applied or not). Remove or reassign them before deleting this company.`,
+        title: t("companies.associatedJobsExist"),
+        description: t(
+          totalJobs === 1
+            ? "companies.associatedJobsDescriptionOne"
+            : "companies.associatedJobsDescriptionMany",
+          { count: totalJobs },
+        ),
         deleteAction: false,
       });
     } else {
@@ -81,8 +86,8 @@ function CompaniesTable({
     if (res.success) {
       toastSuccess(
         next
-          ? `${company.label} added to your watchlist`
-          : `${company.label} removed from your watchlist. It stays in your Library.`,
+          ? t("companies.addedToWatchlist", { name: company.label })
+          : t("companies.removedFromWatchlist", { name: company.label }),
       );
       reloadCompanies();
     } else {
@@ -94,7 +99,7 @@ function CompaniesTable({
     if (companyId) {
       const { res, success, message } = await deleteCompanyById(companyId);
       if (success) {
-        toastSuccess(`Company has been deleted successfully`);
+        toastSuccess(t("companies.deletedSuccess"));
         reloadCompanies();
       } else {
         toastError(message);
@@ -108,27 +113,29 @@ function CompaniesTable({
         <TableHeader>
           <TableRow>
             <TableHead className="hidden w-[100px] sm:table-cell">
-              <span className="sr-only">Company Logo</span>
+              <span className="sr-only">{t("companies.companyLogo")}</span>
             </TableHead>
-            <TableHead>Company Name</TableHead>
+            <TableHead>{t("companies.companyName")}</TableHead>
             {scope === "watchlist" ? (
               <>
-                <TableHead>Board</TableHead>
-                <TableHead>Jobs</TableHead>
-                <TableHead>Watched</TableHead>
+                <TableHead>{t("library.board")}</TableHead>
+                <TableHead>{t("common.jobs")}</TableHead>
+                <TableHead>{t("library.watched")}</TableHead>
               </>
             ) : (
               <>
-                <TableHead className="hidden sm:table-cell">Value</TableHead>
-                <TableHead>Total Jobs</TableHead>
-                <TableHead>Jobs Applied</TableHead>
-                <TableHead>Rejected</TableHead>
-                <TableHead>Contacts</TableHead>
+                <TableHead className="hidden sm:table-cell">
+                  {t("library.value")}
+                </TableHead>
+                <TableHead>{t("library.totalJobs")}</TableHead>
+                <TableHead>{t("library.jobsApplied")}</TableHead>
+                <TableHead>{t("library.rejected")}</TableHead>
+                <TableHead>{t("library.contacts")}</TableHead>
               </>
             )}
-            <TableHead>Actions</TableHead>
+            <TableHead>{t("common.actions")}</TableHead>
             <TableHead>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -139,7 +146,7 @@ function CompaniesTable({
                 <TableCell className="hidden sm:table-cell">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    alt="Company logo"
+                    alt={t("companies.companyLogo")}
                     className="w-8 h-8 rounded-md object-cover"
                     src={company.logoUrl || "/images/vocatrya-logo.svg"}
                     onError={(e) => {
@@ -158,7 +165,7 @@ function CompaniesTable({
                     </Link>
                     {company.watched && (
                       <span
-                        title="On your watchlist"
+                        title={t("companies.onWatchlist")}
                         className="text-emerald-600 dark:text-emerald-400"
                       >
                         <Eye className="h-3.5 w-3.5" />
@@ -227,15 +234,15 @@ function CompaniesTable({
                     <DropdownMenuTrigger asChild>
                       <Button aria-haspopup="true" size="icon" variant="ghost">
                         <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">Toggle menu</span>
+                        <span className="sr-only">{t("common.toggleMenu")}</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                       <DropdownMenuItem className="cursor-pointer" asChild>
                         <Link href={detailsHref(company.id)}>
                           <Building2 className="mr-2 h-4 w-4" />
-                          View details
+                          {t("companies.viewDetails")}
                         </Link>
                       </DropdownMenuItem>
                       {company._count?.jobsApplied ? (
@@ -244,7 +251,7 @@ function CompaniesTable({
                             href={`/dashboard/myjobs?company=${encodeURIComponent(company.value)}&applied=true`}
                           >
                             <Briefcase className="mr-2 h-4 w-4" />
-                            View Jobs
+                            {t("companies.viewJobs")}
                           </Link>
                         </DropdownMenuItem>
                       ) : null}
@@ -253,7 +260,7 @@ function CompaniesTable({
                         onClick={() => editCompany(company.id)}
                       >
                         <Pencil className="mr-2 h-4 w-4" />
-                        Edit Company
+                        {t("companies.editCompany")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
@@ -264,14 +271,16 @@ function CompaniesTable({
                         ) : (
                           <Eye className="mr-2 h-4 w-4" />
                         )}
-                        {company.watched ? "Unwatch" : "Watch"}
+                        {company.watched
+                          ? t("companies.unwatch")
+                          : t("companies.watch")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-red-600 cursor-pointer"
                         onClick={() => onDeleteCompany(company)}
                       >
                         <Trash className="mr-2 h-4 w-4" />
-                        Delete
+                        {t("common.delete")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

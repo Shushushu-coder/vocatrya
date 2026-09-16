@@ -24,6 +24,7 @@ import { AlertDialog } from "@/models/alertDialog.model";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { deleteJobSourceById } from "@/actions/jobSource.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { useI18n } from "@/i18n";
 
 type JobSourcesTableProps = {
   jobSources: JobSource[];
@@ -34,6 +35,7 @@ function JobSourcesTable({
   jobSources,
   reloadJobSources,
 }: JobSourcesTableProps) {
+  const { t } = useI18n();
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -44,10 +46,16 @@ function JobSourcesTable({
     if (totalJobs > 0) {
       setAlert({
         openState: true,
-        title: "Associated jobs exist!",
-        description: `This source has ${totalJobs} associated job${
-          totalJobs === 1 ? "" : "s"
-        } (applied or not). Remove or reassign them before deleting this source.`,
+        title: t("companies.associatedJobsExist"),
+        description: t(
+          totalJobs === 1
+            ? "library.associatedJobsDescriptionOne"
+            : "library.associatedJobsDescriptionMany",
+          {
+            item: t("library.jobSourceItem"),
+            count: totalJobs,
+          },
+        ),
         deleteAction: false,
       });
     } else {
@@ -63,7 +71,7 @@ function JobSourcesTable({
     if (sourceId) {
       const { success, message } = await deleteJobSourceById(sourceId);
       if (success) {
-        toastSuccess(`Job source has been deleted successfully`);
+        toastSuccess(t("library.jobSourceDeleted"));
         reloadJobSources();
       } else {
         toastError(message);
@@ -76,13 +84,15 @@ function JobSourcesTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Source</TableHead>
-            <TableHead className="hidden sm:table-cell">Value</TableHead>
-            <TableHead>Total Jobs</TableHead>
-            <TableHead>Jobs Applied</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>{t("library.sources")}</TableHead>
+            <TableHead className="hidden sm:table-cell">
+              {t("library.value")}
+            </TableHead>
+            <TableHead>{t("library.totalJobs")}</TableHead>
+            <TableHead>{t("library.jobsApplied")}</TableHead>
+            <TableHead>{t("common.actions")}</TableHead>
             <TableHead>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -123,18 +133,18 @@ function JobSourcesTable({
                     <DropdownMenuTrigger asChild>
                       <Button aria-haspopup="true" size="icon" variant="ghost">
                         <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">Toggle menu</span>
+                        <span className="sr-only">{t("common.toggleMenu")}</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                       {source._count?.jobsApplied ? (
                         <DropdownMenuItem className="cursor-pointer" asChild>
                           <Link
                             href={`/dashboard/myjobs?source=${encodeURIComponent(source.value)}&applied=true`}
                           >
                             <Briefcase className="mr-2 h-4 w-4" />
-                            View Jobs
+                            {t("companies.viewJobs")}
                           </Link>
                         </DropdownMenuItem>
                       ) : null}
@@ -143,7 +153,7 @@ function JobSourcesTable({
                         onClick={() => onDeleteJobSource(source)}
                       >
                         <Trash className="mr-2 h-4 w-4" />
-                        Delete
+                        {t("common.delete")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

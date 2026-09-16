@@ -29,7 +29,7 @@ export function AgentChatTrigger() {
       {approvalPending && (
         <span
           className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary"
-          aria-label="Approval pending"
+          aria-label={t("agent.approvalPending")}
         />
       )}
     </Button>

@@ -51,6 +51,7 @@ export function I18nProvider({
       if (stored && normalizeLocale(stored) !== locale) {
         const nextLocale = normalizeLocale(stored);
         setLocaleState(nextLocale);
+        document.documentElement.lang = nextLocale;
         document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; path=/; max-age=31536000; SameSite=Lax`;
       }
     } catch {
@@ -67,6 +68,7 @@ export function I18nProvider({
 
       try {
         if (typeof document !== "undefined") {
+          document.documentElement.lang = validated;
           document.cookie = `${LOCALE_COOKIE_NAME}=${validated}; path=/; max-age=31536000; SameSite=Lax`;
         }
         if (typeof localStorage !== "undefined") {

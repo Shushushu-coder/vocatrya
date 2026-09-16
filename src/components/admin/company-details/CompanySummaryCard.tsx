@@ -6,6 +6,7 @@ import { BoardCell } from "@/components/admin/BoardCell";
 import { formatUrl } from "@/lib/utils";
 import type { Company } from "@/models/job.model";
 import { hostnameOf } from "./hostname";
+import { useI18n } from "@/i18n";
 
 type CompanySummaryCardProps = {
   company: Company;
@@ -44,14 +45,15 @@ export function CompanySummaryCard({
   appliedCount,
   contactsCount,
 }: CompanySummaryCardProps) {
+  const { t } = useI18n();
   return (
     <Card data-testid="company-summary">
       <CardContent className="pt-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Fact label="Watchlist">
+          <Fact label={t("companies.watchlist")}>
             {company.watched ? (
               <>
-                Watched
+                {t("library.watched")}
                 {company.watchedAt && (
                   <span className="block text-sm font-normal text-muted-foreground">
                     {formatDistanceToNow(new Date(company.watchedAt), {
@@ -61,22 +63,22 @@ export function CompanySummaryCard({
                 )}
               </>
             ) : (
-              "Not watched"
+              t("companies.notWatched")
             )}
           </Fact>
-          <Fact label="Board">
+          <Fact label={t("library.board")}>
             <BoardCell company={company} />
           </Fact>
-          <Fact label="Industry">{company.industry || "—"}</Fact>
-          <Fact label="Website">
+          <Fact label={t("companies.industry")}>{company.industry || "—"}</Fact>
+          <Fact label={t("companies.website")}>
             <HostLink url={company.websiteUrl} />
           </Fact>
-          <Fact label="Careers page">
+          <Fact label={t("companies.careersPage")}>
             <HostLink url={company.careersUrl} />
           </Fact>
-          <Fact label="Jobs">{jobsCount}</Fact>
-          <Fact label="Applied">{appliedCount}</Fact>
-          <Fact label="Contacts">{contactsCount}</Fact>
+          <Fact label={t("common.jobs")}>{jobsCount}</Fact>
+          <Fact label={t("companies.applied")}>{appliedCount}</Fact>
+          <Fact label={t("library.contacts")}>{contactsCount}</Fact>
         </div>
       </CardContent>
     </Card>

@@ -22,6 +22,7 @@ import { deleteTagById } from "@/actions/tag.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { AlertDialog } from "@/models/alertDialog.model";
+import { useI18n } from "@/i18n";
 
 type TagsTableProps = {
   tags: Tag[];
@@ -29,6 +30,7 @@ type TagsTableProps = {
 };
 
 function TagsTable({ tags, reloadTags }: TagsTableProps) {
+  const { t } = useI18n();
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -41,17 +43,40 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
 
     if (jobCount > 0 || questionCount > 0 || skillCount > 0) {
       const links = [
-        jobCount > 0 ? `${jobCount} job(s)` : "",
-        questionCount > 0 ? `${questionCount} question(s)` : "",
-        skillCount > 0 ? `${skillCount} skill(s)` : "",
+        jobCount > 0
+          ? t(jobCount === 1 ? "library.jobCountOne" : "library.jobCountMany", {
+              count: jobCount,
+            })
+          : "",
+        questionCount > 0
+          ? t(
+              questionCount === 1
+                ? "library.questionCountOne"
+                : "library.questionCountMany",
+              { count: questionCount },
+            )
+          : "",
+        skillCount > 0
+          ? t(
+              skillCount === 1
+                ? "library.skillCountOne"
+                : "library.skillCountMany",
+              { count: skillCount },
+            )
+          : "",
       ]
         .filter(Boolean)
-        .join(" and ");
+        .join(t("library.listSeparator"));
 
       setAlert({
         openState: true,
-        title: "Skill is in use!",
-        description: `This skill is linked to ${links} and cannot be deleted.`,
+        title: t("library.itemInUseTitle", {
+          item: t("library.skillItem"),
+        }),
+        description: t("library.itemInUseDescription", {
+          item: t("library.skillItem"),
+          links,
+        }),
         deleteAction: false,
       });
     } else {
@@ -67,7 +92,7 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
     if (!tagId) return;
     const { success, message } = await deleteTagById(tagId);
     if (success) {
-      toastSuccess("Skill tag has been deleted successfully");
+      toastSuccess(t("library.skillDeleted"));
       reloadTags();
     } else {
       toastError(message);
@@ -79,11 +104,13 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Skill Label</TableHead>
-            <TableHead className="hidden sm:table-cell">Value</TableHead>
-            <TableHead># Jobs</TableHead>
-            <TableHead># Questions</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>{t("library.skillLabel")}</TableHead>
+            <TableHead className="hidden sm:table-cell">
+              {t("library.value")}
+            </TableHead>
+            <TableHead>{t("library.totalJobs")}</TableHead>
+            <TableHead>{t("library.questionsCount")}</TableHead>
+            <TableHead>{t("common.actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -104,17 +131,17 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
                   <DropdownMenuTrigger asChild>
                     <Button aria-haspopup="true" size="icon" variant="ghost">
                       <MoreVertical className="h-4 w-4" />
-                      <span className="sr-only">Toggle menu</span>
+                      <span className="sr-only">{t("common.toggleMenu")}</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                     <DropdownMenuItem
                       className="text-red-600 cursor-pointer"
                       onClick={() => onDeleteTag(tag)}
                     >
                       <Trash className="mr-2 h-4 w-4" />
-                      Delete
+                      {t("common.delete")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

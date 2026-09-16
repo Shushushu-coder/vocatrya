@@ -13,6 +13,7 @@ import { deleteContactById } from "@/actions/contact.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { AlertDialog } from "@/models/alertDialog.model";
 import type { Contact } from "@/models/contact.model";
+import { useI18n } from "@/i18n";
 
 type ContactsTableProps = {
   contacts: Contact[];
@@ -27,6 +28,7 @@ function ContactsTable({
   editContact,
   hideCompanyColumn,
 }: ContactsTableProps) {
+  const { t } = useI18n();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
@@ -41,10 +43,15 @@ function ContactsTable({
       openState: true,
       deleteAction: true,
       itemId: contact.id,
-      title: jobs > 0 ? "Delete this contact?" : undefined,
+      title: jobs > 0 ? t("contacts.deleteThisContact") : undefined,
       description:
         jobs > 0
-          ? `${contact.name} is linked to ${jobs} job${jobs === 1 ? "" : "s"}. Deleting the contact removes those links. This cannot be undone.`
+          ? t(
+              jobs === 1
+                ? "contacts.linkedToJobsOne"
+                : "contacts.linkedToJobsMany",
+              { name: contact.name, count: jobs },
+            )
           : undefined,
     });
   };
@@ -53,7 +60,7 @@ function ContactsTable({
     if (contactId) {
       const { success, message } = await deleteContactById(contactId);
       if (success) {
-        toastSuccess("Contact has been deleted successfully");
+        toastSuccess(t("contacts.deletedSuccess"));
         reloadContacts();
       } else {
         toastError(message);
@@ -67,16 +74,18 @@ function ContactsTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-8">
-              <span className="sr-only">Expand</span>
+              <span className="sr-only">{t("common.expand")}</span>
             </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead className="hidden sm:table-cell">Title</TableHead>
-            {!hideCompanyColumn && <TableHead>Company</TableHead>}
-            <TableHead>Roles</TableHead>
-            <TableHead>Jobs</TableHead>
-            <TableHead>Last contacted</TableHead>
+            <TableHead>{t("common.name")}</TableHead>
+            <TableHead className="hidden sm:table-cell">
+              {t("common.title")}
+            </TableHead>
+            {!hideCompanyColumn && <TableHead>{t("common.company")}</TableHead>}
+            <TableHead>{t("library.roles")}</TableHead>
+            <TableHead>{t("common.jobs")}</TableHead>
+            <TableHead>{t("contacts.lastContactedLabel")}</TableHead>
             <TableHead>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>

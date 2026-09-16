@@ -98,7 +98,9 @@ function AddCompany({
         ? await updateCompany(data)
         : await addCompany(data);
       toastActionResult(res, {
-        success: `Company has been ${editCompany ? "updated" : "created"} successfully`,
+        success: editCompany
+          ? t("companies.updatedSuccess")
+          : t("companies.createdSuccess"),
         onSuccess: () => {
           reset();
           setDialogOpen(false);
@@ -120,7 +122,7 @@ function AddCompany({
         >
           <PlusCircle className="h-3.5 w-3.5" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            New Company
+            {t("companies.newCompany")}
           </span>
         </Button>
       )}
@@ -130,8 +132,7 @@ function AddCompany({
             <DialogTitle>{pageTitle}</DialogTitle>
             {editCompany && (
               <DialogDescription className="text-orange-600 dark:text-orange-500">
-                Caution: Editing name of the company will affect all the
-                related job records including your resume.
+                {t("companies.editCaution")}
               </DialogDescription>
             )}
           </DialogHeader>
@@ -181,7 +182,10 @@ function AddCompany({
                   <FormItem>
                     <FormLabel>{t("companies.website")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="https://example.com" {...field} />
+                        <Input
+                          placeholder={t("companies.websitePlaceholder")}
+                          {...field}
+                        />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -197,7 +201,7 @@ function AddCompany({
                     <FormLabel>{t("library.careersPage")}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="https://example.com/careers"
+                        placeholder={t("companies.careersPlaceholder")}
                         {...field}
                       />
                     </FormControl>
@@ -215,7 +219,10 @@ function AddCompany({
                     <FormItem>
                       <FormLabel>{t("companies.industry")}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Financial Services" {...field} />
+                        <Input
+                          placeholder={t("companies.industryPlaceholder")}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -234,11 +241,11 @@ function AddCompany({
                       className="mt-2 md:mt-0 w-full"
                       onClick={closeDialog}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   </div>
                   <Button type="submit" disabled={!formState.isDirty}>
-                    Save
+                    {t("common.save")}
                     {isPending && (
                       <Loader className="h-4 w-4 shrink-0 spinner" />
                     )}
