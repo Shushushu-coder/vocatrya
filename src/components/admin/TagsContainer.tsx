@@ -12,8 +12,10 @@ import TagsTable from "./TagsTable";
 import AddTag from "./AddTag";
 import { SearchInput } from "../SearchInput";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { useI18n } from "@/i18n";
 
 function TagsContainer() {
+  const { t } = useI18n();
   const [tags, setTags] = useState<Tag[]>([]);
   const [totalTags, setTotalTags] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
@@ -86,7 +88,7 @@ function TagsContainer() {
         <Card>
           <ResponsiveCardHeader>
             <div className="flex items-baseline gap-2">
-              <CardTitle>Skills/Tags</CardTitle>
+              <CardTitle>{t("library.skillsTags")}</CardTitle>
               {!initialLoading && totalTags > 0 && (
                 <RecordsCount count={tags.length} total={totalTags} label="skills" />
               )}
@@ -95,7 +97,7 @@ function TagsContainer() {
               <SearchInput
                 value={searchTerm}
                 onChange={setSearchTerm}
-                placeholder="Search skills..."
+                placeholder={t("library.searchSkills")}
               />
               <AddTag reloadTags={reloadTags} />
             </div>

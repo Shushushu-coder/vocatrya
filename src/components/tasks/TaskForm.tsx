@@ -9,8 +9,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { createTask, updateTask } from "@/actions/task.actions";
-import { format } from "date-fns";
-import { Loader, PlusCircle } from "lucide-react";
+import { Loader } from "lucide-react";
 import { Button } from "../ui/button";
 import { useForm } from "react-hook-form";
 import { useEffect, useTransition } from "react";
@@ -34,6 +33,7 @@ import { Input } from "../ui/input";
 import { Combobox } from "../ComboBox";
 import { Slider } from "../ui/slider";
 import { ActivityType } from "@/models/activity.model";
+import { useI18n, getLocalizedTaskStatus } from "@/i18n";
 
 type TaskFormProps = {
   activityTypes: ActivityType[];
@@ -45,11 +45,7 @@ type TaskFormProps = {
   onSaveAndStart?: (taskId: string) => void;
 };
 
-const statusOptions = Object.entries(TASK_STATUSES).map(([value, label]) => ({
-  id: value,
-  label,
-  value,
-}));
+
 
 export function TaskForm({
   activityTypes,
@@ -60,7 +56,15 @@ export function TaskForm({
   setDialogOpen,
   onSaveAndStart,
 }: TaskFormProps) {
+  const { t, formatDateTime } = useI18n();
   const [isPending, startTransition] = useTransition();
+  const statusOptions = (Object.keys(TASK_STATUSES) as TaskStatus[]).map(
+    (value) => ({
+      id: value,
+      label: getLocalizedTaskStatus(value, t),
+      value,
+    }),
+  );
   const form = useForm<z.infer<typeof AddTaskFormSchema>>({
     resolver: zodResolver(AddTaskFormSchema),
     defaultValues: {
@@ -112,7 +116,9 @@ export function TaskForm({
     startTransition(async () => {
       const result = editTask ? await updateTask(data) : await createTask(data);
       toastActionResult<Task>(result, {
-        success: `Task has been ${editTask ? "updated" : "created"} successfully`,
+        success: editTask
+          ? t("tasks.taskUpdated")
+          : t("tasks.taskCreated"),
         onSuccess: (task) => {
           reset();
           setDialogOpen(false);
@@ -131,10 +137,10 @@ export function TaskForm({
     onSubmit(data, true),
   );
 
-  const pageTitle = editTask ? "Edit Task" : "Add Task";
+  const pageTitle = editTask ? t("tasks.editTask") : t("tasks.addTask");
   const pageDescription = editTask
-    ? "Update the details of this task."
-    : "Add a new task to track.";
+    ? t("tasks.editTaskDescription")
+    : t("tasks.addTaskDescription");
 
   const closeDialog = () => {
     reset();
@@ -164,9 +170,12 @@ export function TaskForm({
                   name="title"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Title *</FormLabel>
+                      <FormLabel>{t("tasks.titleRequired")}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Enter task title" {...field} />
+                        <Input
+                          placeholder={t("tasks.titlePlaceholder")}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -181,7 +190,7 @@ export function TaskForm({
                   name="activityTypeId"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Activity Type</FormLabel>
+                      <FormLabel>{t("tasks.activityType")}</FormLabel>
                       <FormControl>
                         <Combobox
                           options={activityTypes}
@@ -205,9 +214,9 @@ export function TaskForm({
                   name="status"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Status</FormLabel>
+                      <FormLabel>{t("common.status")}</FormLabel>
                       <SelectFormCtrl
-                        label="Task Status"
+                        label={t("tasks.taskStatus")}
                         options={statusOptions}
                         field={field}
                       />
@@ -224,7 +233,9 @@ export function TaskForm({
                   name="priority"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Priority: {priorityValue}</FormLabel>
+                      <FormLabel>
+                        {t("tasks.priorityValue", { value: priorityValue })}
+                      </FormLabel>
                       <FormControl>
                         <Slider
                           min={0}
@@ -236,8 +247,8 @@ export function TaskForm({
                         />
                       </FormControl>
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Low (0)</span>
-                        <span>High (10)</span>
+                        <span>{t("tasks.lowZero")}</span>
+                        <span>{t("tasks.highTen")}</span>
                       </div>
                       <FormMessage />
                     </FormItem>
@@ -252,7 +263,11 @@ export function TaskForm({
                   name="percentComplete"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>% Complete: {percentCompleteValue}%</FormLabel>
+                      <FormLabel>
+                        {t("tasks.percentCompleteValue", {
+                          value: percentCompleteValue,
+                        })}
+                      </FormLabel>
                       <FormControl>
                         <Slider
                           min={0}
@@ -280,7 +295,7 @@ export function TaskForm({
                   name="dueDate"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Due Date</FormLabel>
+                      <FormLabel>{t("tasks.dueDate")}</FormLabel>
                       <DatePicker
                         field={field}
                         presets={true}
@@ -296,25 +311,19 @@ export function TaskForm({
               {editTask && (
                 <div className="flex flex-col gap-2">
                   <div>
-                    <p className="text-sm font-medium">Created</p>
+                    <p className="text-sm font-medium">{t("common.created")}</p>
                     <p className="text-sm text-muted-foreground">
                       {editTask.createdAt
-                        ? format(
-                            new Date(editTask.createdAt),
-                            "MMM d, yyyy h:mm a",
-                          )
-                        : "N/A"}
+                        ? formatDateTime(new Date(editTask.createdAt))
+                        : t("common.notAvailable")}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium">Updated</p>
+                    <p className="text-sm font-medium">{t("common.updated")}</p>
                     <p className="text-sm text-muted-foreground">
                       {editTask.updatedAt
-                        ? format(
-                            new Date(editTask.updatedAt),
-                            "MMM d, yyyy h:mm a",
-                          )
-                        : "N/A"}
+                        ? formatDateTime(new Date(editTask.updatedAt))
+                        : t("common.notAvailable")}
                     </p>
                   </div>
                 </div>
@@ -327,7 +336,7 @@ export function TaskForm({
                   name="description"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Description</FormLabel>
+                      <FormLabel>{t("common.description")}</FormLabel>
                       <FormControl>
                         <TiptapEditor field={field} />
                       </FormControl>
@@ -346,7 +355,7 @@ export function TaskForm({
                       className="mt-2 md:mt-0 w-full"
                       onClick={closeDialog}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   </div>
                   {onSaveAndStart && (
@@ -358,7 +367,7 @@ export function TaskForm({
                       disabled={isPending}
                       data-testid="save-and-start-task-btn"
                     >
-                      Save & Start
+                      {t("tasks.saveAndStart")}
                     </Button>
                   )}
                   <Button
@@ -366,7 +375,7 @@ export function TaskForm({
                     disabled={isPending}
                     data-testid="save-task-btn"
                   >
-                    Save
+                    {t("common.save")}
                     {isPending && (
                       <Loader className="h-4 w-4 shrink-0 spinner ml-2" />
                     )}

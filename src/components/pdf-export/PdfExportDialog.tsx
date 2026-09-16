@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PdfPreviewPane } from "./PdfPreviewPane";
 import type { PreviewResult } from "./usePdfPreview";
+import { useI18n } from "@/i18n";
 
 type PdfExportDialogProps = {
   open: boolean;
@@ -48,6 +49,7 @@ export function PdfExportDialog({
   settingsPanel,
   onExport,
 }: PdfExportDialogProps) {
+  const { t } = useI18n();
   // Exporting mid-generation would download the settings just switched away
   // from, since Export reuses the previewed blob. Exporting while pending
   // would take the null-prepared path and generate from inputs that have not
@@ -87,7 +89,7 @@ export function PdfExportDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             type="button"
@@ -101,7 +103,7 @@ export function PdfExportDialog({
             }}
           >
             <FileDown className="h-4 w-4" />
-            Export
+            {t("common.export")}
           </Button>
         </DialogFooter>
       </DialogContent>

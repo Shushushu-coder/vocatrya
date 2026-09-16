@@ -31,8 +31,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { useI18n } from "@/i18n";
 
 const ProfileContainer = () => {
+  const { t } = useI18n();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [coverLetters, setCoverLetters] = useState<CoverLetter[]>([]);
   const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
@@ -198,9 +200,13 @@ const ProfileContainer = () => {
     <Card>
       <ResponsiveCardHeader>
         <div className="flex items-baseline gap-2">
-          <CardTitle>Profile</CardTitle>
+          <CardTitle>{t("profile.title")}</CardTitle>
           {!loading && totalDocuments > 0 && (
-            <RecordsCount count={documents.length} total={totalDocuments} label="documents" />
+            <RecordsCount
+              count={documents.length}
+              total={totalDocuments}
+              label={t("profile.documents")}
+            />
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -209,7 +215,7 @@ const ProfileContainer = () => {
               <Button size="sm" variant="outline" className="h-8 gap-1">
                 <PlusCircle className="h-3.5 w-3.5" />
                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  New
+                  {t("common.new")}
                 </span>
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
@@ -219,13 +225,13 @@ const ProfileContainer = () => {
                 className="cursor-pointer"
                 onClick={createResume}
               >
-                Add New Resume
+                {t("profile.addNewResume")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"
                 onClick={createCoverLetter}
               >
-                Add New Cover Letter
+                {t("profile.addNewCoverLetter")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -281,7 +287,7 @@ const ProfileContainer = () => {
               disabled={loading}
               className="btn btn-primary"
             >
-              {loading ? "Loading..." : "Load More"}
+              {loading ? t("common.loading") : t("common.loadMore")}
             </Button>
           </div>
         )}

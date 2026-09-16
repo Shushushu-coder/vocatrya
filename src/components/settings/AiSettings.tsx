@@ -27,8 +27,10 @@ import { XCircle, Loader2, RefreshCw } from "lucide-react";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 import { getUserSettings, updateAiSettings } from "@/actions/userSettings.actions";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { useI18n } from "@/i18n";
 
 function AiSettings() {
+  const { t } = useI18n();
   const { isOpen: isAgentChatOpen, refreshPreflight } = useAgentChat();
   const [selectedModel, setSelectedModel] = useState<AiModel>(defaultModel);
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
@@ -115,7 +117,7 @@ function AiSettings() {
             if (!connResult.isConnected) {
               if (!cancelled) {
                 setFetchedModels(fallback);
-                setConnectionError(connResult.error || "Ollama is not reachable.");
+                setConnectionError(connResult.error || t("settings.ollamaNotReachable"));
               }
               return;
             }
@@ -125,8 +127,8 @@ function AiSettings() {
             const errorData = await response.json().catch(() => null);
             const errorMsg = errorData?.error
               || (entry.category === "local"
-                ? `Failed to fetch ${entry.displayName} models. Make sure ${entry.displayName} is running.`
-                : `Failed to fetch ${entry.displayName} models. Please check your API key in API Keys settings.`);
+                ? t("settings.fetchLocalModelsFailed", { name: entry.displayName })
+                : t("settings.fetchCloudModelsFailed", { name: entry.displayName }));
             if (!cancelled) {
               setFetchError(errorMsg);
               setFetchedModels(fallback);
@@ -150,8 +152,8 @@ function AiSettings() {
             setFetchedModels(fallback);
             setFetchError(
               entry.category === "local"
-                ? `Failed to fetch ${entry.displayName} models. Make sure ${entry.displayName} is running.`
-                : `Failed to fetch ${entry.displayName} models. Please check your API key in API Keys settings.`,
+                ? t("settings.fetchLocalModelsFailed", { name: entry.displayName })
+                : t("settings.fetchCloudModelsFailed", { name: entry.displayName }),
             );
           }
         } finally {
@@ -161,7 +163,7 @@ function AiSettings() {
 
       return () => { cancelled = true; };
     },
-    [],
+    [t],
   );
 
   useEffect(() => {
@@ -175,7 +177,7 @@ function AiSettings() {
 
   const saveModelSettings = async () => {
     if (!selectedModel.model) {
-      toastError("Please select a model to save.");
+      toastError(t("settings.pleaseSelectModel"));
       return;
     }
     setIsSaving(true);
@@ -185,14 +187,14 @@ function AiSettings() {
         model: selectedModel.model,
       });
       if (result.success) {
-        toastSuccess("AI Settings saved successfully.", "Saved!");
+        toastSuccess(t("settings.aiSettingsSaved"), t("settings.savedExclaim"));
         if (isAgentChatOpen) void refreshPreflight();
       } else {
-        toastError(result.message || "Failed to save AI settings.");
+        toastError(result.message || t("settings.saveAiFailed"));
       }
     } catch (error) {
       console.error("Error saving AI settings:", error);
-      toastError("Failed to save AI settings.");
+      toastError(t("settings.saveAiFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -202,14 +204,14 @@ function AiSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">AI Provider</h3>
+          <h3 className="text-lg font-medium">{t("settings.aiProvider")}</h3>
           <p className="text-sm text-muted-foreground">
-            Configure your AI service provider and model.
+            {t("settings.aiProviderDescription")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading settings...</span>
+          <span>{t("settings.loadingSettings")}</span>
         </div>
       </div>
     );
@@ -218,14 +220,14 @@ function AiSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">AI Provider</h3>
+        <h3 className="text-lg font-medium">{t("settings.aiProvider")}</h3>
         <p className="text-sm text-muted-foreground">
-          Configure your AI service provider and model.
+          {t("settings.aiProviderDescription")}
         </p>
       </div>
       <div>
         <Label className="my-4" htmlFor="ai-provider">
-          AI Service Provider
+          {t("settings.aiServiceProvider")}
         </Label>
         <Select
           value={selectedModel.provider}
@@ -233,10 +235,10 @@ function AiSettings() {
         >
           <SelectTrigger
             id="ai-provider"
-            aria-label="Select AI provider"
+            aria-label={t("settings.selectAiProvider")}
             className="w-[180px]"
           >
-            <SelectValue placeholder="Select AI Service Provider" />
+            <SelectValue placeholder={t("settings.selectAiServiceProvider")} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
@@ -254,7 +256,7 @@ function AiSettings() {
       </div>
       <div>
         <Label className="my-4" htmlFor="ai-model">
-          Model
+          {t("settings.modelLabel")}
         </Label>
         <div className="flex flex-wrap items-start gap-2">
           <Select
@@ -264,12 +266,14 @@ function AiSettings() {
           >
             <SelectTrigger
               id="ai-model"
-              aria-label="Select Model"
+              aria-label={t("settings.selectModel")}
               className="w-[180px]"
             >
               <SelectValue
                 placeholder={
-                  isLoadingModels ? "Loading models..." : "Select AI Model"
+                  isLoadingModels
+                    ? t("settings.loadingModels")
+                    : t("settings.selectAiModel")
                 }
               />
             </SelectTrigger>
@@ -299,7 +303,7 @@ function AiSettings() {
                 disabled={isLoadingModels}
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isLoadingModels ? "animate-spin" : ""}`} />
-                Retry
+                {t("common.retry")}
               </Button>
               <div className="flex items-start gap-1 text-red-600 text-sm">
                 <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -315,7 +319,7 @@ function AiSettings() {
         disabled={!selectedModel.model || isLoadingModels || isSaving}
       >
         {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Save
+        {t("common.save")}
       </Button>
     </div>
   );

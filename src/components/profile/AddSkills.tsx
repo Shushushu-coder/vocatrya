@@ -34,6 +34,7 @@ import {
   AddSkillsFormSchema,
   UpdateSkillsFormSchema,
 } from "@/models/skills.schema";
+import { useI18n } from "@/i18n";
 type AddSkillsProps = {
   resumeId: string | undefined;
   dialogOpen: boolean;
@@ -47,6 +48,7 @@ function AddSkills({
   setDialogOpen,
   skillsToEdit,
 }: AddSkillsProps) {
+  const { t } = useI18n();
   const isEditing = !!skillsToEdit;
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [isPending, startTransition] = useTransition();
@@ -71,7 +73,7 @@ function AddSkills({
       if (Array.isArray(tags)) {
         setAllTags(tags);
       } else {
-        toastError("Failed to load skills. Please close and reopen the dialog.");
+        toastError(t("profile.skillsLoadFailed"));
       }
     });
 
@@ -104,7 +106,7 @@ function AddSkills({
         categories: [{ label: "", tagIds: [] }],
       });
     }
-  }, [dialogOpen, isEditing, skillsToEdit, resumeId, form]);
+  }, [dialogOpen, isEditing, skillsToEdit, resumeId, form, t]);
 
   const handleTagCreated = (newTag: Tag) => {
     setAllTags((prev) =>
@@ -129,7 +131,9 @@ function AddSkills({
       } else {
         form.reset();
         setDialogOpen(false);
-        toastSuccess(`Skills section ${isEditing ? "updated" : "added"} successfully`);
+        toastSuccess(
+          isEditing ? t("profile.skillsUpdated") : t("profile.skillsAdded"),
+        );
       }
     });
   };
@@ -138,10 +142,11 @@ function AddSkills({
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="max-h-[85vh] md:max-w-[40rem] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Skills" : "Add Skills"}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? t("profile.editSkills") : t("profile.addSkills")}
+          </DialogTitle>
           <DialogDescription>
-            Group your skills into categories. Leave a name blank to list skills
-            without a heading.
+            {t("profile.addSkillsDescription")}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -154,9 +159,12 @@ function AddSkills({
               name="sectionTitle"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Section heading</FormLabel>
+                  <FormLabel>{t("profile.sectionHeading")}</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="e.g. Core Skills" />
+                    <Input
+                      {...field}
+                      placeholder={t("profile.coreSkillsPlaceholder")}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -180,7 +188,7 @@ function AddSkills({
                           <FormControl>
                             <Input
                               {...f}
-                              placeholder="Category name (optional, e.g. Languages)"
+                              placeholder={t("profile.categoryNamePlaceholder")}
                               className="uppercase text-xs font-medium"
                             />
                           </FormControl>
@@ -211,7 +219,7 @@ function AddSkills({
                             selectedTagIds={f.value}
                             onChange={f.onChange}
                             max={APP_CONSTANTS.MAX_SKILLS_PER_CATEGORY}
-                            placeholder="Search or add a skill…"
+                            placeholder={t("profile.searchOrAddSkill")}
                             onTagCreated={handleTagCreated}
                           />
                         </FormControl>
@@ -232,7 +240,7 @@ function AddSkills({
               onClick={() => append({ label: "", tagIds: [] })}
             >
               <PlusCircle className="h-4 w-4 mr-2" />
-              Add category
+              {t("profile.addCategory")}
             </Button>
 
             <DialogFooter>
@@ -241,10 +249,10 @@ function AddSkills({
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={isPending}>
-                Save
+                {t("common.save")}
                 {isPending && <Loader className="h-4 w-4 shrink-0 spinner ml-2" />}
               </Button>
             </DialogFooter>

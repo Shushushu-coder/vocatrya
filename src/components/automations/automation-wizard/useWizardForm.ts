@@ -14,6 +14,7 @@ import {
 import { toastSuccess, toastError } from "@/lib/toast";
 import type { AutomationWithResume, JobBoard } from "@/models/automation.model";
 import type { AtsConfigValue } from "../AtsSearchStep";
+import { useI18n } from "@/i18n";
 import {
   EMPTY_ATS,
   STEPS,
@@ -36,6 +37,7 @@ export function useWizardForm({
   onSuccess,
   editAutomation,
 }: UseWizardFormArgs) {
+  const { t } = useI18n();
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -82,19 +84,21 @@ export function useWizardForm({
       if (result.success) {
         toastSuccess(
           editAutomation
-            ? "Your automation has been updated successfully."
-            : "Your automation has been created and will run at the scheduled time.",
-          editAutomation ? "Automation updated" : "Automation created",
+            ? t("automations.updatedSuccess")
+            : t("automations.createdSuccess"),
+          editAutomation
+            ? t("automations.updatedTitle")
+            : t("automations.createdTitle"),
         );
         form.reset();
         setStep(0);
         onOpenChange(false);
         onSuccess();
       } else {
-        toastError(result.message || "Something went wrong");
+        toastError(result.message || t("automations.somethingWentWrong"));
       }
     } catch (error) {
-      toastError("Failed to save automation");
+      toastError(t("automations.failedToSave"));
     } finally {
       setIsSubmitting(false);
     }
@@ -131,11 +135,9 @@ export function useWizardForm({
   const nextStep = () => {
     if (step === 4 && takenHours.has(formValues.scheduleHour)) {
       form.setError("scheduleHour", {
-        message: `Another automation already runs at ${(
-          formValues.scheduleHour ?? 8
-        )
-          .toString()
-          .padStart(2, "0")}:00. Please choose a different time.`,
+        message: t("automations.hourTaken", {
+          time: `${(formValues.scheduleHour ?? 8).toString().padStart(2, "0")}:00`,
+        }),
       });
       return;
     }

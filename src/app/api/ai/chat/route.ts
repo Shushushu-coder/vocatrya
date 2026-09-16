@@ -20,11 +20,12 @@ import { TEMPERATURES } from "@/lib/ai/config";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { AgentChatRequestSchema } from "@/models/agent.schema";
 import {
-  AGENT_CHAT_SYSTEM_PROMPT,
+  buildAgentChatSystemPrompt,
   AGENT_PASTE_ONLY_USER_MESSAGE,
   buildPageContextMessage,
   buildPasteContextMessage,
 } from "@/lib/agent/prompt";
+import { LOCALE_COOKIE_NAME, normalizeLocale } from "@/i18n";
 import {
   resolvePastedText,
   stubConsumedPastes,
@@ -208,6 +209,10 @@ export const POST = async (req: NextRequest) => {
   let turnUsage: LanguageModelUsage | undefined;
   let turnFinishReason: string | undefined;
 
+  const rawLocale = req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value;
+  const locale = normalizeLocale(rawLocale);
+  const systemPrompt = buildAgentChatSystemPrompt(locale);
+
   const turnSpan = startSpan("agent.chat.turn", {
     ...genAiRequestAttrs({
       provider,
@@ -215,7 +220,7 @@ export const POST = async (req: NextRequest) => {
       temperature: TEMPERATURES.ANALYSIS,
       numCtx: APP_CONSTANTS.AGENT_CHAT_NUM_CTX,
       surface: SURFACES.AGENT_CHAT,
-      system: AGENT_CHAT_SYSTEM_PROMPT,
+      system: systemPrompt,
       prompt: modelMessages,
     }),
     "jobsync.user_id": userId,
@@ -250,13 +255,13 @@ export const POST = async (req: NextRequest) => {
         });
         prefixMetrics = measureTurnPrefix({
           userId,
-          system: AGENT_CHAT_SYSTEM_PROMPT,
+          system: systemPrompt,
           tools,
           modelMessages,
         });
         const result = streamText({
           model,
-          system: AGENT_CHAT_SYSTEM_PROMPT,
+          system: systemPrompt,
           messages: modelMessages,
           tools,
           // Which tools end the turn — and why — lives beside the tool metadata

@@ -28,12 +28,17 @@ import {
   type AgentPastePartData,
 } from "@/models/agent.model";
 
+import { useI18n } from "@/i18n";
+
 function PasteChip({ data }: { data: AgentPastePartData }) {
-  const chars = data.chars.toLocaleString();
+  const { t, formatNumber } = useI18n();
+  const chars = formatNumber(data.chars);
   return (
     <span className="inline-flex items-center gap-1.5 rounded-sm border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
       <FileTextIcon className="size-3" />
-      Pasted posting · {chars} chars{data.truncated ? " (truncated)" : ""}
+      {data.truncated
+        ? t("agent.pastedPostingTruncated", { chars })
+        : t("agent.pastedPosting", { chars })}
     </span>
   );
 }
@@ -96,6 +101,8 @@ export function AgentChatMessages() {
     setDismissed(true);
     dismissInterrupted();
   };
+
+  const { t } = useI18n();
 
   return (
     <Conversation className="flex-1">
@@ -183,7 +190,7 @@ export function AgentChatMessages() {
 
         {showContinue && (
           <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            <span className="flex-1">This reply was interrupted.</span>
+            <span className="flex-1">{t("agent.replyInterrupted")}</span>
             {/* Offered, never automatic — the user closed the panel, and
                 silently restarting a 30–60s local generation on reopen undoes
                 their own action. */}
@@ -193,10 +200,10 @@ export function AgentChatMessages() {
               type="button"
               variant="outline"
             >
-              Continue
+              {t("agent.continue")}
             </Button>
             <Button
-              aria-label="Dismiss"
+              aria-label={t("agent.dismissInterrupted")}
               className="size-6 shrink-0"
               onClick={dismiss}
               size="icon"
@@ -208,7 +215,7 @@ export function AgentChatMessages() {
           </div>
         )}
 
-        {thinking && <AgentStatusRow label="Thinking…" />}
+        {thinking && <AgentStatusRow label={t("agent.thinkingLabel")} />}
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>

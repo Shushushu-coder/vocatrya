@@ -13,36 +13,56 @@ const inter = localFont({
   weight: "100 900",
 });
 
-export const metadata: Metadata = {
-  title: {
-    template: "%s | Vocatrya",
-    default: "Vocatrya",
-  },
-  description: "Job Application Tracking System",
-};
+import { cookies } from "next/headers";
+import { I18nProvider, LOCALE_COOKIE_NAME, normalizeLocale } from "@/i18n";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const cookieStore = await cookies();
+  const rawLocale = cookieStore.get(LOCALE_COOKIE_NAME)?.value;
+  const locale = normalizeLocale(rawLocale);
+
+  const description =
+    locale === "zh-CN"
+      ? "AI 求职与职业发展工作台"
+      : "Job Application Tracking System";
+
+  return {
+    title: {
+      template: "%s | Vocatrya",
+      default: "Vocatrya",
+    },
+    description,
+  };
+}
 
 interface Props {
   children: React.ReactNode;
 }
 
-export default function RootLayout({ children }: Readonly<Props>) {
+export default async function RootLayout({ children }: Readonly<Props>) {
+  const cookieStore = await cookies();
+  const rawLocale = cookieStore.get(LOCALE_COOKIE_NAME)?.value;
+  const locale = normalizeLocale(rawLocale);
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body
         className={cn(
           "min-h-screen bg-background font-sans antialiased",
           inter.variable
         )}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-          <Toaster />
-        </ThemeProvider>
+        <I18nProvider initialLocale={locale}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+            <Toaster />
+          </ThemeProvider>
+        </I18nProvider>
       </body>
     </html>
   );

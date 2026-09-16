@@ -27,6 +27,7 @@ import {
   updateResumeSummary,
 } from "@/actions/profile.actions";
 import { ResumeSection } from "@/models/profile.model";
+import { useI18n } from "@/i18n";
 
 interface AddResumeSummaryProps {
   resumeId: string | undefined;
@@ -41,12 +42,15 @@ function AddResumeSummary({
   setDialogOpen,
   summaryToEdit,
 }: AddResumeSummaryProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
-  const pageTitle = summaryToEdit ? "Edit Summary" : "Add Summary";
+  const pageTitle = summaryToEdit
+    ? t("profile.editSummary")
+    : t("profile.addSummary");
   const pageDescription = summaryToEdit
-    ? "Update the professional summary on your resume."
-    : "Add a professional summary to your resume.";
+    ? t("profile.editSummaryDescription")
+    : t("profile.addSummaryDescription");
 
   const form = useForm<z.infer<typeof AddSummarySectionFormSchema>>({
     resolver: zodResolver(AddSummarySectionFormSchema),
@@ -84,9 +88,11 @@ function AddResumeSummary({
       } else {
         reset();
         setDialogOpen(false);
-        toastSuccess(`Summary has been ${
-          summaryToEdit ? "updated" : "created"
-        } successfully`);
+        toastSuccess(
+          summaryToEdit
+            ? t("profile.summaryUpdated")
+            : t("profile.summaryCreated"),
+        );
       }
     });
   };
@@ -112,9 +118,12 @@ function AddResumeSummary({
                 name="sectionTitle"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Section Title</FormLabel>
+                    <FormLabel>{t("profile.sectionTitle")}</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Ex: Summary" />
+                      <Input
+                        {...field}
+                        placeholder={t("profile.sectionTitlePlaceholderSummary")}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -128,7 +137,7 @@ function AddResumeSummary({
                 name="content"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Resume Summary</FormLabel>
+                    <FormLabel>{t("profile.resumeSummary")}</FormLabel>
                     <FormControl>
                       <TiptapEditor field={field} />
                     </FormControl>

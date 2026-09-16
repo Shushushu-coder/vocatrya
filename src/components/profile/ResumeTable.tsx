@@ -25,7 +25,6 @@ import {
   TableRow,
 } from "../ui/table";
 import { ProfileDocument } from "@/models/profile.model";
-import { format } from "date-fns";
 import Link from "next/link";
 import { Button } from "../ui/button";
 import { useMemo, useState } from "react";
@@ -40,6 +39,7 @@ import {
   hasMinResumeSections,
   warnInsufficientResumeSections,
 } from "@/utils/resumeSections.utils";
+import { useI18n } from "@/i18n";
 
 type DocumentTableProps = {
   documents: ProfileDocument[];
@@ -60,6 +60,7 @@ function DocumentTable({
   reloadDocuments,
   defaultResumeId,
 }: DocumentTableProps) {
+  const { t, formatDate } = useI18n();
   const [alertOpen, setAlertOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<ProfileDocument>();
   const [setDefaultConfirmOpen, setSetDefaultConfirmOpen] = useState(false);
@@ -86,7 +87,7 @@ function DocumentTable({
     if (!doc.id) return;
     const { success, message } = await setDefaultResume(doc.id);
     if (success) {
-      toastSuccess(`"${doc.title}" is now your default resume.`);
+      toastSuccess(t("profile.defaultNow", { title: doc.title }));
       reloadDocuments();
     } else {
       toastError(message);
@@ -122,8 +123,11 @@ function DocumentTable({
   const deleteDocument = async (doc: ProfileDocument) => {
     if (!doc.id) return;
     if (doc.jobCount > 0) {
-      const label = doc.type === "resume" ? "resume" : "cover letter";
-      return toastError(`Number of jobs using ${label} must be 0!`);
+      const label =
+        doc.type === "resume"
+          ? t("profile.resumeLabel")
+          : t("profile.coverLetterLabel");
+      return toastError(t("profile.jobsUsingMustBeZero", { label }));
     }
 
     const { success, message } =
@@ -132,8 +136,11 @@ function DocumentTable({
         : await deleteCoverLetterById(doc.id);
 
     if (success) {
-      const label = doc.type === "resume" ? "Resume" : "Cover letter";
-      toastSuccess(`${label} has been deleted successfully`);
+      toastSuccess(
+        doc.type === "resume"
+          ? t("profile.resumeDeleted")
+          : t("profile.coverLetterDeleted"),
+      );
       reloadDocuments();
     } else {
       toastError(message);
@@ -145,16 +152,18 @@ function DocumentTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Title</TableHead>
-            <TableHead className="whitespace-nowrap">Type</TableHead>
-            <TableHead className="whitespace-nowrap">Created</TableHead>
-            <TableHead className="hidden md:table-cell whitespace-nowrap">
-              Updated
+            <TableHead>{t("common.title")}</TableHead>
+            <TableHead className="whitespace-nowrap">{t("common.type")}</TableHead>
+            <TableHead className="whitespace-nowrap">
+              {t("common.created")}
             </TableHead>
-            <TableHead>Jobs</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead className="hidden md:table-cell whitespace-nowrap">
+              {t("common.updated")}
+            </TableHead>
+            <TableHead>{t("profile.jobsCount")}</TableHead>
+            <TableHead>{t("common.actions")}</TableHead>
             <TableHead>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -175,7 +184,7 @@ function DocumentTable({
                       ) : null}
                       {doc.isDefault ? (
                         <Badge className="ml-2 border-transparent bg-green-600 text-white hover:bg-green-600/90">
-                          Default
+                          {t("profile.defaultResume")}
                         </Badge>
                       ) : null}
                     </Link>
@@ -190,15 +199,19 @@ function DocumentTable({
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <StatusBadge
-                    label={isResume ? "Resume" : "Cover Letter"}
+                    label={
+                      isResume
+                        ? t("profile.resume")
+                        : t("profile.coverLetter")
+                    }
                     color={DOCUMENT_TYPE_BADGE_COLORS[doc.type]}
                   />
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                  {doc.createdAt && format(doc.createdAt, "PP")}
+                  {doc.createdAt && formatDate(doc.createdAt)}
                 </TableCell>
                 <TableCell className="hidden md:table-cell whitespace-nowrap">
-                  {doc.updatedAt && format(doc.updatedAt, "PP")}
+                  {doc.updatedAt && formatDate(doc.updatedAt)}
                 </TableCell>
                 <TableCell>{doc.jobCount}</TableCell>
                 <TableCell>
@@ -211,11 +224,11 @@ function DocumentTable({
                         data-testid="document-actions-menu-btn"
                       >
                         <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">Toggle menu</span>
+                        <span className="sr-only">{t("common.toggleMenu")}</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                       {isResume ? (
                         <>
                           <DropdownMenuItem
@@ -223,12 +236,12 @@ function DocumentTable({
                             onClick={() => editResume(doc)}
                           >
                             <Pencil className="mr-2 h-4 w-4" />
-                            Edit Resume Title
+                            {t("profile.editResumeTitle")}
                           </DropdownMenuItem>
                           <Link href={`/dashboard/profile/resume/${doc.id}`}>
                             <DropdownMenuItem className="cursor-pointer">
                               <FilePenLine className="mr-2 h-4 w-4" />
-                              View/Edit Resume
+                              {t("profile.viewEditResume")}
                             </DropdownMenuItem>
                           </Link>
                           <DropdownMenuItem
@@ -237,7 +250,7 @@ function DocumentTable({
                             data-testid="copy-resume-menu-item"
                           >
                             <Copy className="mr-2 h-4 w-4" />
-                            Create a copy
+                            {t("profile.createACopy")}
                           </DropdownMenuItem>
                           {!doc.isDefault && (
                             <DropdownMenuItem
@@ -245,7 +258,7 @@ function DocumentTable({
                               onClick={() => onSetDefault(doc)}
                             >
                               <Star className="mr-2 h-4 w-4" />
-                              Set as default
+                              {t("profile.setAsDefaultLower")}
                             </DropdownMenuItem>
                           )}
                         </>
@@ -256,7 +269,7 @@ function DocumentTable({
                             onClick={() => editCoverLetter(doc)}
                           >
                             <Pencil className="mr-2 h-4 w-4" />
-                            Edit Cover Letter
+                            {t("profile.editCoverLetter")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="cursor-pointer"
@@ -264,7 +277,7 @@ function DocumentTable({
                             data-testid="export-cover-letter-menu-item"
                           >
                             <FileDown className="mr-2 h-4 w-4" />
-                            Export to PDF
+                            {t("profile.exportToPdf")}
                           </DropdownMenuItem>
                         </>
                       )}
@@ -273,7 +286,7 @@ function DocumentTable({
                         onClick={() => onDeleteDocument(doc)}
                       >
                         <Trash className="mr-2 h-4 w-4" />
-                        Delete
+                        {t("common.delete")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -285,29 +298,36 @@ function DocumentTable({
       </Table>
       <DeleteAlertDialog
         pageTitle={
-          documentToDelete?.type === "cover-letter" ? "cover letter" : "resume"
+          documentToDelete?.type === "cover-letter"
+            ? t("profile.coverLetterLabel")
+            : t("profile.resumeLabel")
         }
         open={alertOpen}
         onOpenChange={setAlertOpen}
         onDelete={() => deleteDocument(documentToDelete!)}
         alertDescription={
           documentToDelete?.isDefault
-            ? "This is your default resume. Deleting it will leave you without a default until you set another. This action cannot be undone."
+            ? t("profile.deleteDefaultResumeDescription")
             : undefined
         }
       />
       <DeleteAlertDialog
-        pageTitle="resume"
+        pageTitle={t("profile.resumeLabel")}
         open={setDefaultConfirmOpen}
         onOpenChange={setSetDefaultConfirmOpen}
         onDelete={() => performSetDefault(documentToSetDefault!)}
-        alertTitle="Change default resume?"
+        alertTitle={t("profile.changeDefaultResume")}
         alertDescription={
           currentDefault
-            ? `This will make "${documentToSetDefault?.title}" your default resume, replacing "${currentDefault.title}".`
-            : `This will make "${documentToSetDefault?.title}" your default resume, replacing your current default.`
+            ? t("profile.replaceDefaultNamed", {
+                newTitle: documentToSetDefault?.title ?? "",
+                currentTitle: currentDefault.title,
+              })
+            : t("profile.replaceDefaultUnnamed", {
+                newTitle: documentToSetDefault?.title ?? "",
+              })
         }
-        actionLabel="Set as default"
+        actionLabel={t("profile.setAsDefaultLower")}
         actionVariant="default"
       />
     </>

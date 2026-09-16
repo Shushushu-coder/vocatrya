@@ -30,6 +30,8 @@ type MyJobsTableProps = {
   onAddNote: (jobId: string) => void;
 };
 
+import { useI18n } from "@/i18n";
+
 function MyJobsTable({
   jobs,
   jobStatuses,
@@ -38,6 +40,7 @@ function MyJobsTable({
   onChangeJobStatus,
   onAddNote,
 }: MyJobsTableProps) {
+  const { t, formatDate } = useI18n();
   const [alertOpen, setAlertOpen] = useState(false);
   const [jobIdToDelete, setJobIdToDelete] = useState("");
 
@@ -52,17 +55,17 @@ function MyJobsTable({
         <TableHeader>
           <TableRow>
             <TableHead className="hidden w-[100px] sm:table-cell">
-              <span className="sr-only">Company Logo</span>
+              <span className="sr-only">{t("jobs.company")}</span>
             </TableHead>
-            <TableHead className="hidden md:table-cell">Date Applied</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead>Company</TableHead>
-            <TableHead className="hidden md:table-cell">Location</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="hidden md:table-cell text-center">Match</TableHead>
-            <TableHead className="hidden md:table-cell">Source</TableHead>
+            <TableHead className="hidden md:table-cell">{t("jobs.dateApplied")}</TableHead>
+            <TableHead>{t("jobs.jobTitle")}</TableHead>
+            <TableHead>{t("jobs.company")}</TableHead>
+            <TableHead className="hidden md:table-cell">{t("jobs.location")}</TableHead>
+            <TableHead>{t("jobs.jobStatus")}</TableHead>
+            <TableHead className="hidden md:table-cell text-center">{t("jobs.matchTab")}</TableHead>
+            <TableHead className="hidden md:table-cell">{t("jobs.jobSource")}</TableHead>
             <TableHead>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -77,7 +80,7 @@ function MyJobsTable({
                   />
                 </TableCell>
                 <TableCell className="hidden md:table-cell w-[120px] whitespace-nowrap">
-                  {job.appliedDate ? format(job.appliedDate, "PP") : "N/A"}
+                  {job.appliedDate ? formatDate(job.appliedDate) : t("common.notAvailable")}
                 </TableCell>
                 <TableCell
                   className="font-medium cursor-pointer max-w-[120px] md:max-w-[220px]"
@@ -140,6 +143,7 @@ function MyJobsTable({
       </Table>
       <DeleteAlertDialog
         pageTitle="job"
+        alertTitle={t("jobs.deleteConfirm")}
         open={alertOpen}
         onOpenChange={setAlertOpen}
         onDelete={() => deleteJob(jobIdToDelete)}

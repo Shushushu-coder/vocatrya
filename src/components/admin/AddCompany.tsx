@@ -26,6 +26,7 @@ import { Input } from "../ui/input";
 import { toastActionResult } from "@/lib/toast";
 import { addCompany, updateCompany } from "@/actions/company.actions";
 import { Company } from "@/models/job.model";
+import { useI18n } from "@/i18n";
 
 type AddCompanyProps = {
   reloadCompanies: () => void;
@@ -44,9 +45,10 @@ function AddCompany({
   setDialogOpen,
   hideTrigger,
 }: AddCompanyProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
-  const pageTitle = editCompany ? "Edit Company" : "Add Company";
+  const pageTitle = editCompany ? t("companies.editCompany") : t("companies.addCompany");
 
   const form = useForm<z.infer<typeof AddCompanyFormSchema>>({
     resolver: zodResolver(AddCompanyFormSchema),
@@ -145,7 +147,7 @@ function AddCompany({
                   name="company"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Company Name</FormLabel>
+                      <FormLabel>{t("companies.companyName")}</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -162,7 +164,7 @@ function AddCompany({
                   name="logoUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Company Logo URL</FormLabel>
+                      <FormLabel>{t("library.companyLogoUrl")}</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -177,7 +179,7 @@ function AddCompany({
                 name="websiteUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Website</FormLabel>
+                    <FormLabel>{t("companies.website")}</FormLabel>
                     <FormControl>
                       <Input placeholder="https://example.com" {...field} />
                     </FormControl>
@@ -192,7 +194,7 @@ function AddCompany({
                 name="careersUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Careers Page</FormLabel>
+                    <FormLabel>{t("library.careersPage")}</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="https://example.com/careers"
@@ -211,7 +213,7 @@ function AddCompany({
                   name="industry"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Industry</FormLabel>
+                      <FormLabel>{t("companies.industry")}</FormLabel>
                       <FormControl>
                         <Input placeholder="Financial Services" {...field} />
                       </FormControl>

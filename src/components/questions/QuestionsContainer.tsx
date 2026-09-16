@@ -24,6 +24,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import Loading from "../Loading";
 import { QuestionList } from "./QuestionList";
 import { QuestionForm } from "./QuestionForm";
+import { useI18n } from "@/i18n";
 
 type QuestionsContainerProps = {
   availableTags: Tag[];
@@ -36,6 +37,7 @@ function QuestionsContainer({
   filterKey,
   onQuestionsChanged,
 }: QuestionsContainerProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -64,11 +66,11 @@ function QuestionsContainer({
         setTotalQuestions(result.total);
         setPage(pageNum);
       } else {
-        toastError(result?.message || "Failed to load questions.");
+        toastError(result?.message || t("questions.failedToLoad"));
       }
       setLoading(false);
     },
-    [],
+    [t],
   );
 
   const reloadQuestions = useCallback(async () => {
@@ -79,7 +81,7 @@ function QuestionsContainer({
   const onDeleteQuestion = async (questionId: string) => {
     const result = await deleteQuestion(questionId);
     toastActionResult(result, {
-      success: "Question has been deleted successfully",
+      success: t("questions.questionDeleted"),
       onSuccess: () => reloadQuestions(),
     });
   };
@@ -137,12 +139,12 @@ function QuestionsContainer({
       <Card className="h-full">
         <ResponsiveCardHeader>
           <div className="flex items-baseline gap-2">
-            <CardTitle>Questions</CardTitle>
+            <CardTitle>{t("questions.title")}</CardTitle>
             {!loading && totalQuestions > 0 && (
               <RecordsCount
                 count={questions.length}
                 total={totalQuestions}
-                label="questions"
+                label={t("questions.recordsLabel")}
               />
             )}
           </div>
@@ -150,7 +152,7 @@ function QuestionsContainer({
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search questions..."
+              placeholder={t("questions.searchPlaceholder")}
             />
             <Button
               size="sm"
@@ -160,7 +162,7 @@ function QuestionsContainer({
             >
               <PlusCircle className="h-3.5 w-3.5" />
               <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                New Question
+                {t("questions.newQuestion")}
               </span>
             </Button>
           </div>
@@ -186,7 +188,7 @@ function QuestionsContainer({
                 }
                 disabled={loading}
               >
-                Load More
+                {t("questions.loadMore")}
               </Button>
             </div>
           )}

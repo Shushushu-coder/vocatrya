@@ -2,6 +2,7 @@
 
 import { RadialChartComponent } from "@/components/RadialChartSvg";
 import type { ResumeScores } from "@/models/ai.schemas";
+import { useI18n } from "@/i18n";
 
 // Started as a copy of the retired review sheet's ScoresSection, kept
 // separate so that surface could be deleted without touching this one.
@@ -13,10 +14,11 @@ export function AgentReviewScoreCard({
   scores: ResumeScores;
   size?: number;
 }) {
+  const { t } = useI18n();
   const items = [
-    { label: "Impact", value: scores.impact },
-    { label: "Clarity", value: scores.clarity },
-    { label: "ATS", value: scores.atsCompatibility },
+    { label: t("agent.impact"), value: scores.impact },
+    { label: t("agent.clarity"), value: scores.clarity },
+    { label: t("agent.ats"), value: scores.atsCompatibility },
   ];
 
   return (

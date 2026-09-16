@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "../ui/form";
 import TiptapEditor from "../TiptapEditor";
+import { useI18n } from "@/i18n";
 
 type NoteDialogProps = {
   open: boolean;
@@ -41,6 +42,7 @@ export function NoteDialog({
   editNote,
   onSaved,
 }: NoteDialogProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
   const form = useForm<z.infer<typeof NoteFormSchema>>({
@@ -66,7 +68,7 @@ export function NoteDialog({
         : await addNote(data);
 
       if (result.success) {
-        toastSuccess(`Note ${editNote ? "updated" : "added"} successfully`);
+        toastSuccess(editNote ? t("jobs.noteUpdated") : t("jobs.noteAdded"));
         form.reset({ jobId, content: "" });
         onOpenChange(false);
         onSaved();
@@ -80,11 +82,13 @@ export function NoteDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editNote ? "Edit Note" : "Add Note"}</DialogTitle>
+          <DialogTitle>
+            {editNote ? t("jobs.editNote") : t("jobs.addNote")}
+          </DialogTitle>
           <DialogDescription>
             {editNote
-              ? "Update this note on the job application."
-              : "Add a note to this job application."}
+              ? t("jobs.editNoteDescription")
+              : t("jobs.addNoteDescription")}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -107,10 +111,10 @@ export function NoteDialog({
                 variant="outline"
                 onClick={() => onOpenChange(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={isPending}>
-                Save
+                {t("common.save")}
                 {isPending && (
                   <Loader className="ml-2 h-4 w-4 shrink-0 spinner" />
                 )}

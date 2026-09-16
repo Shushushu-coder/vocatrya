@@ -1,22 +1,23 @@
-import { Metadata } from "next";
 import {
   MockActivitiesCard,
   MockProfileCard,
   MockJobsCard,
 } from "@/components/developer/DeveloperContainer";
+import { getServerI18n } from "@/i18n/server";
 
-export const metadata: Metadata = {
-  title: "Developer Options | Vocatrya",
-  description: "Developer tools and utilities for development mode",
-};
+export async function generateMetadata() {
+  const { t } = await getServerI18n();
+  return { title: t("nav.developer") };
+}
 
-export default function DeveloperPage() {
+export default async function DeveloperPage() {
+  const { t } = await getServerI18n();
   return (
     <>
       <div className="col-span-3">
-        <h1 className="text-3xl font-bold tracking-tight">Developer Options</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("nav.developer")}</h1>
         <p className="text-muted-foreground mt-2">
-          Tools for development and testing. Only available in development mode.
+          {t("developer.pageDescription")}
         </p>
       </div>
       <div className="col-start-1 self-start">

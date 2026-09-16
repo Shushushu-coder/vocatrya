@@ -14,11 +14,13 @@ import {
   filterUnrecognizedSections,
   PendingCard,
 } from "./pendingCards";
+import { useI18n } from "@/i18n";
 
 // Owns the resume-import review flow: streaming the document into pending
 // cards, the AI availability probe behind "Structure with AI", and accepting,
 // discarding or abandoning the import.
 export function useResumeImport(resume: Resume) {
+  const { t } = useI18n();
   const router = useRouter();
 
   // Import review mode state
@@ -75,8 +77,8 @@ export function useResumeImport(resume: Resume) {
         if (cards.length === 0) {
           setImportMode(false);
           toastError(
-            "No structured data could be extracted from the document.",
-            "No sections found",
+            t("profile.noStructuredData"),
+            t("profile.noSectionsFound"),
           );
           return;
         }
@@ -90,7 +92,9 @@ export function useResumeImport(resume: Resume) {
         if (abortController.signal.aborted) return;
         setImportMode(false);
         toastError(
-          error instanceof Error ? error.message : "Failed to contact AI service.",
+          error instanceof Error
+            ? error.message
+            : t("profile.failedToContactAi"),
         );
       } finally {
         if (importAbortRef.current === abortController) {
@@ -103,7 +107,7 @@ export function useResumeImport(resume: Resume) {
         }
       }
     },
-    [resume.id],
+    [resume.id, t],
   );
 
   // Abort any in-flight import when the component unmounts.
@@ -166,7 +170,7 @@ export function useResumeImport(resume: Resume) {
               setOllamaConnected(result.isConnected);
               if (!result.isConnected) {
                 setConnectionError(
-                  result.error || "Ollama is not reachable.",
+                  result.error || t("profile.ollamaNotReachable"),
                 );
               }
             });
@@ -174,7 +178,7 @@ export function useResumeImport(resume: Resume) {
         }
       });
     }
-  }, [resume.File?.filePath, importMode]);
+  }, [resume.File?.filePath, importMode, t]);
 
   const handleAcceptCard = useCallback(
     async (cardId: string) => {

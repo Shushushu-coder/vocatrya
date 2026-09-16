@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useI18n } from "@/i18n";
 import { ResponsiveCalendar } from "@nivo/calendar";
 import { format, parseISO } from "date-fns";
 import { useTheme } from "next-themes";
@@ -23,6 +24,7 @@ export default function ActivityCalendar({
   years: string[];
   dataByYear: Record<string, any[]>;
 }) {
+  const { t } = useI18n();
   const { resolvedTheme } = useTheme();
   const [year, setYear] = useState(years.at(-1));
   const borderColor = resolvedTheme === "light" ? "#ffffff" : "#0e1117";
@@ -34,10 +36,10 @@ export default function ActivityCalendar({
     <Card className="w-[100%]">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg text-green-600">Activity Calendar</CardTitle>
+          <CardTitle className="text-lg text-green-600">{t("dashboard.activityCalendar")}</CardTitle>
           <Select value={year} onValueChange={setYear}>
-            <SelectTrigger className="w-[100px]" aria-label="Select year">
-              <SelectValue placeholder="Select year" />
+            <SelectTrigger className="w-[100px]" aria-label={t("dashboard.selectYear")}>
+              <SelectValue placeholder={t("dashboard.selectYear")} />
             </SelectTrigger>
             <SelectContent>
               {years.map((y) => (

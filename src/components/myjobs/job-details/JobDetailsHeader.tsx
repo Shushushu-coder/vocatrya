@@ -34,6 +34,7 @@ import {
   getWorkplaceTypeLabel,
 } from "@/models/job.model";
 import { CompanyLogo } from "../CompanyLogo";
+import { useI18n, getLocalizedJobType, getLocalizedWorkplaceType } from "@/i18n";
 
 type JobDetailsHeaderProps = {
   job: JobResponse;
@@ -64,10 +65,13 @@ export function JobDetailsHeader({
   onAddNote,
   onChangeStatus,
 }: JobDetailsHeaderProps) {
+  const { t } = useI18n();
   const details = [
     job.Location?.label,
-    getJobTypeLabel(job.jobType),
-    job.workplaceType ? getWorkplaceTypeLabel(job.workplaceType) : null,
+    getLocalizedJobType(getJobTypeLabel(job.jobType), t),
+    job.workplaceType
+      ? getLocalizedWorkplaceType(getWorkplaceTypeLabel(job.workplaceType), t)
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -75,7 +79,7 @@ export function JobDetailsHeader({
   return (
     <div className="flex flex-col gap-4 @5xl/main:flex-row @5xl/main:items-center">
       <div className="flex flex-1 min-w-0 items-center gap-4">
-        <Button title="Go Back" variant="ghost" size="icon" onClick={onBack}>
+        <Button title={t("jobs.goBack")} variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <CompanyLogo
@@ -103,12 +107,12 @@ export function JobDetailsHeader({
           variant="outline"
           className="cursor-pointer"
           disabled={chatBusy}
-          title={chatBusy ? "The assistant is busy" : undefined}
+          title={chatBusy ? t("jobs.assistantBusy") : undefined}
           onClick={onMatch}
         >
           <Sparkles className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            Match with AI
+            {t("jobs.matchWithAi")}
           </span>
         </Button>
         <Button
@@ -121,7 +125,9 @@ export function JobDetailsHeader({
         >
           <FileText className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            {job.coverLetterId ? "Regenerate Letter" : "Cover Letter"}
+            {job.coverLetterId
+              ? t("jobs.regenerateLetter")
+              : t("jobs.coverLetter")}
           </span>
         </Button>
         <Button
@@ -131,7 +137,7 @@ export function JobDetailsHeader({
         >
           <Pencil className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            Edit
+            {t("common.edit")}
           </span>
         </Button>
         <Button
@@ -142,7 +148,7 @@ export function JobDetailsHeader({
         >
           <Trash2 className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            Delete
+            {t("common.delete")}
           </span>
         </Button>
         <DropdownMenu>
@@ -154,25 +160,25 @@ export function JobDetailsHeader({
               data-testid="job-details-actions-menu-btn"
             >
               <MoreVertical className="h-4 w-4" />
-              <span className="sr-only">Toggle menu</span>
+              <span className="sr-only">{t("jobs.toggleMenu")}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[200px]">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
             <DropdownMenuGroup>
               <DropdownMenuItem className="cursor-pointer" onClick={onEdit}>
                 <Pencil className="mr-2 h-4 w-4" />
-                Edit Job
+                {t("jobs.editJob")}
               </DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer" onClick={onAddNote}>
                 <StickyNote className="mr-2 h-4 w-4" />
-                Add a Note
+                {t("jobs.addANote")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <Tags className="mr-2 h-4 w-4" />
-                  Change status
+                  {t("jobs.changeStatus")}
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent className="p-0">
@@ -190,7 +196,7 @@ export function JobDetailsHeader({
                 onClick={onDelete}
               >
                 <Trash className="mr-2 h-4 w-4" />
-                Delete
+                {t("common.delete")}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

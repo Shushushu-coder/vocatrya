@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { PanelLeft, Briefcase } from "lucide-react";
 
@@ -12,19 +14,40 @@ import {
 import { SIDEBAR_LINKS } from "@/lib/constants";
 import SidebarToggle from "./SidebarToggle";
 import { AgentChatTrigger } from "./AgentChatTrigger";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import { useI18n } from "@/i18n";
 
-async function Header() {
+export function getSidebarNavLabel(
+  route: string,
+  fallbackLabel: string,
+  t: (key: string) => string
+): string {
+  if (route === "/dashboard") return t("nav.dashboard");
+  if (route.startsWith("/dashboard/myjobs")) return t("nav.jobs");
+  if (route.startsWith("/dashboard/automations")) return t("nav.automations");
+  if (route.startsWith("/dashboard/tasks")) return t("nav.tasks");
+  if (route.startsWith("/dashboard/activities")) return t("nav.activities");
+  if (route.startsWith("/dashboard/questions")) return t("nav.questions");
+  if (route.startsWith("/dashboard/profile")) return t("nav.profile");
+  if (route.startsWith("/dashboard/admin")) return t("nav.library");
+  if (route.startsWith("/dashboard/developer")) return t("nav.developer");
+  return fallbackLabel;
+}
+
+function Header() {
+  const { t } = useI18n();
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <Sheet>
         <SheetTrigger asChild>
           <Button size="icon" variant="outline" className="sm:hidden">
             <PanelLeft className="h-5 w-5" />
-            <span className="sr-only">Toggle Menu</span>
+            <span className="sr-only">{t("nav.toggleMenu")}</span>
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="sm:max-w-xs">
-          <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+          <SheetTitle className="sr-only">{t("nav.toggleMenu")}</SheetTitle>
           <nav className="grid gap-6 text-lg font-medium">
             <SheetClose asChild>
               <Link
@@ -32,14 +55,14 @@ async function Header() {
                 className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
               >
                 <Briefcase className="h-5 w-5 transition-all group-hover:scale-110" />
-                <span className="sr-only">Vocatrya</span>
+                <span className="sr-only">{t("common.appTitle")}</span>
               </Link>
             </SheetClose>
             {SIDEBAR_LINKS.map((item) => {
-              // Only show dev-only items in development mode
               if (item.devOnly && process.env.NODE_ENV !== "development") {
                 return null;
               }
+              const label = getSidebarNavLabel(item.route, item.label, t);
               return (
                 <SheetClose asChild key={item.label}>
                   <Link
@@ -47,7 +70,7 @@ async function Header() {
                     className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
                   >
                     <item.icon className="h-5 w-5" />
-                    {item.label}
+                    {label}
                   </Link>
                 </SheetClose>
               );
@@ -56,20 +79,17 @@ async function Header() {
         </SheetContent>
       </Sheet>
       <SidebarToggle />
-      <h1 className="font-semibold">
-        Vocatrya<span className="hidden sm:inline"> - Job Search Assistant</span>
+      <h1 className="font-semibold text-base">
+        Vocatrya
+        <span className="hidden text-muted-foreground sm:inline font-normal">
+          {" "}
+          - {t("common.appSubtitle")}
+        </span>
       </h1>
-      <div className="relative ml-auto flex-1 md:grow-0">
-        {/* <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          id="search"
-          type="search"
-          placeholder="Search..."
-          className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[336px]"
-        /> */}
+      <div className="relative ml-auto flex items-center gap-2">
+        <LanguageSwitcher />
+        <AgentChatTrigger />
       </div>
-
-      <AgentChatTrigger />
     </header>
   );
 }

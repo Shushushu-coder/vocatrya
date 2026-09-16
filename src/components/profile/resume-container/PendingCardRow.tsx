@@ -5,15 +5,19 @@ import type { ImportCardPayload } from "@/actions/resumeImport.actions";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import type { PendingCard } from "./pendingCards";
+import { useI18n } from "@/i18n";
 
-function cardSectionLabel(type: ImportCardPayload["type"]): string {
+function cardSectionLabel(
+  type: ImportCardPayload["type"],
+  t: (key: string) => string,
+): string {
   const map: Record<string, string> = {
-    contactInfo: "Contact Info",
-    summary: "Summary",
-    experience: "Experience",
-    education: "Education",
-    certification: "Certification",
-    skills: "Skills",
+    contactInfo: t("profile.contactInfoShort"),
+    summary: t("profile.summary"),
+    experience: t("profile.experience"),
+    education: t("profile.education"),
+    certification: t("profile.certification"),
+    skills: t("profile.skills"),
   };
   return map[type] ?? type;
 }
@@ -31,17 +35,23 @@ function DetailRow({ label, value }: { label: string; value?: unknown }) {
   );
 }
 
-function PendingCardDetail({ card }: { card: ImportCardPayload }) {
+function PendingCardDetail({
+  card,
+  t,
+}: {
+  card: ImportCardPayload;
+  t: (key: string) => string;
+}) {
   if (card.type === "contactInfo") {
     const d = card.data;
     const name = `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim();
     return (
       <div className="space-y-1 mt-1">
-        {name && <DetailRow label="Name" value={name} />}
-        <DetailRow label="Headline" value={d.headline} />
-        <DetailRow label="Email" value={d.email} />
-        <DetailRow label="Phone" value={d.phone} />
-        <DetailRow label="Address" value={d.address} />
+        {name && <DetailRow label={t("common.name")} value={name} />}
+        <DetailRow label={t("common.headline")} value={d.headline} />
+        <DetailRow label={t("common.email")} value={d.email} />
+        <DetailRow label={t("common.phone")} value={d.phone} />
+        <DetailRow label={t("common.address")} value={d.address} />
       </div>
     );
   }
@@ -59,10 +69,10 @@ function PendingCardDetail({ card }: { card: ImportCardPayload }) {
     const dates = [d.startDate, d.endDate].filter(Boolean).join(" – ");
     return (
       <div className="space-y-1 mt-1">
-        <DetailRow label="Title" value={d.jobTitle} />
-        <DetailRow label="Company" value={d.company} />
-        <DetailRow label="Location" value={d.location} />
-        {dates && <DetailRow label="Dates" value={dates} />}
+        <DetailRow label={t("common.title")} value={d.jobTitle} />
+        <DetailRow label={t("common.company")} value={d.company} />
+        <DetailRow label={t("common.location")} value={d.location} />
+        {dates && <DetailRow label={t("common.dates")} value={dates} />}
         {typeof d.description === "string" && d.description && (
           <p className="text-xs text-foreground mt-1 whitespace-pre-wrap pl-[5.5rem]">
             {d.description}
@@ -77,11 +87,11 @@ function PendingCardDetail({ card }: { card: ImportCardPayload }) {
     const dates = [d.startDate, d.endDate].filter(Boolean).join(" – ");
     return (
       <div className="space-y-1 mt-1">
-        <DetailRow label="Institution" value={d.institution} />
-        <DetailRow label="Degree" value={d.degree} />
-        <DetailRow label="Field" value={d.fieldOfStudy} />
-        <DetailRow label="Location" value={d.location} />
-        {dates && <DetailRow label="Dates" value={dates} />}
+        <DetailRow label={t("common.institution")} value={d.institution} />
+        <DetailRow label={t("profile.degree")} value={d.degree} />
+        <DetailRow label={t("common.field")} value={d.fieldOfStudy} />
+        <DetailRow label={t("common.location")} value={d.location} />
+        {dates && <DetailRow label={t("common.dates")} value={dates} />}
         {typeof d.description === "string" && d.description && (
           <p className="text-xs text-foreground mt-1 whitespace-pre-wrap pl-[5.5rem]">
             {d.description}
@@ -95,11 +105,11 @@ function PendingCardDetail({ card }: { card: ImportCardPayload }) {
     const d = card.data;
     return (
       <div className="space-y-1 mt-1">
-        <DetailRow label="Title" value={d.title} />
-        <DetailRow label="Issuer" value={d.organization} />
-        <DetailRow label="Issued" value={d.issueDate} />
-        <DetailRow label="Expires" value={d.expirationDate} />
-        <DetailRow label="URL" value={d.credentialUrl} />
+        <DetailRow label={t("common.title")} value={d.title} />
+        <DetailRow label={t("common.issuer")} value={d.organization} />
+        <DetailRow label={t("profile.issuedLabel")} value={d.issueDate} />
+        <DetailRow label={t("profile.expiresLabel")} value={d.expirationDate} />
+        <DetailRow label={t("common.url")} value={d.credentialUrl} />
       </div>
     );
   }
@@ -149,13 +159,14 @@ export function PendingCardRow({
   onDiscard: (id: string) => void;
   locked?: boolean;
 }) {
+  const { t } = useI18n();
   const [isSaving, startSaving] = useTransition();
 
   return (
     <div className="border border-dashed rounded-md px-4 py-3 bg-muted/30">
       <div className="flex items-start justify-between gap-4">
         <Badge variant="outline" className="text-xs shrink-0">
-          {cardSectionLabel(pending.card.type)}
+          {cardSectionLabel(pending.card.type, t)}
         </Badge>
         <div className="flex items-center gap-1 shrink-0 ml-auto">
           <Button
@@ -174,7 +185,7 @@ export function PendingCardRow({
             ) : (
               <Check className="h-3 w-3" />
             )}
-            <span className="ml-1">Accept</span>
+            <span className="ml-1">{t("common.accept")}</span>
           </Button>
           <Button
             size="sm"
@@ -187,7 +198,7 @@ export function PendingCardRow({
           </Button>
         </div>
       </div>
-      <PendingCardDetail card={pending.card} />
+      <PendingCardDetail card={pending.card} t={t} />
     </div>
   );
 }

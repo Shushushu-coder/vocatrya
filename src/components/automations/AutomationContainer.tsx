@@ -12,6 +12,7 @@ import type { AutomationWithResume } from "@/models/automation.model";
 import { AutomationList } from "./AutomationList";
 import { AutomationWizard } from "./AutomationWizard";
 import Loading from "@/components/Loading";
+import { useI18n } from "@/i18n";
 
 interface Resume {
   id: string;
@@ -23,6 +24,7 @@ interface AutomationContainerProps {
 }
 
 export function AutomationContainer({ resumes }: AutomationContainerProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [automations, setAutomations] = useState<AutomationWithResume[]>([]);
@@ -39,10 +41,10 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
     if (result.success && result.data) {
       setAutomations(result.data);
     } else {
-      toastError(result.message || "Failed to load automations");
+      toastError(result.message || t("automations.failedToLoad"));
     }
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadAutomations();
@@ -82,14 +84,14 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
     <>
       <Card>
         <ResponsiveCardHeader>
-          <CardTitle>Automations</CardTitle>
+          <CardTitle>{t("automations.title")}</CardTitle>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="icon" onClick={loadAutomations}>
               <RefreshCw className="h-4 w-4" />
             </Button>
             <Button variant="outline" onClick={() => setWizardOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Automation
+              {t("automations.createAutomation")}
             </Button>
           </div>
         </ResponsiveCardHeader>

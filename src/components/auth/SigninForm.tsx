@@ -18,8 +18,10 @@ import { useRouter } from "next/navigation";
 import { SigninFormSchema } from "@/models/signinForm.schema";
 import Loading from "../Loading";
 import { Eye, EyeOff } from "lucide-react";
+import { useI18n } from "@/i18n";
 
 function SigninForm() {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
   const form = useForm<z.infer<typeof SigninFormSchema>>({
@@ -56,7 +58,6 @@ function SigninForm() {
         <form
           method="POST"
           onSubmit={form.handleSubmit(onSubmit)}
-          // className="w-2/3 space-y-6"
         >
           <div className="grid gap-4">
             <div className="grid gap-2">
@@ -65,7 +66,7 @@ function SigninForm() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="email">Email</FormLabel>
+                    <FormLabel htmlFor="email">{t("auth.email")}</FormLabel>
                     <FormControl>
                       <Input
                         id="email"
@@ -86,7 +87,7 @@ function SigninForm() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="password">Password</FormLabel>
+                    <FormLabel htmlFor="password">{t("auth.password")}</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Input
@@ -105,7 +106,9 @@ function SigninForm() {
                           className="absolute right-0 top-0 h-full px-3 text-muted-foreground"
                           onClick={() => setShowPassword((v) => !v)}
                           aria-label={
-                            showPassword ? "Hide password" : "Show password"
+                            showPassword
+                              ? t("common.hidePassword")
+                              : t("common.showPassword")
                           }
                           tabIndex={-1}
                         >
@@ -123,7 +126,7 @@ function SigninForm() {
               />
             </div>
             <Button type="submit" disabled={isPending} className="w-full">
-              {isPending ? <Loading /> : "Login"}
+              {isPending ? <Loading /> : t("auth.login")}
             </Button>
             <div
               className="flex h-8 items-end space-x-1"

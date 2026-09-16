@@ -15,6 +15,7 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { clearDiscoveredJobs } from "@/actions/automation.actions";
+import { useI18n } from "@/i18n";
 
 interface ClearJobsDialogProps {
   open: boolean;
@@ -35,6 +36,7 @@ export function ClearJobsDialog({
   automationId,
   onRefresh,
 }: ClearJobsDialogProps) {
+  const { t } = useI18n();
   const [clearing, setClearing] = useState(false);
 
   const handleClear = async () => {
@@ -47,7 +49,10 @@ export function ClearJobsDialog({
     onOpenChange(false);
 
     if (result.success) {
-      toastSuccess(`Removed ${result.deleted ?? 0} job(s).`, "Discovered jobs cleared");
+      toastSuccess(
+        t("automations.removedJobs", { count: result.deleted ?? 0 }),
+        t("automations.discoveredJobsCleared"),
+      );
       onRefresh();
     } else {
       toastError(result.message);
@@ -58,12 +63,11 @@ export function ClearJobsDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Clear discovered jobs?</AlertDialogTitle>
+          <AlertDialogTitle>{t("automations.clearDiscoveredJobs")}</AlertDialogTitle>
           <AlertDialogDescription>
-            Accepted jobs are always kept. This permanently deletes all
-            dismissed jobs
-            {includeNew && newCount > 0 ? " and all unreviewed new jobs" : ""}
-            . This action cannot be undone.
+            {includeNew && newCount > 0
+              ? t("automations.clearJobsDescriptionWithNew")
+              : t("automations.clearJobsDescription")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {newCount > 0 && (
@@ -74,11 +78,11 @@ export function ClearJobsDialog({
               checked={includeNew}
               onChange={(e) => onIncludeNewChange(e.target.checked)}
             />
-            Also delete {newCount} unreviewed new job(s)
+            {t("automations.alsoDeleteNew", { count: newCount })}
           </label>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={clearing}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={clearing}>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             className={buttonVariants({ variant: "destructive" })}
             disabled={clearing}
@@ -90,7 +94,7 @@ export function ClearJobsDialog({
             {clearing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              "Delete"
+              t("common.delete")
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

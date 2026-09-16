@@ -8,6 +8,7 @@ import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { Button } from "../ui/button";
 import { PlusCircle } from "lucide-react";
 import { toastActionResult } from "@/lib/toast";
+import { useI18n } from "@/i18n";
 
 type NotesSectionProps = {
   jobId: string;
@@ -20,6 +21,7 @@ export function NotesSection({
   openTrigger,
   onCountChange,
 }: NotesSectionProps) {
+  const { t } = useI18n();
   const [notes, setNotes] = useState<NoteResponse[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editNote, setEditNote] = useState<NoteResponse | null>(null);
@@ -51,7 +53,7 @@ export function NotesSection({
   const handleDelete = async () => {
     const result = await deleteNote(noteIdToDelete);
     toastActionResult(result, {
-      success: "Note deleted successfully",
+      success: t("jobs.noteDeleted"),
       onSuccess: () => loadNotes(),
     });
   };
@@ -81,10 +83,10 @@ export function NotesSection({
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
             {notes.length === 0
-              ? "Notes"
+              ? t("common.notes")
               : notes.length === 1
-                ? "1 note on this job"
-                : `${notes.length} notes on this job`}
+                ? t("jobs.notesCountOne")
+                : t("jobs.notesCountMany", { count: notes.length })}
           </span>
           <Button
             variant="outline"
@@ -93,12 +95,12 @@ export function NotesSection({
             onClick={handleAddNote}
           >
             <PlusCircle className="h-3.5 w-3.5" />
-            New Note
+            {t("jobs.newNote")}
           </Button>
         </div>
         <div className="mt-3 space-y-3">
           {notes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No notes yet.</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.noNotesYet")}</p>
           ) : (
             notes.map((note) => (
               <NoteCard
@@ -121,6 +123,7 @@ export function NotesSection({
       />
       <DeleteAlertDialog
         pageTitle="note"
+        alertTitle={t("jobs.deleteNoteConfirm")}
         open={deleteAlertOpen}
         onOpenChange={setDeleteAlertOpen}
         onDelete={handleDelete}

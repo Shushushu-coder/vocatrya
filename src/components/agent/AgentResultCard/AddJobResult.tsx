@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { AgentAddJobResult } from "@/models/agent.model";
+import { useI18n } from "@/i18n";
 
 // Composed from the tool result's STRUCTURED fields, never from
 // createJobFromNames' message string — that prose is MCP-facing protocol text
@@ -14,10 +15,13 @@ export function AddJobResult({
   output: AgentAddJobResult;
   input: Record<string, unknown>;
 }) {
+  const { t } = useI18n();
   if (output.validationError) {
     return (
       <p className="text-sm">
-        Could not add the job — {output.displayError ?? output.validationError}
+        {t("agent.couldNotAddJob", {
+          error: output.displayError ?? output.validationError,
+        })}
       </p>
     );
   }
@@ -26,15 +30,16 @@ export function AddJobResult({
     return (
       <div className="text-sm">
         <p>
-          Already tracked: <strong>{output.duplicateOf.title}</strong> at{" "}
-          <strong>{output.duplicateOf.company}</strong>. No second job was
-          created.
+          {t("agent.alreadyTracked", {
+            title: output.duplicateOf.title,
+            company: output.duplicateOf.company,
+          })}
         </p>
         <Link
           className="text-xs underline"
           href={`/dashboard/myjobs/${output.duplicateOf.id}`}
         >
-          Open the existing job
+          {t("agent.openExistingJob")}
         </Link>
       </div>
     );
@@ -43,36 +48,40 @@ export function AddJobResult({
   const newEntities = output.resolutions
     .filter((r) => r.created)
     .map((r) => r.label);
-  const jobTitle = typeof input.jobTitle === "string" ? input.jobTitle : "job";
+  const jobTitle =
+    typeof input.jobTitle === "string" ? input.jobTitle : t("agent.fallbackJob");
   const company = typeof input.company === "string" ? input.company : undefined;
 
   return (
     <div className="text-sm">
       <p>
-        Added <strong>{jobTitle}</strong>
-        {company ? ` at ${company}` : ""}.
+        {company
+          ? t("agent.addedJobAt", { title: jobTitle, company })
+          : t("agent.addedJob", { title: jobTitle })}
       </p>
       {output.jobId && (
         <Link
           className="text-xs underline"
           href={`/dashboard/myjobs/${output.jobId}`}
         >
-          Open the job
+          {t("agent.openTheJob")}
         </Link>
       )}
       {newEntities.length > 0 && (
         <p className="mt-1 text-xs text-muted-foreground">
-          New: {newEntities.join(", ")}
+          {t("agent.newEntities", { list: newEntities.join(", ") })}
         </p>
       )}
       {output.descriptionChars !== undefined && (
         <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
           <span>
-            Description ·{" "}
-            {output.descriptionSource === "pasted"
-              ? "pasted verbatim"
-              : "model-supplied"}{" "}
-            · {output.descriptionChars} chars
+            {t("agent.descriptionMeta", {
+              source:
+                output.descriptionSource === "pasted"
+                  ? t("agent.pastedVerbatim")
+                  : t("agent.modelSupplied"),
+              chars: output.descriptionChars,
+            })}
           </span>
           {output.descriptionCompleteness && (
             <Badge variant="outline">{output.descriptionCompleteness}</Badge>

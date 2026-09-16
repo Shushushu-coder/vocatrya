@@ -19,6 +19,7 @@ import { AutomationSummaryCard } from "./automation-detail-container/AutomationS
 import { AutomationDetailDialogs } from "./automation-detail-container/AutomationDetailDialogs";
 import { useAutomationWizardData } from "./automation-detail-container/useAutomationWizardData";
 import { useDiscoveredJobDetail } from "./automation-detail-container/useDiscoveredJobDetail";
+import { useI18n } from "@/i18n";
 
 const AUTOMATION_DETAIL_TABS = ["logs", "jobs", "history"] as const;
 
@@ -88,6 +89,7 @@ export function AutomationDetailContainer({
 
   const { resumes, allAutomations } = useAutomationWizardData();
 
+  const { t } = useI18n();
   const [jobsBusy, setJobsBusy] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -140,16 +142,16 @@ export function AutomationDetailContainer({
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="logs">{t("automations.logs")}</TabsTrigger>
           <TabsTrigger value="jobs">
-            Discovered Jobs
+            {t("automations.discoveredJobs")}
             {newJobsCount > 0 && (
               <Badge variant="secondary" className="ml-2">
                 {newJobsCount}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="history">Run History</TabsTrigger>
+          <TabsTrigger value="history">{t("automations.runHistory")}</TabsTrigger>
         </TabsList>
         <TabsContent value="logs" className="mt-4">
           <LogsTab logData={logData} onClearLogs={handleClearLogs} />

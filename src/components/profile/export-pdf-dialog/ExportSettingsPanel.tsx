@@ -11,10 +11,10 @@ import {
   PDF_FONT_LABELS,
 } from "@/models/pdfExport.model";
 import {
-  RESUME_LAYOUT_LABELS,
   type ResumeExportSettings,
   type ResumeNumericSetting,
 } from "@/models/resumeExport.model";
+import { useI18n } from "@/i18n";
 
 type ExportSettingsPanelProps = {
   settings: ResumeExportSettings;
@@ -31,18 +31,32 @@ export function ExportSettingsPanel({
   onReset,
   isDefault,
 }: ExportSettingsPanelProps) {
+  const { t } = useI18n();
   const setNumber = (field: ResumeNumericSetting) => (value: number) =>
     onChange({ ...settings, [field]: value });
+
+  const layoutLabels = {
+    simple: t("resume.simple"),
+    professional: t("resume.professional"),
+  } as const;
 
   const typographySummary = [
     PDF_FONT_LABELS[settings.font],
     formatSettingValue("fontSize", settings.fontSize),
-    `${formatSettingValue("lineHeight", settings.lineHeight)} line`,
+    t("resume.lineSuffix", {
+      value: formatSettingValue("lineHeight", settings.lineHeight),
+    }),
   ].join(" • ");
 
   const layoutSummary = [
-    `${settings.marginVertical} × ${settings.marginHorizontal} pt margins`,
-    `${settings.sectionSpacing}/${settings.entrySpacing} pt spacing`,
+    t("resume.ptMargins", {
+      v: settings.marginVertical,
+      h: settings.marginHorizontal,
+    }),
+    t("resume.ptSpacing", {
+      section: settings.sectionSpacing,
+      entry: settings.entrySpacing,
+    }),
   ].join(" • ");
 
   return (
@@ -51,17 +65,17 @@ export function ExportSettingsPanel({
       <div className="rounded-lg border bg-muted/40">
         <SelectRow
           id={`${ID_PREFIX}-template`}
-          label="Template"
+          label={t("resume.template")}
           value={settings.template}
-          labels={RESUME_LAYOUT_LABELS}
+          labels={layoutLabels}
           onSelect={(template) => onChange({ ...settings, template })}
         />
       </div>
 
-      <DisclosureGroup title="Typography" summary={typographySummary}>
+      <DisclosureGroup title={t("resume.typography")} summary={typographySummary}>
         <SelectRow
           id={`${ID_PREFIX}-font`}
-          label="Font"
+          label={t("resume.font")}
           value={settings.font}
           labels={PDF_FONT_LABELS}
           onSelect={(font) => onChange({ ...settings, font })}
@@ -80,7 +94,7 @@ export function ExportSettingsPanel({
         />
       </DisclosureGroup>
 
-      <DisclosureGroup title="Layout" summary={layoutSummary}>
+      <DisclosureGroup title={t("resume.layout")} summary={layoutSummary}>
         <StepperRow
           idPrefix={ID_PREFIX}
           field="marginVertical"
@@ -116,7 +130,7 @@ export function ExportSettingsPanel({
             onClick={onReset}
             disabled={isDefault}
           >
-            Reset to defaults
+            {t("resume.resetToDefaults")}
           </Button>
         </div>
       )}

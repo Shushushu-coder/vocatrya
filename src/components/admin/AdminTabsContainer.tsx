@@ -10,8 +10,10 @@ import TagsContainer from "@/components/admin/TagsContainer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
+import { useI18n } from "@/i18n";
 
 function AdminTabsContainer() {
+  const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const queryParams = useSearchParams();
@@ -35,14 +37,14 @@ function AdminTabsContainer() {
       onValueChange={(e) => onTabChange(e)}
     >
       <TabsList className="w-full justify-start overflow-x-auto">
-        <TabsTrigger value="companies">Companies</TabsTrigger>
-        <TabsTrigger value="job-titles">Job Titles</TabsTrigger>
-        <TabsTrigger value="locations">Locations</TabsTrigger>
-        <TabsTrigger value="sources">Sources</TabsTrigger>
-        <TabsTrigger value="skills">Skills</TabsTrigger>
-        <TabsTrigger value="activity-types">Activity Types</TabsTrigger>
-        <TabsTrigger value="contacts">Contacts</TabsTrigger>
-        <TabsTrigger value="roles">Roles</TabsTrigger>
+        <TabsTrigger value="companies">{t("library.companies")}</TabsTrigger>
+        <TabsTrigger value="job-titles">{t("library.jobTitles")}</TabsTrigger>
+        <TabsTrigger value="locations">{t("library.locations")}</TabsTrigger>
+        <TabsTrigger value="sources">{t("library.sources")}</TabsTrigger>
+        <TabsTrigger value="skills">{t("library.skills")}</TabsTrigger>
+        <TabsTrigger value="activity-types">{t("library.activityTypes")}</TabsTrigger>
+        <TabsTrigger value="contacts">{t("library.contacts")}</TabsTrigger>
+        <TabsTrigger value="roles">{t("library.roles")}</TabsTrigger>
       </TabsList>
       <TabsContent value="companies">
         <CompaniesContainer />

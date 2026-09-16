@@ -23,8 +23,10 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { RecordsCount } from "../RecordsCount";
 import { useActivity } from "@/context/ActivityContext";
 import { useActivitySwitchConfirm } from "@/hooks/useActivitySwitchConfirm";
+import { useI18n } from "@/i18n";
 
 function ActivitiesContainer() {
+  const { t } = useI18n();
   const [activityFormOpen, setActivityFormOpen] = useState<boolean>(false);
   const [activitiesList, setActivitiesList] = useState<Activity[]>([]);
   const [page, setPage] = useState<number>(1);
@@ -59,13 +61,13 @@ function ActivitiesContainer() {
           toastError(message);
         }
       } catch (error) {
-        toastError("Failed to load activities. Please try again.");
+        toastError(t("activities.failedToLoad"));
       } finally {
         setInitialLoading(false);
         setLoadingMore(false);
       }
     },
-    [],
+    [t],
   );
 
   const reloadActivities = useCallback(async () => {
@@ -143,16 +145,16 @@ function ActivitiesContainer() {
     <Card>
       <ResponsiveCardHeader>
         <div className="flex items-baseline gap-2">
-          <CardTitle>Activities</CardTitle>
+          <CardTitle>{t("activities.title")}</CardTitle>
           {!initialLoading && totalActivities > 0 && (
-            <RecordsCount count={activitiesList.length} total={totalActivities} label="activities" />
+            <RecordsCount count={activitiesList.length} total={totalActivities} label={t("activities.recordsLabel")} />
           )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <SearchInput
             value={searchTerm}
             onChange={setSearchTerm}
-            placeholder="Search activities..."
+            placeholder={t("activities.searchPlaceholder")}
           />
           <Dialog open={activityFormOpen} onOpenChange={setActivityFormOpen}>
             <DialogTrigger asChild>
@@ -164,15 +166,15 @@ function ActivitiesContainer() {
               >
                 <PlusCircle className="h-3.5 w-3.5" />
                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  New Activity
+                  {t("activities.newActivity")}
                 </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add New Activity</DialogTitle>
+                <DialogTitle>{t("activities.addNewActivity")}</DialogTitle>
                 <DialogDescription>
-                  Log a new activity to track your time and progress.
+                  {t("activities.logDescription")}
                 </DialogDescription>
               </DialogHeader>
               <div className="p-4">

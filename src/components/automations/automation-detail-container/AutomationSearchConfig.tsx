@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { JobBoard, LeverSourceConfig } from "@/models/automation.model";
 import { companyBoardUrl } from "@/lib/atsBoardUrl";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { useI18n } from "@/i18n";
 
 // Pure JSON parse (no runner dependency — this is a client component, and
 // runner.ts pulls the network-calling scraper into the client bundle). The raw
@@ -34,6 +35,7 @@ export function AutomationSearchConfig({
   jobBoard,
   retired,
 }: AutomationSearchConfigProps) {
+  const { t } = useI18n();
   const [showSearchConfig, setShowSearchConfig] = useState(false);
 
   const greenhouseConfig = retired
@@ -55,13 +57,13 @@ export function AutomationSearchConfig({
         ) : (
           <ChevronDown className="h-4 w-4 mr-1" />
         )}
-        {showSearchConfig ? "Show less" : "Show more"}
+        {showSearchConfig ? t("automations.showLess") : t("automations.showMore")}
       </Button>
 
       {showSearchConfig && (
         <div className="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="col-span-2 md:col-span-4">
-            <p className="text-sm text-muted-foreground">Companies</p>
+            <p className="text-sm text-muted-foreground">{t("automations.companies")}</p>
             {greenhouseConfig.companies?.length ? (
               <div className="mt-1 flex flex-wrap gap-1">
                 {greenhouseConfig.companies.map((c) => (
@@ -71,8 +73,8 @@ export function AutomationSearchConfig({
                       href={companyBoardUrl(jobBoard, c)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label={`Open ${c.name} job board`}
-                      title="Open job board"
+                      aria-label={t("automations.openJobBoard", { name: c.name })}
+                      title={t("automations.openJobBoardTitle")}
                       className="text-muted-foreground hover:text-foreground"
                     >
                       <ExternalLink className="h-3 w-3" />
@@ -85,45 +87,47 @@ export function AutomationSearchConfig({
             )}
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Target titles</p>
+            <p className="text-sm text-muted-foreground">{t("automations.targetTitles")}</p>
             <p className="font-medium">
               {greenhouseConfig.targetTitles?.length
                 ? greenhouseConfig.targetTitles.join(", ")
-                : "Any"}
+                : t("automations.any")}
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Keywords</p>
+            <p className="text-sm text-muted-foreground">{t("automations.keywords")}</p>
             <p className="font-medium">
               {greenhouseConfig.keywords?.length
                 ? greenhouseConfig.keywords.join(", ")
-                : "None"}
+                : t("common.none")}
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Locations</p>
+            <p className="text-sm text-muted-foreground">{t("automations.locations")}</p>
             <p className="font-medium">
               {greenhouseConfig.locations?.length
                 ? `${greenhouseConfig.locations.join(", ")}${
-                    greenhouseConfig.strictLocation ? " (strict)" : ""
+                    greenhouseConfig.strictLocation
+                      ? t("automations.strictSuffix")
+                      : ""
                   }`
-                : "Any location"}
+                : t("automations.anyLocation")}
             </p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">
-              Jobs analyzed per run
+              {t("automations.jobsAnalyzedPerRun")}
             </p>
             <p className="font-medium">
               {greenhouseConfig.topK ?? APP_CONSTANTS.MAX_JOBS_PER_RUN}
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Extra listings</p>
+            <p className="text-sm text-muted-foreground">{t("automations.extraListings")}</p>
             <p className="font-medium">
               {greenhouseConfig.saveUnanalyzed !== false
-                ? "Saved"
-                : "Not saved"}
+                ? t("automations.listingsSaved")
+                : t("automations.listingsNotSaved")}
             </p>
           </div>
         </div>

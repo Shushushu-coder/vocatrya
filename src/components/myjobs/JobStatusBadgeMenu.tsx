@@ -12,6 +12,7 @@ import {
 import { JobStatusBadge } from "./JobStatusBadge";
 import { JobStatusMenuItems } from "./JobStatusMenuItems";
 import { JobResponse, JobStatus } from "@/models/job.model";
+import { useI18n, getLocalizedJobStatus } from "@/i18n";
 
 type JobStatusBadgeMenuProps = {
   job: JobResponse;
@@ -26,6 +27,9 @@ export function JobStatusBadgeMenu({
   onChangeJobStatus,
   className,
 }: JobStatusBadgeMenuProps) {
+  const { t } = useI18n();
+  const currentStatus = getLocalizedJobStatus(job.Status, t);
+
   return (
     <DropdownMenu>
       <Tooltip>
@@ -33,14 +37,16 @@ export function JobStatusBadgeMenu({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              aria-label={`Change status, currently ${job.Status?.label ?? ""}`}
+              aria-label={t("jobs.changeStatusCurrently", {
+                status: currentStatus,
+              })}
               className="cursor-pointer rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <JobStatusBadge job={job} className={className} />
             </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Click to change status</TooltipContent>
+        <TooltipContent>{t("jobs.clickToChangeStatus")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="start" className="p-0">
         <JobStatusMenuItems

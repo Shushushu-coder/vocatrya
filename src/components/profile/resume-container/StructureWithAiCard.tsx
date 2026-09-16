@@ -4,6 +4,7 @@ import type { AiModel } from "@/models/ai.model";
 import { ResponsiveCardHeader } from "../../ResponsiveCardHeader";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { useI18n } from "@/i18n";
 
 export function StructureWithAiCard({
   aiModel,
@@ -18,12 +19,13 @@ export function StructureWithAiCard({
   isStructuring: boolean;
   onStructure: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <Card className="border-dashed">
       <ResponsiveCardHeader>
         <div>
           <p className="text-sm text-muted-foreground">
-            A file is attached. Structure it into sections using AI.
+            {t("profile.fileAttachedStructure")}
           </p>
           {aiModel.provider === "ollama" &&
             ollamaConnected === false &&
@@ -47,7 +49,9 @@ export function StructureWithAiCard({
           ) : (
             <Sparkles className="h-4 w-4 mr-2" />
           )}
-          {isStructuring ? "Structuring…" : "Structure with AI"}
+          {isStructuring
+            ? t("profile.structuring")
+            : t("profile.structureWithAi")}
         </Button>
       </ResponsiveCardHeader>
     </Card>

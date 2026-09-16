@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { toastError } from "@/lib/toast";
 import type { EntityOption } from "./types";
+import { useI18n } from "@/i18n";
 
 // Generic chip input that searches existing DB entities and can create new ones.
 // `values` is a string[] of labels (not IDs) stored in the source config.
@@ -42,6 +43,7 @@ export function EntityStringChipInput({
   loadOptions: () => Promise<EntityOption[]>;
   createOption: (label: string) => Promise<EntityOption | null>;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [options, setOptions] = useState<EntityOption[]>([]);
@@ -86,7 +88,7 @@ export function EntityStringChipInput({
     startCreate(async () => {
       const created = await createOption(lbl);
       if (!created) {
-        toastError(`Failed to create ${noun}.`);
+        toastError(t("automations.failedToCreateNoun", { noun }));
         return;
       }
       setOptions((prev) =>
@@ -120,7 +122,7 @@ export function EntityStringChipInput({
         >
           <Command shouldFilter={false}>
             <CommandInput
-              placeholder={`Search or create ${noun}...`}
+              placeholder={t("automations.searchOrCreate", { noun })}
               value={input}
               onValueChange={setInput}
             />
@@ -128,14 +130,16 @@ export function EntityStringChipInput({
               {isLoading && (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading...
+                  {t("common.loading")}
                 </div>
               )}
               {!isLoading && !input.trim() && filtered.length === 0 && (
-                <CommandEmpty>No {noun}s found. Type to create one.</CommandEmpty>
+                <CommandEmpty>
+                  {t("automations.noNounsFound", { noun })}
+                </CommandEmpty>
               )}
               {input.trim() && alreadyAdded && (
-                <CommandEmpty>Already added.</CommandEmpty>
+                <CommandEmpty>{t("automations.alreadyAdded")}</CommandEmpty>
               )}
               {filtered.length > 0 && (
                 <CommandGroup>
@@ -162,7 +166,7 @@ export function EntityStringChipInput({
                     ) : (
                       <CirclePlus className="h-4 w-4 mr-2" />
                     )}
-                    Create &quot;{input.trim()}&quot;
+                    {t("automations.createQuoted", { value: input.trim() })}
                   </CommandItem>
                 </CommandGroup>
               )}

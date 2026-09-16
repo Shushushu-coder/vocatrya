@@ -14,6 +14,7 @@ import type {
   CoverLetterExportSettings,
   CoverLetterNumericSetting,
 } from "@/models/coverLetterExport.model";
+import { useI18n } from "@/i18n";
 
 type CoverLetterSettingsPanelProps = {
   settings: CoverLetterExportSettings;
@@ -33,27 +34,33 @@ export function CoverLetterSettingsPanel({
   isDefault,
   hasLetterhead,
 }: CoverLetterSettingsPanelProps) {
+  const { t } = useI18n();
   const setNumber = (field: CoverLetterNumericSetting) => (value: number) =>
     onChange({ ...settings, [field]: value });
 
   const typographySummary = [
     PDF_FONT_LABELS[settings.font],
     formatSettingValue("fontSize", settings.fontSize),
-    `${formatSettingValue("lineHeight", settings.lineHeight)} line`,
+    t("resume.lineSuffix", {
+      value: formatSettingValue("lineHeight", settings.lineHeight),
+    }),
   ].join(" • ");
 
   const layoutSummary = [
-    `${settings.marginVertical} × ${settings.marginHorizontal} pt margins`,
-    `${settings.paragraphSpacing} pt paragraphs`,
+    t("resume.ptMargins", {
+      v: settings.marginVertical,
+      h: settings.marginHorizontal,
+    }),
+    t("resume.ptParagraphs", { value: settings.paragraphSpacing }),
   ].join(" • ");
 
   return (
     <div className="flex flex-col gap-4">
       {/* No Template row: a cover letter has exactly one style. */}
-      <DisclosureGroup title="Typography" summary={typographySummary}>
+      <DisclosureGroup title={t("resume.typography")} summary={typographySummary}>
         <SelectRow
           id={`${ID_PREFIX}-font`}
-          label="Font"
+          label={t("resume.font")}
           value={settings.font}
           labels={PDF_FONT_LABELS}
           onSelect={(font) => onChange({ ...settings, font })}
@@ -72,7 +79,7 @@ export function CoverLetterSettingsPanel({
         />
       </DisclosureGroup>
 
-      <DisclosureGroup title="Layout" summary={layoutSummary}>
+      <DisclosureGroup title={t("resume.layout")} summary={layoutSummary}>
         <StepperRow
           idPrefix={ID_PREFIX}
           field="marginVertical"
@@ -97,8 +104,7 @@ export function CoverLetterSettingsPanel({
           not discoverable from this dialog. */}
       {!hasLetterhead && (
         <p className="text-xs text-muted-foreground">
-          No letterhead — set a default resume with contact info to add your
-          name and contact line.
+          {t("resume.noLetterhead")}
         </p>
       )}
 
@@ -111,7 +117,7 @@ export function CoverLetterSettingsPanel({
             onClick={onReset}
             disabled={isDefault}
           >
-            Reset to defaults
+            {t("resume.resetToDefaults")}
           </Button>
         </div>
       )}

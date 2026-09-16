@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type { AutomationLog, LogLevel } from "@/lib/automation-logger";
+import { useI18n } from "@/i18n";
 
 export interface LogData {
   logs: AutomationLog[];
@@ -39,6 +40,7 @@ interface LogsTabProps {
 }
 
 export function LogsTab({ logData, onClearLogs }: LogsTabProps) {
+  const { t } = useI18n();
   const [filter, setFilter] = useState<LogLevel | "all">("all");
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
@@ -90,7 +92,7 @@ export function LogsTab({ logData, onClearLogs }: LogsTabProps) {
     <Card>
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>Automation Logs</CardTitle>
+          <CardTitle>{t("automations.automationLogs")}</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1">
               <Button
@@ -98,35 +100,35 @@ export function LogsTab({ logData, onClearLogs }: LogsTabProps) {
                 variant={filter === "all" ? "default" : "outline"}
                 onClick={() => setFilter("all")}
               >
-                All
+                {t("common.all")}
               </Button>
               <Button
                 size="sm"
                 variant={filter === "info" ? "default" : "outline"}
                 onClick={() => setFilter("info")}
               >
-                Info
+                {t("common.info")}
               </Button>
               <Button
                 size="sm"
                 variant={filter === "success" ? "default" : "outline"}
                 onClick={() => setFilter("success")}
               >
-                Success
+                {t("common.success")}
               </Button>
               <Button
                 size="sm"
                 variant={filter === "warning" ? "default" : "outline"}
                 onClick={() => setFilter("warning")}
               >
-                Warning
+                {t("common.warning")}
               </Button>
               <Button
                 size="sm"
                 variant={filter === "error" ? "default" : "outline"}
                 onClick={() => setFilter("error")}
               >
-                Error
+                {t("common.error")}
               </Button>
             </div>
             <Button
@@ -141,12 +143,19 @@ export function LogsTab({ logData, onClearLogs }: LogsTabProps) {
         </div>
         {logData.startedAt && (
           <p className="text-sm text-muted-foreground">
-            Started: {format(new Date(logData.startedAt), "MMM d, h:mm:ss a")}
+            {t("automations.startedAt", {
+              time: format(new Date(logData.startedAt), "MMM d, h:mm:ss a"),
+            })}
             {logData.completedAt && (
               <>
                 {" "}
-                • Completed:{" "}
-                {format(new Date(logData.completedAt), "MMM d, h:mm:ss a")}
+                •{" "}
+                {t("automations.completedAt", {
+                  time: format(
+                    new Date(logData.completedAt),
+                    "MMM d, h:mm:ss a",
+                  ),
+                })}
               </>
             )}
           </p>
@@ -158,8 +167,8 @@ export function LogsTab({ logData, onClearLogs }: LogsTabProps) {
             <div className="flex items-center justify-center h-full text-muted-foreground">
               <p>
                 {logData.logs.length === 0
-                  ? "No logs yet. Run the automation to see logs."
-                  : "No logs match the selected filter."}
+                  ? t("automations.noLogsYet")
+                  : t("automations.noLogsMatchFilter")}
               </p>
             </div>
           ) : (
@@ -203,14 +212,13 @@ export function LogsTab({ logData, onClearLogs }: LogsTabProps) {
       <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear logs?</AlertDialogTitle>
+            <AlertDialogTitle>{t("automations.clearLogs")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove all current logs. This action cannot
-              be undone.
+              {t("automations.clearLogsDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className={buttonVariants({ variant: "destructive" })}
               onClick={(e) => {
@@ -219,7 +227,7 @@ export function LogsTab({ logData, onClearLogs }: LogsTabProps) {
                 onClearLogs();
               }}
             >
-              Clear logs
+              {t("automations.clearLogsAction")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

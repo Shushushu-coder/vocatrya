@@ -1,6 +1,5 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { format } from "date-fns";
 import { ReviewDetails } from "@/components/profile/ReviewDetails";
 import type { ResumeReviewData } from "@/models/ai.schemas";
 
@@ -35,11 +34,7 @@ describe("ReviewDetails", () => {
     expect(screen.getByText("82")).toBeInTheDocument();
     expect(screen.getByText("ATS")).toBeInTheDocument();
     expect(screen.getByText("78")).toBeInTheDocument();
-    const date = format(
-      new Date(reviewData.reviewedAt!),
-      "MMM d, yyyy 'at' h:mm a",
-    );
-    expect(screen.getByText(`Reviewed on ${date}`)).toBeInTheDocument();
+    expect(screen.getByText(/Reviewed on Jul 1, 2026/)).toBeInTheDocument();
     expect(screen.getByText("using openai / gpt-4o")).toBeInTheDocument();
   });
 

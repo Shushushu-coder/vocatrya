@@ -28,24 +28,34 @@ import {
   type AgentPastePartData,
 } from "@/models/agent.model";
 
+import { useI18n, type TranslateFn } from "@/i18n";
+
 type ComposerPart = TextUIPart | AgentPastePart;
 
-function chipLabel(chip: AgentPastePartData): string {
-  const chars = chip.chars.toLocaleString();
+function chipLabel(
+  chip: AgentPastePartData,
+  t: TranslateFn,
+  formatChars: (n: number) => string,
+): string {
+  const chars = formatChars(chip.chars);
   return chip.truncated
-    ? `Pasted posting · ${chars} chars (truncated)`
-    : `Pasted posting · ${chars} chars`;
+    ? t("agent.pastedPostingTruncated", { chars })
+    : t("agent.pastedPosting", { chars });
 }
 
 // Synthesized at render time only. The wire format stays the custom data part:
 // a real FileUIPart is a standard type, so convertToModelMessages would carry
 // the whole posting to the model and defeat head truncation.
-function chipAttachment(chip: AgentPastePartData): AttachmentData {
+function chipAttachment(
+  chip: AgentPastePartData,
+  t: TranslateFn,
+  formatChars: (n: number) => string,
+): AttachmentData {
   return {
     type: "file",
     id: chip.id,
     mediaType: "text/plain",
-    filename: chipLabel(chip),
+    filename: chipLabel(chip, t, formatChars),
     url: "",
   };
 }
@@ -60,11 +70,15 @@ function chipId(): string {
   );
 }
 
-function queuedText(parts: UIMessage["parts"]): string {
+function queuedText(
+  parts: UIMessage["parts"],
+  t: TranslateFn,
+  formatChars: (n: number) => string,
+): string {
   const text = parts.find((part) => part.type === "text");
   const chip = parts.find(isAgentPastePart);
   if (text?.type === "text" && text.text) return text.text;
-  return chip ? chipLabel(chip.data) : "";
+  return chip ? chipLabel(chip.data, t, formatChars) : "";
 }
 
 export function AgentChatInput() {
@@ -80,6 +94,8 @@ export function AgentChatInput() {
     preflight,
     composerNonce,
   } = useAgentChat();
+  const { t, formatNumber } = useI18n();
+  const formatChars = (n: number) => formatNumber(n);
 
   const [text, setText] = useState("");
   const [chip, setChip] = useState<AgentPastePartData | undefined>();
@@ -148,7 +164,7 @@ export function AgentChatInput() {
             {error.message}
           </AlertDescription>
           <Button
-            aria-label="Dismiss error"
+            aria-label={t("common.dismissError")}
             className="size-6 shrink-0"
             onClick={clearError}
             size="icon"
@@ -165,13 +181,13 @@ export function AgentChatInput() {
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground">
               {approvalPending
-                ? "Queued — waiting on your approval above"
-                : "Queued — sends when the current reply finishes"}
+                ? t("agent.queuedApproval")
+                : t("agent.queuedStreaming")}
             </p>
-            <p className="truncate">{queuedText(queued.parts)}</p>
+            <p className="truncate">{queuedText(queued.parts, t, formatChars)}</p>
           </div>
           <Button
-            aria-label="Remove from queue"
+            aria-label={t("agent.removeFromQueue")}
             className="size-6 shrink-0"
             onClick={clearQueued}
             size="icon"
@@ -195,13 +211,13 @@ export function AgentChatInput() {
         {chip ? (
           <PromptInputHeader>
             <Attachments variant="inline">
-              <Attachment data={chipAttachment(chip)}>
+              <Attachment data={chipAttachment(chip, t, formatChars)}>
                 <AttachmentPreview />
                 <AttachmentInfo />
                 {/* Not AttachmentRemove: it repeats its label in an sr-only
                     span, so the chip's wording would appear twice. */}
                 <Button
-                  aria-label="Remove pasted content"
+                  aria-label={t("agent.removePasted")}
                   className="size-5 shrink-0 rounded p-0 [&_svg]:size-2.5"
                   onClick={() => setChip(undefined)}
                   type="button"
@@ -220,14 +236,16 @@ export function AgentChatInput() {
           key={composerNonce}
           onChange={(event) => setText(event.currentTarget.value)}
           onPaste={onPaste}
-          placeholder="Ask or paste a job posting…"
+          placeholder={t("agent.inputPlaceholder")}
         />
         <PromptInputFooter>
           <span className="text-xs text-muted-foreground">
-            {approvalPending && !queued ? "Waiting on your approval above" : ""}
+            {approvalPending && !queued ? t("agent.waitingOnApproval") : ""}
           </span>
           <PromptInputSubmit
-            aria-label={isGenerating ? "Stop response" : "Send"}
+            aria-label={
+              isGenerating ? t("agent.stopResponse") : t("agent.send")
+            }
             disabled={!isGenerating && !canSend}
             className="[&_svg]:size-3.5"
             onStop={onStop}

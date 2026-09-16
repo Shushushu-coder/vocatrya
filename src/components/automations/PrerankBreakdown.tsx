@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { APP_CONSTANTS } from "@/lib/constants";
 import type { PrerankComponents } from "@/models/ai.schemas";
+import { useI18n } from "@/i18n";
 
 interface PrerankBreakdownProps {
   prerankScore: number;
@@ -15,16 +16,17 @@ export function PrerankBreakdown({
   prerankScore,
   components,
 }: PrerankBreakdownProps) {
+  const { t } = useI18n();
   const rows = components
     ? [
         {
-          label: "Title",
+          label: t("common.title"),
           weight: APP_CONSTANTS.ATS_TITLE_WEIGHT,
           score: components.titleScore,
           hits: components.titleHits,
         },
         {
-          label: "Keywords",
+          label: t("automations.keywords"),
           weight: APP_CONSTANTS.ATS_SKILL_WEIGHT,
           score: components.keywordScore,
           hits: components.keywordHits,
@@ -35,15 +37,13 @@ export function PrerankBreakdown({
   return (
     <div className="rounded-md border border-dashed p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Lexical pre-rank</span>
+        <span className="text-sm font-medium">{t("automations.lexicalPrerank")}</span>
         <span className="font-mono text-sm">
           {Math.round(prerankScore * 100)}%
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        Internal relevance score used to pick which jobs get AI-analyzed. Each
-        hit is weighted by how rare the term is across the board. Not an AI match
-        — compare it against the % above to gauge pre-rank accuracy.
+        {t("automations.prerankDescription")}
       </p>
       {rows.map((row) => (
         <div key={row.label} className="text-xs">
@@ -69,8 +69,9 @@ export function PrerankBreakdown({
       ))}
       {components && (
         <div className="text-xs text-muted-foreground">
-          Location:{" "}
-          {components.locScore > 0 ? "matches (gate only)" : "not scored"}
+          {components.locScore > 0
+            ? t("automations.locationMatches")
+            : t("automations.locationNotScored")}
         </div>
       )}
     </div>

@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Loader, PlusCircle } from "lucide-react";
+import { useI18n } from "@/i18n";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -37,6 +38,7 @@ type AddContactRoleProps = {
 };
 
 function AddContactRole({ reloadRoles }: AddContactRoleProps) {
+  const { t } = useI18n();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -56,7 +58,7 @@ function AddContactRole({ reloadRoles }: AddContactRoleProps) {
     startTransition(async () => {
       const res = await createContactRole(values.label);
       toastActionResult(res, {
-        success: "Role has been added successfully.",
+        success: t("library.roleAdded"),
         onSuccess: () => {
           setDialogOpen(false);
           reset();
@@ -76,16 +78,15 @@ function AddContactRole({ reloadRoles }: AddContactRoleProps) {
       >
         <PlusCircle className="h-3.5 w-3.5" />
         <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-          New Role
+          {t("library.newRole")}
         </span>
       </Button>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Contact Role</DialogTitle>
+            <DialogTitle>{t("library.addNewContactRole")}</DialogTitle>
             <DialogDescription>
-              Roles describe what a person was to you on one job — recruiter,
-              interviewer, reference.
+              {t("library.addRoleDescription")}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -95,9 +96,9 @@ function AddContactRole({ reloadRoles }: AddContactRoleProps) {
                 name="label"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Role Name</FormLabel>
+                    <FormLabel>{t("library.roleName")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Panel Lead, Referrer" {...field} />
+                      <Input placeholder={t("library.rolePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -109,10 +110,10 @@ function AddContactRole({ reloadRoles }: AddContactRoleProps) {
                   variant="outline"
                   onClick={() => setDialogOpen(false)}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={isPending}>
-                  Save
+                  {t("common.save")}
                   {isPending && (
                     <Loader className="ml-2 h-4 w-4 shrink-0 spinner" />
                   )}

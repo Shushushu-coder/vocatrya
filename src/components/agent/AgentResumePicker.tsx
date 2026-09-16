@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { useI18n } from "@/i18n";
 
 // Radix Select, not ComboBox: a cmdk list inside a Sheet needs the popover
 // scroll fix, and a handful of resumes does not need search.
@@ -18,6 +19,7 @@ export function AgentResumePicker({
   resumes: { id: string; title: string }[];
   messageFor?: (title: string) => string;
 }) {
+  const { t } = useI18n();
   const { sendMessage } = useAgentChat();
 
   // Sends the TITLE, never the id: the tool resolves names ownership-scoped,
@@ -25,7 +27,9 @@ export function AgentResumePicker({
   const pick = (id: string) => {
     const title = resumes.find((r) => r.id === id)?.title;
     if (!title) return;
-    const text = messageFor ? messageFor(title) : `Review my resume "${title}"`;
+    const text = messageFor
+      ? messageFor(title)
+      : t("agent.reviewMyResume", { title });
     // The parts form, matching AgentChatInput — this surface always sends
     // parts, never a bare text shortcut.
     void sendMessage({ parts: [{ type: "text", text }] });
@@ -33,8 +37,8 @@ export function AgentResumePicker({
 
   return (
     <Select onValueChange={pick}>
-      <SelectTrigger aria-label="Select a resume" className="mt-2 w-full">
-        <SelectValue placeholder="Pick a resume" />
+      <SelectTrigger aria-label={t("agent.selectAResume")} className="mt-2 w-full">
+        <SelectValue placeholder={t("agent.pickAResume")} />
       </SelectTrigger>
       <SelectContent>
         {resumes.map((resume) => (

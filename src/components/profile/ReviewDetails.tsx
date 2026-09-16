@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import MarkdownIt from "markdown-it";
-import { format } from "date-fns";
 import { ChevronDown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +13,7 @@ import {
 import { TipTapContentViewer } from "@/components/TipTapContentViewer";
 import { AgentReviewScoreCard } from "@/components/agent/AgentReviewScoreCard";
 import type { ResumeReviewData } from "@/models/ai.schemas";
+import { useI18n } from "@/i18n";
 
 // html:false escapes any raw HTML in the model output; TipTapContentViewer
 // further strips unrecognized tags, so the rendered review is safe.
@@ -24,6 +24,7 @@ interface ReviewDetailsProps {
 }
 
 export function ReviewDetails({ reviewData }: ReviewDetailsProps) {
+  const { t, formatDateTime } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const html = useMemo(
     () => (reviewData?.body ? md.render(reviewData.body) : ""),
@@ -39,29 +40,36 @@ export function ReviewDetails({ reviewData }: ReviewDetailsProps) {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           {reviewData.reviewedAt ? (
             <span>
-              Reviewed on{" "}
-              {format(
-                new Date(reviewData.reviewedAt),
-                "MMM d, yyyy 'at' h:mm a",
-              )}
+              {t("profile.reviewedOn", {
+                date: formatDateTime(new Date(reviewData.reviewedAt)),
+              })}
             </span>
           ) : null}
           {reviewData.provider === "mcp"
             ? reviewData.model && (
                 <Badge className="gap-1 bg-violet-500 dark:bg-violet-400">
                   <Sparkles className="h-3.5 w-3.5" />
-                  via {reviewData.model}
+                  {t("profile.viaModel", { model: reviewData.model })}
                 </Badge>
               )
             : reviewData.provider
-              ? `using ${reviewData.provider}${reviewData.model ? ` / ${reviewData.model}` : ""}`
+              ? reviewData.model
+                ? t("profile.usingProviderModel", {
+                    provider: reviewData.provider,
+                    model: reviewData.model,
+                  })
+                : t("profile.usingProvider", {
+                    provider: reviewData.provider,
+                  })
               : null}
         </div>
       </div>
 
       <CollapsibleTrigger asChild>
         <Button variant="ghost" size="sm" className="mt-2 h-7 px-2 text-xs">
-          {expanded ? "Hide full review" : "Show full review"}
+          {expanded
+            ? t("profile.hideFullReview")
+            : t("profile.showFullReview")}
           <ChevronDown
             className={`ml-1 h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
           />

@@ -1,6 +1,7 @@
 import { DialogFooter } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Loader } from "lucide-react";
+import { useI18n } from "@/i18n";
 
 type FormDialogFooterProps = {
   onCancel: () => void;
@@ -14,6 +15,8 @@ export function FormDialogFooter({
   isPending,
   saveDisabled,
 }: FormDialogFooterProps) {
+  const { t } = useI18n();
+
   return (
     <div className="md:col-span-2 mt-4">
       <DialogFooter>
@@ -24,12 +27,12 @@ export function FormDialogFooter({
             className="mt-2 md:mt-0 w-full"
             onClick={onCancel}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
         <Button type="submit" disabled={saveDisabled}>
-          Save
-          {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
+          {t("common.save")}
+          {isPending && <Loader className="h-4 w-4 shrink-0 spinner ml-1" />}
         </Button>
       </DialogFooter>
     </div>

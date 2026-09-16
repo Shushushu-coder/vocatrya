@@ -22,8 +22,10 @@ import {
   useCompanyScope,
 } from "./companies-container/useCompanyScope";
 import type { LeverCompany } from "@/models/automation.model";
+import { useI18n } from "@/i18n";
 
 function CompaniesContainer() {
+  const { t } = useI18n();
   const { scope, setScope } = useCompanyScope();
   const provider = boardProvider(scope);
   const [searchTerm, setSearchTerm] = useState("");
@@ -83,7 +85,7 @@ function CompaniesContainer() {
         <Card x-chunk="dashboard-06-chunk-0">
           <ResponsiveCardHeader>
             <div className="flex items-baseline gap-2">
-              <CardTitle>Companies</CardTitle>
+              <CardTitle>{t("library.companies")}</CardTitle>
               {!loading && shownCount > 0 && (
                 <RecordsCount
                   count={shownCount}
@@ -97,7 +99,7 @@ function CompaniesContainer() {
               <SearchInput
                 value={searchTerm}
                 onChange={setSearchTerm}
-                placeholder="Search companies..."
+                placeholder={t("companies.searchPlaceholder")}
               />
               <AddCompany
                 editCompany={editCompany}

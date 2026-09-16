@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Loader, PlusCircle } from "lucide-react";
+import { useI18n } from "@/i18n";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -39,6 +40,7 @@ type AddActivityTypeProps = {
 };
 
 function AddActivityType({ reloadActivityTypes }: AddActivityTypeProps) {
+  const { t } = useI18n();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -58,12 +60,12 @@ function AddActivityType({ reloadActivityTypes }: AddActivityTypeProps) {
     startTransition(async () => {
       try {
         await createActivityType(values.label);
-        toastSuccess("Activity type has been added successfully.");
+        toastSuccess(t("library.activityTypeAdded"));
         setDialogOpen(false);
         reset();
         reloadActivityTypes();
       } catch {
-        toastError("Failed to create activity type.");
+        toastError(t("library.failedCreateActivityType"));
       }
     });
   };
@@ -78,15 +80,15 @@ function AddActivityType({ reloadActivityTypes }: AddActivityTypeProps) {
       >
         <PlusCircle className="h-3.5 w-3.5" />
         <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-          New Activity Type
+          {t("library.newActivityType")}
         </span>
       </Button>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Activity Type</DialogTitle>
+            <DialogTitle>{t("library.addNewActivityType")}</DialogTitle>
             <DialogDescription>
-              Add a new activity type to categorize your activities and tasks.
+              {t("library.addActivityTypeDescription")}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -96,10 +98,10 @@ function AddActivityType({ reloadActivityTypes }: AddActivityTypeProps) {
                 name="label"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Activity Type Name</FormLabel>
+                    <FormLabel>{t("library.activityTypeName")}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="e.g. Networking, Interview Prep"
+                        placeholder={t("library.activityTypePlaceholder")}
                         {...field}
                       />
                     </FormControl>
@@ -113,10 +115,10 @@ function AddActivityType({ reloadActivityTypes }: AddActivityTypeProps) {
                   variant="outline"
                   onClick={() => setDialogOpen(false)}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={isPending}>
-                  Save
+                  {t("common.save")}
                   {isPending && (
                     <Loader className="ml-2 h-4 w-4 shrink-0 spinner" />
                   )}

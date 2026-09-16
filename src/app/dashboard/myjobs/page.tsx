@@ -1,15 +1,15 @@
-import { Metadata } from "next";
-
 import { getJobSourceList, getStatusList } from "@/actions/job.actions";
+import { getServerI18n } from "@/i18n/server";
 import JobsContainer from "@/components/myjobs/JobsContainer";
 import { getAllCompanies } from "@/actions/company.actions";
 import { getAllJobTitles } from "@/actions/jobtitle.actions";
 import { getAllJobLocations } from "@/actions/jobLocation.actions";
 import { getAllTags } from "@/actions/tag.actions";
 
-export const metadata: Metadata = {
-  title: "My Jobs | Vocatrya",
-};
+export async function generateMetadata() {
+  const { t } = await getServerI18n();
+  return { title: t("jobs.pageTitle") };
+}
 
 async function MyJobs() {
   const [statuses, companies, titles, locations, sources, tags] =

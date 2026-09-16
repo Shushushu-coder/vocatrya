@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 type ActivityTypeWithCount = {
   id: string;
@@ -23,6 +24,7 @@ function TasksSidebar({
   selectedFilter,
   onFilterChange,
 }: TasksSidebarProps) {
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -35,7 +37,9 @@ function TasksSidebar({
       <button
         onClick={() => setCollapsed((prev) => !prev)}
         className="absolute -right-3 top-4 z-10 flex items-center justify-center w-6 h-6 rounded-full border bg-background text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={
+          collapsed ? t("common.expandSidebar") : t("common.collapseSidebar")
+        }
       >
         {collapsed ? (
           <ChevronRight className="h-3.5 w-3.5" />
@@ -46,7 +50,9 @@ function TasksSidebar({
 
       {!collapsed && (
         <>
-          <h3 className="font-semibold mb-4 text-sm px-1">Activity Types</h3>
+          <h3 className="font-semibold mb-4 text-sm px-1">
+            {t("tasks.activityTypes")}
+          </h3>
           <ul className="space-y-1">
             <li>
               <button
@@ -59,7 +65,7 @@ function TasksSidebar({
                 )}
               >
                 <span className="flex justify-between items-center">
-                  <span>All</span>
+                  <span>{t("common.all")}</span>
                   <span className="text-muted-foreground text-xs">
                     {totalTasks}
                   </span>

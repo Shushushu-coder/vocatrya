@@ -12,13 +12,15 @@ import JobsApplied from "@/components/dashboard/JobsAppliedCard";
 import RecentCardToggle from "@/components/dashboard/RecentCardToggle";
 import WeeklyBarChartToggle from "@/components/dashboard/WeeklyBarChartToggle";
 
-import { Metadata } from "next";
+import { getServerI18n } from "@/i18n/server";
 
-export const metadata: Metadata = {
-  title: "Dashboard",
-};
+export async function generateMetadata() {
+  const { t } = await getServerI18n();
+  return { title: t("nav.dashboard") };
+}
 
 export default async function Dashboard() {
+  const { t } = await getServerI18n();
   const [
     summary7Days,
     summary30Days,
@@ -55,14 +57,14 @@ export default async function Dashboard() {
               label: "Jobs",
               data: weeklyData,
               keys: ["value"],
-              axisLeftLegend: "JOBS APPLIED",
+              axisLeftLegend: t("dashboard.jobsAppliedAxis"),
             },
             {
               label: "Activities",
               data: activitiesData.data,
               keys: activitiesData.keys,
               groupMode: "stacked",
-              axisLeftLegend: "TIME SPENT (Hours)",
+              axisLeftLegend: t("dashboard.timeSpentHours"),
             },
           ]}
         />

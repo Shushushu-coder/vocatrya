@@ -1,11 +1,11 @@
 "use client";
 
-import { format } from "date-fns";
 import { FileText, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TipTapContentViewer } from "@/components/TipTapContentViewer";
 import type { CoverLetter } from "@/models/profile.model";
 import { JobTabEmptyState } from "./JobTabEmptyState";
+import { useI18n } from "@/i18n";
 
 type CoverLetterTabProps = {
   letter?: CoverLetter;
@@ -18,13 +18,15 @@ export function CoverLetterTab({
   blockedReason,
   onGenerate,
 }: CoverLetterTabProps) {
+  const { t, formatDate } = useI18n();
+
   if (!letter) {
     return (
       <JobTabEmptyState
         icon={FileText}
-        title="No cover letter yet"
-        description="Generate one from your resume and this posting. You can edit and export it afterwards from Profile."
-        actionLabel="Generate Cover Letter"
+        title={t("jobs.noCoverLetterYet")}
+        description={t("jobs.noCoverLetterDescription")}
+        actionLabel={t("jobs.generateCoverLetter")}
         onAction={onGenerate}
         actionDisabled={!!blockedReason}
         actionTitle={blockedReason}
@@ -40,7 +42,7 @@ export function CoverLetterTab({
         <span className="text-xs text-muted-foreground">
           {letter.title}
           {generatedAt &&
-            ` · Generated ${format(new Date(generatedAt), "PP")}`}
+            ` · ${t("jobs.generatedAt", { date: formatDate(generatedAt) })}`}
         </span>
         <Button
           variant="outline"
@@ -51,7 +53,7 @@ export function CoverLetterTab({
           title={blockedReason}
         >
           <Sparkles className="h-4 w-4 mr-2" />
-          Regenerate
+          {t("jobs.regenerate")}
         </Button>
       </div>
       <TipTapContentViewer content={letter.content} />

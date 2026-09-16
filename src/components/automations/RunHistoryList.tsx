@@ -38,6 +38,7 @@ import type { AutomationRun, FunnelStage } from "@/models/automation.model";
 import { DeleteAlertDialog } from "@/components/DeleteAlertDialog";
 import { deleteAutomationRun } from "@/actions/automation.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { useI18n } from "@/i18n";
 
 interface RunHistoryListProps {
   runs: AutomationRun[];
@@ -109,6 +110,7 @@ export function RunHistoryList({
   onLoadMore,
   onDelete,
 }: RunHistoryListProps) {
+  const { t } = useI18n();
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -139,7 +141,7 @@ export function RunHistoryList({
     const result = await deleteAutomationRun(deleteRunId);
     setDeleteRunId(null);
     if (result.success) {
-      toastSuccess("Run deleted");
+      toastSuccess(t("automations.runDeleted"));
       onDelete?.();
     } else {
       toastError(result.message);
@@ -151,9 +153,9 @@ export function RunHistoryList({
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
           <History className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">No runs yet</h3>
+          <h3 className="text-lg font-medium">{t("automations.noRunsYet")}</h3>
           <p className="text-muted-foreground text-center mt-2">
-            Run history will appear here once the automation runs.
+            {t("automations.noRunsYetDescription")}
           </p>
         </CardContent>
       </Card>
@@ -164,24 +166,28 @@ export function RunHistoryList({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Run History</CardTitle>
+          <CardTitle>{t("automations.runHistory")}</CardTitle>
           {totalRuns > 0 && (
-            <RecordsCount count={runs.length} total={totalRuns} label="runs" />
+            <RecordsCount
+              count={runs.length}
+              total={totalRuns}
+              label={t("automations.runsLabel")}
+            />
           )}
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Started</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead className="text-center">Searched</TableHead>
-                <TableHead className="text-center">New</TableHead>
-                <TableHead className="text-center">Processed</TableHead>
-                <TableHead className="text-center">Matched</TableHead>
-                <TableHead className="text-center">Saved</TableHead>
-                <TableHead>Error</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+                <TableHead>{t("automations.started")}</TableHead>
+                <TableHead>{t("automations.duration")}</TableHead>
+                <TableHead className="text-center">{t("automations.searched")}</TableHead>
+                <TableHead className="text-center">{t("common.new")}</TableHead>
+                <TableHead className="text-center">{t("automations.processed")}</TableHead>
+                <TableHead className="text-center">{t("automations.matched")}</TableHead>
+                <TableHead className="text-center">{t("automations.saved")}</TableHead>
+                <TableHead>{t("common.error")}</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -214,7 +220,9 @@ export function RunHistoryList({
                         {format(new Date(run.startedAt), "MMM d, h:mm a")}
                       </TableCell>
                       <TableCell>
-                        {duration !== null ? `${duration}s` : "-"}
+                        {duration !== null
+                          ? t("automations.durationSeconds", { value: duration })
+                          : "-"}
                       </TableCell>
                       <TableCell className="text-center">
                         {run.jobsSearched}
@@ -293,7 +301,7 @@ export function RunHistoryList({
       </Card>
 
       <DeleteAlertDialog
-        pageTitle="run"
+        pageTitle={t("automations.runNoun")}
         open={!!deleteRunId}
         onOpenChange={(open) => !open && setDeleteRunId(null)}
         onDelete={handleDelete}

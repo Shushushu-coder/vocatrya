@@ -11,8 +11,10 @@ import { Loader } from "lucide-react";
 import { RecordsCount } from "../RecordsCount";
 import { SearchInput } from "../SearchInput";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { useI18n } from "@/i18n";
 
 function JobTitlesContainer() {
+  const { t } = useI18n();
   const [titles, setTitles] = useState<JobTitle[]>([]);
   const [totalJobTitles, setTotalJobTitles] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
@@ -81,7 +83,7 @@ function JobTitlesContainer() {
         <Card x-chunk="dashboard-06-chunk-0">
           <ResponsiveCardHeader>
             <div className="flex items-baseline gap-2">
-              <CardTitle>Job Titles</CardTitle>
+              <CardTitle>{t("library.jobTitles")}</CardTitle>
               {!initialLoading && totalJobTitles > 0 && (
                 <RecordsCount count={titles.length} total={totalJobTitles} label="job titles" />
               )}
@@ -90,7 +92,7 @@ function JobTitlesContainer() {
               <SearchInput
                 value={searchTerm}
                 onChange={setSearchTerm}
-                placeholder="Search job titles..."
+                placeholder={t("library.searchJobTitles")}
               />
               {/* <AddCompany reloadCompanies={reloadJobTitles} /> */}
             </div>

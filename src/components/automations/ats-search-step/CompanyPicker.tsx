@@ -26,6 +26,7 @@ import { PROVIDER_META } from "./types";
 import { useAtsCompanySearch } from "./useAtsCompanySearch";
 import { useWatchedBoards } from "./useWatchedBoards";
 import { JobBoardUrlAdd } from "@/components/JobBoardUrlAdd";
+import { useI18n } from "@/i18n";
 
 interface CompanyPickerProps {
   provider: JobBoard;
@@ -42,6 +43,7 @@ export function CompanyPicker({
   onAddMany,
   onRemove,
 }: CompanyPickerProps) {
+  const { t } = useI18n();
   const meta = PROVIDER_META[provider] ?? PROVIDER_META.greenhouse;
   const {
     query,
@@ -64,7 +66,10 @@ export function CompanyPicker({
     const skipped = onAddMany(watched);
     if (skipped > 0) {
       toastInfo(
-        `Added what fits — ${skipped} skipped at the ${APP_CONSTANTS.ATS_MAX_COMPANIES}-company limit.`,
+        t("automations.skippedAtLimit", {
+          skipped,
+          max: APP_CONSTANTS.ATS_MAX_COMPANIES,
+        }),
       );
     }
   };
@@ -81,14 +86,15 @@ export function CompanyPicker({
     <div className="space-y-2">
       <Label className="flex items-center justify-between">
         <span>
-          {meta.label} Companies{" "}
-          <span className="font-normal text-muted-foreground">
-            ({companies.length}/{APP_CONSTANTS.ATS_MAX_COMPANIES})
-          </span>
+          {t("automations.providerCompanies", {
+            label: meta.label,
+            count: companies.length,
+            max: APP_CONSTANTS.ATS_MAX_COMPANIES,
+          })}
         </span>
         {totalCount !== null && totalCount > 0 && (
           <span className="text-xs font-normal text-muted-foreground">
-            {totalCount} available
+            {t("automations.availableCount", { count: totalCount })}
           </span>
         )}
       </Label>
@@ -105,8 +111,12 @@ export function CompanyPicker({
             disabled={atLimit}
           >
             {atLimit
-              ? `Max ${APP_CONSTANTS.ATS_MAX_COMPANIES} companies reached`
-              : `Search companies (e.g., ${meta.searchExample})`}
+              ? t("automations.maxCompaniesReached", {
+                  count: APP_CONSTANTS.ATS_MAX_COMPANIES,
+                })
+              : t("automations.searchCompaniesExample", {
+                  example: meta.searchExample,
+                })}
             {isSearching ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -120,7 +130,7 @@ export function CompanyPicker({
         >
           <Command shouldFilter={false}>
             <CommandInput
-              placeholder="Search or browse companies..."
+              placeholder={t("automations.searchOrBrowseCompanies")}
               value={query}
               onValueChange={handleQueryChange}
             />
@@ -129,7 +139,7 @@ export function CompanyPicker({
             {watched.length > 0 && (
               <div className="flex items-center justify-between border-b px-3 py-1.5">
                 <span className="text-xs text-muted-foreground">
-                  {watched.length} watched on this board
+                  {t("automations.watchedOnBoard", { count: watched.length })}
                 </span>
                 <button
                   type="button"
@@ -137,7 +147,7 @@ export function CompanyPicker({
                   onClick={addAllWatched}
                   className="text-xs text-primary hover:underline disabled:opacity-50"
                 >
-                  Add all watched
+                  {t("automations.addAllWatched")}
                 </button>
               </div>
             )}
@@ -145,16 +155,16 @@ export function CompanyPicker({
               {isSearching && results.length === 0 && (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Searching...
+                  {t("automations.searching")}
                 </div>
               )}
               {!isSearching && results.length === 0 && (
                 <CommandEmpty>
-                  No matches. Try &quot;Add by URL&quot; below.
+                  {t("automations.noMatchesTryUrl")}
                 </CommandEmpty>
               )}
               {watched.length > 0 && (
-                <CommandGroup heading={`Watched (${watched.length})`}>
+                <CommandGroup heading={t("automations.watchedCount", { count: watched.length })}>
                   {watchedOnly.map((c) => {
                     const selected = companies.some(
                       (sel) => sel.token === c.token,
@@ -207,8 +217,8 @@ export function CompanyPicker({
                         href={companyBoardUrl(provider, c)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`Open ${c.name} job board`}
-                        title="Open job board"
+                        aria-label={t("automations.openJobBoard", { name: c.name })}
+                        title={t("automations.openJobBoardTitle")}
                         onClick={(e) => e.stopPropagation()}
                         onPointerDown={(e) => e.stopPropagation()}
                         className="ml-auto text-muted-foreground hover:text-foreground"
@@ -222,7 +232,7 @@ export function CompanyPicker({
               {isSearching && results.length > 0 && (
                 <div className="flex items-center justify-center gap-2 p-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading more...
+                  {t("automations.loadingMore")}
                 </div>
               )}
             </CommandList>
@@ -245,13 +255,12 @@ export function CompanyPicker({
 
       <JobBoardUrlAdd
         provider={provider}
-        placeholder={meta.urlHint}
+        placeholder={t(`automations.urlHints.${provider}`)}
         disabled={atLimit}
         onResolved={onAdd}
       />
       <p className="text-sm text-muted-foreground">
-        Select {meta.label} companies to monitor their job boards for new
-        openings.
+        {t("automations.selectCompaniesHelp", { label: meta.label })}
       </p>
     </div>
   );

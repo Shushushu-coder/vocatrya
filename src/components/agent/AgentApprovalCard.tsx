@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { classifyDescriptionCompleteness } from "@/lib/jobs/descriptionCompleteness";
+import { useI18n } from "@/i18n";
 
 type Respond = (r: { id: string; approved: boolean; reason?: string }) => void;
 
@@ -37,8 +38,9 @@ function AddJobBody({
   input: Record<string, unknown>;
   pastedText?: string;
 }) {
+  const { t } = useI18n();
   const description = pastedText ?? text(input.jobDescription);
-  const source = pastedText ? "pasted verbatim" : "model-supplied";
+  const source = pastedText ? t("agent.pastedVerbatim") : t("agent.modelSupplied");
   const completeness = description
     ? classifyDescriptionCompleteness(description)
     : undefined;
@@ -46,18 +48,21 @@ function AddJobBody({
 
   return (
     <div>
-      <Row label="Company" value={text(input.company)} />
-      <Row label="Job title" value={text(input.jobTitle)} />
-      <Row label="Location" value={text(input.location)} />
-      <Row label="Source" value={text(input.source)} />
-      <Row label="URL" value={text(input.jobUrl)} />
-      <Row label="Salary" value={text(input.salaryRange)} />
-      <Row label="Tags" value={tags} />
+      <Row label={t("common.company")} value={text(input.company)} />
+      <Row label={t("agent.jobTitle")} value={text(input.jobTitle)} />
+      <Row label={t("common.location")} value={text(input.location)} />
+      <Row label={t("agent.source")} value={text(input.source)} />
+      <Row label={t("common.url")} value={text(input.jobUrl)} />
+      <Row label={t("common.salary")} value={text(input.salaryRange)} />
+      <Row label={t("common.tags")} value={tags} />
       {description ? (
         <div className="mt-2 rounded-sm border bg-muted/20 p-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>
-              Description · {source} · {description.length} chars
+              {t("agent.descriptionMeta", {
+                source,
+                chars: description.length,
+              })}
             </span>
             {completeness && <Badge variant="outline">{completeness}</Badge>}
           </div>
@@ -70,7 +75,7 @@ function AddJobBody({
         </div>
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">
-          No description — the assistant will ask for one.
+          {t("agent.noDescriptionAsk")}
         </p>
       )}
     </div>
@@ -86,6 +91,7 @@ export function AgentApprovalCard({
   pastedText?: string;
   onRespond: Respond;
 }) {
+  const { t } = useI18n();
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState("");
   const cardRef = useRef<HTMLDivElement>(null);
@@ -120,14 +126,14 @@ export function AgentApprovalCard({
       className="rounded-sm p-3 outline-hidden"
     >
       <div className="flex items-center gap-2">
-        <Badge variant="secondary">Needs approval</Badge>
+        <Badge variant="secondary">{t("agent.needsApproval")}</Badge>
         <span className="text-sm font-semibold">{toolName}</span>
       </div>
 
       {body}
 
       {part.state === "approval-responded" && (
-        <p className="text-xs text-muted-foreground">Waiting…</p>
+        <p className="text-xs text-muted-foreground">{t("agent.waiting")}</p>
       )}
 
       <ConfirmationRequest>
@@ -136,7 +142,7 @@ export function AgentApprovalCard({
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="What was wrong? (optional)"
+              placeholder={t("agent.declineReasonPlaceholder")}
               rows={2}
             />
             <div className="flex gap-2">
@@ -146,7 +152,7 @@ export function AgentApprovalCard({
                   onRespond({ id: approvalId, approved: false, reason })
                 }
               >
-                Send
+                {t("agent.send")}
               </ConfirmationAction>
               <ConfirmationAction
                 variant="ghost"
@@ -154,7 +160,7 @@ export function AgentApprovalCard({
                   approvalId && onRespond({ id: approvalId, approved: false })
                 }
               >
-                Skip
+                {t("agent.skip")}
               </ConfirmationAction>
             </div>
           </div>
@@ -168,12 +174,12 @@ export function AgentApprovalCard({
               approvalId && onRespond({ id: approvalId, approved: true })
             }
           >
-            Confirm
+            {t("agent.confirm")}
           </ConfirmationAction>
           {/* Client-side and always available — it must not depend on a
               server round-trip succeeding. */}
           <ConfirmationAction variant="outline" onClick={() => setDeclining(true)}>
-            Cancel
+            {t("agent.cancel")}
           </ConfirmationAction>
         </ConfirmationActions>
       )}

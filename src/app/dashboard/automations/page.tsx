@@ -1,6 +1,12 @@
 import { getResumeList } from "@/actions/profile.actions";
 import { AutomationContainer } from "@/components/automations/AutomationContainer";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { getServerI18n } from "@/i18n/server";
+
+export async function generateMetadata() {
+  const { t } = await getServerI18n();
+  return { title: t("nav.automations") };
+}
 
 export default async function AutomationsPage() {
   const resumeResult = await getResumeList(

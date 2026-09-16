@@ -29,6 +29,7 @@ import {
   copyResume,
   getResumeCopyTitleSuggestion,
 } from "@/actions/profile.actions";
+import { useI18n } from "@/i18n";
 
 type CopyResumeDialogProps = {
   open: boolean;
@@ -43,6 +44,7 @@ function CopyResumeDialog({
   sourceDoc,
   onCopied,
 }: CopyResumeDialogProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
   const [loadingTitle, setLoadingTitle] = useState(false);
 
@@ -95,7 +97,7 @@ function CopyResumeDialog({
       reset({ title: "" });
       setOpen(false);
       onCopied();
-      toastSuccess(`Copy created: "${data.title}"`);
+      toastSuccess(t("profile.copyCreated", { title: data.title }));
     });
   };
 
@@ -103,10 +105,11 @@ function CopyResumeDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create a copy</DialogTitle>
+          <DialogTitle>{t("profile.createACopy")}</DialogTitle>
           <DialogDescription>
-            Copies the sections and contact info of &quot;{sourceDoc?.title}
-            &quot;. The attachment is not copied.
+            {t("profile.copyResumeDescription", {
+              title: sourceDoc?.title ?? "",
+            })}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -122,7 +125,7 @@ function CopyResumeDialog({
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Resume Title</FormLabel>
+                  <FormLabel>{t("profile.resumeTitle")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -141,13 +144,13 @@ function CopyResumeDialog({
                 className="mt-2 md:mt-0"
                 onClick={() => setOpen(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="submit"
                 disabled={!isValid || isPending || loadingTitle}
               >
-                Create copy
+                {t("profile.createCopy")}
                 {isPending && (
                   <Loader className="h-4 w-4 shrink-0 animate-spin" />
                 )}

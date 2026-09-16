@@ -17,10 +17,12 @@ import {
   generateMockJobsAction,
   clearMockJobsAction,
 } from "@/actions/mock.actions";
+import { useI18n } from "@/i18n";
 
 type StatusMessage = { type: "success" | "error"; text: string };
 
 function StatusBanner({ message }: { message: StatusMessage }) {
+  const { t } = useI18n();
   return (
     <div
       className={`flex items-start gap-3 rounded-lg border p-4 ${
@@ -36,7 +38,7 @@ function StatusBanner({ message }: { message: StatusMessage }) {
       )}
       <div className="flex-1">
         <p className="font-semibold">
-          {message.type === "error" ? "Error" : "Success"}
+          {message.type === "error" ? t("common.error") : t("common.success")}
         </p>
         <p className="text-sm">{message.text}</p>
       </div>
@@ -45,6 +47,7 @@ function StatusBanner({ message }: { message: StatusMessage }) {
 }
 
 export function MockActivitiesCard() {
+  const { t } = useI18n();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [message, setMessage] = useState<StatusMessage | null>(null);
@@ -58,18 +61,14 @@ export function MockActivitiesCard() {
       text:
         result.message ||
         (result.success
-          ? "Mock activities generated successfully"
-          : "Failed to generate mock activities"),
+          ? t("developer.mockActivitiesGenerated")
+          : t("developer.mockActivitiesGenerateFailed")),
     });
     setIsGenerating(false);
   };
 
   const handleClear = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to delete all mock activities? This action cannot be undone.",
-      )
-    )
+    if (!confirm(t("developer.confirmClearMockActivities")))
       return;
 
     setIsClearing(true);
@@ -80,8 +79,8 @@ export function MockActivitiesCard() {
       text:
         result.message ||
         (result.success
-          ? "Mock activities cleared successfully"
-          : "Failed to clear mock activities"),
+          ? t("developer.mockActivitiesCleared")
+          : t("developer.mockActivitiesClearFailed")),
     });
     setIsClearing(false);
   };
@@ -91,18 +90,16 @@ export function MockActivitiesCard() {
       {message && <StatusBanner message={message} />}
       <Card>
         <CardHeader>
-          <CardTitle>Mock Data Management</CardTitle>
+          <CardTitle>{t("developer.mockDataManagement")}</CardTitle>
           <CardDescription>
-            Generate or clear mock activities for testing
+            {t("developer.mockActivitiesCardDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h3 className="font-semibold mb-2">Generate Mock Activities</h3>
+            <h3 className="font-semibold mb-2">{t("developer.generateMockActivities")}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Creates 25+ mock activities for the last 10 days with types:
-              Learning, Side Project 1, Side Project 2, Job Search, and
-              Interview Preparation. Duration is between 20-120 minutes.
+              {t("developer.generateMockActivitiesBody")}
             </p>
             <Button
               onClick={handleGenerate}
@@ -112,15 +109,14 @@ export function MockActivitiesCard() {
               {isGenerating && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {isGenerating ? "Generating..." : "Generate Mock Activities"}
+              {isGenerating ? t("developer.generating") : t("developer.generateMockActivities")}
             </Button>
           </div>
 
           <div className="border-t pt-4">
-            <h3 className="font-semibold mb-2">Clear Mock Activities</h3>
+            <h3 className="font-semibold mb-2">{t("developer.clearMockActivities")}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Deletes only mock activities (marked with [MOCK_DATA] identifier).
-              Regular activities are not affected.
+              {t("developer.clearMockActivitiesBody")}
             </p>
             <Button
               onClick={handleClear}
@@ -129,7 +125,7 @@ export function MockActivitiesCard() {
               className="w-full"
             >
               {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? "Clearing..." : "Clear Mock Activities"}
+              {isClearing ? t("developer.clearing") : t("developer.clearMockActivities")}
             </Button>
           </div>
         </CardContent>
@@ -139,6 +135,7 @@ export function MockActivitiesCard() {
 }
 
 export function MockProfileCard() {
+  const { t } = useI18n();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [message, setMessage] = useState<StatusMessage | null>(null);
@@ -152,18 +149,14 @@ export function MockProfileCard() {
       text:
         result.message ||
         (result.success
-          ? "Mock profile data generated successfully"
-          : "Failed to generate mock profile data"),
+          ? t("developer.mockProfileGenerated")
+          : t("developer.mockProfileGenerateFailed")),
     });
     setIsGenerating(false);
   };
 
   const handleClear = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to delete all mock profile data (resumes, companies, locations, job titles)? This cannot be undone.",
-      )
-    )
+    if (!confirm(t("developer.confirmClearMockProfile")))
       return;
 
     setIsClearing(true);
@@ -174,8 +167,8 @@ export function MockProfileCard() {
       text:
         result.message ||
         (result.success
-          ? "Mock profile data cleared successfully"
-          : "Failed to clear mock profile data"),
+          ? t("developer.mockProfileCleared")
+          : t("developer.mockProfileClearFailed")),
     });
     setIsClearing(false);
   };
@@ -185,21 +178,16 @@ export function MockProfileCard() {
       {message && <StatusBanner message={message} />}
       <Card>
         <CardHeader>
-          <CardTitle>Mock Profile Data</CardTitle>
+          <CardTitle>{t("developer.mockProfileData")}</CardTitle>
           <CardDescription>
-            Generate or clear mock companies, locations, job titles, and resumes
-            for testing
+            {t("developer.mockProfileCardDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h3 className="font-semibold mb-2">Generate Mock Profile Data</h3>
+            <h3 className="font-semibold mb-2">{t("developer.generateMockProfileData")}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Creates 12 FAANG companies, 12 IT-hub locations (US &amp; Canada),
-              15 IT job titles (junior → principal), and 8 resumes covering
-              junior, intermediate, and senior career levels — each with a
-              detailed summary, multi-role work history, and education section.
-              Uses <code>[MOCK_DATA]</code> prefix to tag records.
+              {t("developer.generateMockProfileBody")}
             </p>
             <Button
               onClick={handleGenerate}
@@ -209,16 +197,14 @@ export function MockProfileCard() {
               {isGenerating && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {isGenerating ? "Generating..." : "Generate Mock Profile Data"}
+              {isGenerating ? t("developer.generating") : t("developer.generateMockProfileData")}
             </Button>
           </div>
 
           <div className="border-t pt-4">
-            <h3 className="font-semibold mb-2">Clear Mock Profile Data</h3>
+            <h3 className="font-semibold mb-2">{t("developer.clearMockProfileData")}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Deletes all mock resumes (titled with <code>[MOCK_DATA]</code>)
-              and their associated sections, then removes mock companies,
-              locations, and job titles. Real data is not affected.
+              {t("developer.clearMockProfileBody")}
             </p>
             <Button
               onClick={handleClear}
@@ -227,7 +213,7 @@ export function MockProfileCard() {
               className="w-full"
             >
               {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? "Clearing..." : "Clear Mock Profile Data"}
+              {isClearing ? t("developer.clearing") : t("developer.clearMockProfileData")}
             </Button>
           </div>
         </CardContent>
@@ -237,6 +223,7 @@ export function MockProfileCard() {
 }
 
 export function MockJobsCard() {
+  const { t } = useI18n();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [message, setMessage] = useState<StatusMessage | null>(null);
@@ -250,18 +237,14 @@ export function MockJobsCard() {
       text:
         result.message ||
         (result.success
-          ? "Mock jobs generated successfully"
-          : "Failed to generate mock jobs"),
+          ? t("developer.mockJobsGenerated")
+          : t("developer.mockJobsGenerateFailed")),
     });
     setIsGenerating(false);
   };
 
   const handleClear = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to delete all mock jobs? This action cannot be undone.",
-      )
-    )
+    if (!confirm(t("developer.confirmClearMockJobs")))
       return;
 
     setIsClearing(true);
@@ -272,8 +255,8 @@ export function MockJobsCard() {
       text:
         result.message ||
         (result.success
-          ? "Mock jobs cleared successfully"
-          : "Failed to clear mock jobs"),
+          ? t("developer.mockJobsCleared")
+          : t("developer.mockJobsClearFailed")),
     });
     setIsClearing(false);
   };
@@ -283,20 +266,16 @@ export function MockJobsCard() {
       {message && <StatusBanner message={message} />}
       <Card>
         <CardHeader>
-          <CardTitle>Mock Jobs Data</CardTitle>
+          <CardTitle>{t("developer.mockJobsData")}</CardTitle>
           <CardDescription>
-            Generate or clear mock jobs for testing
+            {t("developer.mockJobsCardDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h3 className="font-semibold mb-2">Generate Mock Jobs</h3>
+            <h3 className="font-semibold mb-2">{t("developer.generateMockJobs")}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Creates 30-40 mock jobs spread across the last 30 days using mock
-              profile data (companies, locations, job titles, resumes). Status
-              distribution is realistic: mostly Applied/Rejected, some
-              Interviews, few Offers. Requires mock profile data to be generated
-              first.
+              {t("developer.generateMockJobsBody")}
             </p>
             <Button
               onClick={handleGenerate}
@@ -306,15 +285,14 @@ export function MockJobsCard() {
               {isGenerating && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {isGenerating ? "Generating..." : "Generate Mock Jobs"}
+              {isGenerating ? t("developer.generating") : t("developer.generateMockJobs")}
             </Button>
           </div>
 
           <div className="border-t pt-4">
-            <h3 className="font-semibold mb-2">Clear Mock Jobs</h3>
+            <h3 className="font-semibold mb-2">{t("developer.clearMockJobs")}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Deletes only mock jobs (marked with [MOCK_DATA] identifier).
-              Regular jobs are not affected.
+              {t("developer.clearMockJobsBody")}
             </p>
             <Button
               onClick={handleClear}
@@ -323,7 +301,7 @@ export function MockJobsCard() {
               className="w-full"
             >
               {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? "Clearing..." : "Clear Mock Jobs"}
+              {isClearing ? t("developer.clearing") : t("developer.clearMockJobs")}
             </Button>
           </div>
         </CardContent>

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/form";
 import type { CreateAutomationInput } from "@/models/automation.schema";
 import type { WizardResume } from "./wizardConfig";
+import { useI18n } from "@/i18n";
 
 export function StepResume({
   form,
@@ -26,6 +27,7 @@ export function StepResume({
   form: UseFormReturn<CreateAutomationInput>;
   resumes: WizardResume[];
 }) {
+  const { t } = useI18n();
   return (
     <>
       <FormField
@@ -33,11 +35,11 @@ export function StepResume({
         name="resumeId"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Resume for Matching</FormLabel>
+            <FormLabel>{t("automations.resumeForMatching")}</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a resume" />
+                  <SelectValue placeholder={t("automations.selectResume")} />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
@@ -49,7 +51,7 @@ export function StepResume({
               </SelectContent>
             </Select>
             <FormDescription>
-              Jobs will be matched against this resume
+              {t("automations.resumeDescription")}
             </FormDescription>
             <FormMessage />
           </FormItem>
@@ -57,8 +59,7 @@ export function StepResume({
       />
       {resumes.length === 0 && (
         <p className="text-sm text-orange-600 dark:text-orange-500">
-          No resumes found. Please create a resume with enough content in your
-          profile first.
+          {t("automations.noResumesForMatching")}
         </p>
       )}
     </>

@@ -18,12 +18,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import type { CreateAutomationInput } from "@/models/automation.schema";
+import { useI18n } from "@/i18n";
 
 export function StepBasics({
   form,
 }: {
   form: UseFormReturn<CreateAutomationInput>;
 }) {
+  const { t } = useI18n();
   return (
     <>
       <FormField
@@ -31,12 +33,12 @@ export function StepBasics({
         name="name"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Automation Name</FormLabel>
+            <FormLabel>{t("automations.automationName")}</FormLabel>
             <FormControl>
-              <Input placeholder="e.g., Full Stack Jobs Calgary" {...field} />
+              <Input placeholder={t("automations.namePlaceholder")} {...field} />
             </FormControl>
             <FormDescription>
-              A descriptive name to identify this automation
+              {t("automations.nameDescription")}
             </FormDescription>
             <FormMessage />
           </FormItem>
@@ -47,23 +49,23 @@ export function StepBasics({
         name="jobBoard"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Job Board</FormLabel>
+            <FormLabel>{t("automations.jobBoard")}</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a job board" />
+                  <SelectValue placeholder={t("automations.selectJobBoard")} />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
                 <SelectItem value="greenhouse">
-                  Greenhouse (company boards)
+                  {t("automations.boards.greenhouse")}
                 </SelectItem>
-                <SelectItem value="lever">Lever (company boards)</SelectItem>
-                <SelectItem value="ashby">Ashby (company boards)</SelectItem>
+                <SelectItem value="lever">{t("automations.boards.lever")}</SelectItem>
+                <SelectItem value="ashby">{t("automations.boards.ashby")}</SelectItem>
               </SelectContent>
             </Select>
             <FormDescription>
-              Track specific companies&apos; job boards
+              {t("automations.jobBoardDescription")}
             </FormDescription>
             <FormMessage />
           </FormItem>

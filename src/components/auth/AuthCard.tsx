@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import SigninForm from "./SigninForm";
 import SignupForm from "./SignupForm";
+import { useI18n } from "@/i18n";
 
 type AuthMode = "signin" | "signup";
 
@@ -12,6 +13,7 @@ interface AuthCardProps {
 
 export default function AuthCard({ mode }: AuthCardProps) {
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
     <div className="mx-auto w-full max-w-md px-4">
@@ -19,7 +21,7 @@ export default function AuthCard({ mode }: AuthCardProps) {
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight">Vocatrya</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Track your job search, powered by AI
+          {t("common.appTagline")}
         </p>
       </div>
 
@@ -33,7 +35,7 @@ export default function AuthCard({ mode }: AuthCardProps) {
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Sign In
+          {t("auth.signin")}
         </button>
         <button
           onClick={() => router.push("/signup")}
@@ -43,7 +45,7 @@ export default function AuthCard({ mode }: AuthCardProps) {
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Create Account
+          {t("auth.signup")}
         </button>
       </div>
 
@@ -52,9 +54,9 @@ export default function AuthCard({ mode }: AuthCardProps) {
         {mode === "signin" ? (
           <>
             <div className="mb-5">
-              <h2 className="text-xl font-semibold">Welcome back</h2>
+              <h2 className="text-xl font-semibold">{t("auth.welcomeBack")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Enter your credentials to access your account
+                {t("auth.enterCredentials")}
               </p>
             </div>
             <SigninForm />
@@ -62,9 +64,9 @@ export default function AuthCard({ mode }: AuthCardProps) {
         ) : (
           <>
             <div className="mb-5">
-              <h2 className="text-xl font-semibold">Get started</h2>
+              <h2 className="text-xl font-semibold">{t("auth.getStarted")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Create a free account to start tracking your applications
+                {t("auth.createAccountToTrack")}
               </p>
             </div>
             <SignupForm />

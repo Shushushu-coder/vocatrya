@@ -1,9 +1,9 @@
 "use client";
 import { NoteResponse } from "@/models/note.model";
 import { TipTapContentViewer } from "../TipTapContentViewer";
-import { format } from "date-fns";
 import { Button } from "../ui/button";
 import { Pencil, Trash } from "lucide-react";
+import { useI18n } from "@/i18n";
 
 type NoteCardProps = {
   note: NoteResponse;
@@ -12,13 +12,17 @@ type NoteCardProps = {
 };
 
 export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
+  const { t, formatDateTime } = useI18n();
+
   return (
     <div className="border rounded-lg p-4 space-y-2">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          {format(new Date(note.createdAt), "PPp")}
+          {formatDateTime(note.createdAt)}
           {note.isEdited && (
-            <span className="ml-2 text-xs text-muted-foreground">(edited)</span>
+            <span className="ml-2 text-xs text-muted-foreground">
+              {t("jobs.edited")}
+            </span>
           )}
         </div>
         <div className="flex gap-1">

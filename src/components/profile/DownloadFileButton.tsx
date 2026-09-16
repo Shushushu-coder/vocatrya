@@ -1,4 +1,15 @@
 import { Paperclip } from "lucide-react";
+import { translate } from "@/i18n";
+import { LOCALE_STORAGE_KEY, normalizeLocale, type Locale } from "@/i18n/config";
+
+function getDownloadLocale(): Locale {
+  try {
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+    return stored ? normalizeLocale(stored) : "en";
+  } catch {
+    return "en";
+  }
+}
 
 export function DownloadFileButton(
   resumeId: string,
@@ -36,7 +47,9 @@ export function DownloadFileButton(
     <button
       className="flex items-center"
       onClick={handleDownload}
-      title={`Download ${fileName}`}
+      title={translate(getDownloadLocale(), "profile.downloadFile", {
+        name: fileName,
+      })}
     >
       <div>{fileTitle}</div>
       <Paperclip className="h-3.5 w-3.5 ml-1" />

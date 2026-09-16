@@ -19,6 +19,7 @@ import type {
 import type { Company, JobLocation } from "@/models/job.model";
 import { JobTabEmptyState } from "./JobTabEmptyState";
 import { AddJobContactForm } from "./AddJobContactForm";
+import { useI18n } from "@/i18n";
 
 type JobContactsTabProps = {
   jobId: string;
@@ -33,6 +34,7 @@ export function JobContactsTab({
   companies = [],
   locations = [],
 }: JobContactsTabProps) {
+  const { t } = useI18n();
   const [rows, setRows] = useState<JobContactLink[]>(links);
   const [showForm, setShowForm] = useState(false);
   const [contacts, setContacts] = useState<ContactRef[]>([]);
@@ -64,7 +66,7 @@ export function JobContactsTab({
     const res = await removeJobContact(removeTarget.id);
     setRemoveTarget(null);
     toastActionResult(res, {
-      success: "Contact has been unlinked from this job",
+      success: t("jobs.contactUnlinked"),
       onSuccess: reload,
     });
   };
@@ -80,7 +82,7 @@ export function JobContactsTab({
             onClick={openForm}
           >
             <PlusCircle className="h-3.5 w-3.5" />
-            Add Contact
+            {t("contacts.addContact")}
           </Button>
         </div>
       )}
@@ -104,9 +106,9 @@ export function JobContactsTab({
       {rows.length === 0 && !showForm && (
         <JobTabEmptyState
           icon={Users}
-          title="No contacts on this job"
-          description="Link the recruiter, the panel, or a reference you named for this application."
-          actionLabel="Add Contact"
+          title={t("jobs.noContactsOnJob")}
+          description={t("jobs.noContactsDescription")}
+          actionLabel={t("contacts.addContact")}
           onAction={openForm}
         />
       )}
@@ -153,14 +155,16 @@ export function JobContactsTab({
                   rel="noopener noreferrer"
                   className="text-primary underline-offset-4 hover:underline"
                 >
-                  LinkedIn
+                  {t("common.linkedin")}
                 </a>
               )}
               <Button
                 variant="ghost"
                 size="icon"
                 className="ml-auto cursor-pointer"
-                aria-label={`Remove ${row.Contact?.name}`}
+                aria-label={t("jobs.removeNamed", {
+                  name: row.Contact?.name ?? "",
+                })}
                 onClick={() => setRemoveTarget(row)}
               >
                 <Trash className="h-4 w-4 text-red-600" />
@@ -171,11 +175,11 @@ export function JobContactsTab({
       )}
 
       <DeleteAlertDialog
-        pageTitle="contact link"
+        pageTitle={t("jobs.contactLink")}
         open={!!removeTarget}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
         onDelete={onRemove}
-        alertDescription="Removing this only unlinks the contact from this job. The contact itself is kept."
+        alertDescription={t("jobs.unlinkContactDescription")}
       />
     </div>
   );

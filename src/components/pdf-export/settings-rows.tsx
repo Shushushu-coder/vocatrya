@@ -22,6 +22,7 @@ import {
   PDF_NUMERIC_SETTINGS,
   type NumericSetting,
 } from "@/models/pdfExport.model";
+import { useI18n } from "@/i18n";
 
 // Wraps rather than clips: the control drops below the label on a narrow
 // settings column instead of overflowing it.
@@ -78,9 +79,11 @@ export function StepperRow({
   value: number;
   onCommit: (value: number) => void;
 }) {
+  const { t } = useI18n();
   const spec = PDF_NUMERIC_SETTINGS[field];
   const id = `${idPrefix}-${field}`;
   const [draft, setDraft] = useState(() => String(value));
+  const label = t(`resume.${field}`);
 
   // Resyncs when the value moves without the input being touched: Reset,
   // or the first read from storage.
@@ -102,7 +105,7 @@ export function StepperRow({
   return (
     <div className={ROW}>
       <Label htmlFor={id} className="cursor-pointer font-normal">
-        {spec.label}
+        {label}
       </Label>
       <div className="ml-auto flex items-center gap-1">
         <Button
@@ -110,7 +113,7 @@ export function StepperRow({
           variant="outline"
           size="icon"
           className="h-7 w-7 shrink-0"
-          aria-label={`Decrease ${spec.label}`}
+          aria-label={t("resume.decreaseField", { label })}
           disabled={value <= spec.min}
           onClick={() => stepBy(-1)}
         >
@@ -136,7 +139,7 @@ export function StepperRow({
           variant="outline"
           size="icon"
           className="h-7 w-7 shrink-0"
-          aria-label={`Increase ${spec.label}`}
+          aria-label={t("resume.increaseField", { label })}
           disabled={value >= spec.max}
           onClick={() => stepBy(1)}
         >

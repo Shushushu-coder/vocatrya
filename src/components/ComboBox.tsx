@@ -29,6 +29,7 @@ import { toastError } from "@/lib/toast";
 import { createActivityType } from "@/actions/activity.actions";
 import { createJobSource } from "@/actions/job.actions";
 import { createContactRole } from "@/actions/contactRole.actions";
+import { useI18n } from "@/i18n";
 
 interface ComboboxProps {
   options: any[];
@@ -50,6 +51,7 @@ export function Combobox({
   onSearchChange,
   fullWidth,
 }: ComboboxProps) {
+  const { t } = useI18n();
   // Placeholder text only; the accessible name comes from FormLabel/FormControl
   const displayName = label ?? field.name;
   const [newOption, setNewOption] = useState<string>("");
@@ -182,7 +184,11 @@ export function Combobox({
               setNewOption(val);
               onSearchChange?.(val);
             }}
-            placeholder={`${creatable ? "Create or " : ""}Search ${displayName}`}
+            placeholder={
+              creatable
+                ? t("common.createOrSearch", { name: displayName })
+                : t("common.searchName", { name: displayName })
+            }
             onKeyDown={(e) => handleEnterKey(e)}
           />
           <CommandList>
@@ -199,13 +205,13 @@ export function Combobox({
               {creatable ? (
                 <>
                   <CirclePlus className="h-4 w-4" />
-                  <p>Create: </p>
+                  <p>{t("common.createPrefix")} </p>
                   <p className="block max-w-48 truncate font-semibold text-primary">
                     {newOption}
                   </p>
                 </>
               ) : (
-                <p className="font-semibold text-primary">No source found!</p>
+                <p className="font-semibold text-primary">{t("common.noSourceFound")}</p>
               )}
             </CommandEmpty>
             <CommandGroup>

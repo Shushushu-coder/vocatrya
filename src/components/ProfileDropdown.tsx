@@ -16,6 +16,7 @@ import UserAvatar from "./UserAvatar";
 import { SupportDialog } from "./SupportDialog";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 interface ProfileDropdownProps {
   user: any;
@@ -28,9 +29,10 @@ export function ProfileDropdown({
   expanded,
   signOutAction,
 }: ProfileDropdownProps) {
+  const { t } = useI18n();
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const version = useAppVersion();
-  const label = user?.email ?? "My Account";
+  const label = user?.email ?? t("nav.userMenu");
 
   return (
     <>
@@ -40,7 +42,7 @@ export function ProfileDropdown({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                aria-label="User menu"
+                aria-label={t("nav.userMenu")}
                 className="navlink h-10 w-full text-muted-foreground hover:text-foreground"
               >
                 <span className="relative flex h-full w-14 shrink-0 items-center justify-center">
@@ -51,7 +53,7 @@ export function ProfileDropdown({
                         aria-hidden
                         className="absolute right-3 top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
                       />
-                      <span className="sr-only">Update available</span>
+                      <span className="sr-only">{t("nav.updateAvailable")}</span>
                     </>
                   )}
                 </span>
@@ -74,7 +76,7 @@ export function ProfileDropdown({
           <DropdownMenuItem asChild>
             <Link href="/dashboard/settings" className="cursor-pointer">
               <Settings className="w-5 mr-2" />
-              Settings
+              {t("nav.settings")}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -82,7 +84,7 @@ export function ProfileDropdown({
             className="cursor-pointer"
           >
             <Info className="w-5 mr-2" />
-            Support
+            {t("nav.support")}
           </DropdownMenuItem>
           {version?.updateAvailable && (
             <DropdownMenuItem
@@ -90,7 +92,7 @@ export function ProfileDropdown({
               className="cursor-pointer text-primary focus:text-primary"
             >
               <ArrowUpCircle className="w-5 mr-2" />
-              Update available
+              {t("nav.updateAvailable")}
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
@@ -98,7 +100,7 @@ export function ProfileDropdown({
             <form action={signOutAction}>
               <button type="submit" className="flex w-full items-center">
                 <PowerIcon className="w-5 mr-2" />
-                <div className="hidden md:block">Logout</div>
+                <div className="hidden md:block">{t("nav.logout")}</div>
               </button>
             </form>
           </DropdownMenuItem>

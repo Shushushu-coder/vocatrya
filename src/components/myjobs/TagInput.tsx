@@ -21,6 +21,7 @@ import { createTag } from "@/actions/tag.actions";
 import { toastError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { useI18n } from "@/i18n";
 
 interface TagInputProps {
   availableTags: Tag[];
@@ -37,10 +38,13 @@ export function TagInput({
   selectedTagIds,
   onChange,
   max = APP_CONSTANTS.MAX_JOB_TAGS,
-  placeholder = "Search or add a skill...",
-  noun = "skills",
+  placeholder,
+  noun,
   onTagCreated,
 }: TagInputProps) {
+  const { t } = useI18n();
+  const resolvedPlaceholder = placeholder ?? t("jobs.searchOrAddSkill");
+  const resolvedNoun = noun ?? t("jobs.skillsNoun");
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [localTags, setLocalTags] = useState<Tag[]>(availableTags);
@@ -91,7 +95,7 @@ export function TagInput({
     startTransition(async () => {
       const result = await createTag(label);
       if (!result?.success) {
-        toastError(result?.message ?? "Failed to create skill tag.");
+        toastError(result?.message ?? t("jobs.failedCreateSkillTag"));
         return;
       }
       const newTag: Tag = result.data;
@@ -119,7 +123,7 @@ export function TagInput({
           <Button
             variant="outline"
             role="combobox"
-            aria-label={placeholder}
+            aria-label={resolvedPlaceholder}
             aria-expanded={open}
             className={cn(
               "w-full justify-between font-normal",
@@ -128,20 +132,22 @@ export function TagInput({
             disabled={isMaxReached}
             type="button"
           >
-            {isMaxReached ? `Max ${max} ${noun} reached` : placeholder}
+            {isMaxReached
+              ? t("jobs.maxTagsReached", { max, noun: resolvedNoun })
+              : resolvedPlaceholder}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-full p-0" align="start">
           <Command shouldFilter={false}>
             <CommandInput
-              placeholder="Type a skill..."
+              placeholder={t("jobs.typeASkill")}
               value={inputValue}
               onValueChange={setInputValue}
             />
             <CommandList>
               {filteredOptions.length === 0 && !inputValue && (
-                <CommandEmpty>No skills found.</CommandEmpty>
+                <CommandEmpty>{t("jobs.noSkillsFound")}</CommandEmpty>
               )}
               {filteredOptions.length > 0 && (
                 <CommandGroup>
@@ -167,7 +173,7 @@ export function TagInput({
                     ) : (
                       <CirclePlus className="mr-2 h-4 w-4" />
                     )}
-                    Create &quot;{inputValue.trim()}&quot;
+                    {t("jobs.createQuoted", { value: inputValue.trim() })}
                   </CommandItem>
                 </CommandGroup>
               )}
@@ -185,7 +191,7 @@ export function TagInput({
                 type="button"
                 onClick={() => removeTagById(tag.id)}
                 className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                aria-label={`Remove ${tag.label}`}
+                aria-label={t("jobs.removeNamed", { name: tag.label })}
               >
                 <X className="h-3 w-3" />
               </button>

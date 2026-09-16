@@ -26,6 +26,7 @@ import {
   JobTitle,
   Tag,
 } from "@/models/job.model";
+import { useI18n } from "@/i18n";
 
 // Presentational: the Jobs card header — title/count, active filter chips,
 // view toggle, search, filter select, export and Add Job.
@@ -88,12 +89,14 @@ export function JobsToolbar({
   resetEditJob: () => void;
   addJobInitialOpen: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
     <CardHeader className="flex-row flex-wrap justify-between items-center gap-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <CardTitle>Jobs</CardTitle>
+        <CardTitle>{t("jobs.title")}</CardTitle>
         {!initialLoading && totalJobs > 0 && (
-          <RecordsCount count={jobsCount} total={totalJobs} label="jobs" />
+          <RecordsCount count={jobsCount} total={totalJobs} label={t("common.jobsLabel")} />
         )}
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
@@ -139,18 +142,18 @@ export function JobsToolbar({
           variant="outline"
           className="h-8 w-8 p-0"
           disabled={initialLoading}
-          title="Reload jobs"
+          title={t("jobs.reloadJobs")}
           onClick={onReload}
         >
           <RefreshCw
             className={`h-3.5 w-3.5 ${initialLoading ? "animate-spin" : ""}`}
           />
-          <span className="sr-only">Reload jobs</span>
+          <span className="sr-only">{t("jobs.reloadJobs")}</span>
         </Button>
         <SearchInput
           value={searchTerm}
           onChange={onSearchTermChange}
-          placeholder="Search jobs..."
+          placeholder={t("jobs.searchPlaceholder")}
         />
         <Select value={filterKey} onValueChange={onFilterChange}>
           <SelectTrigger
@@ -158,20 +161,22 @@ export function JobsToolbar({
             data-testid="job-filter-select"
           >
             <ListFilter className="h-3.5 w-3.5" />
-            <SelectValue placeholder="Filter" />
+            <SelectValue placeholder={t("common.filter")} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectLabel>Filter by</SelectLabel>
+              <SelectLabel>{t("jobs.filterByStatus")}</SelectLabel>
               <SelectSeparator />
-              <SelectItem value="none">All (Except Dismissed)</SelectItem>
-              <SelectItem value="applied">Applied</SelectItem>
-              <SelectItem value="interview">Interview</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              <SelectItem value="PT">Part-time</SelectItem>
-              <SelectItem value="accepted">Accepted (discovered)</SelectItem>
-              <SelectItem value="dismissed">Dismissed (discovered)</SelectItem>
+              <SelectItem value="none">
+                {t("jobs.allExceptDismissed")}
+              </SelectItem>
+              <SelectItem value="applied">{t("jobs.statuses.applied")}</SelectItem>
+              <SelectItem value="interview">{t("jobs.statuses.interview")}</SelectItem>
+              <SelectItem value="draft">{t("jobs.statuses.draft")}</SelectItem>
+              <SelectItem value="rejected">{t("jobs.statuses.rejected")}</SelectItem>
+              <SelectItem value="PT">{t("jobs.jobTypes.part-time")}</SelectItem>
+              <SelectItem value="accepted">{t("automations.acceptJob")}</SelectItem>
+              <SelectItem value="dismissed">{t("automations.dismissJob")}</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -184,7 +189,7 @@ export function JobsToolbar({
         >
           <File className="h-3.5 w-3.5" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            Export
+            {t("common.export")}
           </span>
         </Button>
         <AddJob

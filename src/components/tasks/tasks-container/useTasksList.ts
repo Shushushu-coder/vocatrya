@@ -4,6 +4,7 @@ import { getTasksList, updateTaskStatus } from "@/actions/task.actions";
 import { toastActionResult, toastError } from "@/lib/toast";
 import { Task, TaskGroupBy, TaskStatus } from "@/models/task.model";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { useI18n } from "@/i18n";
 
 const DEFAULT_STATUS_FILTER: TaskStatus[] = ["in-progress", "needs-attention"];
 
@@ -16,6 +17,7 @@ export function useTasksList({
   filterKey?: string;
   onTasksChanged?: () => void;
 }) {
+  const { t } = useI18n();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
@@ -85,7 +87,7 @@ export function useTasksList({
     } else {
       setTasks(originalTasks);
     }
-    toastActionResult(result, { success: "Task status updated successfully" });
+    toastActionResult(result, { success: t("tasks.statusUpdated") });
   };
 
   useEffect(() => {

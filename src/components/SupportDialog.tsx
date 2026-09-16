@@ -9,6 +9,7 @@ import {
 } from "./ui/dialog";
 import { AppVersionInfo } from "@/models/version.model";
 import packageJson from "../../package.json";
+import { useI18n } from "@/i18n";
 
 interface SupportDialogProps {
   open: boolean;
@@ -21,6 +22,7 @@ export function SupportDialog({
   onOpenChange,
   version,
 }: SupportDialogProps) {
+  const { t } = useI18n();
   const appVersion = packageJson.version;
   const currentYear = new Date().getFullYear();
 
@@ -28,7 +30,7 @@ export function SupportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Support</DialogTitle>
+          <DialogTitle>{t("nav.support")}</DialogTitle>
           <DialogDescription>
             <a
               href="https://github.com/Shushushu-coder/vocatrya/issues"
@@ -42,7 +44,7 @@ export function SupportDialog({
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Version</h3>
+            <h3 className="text-sm font-semibold">{t("common.version")}</h3>
             <p className="text-sm text-muted-foreground">v{appVersion}</p>
             {version?.updateAvailable && (
               <p className="text-sm">
@@ -52,15 +54,17 @@ export function SupportDialog({
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
-                  {version.latest} is available
+                  {t("common.updateAvailableVersion", {
+                    version: version.latest ?? "",
+                  })}
                 </a>
               </p>
             )}
           </div>
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold">About & Copyright</h3>
+            <h3 className="text-sm font-semibold">{t("common.aboutCopyright")}</h3>
             <p className="text-sm text-muted-foreground">
-              © {currentYear} Vocatrya. Derived from JobSync (© 2024–{currentYear} gsync).
+              {t("common.derivedFrom", { year: currentYear })}
             </p>
             <div className="flex flex-col gap-1 text-sm">
               <a
@@ -72,7 +76,7 @@ export function SupportDialog({
                 https://github.com/Shushushu-coder/vocatrya
               </a>
               <span className="text-xs text-muted-foreground">
-                Upstream base:{" "}
+                {t("common.upstreamBase")}{" "}
                 <a
                   href="https://github.com/Gsync/jobsync"
                   target="_blank"

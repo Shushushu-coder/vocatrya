@@ -16,8 +16,7 @@ import {
 } from "@/models/coverLetterExport.model";
 import { CoverLetterSettingsPanel } from "./cover-letter-export-dialog/CoverLetterSettingsPanel";
 import { canExportCoverLetter } from "./cover-letter-export-dialog/canExportCoverLetter";
-
-const EMPTY_MESSAGE = "Add some content to this cover letter to preview it.";
+import { useI18n } from "@/i18n";
 
 type CoverLetterExportDialogProps = {
   open: boolean;
@@ -33,6 +32,7 @@ export function CoverLetterExportDialog({
   letter,
   contactInfo,
 }: CoverLetterExportDialogProps) {
+  const { t } = useI18n();
   const { settings, setSettings, ready, reset } = useExportSettings({
     storageKey: APP_CONSTANTS.COVER_LETTER_EXPORT_SETTINGS_STORAGE_KEY,
     defaults: defaultCoverLetterExportSettings,
@@ -77,7 +77,10 @@ export function CoverLetterExportDialog({
     prepared: { blob: Blob; filename: string } | null,
   ) => {
     if (!letter || !canExportCoverLetter(letter.content)) {
-      toastError("Add some content before exporting.", "Nothing to export");
+      toastError(
+        t("profile.addContentBeforeExport"),
+        t("profile.nothingToExport"),
+      );
       return;
     }
     try {
@@ -85,9 +88,12 @@ export function CoverLetterExportDialog({
       // failed preview.
       const output = prepared ?? (await generate(settings));
       triggerDownload(output.blob, output.filename);
-      toastSuccess("Saved to your Downloads folder.", "PDF exported");
+      toastSuccess(
+        t("profile.savedDownloadsFolder"),
+        t("profile.pdfExported"),
+      );
     } catch {
-      toastError("Failed to generate PDF. Please try again.");
+      toastError(t("profile.failedGeneratePdf"));
     }
   };
 
@@ -95,10 +101,10 @@ export function CoverLetterExportDialog({
     <PdfExportDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Export to PDF"
-      description="Adjust the settings and preview the file before exporting."
-      previewLabel="Cover letter preview"
-      emptyMessage={EMPTY_MESSAGE}
+      title={t("profile.exportToPdf")}
+      description={t("profile.exportPdfDescription")}
+      previewLabel={t("profile.coverLetterPreview")}
+      emptyMessage={t("profile.emptyCoverLetterPreview")}
       blob={blob}
       filename={filename}
       isGenerating={isGenerating}

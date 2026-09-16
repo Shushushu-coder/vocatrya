@@ -9,7 +9,7 @@ import {
 } from "../ui/card";
 import { Button } from "../ui/button";
 import { Edit, ExternalLink } from "lucide-react";
-import { format } from "date-fns";
+import { useI18n } from "@/i18n";
 
 interface CertificationCardProps {
   certificationSection: ResumeSection | undefined;
@@ -20,6 +20,7 @@ function CertificationCard({
   certificationSection,
   openDialogForEdit,
 }: CertificationCardProps) {
+  const { t, formatMonthYear } = useI18n();
   const { sectionTitle, licenseOrCertifications } = certificationSection!;
   return (
     <>
@@ -44,7 +45,7 @@ function CertificationCard({
               >
                 <Edit className="h-3.5 w-3.5" />
                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  Edit
+                  {t("common.edit")}
                 </span>
               </Button>
             </CardHeader>
@@ -52,13 +53,18 @@ function CertificationCard({
               <h3>{organization}</h3>
               <CardDescription>
                 {issueDate && (
-                  <>Issued: {format(new Date(issueDate), "MMM yyyy")}</>
+                  <>
+                    {t("profile.issued")} {formatMonthYear(new Date(issueDate))}
+                  </>
                 )}
                 {issueDate && expirationDate && " · "}
                 {expirationDate ? (
-                  <>Expires: {format(new Date(expirationDate), "MMM yyyy")}</>
+                  <>
+                    {t("profile.expires")}{" "}
+                    {formatMonthYear(new Date(expirationDate))}
+                  </>
                 ) : (
-                  issueDate && " · No Expiration"
+                  issueDate && ` · ${t("profile.noExpiration")}`
                 )}
               </CardDescription>
               {credentialUrl && (
@@ -68,7 +74,7 @@ function CertificationCard({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-sm text-blue-500 hover:underline mt-1"
                 >
-                  View Credential
+                  {t("profile.viewCredential")}
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               )}

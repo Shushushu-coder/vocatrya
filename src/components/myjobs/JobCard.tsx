@@ -19,6 +19,8 @@ type JobCardProps = {
   onDeleteJob: (jobId: string) => void;
 };
 
+import { useI18n } from "@/i18n";
+
 export function JobCard({
   job,
   jobStatuses,
@@ -27,6 +29,7 @@ export function JobCard({
   onAddNote,
   onDeleteJob,
 }: JobCardProps) {
+  const { t, formatDate } = useI18n();
   const notesCount = job._count?.Notes ?? 0;
 
   return (
@@ -74,7 +77,7 @@ export function JobCard({
         )}
         <span className="flex items-center gap-1 whitespace-nowrap">
           <Calendar className="h-3.5 w-3.5 shrink-0" />
-          {job.appliedDate ? format(job.appliedDate, "PP") : "Not applied"}
+          {job.appliedDate ? formatDate(job.appliedDate) : t("jobs.notApplied")}
         </span>
         {job.JobSource?.label && (
           <span className="flex min-w-0 items-center gap-1">

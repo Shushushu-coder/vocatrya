@@ -40,6 +40,7 @@ import { JobTabEmptyState } from "./job-details/JobTabEmptyState";
 import { CoverLetterTab } from "./job-details/CoverLetterTab";
 import { useAutoMatch } from "./job-details/useAutoMatch";
 import { JobContactsTab } from "./job-details/JobContactsTab";
+import { useI18n } from "@/i18n";
 
 const JOB_DETAIL_TABS = [
   "description",
@@ -68,6 +69,7 @@ function JobDetails({
   sources,
   tags,
 }: JobDetailsProps) {
+  const { t } = useI18n();
   const {
     open: openChat,
     clear: clearChat,
@@ -138,9 +140,9 @@ function JobDetails({
   // Regenerate all key on this one reason.
   const coverLetterBlockedReason =
     job.descriptionCompleteness === "title-only"
-      ? "Add a job description first"
+      ? t("jobs.addDescriptionFirst")
       : chatBusy
-        ? "The assistant is busy"
+        ? t("jobs.assistantBusy")
         : undefined;
 
   const onEditJob = () => {
@@ -158,7 +160,7 @@ function JobDetails({
     const { success, message } = await updateJobStatus(job.id, status);
     if (success) {
       setCurrentStatus(status);
-      toastSuccess(`Job has been updated successfully`);
+      toastSuccess(t("jobs.updatedSuccess"));
     } else {
       toastError(message);
     }
@@ -167,7 +169,7 @@ function JobDetails({
   const onDeleteJob = async () => {
     const { success, message } = await deleteJobById(job.id);
     if (success) {
-      toastSuccess(`Job has been deleted successfully`);
+      toastSuccess(t("jobs.deletedSuccess"));
       router.push("/dashboard/myjobs");
     } else {
       toastError(message);
@@ -200,11 +202,11 @@ function JobDetails({
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
-            <TabsTrigger value="description">Description</TabsTrigger>
-            <TabsTrigger value="match">AI Match</TabsTrigger>
-            <TabsTrigger value="letter">Cover Letter</TabsTrigger>
+            <TabsTrigger value="description">{t("common.description")}</TabsTrigger>
+            <TabsTrigger value="match">{t("automations.aiMatch")}</TabsTrigger>
+            <TabsTrigger value="letter">{t("jobs.coverLetter")}</TabsTrigger>
             <TabsTrigger value="notes">
-              Notes
+              {t("common.notes")}
               {notesCount > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   {notesCount}
@@ -212,7 +214,7 @@ function JobDetails({
               )}
             </TabsTrigger>
             <TabsTrigger value="contacts">
-              Contacts
+              {t("jobs.contactsTab")}
               {(job.contactLinks?.length ?? 0) > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   {job.contactLinks!.length}
@@ -232,12 +234,12 @@ function JobDetails({
               ) : (
                 <JobTabEmptyState
                   icon={Sparkles}
-                  title="No match analysis yet"
-                  description="Run an AI match to see how your resume lines up with this posting, and where the gaps are."
-                  actionLabel="Match with AI"
+                  title={t("jobs.noMatchYet")}
+                  description={t("jobs.noMatchDescription")}
+                  actionLabel={t("jobs.matchWithAi")}
                   onAction={onMatch}
                   actionDisabled={chatBusy}
-                  actionTitle={chatBusy ? "The assistant is busy" : undefined}
+                  actionTitle={chatBusy ? t("jobs.assistantBusy") : undefined}
                 />
               )}
             </Card>
@@ -291,6 +293,7 @@ function JobDetails({
       />
       <DeleteAlertDialog
         pageTitle="job"
+        alertTitle={t("jobs.deleteConfirm")}
         open={deleteAlertOpen}
         onOpenChange={setDeleteAlertOpen}
         onDelete={onDeleteJob}
@@ -302,16 +305,15 @@ function JobDetails({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear the assistant conversation?</AlertDialogTitle>
+            <AlertDialogTitle>{t("jobs.clearChatTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              A job is waiting for your approval in the assistant. Starting this
-              clears the conversation, and that job will not be saved.
+              {t("jobs.clearChatDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void startChat(pendingChatMessage)}>
-              Clear and continue
+              {t("jobs.clearAndContinue")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

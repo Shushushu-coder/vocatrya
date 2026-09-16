@@ -26,6 +26,7 @@ import { useEffect, useState, useTransition } from "react";
 import { toastActionResult } from "@/lib/toast";
 import { ContactInfo } from "@/models/profile.model";
 import { addContactInfo, updateContactInfo } from "@/actions/profile.actions";
+import { useI18n } from "@/i18n";
 
 interface AddContactInfoProps {
   dialogOpen: boolean;
@@ -40,15 +41,16 @@ function AddContactInfo({
   contactInfoToEdit,
   resumeId,
 }: AddContactInfoProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
   const [showLink2, setShowLink2] = useState(false);
 
   const pageTitle = contactInfoToEdit
-    ? "Edit Contact Info"
-    : "Add Contact Info";
+    ? t("profile.editContactInfo")
+    : t("profile.addContactInfo");
   const pageDescription = contactInfoToEdit
-    ? "Update your contact information on your resume."
-    : "Add your contact information to your resume.";
+    ? t("profile.editContactInfoDescription")
+    : t("profile.addContactInfoDescription");
 
   const form = useForm<z.infer<typeof AddContactInfoFormSchema>>({
     resolver: zodResolver(AddContactInfoFormSchema),
@@ -100,9 +102,9 @@ function AddContactInfo({
         ? await updateContactInfo(data)
         : await addContactInfo(data);
       toastActionResult(res, {
-        success: `Contact Info has been ${
-          contactInfoToEdit ? "updated" : "created"
-        } successfully`,
+        success: contactInfoToEdit
+          ? t("profile.contactInfoUpdated")
+          : t("profile.contactInfoCreated"),
         onSuccess: () => {
           reset();
           setDialogOpen(false);
@@ -132,7 +134,7 @@ function AddContactInfo({
                 name="firstName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>First Name</FormLabel>
+                    <FormLabel>{t("common.firstName")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -149,7 +151,7 @@ function AddContactInfo({
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel>{t("common.lastName")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -166,7 +168,7 @@ function AddContactInfo({
                 name="headline"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Headline</FormLabel>
+                    <FormLabel>{t("common.headline")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -183,7 +185,7 @@ function AddContactInfo({
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel>{t("common.email")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -200,7 +202,7 @@ function AddContactInfo({
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel>{t("common.phone")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -217,7 +219,7 @@ function AddContactInfo({
                 name="address"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Address</FormLabel>
+                    <FormLabel>{t("common.address")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -230,9 +232,9 @@ function AddContactInfo({
             {/* LINK 1 */}
             <div className="md:col-span-2">
               <p className="text-sm font-medium mb-2">
-                Link 1{" "}
+                {t("profile.link1")}{" "}
                 <span className="text-muted-foreground font-normal">
-                  (optional — portfolio, LinkedIn, GitHub, etc.)
+                  {t("profile.link1Hint")}
                 </span>
               </p>
               <div className="grid grid-cols-3 gap-2">
@@ -241,9 +243,14 @@ function AddContactInfo({
                   name="url1Label"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">Label</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        {t("common.label")}
+                      </FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. LinkedIn" {...field} />
+                        <Input
+                          placeholder={t("profile.linkedinPlaceholder")}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -254,9 +261,14 @@ function AddContactInfo({
                   name="url1"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel className="text-xs text-muted-foreground">URL</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        {t("common.url")}
+                      </FormLabel>
                       <FormControl>
-                        <Input placeholder="https://" {...field} />
+                        <Input
+                          placeholder={t("profile.urlPlaceholder")}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -269,7 +281,7 @@ function AddContactInfo({
             {showLink2 ? (
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium">Link 2</p>
+                  <p className="text-sm font-medium">{t("profile.link2")}</p>
                   <Button
                     type="button"
                     variant="ghost"
@@ -290,9 +302,14 @@ function AddContactInfo({
                     name="url2Label"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-xs text-muted-foreground">Label</FormLabel>
+                        <FormLabel className="text-xs text-muted-foreground">
+                          {t("common.label")}
+                        </FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g. GitHub" {...field} />
+                          <Input
+                            placeholder={t("profile.githubPlaceholder")}
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -303,9 +320,14 @@ function AddContactInfo({
                     name="url2"
                     render={({ field }) => (
                       <FormItem className="col-span-2">
-                        <FormLabel className="text-xs text-muted-foreground">URL</FormLabel>
+                        <FormLabel className="text-xs text-muted-foreground">
+                          {t("common.url")}
+                        </FormLabel>
                         <FormControl>
-                          <Input placeholder="https://" {...field} />
+                          <Input
+                            placeholder={t("profile.urlPlaceholder")}
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -322,7 +344,7 @@ function AddContactInfo({
                   className="text-muted-foreground px-0 h-auto"
                   onClick={() => setShowLink2(true)}
                 >
-                  + Add another link
+                  {t("profile.addAnotherLink")}
                 </Button>
               </div>
             )}

@@ -28,6 +28,7 @@ import {
 } from "./resume-container/ResumeDialogs";
 import { useResumeImport } from "./resume-container/useResumeImport";
 import { useResumePdfExport } from "./resume-container/useResumePdfExport";
+import { useI18n } from "@/i18n";
 
 function ResumeContainer({
   resume,
@@ -36,6 +37,7 @@ function ResumeContainer({
   resume: Resume;
   defaultResumeId?: string | null;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const goBack = () => router.back();
   const isDefault = !!resume?.id && resume.id === defaultResumeId;
@@ -177,7 +179,7 @@ function ResumeContainer({
     if (!resume?.id) return;
     const { success, message } = await setDefaultResume(resume.id);
     if (success) {
-      toastSuccess("This resume is now your default.");
+      toastSuccess(t("profile.thisResumeNowDefault"));
       router.refresh();
     } else {
       toastError(message);
@@ -198,13 +200,13 @@ function ResumeContainer({
       />
 
       <DeleteAlertDialog
-        pageTitle="resume"
+        pageTitle={t("profile.resumeLabel")}
         open={setDefaultConfirmOpen}
         onOpenChange={setSetDefaultConfirmOpen}
         onDelete={handleSetDefault}
-        alertTitle="Change default resume?"
-        alertDescription="This will make this resume your default, replacing any current default."
-        actionLabel="Set as default"
+        alertTitle={t("profile.changeDefaultResume")}
+        alertDescription={t("profile.replaceDefaultThis")}
+        actionLabel={t("profile.setAsDefaultLower")}
         actionVariant="default"
       />
 
@@ -213,7 +215,7 @@ function ResumeContainer({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles className="h-4 w-4" />
-              AI Review
+              {t("profile.aiReview")}
             </CardTitle>
             <ReviewDetails reviewData={parsedReviewData} />
           </CardHeader>

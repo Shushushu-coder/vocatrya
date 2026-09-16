@@ -18,6 +18,7 @@ import { useActivitySwitchConfirm } from "@/hooks/useActivitySwitchConfirm";
 import { useTasksList } from "./tasks-container/useTasksList";
 import { useAutoOpenAddTaskDialog } from "./tasks-container/useAutoOpenAddTaskDialog";
 import { TasksToolbar } from "./tasks-container/TasksToolbar";
+import { useI18n } from "@/i18n";
 
 type TasksContainerProps = {
   activityTypes: ActivityType[];
@@ -30,6 +31,7 @@ function TasksContainer({
   filterKey,
   onTasksChanged,
 }: TasksContainerProps) {
+  const { t } = useI18n();
   const { refreshCurrentActivity } = useActivity();
   const { requestStart, confirmDialog } = useActivitySwitchConfirm();
   const [editTask, setEditTask] = useState<Task | null>(null);
@@ -56,7 +58,7 @@ function TasksContainer({
   const onDeleteTask = async (taskId: string) => {
     const result = await deleteTaskById(taskId);
     toastActionResult(result, {
-      success: "Task has been deleted successfully",
+      success: t("tasks.taskDeleted"),
       onSuccess: () => reloadTasks(),
     });
   };
@@ -80,7 +82,7 @@ function TasksContainer({
     requestStart(async () => {
       const result = await startActivityFromTask(taskId);
       toastActionResult(result, {
-        success: "Activity started from task",
+        success: t("tasks.activityStartedFromTask"),
         onSuccess: () => refreshCurrentActivity(),
       });
       return result.success;
@@ -122,7 +124,7 @@ function TasksContainer({
           )}
           {!initialLoading && tasks.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              No tasks found. Create your first task to get started.
+              {t("tasks.emptyState")}
             </div>
           )}
           {tasks.length < totalTasks && (

@@ -8,6 +8,7 @@ import {
   defaultResumeExportSettings,
   type ResumeExportSettings,
 } from "@/models/resumeExport.model";
+import { useI18n } from "@/i18n";
 
 // The one rule for what counts as an exportable resume. The dialog reads it to
 // disable Export up front; the hook keeps it as its own safety net.
@@ -32,6 +33,7 @@ export function canExportResume(resume: Resume): boolean {
 // Owns PDF export: generating the blob, downloading it, and the follow-up
 // prompt when the resume already has a file attached.
 export function useResumePdfExport(resume: Resume) {
+  const { t } = useI18n();
   const router = useRouter();
   const [isExporting, setIsExporting] = useState(false);
   const [pendingPdf, setPendingPdf] = useState<{
@@ -69,8 +71,8 @@ export function useResumePdfExport(resume: Resume) {
   ) => {
     if (!canExportResume(resume)) {
       toastError(
-        "Add your contact info and at least one section (Summary, Experience, or Education) before exporting.",
-        "Nothing to export",
+        t("profile.exportNeedContent"),
+        t("profile.nothingToExport"),
       );
       return;
     }
@@ -89,13 +91,16 @@ export function useResumePdfExport(resume: Resume) {
       if (!resume.FileId) {
         triggerDownload(blob, filename);
         await uploadPdfAsAttachment(blob, filename, false);
-        toastSuccess("Saved to Downloads and attached to this resume.", "PDF exported");
+        toastSuccess(
+          t("profile.savedDownloadsAttached"),
+          t("profile.pdfExported"),
+        );
       } else {
         setPendingPdf({ blob, filename });
         setShowAttachConfirm(true);
       }
     } catch {
-      toastError("Failed to generate PDF. Please try again.");
+      toastError(t("profile.failedGeneratePdf"));
     } finally {
       setIsExporting(false);
     }
@@ -110,12 +115,18 @@ export function useResumePdfExport(resume: Resume) {
       triggerDownload(blob, filename);
       if (choice === "replace") {
         await uploadPdfAsAttachment(blob, filename, true);
-        toastSuccess("Saved to Downloads and attachment replaced.", "PDF exported");
+        toastSuccess(
+          t("profile.savedDownloadsReplaced"),
+          t("profile.pdfExported"),
+        );
       } else {
-        toastSuccess("Saved to your Downloads folder.", "PDF exported");
+        toastSuccess(
+          t("profile.savedDownloadsFolder"),
+          t("profile.pdfExported"),
+        );
       }
     } catch {
-      toastError("Failed to upload PDF. Please try again.");
+      toastError(t("profile.failedUploadPdf"));
     } finally {
       setIsExporting(false);
       setPendingPdf(null);

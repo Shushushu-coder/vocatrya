@@ -73,7 +73,10 @@ function makeArcLinkLabel(maxChars: RefObject<number>) {
   };
 }
 
+import { useI18n } from "@/i18n";
+
 export default function JobsActivityCard({ data }: JobsActivityCardProps) {
+  const { t } = useI18n();
   const [activeIndex, selectTab] = usePersistedTabIndex(
     APP_CONSTANTS.DASHBOARD_JOBS_ACTIVITY_STORAGE_KEY,
     data.map((item) => item.label),
@@ -110,7 +113,7 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-lg text-green-600 min-w-0 truncate">
-            Jobs &amp; Activity
+            {t("dashboard.jobsAndActivity")}
           </CardTitle>
           <div
             className="flex shrink-0 rounded-md border text-xs"
@@ -141,7 +144,7 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
             <div className="flex h-full w-full items-center justify-center">
               <div className="h-[132px] w-[132px] rounded-full border-[18px] border-muted" />
               <p className="absolute inset-x-0 bottom-0 text-center text-sm text-muted-foreground">
-                No activities recorded
+                {t("activities.noActivities")}
               </p>
             </div>
           ) : (

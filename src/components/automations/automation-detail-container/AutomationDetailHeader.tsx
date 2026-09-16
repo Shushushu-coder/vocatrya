@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AutomationWithResume } from "@/models/automation.model";
+import { useI18n } from "@/i18n";
 
 interface AutomationDetailHeaderProps {
   automation: AutomationWithResume;
@@ -46,6 +47,7 @@ export function AutomationDetailHeader({
   onAbort,
   onRunNow,
 }: AutomationDetailHeaderProps) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
       <div className="flex flex-1 min-w-0 items-center gap-4">
@@ -59,15 +61,16 @@ export function AutomationDetailHeader({
           {retired && (
             <p className="flex items-center gap-2 text-amber-600 text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              The {automation.jobBoard} job board was removed and no longer
-              runs. Delete this automation.
+              {t("automations.retiredBoardWarning", {
+                jobBoard: automation.jobBoard,
+              })}
             </p>
           )}
           {(automation.keywords || automation.location) && (
             <p className="text-muted-foreground">
               {[automation.keywords, automation.location]
                 .filter(Boolean)
-                .join(" in ")}
+                .join(t("automations.inJoin"))}
             </p>
           )}
         </div>
@@ -79,7 +82,7 @@ export function AutomationDetailHeader({
         {!retired && (
           <Button variant="outline" onClick={onEdit}>
             <Pencil className="h-4 w-4 mr-2" />
-            Edit
+            {t("common.edit")}
           </Button>
         )}
         <Button
@@ -88,7 +91,7 @@ export function AutomationDetailHeader({
           onClick={onDelete}
         >
           <Trash2 className="h-4 w-4 mr-2" />
-          Delete
+          {t("common.delete")}
         </Button>
         {!retired && (
           <Button
@@ -103,7 +106,9 @@ export function AutomationDetailHeader({
             ) : (
               <Play className="h-4 w-4 mr-2" />
             )}
-            {automation.status === "active" ? "Pause" : "Resume"}
+            {automation.status === "active"
+              ? t("automations.pause")
+              : t("automations.resumeAction")}
           </Button>
         )}
         {retired ? null : runActive ? (
@@ -113,7 +118,7 @@ export function AutomationDetailHeader({
             disabled={aborting}
           >
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            {aborting ? "Aborting…" : "Abort Run"}
+            {aborting ? t("automations.aborting") : t("automations.abortRun")}
           </Button>
         ) : (
           <Button
@@ -122,14 +127,10 @@ export function AutomationDetailHeader({
             disabled={
               resumeMissing || automation.status === "paused" || jobsBusy
             }
-            title={
-              jobsBusy
-                ? "Wait for the in-progress job analysis to finish"
-                : undefined
-            }
+            title={jobsBusy ? t("automations.waitForAnalysis") : undefined}
           >
             <PlayCircle className="h-4 w-4 mr-2" />
-            Run Now
+            {t("automations.runNow")}
           </Button>
         )}
       </div>

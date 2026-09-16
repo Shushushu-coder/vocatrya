@@ -3,19 +3,20 @@
 import { Bot, Database, Key, Palette, Plug } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 export type SettingsSection = "ai-provider" | "api-keys" | "appearance" | "mcp-access" | "data";
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
-  label: string;
+  labelKey: string;
   icon: typeof Bot;
 }[] = [
-  { id: "ai-provider", label: "AI Provider", icon: Bot },
-  { id: "api-keys", label: "API Keys", icon: Key },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "mcp-access", label: "MCP Access", icon: Plug },
-  { id: "data", label: "Data", icon: Database },
+  { id: "ai-provider", labelKey: "settings.aiProvider", icon: Bot },
+  { id: "api-keys", labelKey: "settings.apiKeys", icon: Key },
+  { id: "appearance", labelKey: "settings.appearance", icon: Palette },
+  { id: "mcp-access", labelKey: "settings.mcpAccess", icon: Plug },
+  { id: "data", labelKey: "settings.dataSection", icon: Database },
 ];
 
 interface SettingsSidebarProps {
@@ -27,6 +28,7 @@ export default function SettingsSidebar({
   activeSection,
   onSectionChange,
 }: SettingsSidebarProps) {
+  const { t } = useI18n();
   return (
     <nav className="flex flex-col gap-1 w-48 shrink-0">
       {SETTINGS_SECTIONS.map((section) => {
@@ -45,7 +47,7 @@ export default function SettingsSidebar({
             onClick={() => onSectionChange(section.id)}
           >
             <Icon className="h-4 w-4" />
-            {section.label}
+            {t(section.labelKey)}
           </Button>
         );
       })}

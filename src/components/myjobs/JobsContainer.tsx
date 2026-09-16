@@ -25,6 +25,7 @@ import { useJobFilters } from "./jobs-container/useJobFilters";
 import { useJobsList } from "./jobs-container/useJobsList";
 import { downloadJobsList } from "./jobs-container/downloadJobsCsv";
 import { JobsToolbar } from "./jobs-container/JobsToolbar";
+import { useI18n } from "@/i18n";
 
 type MyJobsProps = {
   statuses: JobStatus[];
@@ -44,6 +45,7 @@ function JobsContainer({
   tags,
 }: MyJobsProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [editJob, setEditJob] = useState(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteJobId, setNoteJobId] = useState("");
@@ -90,7 +92,7 @@ function JobsContainer({
   const onDeleteJob = async (jobId: string) => {
     const { res, success, message } = await deleteJobById(jobId);
     if (success) {
-      toastSuccess(`Job has been deleted successfully`);
+      toastSuccess(t("jobs.deletedSuccess"));
     } else {
       toastError(message);
     }
@@ -110,7 +112,7 @@ function JobsContainer({
     const { success, message } = await updateJobStatus(jobId, jobStatus);
     if (success) {
       router.refresh();
-      toastSuccess(`Job has been updated successfully`);
+      toastSuccess(t("jobs.updatedSuccess"));
     } else {
       toastError(message);
     }
@@ -148,7 +150,7 @@ function JobsContainer({
           onSearchTermChange={setSearchTerm}
           filterKey={filterKey}
           onFilterChange={onFilterChange}
-          onDownload={downloadJobsList}
+          onDownload={() => downloadJobsList(t)}
           statuses={statuses}
           companies={companies}
           titles={titles}

@@ -38,6 +38,7 @@ import type {
 import { getAiProviders } from "@/lib/ai/provider-registry";
 import { AiProvider } from "@/models/ai.model";
 import { checkOllamaConnection } from "@/utils/ai.utils";
+import { useI18n } from "@/i18n";
 
 interface ProviderConfig {
   id: ApiKeyProvider;
@@ -58,6 +59,7 @@ const PROVIDERS: ProviderConfig[] = getAiProviders().map((entry) => ({
 }));
 
 function ApiKeySettings() {
+  const { t } = useI18n();
   const [keys, setKeys] = useState<ApiKeyClientResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [defaultOllamaUrl, setDefaultOllamaUrl] = useState(
@@ -120,7 +122,7 @@ function ApiKeySettings() {
       const verifyData = await verifyRes.json();
 
       if (!verifyData.success) {
-        toastError(verifyData.error || "Could not verify the key", "Verification failed");
+        toastError(verifyData.error || t("settings.couldNotVerifyKey"), t("settings.verificationFailed"));
         return;
       }
 
@@ -131,16 +133,21 @@ function ApiKeySettings() {
         sensitive: providerConfig?.sensitive ?? true,
       });
       if (saveResult.success) {
-        toastSuccess(`${PROVIDERS.find((p) => p.id === provider)?.name} key verified and saved.`, "API key saved");
+        toastSuccess(
+          t("settings.keyVerifiedAndSaved", {
+            name: PROVIDERS.find((p) => p.id === provider)?.name ?? "",
+          }),
+          t("settings.apiKeySaved"),
+        );
         setEditingProvider(null);
         setInputValue("");
         await fetchKeys();
       } else {
-        toastError(saveResult.message || "Failed to save API key", "Save failed");
+        toastError(saveResult.message || t("settings.failedToSaveApiKey"), t("settings.saveFailed"));
       }
     } catch (error) {
       console.error("Error saving API key:", error);
-      toastError("An unexpected error occurred");
+      toastError(t("settings.unexpectedError"));
     } finally {
       setVerifying(false);
     }
@@ -151,10 +158,15 @@ function ApiKeySettings() {
     try {
       const result = await deleteApiKey(provider);
       if (result.success) {
-        toastSuccess(`${PROVIDERS.find((p) => p.id === provider)?.name} key removed.`, "API key deleted");
+        toastSuccess(
+          t("settings.keyRemoved", {
+            name: PROVIDERS.find((p) => p.id === provider)?.name ?? "",
+          }),
+          t("settings.apiKeyDeleted"),
+        );
         await fetchKeys();
       } else {
-        toastError(result.message || "Failed to delete API key");
+        toastError(result.message || t("settings.failedToDeleteApiKey"));
       }
     } catch (error) {
       console.error("Error deleting API key:", error);
@@ -172,14 +184,14 @@ function ApiKeySettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">API Keys</h3>
+          <h3 className="text-lg font-medium">{t("settings.apiKeys")}</h3>
           <p className="text-sm text-muted-foreground">
-            Manage your API keys for AI providers and external services.
+            {t("settings.apiKeysDescription")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading keys...</span>
+          <span>{t("settings.loadingKeys")}</span>
         </div>
       </div>
     );
@@ -188,10 +200,9 @@ function ApiKeySettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">API Keys</h3>
+        <h3 className="text-lg font-medium">{t("settings.apiKeys")}</h3>
         <p className="text-sm text-muted-foreground">
-          Manage your API keys for AI providers and external services. Keys are
-          encrypted and stored securely.
+          {t("settings.apiKeysDescriptionSecure")}
         </p>
       </div>
 
@@ -211,7 +222,12 @@ function ApiKeySettings() {
                       {provider.description}
                       {isBaseUrl && (
                         <span className="block text-xs text-muted-foreground/70 mt-0.5">
-                          Default: {provider.id === "ollama" ? defaultOllamaUrl : provider.placeholder}
+                          {t("settings.defaultPrefix", {
+                            value:
+                              provider.id === "ollama"
+                                ? defaultOllamaUrl
+                                : provider.placeholder,
+                          })}
                         </span>
                       )}
                     </CardDescription>
@@ -224,7 +240,7 @@ function ApiKeySettings() {
                         : existingKey.displayValue || existingKey.last4}
                     </Badge>
                   ) : (
-                    <Badge variant="secondary">Not configured</Badge>
+                    <Badge variant="secondary">{t("settings.notConfigured")}</Badge>
                   )}
                 </div>
               </CardHeader>
@@ -234,17 +250,17 @@ function ApiKeySettings() {
                     {ollamaChecking ? (
                       <div className="flex items-center gap-1 text-muted-foreground text-sm">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>Checking...</span>
+                        <span>{t("settings.checking")}</span>
                       </div>
                     ) : ollamaConnected === true ? (
                       <div className="flex items-center gap-1 text-green-600 text-sm">
                         <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>Ollama is running</span>
+                        <span>{t("settings.ollamaRunning")}</span>
                       </div>
                     ) : ollamaConnected === false ? (
                       <div className="flex items-center gap-1 text-red-600 text-sm">
                         <XCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>Ollama is not running</span>
+                        <span>{t("settings.ollamaNotRunning")}</span>
                       </div>
                     ) : null}
                     <Button
@@ -264,7 +280,7 @@ function ApiKeySettings() {
                   <div className="space-y-3">
                     <div>
                       <Label htmlFor={`key-${provider.id}`}>
-                        {isBaseUrl ? "Base URL" : "API Key"}
+                        {isBaseUrl ? t("settings.baseUrl") : t("settings.apiKey")}
                       </Label>
                       <Input
                         id={`key-${provider.id}`}
@@ -288,14 +304,14 @@ function ApiKeySettings() {
                         {verifying && (
                           <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                         )}
-                        Verify & Save
+                        {t("settings.verifyAndSave")}
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={handleCancel}
                       >
-                        Cancel
+                        {t("common.cancel")}
                       </Button>
                     </div>
                   </div>
@@ -310,7 +326,7 @@ function ApiKeySettings() {
                       }}
                     >
                       <Plus className="h-3 w-3 mr-1" />
-                      {existingKey ? "Update Key" : "Add Key"}
+                      {existingKey ? t("settings.updateKey") : t("settings.addKey")}
                     </Button>
                     {existingKey && (
                       <AlertDialog>
@@ -330,19 +346,19 @@ function ApiKeySettings() {
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Delete API Key</AlertDialogTitle>
+                            <AlertDialogTitle>{t("settings.deleteApiKey")}</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete your{" "}
-                              {provider.name} key? The system will fall back to
-                              the server environment variable if available.
+                              {t("settings.deleteApiKeyDescription", {
+                                name: provider.name,
+                              })}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => handleDelete(provider.id)}
                             >
-                              Delete
+                              {t("common.delete")}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>

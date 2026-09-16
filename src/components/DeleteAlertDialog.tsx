@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { buttonVariants } from "./ui/button";
+import { useI18n } from "@/i18n";
 
 interface DeleteAlertDialogProps {
   pageTitle: string;
@@ -28,28 +29,36 @@ export function DeleteAlertDialog({
   onOpenChange,
   onDelete,
   alertTitle,
-  alertDescription = "This action cannot be undone. This will permanently delete and remove data from server.",
+  alertDescription,
   deleteAction = true,
-  actionLabel = "Delete",
+  actionLabel,
   actionVariant = "destructive",
 }: DeleteAlertDialogProps) {
+  const { t } = useI18n();
+
+  const title =
+    alertTitle ??
+    (t("common.confirmDeleteTitle") +
+      (pageTitle ? ` (${pageTitle})` : ""));
+  const description =
+    alertDescription ?? t("common.confirmDeleteDescription");
+  const confirmBtn = actionLabel ?? t("common.delete");
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {alertTitle ?? `Are you sure you want to delete this ${pageTitle}?`}
-          </AlertDialogTitle>
-          <AlertDialogDescription>{alertDescription}</AlertDialogDescription>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
           {deleteAction && (
             <AlertDialogAction
               className={buttonVariants({ variant: actionVariant })}
               onClick={onDelete}
             >
-              {actionLabel}
+              {confirmBtn}
             </AlertDialogAction>
           )}
         </AlertDialogFooter>

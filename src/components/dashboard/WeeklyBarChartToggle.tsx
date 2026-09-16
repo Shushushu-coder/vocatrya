@@ -13,6 +13,7 @@ import {
   OTHER_SLICE_ID,
   otherBucketLabel,
 } from "./jobsActivityChart";
+import { useI18n } from "@/i18n";
 
 type ChartConfig = {
   label: string;
@@ -30,6 +31,7 @@ type WeeklyBarChartToggleProps = {
 export default function WeeklyBarChartToggle({
   charts,
 }: WeeklyBarChartToggleProps) {
+  const { t } = useI18n();
   const [activeIndex, selectTab] = usePersistedTabIndex(
     APP_CONSTANTS.DASHBOARD_WEEKLY_CHART_STORAGE_KEY,
     charts.map((chart) => chart.label),
@@ -104,11 +106,13 @@ export default function WeeklyBarChartToggle({
         <div className="flex items-center justify-between gap-2 mb-1 mt-3">
           <div className="flex items-baseline gap-2 min-w-0">
             <CardTitle className="text-lg text-green-600 truncate">
-              Weekly {current.label}
+              {current.label === "Activities"
+                ? t("dashboard.weeklyActivities")
+                : t("dashboard.weeklyJobs")}
             </CardTitle>
             {totalHours !== null && (
               <span className="text-sm text-muted-foreground whitespace-nowrap">
-                {totalHours.toFixed(1)} hrs
+                {t("dashboard.hoursAbbr", { hours: totalHours.toFixed(1) })}
               </span>
             )}
           </div>
@@ -129,7 +133,9 @@ export default function WeeklyBarChartToggle({
                     : "hover:bg-muted",
                 )}
               >
-                {chart.label}
+                {chart.label === "Activities"
+                  ? t("nav.activities")
+                  : t("nav.jobs")}
               </button>
             ))}
           </div>

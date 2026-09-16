@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PROVIDER_META } from "@/components/automations/ats-search-step/types";
 import type { JobBoard } from "@/models/automation.model";
+import { useI18n } from "@/i18n";
 
 export type PendingMerge = {
   provider: JobBoard;
@@ -28,15 +29,20 @@ type Props = {
 // There is no "create a separate entry" option: @@unique([value, createdBy])
 // forbids a second row with the same canonical value.
 export function WatchMergeDialog({ pending, onConfirm, onCancel }: Props) {
+  const { t } = useI18n();
   return (
     <AlertDialog open={!!pending} onOpenChange={(o) => !o && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Link this board?</AlertDialogTitle>
+          <AlertDialogTitle>{t("automations.linkThisBoard")}</AlertDialogTitle>
           <AlertDialogDescription>
-            You already track <strong>{pending?.existing.label}</strong>. Link
-            its {pending && PROVIDER_META[pending.provider].label} board{" "}
-            <code>{pending?.board.token}</code> to that company?
+            {pending
+              ? t("companies.linkBoardDescription", {
+                  name: pending.existing.label,
+                  provider: PROVIDER_META[pending.provider].label,
+                  token: pending.board.token,
+                })
+              : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

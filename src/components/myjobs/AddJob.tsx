@@ -54,6 +54,12 @@ import { getCoverLetterList } from "@/actions/coverLetter.actions";
 import { TagInput } from "./TagInput";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
+  useI18n,
+  getLocalizedJobStatus,
+  getLocalizedJobType,
+  getLocalizedWorkplaceType,
+} from "@/i18n";
+import {
   getFromLocalStorage,
   saveToLocalStorage,
 } from "@/utils/localstorage.utils";
@@ -85,6 +91,7 @@ export function AddJob({
   hideTrigger,
   redirectPath,
 }: AddJobProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(initialOpen ?? false);
@@ -208,7 +215,7 @@ export function AddJob({
     startTransition(async () => {
       const result = editJob ? await updateJob(data) : await addJob(data);
       toastActionResult(result, {
-        success: `Job has been ${editJob ? "updated" : "created"} successfully`,
+        success: editJob ? t("jobs.updatedSuccess") : t("jobs.createdSuccess"),
         onSuccess: () => {
           saveToLocalStorage(
             APP_CONSTANTS.LAST_JOB_LOCATION_STORAGE_KEY,
@@ -226,10 +233,10 @@ export function AddJob({
     });
   }
 
-  const pageTitle = editJob ? "Edit Job" : "Add Job";
+  const pageTitle = editJob ? t("jobs.editJob") : t("jobs.addJob");
   const pageDescription = editJob
-    ? "Update the details of this job application."
-    : "Track a new job application.";
+    ? t("jobs.editJobDescription")
+    : t("jobs.addJobDescription");
 
   const addJobForm = () => {
     reset(newJobDefaultValues);
@@ -266,7 +273,7 @@ export function AddJob({
         >
           <PlusCircle className="h-3.5 w-3.5" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            New Job
+            {t("jobs.newJob")}
           </span>
         </Button>
       )}
@@ -291,7 +298,7 @@ export function AddJob({
                     name="title"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Job Title</FormLabel>
+                        <FormLabel>{t("jobs.jobTitle")}</FormLabel>
                         <FormControl>
                           <Combobox
                             options={jobTitles}
@@ -312,10 +319,10 @@ export function AddJob({
                     name="jobUrl"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Job URL</FormLabel>
+                        <FormLabel>{t("jobs.url")}</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="Copy and paste job link here"
+                            placeholder={t("jobs.urlPlaceholder")}
                             {...field}
                           />
                         </FormControl>
@@ -331,7 +338,7 @@ export function AddJob({
                     name="company"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Company</FormLabel>
+                        <FormLabel>{t("jobs.company")}</FormLabel>
                         <FormControl>
                           <Combobox
                             options={companies}
@@ -351,7 +358,7 @@ export function AddJob({
                     name="location"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Job Location</FormLabel>
+                        <FormLabel>{t("jobs.jobLocation")}</FormLabel>
                         <FormControl>
                           <Combobox
                             options={locations}
@@ -371,7 +378,7 @@ export function AddJob({
                     name="type"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel className="mb-2">Job Type</FormLabel>
+                        <FormLabel className="mb-2">{t("jobs.jobType")}</FormLabel>
                         <RadioGroup
                           name="type"
                           onValueChange={field.onChange}
@@ -387,7 +394,7 @@ export function AddJob({
                                 <RadioGroupItem value={key} />
                               </FormControl>
                               <FormLabel className="font-normal">
-                                {value}
+                                {getLocalizedJobType(value, t)}
                               </FormLabel>
                             </FormItem>
                           ))}
@@ -404,7 +411,7 @@ export function AddJob({
                     name="workplaceType"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel className="mb-2">Workplace Type</FormLabel>
+                        <FormLabel className="mb-2">{t("jobs.workplaceType")}</FormLabel>
                         <RadioGroup
                           name="workplaceType"
                           onValueChange={field.onChange}
@@ -421,7 +428,7 @@ export function AddJob({
                                   <RadioGroupItem value={key} />
                                 </FormControl>
                                 <FormLabel className="font-normal">
-                                  {value}
+                                  {getLocalizedWorkplaceType(value, t)}
                                 </FormLabel>
                               </FormItem>
                             ),
@@ -439,7 +446,7 @@ export function AddJob({
                     name="source"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Job Source</FormLabel>
+                        <FormLabel>{t("jobs.jobSourceLabel")}</FormLabel>
                         <Combobox
                           options={jobSources}
                           field={field}
@@ -473,7 +480,9 @@ export function AddJob({
                           htmlFor="applied-switch"
                           className="flex items-center ml-4 mb-2"
                         >
-                          {field.value ? "Applied" : "Not Applied"}
+                          {field.value
+                            ? t("jobs.statuses.applied")
+                            : t("jobs.notAppliedSwitch")}
                         </FormLabel>
 
                         <FormMessage />
@@ -489,10 +498,13 @@ export function AddJob({
                     name="status"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Status</FormLabel>
+                        <FormLabel>{t("jobs.jobStatus")}</FormLabel>
                         <SelectFormCtrl
-                          label="Job Status"
-                          options={jobStatuses}
+                          label={t("jobs.jobStatusSelect")}
+                          options={jobStatuses.map((status) => ({
+                            ...status,
+                            label: getLocalizedJobStatus(status, t),
+                          }))}
                           field={field}
                         />
                         <FormMessage />
@@ -508,7 +520,7 @@ export function AddJob({
                     name="dateApplied"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Date Applied</FormLabel>
+                        <FormLabel>{t("jobs.dateApplied")}</FormLabel>
                         <DatePicker
                           field={field}
                           presets={false}
@@ -527,7 +539,7 @@ export function AddJob({
                     name="dueDate"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Due Date</FormLabel>
+                        <FormLabel>{t("jobs.dueDate")}</FormLabel>
                         <DatePicker
                           field={field}
                           presets={true}
@@ -546,13 +558,13 @@ export function AddJob({
                     name="salaryRange"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Salary Range</FormLabel>
+                        <FormLabel>{t("jobs.salaryRange")}</FormLabel>
                         <Combobox
                           options={SALARY_RANGES}
                           field={field}
                           creatable
                           freeText
-                          label="Salary Range"
+                          label={t("jobs.salaryRange")}
                         />
                         <FormMessage />
                       </FormItem>
@@ -567,9 +579,9 @@ export function AddJob({
                     name="resume"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Resume</FormLabel>
+                        <FormLabel>{t("jobs.resume")}</FormLabel>
                         <SelectFormCtrl
-                          label="Resume"
+                          label={t("jobs.resume")}
                           options={resumes}
                           field={field}
                         />
@@ -578,7 +590,7 @@ export function AddJob({
                     )}
                   />
                   <Button variant="link" type="button" onClick={createResume}>
-                    Add New
+                    {t("jobs.addNew")}
                   </Button>
                   <CreateResume
                     resumeDialogOpen={resumeDialogOpen}
@@ -595,9 +607,9 @@ export function AddJob({
                     name="coverLetter"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Cover Letter</FormLabel>
+                        <FormLabel>{t("jobs.coverLetter")}</FormLabel>
                         <SelectFormCtrl
-                          label="Cover Letter"
+                          label={t("jobs.coverLetter")}
                           options={coverLetters}
                           field={field}
                         />
@@ -614,7 +626,7 @@ export function AddJob({
                     name="tags"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Add Skill</FormLabel>
+                        <FormLabel>{t("jobs.addSkill")}</FormLabel>
                         <FormControl>
                           <TagInput
                             availableTags={availableTags}
@@ -636,7 +648,7 @@ export function AddJob({
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
                         <FormLabel id="job-description-label">
-                          Job Description
+                          {t("jobs.description")}
                         </FormLabel>
                         <FormControl>
                           <TiptapEditor field={field} />
@@ -658,11 +670,11 @@ export function AddJob({
                         className="mt-2 md:mt-0 w-full"
                         onClick={closeDialog}
                       >
-                        Cancel
+                        {t("common.cancel")}
                       </Button>
                     </div>
                     <Button type="submit" data-testid="save-job-btn">
-                      Save
+                      {t("common.save")}
                       {isPending && (
                         <Loader className="h-4 w-4 shrink-0 spinner" />
                       )}

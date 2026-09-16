@@ -9,6 +9,7 @@ import {
   getFromLocalStorage,
   saveToLocalStorage,
 } from "@/utils/localstorage.utils";
+import { useI18n } from "@/i18n";
 
 const PREVIEW_RESIZE_DEBOUNCE_MS = 250;
 const MAX_CANVAS_SCALE = 2;
@@ -36,8 +37,10 @@ function isRenderCancelled(error: unknown): boolean {
   );
 }
 
-function pageLabel(count: number): string {
-  return `${count} ${count === 1 ? "page" : "pages"}`;
+function pageLabel(count: number, t: (key: string, params?: Record<string, string | number>) => string): string {
+  return count === 1
+    ? t("resume.pageCount", { count })
+    : t("resume.pagesCount", { count });
 }
 
 export function PdfPreviewPane({
@@ -49,6 +52,7 @@ export function PdfPreviewPane({
   emptyMessage,
   className,
 }: PdfPreviewPaneProps) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
@@ -220,20 +224,21 @@ export function PdfPreviewPane({
   const showFirstSpinner = canExport && !showError && !hasPages;
   const showOverlaySpinner = canExport && !showError && hasPages && isGenerating;
 
+  const pagesText = pageLabel(pageCount, t);
   const status = showEmpty
     ? emptyMessage
     : showError
-      ? "Preview unavailable"
+      ? t("resume.previewUnavailable")
       : isGenerating
-        ? "Generating preview…"
+        ? t("resume.generatingPreview")
         : hasPages
-          ? `Preview ready, ${pageLabel(pageCount)}`
+          ? t("resume.previewReady", { pages: pagesText })
           : "";
 
   return (
     <div className={cn("flex min-h-0 flex-col gap-2", className)}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">Preview</span>
+        <span className="text-sm font-medium">{t("resume.preview")}</span>
         <div className="flex items-center gap-2">
           {hasPages && (
             <div className="flex items-center rounded-md border p-0.5">
@@ -241,24 +246,24 @@ export function PdfPreviewPane({
                 size="sm"
                 pressed={fitMode === "page"}
                 onPressedChange={() => onChangeFitMode("page")}
-                aria-label="Fit whole page"
+                aria-label={t("resume.fitWholePage")}
                 className="h-6 px-2 text-xs"
               >
-                Fit page
+                {t("resume.fitPage")}
               </Toggle>
               <Toggle
                 size="sm"
                 pressed={fitMode === "width"}
                 onPressedChange={() => onChangeFitMode("width")}
-                aria-label="Fit page width"
+                aria-label={t("resume.fitPageWidth")}
                 className="h-6 px-2 text-xs"
               >
-                Fit width
+                {t("resume.fitWidth")}
               </Toggle>
             </div>
           )}
           <span className="text-xs text-muted-foreground">
-            {hasPages ? pageLabel(pageCount) : ""}
+            {hasPages ? pagesText : ""}
           </span>
         </div>
       </div>
@@ -266,7 +271,7 @@ export function PdfPreviewPane({
       <div
         ref={scrollRef}
         aria-label={
-          hasPages ? `${previewLabel}, ${pageLabel(pageCount)}` : previewLabel
+          hasPages ? `${previewLabel}, ${pagesText}` : previewLabel
         }
         className="relative min-h-0 flex-1 overflow-y-auto rounded-md border bg-muted p-4"
       >
@@ -286,7 +291,7 @@ export function PdfPreviewPane({
             {showEmpty ? (
               emptyMessage
             ) : showError ? (
-              "Preview unavailable"
+              t("resume.previewUnavailable")
             ) : (
               <Spinner className="size-6" />
             )}

@@ -32,6 +32,7 @@ import {
 } from "@/models/addContactForm.schema";
 import type { Contact, ContactRef, ContactRole } from "@/models/contact.model";
 import type { Company, JobLocation } from "@/models/job.model";
+import { useI18n } from "@/i18n";
 
 type AddContactProps = {
   reloadContacts: () => void;
@@ -95,9 +96,10 @@ function AddContact({
   pickersLoading,
   onSaved,
 }: AddContactProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
-  const pageTitle = editContact ? "Edit Contact" : "Add Contact";
+  const pageTitle = editContact ? t("contacts.editContact") : t("contacts.addContact");
 
   const prefilled: ContactFormValues = {
     ...EMPTY_CONTACT,
@@ -231,7 +233,7 @@ function AddContact({
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>{t("contacts.name")}</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. Dana Whitfield" {...field} />
                     </FormControl>
@@ -245,7 +247,7 @@ function AddContact({
                 name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Title</FormLabel>
+                    <FormLabel>{t("common.title")}</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. Engineering Manager" {...field} />
                     </FormControl>
@@ -259,7 +261,7 @@ function AddContact({
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel>{t("contacts.email")}</FormLabel>
                     <FormControl>
                       <Input
                         type="email"
@@ -277,7 +279,7 @@ function AddContact({
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel>{t("contacts.phone")}</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. +1 416 555 0134" {...field} />
                     </FormControl>
@@ -292,7 +294,7 @@ function AddContact({
                   name="linkedinUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>LinkedIn URL</FormLabel>
+                      <FormLabel>{t("contacts.linkedinUrl")}</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="https://www.linkedin.com/in/..."
@@ -312,7 +314,7 @@ function AddContact({
                 name="company"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Company</FormLabel>
+                    <FormLabel>{t("contacts.company")}</FormLabel>
                     <Combobox options={companies} field={field} creatable fullWidth />
                     <FormMessage />
                   </FormItem>
@@ -324,7 +326,7 @@ function AddContact({
                 name="location"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Location</FormLabel>
+                    <FormLabel>{t("common.location")}</FormLabel>
                     <Combobox options={locations} field={field} creatable fullWidth />
                     <FormMessage />
                   </FormItem>
@@ -336,7 +338,7 @@ function AddContact({
                 name="contactRole"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Role</FormLabel>
+                    <FormLabel>{t("contacts.role")}</FormLabel>
                     <Combobox
                       options={roles}
                       field={{
@@ -361,7 +363,7 @@ function AddContact({
                     name="relationship"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Relationship</FormLabel>
+                        <FormLabel>{t("common.relationship")}</FormLabel>
                         <FormControl>
                           <Input placeholder="e.g. my manager, peer" {...field} />
                         </FormControl>
@@ -375,7 +377,7 @@ function AddContact({
                     name="workedAtCompany"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Worked together at</FormLabel>
+                        <FormLabel>{t("contacts.workedTogetherAt")}</FormLabel>
                         <Combobox
                           options={companies}
                           field={field}
@@ -395,7 +397,7 @@ function AddContact({
                     name="workedFrom"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>From</FormLabel>
+                        <FormLabel>{t("common.from")}</FormLabel>
                         <DatePicker
                           field={field}
                           presets={false}
@@ -413,7 +415,7 @@ function AddContact({
                     name="workedTo"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>To</FormLabel>
+                        <FormLabel>{t("common.to")}</FormLabel>
                         <DatePicker
                           field={field}
                           presets={false}
@@ -435,7 +437,7 @@ function AddContact({
                 name="lastContactedAt"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Last contacted</FormLabel>
+                    <FormLabel>{t("contacts.lastContactedLabel")}</FormLabel>
                     <DatePicker
                       field={field}
                       presets={false}
@@ -455,7 +457,7 @@ function AddContact({
                   name="notes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Notes</FormLabel>
+                      <FormLabel>{t("contacts.notes")}</FormLabel>
                       <FormControl>
                         <Textarea
                           className="min-h-24"

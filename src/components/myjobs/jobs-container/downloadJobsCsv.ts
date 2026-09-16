@@ -1,7 +1,8 @@
 import { format } from "date-fns";
 import { toastError, toastSuccess } from "@/lib/toast";
+import type { TranslateFn } from "@/i18n";
 
-export async function downloadJobsList() {
+export async function downloadJobsList(t: TranslateFn) {
   try {
     const res = await fetch("/api/jobs/export", {
       method: "POST",
@@ -10,7 +11,7 @@ export async function downloadJobsList() {
       },
     });
     if (!res.ok) {
-      throw new Error("Failed to download jobs!");
+      throw new Error(t("jobs.downloadFailed"));
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -20,10 +21,10 @@ export async function downloadJobsList() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toastSuccess("Downloaded successfully!");
+    toastSuccess(t("jobs.downloadSuccess"));
   } catch (error) {
     toastError(
-      error instanceof Error ? error.message : "Unknown error occurred.",
+      error instanceof Error ? error.message : t("jobs.unknownError"),
     );
   }
 }

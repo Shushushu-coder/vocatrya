@@ -3,6 +3,8 @@ import { Check } from "lucide-react";
 import { DropdownMenuItem } from "../ui/dropdown-menu";
 import { JobStatus } from "@/models/job.model";
 
+import { useI18n, getLocalizedJobStatus } from "@/i18n";
+
 type JobStatusMenuItemsProps = {
   jobStatuses: JobStatus[];
   currentStatusId: string;
@@ -16,6 +18,8 @@ export function JobStatusMenuItems({
   currentStatusId,
   onSelectStatus,
 }: JobStatusMenuItemsProps) {
+  const { t } = useI18n();
+
   return (
     <>
       {jobStatuses.map((status) => (
@@ -30,7 +34,7 @@ export function JobStatusMenuItems({
               <Check className="h-4 w-4" />
             </span>
           )}
-          <span>{status.label}</span>
+          <span>{getLocalizedJobStatus(status, t)}</span>
         </DropdownMenuItem>
       ))}
     </>

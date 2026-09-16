@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,13 +17,12 @@ import { toastActionResult } from "@/lib/toast";
 import { addJobContact } from "@/actions/contact.actions";
 import type { ContactRef, ContactRole } from "@/models/contact.model";
 import type { Company, JobLocation } from "@/models/job.model";
+import { useI18n } from "@/i18n";
 
-const LinkContactSchema = z.object({
-  contact: z.string().min(1, "Pick a contact."),
-  contactRole: z.string().min(1, "Pick a role."),
-});
-
-type LinkContactValues = z.infer<typeof LinkContactSchema>;
+type LinkContactValues = {
+  contact: string;
+  contactRole: string;
+};
 
 type AddJobContactFormProps = {
   jobId: string;
@@ -46,10 +45,20 @@ export function AddJobContactForm({
   onLinked,
   onContactCreated,
 }: AddJobContactFormProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
   const [newContactOpen, setNewContactOpen] = useState(false);
   // What the contact picker's search box holds, so "New contact" can carry it
   const [typedName, setTypedName] = useState("");
+
+  const LinkContactSchema = useMemo(
+    () =>
+      z.object({
+        contact: z.string().min(1, t("jobs.pickContact")),
+        contactRole: z.string().min(1, t("jobs.pickRole")),
+      }),
+    [t],
+  );
 
   const form = useForm<LinkContactValues>({
     resolver: zodResolver(LinkContactSchema),
@@ -60,7 +69,7 @@ export function AddJobContactForm({
     startTransition(async () => {
       const res = await addJobContact(jobId, values.contact, values.contactRole);
       toastActionResult(res, {
-        success: "Contact has been linked to this job",
+        success: t("jobs.contactLinked"),
         onSuccess: () => {
           form.reset();
           onLinked();
@@ -80,7 +89,7 @@ export function AddJobContactForm({
           name="contact"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Contact</FormLabel>
+              <FormLabel>{t("jobs.contact")}</FormLabel>
               <Combobox
                 options={contacts}
                 field={field}
@@ -97,7 +106,7 @@ export function AddJobContactForm({
           name="contactRole"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Role</FormLabel>
+              <FormLabel>{t("common.role")}</FormLabel>
               <Combobox options={roles} field={field} creatable label="role" />
               <FormMessage />
             </FormItem>
@@ -105,7 +114,7 @@ export function AddJobContactForm({
         />
 
         <Button type="submit" className="cursor-pointer" disabled={isPending}>
-          Save
+          {t("common.save")}
         </Button>
         <Button
           type="button"
@@ -113,7 +122,7 @@ export function AddJobContactForm({
           className="cursor-pointer"
           onClick={onCancel}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button
           type="button"
@@ -121,7 +130,7 @@ export function AddJobContactForm({
           className="cursor-pointer"
           onClick={() => setNewContactOpen(true)}
         >
-          New contact
+          {t("jobs.newContact")}
         </Button>
       </form>
 

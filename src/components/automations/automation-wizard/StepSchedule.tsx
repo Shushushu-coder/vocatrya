@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/form";
 import type { CreateAutomationInput } from "@/models/automation.schema";
 import { HOURS } from "./wizardConfig";
+import { useI18n } from "@/i18n";
 
 export function StepSchedule({
   form,
@@ -26,13 +27,14 @@ export function StepSchedule({
   form: UseFormReturn<CreateAutomationInput>;
   takenHours: Set<number>;
 }) {
+  const { t } = useI18n();
   return (
     <FormField
       control={form.control}
       name="scheduleHour"
       render={({ field }) => (
         <FormItem>
-          <FormLabel>Daily Run Time</FormLabel>
+          <FormLabel>{t("automations.dailyRunTime")}</FormLabel>
           <Select
             onValueChange={(val) => {
               field.onChange(parseInt(val));
@@ -42,7 +44,7 @@ export function StepSchedule({
           >
             <FormControl>
               <SelectTrigger>
-                <SelectValue placeholder="Select time" />
+                <SelectValue placeholder={t("automations.selectTime")} />
               </SelectTrigger>
             </FormControl>
             <SelectContent>
@@ -51,7 +53,7 @@ export function StepSchedule({
                   {hour.label}
                   {takenHours.has(hour.value) && (
                     <span className="ml-2 text-xs text-muted-foreground">
-                      In use
+                      {t("automations.inUse")}
                     </span>
                   )}
                 </SelectItem>
@@ -59,7 +61,7 @@ export function StepSchedule({
             </SelectContent>
           </Select>
           <FormDescription>
-            The automation will run daily at this time (server timezone)
+            {t("automations.scheduleDescription")}
           </FormDescription>
           <FormMessage />
         </FormItem>

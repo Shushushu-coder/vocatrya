@@ -18,8 +18,10 @@ import { useRouter } from "next/navigation";
 import { SignupFormSchema } from "@/models/signupForm.schema";
 import Loading from "../Loading";
 import { Eye, EyeOff } from "lucide-react";
+import { useI18n } from "@/i18n";
 
 function SignupForm() {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
   const form = useForm<z.infer<typeof SignupFormSchema>>({
@@ -66,9 +68,9 @@ function SignupForm() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Full Name</FormLabel>
+                  <FormLabel>{t("auth.fullName")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your Name" {...field} />
+                    <Input placeholder={t("auth.fullName")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -81,7 +83,7 @@ function SignupForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>{t("auth.email")}</FormLabel>
                   <FormControl>
                     <Input
                       type="email"
@@ -101,7 +103,7 @@ function SignupForm() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <FormLabel>{t("auth.password")}</FormLabel>
                   <div className="relative">
                     <FormControl>
                       <Input
@@ -120,7 +122,9 @@ function SignupForm() {
                       className="absolute right-0 top-0 h-full px-3 text-muted-foreground"
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={
-                        showPassword ? "Hide password" : "Show password"
+                        showPassword
+                          ? t("common.hidePassword")
+                          : t("common.showPassword")
                       }
                       tabIndex={-1}
                     >
@@ -137,7 +141,7 @@ function SignupForm() {
             />
           </div>
           <Button type="submit" disabled={isPending} className="w-full">
-            {isPending ? <Loading /> : "Create an account"}
+            {isPending ? <Loading /> : t("auth.createAnAccount")}
           </Button>
           <div
             className="flex h-8 items-end space-x-1"

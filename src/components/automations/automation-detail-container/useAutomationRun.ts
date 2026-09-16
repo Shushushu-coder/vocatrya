@@ -5,6 +5,7 @@ import { toastSuccess, toastError } from "@/lib/toast";
 import { getAutomationRuns } from "@/actions/automation.actions";
 import type { AutomationWithResume } from "@/models/automation.model";
 import type { LogData } from "@/components/automations/LogsTab";
+import { useI18n } from "@/i18n";
 
 interface UseAutomationRunArgs {
   automationId: string;
@@ -26,6 +27,7 @@ export function useAutomationRun({
   loadData,
   refreshJobs,
 }: UseAutomationRunArgs) {
+  const { t } = useI18n();
   const [runNowLoading, setRunNowLoading] = useState(false);
   const [aborting, setAborting] = useState(false);
   const [abortConfirmOpen, setAbortConfirmOpen] = useState(false);
@@ -148,11 +150,14 @@ export function useAutomationRun({
       // (e.g. switching tabs) doesn't re-init its badge to "Running".
       setRunKey(0);
       if (latest.status === "cancelled") {
-        toastError(`Saved ${latest.jobsSaved} new jobs`, "Run cancelled");
+        toastError(
+          t("automations.savedNewJobs", { count: latest.jobsSaved }),
+          t("automations.runCancelled"),
+        );
       } else {
         toastSuccess(
-          `Saved ${latest.jobsSaved} new jobs`,
-          "Automation run complete",
+          t("automations.savedNewJobs", { count: latest.jobsSaved }),
+          t("automations.runComplete"),
         );
       }
       loadData();
@@ -163,7 +168,7 @@ export function useAutomationRun({
       stopped = true;
       clearInterval(interval);
     };
-  }, [runNowLoading, automationId, loadData]);
+  }, [runNowLoading, automationId, loadData, t]);
 
   const handleRunNow = async () => {
     if (!automation) return;
@@ -196,7 +201,7 @@ export function useAutomationRun({
           setRunKey(0);
           setLogData((prev) => ({ ...prev, isRunning: false }));
         }
-        toastError(data.message || "Failed to start run");
+        toastError(data.message || t("automations.failedToStartRun"));
       }
       // On success the run is running in the background; the watcher effect
       // above handles completion.
@@ -204,7 +209,7 @@ export function useAutomationRun({
       setRunNowLoading(false);
       setRunKey(0);
       setLogData((prev) => ({ ...prev, isRunning: false }));
-      toastError("Failed to start run");
+      toastError(t("automations.failedToStartRun"));
     }
   };
 

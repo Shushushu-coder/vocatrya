@@ -29,6 +29,7 @@ import {
   addCertification,
   updateCertification,
 } from "@/actions/profile.actions";
+import { useI18n } from "@/i18n";
 
 type AddCertificationProps = {
   resumeId: string | undefined;
@@ -45,12 +46,13 @@ function AddCertification({
   setDialogOpen,
   certificationToEdit,
 }: AddCertificationProps) {
+  const { t } = useI18n();
   const pageTitle = certificationToEdit
-    ? "Edit Certification / License"
-    : "Add Certification / License";
+    ? t("profile.editCertificationLicense")
+    : t("profile.addCertificationLicense");
   const pageDescription = certificationToEdit
-    ? "Update this certification or license on your resume."
-    : "Add a certification or license to your resume.";
+    ? t("profile.editCertificationDescription")
+    : t("profile.addCertificationDescription");
   const [isPending, startTransition] = useTransition();
 
   const form = useForm<z.infer<typeof AddCertificationFormSchema>>({
@@ -110,9 +112,11 @@ function AddCertification({
       } else {
         reset();
         setDialogOpen(false);
-        toastSuccess(`Certification has been ${
-          certificationToEdit ? "updated" : "added"
-        } successfully`);
+        toastSuccess(
+          certificationToEdit
+            ? t("profile.certificationUpdated")
+            : t("profile.certificationAdded"),
+        );
       }
     });
   };
@@ -140,12 +144,14 @@ function AddCertification({
                     name="sectionTitle"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Section Title</FormLabel>
+                        <FormLabel>{t("profile.sectionTitle")}</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
                             value={field.value ?? ""}
-                            placeholder="Ex: Certifications"
+                            placeholder={t(
+                              "profile.sectionTitlePlaceholderCertifications",
+                            )}
                           />
                         </FormControl>
                         <FormMessage />
@@ -164,12 +170,14 @@ function AddCertification({
                 name="title"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Certification / License Name</FormLabel>
+                    <FormLabel>
+                      {t("profile.certificationLicenseName")}
+                    </FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         value={field.value ?? ""}
-                        placeholder="Ex: AWS Certified Solutions Architect"
+                        placeholder={t("profile.certNamePlaceholder")}
                       />
                     </FormControl>
                     <FormMessage />
@@ -185,12 +193,12 @@ function AddCertification({
                 name="organization"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Issuing Organization</FormLabel>
+                    <FormLabel>{t("profile.issuingOrg")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         value={field.value ?? ""}
-                        placeholder="Ex: Amazon Web Services"
+                        placeholder={t("profile.issuingOrgPlaceholder")}
                       />
                     </FormControl>
                     <FormMessage />
@@ -206,7 +214,7 @@ function AddCertification({
                 name="issueDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Issue Date</FormLabel>
+                    <FormLabel>{t("profile.issueDate")}</FormLabel>
                     <DatePicker
                       field={field}
                       presets={false}
@@ -226,7 +234,7 @@ function AddCertification({
                 name="expirationDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Expiration Date</FormLabel>
+                    <FormLabel>{t("profile.expirationDate")}</FormLabel>
                     <DatePicker
                       field={field}
                       presets={false}
@@ -254,7 +262,9 @@ function AddCertification({
                       }}
                     />
                     <FormLabel className="flex items-center ml-4 mb-2">
-                      {field.value ? "No Expiration" : "Has Expiration Date"}
+                      {field.value
+                        ? t("profile.noExpiration")
+                        : t("profile.hasExpirationDate")}
                     </FormLabel>
                     <FormMessage />
                   </FormItem>
@@ -269,7 +279,7 @@ function AddCertification({
                 name="credentialUrl"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Credential URL (optional)</FormLabel>
+                    <FormLabel>{t("profile.credentialUrlOptional")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}

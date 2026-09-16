@@ -1,6 +1,5 @@
 "use client";
 
-import { format } from "date-fns";
 import Link from "next/link";
 import { ExternalLink, FileText, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +16,12 @@ import {
   getJobTypeLabel,
   getWorkplaceTypeLabel,
 } from "@/models/job.model";
+import {
+  useI18n,
+  getLocalizedJobStatus,
+  getLocalizedJobType,
+  getLocalizedWorkplaceType,
+} from "@/i18n";
 
 type JobSummaryCardProps = {
   job: JobResponse;
@@ -29,6 +34,7 @@ export function JobSummaryCard({
   currentStatus,
   matchData,
 }: JobSummaryCardProps) {
+  const { t, formatDate } = useI18n();
   const expired =
     job.dueDate &&
     new Date() > new Date(job.dueDate) &&
@@ -39,44 +45,44 @@ export function JobSummaryCard({
       <CardContent className="pt-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <p className="text-sm text-muted-foreground">Status</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.jobStatus")}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {expired ? (
-                <StatusBadge label="Expired" color="amber" />
+                <StatusBadge label={t("jobs.statuses.expired")} color="amber" />
               ) : (
                 <StatusBadge
-                  label={currentStatus?.label ?? ""}
+                  label={getLocalizedJobStatus(currentStatus, t)}
                   color={getJobStatusBadgeColor(currentStatus?.value ?? "")}
                 />
               )}
             </div>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Job Type</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.jobType")}</p>
             <p className="mt-1 font-medium">
-              {getJobTypeLabel(job.jobType)}
+              {getLocalizedJobType(getJobTypeLabel(job.jobType), t)}
               {job.workplaceType &&
-                ` · ${getWorkplaceTypeLabel(job.workplaceType)}`}
+                ` · ${getLocalizedWorkplaceType(getWorkplaceTypeLabel(job.workplaceType), t)}`}
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Salary Range</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.salaryRange")}</p>
             <p className="mt-1 font-medium">{job.salaryRange || "-"}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Source</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.jobSource")}</p>
             <p className="mt-1 font-medium">{job.JobSource?.label ?? "-"}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Applied</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.statuses.applied")}</p>
             <p className="mt-1 font-medium">
               {job.appliedDate
-                ? format(new Date(job.appliedDate), "PP")
-                : "Not applied"}
+                ? formatDate(job.appliedDate)
+                : t("jobs.notApplied")}
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">AI Match</p>
+            <p className="text-sm text-muted-foreground">{t("automations.aiMatch")}</p>
             {job.matchScore != null && matchData?.analyzed !== false ? (
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <CircularScore score={job.matchScore} size="sm" />
@@ -87,11 +93,11 @@ export function JobSummaryCard({
                 )}
               </div>
             ) : (
-              <p className="mt-1 font-medium">Not matched</p>
+              <p className="mt-1 font-medium">{t("jobs.notMatched")}</p>
             )}
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Resume</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.resume")}</p>
             <div className="mt-1 font-medium">
               {job.Resume?.File?.filePath ? (
                 DownloadFileButton(
@@ -114,15 +120,15 @@ export function JobSummaryCard({
             </div>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Added</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.added")}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="font-medium">
-                {job.createdAt ? format(new Date(job.createdAt), "PP") : "-"}
+                {job.createdAt ? formatDate(job.createdAt) : "-"}
               </span>
               {job.createdVia && (
                 <Badge className="gap-1 bg-violet-500 dark:bg-violet-400">
                   <Sparkles className="h-3.5 w-3.5" />
-                  via {job.createdVia}
+                  {t("jobs.viaSource", { source: job.createdVia })}
                 </Badge>
               )}
             </div>

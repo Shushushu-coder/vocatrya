@@ -9,8 +9,10 @@ import { getJobSourceList } from "@/actions/jobSource.actions";
 import Loading from "../Loading";
 import { Button } from "../ui/button";
 import { RecordsCount } from "../RecordsCount";
+import { useI18n } from "@/i18n";
 
 function JobSourcesContainer() {
+  const { t } = useI18n();
   const [sources, setSources] = useState<JobSource[]>([]);
   const [totalJobSources, setTotalJobSources] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
@@ -47,7 +49,7 @@ function JobSourcesContainer() {
         <Card x-chunk="dashboard-06-chunk-0">
           <ResponsiveCardHeader>
             <div className="flex items-baseline gap-2">
-              <CardTitle>Job Sources</CardTitle>
+              <CardTitle>{t("library.jobSources")}</CardTitle>
               {!loading && totalJobSources > 0 && (
                 <RecordsCount count={sources.length} total={totalJobSources} label="job sources" />
               )}

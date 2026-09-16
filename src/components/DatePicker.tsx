@@ -1,6 +1,7 @@
 "use client";
 
-import { addDays, format } from "date-fns";
+import { addDays } from "date-fns";
+import { useI18n } from "@/i18n";
 import { Calendar as CalendarIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -19,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ControllerRenderProps } from "react-hook-form";
-import { JobForm } from "@/models/job.model";
 import { useState } from "react";
 import { FormControl } from "./ui/form";
 
@@ -41,6 +41,7 @@ export function DatePicker({
   fullWidth,
   disableFuture,
 }: DatePickerProps) {
+  const { t, formatDate } = useI18n();
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
 
   return (
@@ -57,7 +58,7 @@ export function DatePicker({
             disabled={!isEnabled}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {field.value ? format(field.value, "PP") : <span>Pick a date</span>}
+            {field.value ? formatDate(field.value) : <span>{t("common.pickDate")}</span>}
           </Button>
         </FormControl>
       </PopoverTrigger>
@@ -70,13 +71,13 @@ export function DatePicker({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select Preset" />
+              <SelectValue placeholder={t("common.selectPreset")} />
             </SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value="0">Today</SelectItem>
-              <SelectItem value="1">Tomorrow</SelectItem>
-              <SelectItem value="3">In 3 days</SelectItem>
-              <SelectItem value="7">In a week</SelectItem>
+              <SelectItem value="0">{t("common.today")}</SelectItem>
+              <SelectItem value="1">{t("common.tomorrow")}</SelectItem>
+              <SelectItem value="3">{t("common.in3Days")}</SelectItem>
+              <SelectItem value="7">{t("common.inAWeek")}</SelectItem>
             </SelectContent>
           </Select>
         )}

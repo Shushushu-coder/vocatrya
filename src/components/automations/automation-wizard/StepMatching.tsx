@@ -11,19 +11,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import type { CreateAutomationInput } from "@/models/automation.schema";
+import { useI18n } from "@/i18n";
 
 export function StepMatching({
   form,
 }: {
   form: UseFormReturn<CreateAutomationInput>;
 }) {
+  const { t } = useI18n();
   return (
     <FormField
       control={form.control}
       name="matchThreshold"
       render={({ field }) => (
         <FormItem>
-          <FormLabel>Match Threshold: {field.value}%</FormLabel>
+          <FormLabel>
+            {t("automations.matchThreshold", { value: field.value })}
+          </FormLabel>
           <FormControl>
             <Slider
               min={0}
@@ -34,9 +38,7 @@ export function StepMatching({
             />
           </FormControl>
           <FormDescription>
-            Only save listings whose AI match score reaches this threshold.
-            Analyzed listings that score below it are discarded — set it lower
-            to keep more.
+            {t("automations.matchThresholdDescription")}
           </FormDescription>
           <FormMessage />
         </FormItem>

@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
+import { useI18n } from "@/i18n";
 
 interface SkillsSectionCardProps {
   skillsSection: ResumeSection;
@@ -37,6 +38,7 @@ function SkillsSectionCard({
   openDialogForEdit,
   onDelete,
 }: SkillsSectionCardProps) {
+  const { t } = useI18n();
   const skills = skillsSection.skills ?? [];
   const grouped = groupByCategory(skills);
   const hasCategories = Array.from(grouped.keys()).some((k) => k !== "");
@@ -55,7 +57,7 @@ function SkillsSectionCard({
             >
               <Edit className="h-3.5 w-3.5" />
               <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                Edit
+                {t("common.edit")}
               </span>
             </Button>
             <AlertDialog>
@@ -67,25 +69,26 @@ function SkillsSectionCard({
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                    Delete
+                    {t("common.delete")}
                   </span>
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete skills section?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    {t("profile.deleteSkillsSection")}
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will remove the entire skills section and all skills in
-                    it. The skill tags themselves are not deleted.
+                    {t("profile.deleteSkillsSectionDescription")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     onClick={onDelete}
                   >
-                    Delete
+                    {t("common.delete")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

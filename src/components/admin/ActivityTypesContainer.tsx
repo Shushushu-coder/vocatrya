@@ -9,8 +9,10 @@ import { Button } from "../ui/button";
 import { RecordsCount } from "../RecordsCount";
 import ActivityTypesTable from "./ActivityTypesTable";
 import AddActivityType from "./AddActivityType";
+import { useI18n } from "@/i18n";
 
 function ActivityTypesContainer() {
+  const { t } = useI18n();
   const [activityTypes, setActivityTypes] = useState<any[]>([]);
   const [totalActivityTypes, setTotalActivityTypes] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
@@ -46,9 +48,13 @@ function ActivityTypesContainer() {
         <Card>
           <ResponsiveCardHeader>
             <div className="flex items-baseline gap-2">
-              <CardTitle>Activity Types / Projects</CardTitle>
+              <CardTitle>{t("library.activityTypesProjects")}</CardTitle>
               {!loading && totalActivityTypes > 0 && (
-                <RecordsCount count={activityTypes.length} total={totalActivityTypes} label="activity types" />
+                <RecordsCount
+                  count={activityTypes.length}
+                  total={totalActivityTypes}
+                  label={t("library.activityTypesLabel")}
+                />
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
@@ -74,7 +80,7 @@ function ActivityTypesContainer() {
                   disabled={loading}
                   className="btn btn-primary"
                 >
-                  {loading ? "Loading..." : "Load More"}
+                  {loading ? t("common.loading") : t("common.loadMore")}
                 </Button>
               </div>
             )}

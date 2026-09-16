@@ -1,9 +1,8 @@
 "use client";
 
+import { useI18n } from "@/i18n";
+
 export function NoResumesNotice() {
-  return (
-    <p className="text-sm">
-      You don&apos;t have any resumes yet — create one on the Profile page.
-    </p>
-  );
+  const { t } = useI18n();
+  return <p className="text-sm">{t("agent.noResumes")}</p>;
 }

@@ -9,8 +9,8 @@ import {
 } from "../ui/card";
 import { Button } from "../ui/button";
 import { Edit } from "lucide-react";
-import { format } from "date-fns";
 import { TipTapContentViewer } from "../TipTapContentViewer";
+import { useI18n } from "@/i18n";
 
 interface ExperienceCardProps {
   experienceSection: ResumeSection | undefined;
@@ -21,6 +21,7 @@ function ExperienceCard({
   experienceSection,
   openDialogForEdit,
 }: ExperienceCardProps) {
+  const { t, formatMonthYear } = useI18n();
   return (
     <>
       <CardTitle className="pl-6 py-3">
@@ -47,15 +48,15 @@ function ExperienceCard({
               >
                 <Edit className="h-3.5 w-3.5" />
                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  Edit
+                  {t("common.edit")}
                 </span>
               </Button>
             </CardHeader>
             <CardContent>
               <h3>{Company.label}</h3>
               <CardDescription>
-                {format(startDate, "MMM yyyy")} -{" "}
-                {endDate ? format(endDate, "MMM yyyy") : "Present"}
+                {formatMonthYear(startDate)} -{" "}
+                {endDate ? formatMonthYear(endDate) : t("common.present")}
                 <br />
                 {location.label}
               </CardDescription>

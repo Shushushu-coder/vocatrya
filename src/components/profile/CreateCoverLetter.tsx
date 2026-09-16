@@ -32,6 +32,7 @@ import {
 import Tiptap from "../TiptapEditor";
 import { CoverLetterExportDialog } from "./CoverLetterExportDialog";
 import { canExportCoverLetter } from "./cover-letter-export-dialog/canExportCoverLetter";
+import { useI18n } from "@/i18n";
 
 type CreateCoverLetterProps = {
   dialogOpen: boolean;
@@ -48,15 +49,16 @@ function CreateCoverLetter({
   reloadDocuments,
   contactInfo,
 }: CreateCoverLetterProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
   const [exportOpen, setExportOpen] = useState(false);
 
   const pageTitle = coverLetterToEdit
-    ? "Edit Cover Letter"
-    : "Create Cover Letter";
+    ? t("profile.editCoverLetter")
+    : t("profile.createCoverLetter");
   const pageDescription = coverLetterToEdit
-    ? "Update this cover letter."
-    : "Create a new cover letter for your profile.";
+    ? t("profile.editCoverLetterDescription")
+    : t("profile.createCoverLetterDescription");
 
   const form = useForm<z.infer<typeof CoverLetterFormSchema>>({
     resolver: zodResolver(CoverLetterFormSchema),
@@ -104,9 +106,11 @@ function CreateCoverLetter({
         reset();
         setDialogOpen(false);
         reloadDocuments();
-        toastSuccess(`Cover letter has been ${
-          coverLetterToEdit ? "updated" : "created"
-        } successfully`);
+        toastSuccess(
+          coverLetterToEdit
+            ? t("profile.coverLetterUpdated")
+            : t("profile.coverLetterCreated"),
+        );
       }
     });
   };
@@ -131,11 +135,11 @@ function CreateCoverLetter({
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Cover Letter Title</FormLabel>
+                  <FormLabel>{t("profile.coverLetterTitle")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="Ex: Software Engineer - Google"
+                      placeholder={t("profile.coverLetterTitlePlaceholder")}
                     />
                   </FormControl>
                   <FormMessage>
@@ -155,7 +159,7 @@ function CreateCoverLetter({
               key={coverLetterToEdit?.id ?? "new"}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Content</FormLabel>
+                  <FormLabel>{t("common.content")}</FormLabel>
                   <FormControl>
                     <Tiptap field={field} />
                   </FormControl>
@@ -180,7 +184,7 @@ function CreateCoverLetter({
                   onClick={() => setExportOpen(true)}
                 >
                   <FileDown className="h-4 w-4" />
-                  Export to PDF
+                  {t("profile.exportToPdf")}
                 </Button>
                 <div>
                   <Button
@@ -189,11 +193,11 @@ function CreateCoverLetter({
                     className="mt-2 md:mt-0 w-full"
                     onClick={closeDialog}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 </div>
                 <Button type="submit" disabled={!isValid}>
-                  Save
+                  {t("common.save")}
                   {isPending && (
                     <Loader className="h-4 w-4 shrink-0 spinner" />
                   )}

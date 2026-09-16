@@ -5,24 +5,20 @@ import { AgentMarkdown } from "@/components/agent/AgentMarkdown";
 import { NoResumesNotice } from "@/components/agent/AgentResultCard/NoResumesNotice";
 import { ResumeSelectionPrompt } from "@/components/agent/AgentResultCard/ResumeSelectionPrompt";
 import type { AgentCoverLetterResult } from "@/models/agent.model";
+import { useI18n } from "@/i18n";
 
 // The letter comes from the tool output, not from the streamed text: the
 // stream is a progress indicator and the output is what was saved.
 export function CoverLetterResult({ output }: { output: AgentCoverLetterResult }) {
+  const { t } = useI18n();
   if (output.status === "no_job") {
-    return (
-      <p className="text-sm">
-        Open the job you want a letter for first — I write for the job
-        you&apos;re looking at.
-      </p>
-    );
+    return <p className="text-sm">{t("agent.openJobForLetter")}</p>;
   }
 
   if (output.status === "no_description") {
     return (
       <p className="text-sm">
-        <strong>{output.jobTitle}</strong> has no real description yet. Add the
-        posting and I can write a letter from it.
+        {t("agent.noRealDescription", { title: output.jobTitle })}
       </p>
     );
   }
@@ -34,11 +30,9 @@ export function CoverLetterResult({ output }: { output: AgentCoverLetterResult }
   if (output.status === "needs_selection") {
     return (
       <ResumeSelectionPrompt
-        prompt="Which resume should the letter draw on?"
+        prompt={t("agent.whichResumeLetter")}
         resumes={output.resumes}
-        messageFor={(title) =>
-          `Write a cover letter for this job using my resume "${title}"`
-        }
+        messageFor={(title) => t("agent.letterUsingResume", { title })}
       />
     );
   }
@@ -46,7 +40,7 @@ export function CoverLetterResult({ output }: { output: AgentCoverLetterResult }
   if (output.status === "unreadable") {
     return (
       <p className="text-sm">
-        Couldn&apos;t read <strong>{output.title}</strong> — {output.reason}
+        {t("agent.couldntRead", { title: output.title, reason: output.reason })}
       </p>
     );
   }
@@ -54,8 +48,10 @@ export function CoverLetterResult({ output }: { output: AgentCoverLetterResult }
   if (output.status === "generation_failed") {
     return (
       <p className="text-sm">
-        Couldn&apos;t write a letter for <strong>{output.jobTitle}</strong> —{" "}
-        {output.reason}
+        {t("agent.couldntWriteLetter", {
+          title: output.jobTitle,
+          reason: output.reason,
+        })}
       </p>
     );
   }
@@ -64,20 +60,22 @@ export function CoverLetterResult({ output }: { output: AgentCoverLetterResult }
     <div className="text-sm">
       <AgentMarkdown text={output.body} />
       <p className="mt-2 text-xs text-muted-foreground">
-        {output.jobTitle}
-        {output.company ? ` at ${output.company}` : ""} · drawn from{" "}
-        {output.resumeTitle}
+        {t("agent.drawnFrom", {
+          jobTitle: output.jobTitle,
+          company: output.company ? t("agent.atCompany", { company: output.company }) : "",
+          resumeTitle: output.resumeTitle,
+        })}
       </p>
       {output.saved ? (
         <p className="mt-1 text-xs text-muted-foreground">
-          Saved as “{output.coverLetterTitle}” —{" "}
+          {t("agent.savedAsLetter", { title: output.coverLetterTitle ?? "" })}
           <Link href="/dashboard/profile" className="underline">
-            edit it in Profile → Documents
+            {t("agent.editInProfileDocuments")}
           </Link>
         </p>
       ) : (
         <p className="mt-1 text-xs text-muted-foreground">
-          Letter not saved — {output.saveError}
+          {t("agent.letterNotSaved", { error: output.saveError ?? "" })}
         </p>
       )}
     </div>

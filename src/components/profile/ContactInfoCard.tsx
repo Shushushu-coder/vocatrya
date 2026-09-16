@@ -3,6 +3,7 @@ import { ContactInfo } from "@/models/profile.model";
 import { Card, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Edit } from "lucide-react";
+import { useI18n } from "@/i18n";
 
 interface ContactInfoCardProps {
   contactInfo: ContactInfo | undefined;
@@ -10,6 +11,7 @@ interface ContactInfoCardProps {
 }
 
 function ContactInfoCard({ contactInfo, openDialog }: ContactInfoCardProps) {
+  const { t } = useI18n();
   const { firstName, lastName, headline, email, phone, address, url1, url1Label, url2, url2Label } =
     contactInfo!;
   const contactParts = [email, phone, address].filter(Boolean).join(" · ");
@@ -64,7 +66,7 @@ function ContactInfoCard({ contactInfo, openDialog }: ContactInfoCardProps) {
         >
           <Edit className="h-3.5 w-3.5" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            Edit
+            {t("common.edit")}
           </span>
         </Button>
       </CardHeader>
