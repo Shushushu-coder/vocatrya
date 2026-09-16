@@ -13,32 +13,46 @@ datasource db {
 }
 
 model User {
-  id             String           @id @default(uuid())
-  name           String
-  email          String           @unique
-  password       String
-  createdAt      DateTime         @default(now())
-  jobsApplied    Job[]
-  JobTitle       JobTitle[]
-  Location       Location[]
-  Company        Company[]
-  JobSource      JobSource[]
-  Contact        Contact[]
-  ContactRole    ContactRole[]
-  Profile        Profile[]
-  Activity       Activity[]
-  ActivityType   ActivityType[]
-  Task           Task[]
-  Automation     Automation[]
-  Settings       UserSettings?
-  ApiKey         ApiKey[]
-  Note           Note[]
-  Tag            Tag[]
-  Question       Question[]
-  McpAccessToken McpAccessToken[]
+  id               String            @id @default(uuid())
+  name             String
+  email            String            @unique
+  password         String
+  createdAt        DateTime          @default(now())
+  jobsApplied      Job[]
+  JobTitle         JobTitle[]
+  Location         Location[]
+  Company          Company[]
+  JobSource        JobSource[]
+  Contact          Contact[]
+  ContactRole      ContactRole[]
+  Profile          Profile[]
+  Activity         Activity[]
+  ActivityType     ActivityType[]
+  Task             Task[]
+  Automation       Automation[]
+  Settings         UserSettings?
+  ApiKey           ApiKey[]
+  Note             Note[]
+  Tag              Tag[]
+  Question         Question[]
+  McpAccessToken   McpAccessToken[]
   ChatConversation ChatConversation?
-  defaultResumeId String?
-  defaultResume   Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
+  defaultResumeId  String?
+  defaultResume    Resume?           @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
+
+  // Vocatrya A+B foundation (additive). Cross-user relation equality is a
+  // service-layer invariant and cannot be fully guaranteed by Prisma FKs alone.
+  recruitmentCampaigns RecruitmentCampaign[]
+  jobOpportunities     JobOpportunity[]
+  jobOpportunityNotes  JobOpportunityNote[]
+  applicationAttempts  ApplicationAttempt[]
+  jobSearchPreference  JobSearchPreference?
+  careerMaterialItems  CareerMaterialItem[]
+  resumeContactProfile ResumeContactProfile?
+  resumeVariants       ResumeVariant[]
+  matchAnalyses        MatchAnalysis[]
+  legacyMigrationMaps  LegacyMigrationMap[]
+  dataMigrationRuns    DataMigrationRun[]
 }
 
 model ApiKey {
@@ -208,43 +222,43 @@ model OtherSection {
 }
 
 model Contact {
-  id                String     @id @default(uuid())
-  name              String
-  title             String?
-  email             String?
-  phone             String?
-  linkedinUrl       String?
+  id          String  @id @default(uuid())
+  name        String
+  title       String?
+  email       String?
+  phone       String?
+  linkedinUrl String?
 
   // Where they work now
-  companyId         String?
-  Company           Company?   @relation("ContactCompany", fields: [companyId], references: [id])
-  locationId        String?
-  Location          Location?  @relation(fields: [locationId], references: [id])
+  companyId  String?
+  Company    Company?  @relation("ContactCompany", fields: [companyId], references: [id])
+  locationId String?
+  Location   Location? @relation(fields: [locationId], references: [id])
 
   // Shared history — how you know them
   relationship      String?
   workedAtCompanyId String?
-  WorkedAtCompany   Company?   @relation("ContactWorkedAt", fields: [workedAtCompanyId], references: [id])
+  WorkedAtCompany   Company?  @relation("ContactWorkedAt", fields: [workedAtCompanyId], references: [id])
   workedFrom        DateTime?
   workedTo          DateTime?
 
   // What this person generally is to you. The per-job role on JobContact wins
   // for a specific job; this is the standing answer and the Phase 5 prefill.
-  roleId            String?
-  Role              ContactRole? @relation(fields: [roleId], references: [id])
+  roleId String?
+  Role   ContactRole? @relation(fields: [roleId], references: [id])
 
-  notes             String?
-  lastContactedAt   DateTime?
+  notes           String?
+  lastContactedAt DateTime?
 
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  createdBy         String // userId
-  user              User       @relation(fields: [createdBy], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String // userId
+  user      User     @relation(fields: [createdBy], references: [id])
 
-  Interview         Interview? @relation(fields: [interviewId], references: [id])
-  interviewId       String?
+  Interview   Interview? @relation(fields: [interviewId], references: [id])
+  interviewId String?
 
-  jobLinks          JobContact[]
+  jobLinks JobContact[]
 
   @@index([createdBy])
   @@index([companyId])
@@ -323,22 +337,33 @@ model Company {
   user            User             @relation(fields: [createdBy], references: [id])
   workExperiences WorkExperience[]
 
-  contacts         Contact[]        @relation("ContactCompany")
-  formerColleagues Contact[]        @relation("ContactWorkedAt")
+  contacts         Contact[] @relation("ContactCompany")
+  formerColleagues Contact[] @relation("ContactWorkedAt")
 
   // Watch intent — independent of whether a board is linked
-  watched         Boolean          @default(false)
-  watchedAt       DateTime?
+  watched   Boolean   @default(false)
+  watchedAt DateTime?
 
   // Board coordinates; atsHost is Lever-only
-  atsProvider     String?
-  atsToken        String?
-  atsHost         String?
+  atsProvider String?
+  atsToken    String?
+  atsHost     String?
 
   // Company attributes, unrelated to boards
-  websiteUrl      String?
-  careersUrl      String?
-  industry        String?
+  websiteUrl String?
+  careersUrl String?
+  industry   String?
+
+  // Optional A+B attributes; existing Job / WorkExperience / Contact / ATS
+  // relations are unchanged.
+  notes        String?
+  sizeLabel    String?
+  headquarters String?
+
+  recruitmentCampaigns    RecruitmentCampaign[]
+  jobOpportunities        JobOpportunity[]
+  careerInternshipDetails CareerInternshipDetail[]
+  careerEmploymentDetails CareerEmploymentDetail[]
 
   @@unique([value, createdBy])
   @@unique([createdBy, atsProvider, atsToken])
@@ -365,35 +390,35 @@ model Interview {
 }
 
 model Job {
-  id          String      @id @default(uuid())
-  userId      String
-  User        User        @relation(fields: [userId], references: [id])
-  jobUrl      String?
-  description String
-  jobType     String
+  id            String       @id @default(uuid())
+  userId        String
+  User          User         @relation(fields: [userId], references: [id])
+  jobUrl        String?
+  description   String
+  jobType       String
   workplaceType String?
-  createdAt   DateTime
-  applied     Boolean     @default(false)
-  appliedDate DateTime?
-  dueDate     DateTime?
-  statusId    String
-  Status      JobStatus   @relation(fields: [statusId], references: [id])
-  JobTitle    JobTitle    @relation(fields: [jobTitleId], references: [id])
-  jobTitleId  String
-  Company     Company     @relation(fields: [companyId], references: [id])
-  companyId   String
-  JobSource   JobSource?  @relation(fields: [jobSourceId], references: [id])
-  jobSourceId String?
-  salaryRange String?
-  Location    Location?   @relation(fields: [locationId], references: [id])
-  locationId  String?
-  Interview   Interview[]
+  createdAt     DateTime
+  applied       Boolean      @default(false)
+  appliedDate   DateTime?
+  dueDate       DateTime?
+  statusId      String
+  Status        JobStatus    @relation(fields: [statusId], references: [id])
+  JobTitle      JobTitle     @relation(fields: [jobTitleId], references: [id])
+  jobTitleId    String
+  Company       Company      @relation(fields: [companyId], references: [id])
+  companyId     String
+  JobSource     JobSource?   @relation(fields: [jobSourceId], references: [id])
+  jobSourceId   String?
+  salaryRange   String?
+  Location      Location?    @relation(fields: [locationId], references: [id])
+  locationId    String?
+  Interview     Interview[]
   Resume        Resume?      @relation(fields: [resumeId], references: [id])
   resumeId      String?
   CoverLetter   CoverLetter? @relation(fields: [coverLetterId], references: [id])
   coverLetterId String?
   Notes         Note[]
-  tags        Tag[]
+  tags          Tag[]
   contactLinks  JobContact[]
 
   // Automation discovery fields
@@ -405,16 +430,16 @@ model Job {
   discoveredAt    DateTime?
 
   // MCP provenance: which agent/token created this job (null = UI or automation)
-  createdVia      String?
+  createdVia              String?
   // Word-count classification of `description` at write time:
   // "title-only" | "partial" | "full". Null for pre-existing/UI jobs.
   descriptionCompleteness String?
-
-  @@index([userId, automationId])
-  @@index([userId, discoveryStatus])
   // Also has a hand-written partial unique index (not expressible here):
   // UNIQUE(userId, jobUrl) WHERE automationId IS NOT NULL
   // See migrations/20260710000002_job_automation_url_unique
+
+  @@index([userId, automationId])
+  @@index([userId, discoveryStatus])
 }
 
 model ActivityType {
@@ -434,13 +459,13 @@ model ActivityType {
 }
 
 model Activity {
-  id           String    @id @default(uuid())
-  userId       String
-  User         User      @relation(fields: [userId], references: [id])
-  activityName String
-  startTime    DateTime
-  endTime      DateTime?
-  duration     Int?
+  id               String    @id @default(uuid())
+  userId           String
+  User             User      @relation(fields: [userId], references: [id])
+  activityName     String
+  startTime        DateTime
+  endTime          DateTime?
+  duration         Int?
   // Completed break time in minutes. Existing rows default to 0, so
   // duration keeps meaning (endTime - startTime) for everything already saved.
   breakMinutes     Int       @default(0)
@@ -448,9 +473,9 @@ model Activity {
   breakStartedAt   DateTime?
   // Drives the countdown ring only; never the arithmetic.
   breakPlannedMins Int?
-  description  String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  description      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   activityType   ActivityType @relation(fields: [activityTypeId], references: [id])
   activityTypeId String
@@ -496,8 +521,8 @@ model Automation {
   location       String
   sourceConfig   String? // JSON; per-source params (Greenhouse watchlist, titles)
   resumeId       String
-  resume         Resume @relation(fields: [resumeId], references: [id])
-  matchThreshold Int    @default(80)
+  resume         Resume  @relation(fields: [resumeId], references: [id])
+  matchThreshold Int     @default(80)
 
   scheduleHour Int
   nextRunAt    DateTime?
@@ -508,8 +533,9 @@ model Automation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  runs           AutomationRun[]
-  discoveredJobs Job[]
+  runs                    AutomationRun[]
+  discoveredJobs          Job[]
+  discoveredOpportunities JobOpportunity[]
 
   @@index([userId])
   @@index([status, nextRunAt])
@@ -533,12 +559,12 @@ model AutomationRun {
 
   startedAt   DateTime  @default(now())
   completedAt DateTime?
-
-  @@index([automationId])
-  @@index([startedAt])
   // Also has a hand-written partial unique index (not expressible here):
   // UNIQUE(automationId) WHERE status IN ('running', 'cancelling')
   // See migrations/20260710000001_automation_run_single_active
+
+  @@index([automationId])
+  @@index([startedAt])
 }
 
 model Note {
@@ -556,11 +582,11 @@ model Note {
 }
 
 model Tag {
-  id        String @id @default(uuid())
+  id        String     @id @default(uuid())
   label     String
   value     String
   createdBy String
-  user      User   @relation(fields: [createdBy], references: [id])
+  user      User       @relation(fields: [createdBy], references: [id])
   jobs      Job[]
   questions Question[]
   skills    Skill[]
@@ -603,7 +629,7 @@ model McpAccessToken {
   name        String
   tokenHash   String    @unique
   tokenPrefix String
-  scopes      String    // JSON array string; new tokens are always ["jobs:write","questions:write","resume:write"]
+  scopes      String // JSON array string; new tokens are always ["jobs:write","questions:write","resume:write"]
   expiresAt   DateTime
   lastUsedAt  DateTime?
   createdAt   DateTime  @default(now())
@@ -615,8 +641,793 @@ model McpAccessToken {
 model ChatConversation {
   id        String   @id @default(uuid())
   userId    String   @unique
-  messages  String   // JSON-serialized UIMessage[]
+  messages  String // JSON-serialized UIMessage[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Vocatrya A+B foundation — additive models only.
+// Legacy Job / Resume / Company / Automation tables are unchanged.
+// Status/type codes stay String; evolving payloads stay serialized JSON String.
+// Cross-user relation equality is a service-layer invariant and cannot be
+// fully guaranteed by Prisma foreign keys alone.
+// ---------------------------------------------------------------------------
+
+model RecruitmentCampaign {
+  id        String @id @default(uuid())
+  userId    String
+  companyId String
+
+  name            String
+  recruitmentType String?
+  year            Int?
+  season          String?
+
+  startDate  DateTime?
+  endDate    DateTime?
+  careersUrl String?
+
+  status     String    @default("UNKNOWN")
+  notes      String?
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  opportunities JobOpportunity[]
+
+  @@index([userId, archivedAt])
+  @@index([companyId, year])
+}
+
+/// Opportunity describes the posting, not the user's process.
+/// Status is ACTIVE / CLOSED / EXPIRED / UNKNOWN — never Interview / Rejected / Offer.
+model JobOpportunity {
+  id         String  @id @default(uuid())
+  userId     String
+  companyId  String
+  campaignId String?
+
+  title           String
+  normalizedTitle String?
+
+  locationText    String?
+  employmentType  String?
+  recruitmentType String?
+  workplaceType   String?
+
+  sourceSystem      String?
+  sourceLabel       String?
+  sourceUrl         String?
+  externalSourceKey String?
+
+  deadline   DateTime?
+  salaryText String?
+
+  status String @default("UNKNOWN")
+
+  currentJdVersionId String?   @unique
+  sourceAutomationId String?
+  discoveredAt       DateTime?
+  closedAt           DateTime?
+
+  notes      String?
+  archivedAt DateTime?
+  createdVia String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company          Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  campaign         RecruitmentCampaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  currentJdVersion JobDescriptionVersion? @relation("OpportunityCurrentJd", fields: [currentJdVersionId], references: [id], onDelete: SetNull)
+  sourceAutomation Automation?            @relation(fields: [sourceAutomationId], references: [id], onDelete: SetNull)
+
+  descriptionVersions    JobDescriptionVersion[] @relation("OpportunityJdVersions")
+  applicationAttempts    ApplicationAttempt[]
+  opportunityNotes       JobOpportunityNote[]
+  matchAnalyses          MatchAnalysis[]
+  targetedResumeVariants ResumeVariant[]
+
+  @@index([userId, status])
+  @@index([userId, deadline])
+  @@index([companyId, campaignId])
+  @@index([companyId, normalizedTitle])
+}
+
+model JobOpportunityNote {
+  id               String   @id @default(uuid())
+  userId           String
+  jobOpportunityId String
+  content          String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  jobOpportunity JobOpportunity @relation(fields: [jobOpportunityId], references: [id], onDelete: Cascade)
+
+  @@index([jobOpportunityId])
+  @@index([userId])
+}
+
+/// Immutable by application convention: never update rawContent after create.
+/// Same contentHash on the same opportunity must not create another version.
+model JobDescriptionVersion {
+  id               String @id @default(uuid())
+  jobOpportunityId String
+
+  versionNumber    Int
+  rawContent       String
+  rawContentFormat String   @default("PLAIN_TEXT")
+  sourceUrl        String?
+  capturedAt       DateTime
+  contentHash      String
+  currentParseId   String?  @unique
+  createdVia       String?
+  createdAt        DateTime @default(now())
+
+  jobOpportunity         JobOpportunity         @relation("OpportunityJdVersions", fields: [jobOpportunityId], references: [id], onDelete: Restrict)
+  currentForOpportunity  JobOpportunity?        @relation("OpportunityCurrentJd")
+  currentParse           JobDescriptionParse?   @relation("JdVersionCurrentParse", fields: [currentParseId], references: [id], onDelete: SetNull)
+  parses                 JobDescriptionParse[]  @relation("JdVersionParses")
+  submittedAttempts      ApplicationAttempt[]   @relation("AttemptSubmittedAgainstJd")
+  targetedResumeVersions ResumeVariantVersion[] @relation("ResumeVersionTargetJd")
+
+  @@unique([jobOpportunityId, versionNumber])
+  @@unique([jobOpportunityId, contentHash])
+}
+
+model JobDescriptionParse {
+  id                      String @id @default(uuid())
+  jobDescriptionVersionId String
+
+  schemaVersion  String
+  parserVersion  String
+  structuredData String
+  parseStatus    String
+  provider       String?
+  model          String?
+  promptVersion  String?
+  inputHash      String
+  errorCode      String?
+  parsedAt       DateTime?
+  createdAt      DateTime  @default(now())
+
+  jobDescriptionVersion JobDescriptionVersion  @relation("JdVersionParses", fields: [jobDescriptionVersionId], references: [id], onDelete: Restrict)
+  currentForVersion     JobDescriptionVersion? @relation("JdVersionCurrentParse")
+  matchAnalyses         MatchAnalysis[]
+
+  @@index([jobDescriptionVersionId])
+}
+
+model ApplicationAttempt {
+  id               String @id @default(uuid())
+  userId           String
+  jobOpportunityId String
+
+  channelCategory String?
+  channelLabel    String
+  sourceUrl       String?
+
+  submittedAt          DateTime?
+  currentStageCategory String    @default("DRAFT")
+  outcome              String    @default("ACTIVE")
+
+  submittedResumeVersionId    String?
+  submittedResumeArtifactId   String?
+  submittedAgainstJdVersionId String?
+
+  notes      String?
+  createdVia String?
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user                      User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  jobOpportunity            JobOpportunity           @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
+  submittedResumeVersion    ResumeVariantVersion?    @relation("AttemptSubmittedResumeVersion", fields: [submittedResumeVersionId], references: [id], onDelete: Restrict)
+  submittedResumeArtifact   ResumeArtifact?          @relation("AttemptSubmittedResumeArtifact", fields: [submittedResumeArtifactId], references: [id], onDelete: Restrict)
+  submittedAgainstJdVersion JobDescriptionVersion?   @relation("AttemptSubmittedAgainstJd", fields: [submittedAgainstJdVersionId], references: [id], onDelete: Restrict)
+  processSteps              ApplicationProcessStep[]
+
+  @@index([userId, currentStageCategory])
+  @@index([userId, outcome])
+  @@index([jobOpportunityId, createdAt])
+}
+
+model ApplicationProcessStep {
+  id                   String @id @default(uuid())
+  applicationAttemptId String
+
+  category    String
+  label       String
+  status      String    @default("PENDING")
+  sortOrder   Int
+  scheduledAt DateTime?
+  completedAt DateTime?
+  result      String?
+  source      String    @default("USER")
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applicationAttempt ApplicationAttempt           @relation(fields: [applicationAttemptId], references: [id], onDelete: Cascade)
+  interviewDetail    ApplicationInterviewDetail?
+  assessmentDetail   ApplicationAssessmentDetail?
+  offerDetail        ApplicationOfferDetail?
+
+  @@index([applicationAttemptId, sortOrder])
+  @@index([scheduledAt])
+}
+
+model ApplicationInterviewDetail {
+  id                       String   @id @default(uuid())
+  applicationProcessStepId String   @unique
+  interviewFormat          String?
+  roundLabel               String?
+  locationText             String?
+  interviewerNames         String?
+  durationMinutes          Int?
+  structuredData           String   @default("{}")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  processStep ApplicationProcessStep @relation(fields: [applicationProcessStepId], references: [id], onDelete: Cascade)
+}
+
+model ApplicationAssessmentDetail {
+  id                       String   @id @default(uuid())
+  applicationProcessStepId String   @unique
+  assessmentKind           String?
+  platform                 String?
+  durationMinutes          Int?
+  scoreText                String?
+  structuredData           String   @default("{}")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  processStep ApplicationProcessStep @relation(fields: [applicationProcessStepId], references: [id], onDelete: Cascade)
+}
+
+model ApplicationOfferDetail {
+  id                       String    @id @default(uuid())
+  applicationProcessStepId String    @unique
+  offerType                String?
+  compensationText         String?
+  responseDeadline         DateTime?
+  decision                 String?
+  structuredData           String    @default("{}")
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  processStep ApplicationProcessStep @relation(fields: [applicationProcessStepId], references: [id], onDelete: Cascade)
+}
+
+model JobSearchPreference {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  targetRoles         String?
+  preferredCities     String?
+  preferredIndustries String?
+  recruitmentTypes    String?
+  availability        String?
+  hardConstraints     String?
+  softPreferences     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+/// Unified career-fact parent. Service-layer invariant: exactly one type-detail
+/// row matching `type` must exist. Prisma cannot enforce XOR across detail tables.
+model CareerMaterialItem {
+  id     String @id @default(uuid())
+  userId String
+
+  type               String
+  title              String
+  startDate          DateTime?
+  endDate            DateTime?
+  isCurrent          Boolean   @default(false)
+  notes              String?
+  origin             String    @default("USER")
+  verificationStatus String    @default("USER_AUTHORED")
+  archivedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  evidence           CareerEvidence[]
+  resumeSectionItems ResumeVariantSectionItem[]
+
+  internshipDetail     CareerInternshipDetail?
+  employmentDetail     CareerEmploymentDetail?
+  projectDetail        CareerProjectDetail?
+  researchDetail       CareerResearchDetail?
+  publicationDetail    CareerPublicationDetail?
+  competitionDetail    CareerCompetitionDetail?
+  campusActivityDetail CareerCampusActivityDetail?
+  educationDetail      CareerEducationDetail?
+  awardDetail          CareerAwardDetail?
+  skillDetail          CareerSkillDetail?
+  certificationDetail  CareerCertificationDetail?
+  customDetail         CareerCustomDetail?
+
+  @@index([userId, type, archivedAt])
+}
+
+model CareerInternshipDetail {
+  id               String   @id @default(uuid())
+  materialItemId   String   @unique
+  companyId        String?
+  organizationName String?
+  roleTitle        String?
+  locationText     String?
+  structuredData   String   @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+  company      Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
+}
+
+model CareerEmploymentDetail {
+  id               String   @id @default(uuid())
+  materialItemId   String   @unique
+  companyId        String?
+  organizationName String?
+  roleTitle        String?
+  employmentType   String?
+  locationText     String?
+  structuredData   String   @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+  company      Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
+}
+
+model CareerProjectDetail {
+  id               String   @id @default(uuid())
+  materialItemId   String   @unique
+  roleTitle        String?
+  projectUrl       String?
+  organizationName String?
+  structuredData   String   @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerResearchDetail {
+  id             String   @id @default(uuid())
+  materialItemId String   @unique
+  institution    String?
+  roleTitle      String?
+  field          String?
+  structuredData String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerPublicationDetail {
+  id             String    @id @default(uuid())
+  materialItemId String    @unique
+  venue          String?
+  authors        String?
+  url            String?
+  publishedAt    DateTime?
+  structuredData String    @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerCompetitionDetail {
+  id             String   @id @default(uuid())
+  materialItemId String   @unique
+  organizer      String?
+  awardLevel     String?
+  result         String?
+  structuredData String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerCampusActivityDetail {
+  id               String   @id @default(uuid())
+  materialItemId   String   @unique
+  organizationName String?
+  roleTitle        String?
+  structuredData   String   @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerEducationDetail {
+  id             String   @id @default(uuid())
+  materialItemId String   @unique
+  institution    String?
+  degree         String?
+  fieldOfStudy   String?
+  locationText   String?
+  structuredData String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerAwardDetail {
+  id             String    @id @default(uuid())
+  materialItemId String    @unique
+  issuer         String?
+  awardedAt      DateTime?
+  structuredData String    @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerSkillDetail {
+  id             String   @id @default(uuid())
+  materialItemId String   @unique
+  skillName      String?
+  proficiency    String?
+  structuredData String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerCertificationDetail {
+  id             String    @id @default(uuid())
+  materialItemId String    @unique
+  organization   String?
+  credentialUrl  String?
+  issueDate      DateTime?
+  expirationDate DateTime?
+  structuredData String    @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerCustomDetail {
+  id             String   @id @default(uuid())
+  materialItemId String   @unique
+  structuredData String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerEvidence {
+  id             String @id @default(uuid())
+  materialItemId String
+
+  kind               String
+  content            String
+  metricValue        Float?
+  metricUnit         String?
+  metricText         String?
+  sortOrder          Int       @default(0)
+  origin             String    @default("USER")
+  verificationStatus String    @default("USER_AUTHORED")
+  archivedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  materialItem          CareerMaterialItem         @relation(fields: [materialItemId], references: [id], onDelete: Restrict)
+  resumeExpressionLinks ResumeExpressionEvidence[]
+  matchEvidenceLinks    MatchEvidenceLink[]
+
+  @@index([materialItemId, kind])
+}
+
+model ResumeContactProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  fullName  String?
+  headline  String?
+  email     String?
+  phone     String?
+  address   String?
+  linksData String?
+  extraData String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+model ResumeVariant {
+  id     String @id @default(uuid())
+  userId String
+
+  name                   String
+  targetJobOpportunityId String?
+  currentVersionId       String?   @unique
+  archivedAt             DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  targetJobOpportunity JobOpportunity?        @relation(fields: [targetJobOpportunityId], references: [id], onDelete: SetNull)
+  currentVersion       ResumeVariantVersion?  @relation("ResumeVariantCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions             ResumeVariantVersion[] @relation("ResumeVariantVersions")
+
+  @@index([userId, archivedAt])
+}
+
+/// DRAFT is mutable; FROZEN / SUBMITTED / ARCHIVED immutability is enforced
+/// in the service layer, not by database triggers.
+model ResumeVariantVersion {
+  id              String @id @default(uuid())
+  resumeVariantId String
+
+  versionNumber         Int
+  parentVersionId       String?
+  status                String    @default("DRAFT")
+  targetJdVersionId     String?
+  sourceMatchAnalysisId String?
+  locale                String?
+  headerSnapshot        String?
+  layoutConfig          String?
+  createdVia            String    @default("USER")
+  createdAt             DateTime  @default(now())
+  frozenAt              DateTime?
+
+  resumeVariant       ResumeVariant          @relation("ResumeVariantVersions", fields: [resumeVariantId], references: [id], onDelete: Restrict)
+  currentForVariant   ResumeVariant?         @relation("ResumeVariantCurrentVersion")
+  parentVersion       ResumeVariantVersion?  @relation("ResumeVersionParent", fields: [parentVersionId], references: [id], onDelete: Restrict)
+  childVersions       ResumeVariantVersion[] @relation("ResumeVersionParent")
+  targetJdVersion     JobDescriptionVersion? @relation("ResumeVersionTargetJd", fields: [targetJdVersionId], references: [id], onDelete: Restrict)
+  sourceMatchAnalysis MatchAnalysis?         @relation("ResumeVersionSourceMatch", fields: [sourceMatchAnalysisId], references: [id], onDelete: SetNull)
+  sections            ResumeVariantSection[]
+  artifacts           ResumeArtifact[]
+  submittedAttempts   ApplicationAttempt[]   @relation("AttemptSubmittedResumeVersion")
+  deepMatchAnalyses   MatchAnalysis[]        @relation("MatchAnalysisResumeVersion")
+
+  @@unique([resumeVariantId, versionNumber])
+}
+
+model ResumeVariantSection {
+  id                     String  @id @default(uuid())
+  resumeVariantVersionId String
+  title                  String
+  systemKind             String?
+  sortOrder              Int     @default(0)
+
+  version ResumeVariantVersion       @relation(fields: [resumeVariantVersionId], references: [id], onDelete: Cascade)
+  items   ResumeVariantSectionItem[]
+
+  @@index([resumeVariantVersionId, sortOrder])
+}
+
+model ResumeVariantSectionItem {
+  id                     String  @id @default(uuid())
+  resumeVariantSectionId String
+  careerMaterialItemId   String?
+  itemKind               String
+  sortOrder              Int     @default(0)
+
+  section            ResumeVariantSection @relation(fields: [resumeVariantSectionId], references: [id], onDelete: Cascade)
+  careerMaterialItem CareerMaterialItem?  @relation(fields: [careerMaterialItemId], references: [id], onDelete: Restrict)
+  expressions        ResumeExpression[]
+
+  @@index([resumeVariantSectionId, sortOrder])
+}
+
+model ResumeExpression {
+  id                         String @id @default(uuid())
+  resumeVariantSectionItemId String
+
+  kind           String
+  content        String
+  sortOrder      Int    @default(0)
+  evidenceStatus String @default("UNLINKED")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sectionItem        ResumeVariantSectionItem   @relation(fields: [resumeVariantSectionItemId], references: [id], onDelete: Cascade)
+  evidenceLinks      ResumeExpressionEvidence[]
+  matchEvidenceLinks MatchEvidenceLink[]
+
+  @@index([resumeVariantSectionItemId, sortOrder])
+}
+
+/// Provenance snapshot: later CareerEvidence edits must not rewrite frozen resume meaning.
+model ResumeExpressionEvidence {
+  id                 String @id @default(uuid())
+  resumeExpressionId String
+  careerEvidenceId   String
+
+  evidenceContentSnapshot   String
+  evidenceHashSnapshot      String
+  evidenceUpdatedAtSnapshot DateTime
+
+  createdAt DateTime @default(now())
+
+  resumeExpression ResumeExpression @relation(fields: [resumeExpressionId], references: [id], onDelete: Cascade)
+  careerEvidence   CareerEvidence   @relation(fields: [careerEvidenceId], references: [id], onDelete: Restrict)
+
+  @@unique([resumeExpressionId, careerEvidenceId])
+}
+
+/// storageKey is a relative/logical key, never a fixed Windows absolute path.
+model ResumeArtifact {
+  id                     String @id @default(uuid())
+  resumeVariantVersionId String
+
+  kind       String
+  format     String
+  storageKey String
+  fileName   String
+  sha256     String
+  byteSize   Int?
+
+  createdAt DateTime @default(now())
+
+  version           ResumeVariantVersion @relation(fields: [resumeVariantVersionId], references: [id], onDelete: Cascade)
+  submittedAttempts ApplicationAttempt[] @relation("AttemptSubmittedResumeArtifact")
+
+  @@index([resumeVariantVersionId])
+}
+
+/// FAST_SCREENING requires resumeVariantVersionId = null;
+/// DEEP_MATCH requires resumeVariantVersionId != null.
+/// Enforced in the service layer, not by the database.
+model MatchAnalysis {
+  id                    String @id @default(uuid())
+  userId                String
+  jobOpportunityId      String
+  jobDescriptionParseId String
+
+  analysisType           String
+  resumeVariantVersionId String?
+
+  inputHash             String
+  analysisSchemaVersion String
+  provider              String?
+  model                 String?
+  promptVersion         String?
+  status                String
+  errorCode             String?
+  isStale               Boolean   @default(false)
+  staleReasonCodes      String?
+  staleAt               DateTime?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user                    User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  jobOpportunity          JobOpportunity         @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
+  jobDescriptionParse     JobDescriptionParse    @relation(fields: [jobDescriptionParseId], references: [id], onDelete: Restrict)
+  resumeVariantVersion    ResumeVariantVersion?  @relation("MatchAnalysisResumeVersion", fields: [resumeVariantVersionId], references: [id], onDelete: Restrict)
+  resumeVersionsFromMatch ResumeVariantVersion[] @relation("ResumeVersionSourceMatch")
+  fastScreeningDetail     FastScreeningDetail?
+  deepMatchDetail         DeepMatchDetail?
+  evidenceLinks           MatchEvidenceLink[]
+
+  @@index([jobOpportunityId, analysisType, isStale])
+  @@index([userId, analysisType, isStale])
+  @@index([resumeVariantVersionId])
+}
+
+model FastScreeningDetail {
+  id               String   @id @default(uuid())
+  matchAnalysisId  String   @unique
+  verdict          String
+  inputSnapshot    String
+  hardRequirements String?
+  coreMatch        String?
+  preferenceMatch  String?
+  reasons          String?
+  createdAt        DateTime @default(now())
+
+  matchAnalysis MatchAnalysis @relation(fields: [matchAnalysisId], references: [id], onDelete: Cascade)
+}
+
+model DeepMatchDetail {
+  id                              String   @id @default(uuid())
+  matchAnalysisId                 String   @unique
+  overallSummary                  String
+  overallScore                    Int?
+  hardRequirements                String?
+  responsibilityAlignment         String?
+  experienceRelevance             String?
+  skillCoverage                   String?
+  educationExperienceFit          String?
+  strengths                       String?
+  gaps                            String?
+  resumeOptimizationOpportunities String?
+  nonFixableGaps                  String?
+  createdAt                       DateTime @default(now())
+
+  matchAnalysis MatchAnalysis @relation(fields: [matchAnalysisId], references: [id], onDelete: Cascade)
+}
+
+model MatchEvidenceLink {
+  id              String @id @default(uuid())
+  matchAnalysisId String
+
+  requirementKey          String
+  requirementTextSnapshot String
+  careerEvidenceId        String?
+  resumeExpressionId      String?
+  judgement               String
+  evidenceContentSnapshot String?
+  evidenceHashSnapshot    String?
+
+  createdAt DateTime @default(now())
+
+  matchAnalysis    MatchAnalysis     @relation(fields: [matchAnalysisId], references: [id], onDelete: Cascade)
+  careerEvidence   CareerEvidence?   @relation(fields: [careerEvidenceId], references: [id], onDelete: Restrict)
+  resumeExpression ResumeExpression? @relation(fields: [resumeExpressionId], references: [id], onDelete: Restrict)
+
+  @@index([matchAnalysisId])
+}
+
+model LegacyMigrationMap {
+  id               String  @id @default(uuid())
+  userId           String
+  legacyEntityType String
+  legacyEntityId   String
+  targetEntityType String
+  targetEntityId   String
+  migrationVersion String
+  mappingReason    String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, legacyEntityType, legacyEntityId, targetEntityType, targetEntityId])
+  @@index([targetEntityType, targetEntityId])
+}
+
+model DataMigrationRun {
+  id          String    @id @default(uuid())
+  userId      String?
+  version     String
+  mode        String
+  status      String
+  counts      String?
+  errorCode   String?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, startedAt])
+  @@index([status])
 }

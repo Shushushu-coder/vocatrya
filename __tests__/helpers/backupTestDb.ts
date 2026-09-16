@@ -14,9 +14,18 @@ export function makeTestDbUrl(): { url: string; dir: string } {
 // db push rather than migrate deploy: the round-trip asserts against the
 // current schema, not the migration history, and push is much faster.
 export function pushSchema(url: string): void {
+  const prismaCli = path.join(
+    __dirname,
+    "..",
+    "..",
+    "node_modules",
+    "prisma",
+    "build",
+    "index.js",
+  );
   execFileSync(
-    "npx",
-    ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"],
+    process.execPath,
+    [prismaCli, "db", "push", "--skip-generate", "--accept-data-loss"],
     { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" },
   );
 }
