@@ -3,8 +3,21 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { JOB_TYPES } from "@/models/job.model";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import {
+  getOpportunityAsJob,
+  listOpportunitiesAsJobs,
+} from "@/lib/career/jobOpportunityAdapter";
+import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { requireUser } from "../shared";
 import { hideUnanalyzedScore } from "./shared";
+
+function isAbReadMode(mode: string): boolean {
+  return (
+    mode === CAREER_RUNTIME_MODE.AB_ENABLED ||
+    mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED
+  );
+}
 
 const JOB_LIST_SELECT = {
   id: true,
@@ -184,6 +197,27 @@ export const getJobsList = async (
   try {
     const user = await requireUser();
     const skip = (page - 1) * limit;
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (runtime.mode === CAREER_RUNTIME_MODE.BLOCKED) {
+      return {
+        success: false,
+        message: `Career runtime is blocked (${runtime.reason})`,
+      };
+    }
+    if (isAbReadMode(runtime.mode)) {
+      const { data, total } = await listOpportunitiesAsJobs(prisma, user.id, {
+        skip,
+        take: limit,
+        search,
+        appliedOnly,
+        filter,
+        companyValue,
+        titleValue,
+        locationValue,
+        sourceValue,
+      });
+      return { success: true, data, total };
+    }
 
     const whereClause = buildJobsWhereClause(user.id, {
       filter,
@@ -219,6 +253,16 @@ export const getJobsList = async (
 
 export async function* getJobsIterator(filter?: string, pageSize = 200) {
   const user = await requireUser();
+  const runtime = await resolveCareerRuntimeMode(prisma);
+  if (isAbReadMode(runtime.mode)) {
+    const { data } = await listOpportunitiesAsJobs(prisma, user.id, {
+      includeArchived: true,
+    });
+    for (let i = 0; i < data.length; i += pageSize) {
+      yield data.slice(i, i + pageSize);
+    }
+    return;
+  }
   let page = 1;
   let fetchedCount = 0;
 
@@ -259,6 +303,17 @@ export const getJobDetails = async (
       throw new Error("Please provide job id");
     }
     const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (runtime.mode === CAREER_RUNTIME_MODE.BLOCKED) {
+      return {
+        success: false,
+        message: `Career runtime is blocked (${runtime.reason})`,
+      };
+    }
+    if (isAbReadMode(runtime.mode)) {
+      const job = await getOpportunityAsJob(prisma, user.id, jobId);
+      return { job, success: true };
+    }
 
     const job = await prisma.job.findUnique({
       where: {

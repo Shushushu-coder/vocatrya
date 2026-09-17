@@ -1,5 +1,9 @@
 "use server";
 import prisma from "@/lib/db";
+import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import { CareerRuntimeError } from "@/lib/career/errors";
+import { syncApplicationFromUiStatus } from "@/lib/career/jobOpportunityAdapter";
+import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { handleError } from "@/lib/utils";
 import { JobStatus } from "@/models/job.model";
@@ -31,6 +35,26 @@ export const updateJobStatus = async (
           };
       }
     };
+
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (
+      runtime.mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED ||
+      runtime.mode === CAREER_RUNTIME_MODE.BLOCKED
+    ) {
+      throw new CareerRuntimeError(
+        runtime.mode === CAREER_RUNTIME_MODE.BLOCKED
+          ? "CAREER_RUNTIME_BLOCKED"
+          : "JOB_MUTATIONS_DISABLED",
+        `Job mutations are not allowed in ${runtime.mode}`,
+      );
+    }
+    if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+      await syncApplicationFromUiStatus(prisma, user.id, jobId, status.value, {
+        applied: status.value === "applied" || status.value === "interview",
+      });
+      revalidatePath("/dashboard");
+      return { success: true };
+    }
 
     await assertLegacyCareerWriteAllowed(prisma);
     const job = await prisma.job.update({

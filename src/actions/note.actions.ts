@@ -3,14 +3,56 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { NoteFormSchema } from "@/models/note.schema";
 import { NoteResponse } from "@/models/note.model";
+import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import { CareerRuntimeError } from "@/lib/career/errors";
+import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { requireUser } from "./shared";
 import { z } from "zod";
+
+function isAbReadMode(mode: string): boolean {
+  return (
+    mode === CAREER_RUNTIME_MODE.AB_ENABLED ||
+    mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED
+  );
+}
+
+function assertAbNoteWrites(mode: string): void {
+  if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return;
+  throw new CareerRuntimeError(
+    "JOB_MUTATIONS_DISABLED",
+    `Opportunity notes cannot be mutated in ${mode}`,
+  );
+}
 
 export const getNotesByJobId = async (
   jobId: string
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (isAbReadMode(runtime.mode)) {
+      const opportunity = await prisma.jobOpportunity.findFirst({
+        where: { id: jobId, userId: user.id },
+        select: { id: true },
+      });
+      if (!opportunity) {
+        throw new Error("Job not found");
+      }
+      const notes = await prisma.jobOpportunityNote.findMany({
+        where: { jobOpportunityId: jobId, userId: user.id },
+        orderBy: { createdAt: "desc" },
+      });
+      const data: NoteResponse[] = notes.map((note) => ({
+        id: note.id,
+        jobId: note.jobOpportunityId,
+        userId: note.userId,
+        content: note.content,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        isEdited: note.updatedAt.getTime() - note.createdAt.getTime() > 1000,
+      }));
+      return { success: true, data };
+    }
 
     const job = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },
@@ -44,6 +86,25 @@ export const addNote = async (
     const user = await requireUser();
 
     const validated = NoteFormSchema.parse(data);
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (isAbReadMode(runtime.mode)) {
+      assertAbNoteWrites(runtime.mode);
+      const opportunity = await prisma.jobOpportunity.findFirst({
+        where: { id: validated.jobId, userId: user.id },
+        select: { id: true },
+      });
+      if (!opportunity) {
+        throw new Error("Job not found");
+      }
+      const note = await prisma.jobOpportunityNote.create({
+        data: {
+          jobOpportunityId: validated.jobId,
+          userId: user.id,
+          content: validated.content,
+        },
+      });
+      return { success: true, data: { ...note, jobId: note.jobOpportunityId } };
+    }
 
     const job = await prisma.job.findFirst({
       where: { id: validated.jobId, userId: user.id },
@@ -78,6 +139,22 @@ export const updateNote = async (
     if (!validated.id) {
       throw new Error("Note ID is required for update");
     }
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (isAbReadMode(runtime.mode)) {
+      assertAbNoteWrites(runtime.mode);
+      const existing = await prisma.jobOpportunityNote.findFirst({
+        where: { id: validated.id, userId: user.id },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new Error("Note not found");
+      }
+      const note = await prisma.jobOpportunityNote.update({
+        where: { id: existing.id },
+        data: { content: validated.content },
+      });
+      return { success: true, data: { ...note, jobId: note.jobOpportunityId } };
+    }
 
     const note = await prisma.note.update({
       where: { id: validated.id, userId: user.id },
@@ -96,6 +173,21 @@ export const deleteNote = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (isAbReadMode(runtime.mode)) {
+      assertAbNoteWrites(runtime.mode);
+      const existing = await prisma.jobOpportunityNote.findFirst({
+        where: { id: noteId, userId: user.id },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new Error("Note not found");
+      }
+      await prisma.jobOpportunityNote.delete({
+        where: { id: existing.id },
+      });
+      return { success: true };
+    }
 
     await prisma.note.delete({
       where: { id: noteId, userId: user.id },

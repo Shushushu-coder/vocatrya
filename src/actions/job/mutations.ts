@@ -2,11 +2,30 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { createJobRecord } from "@/lib/jobs/createJobRecord";
+import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
+import {
+  archiveOpportunity,
+  createOpportunityFromJobForm,
+  updateOpportunityFromJobForm,
+} from "@/lib/career/jobOpportunityAdapter";
+import { CareerRuntimeError } from "@/lib/career/errors";
 import { AddJobFormSchema } from "@/models/addJobForm.schema";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "../shared";
+
+function assertJobMutationsAllowed(mode: string): void {
+  if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return;
+  if (mode === CAREER_RUNTIME_MODE.LEGACY_ONLY) return;
+  throw new CareerRuntimeError(
+    mode === CAREER_RUNTIME_MODE.BLOCKED
+      ? "CAREER_RUNTIME_BLOCKED"
+      : "JOB_MUTATIONS_DISABLED",
+    `Job mutations are not allowed in ${mode}`,
+  );
+}
 
 type JobRefs = {
   jobTitleId?: string | null;
@@ -86,6 +105,47 @@ export const addJob = async (
       tags,
     } = data;
 
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertJobMutationsAllowed(runtime.mode);
+    if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+      if (coverLetter) {
+        throw new CareerRuntimeError(
+          "LEGACY_COVER_LETTER_UNSUPPORTED",
+          "Legacy CoverLetter cannot be mapped in A+B mode; re-select or submit without it.",
+        );
+      }
+      if (tags && tags.length > 0) {
+        throw new CareerRuntimeError(
+          "LEGACY_TAGS_UNSUPPORTED",
+          "Legacy Job tags have no A+B mapping yet; submit without tags.",
+        );
+      }
+      await assertJobRefsOwned(user.id, {
+        jobTitleId: title,
+        companyId: company,
+        locationId: location,
+        jobSourceId: source,
+      });
+      const opportunity = await createOpportunityFromJobForm(prisma, user.id, {
+        title,
+        company,
+        location,
+        type,
+        workplaceType,
+        source,
+        status,
+        dueDate,
+        dateApplied,
+        salaryRange: salaryRange || null,
+        jobDescription,
+        jobUrl,
+        applied,
+        resume,
+      });
+      revalidatePath("/dashboard");
+      return { success: true, data: opportunity };
+    }
+
     await assertJobRefsOwned(user.id, {
       jobTitleId: title,
       companyId: company,
@@ -95,7 +155,6 @@ export const addJob = async (
       coverLetterId: coverLetter,
       tagIds: tags,
     });
-
     const job = await createJobRecord({
       jobTitleId: title,
       companyId: company,
@@ -153,6 +212,49 @@ export const updateJob = async (
     } = data;
 
     const tagIds = tags ?? [];
+
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertJobMutationsAllowed(runtime.mode);
+
+    if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+      if (coverLetter) {
+        throw new CareerRuntimeError(
+          "LEGACY_COVER_LETTER_UNSUPPORTED",
+          "Legacy CoverLetter cannot be mapped in A+B mode; re-select or submit without it.",
+        );
+      }
+      if (tagIds.length > 0) {
+        throw new CareerRuntimeError(
+          "LEGACY_TAGS_UNSUPPORTED",
+          "Legacy Job tags have no A+B mapping yet; submit without tags.",
+        );
+      }
+      await assertJobRefsOwned(user.id, {
+        jobTitleId: title,
+        companyId: company,
+        locationId: location,
+        jobSourceId: source,
+      });
+      const opportunity = await updateOpportunityFromJobForm(prisma, user.id, {
+        id,
+        title,
+        company,
+        location,
+        type,
+        workplaceType,
+        source,
+        status,
+        dueDate,
+        dateApplied,
+        salaryRange: salaryRange || null,
+        jobDescription,
+        jobUrl,
+        applied,
+        resume,
+      });
+      revalidatePath("/dashboard");
+      return { success: true, data: opportunity };
+    }
 
     const current = await prisma.job.findFirst({
       where: { id, userId: user.id },
@@ -224,6 +326,14 @@ export const deleteJobById = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertJobMutationsAllowed(runtime.mode);
+    if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+      const res = await archiveOpportunity(prisma, user.id, jobId);
+      revalidatePath("/dashboard");
+      return { res, success: true };
+    }
 
     await assertLegacyCareerWriteAllowed(prisma);
     const res = await prisma.job.delete({

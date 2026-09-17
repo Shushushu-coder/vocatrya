@@ -12,6 +12,7 @@ const FORBIDDEN_STATUS = new Set<string>(
 );
 
 export type OpportunitySafeFields = {
+  companyId?: string;
   title?: string;
   normalizedTitle?: string | null;
   locationText?: string | null;
@@ -135,6 +136,16 @@ export class OpportunityService {
     }
 
     const data: Prisma.JobOpportunityUpdateInput = {};
+    if (fields.companyId !== undefined) {
+      const company = await this.db.company.findFirst({
+        where: { id: fields.companyId, createdBy: this.userId },
+        select: { id: true },
+      });
+      if (!company) {
+        throw new CareerRuntimeError("COMPANY_NOT_FOUND", "Company not found");
+      }
+      data.company = { connect: { id: company.id } };
+    }
     if (fields.title !== undefined) data.title = fields.title;
     if (fields.normalizedTitle !== undefined) {
       data.normalizedTitle = fields.normalizedTitle;

@@ -49,17 +49,19 @@ export class ApplicationService {
 
   async markSubmitted(input: {
     attemptId: string;
-    submittedResumeVersionId: string;
+    submittedResumeVersionId?: string | null;
     submittedResumeArtifactId?: string | null;
     submittedAgainstJdVersionId?: string | null;
     submittedAt?: Date;
   }) {
     await this.gate();
     const attempt = await this.requireOwnedAttempt(input.attemptId);
+    const requestedVersionId = input.submittedResumeVersionId ?? null;
 
     if (
       attempt.submittedResumeVersionId &&
-      attempt.submittedResumeVersionId !== input.submittedResumeVersionId
+      requestedVersionId &&
+      attempt.submittedResumeVersionId !== requestedVersionId
     ) {
       throw new CareerRuntimeError(
         "SUBMITTED_RESUME_PROVENANCE",
@@ -67,23 +69,27 @@ export class ApplicationService {
       );
     }
 
-    const version = await this.db.resumeVariantVersion.findFirst({
-      where: {
-        id: input.submittedResumeVersionId,
-        resumeVariant: { userId: this.userId },
-      },
-      select: { id: true, status: true },
-    });
-    if (!version) {
-      throw new CareerRuntimeError(
-        "VERSION_NOT_FOUND",
-        "submittedResumeVersionId does not reference an owned resume version",
-      );
-    }
+    let nextVersionId = attempt.submittedResumeVersionId;
+    if (requestedVersionId) {
+      const version = await this.db.resumeVariantVersion.findFirst({
+        where: {
+          id: requestedVersionId,
+          resumeVariant: { userId: this.userId },
+        },
+        select: { id: true, status: true },
+      });
+      if (!version) {
+        throw new CareerRuntimeError(
+          "VERSION_NOT_FOUND",
+          "submittedResumeVersionId does not reference an owned resume version",
+        );
+      }
 
-    const variants = new ResumeVariantService(this.db, this.userId, this.env);
-    if (version.status !== RESUME_VERSION_STATUS.SUBMITTED) {
-      await variants.markSubmitted(version.id);
+      const variants = new ResumeVariantService(this.db, this.userId, this.env);
+      if (version.status !== RESUME_VERSION_STATUS.SUBMITTED) {
+        await variants.markSubmitted(version.id);
+      }
+      nextVersionId = version.id;
     }
 
     return this.db.applicationAttempt.update({
@@ -91,7 +97,7 @@ export class ApplicationService {
       data: {
         submittedAt: input.submittedAt ?? attempt.submittedAt ?? new Date(),
         currentStageCategory: ATTEMPT_STAGE.SUBMITTED,
-        submittedResumeVersionId: input.submittedResumeVersionId,
+        submittedResumeVersionId: nextVersionId,
         submittedResumeArtifactId:
           input.submittedResumeArtifactId === undefined
             ? attempt.submittedResumeArtifactId
@@ -101,6 +107,31 @@ export class ApplicationService {
             ? attempt.submittedAgainstJdVersionId
             : input.submittedAgainstJdVersionId,
       },
+    });
+  }
+
+  async ensureAttempt(input: {
+    jobOpportunityId: string;
+    channelLabel?: string;
+    sourceUrl?: string | null;
+  }) {
+    await this.gate();
+    const existing = await this.db.applicationAttempt.findFirst({
+      where: {
+        jobOpportunityId: input.jobOpportunityId,
+        userId: this.userId,
+        archivedAt: null,
+        outcome: {
+          in: [ATTEMPT_OUTCOME.ACTIVE, ATTEMPT_OUTCOME.OFFER],
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) return existing;
+    return this.createAttempt({
+      jobOpportunityId: input.jobOpportunityId,
+      channelLabel: input.channelLabel ?? "USER",
+      sourceUrl: input.sourceUrl ?? null,
     });
   }
 
