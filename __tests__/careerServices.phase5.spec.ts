@@ -11,7 +11,12 @@ import {
   ResumeVariantService,
   writeInstanceMigrationState,
 } from "@/lib/career";
-import { makeTestDbUrl, pushSchema, seedAccount } from "./helpers/backupTestDb";
+import {
+  makeTestDbUrl,
+  pushSchema,
+  resetDisposableDb,
+  seedAccount,
+} from "./helpers/backupTestDb";
 
 const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
 
@@ -34,20 +39,8 @@ afterAll(async () => {
   }
 });
 
-async function resetDisposableDb() {
-  await prisma.$executeRawUnsafe("PRAGMA foreign_keys = OFF");
-  const tables = await prisma.$queryRaw<Array<{ name: string }>>`
-    SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%'
-  `;
-  for (const table of tables) {
-    if (table.name === "JobStatus") continue;
-    await prisma.$executeRawUnsafe(`DELETE FROM "${table.name}"`);
-  }
-  await prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON");
-}
-
 beforeEach(async () => {
-  await resetDisposableDb();
+  await resetDisposableDb(prisma);
   userId = await seedAccount(prisma, `phase5-svc-${Date.now()}@example.com`);
   companyId = (
     await prisma.company.create({

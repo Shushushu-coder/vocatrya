@@ -42,7 +42,9 @@ export default defineConfig({
       provider: "v8",
       reportsDirectory: "coverage",
     },
-    exclude: ["e2e/**", "**/node_modules/**"],
+    // /docs is gitignored local phase residue; default suite must not
+    // treat those environment-sensitive smokes as isolated coverage.
+    exclude: ["e2e/**", "**/node_modules/**", "docs/**"],
     server: {
       deps: {
         inline: [/@prisma/, /next-auth/, /@auth/, /@next/, /jose/],

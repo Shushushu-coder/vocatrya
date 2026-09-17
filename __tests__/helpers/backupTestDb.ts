@@ -239,3 +239,27 @@ export async function seedAccount(
 
   return user.id;
 }
+
+// Reset must not rely on `PRAGMA foreign_keys = OFF`. That pragma is
+// per-connection; Prisma may issue the following DELETEs on another
+// connection (or a second PrismaClient on the same file, e.g. Phase 3
+// migrator) where FKs are still on. sqlite_master order starts with
+// parent tables such as User, so unordered deletes then fail.
+// `PRAGMA defer_foreign_keys` is transaction-scoped and is checked at
+// COMMIT, so FK enforcement stays on.
+export async function resetDisposableDb(prisma: PrismaClient): Promise<void> {
+  const tables = await prisma.$queryRaw<Array<{ name: string }>>`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%'
+  `;
+
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe("PRAGMA defer_foreign_keys = ON");
+      for (const table of tables) {
+        if (table.name === "JobStatus") continue;
+        await tx.$executeRawUnsafe(`DELETE FROM "${table.name}"`);
+      }
+    },
+    { timeout: 60_000, maxWait: 20_000 },
+  );
+}
