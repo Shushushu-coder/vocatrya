@@ -467,6 +467,10 @@ describe("Phase 3 disposable SQLite backfill", () => {
       datasources: { db: { url: ctx.url } },
     });
     try {
+      const migrationState = await verify.abMigrationState.findFirstOrThrow();
+      expect(migrationState.status).toBe("COMPLETED");
+      expect(migrationState.verifiedAt).not.toBeNull();
+
       const opportunities = await verify.jobOpportunity.findMany();
       expect(opportunities).toHaveLength(8);
       expect(opportunities.every((o) => o.campaignId == null)).toBe(true);
@@ -682,6 +686,10 @@ describe("Phase 3 disposable SQLite backfill", () => {
       });
       expect(failedRun.status).toBe("FAILED");
       expect(failedRun.completedAt).not.toBeNull();
+      const failedState = await partialPrisma.abMigrationState.findFirstOrThrow();
+      expect(failedState.status).not.toBe("COMPLETED");
+      expect(failedState.status).toBe("FAILED");
+      expect(failedState.verifiedAt).toBeNull();
 
       const offerMap = await partialPrisma.legacyMigrationMap.findFirst({
         where: {
@@ -712,6 +720,9 @@ describe("Phase 3 disposable SQLite backfill", () => {
         }),
       ).toBeTruthy();
       expect(await partialPrisma.jobOpportunity.count()).toBe(8);
+      const completedState = await partialPrisma.abMigrationState.findFirstOrThrow();
+      expect(completedState.status).toBe("COMPLETED");
+      expect(completedState.verifiedAt).not.toBeNull();
     } finally {
       await partialPrisma.$disconnect();
     }

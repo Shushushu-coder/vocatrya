@@ -112,6 +112,7 @@ describe("Phase 4 backup contract", () => {
       "DeepMatchDetail",
       "MatchEvidenceLink",
       "LegacyMigrationMap",
+      "AbMigrationState",
     ];
     for (const model of required) {
       expect(INSERT_ORDER).toContain(model);

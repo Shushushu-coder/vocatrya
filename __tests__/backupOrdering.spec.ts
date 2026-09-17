@@ -101,6 +101,10 @@ describe("backup ordering", () => {
   it("scopes every model to a user, directly or through a relation chain", () => {
     for (const model of INSERT_ORDER) {
       const where = MODEL_SPECS[model].scope("user-1");
+      if (model === "AbMigrationState") {
+        expect(where).toEqual({});
+        continue;
+      }
       expect(JSON.stringify(where)).toContain("user-1");
     }
   });

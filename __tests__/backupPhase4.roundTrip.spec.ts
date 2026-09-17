@@ -15,6 +15,12 @@ import {
   TARGET,
 } from "@/lib/legacy-migration/identities";
 import { runLegacyMigration } from "@/lib/legacy-migration/migrator";
+import {
+  AB_MIGRATION_STATUS,
+  AB_RUNTIME_FEATURE_ENV,
+  CAREER_RUNTIME_MODE,
+  resolveCareerRuntimeMode,
+} from "@/lib/career";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 
@@ -560,6 +566,16 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(maps.every((m) => m.legacyEntityId !== jobMap?.id)).toBe(true);
 
     expect(await prisma.dataMigrationRun.count({ where: { userId } })).toBe(0);
+
+    const migrationState = await prisma.abMigrationState.findFirstOrThrow();
+    expect(migrationState.status).toBe(AB_MIGRATION_STATUS.COMPLETED);
+    expect(migrationState.verifiedAt).not.toBeNull();
+    const restoredMode = await resolveCareerRuntimeMode(prisma);
+    expect(restoredMode.mode).not.toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
+    expect(restoredMode.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
+    const enabledEnv = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+    const flagged = await resolveCareerRuntimeMode(prisma, { env: enabledEnv });
+    expect(flagged.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
   }, 180_000);
 
   it("does not duplicate Phase 3 backfill after restore", async () => {
@@ -602,6 +618,7 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
       "DeepMatchDetail",
       "MatchEvidenceLink",
       "LegacyMigrationMap",
+      "AbMigrationState",
     ] as const;
     for (const key of keys) {
       expect(second[key].length, key).toBe(first[key].length);
@@ -685,6 +702,7 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(await prisma.resumeVariant.count({ where: { userId } })).toBe(0);
     expect(await prisma.matchAnalysis.count({ where: { userId } })).toBe(0);
     expect(await prisma.legacyMigrationMap.count({ where: { userId } })).toBe(0);
+    expect(await prisma.abMigrationState.count()).toBe(0);
     const companies = await prisma.company.findMany({ where: { createdBy: userId } });
     expect(companies.map((c) => c.value)).toEqual(["legacy-co"]);
     expect(companies[0].notes).toBeNull();

@@ -43,6 +43,11 @@ import {
   type RootError,
   type RunMigrateOptions,
 } from "./types";
+import { checkLegacyRootCoverage } from "@/lib/career/integrity";
+import {
+  AB_MIGRATION_STATUS,
+} from "@/lib/career/identities";
+import { writeInstanceMigrationState } from "@/lib/career/migrationState";
 
 type Tx = Prisma.TransactionClient;
 
@@ -306,6 +311,13 @@ export async function runLegacyMigration(
     });
     runId = run.id;
     bookkeepingWriteCount += 1;
+    await writeInstanceMigrationState(prisma, {
+      status: AB_MIGRATION_STATUS.IN_PROGRESS,
+      completedAt: null,
+      verifiedAt: null,
+      errorCode: null,
+    });
+    bookkeepingWriteCount += 1;
 
     const ro = openReadOnlySqlite(options.dbPath);
     let inventory: Record<string, number> = {};
@@ -338,7 +350,17 @@ export async function runLegacyMigration(
     });
 
     const failedTotal = sumBucket(failed);
-    const status = failedTotal > 0 ? "FAILED" : "COMPLETED";
+    const coverage =
+      failedTotal === 0 ? await checkLegacyRootCoverage(prisma) : null;
+    const integrityOk = coverage?.ok === true;
+    const completed = failedTotal === 0 && integrityOk;
+    const status = completed ? "COMPLETED" : "FAILED";
+    const errorCode = failedTotal > 0
+      ? "ROOT_FAILURE"
+      : integrityOk
+        ? null
+        : coverage?.code ?? "INTEGRITY_FAILED";
+    const now = new Date();
     const reportCounts = {
       migrationVersion: PHASE3_MIGRATION_VERSION,
       sourceSha256: before.sha256,
@@ -353,15 +375,25 @@ export async function runLegacyMigration(
       duplicateCandidates,
       ordering: "ORDER_UNRECOVERABLE",
       errorCount: errors.length,
+      integrityCode: errorCode,
     };
     await prisma.dataMigrationRun.update({
       where: { id: run.id },
       data: {
         status,
-        completedAt: new Date(),
-        errorCode: failedTotal > 0 ? "ROOT_FAILURE" : null,
+        completedAt: now,
+        errorCode,
         counts: JSON.stringify(reportCounts),
       },
+    });
+    bookkeepingWriteCount += 1;
+    await writeInstanceMigrationState(prisma, {
+      status: completed
+        ? AB_MIGRATION_STATUS.COMPLETED
+        : AB_MIGRATION_STATUS.FAILED,
+      completedAt: completed ? now : now,
+      verifiedAt: completed ? now : null,
+      errorCode,
     });
     bookkeepingWriteCount += 1;
 
@@ -396,7 +428,7 @@ export async function runLegacyMigration(
       unexpectedUpdates: 0,
       duplicated: 0,
       errors,
-      phaseResult: failedTotal > 0 ? "FAILED" : "PASS",
+      phaseResult: completed ? "PASS" : "FAILED",
       REAL_USER_DATA_MUTATED: "NO",
       PRODUCTION_BACKFILL_EXECUTED: "NO",
     };
@@ -413,6 +445,17 @@ export async function runLegacyMigration(
           },
         });
         bookkeepingWriteCount += 1;
+        try {
+          await writeInstanceMigrationState(prisma, {
+            status: AB_MIGRATION_STATUS.FAILED,
+            completedAt: new Date(),
+            verifiedAt: null,
+            errorCode: "ENGINE_FAILURE",
+          });
+          bookkeepingWriteCount += 1;
+        } catch {
+          // keep original error
+        }
       } catch {
         // keep original error
       }

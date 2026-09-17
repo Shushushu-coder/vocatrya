@@ -1,5 +1,6 @@
 "use server";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { handleError } from "@/lib/utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { resumeDetailInclude } from "@/lib/jobs/resumeDetailInclude";
@@ -123,6 +124,7 @@ export const saveResumeReviewResult = async (
   try {
     const user = await requireUser();
 
+    await assertLegacyCareerWriteAllowed(prisma);
     await prisma.resume.update({
       where: { id: resumeId, profile: { userId: user.id } },
       data: { reviewData },
@@ -148,6 +150,7 @@ export const editResume = async (
   try {
     const user = await requireUser();
 
+    await assertLegacyCareerWriteAllowed(prisma);
     const res = await prisma.resume.update({
       where: { id, profile: { userId: user.id } },
       data: { title },

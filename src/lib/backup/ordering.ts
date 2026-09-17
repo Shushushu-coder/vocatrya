@@ -33,6 +33,7 @@ export type BackupModel =
   | "Question"
   | "AutomationRun"
   | "UserSettings"
+  | "AbMigrationState"
   | "JobSearchPreference"
   | "RecruitmentCampaign"
   | "JobOpportunity"
@@ -250,6 +251,14 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     scope: (userId) => ({ automation: { userId } }),
   },
   UserSettings: { delegate: "userSettings", owner: "userId", fks: {}, scope: byUser },
+
+  // Instance-level singleton. Restored with the ZIP because it decides whether
+  // the restored database may enter A+B runtime. Feature flag still defaults off.
+  AbMigrationState: {
+    delegate: "abMigrationState",
+    fks: {},
+    scope: () => ({}),
+  },
 
   JobSearchPreference: {
     delegate: "jobSearchPreference",
@@ -512,6 +521,7 @@ export const INSERT_ORDER: BackupModel[] = [
   "Question",
   "AutomationRun",
   "UserSettings",
+  "AbMigrationState",
   "JobSearchPreference",
   "RecruitmentCampaign",
   "JobOpportunity",

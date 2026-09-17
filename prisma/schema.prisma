@@ -55,6 +55,20 @@ model User {
   dataMigrationRuns    DataMigrationRun[]
 }
 
+/// Instance-level A+B backfill marker. Runtime enablement reads this row
+/// (plus cheap integrity), never DataMigrationRun or map existence alone.
+model AbMigrationState {
+  id           String    @id @default(uuid())
+  scopeKey     String    @unique @default("instance")
+  migrationKey String
+  status       String    @default("NOT_STARTED")
+  completedAt  DateTime?
+  verifiedAt   DateTime?
+  errorCode    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
 model ApiKey {
   id           String    @id @default(uuid())
   userId       String

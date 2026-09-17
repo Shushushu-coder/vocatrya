@@ -73,6 +73,7 @@ const NEW_TABLES = [
   "MatchEvidenceLink",
   "LegacyMigrationMap",
   "DataMigrationRun",
+  "AbMigrationState",
 ] as const;
 
 async function tableNames(prisma: PrismaClient): Promise<Set<string>> {

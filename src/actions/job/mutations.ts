@@ -2,6 +2,7 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { createJobRecord } from "@/lib/jobs/createJobRecord";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { AddJobFormSchema } from "@/models/addJobForm.schema";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -184,6 +185,7 @@ export const updateJob = async (
       tagIds: tagIds.filter((tagId) => !currentTagIds.has(tagId)),
     });
 
+    await assertLegacyCareerWriteAllowed(prisma);
     const job = await prisma.job.update({
       where: {
         id,
@@ -223,6 +225,7 @@ export const deleteJobById = async (
   try {
     const user = await requireUser();
 
+    await assertLegacyCareerWriteAllowed(prisma);
     const res = await prisma.job.delete({
       where: {
         id: jobId,

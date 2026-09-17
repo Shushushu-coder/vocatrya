@@ -1,5 +1,6 @@
 import { z } from "zod";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { McpSaveResumeReviewSchema } from "@/models/mcp.schema";
 import { checkMcpRateLimit } from "@/lib/mcp/rate-limit";
@@ -54,6 +55,7 @@ export async function handleSaveResumeReview(
   // exists (unlike saveMatchResult's findFirst, which earns its keep by
   // fetching `title` for provenance; ResumeReviewData has no such field).
   try {
+    await assertLegacyCareerWriteAllowed(prisma);
     await prisma.resume.update({
       where: { id: input.resumeId, profile: { userId } },
       data: { reviewData: JSON.stringify(reviewData) },

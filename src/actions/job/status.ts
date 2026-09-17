@@ -1,5 +1,6 @@
 "use server";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { handleError } from "@/lib/utils";
 import { JobStatus } from "@/models/job.model";
 import { revalidatePath } from "next/cache";
@@ -31,6 +32,7 @@ export const updateJobStatus = async (
       }
     };
 
+    await assertLegacyCareerWriteAllowed(prisma);
     const job = await prisma.job.update({
       where: {
         id: jobId,
@@ -54,6 +56,7 @@ export const saveJobMatchResult = async (
   try {
     const user = await requireUser();
 
+    await assertLegacyCareerWriteAllowed(prisma);
     await prisma.job.update({
       where: { id: jobId, userId: user.id },
       data: { matchScore, matchData },

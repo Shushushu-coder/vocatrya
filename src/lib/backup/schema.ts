@@ -822,6 +822,18 @@ const LegacyMigrationMap = z.object({
   createdAt: dt,
 });
 
+const AbMigrationState = z.object({
+  id,
+  scopeKey: str,
+  migrationKey: str,
+  status: str,
+  completedAt: optDt,
+  verifiedAt: optDt,
+  errorCode: optStr,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
 const group = <T extends z.ZodTypeAny>(schema: T) =>
   z.array(schema).default([]);
 
@@ -856,6 +868,7 @@ export const BackupDataSchema = z.object({
   Question: group(Question),
   AutomationRun: group(AutomationRun),
   UserSettings: group(UserSettings),
+  AbMigrationState: group(AbMigrationState),
   JobSearchPreference: group(JobSearchPreference),
   RecruitmentCampaign: group(RecruitmentCampaign),
   JobOpportunity: group(JobOpportunity),

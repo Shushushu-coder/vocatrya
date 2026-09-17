@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { normalizeJobUrl } from "@/lib/scraper/utils";
 import { classifyDescriptionCompleteness } from "@/lib/jobs/descriptionCompleteness";
@@ -152,6 +153,7 @@ export async function updateJobFromNames(
   }
 
   try {
+    await assertLegacyCareerWriteAllowed(prisma);
     await prisma.job.update({
       where: { id: jobId, userId, createdVia: { not: null } },
       data,

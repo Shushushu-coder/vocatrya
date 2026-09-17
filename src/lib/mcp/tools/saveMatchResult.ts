@@ -1,5 +1,6 @@
 import { z } from "zod";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { McpSaveMatchResultSchema } from "@/models/mcp.schema";
 import { checkMcpRateLimit } from "@/lib/mcp/rate-limit";
@@ -84,6 +85,7 @@ export async function handleSaveMatchResult(
   };
 
   try {
+    await assertLegacyCareerWriteAllowed(prisma);
     await prisma.job.update({
       where: { id: input.jobId, userId, createdVia: { not: null } },
       data: {

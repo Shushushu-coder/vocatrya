@@ -1,5 +1,6 @@
 import path from "path";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { handleError } from "@/lib/utils";
 import { log } from "@/lib/telemetry";
 import { removeResumeFile, type ResumeUpload } from "@/lib/resumeFiles";
@@ -17,6 +18,7 @@ export const createResume = async (
   let fileLinked = false;
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     // Build a unique title: if base title is taken, append (2), (3), …
     const existingTitles = await prisma.resume.findMany({
