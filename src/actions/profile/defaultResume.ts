@@ -6,7 +6,7 @@ import {
   hasMinResumeSections,
 } from "@/lib/resumeSections";
 import { getCurrentUser } from "@/utils/user.utils";
-import { requireUser } from "./shared";
+import { guardLegacyResumeWrite, requireUser } from "./shared";
 
 export const getDefaultResumeId = async (): Promise<string | null> => {
   const user = await getCurrentUser();
@@ -23,6 +23,7 @@ export const setDefaultResume = async (
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     // Verify ownership before pointing the user at this resume.
     const owned = await prisma.resume.findFirst({

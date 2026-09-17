@@ -5,7 +5,7 @@ import { AddSummarySectionFormSchema } from "@/models/addSummaryForm.schema";
 import { SectionType } from "@/models/profile.model";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertResumeOwnership, requireUser } from "./shared";
+import { assertResumeOwnership, guardLegacyResumeWrite, requireUser } from "./shared";
 
 export const addResumeSummary = async (
   data: z.infer<typeof AddSummarySectionFormSchema>,
@@ -48,6 +48,7 @@ export const updateResumeSummary = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     const res = await prisma.resumeSection.update({
       where: {

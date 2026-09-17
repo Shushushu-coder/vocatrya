@@ -8,6 +8,7 @@ import type {
 } from "@/models/automation.model";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { formatError } from "./shared";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 
 export async function getDiscoveredJobs(options?: {
   automationId?: string;
@@ -156,6 +157,7 @@ async function setDiscoveredJobStatus(
 }> {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(db);
 
     const job = await db.job.findFirst({
       where: {
@@ -211,6 +213,7 @@ export async function clearDiscoveredJobs(options: {
 }): Promise<{ success: boolean; deleted?: number; message?: string }> {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(db);
 
     const { automationId, includeNew = false } = options;
     const statuses: DiscoveryStatus[] = includeNew

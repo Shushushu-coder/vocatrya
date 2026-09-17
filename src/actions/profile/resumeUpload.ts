@@ -102,6 +102,7 @@ export const replaceResumeFile = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     // The file being replaced comes from the owned row, never from the form
     const resume = await prisma.resume.findUnique({

@@ -5,7 +5,7 @@ import { AddExperienceFormSchema } from "@/models/addExperienceForm.schema";
 import { SectionType } from "@/models/profile.model";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertResumeOwnership, requireUser } from "./shared";
+import { assertResumeOwnership, guardLegacyResumeWrite, requireUser } from "./shared";
 
 export const addExperience = async (
   data: z.infer<typeof AddExperienceFormSchema>,
@@ -60,6 +60,7 @@ export const updateExperience = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     const summary = await prisma.workExperience.update({
       where: {

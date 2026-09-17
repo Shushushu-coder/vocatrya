@@ -5,7 +5,7 @@ import { AddCertificationFormSchema } from "@/models/addCertificationForm.schema
 import { SectionType } from "@/models/profile.model";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertResumeOwnership, requireUser } from "./shared";
+import { assertResumeOwnership, guardLegacyResumeWrite, requireUser } from "./shared";
 
 export const addCertification = async (
   data: z.infer<typeof AddCertificationFormSchema>,
@@ -55,6 +55,7 @@ export const updateCertification = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     const result = await prisma.licenseOrCertification.update({
       where: {

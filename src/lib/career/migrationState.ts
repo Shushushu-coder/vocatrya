@@ -35,15 +35,21 @@ export function hasMigrationStateDelegate(client: object): client is MigrationSt
   );
 }
 
+const KNOWN_STATUS = new Set<string>(Object.values(AB_MIGRATION_STATUS));
+
+export function isKnownAbMigrationStatus(
+  value: string,
+): value is AbMigrationStatus {
+  return KNOWN_STATUS.has(value);
+}
+
 function asStatus(value: string): AbMigrationStatus {
-  if (
-    value === AB_MIGRATION_STATUS.IN_PROGRESS ||
-    value === AB_MIGRATION_STATUS.COMPLETED ||
-    value === AB_MIGRATION_STATUS.FAILED
-  ) {
+  if (isKnownAbMigrationStatus(value)) {
     return value;
   }
-  return AB_MIGRATION_STATUS.NOT_STARTED;
+  // Preserve the raw token so the resolver can fail closed instead of
+  // pretending the instance is still NOT_STARTED.
+  return value as AbMigrationStatus;
 }
 
 export async function readInstanceMigrationState(

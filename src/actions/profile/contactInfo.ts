@@ -6,13 +6,14 @@ import type { ContactInfo } from "@/models/profile.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireUser } from "./shared";
+import { guardLegacyResumeWrite, requireUser } from "./shared";
 
 export const addContactInfo = async (
   data: z.infer<typeof AddContactInfoFormSchema>,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     const res = await prisma.resume.update({
       where: {
@@ -52,6 +53,7 @@ export const updateContactInfo = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     const res = await prisma.contactInfo.update({
       where: {

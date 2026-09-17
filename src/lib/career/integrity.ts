@@ -1,5 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 import { LEGACY, TARGET } from "@/lib/legacy-migration/identities";
+import {
+  AB_FRESH_DOMAIN_DELEGATES,
+  LEGACY_FRESH_DOMAIN_DELEGATES,
+  countFreshDelegate,
+} from "./freshEligibility";
 
 export type CareerDb = Pick<
   PrismaClient,
@@ -57,14 +62,12 @@ export function canInspectAbDomain(client: object): boolean {
 }
 
 export async function hasAbDomainResidue(db: CareerDb): Promise<boolean> {
-  const [opps, attempts, variants, materials, maps] = await Promise.all([
-    db.jobOpportunity.count(),
-    db.applicationAttempt.count(),
-    db.resumeVariant.count(),
-    db.careerMaterialItem.count(),
+  const counts = await Promise.all([
+    ...AB_FRESH_DOMAIN_DELEGATES.map((name) => countFreshDelegate(db, name)),
     db.legacyMigrationMap.count(),
+    countFreshDelegate(db, "dataMigrationRun"),
   ]);
-  return opps + attempts + variants + materials + maps > 0;
+  return counts.some((count) => count > 0);
 }
 
 /**
@@ -131,8 +134,59 @@ export async function checkLegacyRootCoverage(
 export async function checkNotStartedConsistency(
   db: CareerDb,
 ): Promise<IntegrityResult> {
-  if (await hasAbDomainResidue(db)) {
-    return fail("AB_ROWS_WITHOUT_MIGRATION");
+  try {
+    if (await hasAbDomainResidue(db)) {
+      return fail("AB_ROWS_WITHOUT_MIGRATION");
+    }
+    return PASS;
+  } catch {
+    return fail("AB_SCHEMA_UNAVAILABLE");
   }
-  return PASS;
+}
+
+/**
+ * Cheap fresh-native integrity. A FRESH_READY instance has no legacy source
+ * to cover, so LegacyMigrationMap is a contradiction rather than a requirement.
+ */
+export async function checkFreshNativeIntegrity(
+  db: PrismaClient | CareerDb,
+): Promise<IntegrityResult> {
+  try {
+    const legacyEntries = await Promise.all(
+      LEGACY_FRESH_DOMAIN_DELEGATES.map(
+        async (name) => [name, await countFreshDelegate(db, name)] as const,
+      ),
+    );
+    const legacyCounts = Object.fromEntries(legacyEntries);
+    await Promise.all(
+      AB_FRESH_DOMAIN_DELEGATES.map((name) => countFreshDelegate(db, name)),
+    );
+    const [maps, migrationRuns] = await Promise.all([
+      countFreshDelegate(db, "legacyMigrationMap"),
+      countFreshDelegate(db, "dataMigrationRun"),
+    ]);
+
+    if (maps > 0) {
+      return fail("FRESH_HAS_MIGRATION_MAPS");
+    }
+    if (migrationRuns > 0) {
+      return fail("FRESH_HAS_DATA_MIGRATION_RUNS");
+    }
+    if (legacyCounts.job > 0) {
+      return fail("FRESH_HAS_LEGACY_JOBS");
+    }
+    if (legacyCounts.resume > 0) {
+      return fail("FRESH_HAS_LEGACY_RESUMES");
+    }
+    if (
+      Object.entries(legacyCounts).some(
+        ([name, count]) => name !== "job" && name !== "resume" && count > 0,
+      )
+    ) {
+      return fail("FRESH_HAS_LEGACY_CAREER_ROWS");
+    }
+    return PASS;
+  } catch {
+    return fail("AB_SCHEMA_UNAVAILABLE");
+  }
 }

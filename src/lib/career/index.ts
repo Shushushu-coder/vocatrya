@@ -1,16 +1,20 @@
 export {
   AB_INSTANCE_SCOPE_KEY,
   AB_MIGRATION_KEY,
+  FRESH_NATIVE_KEY,
   AB_RUNTIME_FEATURE_ENV,
   AB_MIGRATION_STATUS,
   CAREER_RUNTIME_MODE,
   CAREER_WRITE_FAMILY,
   OPPORTUNITY_STATUS,
   RESUME_VERSION_STATUS,
+  ATTEMPT_STAGE,
+  ATTEMPT_OUTCOME,
 } from "./identities";
 export { CareerRuntimeError } from "./errors";
 export { isAbRuntimeFeatureEnabled } from "./featureGate";
 export {
+  isKnownAbMigrationStatus,
   readInstanceMigrationState,
   writeInstanceMigrationState,
 } from "./migrationState";
@@ -31,4 +35,9 @@ export { ResumeVariantService } from "./resumeVariantService";
 export {
   checkLegacyRootCoverage,
   checkNotStartedConsistency,
+  checkFreshNativeIntegrity,
 } from "./integrity";
+export { checkFreshAbEligibility } from "./freshEligibility";
+export type { FreshAbEligibility } from "./freshEligibility";
+export { activateFreshAbNative } from "./freshActivation";
+export type { FreshActivationResult } from "./freshActivation";

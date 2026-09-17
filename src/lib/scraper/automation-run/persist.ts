@@ -5,6 +5,7 @@ import type { JobDetails } from "../types";
 import { mapScrapedJobToJobRecord } from "../mapper";
 import { normalizeJobUrl } from "../utils";
 import type { SkillTerm } from "./skillTags";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 
 // Raw lexical score is ~0..PRERANK_MAX; scale into 0..99 so it fits the Int
 // matchScore column and stays below a perfect LLM score (100). Internal sort
@@ -30,6 +31,7 @@ export async function persistDiscoveredJob(
   matchData: object,
   skillTerms: SkillTerm[],
 ): Promise<{ saved: boolean; tagsApplied: number }> {
+  await assertLegacyCareerWriteAllowed(db);
   const scrapedJob: ScrapedJobData = {
     title: job.title,
     company: job.company,

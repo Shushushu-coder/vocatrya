@@ -6,7 +6,7 @@ import {
   hasMinResumeSections,
 } from "@/lib/resumeSections";
 import { buildCopyTitle, ensureUniqueTitle } from "@/lib/resumeCopyTitle";
-import { requireUser, resumeCopySelect } from "./shared";
+import { guardLegacyResumeWrite, requireUser, resumeCopySelect } from "./shared";
 
 export const getResumeCopyTitleSuggestion = async (
   resumeId: string,
@@ -47,6 +47,7 @@ export const copyResume = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     // Read outside the transaction so the SQLite write lock is held briefly
     const source = await prisma.resume.findUnique({

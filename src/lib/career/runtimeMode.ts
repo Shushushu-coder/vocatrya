@@ -2,17 +2,23 @@ import type { PrismaClient } from "@prisma/client";
 import { isAbRuntimeFeatureEnabled } from "./featureGate";
 import {
   AB_MIGRATION_STATUS,
+  AB_MIGRATION_KEY,
   CAREER_RUNTIME_MODE,
   CAREER_WRITE_FAMILY,
+  FRESH_NATIVE_KEY,
   type CareerRuntimeMode,
   type CareerWriteFamily,
 } from "./identities";
 import {
+  checkFreshNativeIntegrity,
   checkLegacyRootCoverage,
   checkNotStartedConsistency,
   type IntegrityResult,
 } from "./integrity";
-import { readInstanceMigrationState } from "./migrationState";
+import {
+  isKnownAbMigrationStatus,
+  readInstanceMigrationState,
+} from "./migrationState";
 
 export type CareerRuntimeResolution = {
   mode: CareerRuntimeMode;
@@ -101,6 +107,24 @@ export async function resolveCareerRuntimeMode(
     });
   }
 
+  if (
+    state.id &&
+    !isKnownAbMigrationStatus(state.status)
+  ) {
+    return blocked({
+      featureEnabled,
+      migrationStatus: state.status,
+      verifiedAt: state.verifiedAt,
+      integrity: {
+        ok: false,
+        code: "UNRECOGNIZED_MIGRATION_STATUS",
+        unmappedJobIds: [],
+        unmappedResumeIds: [],
+      },
+      reason: "unrecognized-migration-status",
+    });
+  }
+
   if (state.status === AB_MIGRATION_STATUS.NOT_STARTED) {
     const consistency = await checkNotStartedConsistency(client);
     if (!consistency.ok) {
@@ -121,29 +145,112 @@ export async function resolveCareerRuntimeMode(
     });
   }
 
-  // COMPLETED
-  if (!state.verifiedAt) {
+  if (state.status === AB_MIGRATION_STATUS.FRESH_READY) {
+    if (state.migrationKey !== FRESH_NATIVE_KEY || state.completedAt !== null) {
+      return blockedForStateOrigin({
+        featureEnabled,
+        state,
+      });
+    }
+    return resolveReadyState({
+      client,
+      featureEnabled,
+      state,
+      integrity: await checkFreshNativeIntegrity(client),
+      unverifiedReason: "fresh-unverified",
+    });
+  }
+
+  // COMPLETED — Phase 3 legacy migration only.
+  if (state.status !== AB_MIGRATION_STATUS.COMPLETED) {
     return blocked({
       featureEnabled,
       migrationStatus: state.status,
       verifiedAt: state.verifiedAt,
       integrity: {
         ok: false,
-        code: "MISSING_VERIFIED_AT",
+        code: "UNRECOGNIZED_MIGRATION_STATUS",
         unmappedJobIds: [],
         unmappedResumeIds: [],
       },
-      reason: "completed-unverified",
+      reason: "unrecognized-migration-status",
     });
   }
 
-  const coverage = await checkLegacyRootCoverage(client);
-  if (!coverage.ok) {
+  if (state.migrationKey !== AB_MIGRATION_KEY || state.completedAt === null) {
+    return blockedForStateOrigin({
+      featureEnabled,
+      state,
+    });
+  }
+
+  return resolveReadyState({
+    client,
+    featureEnabled,
+    state,
+    integrity: !state.verifiedAt
+      ? {
+          ok: false,
+          code: "MISSING_VERIFIED_AT",
+          unmappedJobIds: [],
+          unmappedResumeIds: [],
+        }
+      : await checkLegacyRootCoverage(client),
+    unverifiedReason: "completed-unverified",
+  });
+}
+
+function blockedForStateOrigin(input: {
+  featureEnabled: boolean;
+  state: Awaited<ReturnType<typeof readInstanceMigrationState>>;
+}): CareerRuntimeResolution {
+  const { featureEnabled, state } = input;
+  return blocked({
+    featureEnabled,
+    migrationStatus: state.status,
+    verifiedAt: state.verifiedAt,
+    integrity: {
+      ok: false,
+      code: "MIGRATION_STATE_ORIGIN_MISMATCH",
+      unmappedJobIds: [],
+      unmappedResumeIds: [],
+    },
+    reason: "migration-state-origin-mismatch",
+  });
+}
+
+async function resolveReadyState(input: {
+  client: PrismaClient;
+  featureEnabled: boolean;
+  state: Awaited<ReturnType<typeof readInstanceMigrationState>>;
+  integrity: IntegrityResult;
+  unverifiedReason: string;
+}): Promise<CareerRuntimeResolution> {
+  const { featureEnabled, state, unverifiedReason } = input;
+  let integrity = input.integrity;
+
+  if (!state.verifiedAt) {
+    integrity = {
+      ok: false,
+      code: "MISSING_VERIFIED_AT",
+      unmappedJobIds: [],
+      unmappedResumeIds: [],
+    };
     return blocked({
       featureEnabled,
       migrationStatus: state.status,
       verifiedAt: state.verifiedAt,
-      integrity: coverage,
+      integrity,
+      reason: unverifiedReason,
+    });
+  }
+
+  if (!integrity.ok) {
+    return blocked({
+      featureEnabled,
+      migrationStatus: state.status,
+      verifiedAt: state.verifiedAt,
+      integrity,
       reason: "integrity-failed",
     });
   }
@@ -151,11 +258,11 @@ export async function resolveCareerRuntimeMode(
   if (!featureEnabled) {
     return {
       mode: CAREER_RUNTIME_MODE.AB_READY_DISABLED,
-      writeFamily: CAREER_WRITE_FAMILY.legacy,
+      writeFamily: CAREER_WRITE_FAMILY.blocked,
       featureEnabled,
       migrationStatus: state.status,
       verifiedAt: state.verifiedAt,
-      integrity: coverage,
+      integrity,
       reason: "feature-disabled",
     };
   }
@@ -166,7 +273,7 @@ export async function resolveCareerRuntimeMode(
     featureEnabled,
     migrationStatus: state.status,
     verifiedAt: state.verifiedAt,
-    integrity: coverage,
+    integrity,
     reason: "gates-passed",
   };
 }
@@ -175,12 +282,22 @@ export function careerWriteFamilyFor(
   mode: CareerRuntimeMode,
 ): CareerWriteFamily {
   if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return CAREER_WRITE_FAMILY.ab;
-  if (mode === CAREER_RUNTIME_MODE.BLOCKED) return CAREER_WRITE_FAMILY.blocked;
+  if (
+    mode === CAREER_RUNTIME_MODE.BLOCKED ||
+    mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED
+  ) {
+    return CAREER_WRITE_FAMILY.blocked;
+  }
   return CAREER_WRITE_FAMILY.legacy;
 }
 
 export function careerReadFamilyFor(
   mode: CareerRuntimeMode,
 ): CareerWriteFamily {
-  return careerWriteFamilyFor(mode);
+  if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return CAREER_WRITE_FAMILY.ab;
+  if (mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) {
+    return CAREER_WRITE_FAMILY.ab;
+  }
+  if (mode === CAREER_RUNTIME_MODE.BLOCKED) return CAREER_WRITE_FAMILY.blocked;
+  return CAREER_WRITE_FAMILY.legacy;
 }

@@ -167,6 +167,7 @@ export const deleteResumeById = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     // Verify ownership and get associated fileId
     const resume = await prisma.resume.findUnique({

@@ -2,6 +2,7 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { requireUser } from "../shared";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 
 const JOB_CONTACT_INCLUDE = {
   Role: true,
@@ -40,6 +41,7 @@ export const addJobContact = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     // JobContact has no userId. All three sides are checked, not just the job:
     // linking someone else's contact to your own job must fail.
@@ -73,6 +75,7 @@ export const removeJobContact = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
     const res = await prisma.jobContact.deleteMany({
       where: {
         id: linkId,

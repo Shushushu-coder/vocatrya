@@ -55,8 +55,12 @@ model User {
   dataMigrationRuns    DataMigrationRun[]
 }
 
-/// Instance-level A+B backfill marker. Runtime enablement reads this row
+/// Instance-level A+B readiness marker. Runtime enablement reads this row
 /// (plus cheap integrity), never DataMigrationRun or map existence alone.
+/// status=COMPLETED means Phase 3 legacy backfill finished and verified.
+/// status=FRESH_READY means this instance was explicitly initialized as
+/// A+B native with no legacy career/application data. Do not write COMPLETED
+/// to fake a fresh instance.
 model AbMigrationState {
   id           String    @id @default(uuid())
   scopeKey     String    @unique @default("instance")

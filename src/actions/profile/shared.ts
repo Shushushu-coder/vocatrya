@@ -1,5 +1,10 @@
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { isResumeFilePath } from "@/lib/resumeFiles";
+
+export async function guardLegacyResumeWrite() {
+  await assertLegacyCareerWriteAllowed(prisma);
+}
 
 // Not a "use server" module: it exports selects, so it stays internal to
 // src/actions/profile/ and is never imported by a client component.
@@ -13,6 +18,7 @@ export const assertResumeOwnership = async (
   resumeId: string,
   userId: string,
 ) => {
+  await guardLegacyResumeWrite();
   const owned = await prisma.resume.findUnique({
     where: { id: resumeId, profile: { userId } },
     select: { id: true },

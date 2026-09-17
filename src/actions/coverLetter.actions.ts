@@ -5,6 +5,7 @@ import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { buildCoverLetterTitle } from "@/lib/coverLetterTitle";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 
 // html:false escapes raw HTML in the model output before it is ever stored,
 // so the saved document is the same shape a hand-written letter produces.
@@ -65,6 +66,7 @@ export const createCoverLetter = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     const value = title.trim().toLowerCase();
     const titleExists = await prisma.coverLetter.findFirst({
@@ -117,6 +119,7 @@ export const updateCoverLetter = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     const res = await prisma.coverLetter.update({
       where: { id, profile: { userId: user.id } },
@@ -135,6 +138,7 @@ export const deleteCoverLetterById = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     await prisma.coverLetter.delete({
       where: { id: coverLetterId, profile: { userId: user.id } },
@@ -153,6 +157,7 @@ export const generateCoverLetterForJob = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     if (
       !markdown ||

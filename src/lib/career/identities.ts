@@ -1,7 +1,8 @@
-import { PHASE3_MIGRATION_VERSION } from "@/lib/legacy-migration/identities";
+import { PHASE3_MIGRATION_VERSION } from "../legacy-migration/identities";
 
 export const AB_INSTANCE_SCOPE_KEY = "instance";
 export const AB_MIGRATION_KEY = PHASE3_MIGRATION_VERSION;
+export const FRESH_NATIVE_KEY = "vocatrya-ab-fresh-native-v1";
 export const AB_RUNTIME_FEATURE_ENV = "VOCATRYA_AB_RUNTIME_ENABLED";
 
 export const AB_MIGRATION_STATUS = {
@@ -9,6 +10,9 @@ export const AB_MIGRATION_STATUS = {
   IN_PROGRESS: "IN_PROGRESS",
   COMPLETED: "COMPLETED",
   FAILED: "FAILED",
+  // Fresh instance explicitly initialized for A+B. This is not Phase 3
+  // legacy-backfill completion and must never be written as COMPLETED.
+  FRESH_READY: "FRESH_READY",
 } as const;
 
 export type AbMigrationStatus =
@@ -59,6 +63,11 @@ export const RESUME_VERSION_STATUS = {
 export const ATTEMPT_STAGE = {
   DRAFT: "DRAFT",
   SUBMITTED: "SUBMITTED",
+  SCREENING: "SCREENING",
+  ASSESSMENT: "ASSESSMENT",
+  INTERVIEW: "INTERVIEW",
+  OFFER: "OFFER",
+  CLOSED: "CLOSED",
 } as const;
 
 export const ATTEMPT_OUTCOME = {

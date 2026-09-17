@@ -105,7 +105,7 @@ describe("Phase 5 career runtime gates", () => {
     });
     const resolved = await resolveCareerRuntimeMode(prisma);
     expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
-    expect(resolved.writeFamily).toBe(CAREER_WRITE_FAMILY.legacy);
+    expect(resolved.writeFamily).toBe(CAREER_WRITE_FAMILY.blocked);
   });
 
   it("enables A+B only after COMPLETED + feature on + integrity pass", async () => {

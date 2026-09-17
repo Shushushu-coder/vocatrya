@@ -8,7 +8,7 @@ import {
 } from "@/models/skills.schema";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertResumeOwnership, requireUser } from "./shared";
+import { assertResumeOwnership, guardLegacyResumeWrite, requireUser } from "./shared";
 
 export const addSkillsSection = async (
   data: z.infer<typeof AddSkillsFormSchema>,
@@ -50,6 +50,7 @@ export const updateSkillsSection = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     const section = await prisma.resumeSection.findFirst({
       where: {
@@ -91,6 +92,7 @@ export const deleteSkillsSection = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await guardLegacyResumeWrite();
 
     const section = await prisma.resumeSection.findFirst({
       where: {

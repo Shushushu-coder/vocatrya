@@ -24,16 +24,28 @@ export async function assertLegacyCareerWriteAllowed(
   env?: NodeJS.ProcessEnv,
 ): Promise<void> {
   const resolved = await resolveCareerRuntimeMode(db, { env });
-  if (resolved.writeFamily === CAREER_WRITE_FAMILY.blocked) {
+  if (resolved.mode === CAREER_RUNTIME_MODE.BLOCKED) {
     throw new CareerRuntimeError(
       "CAREER_RUNTIME_BLOCKED",
       `Career writes are blocked: ${resolved.reason}`,
+    );
+  }
+  if (resolved.mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) {
+    throw new CareerRuntimeError(
+      "LEGACY_WRITE_BLOCKED",
+      "AB_READY_DISABLED: legacy Job/Resume writes would drift a ready A+B instance",
     );
   }
   if (resolved.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
     throw new CareerRuntimeError(
       "LEGACY_WRITE_BLOCKED",
       "AB_ENABLED: write Job/Resume through OpportunityService / ResumeVariantService, not legacy Prisma",
+    );
+  }
+  if (resolved.writeFamily === CAREER_WRITE_FAMILY.blocked) {
+    throw new CareerRuntimeError(
+      "CAREER_RUNTIME_BLOCKED",
+      `Career writes are blocked: ${resolved.reason}`,
     );
   }
 }

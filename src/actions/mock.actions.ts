@@ -22,6 +22,7 @@ import {
   STATUS_WEIGHTS,
 } from "@/lib/data/mockJobsData";
 import { SALARY_RANGES } from "@/lib/data/salaryRangeData";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 
 export const generateMockActivitiesAction = async (): Promise<any> => {
   try {
@@ -154,6 +155,7 @@ export const clearMockActivitiesAction = async (): Promise<any> => {
 export const generateMockProfileDataAction = async (): Promise<any> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     if (process.env.NODE_ENV !== "development") {
       throw new Error(
@@ -343,6 +345,7 @@ export const generateMockProfileDataAction = async (): Promise<any> => {
 export const clearMockProfileDataAction = async (): Promise<any> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     if (process.env.NODE_ENV !== "development") {
       throw new Error(
@@ -455,6 +458,7 @@ function pickWeightedStatus(statusMap: Map<string, string>): string {
 export const generateMockJobsAction = async (): Promise<any> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     if (process.env.NODE_ENV !== "development") {
       throw new Error(
@@ -587,6 +591,7 @@ export const generateMockJobsAction = async (): Promise<any> => {
 export const clearMockJobsAction = async (): Promise<any> => {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(prisma);
 
     if (process.env.NODE_ENV !== "development") {
       throw new Error(
