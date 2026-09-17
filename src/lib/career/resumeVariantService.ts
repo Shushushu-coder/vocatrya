@@ -55,7 +55,15 @@ export class ResumeVariantService {
         resumeVariant: { userId: this.userId },
       },
       include: {
-        sections: { include: { items: { include: { expressions: true } } } },
+        sections: {
+          include: {
+            items: {
+              include: {
+                expressions: { include: { evidenceLinks: true } },
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -71,6 +79,7 @@ export class ResumeVariantService {
     await this.gate();
     const version = await this.requireOwnedVersion(versionId);
     this.assertDraft(version.status);
+    await this.assertNotSubmittedReference(versionId);
     return this.db.resumeVariantVersion.update({
       where: { id: versionId },
       data: fields,
@@ -126,13 +135,14 @@ export class ResumeVariantService {
   ) {
     await this.gate();
     const version = await this.requireOwnedVersion(versionId);
-    if (version.status === RESUME_VERSION_STATUS.DRAFT) {
+    const referenced = await this.isSubmittedReference(versionId);
+    if (version.status === RESUME_VERSION_STATUS.DRAFT && !referenced) {
       return this.db.resumeVariantVersion.update({
         where: { id: versionId },
         data: fields,
       });
     }
-    if (!IMMUTABLE.has(version.status)) {
+    if (!IMMUTABLE.has(version.status) && !referenced) {
       throw new CareerRuntimeError(
         "VERSION_IMMUTABLE",
         `Cannot edit version in status ${version.status}`,
@@ -146,6 +156,23 @@ export class ResumeVariantService {
       throw new CareerRuntimeError(
         "VERSION_IMMUTABLE",
         `Version status ${status} is immutable`,
+      );
+    }
+  }
+
+  private async isSubmittedReference(versionId: string): Promise<boolean> {
+    const attempt = await this.db.applicationAttempt.findFirst({
+      where: { submittedResumeVersionId: versionId },
+      select: { id: true },
+    });
+    return attempt != null;
+  }
+
+  private async assertNotSubmittedReference(versionId: string): Promise<void> {
+    if (await this.isSubmittedReference(versionId)) {
+      throw new CareerRuntimeError(
+        "SUBMITTED_RESUME_PROVENANCE",
+        "Versions referenced by ApplicationAttempt.submittedResumeVersionId cannot be overwritten",
       );
     }
   }
@@ -178,7 +205,17 @@ export class ResumeVariantService {
       },
       include: {
         sections: {
-          include: { items: { include: { expressions: true } } },
+          include: {
+            items: {
+              include: {
+                expressions: {
+                  include: { evidenceLinks: true },
+                  orderBy: { sortOrder: "asc" },
+                },
+              },
+              orderBy: { sortOrder: "asc" },
+            },
+          },
           orderBy: { sortOrder: "asc" },
         },
       },
@@ -227,7 +264,7 @@ export class ResumeVariantService {
             },
           });
           for (const expression of item.expressions) {
-            await tx.resumeExpression.create({
+            const createdExpression = await tx.resumeExpression.create({
               data: {
                 resumeVariantSectionItemId: createdItem.id,
                 kind: expression.kind,
@@ -236,6 +273,17 @@ export class ResumeVariantService {
                 evidenceStatus: expression.evidenceStatus,
               },
             });
+            for (const link of expression.evidenceLinks) {
+              await tx.resumeExpressionEvidence.create({
+                data: {
+                  resumeExpressionId: createdExpression.id,
+                  careerEvidenceId: link.careerEvidenceId,
+                  evidenceContentSnapshot: link.evidenceContentSnapshot,
+                  evidenceHashSnapshot: link.evidenceHashSnapshot,
+                  evidenceUpdatedAtSnapshot: link.evidenceUpdatedAtSnapshot,
+                },
+              });
+            }
           }
         }
       }

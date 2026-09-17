@@ -10,8 +10,10 @@ export {
   RESUME_VERSION_STATUS,
   ATTEMPT_STAGE,
   ATTEMPT_OUTCOME,
+  EVIDENCE_STATUS,
 } from "./identities";
 export { CareerRuntimeError } from "./errors";
+export { canonicalize, hashCanonical, sha256Utf8 } from "./hash";
 export { isAbRuntimeFeatureEnabled } from "./featureGate";
 export {
   isKnownAbMigrationStatus,
@@ -32,6 +34,14 @@ export { OpportunityService } from "./opportunityService";
 export { ApplicationService } from "./applicationService";
 export { CareerMaterialService } from "./careerMaterialService";
 export { ResumeVariantService } from "./resumeVariantService";
+export {
+  ResumeProvenanceService,
+  hashEvidenceContent,
+} from "./resumeProvenanceService";
+export {
+  RESUME_VARIANT_VERSION_DIRECT_WRITE_RE,
+  RESUME_VARIANT_VERSION_WRITE_ALLOWLIST,
+} from "./resumeVariantWriteBoundary";
 export {
   checkLegacyRootCoverage,
   checkNotStartedConsistency,

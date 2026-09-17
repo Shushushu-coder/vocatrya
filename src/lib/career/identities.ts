@@ -95,3 +95,10 @@ export const CAREER_MATERIAL_TYPE = {
 
 export type CareerMaterialType =
   (typeof CAREER_MATERIAL_TYPE)[keyof typeof CAREER_MATERIAL_TYPE];
+
+export const EVIDENCE_STATUS = {
+  UNLINKED: "UNLINKED",
+  LINKED: "LINKED",
+} as const;
+
+export type EvidenceStatus = (typeof EVIDENCE_STATUS)[keyof typeof EVIDENCE_STATUS];
