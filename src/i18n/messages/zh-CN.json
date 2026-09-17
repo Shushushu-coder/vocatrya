@@ -1597,6 +1597,14 @@
     "skillItem": "技能",
     "activityTypeItem": "活动类型"
   },
+  "career": {
+    "runtimeReadyTitle": "A+B 已就绪但未启用",
+    "runtimeReadyDescription": "当前实例已按 A+B 原生模式初始化。在打开 VOCATRYA_AB_RUNTIME_ENABLED 之前，职业与申请数据不可写入，也不允许继续写入旧版 Job/Resume。",
+    "runtimeBlockedTitle": "职业运行时已封锁",
+    "runtimeBlockedDescription": "在实例完整性恢复之前，不能修改职业或申请数据。",
+    "resumeReadOnlyTitle": "旧版简历编辑器为只读",
+    "resumeReadOnlyDescription": "A+B 模式下暂不改写简历与职业材料，待后续 Resume cutover。现有简历仍可查看。"
+  },
   "notFound": {
     "title": "未找到",
     "description": "该页面不存在，或相关记录已被删除。",

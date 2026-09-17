@@ -1608,6 +1608,14 @@
     "skillItem": "skill",
     "activityTypeItem": "activity type"
   },
+  "career": {
+    "runtimeReadyTitle": "A+B is ready but disabled",
+    "runtimeReadyDescription": "This instance is initialized for A+B. Career and application edits stay blocked until VOCATRYA_AB_RUNTIME_ENABLED is turned on. Legacy Job/Resume writes are not allowed.",
+    "runtimeBlockedTitle": "Career runtime is blocked",
+    "runtimeBlockedDescription": "Career and application data cannot be changed until instance integrity is restored.",
+    "resumeReadOnlyTitle": "Legacy resume editor is read-only",
+    "resumeReadOnlyDescription": "Resume and career-material editing is disabled in A+B mode until the Resume cutover lands. Existing resumes can still be viewed."
+  },
   "notFound": {
     "title": "Not found",
     "description": "This page doesn't exist, or the record was deleted.",

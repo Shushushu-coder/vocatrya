@@ -32,8 +32,13 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { useI18n } from "@/i18n";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
-const ProfileContainer = () => {
+const ProfileContainer = ({
+  resumeReadOnly = false,
+}: {
+  resumeReadOnly?: boolean;
+}) => {
   const { t } = useI18n();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [coverLetters, setCoverLetters] = useState<CoverLetter[]>([]);
@@ -198,6 +203,14 @@ const ProfileContainer = () => {
 
   return (
     <Card>
+      {resumeReadOnly && (
+        <Alert className="m-4 mb-0">
+          <AlertTitle>{t("career.resumeReadOnlyTitle")}</AlertTitle>
+          <AlertDescription>
+            {t("career.resumeReadOnlyDescription")}
+          </AlertDescription>
+        </Alert>
+      )}
       <ResponsiveCardHeader>
         <div className="flex items-baseline gap-2">
           <CardTitle>{t("profile.title")}</CardTitle>
@@ -210,31 +223,33 @@ const ProfileContainer = () => {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="h-8 gap-1">
-                <PlusCircle className="h-3.5 w-3.5" />
-                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  {t("common.new")}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={createResume}
-              >
-                {t("profile.addNewResume")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={createCoverLetter}
-              >
-                {t("profile.addNewCoverLetter")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!resumeReadOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8 gap-1">
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                    {t("common.new")}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={createResume}
+                >
+                  {t("profile.addNewResume")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={createCoverLetter}
+                >
+                  {t("profile.addNewCoverLetter")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <CreateResume
             resumeDialogOpen={resumeDialogOpen}
             setResumeDialogOpen={setResumeDialogOpen}
@@ -275,6 +290,7 @@ const ProfileContainer = () => {
               copyResume={onCopyResume}
               reloadDocuments={reloadDocuments}
               defaultResumeId={defaultResumeId}
+              readOnly={resumeReadOnly}
             />
           </>
         )}

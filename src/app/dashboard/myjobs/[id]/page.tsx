@@ -9,10 +9,12 @@ import { getAllJobTitles } from "@/actions/jobtitle.actions";
 import { getAllJobLocations } from "@/actions/jobLocation.actions";
 import { getAllTags } from "@/actions/tag.actions";
 import { notFound } from "next/navigation";
+import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
+import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
 
 async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [{ job }, statuses, companies, titles, locations, sources, tags] =
+  const [{ job }, statuses, companies, titles, locations, sources, tags, runtime] =
     await Promise.all([
       getJobDetails(id),
       getStatusList(),
@@ -21,6 +23,7 @@ async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
       getAllJobLocations(),
       getJobSourceList(),
       getAllTags(),
+      getCareerRuntimeSnapshot(),
     ]);
 
   // A link to a job that was deleted (or never belonged to this user) would
@@ -29,6 +32,7 @@ async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="col-span-3">
+      <CareerRuntimeNotice mode={runtime.mode} />
       <JobDetails
         job={job}
         jobStatuses={statuses}

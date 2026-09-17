@@ -59,6 +59,7 @@ export function JobsToolbar({
   editJob,
   resetEditJob,
   addJobInitialOpen,
+  hideAddJob = false,
 }: {
   jobsCount: number;
   totalJobs: number;
@@ -88,6 +89,7 @@ export function JobsToolbar({
   editJob: JobResponse | null;
   resetEditJob: () => void;
   addJobInitialOpen: boolean;
+  hideAddJob?: boolean;
 }) {
   const { t } = useI18n();
 
@@ -192,17 +194,19 @@ export function JobsToolbar({
             {t("common.export")}
           </span>
         </Button>
-        <AddJob
-          jobStatuses={statuses}
-          companies={companies}
-          jobTitles={titles}
-          locations={locations}
-          jobSources={sources}
-          tags={tags}
-          editJob={editJob}
-          resetEditJob={resetEditJob}
-          initialOpen={addJobInitialOpen}
-        />
+        {!hideAddJob && (
+          <AddJob
+            jobStatuses={statuses}
+            companies={companies}
+            jobTitles={titles}
+            locations={locations}
+            jobSources={sources}
+            tags={tags}
+            editJob={editJob}
+            resetEditJob={resetEditJob}
+            initialOpen={addJobInitialOpen}
+          />
+        )}
       </div>
     </CardHeader>
   );

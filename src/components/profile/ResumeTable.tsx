@@ -49,6 +49,7 @@ type DocumentTableProps = {
   copyResume: (doc: ProfileDocument) => void;
   reloadDocuments: () => void;
   defaultResumeId?: string | null;
+  readOnly?: boolean;
 };
 
 function DocumentTable({
@@ -59,6 +60,7 @@ function DocumentTable({
   copyResume,
   reloadDocuments,
   defaultResumeId,
+  readOnly = false,
 }: DocumentTableProps) {
   const { t, formatDate } = useI18n();
   const [alertOpen, setAlertOpen] = useState(false);
@@ -191,7 +193,11 @@ function DocumentTable({
                   ) : (
                     <button
                       className="text-left hover:underline"
-                      onClick={() => editCoverLetter(doc)}
+                      onClick={() =>
+                        readOnly
+                          ? exportCoverLetter(doc)
+                          : editCoverLetter(doc)
+                      }
                     >
                       {doc.title}
                     </button>
@@ -231,28 +237,32 @@ function DocumentTable({
                       <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                       {isResume ? (
                         <>
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onClick={() => editResume(doc)}
-                          >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            {t("profile.editResumeTitle")}
-                          </DropdownMenuItem>
+                          {!readOnly && (
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() => editResume(doc)}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              {t("profile.editResumeTitle")}
+                            </DropdownMenuItem>
+                          )}
                           <Link href={`/dashboard/profile/resume/${doc.id}`}>
                             <DropdownMenuItem className="cursor-pointer">
                               <FilePenLine className="mr-2 h-4 w-4" />
                               {t("profile.viewEditResume")}
                             </DropdownMenuItem>
                           </Link>
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onClick={() => onCopyResume(doc)}
-                            data-testid="copy-resume-menu-item"
-                          >
-                            <Copy className="mr-2 h-4 w-4" />
-                            {t("profile.createACopy")}
-                          </DropdownMenuItem>
-                          {!doc.isDefault && (
+                          {!readOnly && (
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() => onCopyResume(doc)}
+                              data-testid="copy-resume-menu-item"
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              {t("profile.createACopy")}
+                            </DropdownMenuItem>
+                          )}
+                          {!readOnly && !doc.isDefault && (
                             <DropdownMenuItem
                               className="cursor-pointer"
                               onClick={() => onSetDefault(doc)}
@@ -264,13 +274,15 @@ function DocumentTable({
                         </>
                       ) : (
                         <>
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onClick={() => editCoverLetter(doc)}
-                          >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            {t("profile.editCoverLetter")}
-                          </DropdownMenuItem>
+                          {!readOnly && (
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() => editCoverLetter(doc)}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              {t("profile.editCoverLetter")}
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             className="cursor-pointer"
                             onClick={() => exportCoverLetter(doc)}
@@ -281,13 +293,15 @@ function DocumentTable({
                           </DropdownMenuItem>
                         </>
                       )}
-                      <DropdownMenuItem
-                        className="text-red-600 cursor-pointer"
-                        onClick={() => onDeleteDocument(doc)}
-                      >
-                        <Trash className="mr-2 h-4 w-4" />
-                        {t("common.delete")}
-                      </DropdownMenuItem>
+                      {!readOnly && (
+                        <DropdownMenuItem
+                          className="text-red-600 cursor-pointer"
+                          onClick={() => onDeleteDocument(doc)}
+                        >
+                          <Trash className="mr-2 h-4 w-4" />
+                          {t("common.delete")}
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

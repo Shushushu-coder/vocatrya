@@ -34,6 +34,7 @@ type MyJobsProps = {
   locations: JobLocation[];
   sources: JobSource[];
   tags: Tag[];
+  allowJobMutations?: boolean;
 };
 
 function JobsContainer({
@@ -43,6 +44,7 @@ function JobsContainer({
   locations,
   sources,
   tags,
+  allowJobMutations = true,
 }: MyJobsProps) {
   const router = useRouter();
   const { t } = useI18n();
@@ -159,7 +161,10 @@ function JobsContainer({
           tags={tags}
           editJob={editJob}
           resetEditJob={resetEditJob}
-          addJobInitialOpen={queryParams.get("add-job") === "true"}
+          addJobInitialOpen={
+            allowJobMutations && queryParams.get("add-job") === "true"
+          }
+          hideAddJob={!allowJobMutations}
         />
         <CardContent>
           {initialLoading && <Loading />}

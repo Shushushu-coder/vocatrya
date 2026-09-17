@@ -1,6 +1,8 @@
 import { getJobSourceList, getStatusList } from "@/actions/job.actions";
+import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
 import { getServerI18n } from "@/i18n/server";
 import JobsContainer from "@/components/myjobs/JobsContainer";
+import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
 import { getAllCompanies } from "@/actions/company.actions";
 import { getAllJobTitles } from "@/actions/jobtitle.actions";
 import { getAllJobLocations } from "@/actions/jobLocation.actions";
@@ -12,7 +14,7 @@ export async function generateMetadata() {
 }
 
 async function MyJobs() {
-  const [statuses, companies, titles, locations, sources, tags] =
+  const [statuses, companies, titles, locations, sources, tags, runtime] =
     await Promise.all([
       getStatusList(),
       getAllCompanies(),
@@ -20,9 +22,11 @@ async function MyJobs() {
       getAllJobLocations(),
       getJobSourceList(),
       getAllTags(),
+      getCareerRuntimeSnapshot(),
     ]);
   return (
     <div className="col-span-3">
+      <CareerRuntimeNotice mode={runtime.mode} />
       <JobsContainer
         companies={companies}
         titles={titles}
@@ -30,6 +34,7 @@ async function MyJobs() {
         sources={sources}
         statuses={statuses}
         tags={tags ?? []}
+        allowJobMutations={runtime.writeFamily !== "blocked"}
       />
     </div>
   );
