@@ -11,6 +11,10 @@ export {
   ATTEMPT_STAGE,
   ATTEMPT_OUTCOME,
   EVIDENCE_STATUS,
+  MATCH_ANALYSIS_TYPE,
+  MATCH_ANALYSIS_STATUS,
+  MATCH_ANALYSIS_SCHEMA_VERSION,
+  MATCH_STALE_REASON,
 } from "./identities";
 export { CareerRuntimeError } from "./errors";
 export { canonicalize, hashCanonical, sha256Utf8 } from "./hash";
@@ -38,6 +42,12 @@ export {
   ResumeProvenanceService,
   hashEvidenceContent,
 } from "./resumeProvenanceService";
+export {
+  MatchAnalysisService,
+  buildDeepMatchHashInput,
+  buildFastScreeningHashInput,
+  hashMatchInput,
+} from "./matchAnalysisService";
 export {
   RESUME_VARIANT_VERSION_DIRECT_WRITE_RE,
   RESUME_VARIANT_VERSION_WRITE_ALLOWLIST,

@@ -102,3 +102,24 @@ export const EVIDENCE_STATUS = {
 } as const;
 
 export type EvidenceStatus = (typeof EVIDENCE_STATUS)[keyof typeof EVIDENCE_STATUS];
+
+export const MATCH_ANALYSIS_TYPE = {
+  FAST_SCREENING: "FAST_SCREENING",
+  DEEP_MATCH: "DEEP_MATCH",
+} as const;
+
+export type MatchAnalysisType =
+  (typeof MATCH_ANALYSIS_TYPE)[keyof typeof MATCH_ANALYSIS_TYPE];
+
+export const MATCH_ANALYSIS_STATUS = {
+  COMPLETED: "COMPLETED",
+} as const;
+
+export const MATCH_ANALYSIS_SCHEMA_VERSION = "1";
+
+export const MATCH_STALE_REASON = {
+  JD_CHANGED: "JD_CHANGED",
+  CAREER_MATERIAL_CHANGED: "CAREER_MATERIAL_CHANGED",
+  PREFERENCE_CHANGED: "PREFERENCE_CHANGED",
+  RESUME_VERSION_CHANGED: "RESUME_VERSION_CHANGED",
+} as const;
