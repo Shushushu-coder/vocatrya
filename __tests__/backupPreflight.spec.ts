@@ -5,22 +5,14 @@ import { BackupError } from "@/lib/backup/manifest";
 import { BackupDataSchema } from "@/lib/backup/schema";
 import { buildManifest } from "@/lib/backup/manifest";
 
-vi.mock("@/lib/db", () => {
+vi.mock("@/lib/db", async () => {
+  const { EMPTINESS_MODELS, MODEL_SPECS } = await import("@/lib/backup/ordering");
   const counted = () => ({ count: vi.fn().mockResolvedValue(0) });
-  return {
-    default: {
-      profile: counted(),
-      resume: counted(),
-      coverLetter: counted(),
-      job: counted(),
-      note: counted(),
-      contact: counted(),
-      task: counted(),
-      activity: counted(),
-      question: counted(),
-      automation: counted(),
-    },
-  };
+  const mock: Record<string, unknown> = {};
+  for (const model of EMPTINESS_MODELS) {
+    mock[MODEL_SPECS[model].delegate] = counted();
+  }
+  return { default: mock };
 });
 
 const mockDb = db as unknown as Record<string, { count: ReturnType<typeof vi.fn> }>;

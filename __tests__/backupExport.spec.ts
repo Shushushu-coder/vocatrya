@@ -7,7 +7,8 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { buildBackupZip, collectBackupData } from "@/lib/backup/export";
 import { MODEL_SPECS, INSERT_ORDER } from "@/lib/backup/ordering";
 
-vi.mock("@/lib/db", () => {
+vi.mock("@/lib/db", async () => {
+  const { INSERT_ORDER, MODEL_SPECS } = await import("@/lib/backup/ordering");
   const delegate = () => ({ findMany: vi.fn().mockResolvedValue([]) });
   const mock: Record<string, unknown> = {
     // $transaction receives an array of already-resolved promises here because
@@ -16,14 +17,8 @@ vi.mock("@/lib/db", () => {
     user: { findUnique: vi.fn().mockResolvedValue({ defaultResumeId: null }) },
     jobStatus: { findMany: vi.fn().mockResolvedValue([]) },
   };
-  for (const key of [
-    "company", "jobTitle", "location", "jobSource", "tag", "activityType",
-    "profile", "file", "resume", "contactInfo", "summary", "resumeSection",
-    "workExperience", "education", "licenseOrCertification", "otherSection",
-    "skill", "coverLetter", "automation", "job", "note", "interview",
-    "contact", "contactRole", "jobContact", "task", "activity", "question", "automationRun", "userSettings",
-  ]) {
-    mock[key] = delegate();
+  for (const model of INSERT_ORDER) {
+    mock[MODEL_SPECS[model].delegate] = delegate();
   }
   return { default: mock };
 });

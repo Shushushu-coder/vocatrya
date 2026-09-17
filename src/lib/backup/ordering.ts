@@ -32,7 +32,45 @@ export type BackupModel =
   | "Activity"
   | "Question"
   | "AutomationRun"
-  | "UserSettings";
+  | "UserSettings"
+  | "JobSearchPreference"
+  | "RecruitmentCampaign"
+  | "JobOpportunity"
+  | "JobDescriptionVersion"
+  | "JobDescriptionParse"
+  | "JobOpportunityNote"
+  | "CareerMaterialItem"
+  | "CareerInternshipDetail"
+  | "CareerEmploymentDetail"
+  | "CareerProjectDetail"
+  | "CareerResearchDetail"
+  | "CareerPublicationDetail"
+  | "CareerCompetitionDetail"
+  | "CareerCampusActivityDetail"
+  | "CareerEducationDetail"
+  | "CareerAwardDetail"
+  | "CareerSkillDetail"
+  | "CareerCertificationDetail"
+  | "CareerCustomDetail"
+  | "CareerEvidence"
+  | "ResumeContactProfile"
+  | "ResumeVariant"
+  | "ResumeVariantVersion"
+  | "ResumeVariantSection"
+  | "ResumeVariantSectionItem"
+  | "ResumeExpression"
+  | "ResumeExpressionEvidence"
+  | "ResumeArtifact"
+  | "MatchAnalysis"
+  | "FastScreeningDetail"
+  | "DeepMatchDetail"
+  | "MatchEvidenceLink"
+  | "ApplicationAttempt"
+  | "ApplicationProcessStep"
+  | "ApplicationInterviewDetail"
+  | "ApplicationAssessmentDetail"
+  | "ApplicationOfferDetail"
+  | "LegacyMigrationMap";
 
 export interface ModelSpec {
   // Prisma client delegate key, e.g. prisma[spec.delegate].findMany(...)
@@ -42,6 +80,8 @@ export interface ModelSpec {
   // Resolved by (value, createdBy) upsert rather than minted fresh.
   lookup?: boolean;
   // Foreign-key column -> the model whose ids it points at.
+  // Cyclic "current pointer" FKs are NOT listed here; they live in DEFERRED_FKS
+  // and are patched after every referenced row exists.
   fks: Record<string, BackupModel>;
   // Ownership-scoped where clause, per CLAUDE.md's IDOR rules.
   scope: (userId: string) => Record<string, unknown>;
@@ -54,6 +94,31 @@ const byResume = (userId: string) => ({ Resume: { profile: { userId } } });
 const bySection = (userId: string) => ({
   ResumeSection: { Resume: { profile: { userId } } },
 });
+const byOpportunity = (userId: string) => ({ jobOpportunity: { userId } });
+const byJdVersion = (userId: string) => ({
+  jobDescriptionVersion: { jobOpportunity: { userId } },
+});
+const byAttempt = (userId: string) => ({ applicationAttempt: { userId } });
+const byProcessStep = (userId: string) => ({
+  processStep: { applicationAttempt: { userId } },
+});
+const byMaterial = (userId: string) => ({ materialItem: { userId } });
+const byVariant = (userId: string) => ({ resumeVariant: { userId } });
+const byVariantVersion = (userId: string) => ({
+  version: { resumeVariant: { userId } },
+});
+const byVariantSection = (userId: string) => ({
+  section: { version: { resumeVariant: { userId } } },
+});
+const bySectionItem = (userId: string) => ({
+  sectionItem: { section: { version: { resumeVariant: { userId } } } },
+});
+const byExpression = (userId: string) => ({
+  resumeExpression: {
+    sectionItem: { section: { version: { resumeVariant: { userId } } } },
+  },
+});
+const byMatch = (userId: string) => ({ matchAnalysis: { userId } });
 
 export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
   Company: { delegate: "company", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
@@ -185,6 +250,235 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     scope: (userId) => ({ automation: { userId } }),
   },
   UserSettings: { delegate: "userSettings", owner: "userId", fks: {}, scope: byUser },
+
+  JobSearchPreference: {
+    delegate: "jobSearchPreference",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+  },
+  RecruitmentCampaign: {
+    delegate: "recruitmentCampaign",
+    owner: "userId",
+    fks: { companyId: "Company" },
+    scope: byUser,
+  },
+  JobOpportunity: {
+    delegate: "jobOpportunity",
+    owner: "userId",
+    fks: {
+      companyId: "Company",
+      campaignId: "RecruitmentCampaign",
+      sourceAutomationId: "Automation",
+    },
+    scope: byUser,
+  },
+  JobDescriptionVersion: {
+    delegate: "jobDescriptionVersion",
+    fks: { jobOpportunityId: "JobOpportunity" },
+    scope: byOpportunity,
+  },
+  JobDescriptionParse: {
+    delegate: "jobDescriptionParse",
+    fks: { jobDescriptionVersionId: "JobDescriptionVersion" },
+    scope: byJdVersion,
+  },
+  JobOpportunityNote: {
+    delegate: "jobOpportunityNote",
+    owner: "userId",
+    fks: { jobOpportunityId: "JobOpportunity" },
+    scope: byUser,
+  },
+  CareerMaterialItem: {
+    delegate: "careerMaterialItem",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+  },
+  CareerInternshipDetail: {
+    delegate: "careerInternshipDetail",
+    fks: { materialItemId: "CareerMaterialItem", companyId: "Company" },
+    scope: byMaterial,
+  },
+  CareerEmploymentDetail: {
+    delegate: "careerEmploymentDetail",
+    fks: { materialItemId: "CareerMaterialItem", companyId: "Company" },
+    scope: byMaterial,
+  },
+  CareerProjectDetail: {
+    delegate: "careerProjectDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerResearchDetail: {
+    delegate: "careerResearchDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerPublicationDetail: {
+    delegate: "careerPublicationDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerCompetitionDetail: {
+    delegate: "careerCompetitionDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerCampusActivityDetail: {
+    delegate: "careerCampusActivityDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerEducationDetail: {
+    delegate: "careerEducationDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerAwardDetail: {
+    delegate: "careerAwardDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerSkillDetail: {
+    delegate: "careerSkillDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerCertificationDetail: {
+    delegate: "careerCertificationDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerCustomDetail: {
+    delegate: "careerCustomDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  CareerEvidence: {
+    delegate: "careerEvidence",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
+  ResumeContactProfile: {
+    delegate: "resumeContactProfile",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+  },
+  ResumeVariant: {
+    delegate: "resumeVariant",
+    owner: "userId",
+    fks: { targetJobOpportunityId: "JobOpportunity" },
+    scope: byUser,
+  },
+  ResumeVariantVersion: {
+    delegate: "resumeVariantVersion",
+    fks: {
+      resumeVariantId: "ResumeVariant",
+      targetJdVersionId: "JobDescriptionVersion",
+    },
+    scope: byVariant,
+  },
+  ResumeVariantSection: {
+    delegate: "resumeVariantSection",
+    fks: { resumeVariantVersionId: "ResumeVariantVersion" },
+    scope: byVariantVersion,
+  },
+  ResumeVariantSectionItem: {
+    delegate: "resumeVariantSectionItem",
+    fks: {
+      resumeVariantSectionId: "ResumeVariantSection",
+      careerMaterialItemId: "CareerMaterialItem",
+    },
+    scope: byVariantSection,
+  },
+  ResumeExpression: {
+    delegate: "resumeExpression",
+    fks: { resumeVariantSectionItemId: "ResumeVariantSectionItem" },
+    scope: bySectionItem,
+  },
+  ResumeExpressionEvidence: {
+    delegate: "resumeExpressionEvidence",
+    fks: {
+      resumeExpressionId: "ResumeExpression",
+      careerEvidenceId: "CareerEvidence",
+    },
+    scope: byExpression,
+  },
+  ResumeArtifact: {
+    delegate: "resumeArtifact",
+    fks: { resumeVariantVersionId: "ResumeVariantVersion" },
+    scope: byVariantVersion,
+  },
+  MatchAnalysis: {
+    delegate: "matchAnalysis",
+    owner: "userId",
+    fks: {
+      jobOpportunityId: "JobOpportunity",
+      jobDescriptionParseId: "JobDescriptionParse",
+      resumeVariantVersionId: "ResumeVariantVersion",
+    },
+    scope: byUser,
+  },
+  FastScreeningDetail: {
+    delegate: "fastScreeningDetail",
+    fks: { matchAnalysisId: "MatchAnalysis" },
+    scope: byMatch,
+  },
+  DeepMatchDetail: {
+    delegate: "deepMatchDetail",
+    fks: { matchAnalysisId: "MatchAnalysis" },
+    scope: byMatch,
+  },
+  MatchEvidenceLink: {
+    delegate: "matchEvidenceLink",
+    fks: {
+      matchAnalysisId: "MatchAnalysis",
+      careerEvidenceId: "CareerEvidence",
+      resumeExpressionId: "ResumeExpression",
+    },
+    scope: byMatch,
+  },
+  ApplicationAttempt: {
+    delegate: "applicationAttempt",
+    owner: "userId",
+    fks: {
+      jobOpportunityId: "JobOpportunity",
+      submittedResumeVersionId: "ResumeVariantVersion",
+      submittedResumeArtifactId: "ResumeArtifact",
+      submittedAgainstJdVersionId: "JobDescriptionVersion",
+    },
+    scope: byUser,
+  },
+  ApplicationProcessStep: {
+    delegate: "applicationProcessStep",
+    fks: { applicationAttemptId: "ApplicationAttempt" },
+    scope: byAttempt,
+  },
+  ApplicationInterviewDetail: {
+    delegate: "applicationInterviewDetail",
+    fks: { applicationProcessStepId: "ApplicationProcessStep" },
+    scope: byProcessStep,
+  },
+  ApplicationAssessmentDetail: {
+    delegate: "applicationAssessmentDetail",
+    fks: { applicationProcessStepId: "ApplicationProcessStep" },
+    scope: byProcessStep,
+  },
+  ApplicationOfferDetail: {
+    delegate: "applicationOfferDetail",
+    fks: { applicationProcessStepId: "ApplicationProcessStep" },
+    scope: byProcessStep,
+  },
+  // Semantic IDs (legacyEntityId / targetEntityId) are rewritten by a dedicated
+  // remapper, not by fks — they are not Prisma-declared foreign keys.
+  LegacyMigrationMap: {
+    delegate: "legacyMigrationMap",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+  },
 };
 
 export const INSERT_ORDER: BackupModel[] = [
@@ -218,12 +512,68 @@ export const INSERT_ORDER: BackupModel[] = [
   "Question",
   "AutomationRun",
   "UserSettings",
+  "JobSearchPreference",
+  "RecruitmentCampaign",
+  "JobOpportunity",
+  "JobDescriptionVersion",
+  "JobDescriptionParse",
+  "JobOpportunityNote",
+  "CareerMaterialItem",
+  "CareerInternshipDetail",
+  "CareerEmploymentDetail",
+  "CareerProjectDetail",
+  "CareerResearchDetail",
+  "CareerPublicationDetail",
+  "CareerCompetitionDetail",
+  "CareerCampusActivityDetail",
+  "CareerEducationDetail",
+  "CareerAwardDetail",
+  "CareerSkillDetail",
+  "CareerCertificationDetail",
+  "CareerCustomDetail",
+  "CareerEvidence",
+  "ResumeContactProfile",
+  "ResumeVariant",
+  "ResumeVariantVersion",
+  "ResumeVariantSection",
+  "ResumeVariantSectionItem",
+  "ResumeExpression",
+  "ResumeExpressionEvidence",
+  "ResumeArtifact",
+  "MatchAnalysis",
+  "FastScreeningDetail",
+  "DeepMatchDetail",
+  "MatchEvidenceLink",
+  "ApplicationAttempt",
+  "ApplicationProcessStep",
+  "ApplicationInterviewDetail",
+  "ApplicationAssessmentDetail",
+  "ApplicationOfferDetail",
+  "LegacyMigrationMap",
 ];
 
 export const DELETE_ORDER: BackupModel[] = [...INSERT_ORDER].reverse();
 
 export const LOOKUP_MODELS: BackupModel[] = INSERT_ORDER.filter(
   (m) => MODEL_SPECS[m].lookup,
+);
+
+// Cyclic / forward references that cannot be written on insert because SQLite
+// enforces FKs immediately. Insert the row with the column null, then patch.
+export const DEFERRED_FKS: ReadonlyArray<{
+  model: BackupModel;
+  field: string;
+  target: BackupModel;
+}> = [
+  { model: "JobOpportunity", field: "currentJdVersionId", target: "JobDescriptionVersion" },
+  { model: "JobDescriptionVersion", field: "currentParseId", target: "JobDescriptionParse" },
+  { model: "ResumeVariant", field: "currentVersionId", target: "ResumeVariantVersion" },
+  { model: "ResumeVariantVersion", field: "parentVersionId", target: "ResumeVariantVersion" },
+  { model: "ResumeVariantVersion", field: "sourceMatchAnalysisId", target: "MatchAnalysis" },
+];
+
+export const DEFERRED_FK_FIELDS = new Set(
+  DEFERRED_FKS.map((entry) => `${entry.model}.${entry.field}`),
 );
 
 // signup() seeds a JobSource per JOB_SOURCES entry, so no account is ever
@@ -241,4 +591,12 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "Activity",
   "Question",
   "Automation",
+  "JobOpportunity",
+  "RecruitmentCampaign",
+  "CareerMaterialItem",
+  "ResumeVariant",
+  "ResumeContactProfile",
+  "JobSearchPreference",
+  "MatchAnalysis",
+  "ApplicationAttempt",
 ];

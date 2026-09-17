@@ -6,7 +6,7 @@ import {
 import { INSERT_ORDER } from "@/lib/backup/ordering";
 
 const validManifest = {
-  formatVersion: 1,
+  formatVersion: 2,
   appVersion: "1.1.16",
   exportedAt: "2026-08-14T10:00:00.000Z",
   sourceEmail: "a@b.com",
@@ -14,16 +14,22 @@ const validManifest = {
 };
 
 describe("manifest schema", () => {
-  it("pins the format version at 1", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(1);
+  it("pins new backups at format version 2", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(2);
   });
 
-  it("accepts a well-formed manifest", () => {
+  it("accepts a well-formed v2 manifest", () => {
     expect(ManifestSchema.parse(validManifest).appVersion).toBe("1.1.16");
   });
 
-  it("rejects a different formatVersion", () => {
-    const res = ManifestSchema.safeParse({ ...validManifest, formatVersion: 2 });
+  it("still accepts a well-formed v1 manifest", () => {
+    expect(
+      ManifestSchema.parse({ ...validManifest, formatVersion: 1 }).formatVersion,
+    ).toBe(1);
+  });
+
+  it("rejects an unsupported future formatVersion", () => {
+    const res = ManifestSchema.safeParse({ ...validManifest, formatVersion: 99 });
     expect(res.success).toBe(false);
   });
 

@@ -8,11 +8,13 @@ import { BackupError, openBackupZip, readManifest } from "./manifest";
 import {
   checkImportedFile,
   importedFilePath,
+  logicalResumeArtifactStorageKey,
   normalizeAutomation,
   normalizeAutomationRun,
   safeEntryName,
 } from "./normalize";
 import {
+  DEFERRED_FKS,
   DELETE_ORDER,
   EMPTINESS_MODELS,
   INSERT_ORDER,
@@ -20,6 +22,7 @@ import {
   MODEL_SPECS,
   type BackupModel,
 } from "./ordering";
+import { remapLegacyMigrationMapIds } from "./migrationMap";
 import { writeSnapshot } from "./snapshot";
 import { log } from "@/lib/telemetry";
 import { isResumeFilePath } from "@/lib/resumeFiles";
@@ -171,10 +174,50 @@ async function wipe(tx: Tx, userId: string): Promise<void> {
   // Not restorable, but a conversation about deleted jobs is worse than a
   // clean panel. ApiKey and McpAccessToken are deliberately absent.
   await tx.chatConversation.deleteMany({ where: { userId } });
+  // Operational telemetry is not in the ZIP; leftover RUNNING rows would lie.
+  await tx.dataMigrationRun.deleteMany({ where: { userId } });
+
+  // Restrict self-FKs (parentVersionId) and current-pointer cycles must be
+  // cleared before deleteMany, or SQLite refuses the wipe.
+  for (const { model, field } of DEFERRED_FKS) {
+    const spec = MODEL_SPECS[model];
+    await tx[spec.delegate].updateMany({
+      where: spec.scope(userId),
+      data: { [field]: null },
+    });
+  }
 
   for (const model of DELETE_ORDER) {
     const spec = MODEL_SPECS[model];
     await tx[spec.delegate].deleteMany({ where: spec.scope(userId) });
+  }
+}
+
+async function patchDeferredForeignKeys(
+  tx: Tx,
+  data: BackupData,
+  idMap: IdMap,
+): Promise<void> {
+  for (const { model, field } of DEFERRED_FKS) {
+    const spec = MODEL_SPECS[model];
+    for (const row of rowsFor(data, model)) {
+      const original = row[field];
+      if (original === null || original === undefined) continue;
+      const mapped = idMap.get(original as string);
+      if (!mapped) {
+        throw new BackupError(
+          `Restore failed: ${model}.${field} points at ${String(original)}, which is not in the backup.`,
+        );
+      }
+      const rowId = idMap.get(row.id as string);
+      if (!rowId) {
+        throw new BackupError(`Restore failed: ${model} row ${String(row.id)} has no minted id.`);
+      }
+      await tx[spec.delegate].update({
+        where: { id: rowId },
+        data: { [field]: mapped },
+      });
+    }
   }
 }
 
@@ -350,10 +393,43 @@ export async function importBackup(
             if (model === "AutomationRun") {
               payload = normalizeAutomationRun(payload as never);
             }
+            if (model === "ResumeArtifact") {
+              const { bytesMissing: _marker, storageKey: _ignored, ...rest } = payload;
+              payload = {
+                ...rest,
+                storageKey: logicalResumeArtifactStorageKey(
+                  rest.id as string,
+                  row.fileName as string,
+                ),
+              };
+            }
+            if (model === "LegacyMigrationMap") {
+              try {
+                const remapped = remapLegacyMigrationMapIds(
+                  {
+                    legacyEntityType: row.legacyEntityType as string,
+                    legacyEntityId: row.legacyEntityId as string,
+                    targetEntityType: row.targetEntityType as string,
+                    targetEntityId: row.targetEntityId as string,
+                  },
+                  idMap,
+                  userId,
+                );
+                payload = { ...payload, ...remapped };
+              } catch (error) {
+                throw new BackupError(
+                  error instanceof Error
+                    ? `Restore failed: ${error.message}`
+                    : "Restore failed: LegacyMigrationMap ids could not be remapped.",
+                );
+              }
+            }
 
             await tx[spec.delegate].create({ data: payload });
           }
         }
+
+        await patchDeferredForeignKeys(tx, data, idMap);
 
         // Join tables last: both endpoints have to exist first.
         for (const link of data._JobToTag) {

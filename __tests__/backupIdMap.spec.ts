@@ -141,6 +141,28 @@ describe("buildCreateData", () => {
     ).toThrow(/Skill\.tagId/);
   });
 
+  it("nulls deferred cyclic FKs so insert can proceed before the patch pass", () => {
+    const map = mapWith({
+      "old-opp": "new-opp",
+      "old-co": "new-co",
+      "old-jd": "new-jd",
+    });
+    const data = buildCreateData(
+      "JobOpportunity",
+      {
+        id: "old-opp",
+        companyId: "old-co",
+        currentJdVersionId: "old-jd",
+        title: "Role",
+      },
+      map,
+      "u",
+    );
+    expect(data.currentJdVersionId).toBeNull();
+    expect(data.companyId).toBe("new-co");
+    expect(JSON.stringify(data)).not.toContain("old-");
+  });
+
   it("never leaks the backup's own ids into the created row", () => {
     const map = mapWith({ "old-resume": "new-resume", "old-profile": "new-profile" });
     const data = buildCreateData(

@@ -4,6 +4,7 @@ import {
   DELETE_ORDER,
   LOOKUP_MODELS,
   EMPTINESS_MODELS,
+  DEFERRED_FKS,
   type BackupModel,
 } from "@/lib/backup/ordering";
 
@@ -13,6 +14,13 @@ describe("backup ordering", () => {
     const orderKeys = [...INSERT_ORDER].sort();
     expect(orderKeys).toEqual(specKeys);
     expect(new Set(INSERT_ORDER).size).toBe(INSERT_ORDER.length);
+  });
+
+  it("keeps cyclic current-pointer FKs out of MODEL_SPECS so insert order stays acyclic", () => {
+    for (const { model, field, target } of DEFERRED_FKS) {
+      expect(MODEL_SPECS[model].fks).not.toHaveProperty(field);
+      expect(INSERT_ORDER).toContain(target);
+    }
   });
 
   it("inserts every foreign-key target before the model that references it", () => {
@@ -118,14 +126,22 @@ describe("emptiness models", () => {
   it("counts content models only, so seeded JobSource rows do not demand a wipe", () => {
     expect([...EMPTINESS_MODELS].sort()).toEqual([
       "Activity",
+      "ApplicationAttempt",
       "Automation",
+      "CareerMaterialItem",
       "Contact",
       "CoverLetter",
       "Job",
+      "JobOpportunity",
+      "JobSearchPreference",
+      "MatchAnalysis",
       "Note",
       "Profile",
       "Question",
+      "RecruitmentCampaign",
       "Resume",
+      "ResumeContactProfile",
+      "ResumeVariant",
       "Task",
     ]);
   });

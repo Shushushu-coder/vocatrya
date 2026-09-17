@@ -12,6 +12,24 @@ const IMPORT_MIME: Record<"pdf" | "docx", string> = {
 
 // Basename of the entry only, with both separators handled — a zip written on
 // Windows carries backslashes that posix path.basename would keep.
+export function isAbsoluteStorageKey(key: string): boolean {
+  if (!key) return false;
+  if (/^[a-zA-Z]:[\\/]/.test(key)) return true;
+  if (key.startsWith("\\\\") || key.startsWith("//")) return true;
+  if (key.startsWith("/") || key.startsWith("\\")) return true;
+  return false;
+}
+
+// ResumeArtifact.storageKey is a relative/logical key. Restore never writes a
+// source-machine absolute path; artifact bytes are not in the v2 zip.
+export function logicalResumeArtifactStorageKey(
+  artifactId: string,
+  fileName: string,
+): string {
+  const base = safeEntryName(fileName);
+  return `resume-artifacts/${artifactId}/${base}`;
+}
+
 export function safeEntryName(entryName: string): string {
   const flattened = entryName.replace(/\\/g, "/");
   const base = path.posix.basename(flattened);

@@ -18,24 +18,30 @@ vi.mock("@/lib/backup/snapshot", () => ({
   writeSnapshot: vi.fn().mockResolvedValue("data/backups/user-1/pre-import-x.zip"),
 }));
 
-vi.mock("@/lib/db", () => {
-  const counted = () => ({ count: vi.fn().mockResolvedValue(0), deleteMany: vi.fn(), createMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), upsert: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) });
+vi.mock("@/lib/db", async () => {
+  const { INSERT_ORDER, MODEL_SPECS } = await import("@/lib/backup/ordering");
+  const counted = () => ({
+    count: vi.fn().mockResolvedValue(0),
+    deleteMany: vi.fn(),
+    createMany: vi.fn(),
+    findMany: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    upsert: vi.fn(),
+    findFirst: vi.fn().mockResolvedValue(null),
+  });
   const mock: Record<string, unknown> = {
     automationRun: { ...counted(), findFirst: vi.fn().mockResolvedValue(null) },
     jobStatus: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
     user: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ defaultResumeId: null }) },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(mock)),
   };
-  for (const key of [
-    "company", "jobTitle", "location", "jobSource", "tag", "activityType",
-    "profile", "file", "resume", "contactInfo", "summary", "resumeSection",
-    "workExperience", "education", "licenseOrCertification", "otherSection",
-    "skill", "coverLetter", "automation", "job", "note", "interview",
-    "contact", "contactRole", "jobContact", "task", "activity", "question", "userSettings",
-    "chatConversation",
-  ]) {
-    mock[key] = counted();
+  for (const model of INSERT_ORDER) {
+    mock[MODEL_SPECS[model].delegate] = counted();
   }
+  mock.chatConversation = counted();
+  mock.dataMigrationRun = counted();
   return { default: mock };
 });
 
@@ -107,6 +113,7 @@ describe("importBackup guards", () => {
   it("wipes ChatConversation but never ApiKey or McpAccessToken", async () => {
     await importBackup(await emptyBackup(), "user-1", EMAIL, true);
     expect(mockDb.chatConversation.deleteMany).toHaveBeenCalled();
+    expect(mockDb.dataMigrationRun.deleteMany).toHaveBeenCalled();
     expect(mockDb.apiKey).toBeUndefined();
     expect(mockDb.mcpAccessToken).toBeUndefined();
   });

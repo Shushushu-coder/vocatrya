@@ -6,6 +6,10 @@ import { INSERT_ORDER, MODEL_SPECS, type BackupModel } from "./ordering";
 import { BackupDataSchema, type BackupData } from "./schema";
 import { buildManifest } from "./manifest";
 import { isResumeFilePath } from "@/lib/resumeFiles";
+import {
+  isAbsoluteStorageKey,
+  logicalResumeArtifactStorageKey,
+} from "./normalize";
 
 type Row = Record<string, unknown>;
 
@@ -82,6 +86,18 @@ export async function collectBackupData(userId: string): Promise<BackupData> {
           questionToTag.push({ questionId: rest.id as string, tagId: tag.id });
         }
         return rest;
+      }
+
+      if (model === "ResumeArtifact") {
+        const artifact = clean as Row & {
+          id: string;
+          storageKey: string;
+          fileName: string;
+        };
+        const storageKey = isAbsoluteStorageKey(artifact.storageKey)
+          ? logicalResumeArtifactStorageKey(artifact.id, artifact.fileName)
+          : artifact.storageKey;
+        return { ...artifact, storageKey, bytesMissing: true };
       }
 
       return clean;

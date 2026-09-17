@@ -1,5 +1,9 @@
 import { randomUUID } from "crypto";
-import { MODEL_SPECS, type BackupModel } from "./ordering";
+import {
+  DEFERRED_FK_FIELDS,
+  MODEL_SPECS,
+  type BackupModel,
+} from "./ordering";
 
 // Foreign keys that are nullable in the schema. A dangling value in one of
 // these is degraded to null (the spec's defaultResumeId rule generalised);
@@ -23,6 +27,19 @@ const OPTIONAL_FKS = new Set<string>([
   "Contact.roleId",
   "Task.activityTypeId",
   "Activity.taskId",
+  "JobOpportunity.campaignId",
+  "JobOpportunity.sourceAutomationId",
+  "ApplicationAttempt.submittedResumeVersionId",
+  "ApplicationAttempt.submittedResumeArtifactId",
+  "ApplicationAttempt.submittedAgainstJdVersionId",
+  "CareerInternshipDetail.companyId",
+  "CareerEmploymentDetail.companyId",
+  "ResumeVariant.targetJobOpportunityId",
+  "ResumeVariantVersion.targetJdVersionId",
+  "ResumeVariantSectionItem.careerMaterialItemId",
+  "MatchAnalysis.resumeVariantVersionId",
+  "MatchEvidenceLink.careerEvidenceId",
+  "MatchEvidenceLink.resumeExpressionId",
 ]);
 
 export class IdMap {
@@ -59,6 +76,12 @@ export function buildCreateData(
     throw new Error(`${model} row ${String(row.id)} has no minted id`);
   }
   data.id = newId;
+
+  for (const field of Object.keys(data)) {
+    if (DEFERRED_FK_FIELDS.has(`${model}.${field}`)) {
+      data[field] = null;
+    }
+  }
 
   for (const field of Object.keys(spec.fks)) {
     const value = data[field];

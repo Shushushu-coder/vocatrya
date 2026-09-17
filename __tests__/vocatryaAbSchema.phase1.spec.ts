@@ -118,30 +118,33 @@ describe("Vocatrya A+B phase 1 schema", () => {
       expect(await foreignKeyCheck(prisma)).toEqual([]);
     }, 120_000);
 
-    it("lets current backup Company schema ignore unused A+B columns", () => {
-      expect(() =>
-        BackupDataSchema.parse({
-          Company: [
-            {
-              id: "c1",
-              label: "Acme",
-              value: "acme",
-              logoUrl: null,
-              watched: true,
-              watchedAt: null,
-              atsProvider: null,
-              atsToken: null,
-              atsHost: null,
-              websiteUrl: null,
-              careersUrl: null,
-              industry: null,
-              notes: "optional A+B field",
-              sizeLabel: "L",
-              headquarters: "Beijing",
-            },
-          ],
-        }),
-      ).not.toThrow();
+    it("preserves Company A+B columns in the backup schema", () => {
+      const parsed = BackupDataSchema.parse({
+        Company: [
+          {
+            id: "c1",
+            label: "Acme",
+            value: "acme",
+            logoUrl: null,
+            watched: true,
+            watchedAt: null,
+            atsProvider: null,
+            atsToken: null,
+            atsHost: null,
+            websiteUrl: null,
+            careersUrl: null,
+            industry: null,
+            notes: "optional A+B field",
+            sizeLabel: "L",
+            headquarters: "Beijing",
+          },
+        ],
+      });
+      expect(parsed.Company[0]).toMatchObject({
+        notes: "optional A+B field",
+        sizeLabel: "L",
+        headquarters: "Beijing",
+      });
     });
 
     it("keeps prisma.job / prisma.resume / prisma.company delegates", async () => {

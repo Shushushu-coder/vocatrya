@@ -26,7 +26,7 @@ describe("buildManifest", () => {
       ],
     });
     const manifest = buildManifest(data, "me@example.com");
-    expect(manifest.formatVersion).toBe(1);
+    expect(manifest.formatVersion).toBe(2);
     expect(manifest.sourceEmail).toBe("me@example.com");
     expect(manifest.counts.Tag).toBe(2);
     expect(manifest.counts.Job).toBe(0);
@@ -96,11 +96,19 @@ describe("readManifest", () => {
     await expect(readManifest(zip)).rejects.toBeInstanceOf(BackupError);
   });
 
-  it("names both versions when formatVersion does not match", async () => {
-    const manifest = { ...buildManifest(emptyData, "a@b.com"), formatVersion: 2 };
+  it("names both versions when formatVersion is unsupported", async () => {
+    const manifest = { ...buildManifest(emptyData, "a@b.com"), formatVersion: 99 };
     const zip = await openBackupZip(
       await zipOf({ "manifest.json": JSON.stringify(manifest) }),
     );
-    await expect(readManifest(zip)).rejects.toThrow(/version 1.*found 2|found 2/i);
+    await expect(readManifest(zip)).rejects.toThrow(/version 1 or 2.*found 99|found 99/i);
+  });
+
+  it("reads a v1 manifest written before the A+B format bump", async () => {
+    const manifest = { ...buildManifest(emptyData, "a@b.com"), formatVersion: 1 };
+    const zip = await openBackupZip(
+      await zipOf({ "manifest.json": JSON.stringify(manifest) }),
+    );
+    expect((await readManifest(zip)).formatVersion).toBe(1);
   });
 });
