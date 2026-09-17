@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "audit:legacy-migration": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-sqlite --experimental-strip-types scripts/legacy-migration-dry-run.mts",
+    "legacy-migration": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-sqlite --experimental-strip-types scripts/legacy-migration.mts",
     "eval:resume-review": "npm --prefix evals run eval:resume-review",
     "eval:job-match": "npm --prefix evals run eval:job-match",
     "eval:automation-match": "npm --prefix evals run eval:automation-match",
