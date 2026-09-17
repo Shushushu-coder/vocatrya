@@ -45,7 +45,11 @@ beforeAll(async () => {
 afterAll(async () => {
   (APP_CONSTANTS as { UPLOADS_DIR: string }).UPLOADS_DIR = originalUploads;
   await prisma.$disconnect();
-  fs.rmSync(ctx.dir, { recursive: true, force: true });
+  try {
+    fs.rmSync(ctx.dir, { recursive: true, force: true });
+  } catch {
+    // Windows can retain a short-lived SQLite handle after disconnect.
+  }
 });
 
 async function seedFullAccount() {
