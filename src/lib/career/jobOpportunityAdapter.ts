@@ -4,7 +4,9 @@ import { CareerRuntimeError } from "./errors";
 import {
   ATTEMPT_OUTCOME,
   ATTEMPT_STAGE,
+  COMPATIBILITY_PROCESS_STEPS,
   OPPORTUNITY_STATUS,
+  PROCESS_STEP_STATUS,
 } from "./identities";
 import { ApplicationService } from "./applicationService";
 import { OpportunityService } from "./opportunityService";
@@ -201,20 +203,23 @@ export async function syncApplicationFromUiStatus(
   }
 
   if (value === "interview") {
-    await applications.upsertProcessStep({
+    await applications.ensureCompatibilityProcessStep({
       attemptId: attempt.id,
-      category: ATTEMPT_STAGE.INTERVIEW,
-      label: "Interview",
-      sortOrder: 20,
-      status: "IN_PROGRESS",
+      category: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.category,
+      label: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.label,
+      sortOrder: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.sortOrder,
+      status: PROCESS_STEP_STATUS.IN_PROGRESS,
     });
   } else if (value === "offer" || value === "offer-accepted") {
-    await applications.upsertProcessStep({
+    await applications.ensureCompatibilityProcessStep({
       attemptId: attempt.id,
-      category: ATTEMPT_STAGE.OFFER,
-      label: "Offer",
-      sortOrder: 30,
-      status: value === "offer-accepted" ? "COMPLETED" : "IN_PROGRESS",
+      category: COMPATIBILITY_PROCESS_STEPS.OFFER.category,
+      label: COMPATIBILITY_PROCESS_STEPS.OFFER.label,
+      sortOrder: COMPATIBILITY_PROCESS_STEPS.OFFER.sortOrder,
+      status:
+        value === "offer-accepted"
+          ? PROCESS_STEP_STATUS.COMPLETED
+          : PROCESS_STEP_STATUS.IN_PROGRESS,
     });
   }
 

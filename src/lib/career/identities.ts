@@ -78,6 +78,54 @@ export const ATTEMPT_OUTCOME = {
   HIRED: "HIRED",
 } as const;
 
+export const PROCESS_STEP_STATUS = {
+  PENDING: "PENDING",
+  IN_PROGRESS: "IN_PROGRESS",
+  COMPLETED: "COMPLETED",
+} as const;
+
+export type ProcessStepStatus =
+  (typeof PROCESS_STEP_STATUS)[keyof typeof PROCESS_STEP_STATUS];
+
+export const PROCESS_STEP_SOURCE = {
+  USER: "USER",
+  SYSTEM: "SYSTEM",
+  IMPORT: "IMPORT",
+  AUTOMATION: "AUTOMATION",
+} as const;
+
+export type ProcessStepSource =
+  (typeof PROCESS_STEP_SOURCE)[keyof typeof PROCESS_STEP_SOURCE];
+
+export const PROCESS_STEP_CATEGORY = {
+  SCREENING: "SCREENING",
+  ASSESSMENT: "ASSESSMENT",
+  INTERVIEW: "INTERVIEW",
+  OFFER: "OFFER",
+  ONBOARDING: "ONBOARDING",
+  OTHER: "OTHER",
+} as const;
+
+export type ProcessStepCategory =
+  (typeof PROCESS_STEP_CATEGORY)[keyof typeof PROCESS_STEP_CATEGORY];
+
+export const PROCESS_STEP_CATEGORIES = new Set<string>(
+  Object.values(PROCESS_STEP_CATEGORY),
+);
+
+export const COMPATIBILITY_PROCESS_STEPS = {
+  INTERVIEW: {
+    category: ATTEMPT_STAGE.INTERVIEW,
+    label: "Interview",
+    sortOrder: 20,
+  },
+  OFFER: {
+    category: ATTEMPT_STAGE.OFFER,
+    label: "Offer",
+    sortOrder: 30,
+  },
+} as const;
+
 export const CAREER_MATERIAL_TYPE = {
   EMPLOYMENT: "EMPLOYMENT",
   INTERNSHIP: "INTERNSHIP",
