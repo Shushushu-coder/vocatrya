@@ -27,12 +27,14 @@ type JobSummaryCardProps = {
   job: JobResponse;
   currentStatus: JobStatus;
   matchData: JobMatchData | null;
+  showCampusFields?: boolean;
 };
 
 export function JobSummaryCard({
   job,
   currentStatus,
   matchData,
+  showCampusFields = false,
 }: JobSummaryCardProps) {
   const { t, formatDate } = useI18n();
   const expired =
@@ -73,6 +75,30 @@ export function JobSummaryCard({
             <p className="text-sm text-muted-foreground">{t("jobs.jobSource")}</p>
             <p className="mt-1 font-medium">{job.JobSource?.label ?? "-"}</p>
           </div>
+          {showCampusFields && job.recruitmentCohort ? (
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {t("jobs.recruitmentCohort")}
+              </p>
+              <p className="mt-1 font-medium">{job.recruitmentCohort}</p>
+            </div>
+          ) : null}
+          {showCampusFields && job.recruitmentBatch ? (
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {t("jobs.recruitmentBatch")}
+              </p>
+              <p className="mt-1 font-medium">{job.recruitmentBatch}</p>
+            </div>
+          ) : null}
+          {showCampusFields && job.dueDate ? (
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {t("jobs.applicationDeadline")}
+              </p>
+              <p className="mt-1 font-medium">{formatDate(job.dueDate)}</p>
+            </div>
+          ) : null}
           <div>
             <p className="text-sm text-muted-foreground">{t("jobs.statuses.applied")}</p>
             <p className="mt-1 font-medium">

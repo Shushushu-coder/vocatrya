@@ -41,6 +41,7 @@ import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import SelectFormCtrl from "../Select";
 import { DatePicker } from "../DatePicker";
 import { SALARY_RANGES } from "@/lib/data/salaryRangeData";
+import { RECRUITMENT_BATCH_SUGGESTIONS } from "@/lib/data/recruitmentBatchData";
 import TiptapEditor from "../TiptapEditor";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
@@ -138,6 +139,9 @@ export function AddJob({
     jobDescription: "N/A",
     location: locations.find((l) => l.id === lastLocationId)?.id,
     source: jobSources.find((s) => s.id === lastSourceId)?.id,
+    ...(hideUnsupportedAbFields
+      ? { recruitmentCohort: "", recruitmentBatch: "" }
+      : {}),
   };
 
   const form = useForm<z.infer<typeof AddJobFormSchema>>({
@@ -184,6 +188,8 @@ export function AddJob({
         source: editJob.JobSource?.id,
         status: editJob.Status.id,
         dueDate: editJob.dueDate ?? null,
+        recruitmentCohort: editJob.recruitmentCohort ?? "",
+        recruitmentBatch: editJob.recruitmentBatch ?? "",
         salaryRange: editJob.salaryRange ?? "",
         jobDescription: editJob.description,
         applied: editJob.applied,
@@ -564,6 +570,55 @@ export function AddJob({
                     )}
                   />
                 </div>
+
+                {hideUnsupportedAbFields && (
+                  <>
+                    <div>
+                      <FormField
+                        control={form.control}
+                        name="recruitmentCohort"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>
+                              {t("jobs.recruitmentCohort")}{" "}
+                              ({t("common.optional")})
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder={t("jobs.recruitmentCohortPlaceholder")}
+                                {...field}
+                                value={field.value ?? ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <FormField
+                        control={form.control}
+                        name="recruitmentBatch"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>
+                              {t("jobs.recruitmentBatch")}{" "}
+                              ({t("common.optional")})
+                            </FormLabel>
+                            <Combobox
+                              options={RECRUITMENT_BATCH_SUGGESTIONS}
+                              field={field}
+                              creatable
+                              freeText
+                              label={t("jobs.recruitmentBatch")}
+                            />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </>
+                )}
 
                 {/* Salary Range */}
                 <div>

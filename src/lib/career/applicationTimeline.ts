@@ -17,12 +17,21 @@ export type ApplicationProcessStepDTO = {
   notes: string | null;
 };
 
+export type TransferredFromDTO = {
+  attemptId: string;
+  opportunityId: string;
+  title: string;
+  company: string;
+};
+
 export type ApplicationAttemptTimelineDTO = {
   id: string;
   submittedAt: string | null;
   createdAt: string;
   currentStageCategory: string;
   outcome: string;
+  transferredFromAttemptId: string | null;
+  transferredFrom: TransferredFromDTO | null;
   submittedResume: SubmittedResumeDTO;
   steps: ApplicationProcessStepDTO[];
 };

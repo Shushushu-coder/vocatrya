@@ -53,13 +53,17 @@ export {
   assertAbWritesAllowed,
   assertLegacyCareerWriteAllowed,
 } from "./writeGuard";
-export { OpportunityService } from "./opportunityService";
+export {
+  OpportunityService,
+  normalizeOptionalText,
+} from "./opportunityService";
 export { ApplicationService } from "./applicationService";
 export type {
   ApplicationTimelineDTO,
   ApplicationAttemptTimelineDTO,
   ApplicationProcessStepDTO,
   SubmittedResumeDTO,
+  TransferredFromDTO,
 } from "./applicationTimeline";
 export {
   UPCOMING_EVENT_KIND,

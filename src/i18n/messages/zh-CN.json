@@ -332,6 +332,10 @@
     "notApplied": "未投递",
     "notAppliedSwitch": "未投递",
     "dueDate": "截止日期",
+    "recruitmentCohort": "招聘届别",
+    "recruitmentBatch": "招聘批次",
+    "recruitmentCohortPlaceholder": "例如：2027届",
+    "recruitmentBatchPlaceholder": "例如：秋招",
     "salaryRange": "薪资范围",
     "resume": "简历",
     "addNew": "新建",
@@ -473,7 +477,10 @@
       "OFFER": "已获 Offer",
       "HIRED": "已入职",
       "TRANSFERRED": "被调剂"
-    }
+    },
+    "transferredFrom": "调剂来源",
+    "transferredFromGeneric": "由其他岗位调剂而来",
+    "transferredFromDetail": "由 {company} · {title} 调剂而来"
   },
   "automations": {
     "title": "自动化巡检",

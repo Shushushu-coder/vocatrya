@@ -24,12 +24,23 @@ export type OpportunitySafeFields = {
   sourceUrl?: string | null;
   externalSourceKey?: string | null;
   deadline?: Date | null;
+  recruitmentCohort?: string | null;
+  recruitmentBatch?: string | null;
   salaryText?: string | null;
   status?: string;
   notes?: string | null;
   closedAt?: Date | null;
   archivedAt?: Date | null;
 };
+
+export function normalizeOptionalText(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
 
 function assertOpportunityStatus(status: string): void {
   const normalized = status.trim().toUpperCase();
@@ -69,6 +80,8 @@ export class OpportunityService {
     sourceUrl?: string | null;
     sourceLabel?: string | null;
     deadline?: Date | null;
+    recruitmentCohort?: string | null;
+    recruitmentBatch?: string | null;
     salaryText?: string | null;
     status?: string;
     notes?: string | null;
@@ -99,6 +112,8 @@ export class OpportunityService {
         sourceUrl: input.sourceUrl ?? null,
         sourceLabel: input.sourceLabel ?? null,
         deadline: input.deadline ?? null,
+        recruitmentCohort: normalizeOptionalText(input.recruitmentCohort) ?? null,
+        recruitmentBatch: normalizeOptionalText(input.recruitmentBatch) ?? null,
         salaryText: input.salaryText ?? null,
         status,
         notes: input.notes ?? null,
@@ -167,6 +182,14 @@ export class OpportunityService {
       data.externalSourceKey = fields.externalSourceKey;
     }
     if (fields.deadline !== undefined) data.deadline = fields.deadline;
+    if (fields.recruitmentCohort !== undefined) {
+      data.recruitmentCohort =
+        normalizeOptionalText(fields.recruitmentCohort) ?? null;
+    }
+    if (fields.recruitmentBatch !== undefined) {
+      data.recruitmentBatch =
+        normalizeOptionalText(fields.recruitmentBatch) ?? null;
+    }
     if (fields.salaryText !== undefined) data.salaryText = fields.salaryText;
     if (fields.notes !== undefined) data.notes = fields.notes;
     if (fields.closedAt !== undefined) data.closedAt = fields.closedAt;

@@ -8,6 +8,7 @@ const SCHEMA_PATH = path.join(REPO_ROOT, "prisma", "schema.prisma");
 const MIGRATIONS_DIR = path.join(REPO_ROOT, "prisma", "migrations");
 export const AB_FOUNDATION_MIGRATION = "add_vocatrya_ab_foundation";
 export const PROCESS_STEP_DEADLINE_MIGRATION = "add_process_step_deadline_at";
+export const CAMPUS_CORE_FIELDS_MIGRATION = "add_campus_core_fields";
 
 export function makeAbTestDbUrl(): { url: string; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-ab-schema-"));

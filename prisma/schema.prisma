@@ -723,8 +723,10 @@ model JobOpportunity {
   sourceUrl         String?
   externalSourceKey String?
 
-  deadline   DateTime?
-  salaryText String?
+  deadline          DateTime?
+  recruitmentCohort String?
+  recruitmentBatch  String?
+  salaryText        String?
 
   status String @default("UNKNOWN")
 
@@ -836,6 +838,8 @@ model ApplicationAttempt {
   currentStageCategory String    @default("DRAFT")
   outcome              String    @default("ACTIVE")
 
+  transferredFromAttemptId String?
+
   submittedResumeVersionId    String?
   submittedResumeArtifactId   String?
   submittedAgainstJdVersionId String?
@@ -849,6 +853,8 @@ model ApplicationAttempt {
 
   user                      User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
   jobOpportunity            JobOpportunity           @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
+  transferredFromAttempt    ApplicationAttempt?      @relation("AttemptTransferredFrom", fields: [transferredFromAttemptId], references: [id], onDelete: SetNull)
+  transferredToAttempts     ApplicationAttempt[]     @relation("AttemptTransferredFrom")
   submittedResumeVersion    ResumeVariantVersion?    @relation("AttemptSubmittedResumeVersion", fields: [submittedResumeVersionId], references: [id], onDelete: Restrict)
   submittedResumeArtifact   ResumeArtifact?          @relation("AttemptSubmittedResumeArtifact", fields: [submittedResumeArtifactId], references: [id], onDelete: Restrict)
   submittedAgainstJdVersion JobDescriptionVersion?   @relation("AttemptSubmittedAgainstJd", fields: [submittedAgainstJdVersionId], references: [id], onDelete: Restrict)
@@ -857,6 +863,7 @@ model ApplicationAttempt {
   @@index([userId, currentStageCategory])
   @@index([userId, outcome])
   @@index([jobOpportunityId, createdAt])
+  @@index([transferredFromAttemptId])
 }
 
 model ApplicationProcessStep {

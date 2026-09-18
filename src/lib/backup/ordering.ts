@@ -580,6 +580,7 @@ export const DEFERRED_FKS: ReadonlyArray<{
   { model: "ResumeVariant", field: "currentVersionId", target: "ResumeVariantVersion" },
   { model: "ResumeVariantVersion", field: "parentVersionId", target: "ResumeVariantVersion" },
   { model: "ResumeVariantVersion", field: "sourceMatchAnalysisId", target: "MatchAnalysis" },
+  { model: "ApplicationAttempt", field: "transferredFromAttemptId", target: "ApplicationAttempt" },
 ];
 
 export const DEFERRED_FK_FIELDS = new Set(

@@ -32,6 +32,7 @@ const OPTIONAL_FKS = new Set<string>([
   "ApplicationAttempt.submittedResumeVersionId",
   "ApplicationAttempt.submittedResumeArtifactId",
   "ApplicationAttempt.submittedAgainstJdVersionId",
+  "ApplicationAttempt.transferredFromAttemptId",
   "CareerInternshipDetail.companyId",
   "CareerEmploymentDetail.companyId",
   "ResumeVariant.targetJobOpportunityId",

@@ -220,6 +220,7 @@ function JobDetails({
           job={job}
           currentStatus={currentStatus}
           matchData={parsedMatchData}
+          showCampusFields={showTimeline}
         />
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>

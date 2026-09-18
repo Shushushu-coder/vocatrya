@@ -43,6 +43,8 @@ export const AddJobFormSchema = z.object({
     })
     .default("draft"),
   dueDate: z.date().optional().nullable(),
+  recruitmentCohort: z.string().optional().nullable(),
+  recruitmentBatch: z.string().optional().nullable(),
   /**
    * Note: Timezone offsets can be allowed by setting the offset option to true.
    * z.string().datetime({ offset: true });

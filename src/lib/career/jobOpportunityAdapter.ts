@@ -7,7 +7,10 @@ import {
   OPPORTUNITY_STATUS,
 } from "./identities";
 import { ApplicationService } from "./applicationService";
-import { OpportunityService } from "./opportunityService";
+import {
+  normalizeOptionalText,
+  OpportunityService,
+} from "./opportunityService";
 import { isAbHiddenJobFilter } from "./jobsReadCapabilities";
 import {
   deriveUiStatus,
@@ -29,6 +32,8 @@ export type JobFormMutationInput = {
   dueDate?: Date | null;
   dateApplied?: Date | null;
   salaryRange?: string | null;
+  recruitmentCohort?: string | null;
+  recruitmentBatch?: string | null;
   jobDescription: string;
   jobUrl?: string | null;
   applied?: boolean;
@@ -234,6 +239,8 @@ export async function createOpportunityFromJobForm(
       sourceUrl: input.jobUrl ?? null,
       sourceLabel: source?.label ?? null,
       deadline: input.dueDate ?? null,
+      recruitmentCohort: normalizeOptionalText(input.recruitmentCohort) ?? null,
+      recruitmentBatch: normalizeOptionalText(input.recruitmentBatch) ?? null,
       salaryText: input.salaryRange ?? null,
       status: OPPORTUNITY_STATUS.UNKNOWN,
       createdVia: "USER",
@@ -285,6 +292,14 @@ export async function updateOpportunityFromJobForm(
       sourceUrl: input.jobUrl ?? null,
       sourceLabel: source?.label ?? null,
       deadline: input.dueDate ?? null,
+      recruitmentCohort:
+        input.recruitmentCohort === undefined
+          ? undefined
+          : (normalizeOptionalText(input.recruitmentCohort) ?? null),
+      recruitmentBatch:
+        input.recruitmentBatch === undefined
+          ? undefined
+          : (normalizeOptionalText(input.recruitmentBatch) ?? null),
       salaryText: input.salaryRange ?? null,
     });
 
@@ -327,6 +342,8 @@ type OpportunityWithRelations = {
   sourceLabel: string | null;
   sourceUrl: string | null;
   deadline: Date | null;
+  recruitmentCohort: string | null;
+  recruitmentBatch: string | null;
   salaryText: string | null;
   status: string;
   notes: string | null;
@@ -472,6 +489,8 @@ export function mapOpportunityToJobView(
     createdAt: opportunity.createdAt,
     appliedDate: latestAttempt?.submittedAt ?? null,
     dueDate: opportunity.deadline ?? null,
+    recruitmentCohort: opportunity.recruitmentCohort ?? null,
+    recruitmentBatch: opportunity.recruitmentBatch ?? null,
     salaryRange: opportunity.salaryText,
     description:
       opportunity.currentJdVersion?.rawContent ?? opportunity.notes ?? "",
@@ -628,6 +647,8 @@ function opportunityListWhereSql(
       OR IFNULL(o.notes, '') LIKE ${q}
       OR IFNULL(o.locationText, '') LIKE ${q}
       OR IFNULL(o.sourceLabel, '') LIKE ${q}
+      OR IFNULL(o.recruitmentCohort, '') LIKE ${q}
+      OR IFNULL(o.recruitmentBatch, '') LIKE ${q}
       OR c.label LIKE ${q}
       OR IFNULL(jdv.rawContent, '') LIKE ${q}
     )`);

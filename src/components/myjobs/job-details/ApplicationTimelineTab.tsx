@@ -247,6 +247,21 @@ export function ApplicationTimelineTab({
               </p>
               <p className="mt-1 font-medium">{outcomeLabel(attempt.outcome)}</p>
             </div>
+            {attempt.transferredFromAttemptId ? (
+              <div className="sm:col-span-2">
+                <p className="text-sm text-muted-foreground">
+                  {t("jobs.transferredFrom")}
+                </p>
+                <p className="mt-1 font-medium">
+                  {attempt.transferredFrom
+                    ? t("jobs.transferredFromDetail", {
+                        company: attempt.transferredFrom.company,
+                        title: attempt.transferredFrom.title,
+                      })
+                    : t("jobs.transferredFromGeneric")}
+                </p>
+              </div>
+            ) : null}
             <div className="sm:col-span-2">
               <p className="text-sm text-muted-foreground">
                 {t("jobs.submittedResume")}

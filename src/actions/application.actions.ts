@@ -147,6 +147,25 @@ export async function updateApplicationProcessStep(input: {
   }
 }
 
+export async function createTransferredAttempt(input: {
+  sourceAttemptId: string;
+  targetJobOpportunityId: string;
+}): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertAbApplicationWrites(runtime.mode);
+    const data = await applicationsFor(user.id).createTransferredAttempt({
+      sourceAttemptId: input.sourceAttemptId,
+      targetJobOpportunityId: input.targetJobOpportunityId,
+    });
+    revalidatePath("/dashboard");
+    return { success: true, data: { id: data.id } };
+  } catch (error) {
+    return handleError(error, "Failed to transfer application.");
+  }
+}
+
 export async function completeApplicationProcessStep(
   stepId: string,
 ): Promise<ActionResult<ApplicationProcessStep>> {

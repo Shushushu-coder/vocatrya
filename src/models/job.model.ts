@@ -14,6 +14,8 @@ export interface JobForm {
   dueDate?: Date | null;
   dateApplied?: Date;
   salaryRange?: string;
+  recruitmentCohort?: string | null;
+  recruitmentBatch?: string | null;
   jobDescription: string;
   jobUrl?: string;
   applied: boolean;
@@ -45,6 +47,8 @@ export interface JobResponse {
   createdAt: Date;
   appliedDate: Date | null;
   dueDate: Date | null;
+  recruitmentCohort?: string | null;
+  recruitmentBatch?: string | null;
   salaryRange: string | null;
   description: string;
   jobUrl: string;

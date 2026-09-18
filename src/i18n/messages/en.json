@@ -333,6 +333,10 @@
     "notApplied": "Not applied",
     "notAppliedSwitch": "Not Applied",
     "dueDate": "Due Date",
+    "recruitmentCohort": "Recruitment cohort",
+    "recruitmentBatch": "Recruitment batch",
+    "recruitmentCohortPlaceholder": "e.g. Class of 2027",
+    "recruitmentBatchPlaceholder": "e.g. Fall campus hiring",
     "salaryRange": "Salary Range",
     "resume": "Resume",
     "addNew": "Add New",
@@ -474,7 +478,10 @@
       "OFFER": "Offer",
       "HIRED": "Hired",
       "TRANSFERRED": "Transferred"
-    }
+    },
+    "transferredFrom": "Transfer source",
+    "transferredFromGeneric": "Transferred from another application",
+    "transferredFromDetail": "Transferred from {title} at {company}"
   },
   "automations": {
     "title": "Automations",

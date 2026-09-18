@@ -124,6 +124,7 @@ describe("Phase 4 backup contract", () => {
   it("keeps deferred FKs out of the linear FK map", () => {
     const fields = DEFERRED_FKS.map((entry) => `${entry.model}.${entry.field}`).sort();
     expect(fields).toEqual([
+      "ApplicationAttempt.transferredFromAttemptId",
       "JobDescriptionVersion.currentParseId",
       "JobOpportunity.currentJdVersionId",
       "ResumeVariant.currentVersionId",

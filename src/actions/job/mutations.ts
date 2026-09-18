@@ -103,6 +103,8 @@ export const addJob = async (
       resume,
       coverLetter,
       tags,
+      recruitmentCohort,
+      recruitmentBatch,
     } = data;
 
     const runtime = await resolveCareerRuntimeMode(prisma);
@@ -137,6 +139,8 @@ export const addJob = async (
         dueDate,
         dateApplied,
         salaryRange: salaryRange || null,
+        recruitmentCohort,
+        recruitmentBatch,
         jobDescription,
         jobUrl,
         applied,
@@ -209,6 +213,8 @@ export const updateJob = async (
       resume,
       coverLetter,
       tags,
+      recruitmentCohort,
+      recruitmentBatch,
     } = data;
 
     const tagIds = tags ?? [];
@@ -247,6 +253,8 @@ export const updateJob = async (
         dueDate,
         dateApplied,
         salaryRange: salaryRange || null,
+        recruitmentCohort,
+        recruitmentBatch,
         jobDescription,
         jobUrl,
         applied,

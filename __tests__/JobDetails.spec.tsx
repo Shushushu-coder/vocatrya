@@ -74,6 +74,7 @@ vi.mock("@/actions/application.actions", () => ({
   createApplicationProcessStep: vi.fn(),
   updateApplicationProcessStep: vi.fn(),
   completeApplicationProcessStep: vi.fn(),
+  deleteApplicationProcessStep: vi.fn(),
 }));
 
 const baseProps = {
@@ -175,6 +176,56 @@ describe("JobDetails – skill badges", () => {
     // getAllByText returns an array; each label should appear exactly once in the badge area
     expect(screen.getAllByText("React")).toHaveLength(1);
     expect(screen.getAllByText("Vue")).toHaveLength(1);
+  });
+});
+
+describe("JobDetails – campus recruitment fields", () => {
+  it("shows cohort, batch, and application deadline in A+B mode when present", () => {
+    render(
+      <JobDetails
+        {...baseProps}
+        careerRuntimeMode="AB_ENABLED"
+        job={makeJob({
+          recruitmentCohort: "2027届",
+          recruitmentBatch: "秋招",
+          dueDate: new Date("2099-12-31"),
+        })}
+      />,
+    );
+    expect(screen.getByText("Recruitment cohort")).toBeInTheDocument();
+    expect(screen.getByText("2027届")).toBeInTheDocument();
+    expect(screen.getByText("Recruitment batch")).toBeInTheDocument();
+    expect(screen.getByText("秋招")).toBeInTheDocument();
+    expect(screen.getByText("Application deadline")).toBeInTheDocument();
+  });
+
+  it("hides empty campus fields and does not show them in legacy mode", () => {
+    const { rerender } = render(
+      <JobDetails
+        {...baseProps}
+        careerRuntimeMode="AB_ENABLED"
+        job={makeJob({
+          recruitmentCohort: null,
+          recruitmentBatch: null,
+          dueDate: null,
+        })}
+      />,
+    );
+    expect(screen.queryByText("Recruitment cohort")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recruitment batch")).not.toBeInTheDocument();
+    expect(screen.queryByText("Application deadline")).not.toBeInTheDocument();
+
+    rerender(
+      <JobDetails
+        {...baseProps}
+        job={makeJob({
+          recruitmentCohort: "2027届",
+          recruitmentBatch: "秋招",
+        })}
+      />,
+    );
+    expect(screen.queryByText("Recruitment cohort")).not.toBeInTheDocument();
+    expect(screen.queryByText("秋招")).not.toBeInTheDocument();
   });
 });
 
@@ -331,6 +382,8 @@ describe("JobDetails – tabs", () => {
             createdAt: "2024-01-01T00:00:00.000Z",
             currentStageCategory: "INTERVIEW",
             outcome: "ACTIVE",
+            transferredFromAttemptId: null,
+            transferredFrom: null,
             submittedResume: null,
             steps: [
               {
@@ -366,6 +419,49 @@ describe("JobDetails – tabs", () => {
       screen.getByText(/not linked to the resume version/i),
     ).toBeInTheDocument();
     expect(screen.getByTestId("application-process-step")).toBeInTheDocument();
+  });
+
+  it("shows TRANSFERRED as a native attempt outcome, not a process step", async () => {
+    vi.mocked(getApplicationTimeline).mockResolvedValue({
+      success: true,
+      data: {
+        opportunityId: "job-1",
+        attempts: [
+          {
+            id: "att-2",
+            submittedAt: "2024-01-01T00:00:00.000Z",
+            createdAt: "2024-01-01T00:00:00.000Z",
+            currentStageCategory: "CLOSED",
+            outcome: "TRANSFERRED",
+            transferredFromAttemptId: "att-1",
+            transferredFrom: {
+              attemptId: "att-1",
+              opportunityId: "job-0",
+              title: "软件工程师",
+              company: "Tencent",
+            },
+            submittedResume: null,
+            steps: [],
+          },
+        ],
+      },
+    });
+    onTab("timeline");
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="AB_ENABLED"
+      />,
+    );
+
+    expect(await screen.findByText("Transferred")).toBeInTheDocument();
+    expect(
+      screen.getByText("Transferred from 软件工程师 at Tencent"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("application-process-step"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens on the Description tab", () => {

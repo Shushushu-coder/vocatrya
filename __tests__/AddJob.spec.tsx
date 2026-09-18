@@ -546,6 +546,49 @@ describe("AddJob A+B unsupported fields", () => {
       screen.queryByRole("combobox", { name: /select cover letter/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("does not default a fake due date in A+B mode", async () => {
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+        initialOpen={true}
+        careerRuntimeMode="AB_ENABLED"
+      />,
+    );
+    expect(screen.getByLabelText(/due date/i)).toHaveTextContent("Pick a date");
+  });
+
+  it("shows optional recruitment cohort and batch fields in A+B mode", async () => {
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+        initialOpen={true}
+        careerRuntimeMode="AB_ENABLED"
+      />,
+    );
+    expect(screen.getByLabelText(/recruitment cohort/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/recruitment batch/i)).toBeInTheDocument();
+  });
 });
 
 describe("AddJob Component - Error Handling", () => {

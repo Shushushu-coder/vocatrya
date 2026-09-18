@@ -4,6 +4,7 @@ import {
   ATTEMPT_OUTCOME,
   ATTEMPT_STAGE,
   COMPATIBILITY_PROCESS_STEPS,
+  isTerminalAttemptOutcome,
   PROCESS_STEP_CATEGORIES,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_STATUS,
@@ -180,6 +181,67 @@ export class ApplicationService {
     });
   }
 
+  async createTransferredAttempt(input: {
+    sourceAttemptId: string;
+    targetJobOpportunityId: string;
+  }) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      const source = await tx.applicationAttempt.findFirst({
+        where: { id: input.sourceAttemptId, userId: this.userId },
+      });
+      if (!source) {
+        throw new CareerRuntimeError(
+          "ATTEMPT_NOT_FOUND",
+          "Application attempt not found",
+        );
+      }
+
+      const target = await tx.jobOpportunity.findFirst({
+        where: { id: input.targetJobOpportunityId, userId: this.userId },
+        select: { id: true },
+      });
+      if (!target) {
+        throw new CareerRuntimeError(
+          "OPPORTUNITY_NOT_FOUND",
+          "Opportunity not found",
+        );
+      }
+
+      if (source.jobOpportunityId === target.id) {
+        throw new CareerRuntimeError(
+          "TRANSFER_SAME_OPPORTUNITY",
+          "A transferred attempt must target a different job opportunity",
+        );
+      }
+
+      if (isTerminalAttemptOutcome(source.outcome)) {
+        throw new CareerRuntimeError(
+          "TRANSFER_SOURCE_TERMINAL",
+          "A terminal application cannot be transferred",
+        );
+      }
+
+      await tx.applicationAttempt.update({
+        where: { id: source.id },
+        data: { outcome: ATTEMPT_OUTCOME.TRANSFERRED },
+      });
+
+      return tx.applicationAttempt.create({
+        data: {
+          userId: this.userId,
+          jobOpportunityId: target.id,
+          channelLabel: source.channelLabel,
+          channelCategory: source.channelCategory,
+          currentStageCategory: ATTEMPT_STAGE.DRAFT,
+          outcome: ATTEMPT_OUTCOME.ACTIVE,
+          transferredFromAttemptId: source.id,
+          createdVia: "TRANSFER",
+        },
+      });
+    });
+  }
+
   async getTimeline(jobOpportunityId: string): Promise<ApplicationTimelineDTO> {
     const opportunity = await this.db.jobOpportunity.findFirst({
       where: { id: jobOpportunityId, userId: this.userId },
@@ -200,6 +262,18 @@ export class ApplicationService {
             resumeVariant: { select: { name: true } },
           },
         },
+        transferredFromAttempt: {
+          select: {
+            id: true,
+            jobOpportunity: {
+              select: {
+                id: true,
+                title: true,
+                company: { select: { label: true } },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -217,6 +291,15 @@ export class ApplicationService {
         createdAt: attempt.createdAt.toISOString(),
         currentStageCategory: attempt.currentStageCategory,
         outcome: attempt.outcome,
+        transferredFromAttemptId: attempt.transferredFromAttemptId,
+        transferredFrom: attempt.transferredFromAttempt
+          ? {
+              attemptId: attempt.transferredFromAttempt.id,
+              opportunityId: attempt.transferredFromAttempt.jobOpportunity.id,
+              title: attempt.transferredFromAttempt.jobOpportunity.title,
+              company: attempt.transferredFromAttempt.jobOpportunity.company.label,
+            }
+          : null,
         submittedResume: attempt.submittedResumeVersion
           ? {
               id: attempt.submittedResumeVersion.id,
