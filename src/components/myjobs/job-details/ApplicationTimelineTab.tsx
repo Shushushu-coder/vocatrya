@@ -3,11 +3,13 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import { CalendarClock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DeleteAlertDialog } from "@/components/DeleteAlertDialog";
 import { JobTabEmptyState } from "./JobTabEmptyState";
 import { ProcessStepDialog, type ProcessStepFormValues } from "./ProcessStepDialog";
 import {
   completeApplicationProcessStep,
   createApplicationProcessStep,
+  deleteApplicationProcessStep,
   getApplicationTimeline,
   updateApplicationProcessStep,
 } from "@/actions/application.actions";
@@ -15,7 +17,11 @@ import type {
   ApplicationProcessStepDTO,
   ApplicationTimelineDTO,
 } from "@/lib/career/applicationTimeline";
-import { PROCESS_STEP_SOURCE, PROCESS_STEP_STATUS } from "@/lib/career/identities";
+import {
+  PROCESS_STEP_CATEGORY,
+  PROCESS_STEP_SOURCE,
+  PROCESS_STEP_STATUS,
+} from "@/lib/career/identities";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 
@@ -36,11 +42,15 @@ export function ApplicationTimelineTab({
   refreshKey,
   canMutate,
 }: ApplicationTimelineTabProps) {
-  const { t, formatDateTime } = useI18n();
+  const { t, formatDate, formatDateTime } = useI18n();
   const [timeline, setTimeline] = useState<ApplicationTimelineDTO | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editStep, setEditStep] = useState<ApplicationProcessStepDTO | null>(null);
+  const [stepToDelete, setStepToDelete] = useState<ApplicationProcessStepDTO | null>(
+    null,
+  );
   const [completingId, startComplete] = useTransition();
+  const [deletingId, startDelete] = useTransition();
 
   const loadTimeline = useCallback(async () => {
     const result = await getApplicationTimeline(jobId);
@@ -77,6 +87,7 @@ export function ApplicationTimelineTab({
           category: restrictFields ? undefined : values.category,
           label: restrictFields ? undefined : values.label,
           scheduledAt: restrictFields ? undefined : values.scheduledAt,
+          deadlineAt: restrictFields ? undefined : values.deadlineAt,
           notes: values.notes || null,
           result: values.result || null,
         })
@@ -85,6 +96,7 @@ export function ApplicationTimelineTab({
           category: values.category,
           label: values.label,
           scheduledAt: values.scheduledAt,
+          deadlineAt: values.deadlineAt,
           notes: values.notes || null,
         });
     if (!result.success) {
@@ -104,6 +116,21 @@ export function ApplicationTimelineTab({
         return;
       }
       toastSuccess(t("jobs.stepCompleted"));
+      await loadTimeline();
+    });
+  };
+
+  const onConfirmDelete = () => {
+    if (!stepToDelete) return;
+    const stepId = stepToDelete.id;
+    startDelete(async () => {
+      const result = await deleteApplicationProcessStep(stepId);
+      if (!result.success) {
+        toastError(result.message);
+        return;
+      }
+      toastSuccess(t("jobs.stepDeleted"));
+      setStepToDelete(null);
       await loadTimeline();
     });
   };
@@ -243,18 +270,29 @@ export function ApplicationTimelineTab({
             </div>
           </div>
 
+          {attempt.steps.length === 0 ? (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="timeline-steps-empty"
+            >
+              {t("jobs.timelineStepsEmpty")}
+            </p>
+          ) : (
           <ol className="space-y-3">
             {attempt.steps.map((step) => {
               const source = sourceLabel(step.source);
+              const isUserStep = step.source === PROCESS_STEP_SOURCE.USER;
               const canComplete =
                 canMutate &&
                 !isCompleted(step) &&
-                step.source === PROCESS_STEP_SOURCE.USER;
+                isUserStep;
+              const canDelete = canMutate && isUserStep;
               return (
                 <li
                   key={step.id}
                   className="rounded-md border bg-muted/30 p-3"
                   data-testid="application-process-step"
+                  data-step-source={step.source}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
@@ -282,7 +320,15 @@ export function ApplicationTimelineTab({
                         <dt className="text-muted-foreground">
                           {t("jobs.stepScheduledAt")}
                         </dt>
-                        <dd>{formatDateTime(step.scheduledAt)}</dd>
+                        <dd>{formatDate(step.scheduledAt)}</dd>
+                      </div>
+                    )}
+                    {step.deadlineAt && (
+                      <div>
+                        <dt className="text-muted-foreground">
+                          {t("jobs.stepDeadlineAt")}
+                        </dt>
+                        <dd>{formatDate(step.deadlineAt)}</dd>
                       </div>
                     )}
                     {step.completedAt && (
@@ -330,12 +376,26 @@ export function ApplicationTimelineTab({
                           {t("jobs.markStepComplete")}
                         </Button>
                       )}
+                      {canDelete && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-muted-foreground"
+                          onClick={() => setStepToDelete(step)}
+                          disabled={deletingId}
+                          data-testid="delete-process-step"
+                        >
+                          {t("common.delete")}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </li>
               );
             })}
           </ol>
+          )}
         </section>
       ))}
       {canMutate && (
@@ -345,6 +405,18 @@ export function ApplicationTimelineTab({
           editStep={editStep}
           restrictFields={restrictFields}
           onSubmit={onSave}
+        />
+      )}
+      {canMutate && (
+        <DeleteAlertDialog
+          pageTitle=""
+          open={stepToDelete != null}
+          onOpenChange={(open) => {
+            if (!open) setStepToDelete(null);
+          }}
+          onDelete={onConfirmDelete}
+          alertTitle={t("jobs.deleteProcessStepTitle")}
+          alertDescription={t("jobs.deleteProcessStepDescription")}
         />
       )}
     </div>

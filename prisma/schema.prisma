@@ -868,6 +868,7 @@ model ApplicationProcessStep {
   status      String    @default("PENDING")
   sortOrder   Int
   scheduledAt DateTime?
+  deadlineAt  DateTime?
   completedAt DateTime?
   result      String?
   source      String    @default("USER")

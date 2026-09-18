@@ -1,7 +1,7 @@
 import { getJobSourceList, getStatusList } from "@/actions/job.actions";
 import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
 import { getServerI18n } from "@/i18n/server";
-import JobsContainer from "@/components/myjobs/JobsContainer";
+import { MyJobsPageTabs } from "@/components/myjobs/MyJobsPageTabs";
 import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
 import { getAllCompanies } from "@/actions/company.actions";
 import { getAllJobTitles } from "@/actions/jobtitle.actions";
@@ -27,7 +27,7 @@ async function MyJobs() {
   return (
     <div className="col-span-3">
       <CareerRuntimeNotice mode={runtime.mode} />
-      <JobsContainer
+      <MyJobsPageTabs
         companies={companies}
         titles={titles}
         locations={locations}

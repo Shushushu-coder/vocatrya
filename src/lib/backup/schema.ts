@@ -437,6 +437,7 @@ const ApplicationProcessStep = z.object({
   status: str,
   sortOrder: int,
   scheduledAt: optDt,
+  deadlineAt: optDt.optional(),
   completedAt: optDt,
   result: optStr,
   source: str,

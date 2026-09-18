@@ -4,9 +4,11 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { BackupDataSchema } from "@/lib/backup/schema";
 import {
   copyFoundationMigrationInto,
+  copyMigrationBySuffix,
   makeAbTestDbUrl,
   migrateDeploy,
   preparePrismaProject,
+  PROCESS_STEP_DEADLINE_MIGRATION,
 } from "./helpers/abSchemaTestDb";
 
 const LEGACY_TABLES = [
@@ -164,6 +166,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
     const ctx = makeAbTestDbUrl();
     const schemaPath = preparePrismaProject(ctx.dir, {
       excludeFoundation: true,
+      excludeSuffix: PROCESS_STEP_DEADLINE_MIGRATION,
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
 
@@ -237,6 +240,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
       };
 
       copyFoundationMigrationInto(ctx.dir);
+      copyMigrationBySuffix(ctx.dir, PROCESS_STEP_DEADLINE_MIGRATION);
       migrateDeploy(ctx.url, schemaPath);
 
       expect(await prisma.job.count()).toBe(before.jobs);

@@ -340,6 +340,7 @@ describe("JobDetails – tabs", () => {
                 status: "IN_PROGRESS",
                 source: "SYSTEM",
                 scheduledAt: null,
+                deadlineAt: null,
                 completedAt: null,
                 result: null,
                 notes: null,

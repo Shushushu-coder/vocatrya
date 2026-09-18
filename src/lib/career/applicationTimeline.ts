@@ -11,6 +11,7 @@ export type ApplicationProcessStepDTO = {
   status: string;
   source: string;
   scheduledAt: string | null;
+  deadlineAt: string | null;
   completedAt: string | null;
   result: string | null;
   notes: string | null;

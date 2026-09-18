@@ -46,6 +46,7 @@ export type ProcessStepFormValues = {
   category: string;
   label: string;
   scheduledAt: Date | null;
+  deadlineAt: Date | null;
   notes: string;
   result: string;
 };
@@ -72,6 +73,7 @@ export function ProcessStepDialog({
       category: PROCESS_STEP_CATEGORY.INTERVIEW,
       label: "",
       scheduledAt: null,
+      deadlineAt: null,
       notes: "",
       result: "",
     },
@@ -83,6 +85,7 @@ export function ProcessStepDialog({
       category: editStep?.category ?? PROCESS_STEP_CATEGORY.INTERVIEW,
       label: editStep?.label ?? "",
       scheduledAt: editStep?.scheduledAt ? new Date(editStep.scheduledAt) : null,
+      deadlineAt: editStep?.deadlineAt ? new Date(editStep.deadlineAt) : null,
       notes: editStep?.notes ?? "",
       result: editStep?.result ?? "",
     });
@@ -152,22 +155,40 @@ export function ProcessStepDialog({
               )}
             />
             {!restrictFields && (
-              <FormField
-                control={form.control}
-                name="scheduledAt"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>{t("jobs.stepScheduledAt")}</FormLabel>
-                    <DatePicker
-                      field={field}
-                      presets={false}
-                      isEnabled
-                      fullWidth
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <>
+                <FormField
+                  control={form.control}
+                  name="scheduledAt"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>{t("jobs.stepScheduledAt")}</FormLabel>
+                      <DatePicker
+                        field={field}
+                        presets={false}
+                        isEnabled
+                        fullWidth
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="deadlineAt"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>{t("jobs.stepDeadlineAt")}</FormLabel>
+                      <DatePicker
+                        field={field}
+                        presets={false}
+                        isEnabled
+                        fullWidth
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
             )}
             <FormField
               control={form.control}

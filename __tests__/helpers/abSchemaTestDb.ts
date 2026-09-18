@@ -7,6 +7,7 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 const SCHEMA_PATH = path.join(REPO_ROOT, "prisma", "schema.prisma");
 const MIGRATIONS_DIR = path.join(REPO_ROOT, "prisma", "migrations");
 export const AB_FOUNDATION_MIGRATION = "add_vocatrya_ab_foundation";
+export const PROCESS_STEP_DEADLINE_MIGRATION = "add_process_step_deadline_at";
 
 export function makeAbTestDbUrl(): { url: string; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-ab-schema-"));
@@ -14,10 +15,10 @@ export function makeAbTestDbUrl(): { url: string; dir: string } {
   return { url: `file:${dbPath}`, dir };
 }
 
-function copyMigrations(dest: string, excludeSuffix?: string): void {
+function copyMigrations(dest: string, excludeSuffixes: string[] = []): void {
   fs.mkdirSync(dest, { recursive: true });
   for (const name of fs.readdirSync(MIGRATIONS_DIR)) {
-    if (excludeSuffix && name.endsWith(excludeSuffix)) continue;
+    if (excludeSuffixes.some((suffix) => name.endsWith(suffix))) continue;
     fs.cpSync(path.join(MIGRATIONS_DIR, name), path.join(dest, name), {
       recursive: true,
     });
@@ -26,14 +27,19 @@ function copyMigrations(dest: string, excludeSuffix?: string): void {
 
 export function preparePrismaProject(
   dir: string,
-  options: { excludeFoundation?: boolean } = {},
+  options: { excludeFoundation?: boolean; excludeSuffix?: string | string[] } = {},
 ): string {
   const schemaPath = path.join(dir, "schema.prisma");
   fs.copyFileSync(SCHEMA_PATH, schemaPath);
-  copyMigrations(
-    path.join(dir, "migrations"),
-    options.excludeFoundation ? AB_FOUNDATION_MIGRATION : undefined,
-  );
+  const excludeSuffixes = [
+    ...(options.excludeFoundation ? [AB_FOUNDATION_MIGRATION] : []),
+    ...(options.excludeSuffix
+      ? Array.isArray(options.excludeSuffix)
+        ? options.excludeSuffix
+        : [options.excludeSuffix]
+      : []),
+  ];
+  copyMigrations(path.join(dir, "migrations"), excludeSuffixes);
   return schemaPath;
 }
 
@@ -50,16 +56,20 @@ export function migrateDeploy(url: string, schemaPath: string): void {
   );
 }
 
-export function copyFoundationMigrationInto(projectDir: string): void {
+export function copyMigrationBySuffix(projectDir: string, suffix: string): void {
   const source = fs
     .readdirSync(MIGRATIONS_DIR)
-    .find((name) => name.endsWith(AB_FOUNDATION_MIGRATION));
+    .find((name) => name.endsWith(suffix));
   if (!source) {
-    throw new Error(`Missing ${AB_FOUNDATION_MIGRATION} migration`);
+    throw new Error(`Missing ${suffix} migration`);
   }
   fs.cpSync(
     path.join(MIGRATIONS_DIR, source),
     path.join(projectDir, "migrations", source),
     { recursive: true },
   );
+}
+
+export function copyFoundationMigrationInto(projectDir: string): void {
+  copyMigrationBySuffix(projectDir, AB_FOUNDATION_MIGRATION);
 }

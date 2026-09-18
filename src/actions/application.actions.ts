@@ -2,6 +2,10 @@
 import prisma from "@/lib/db";
 import { ApplicationService } from "@/lib/career/applicationService";
 import type { ApplicationTimelineDTO } from "@/lib/career/applicationTimeline";
+import {
+  listUpcomingApplicationEvents as queryUpcomingApplicationEvents,
+  type UpcomingApplicationEvent,
+} from "@/lib/career/upcomingReadModel";
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
@@ -26,13 +30,21 @@ function assertAbApplicationWrites(mode: string): void {
   );
 }
 
-function parseOptionalDate(value: Date | string | null | undefined): Date | null | undefined {
+function parseOptionalDate(
+  value: Date | string | null | undefined,
+  field: string,
+): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
   if (value instanceof Date) return value;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    throw new CareerRuntimeError("PROCESS_STEP_SCHEDULE_INVALID", "scheduledAt is invalid");
+    throw new CareerRuntimeError(
+      field === "deadlineAt"
+        ? "PROCESS_STEP_DEADLINE_INVALID"
+        : "PROCESS_STEP_SCHEDULE_INVALID",
+      `${field} is invalid`,
+    );
   }
   return parsed;
 }
@@ -60,11 +72,31 @@ export async function getApplicationTimeline(
   }
 }
 
+export async function listUpcomingApplicationEvents(): Promise<
+  ActionResult<UpcomingApplicationEvent[]>
+> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (!isAbReadMode(runtime.mode)) {
+      throw new CareerRuntimeError(
+        "UPCOMING_UNAVAILABLE",
+        `Upcoming events are not available in ${runtime.mode}`,
+      );
+    }
+    const data = await queryUpcomingApplicationEvents(prisma, user.id);
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to load upcoming events.");
+  }
+}
+
 export async function createApplicationProcessStep(input: {
   jobOpportunityId: string;
   category: string;
   label: string;
   scheduledAt?: Date | string | null;
+  deadlineAt?: Date | string | null;
   notes?: string | null;
 }): Promise<ActionResult<ApplicationProcessStep>> {
   try {
@@ -75,7 +107,8 @@ export async function createApplicationProcessStep(input: {
       jobOpportunityId: input.jobOpportunityId,
       category: input.category,
       label: input.label,
-      scheduledAt: parseOptionalDate(input.scheduledAt) ?? null,
+      scheduledAt: parseOptionalDate(input.scheduledAt, "scheduledAt") ?? null,
+      deadlineAt: parseOptionalDate(input.deadlineAt, "deadlineAt") ?? null,
       notes: input.notes ?? null,
     });
     revalidatePath("/dashboard");
@@ -90,6 +123,7 @@ export async function updateApplicationProcessStep(input: {
   category?: string;
   label?: string;
   scheduledAt?: Date | string | null;
+  deadlineAt?: Date | string | null;
   notes?: string | null;
   result?: string | null;
 }): Promise<ActionResult<ApplicationProcessStep>> {
@@ -101,7 +135,8 @@ export async function updateApplicationProcessStep(input: {
       stepId: input.stepId,
       category: input.category,
       label: input.label,
-      scheduledAt: parseOptionalDate(input.scheduledAt),
+      scheduledAt: parseOptionalDate(input.scheduledAt, "scheduledAt"),
+      deadlineAt: parseOptionalDate(input.deadlineAt, "deadlineAt"),
       notes: input.notes,
       result: input.result,
     });
@@ -124,5 +159,20 @@ export async function completeApplicationProcessStep(
     return { success: true, data };
   } catch (error) {
     return handleError(error, "Failed to complete process step.");
+  }
+}
+
+export async function deleteApplicationProcessStep(
+  stepId: string,
+): Promise<ActionResult<ApplicationProcessStep>> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertAbApplicationWrites(runtime.mode);
+    const data = await applicationsFor(user.id).deleteUserProcessStep(stepId);
+    revalidatePath("/dashboard");
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to delete process step.");
   }
 }

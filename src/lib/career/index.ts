@@ -61,6 +61,20 @@ export type {
   ApplicationProcessStepDTO,
   SubmittedResumeDTO,
 } from "./applicationTimeline";
+export {
+  UPCOMING_EVENT_KIND,
+  UPCOMING_BUCKET_ID,
+  listUpcomingApplicationEvents,
+  bucketUpcomingApplicationEvents,
+  compareUpcomingEvents,
+  isUpcomingOverdue,
+} from "./upcomingReadModel";
+export type {
+  UpcomingEventKind,
+  UpcomingApplicationEvent,
+  UpcomingBucketId,
+  UpcomingBucket,
+} from "./upcomingReadModel";
 export { CareerMaterialService } from "./careerMaterialService";
 export { ResumeVariantService } from "./resumeVariantService";
 export {

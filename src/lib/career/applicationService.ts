@@ -231,6 +231,7 @@ export class ApplicationService {
           status: step.status,
           source: step.source,
           scheduledAt: toIso(step.scheduledAt),
+          deadlineAt: toIso(step.deadlineAt),
           completedAt: toIso(step.completedAt),
           result: step.result,
           notes: step.notes,
@@ -244,6 +245,7 @@ export class ApplicationService {
     category: string;
     label: string;
     scheduledAt?: Date | null;
+    deadlineAt?: Date | null;
     notes?: string | null;
   }) {
     await this.gate();
@@ -266,6 +268,7 @@ export class ApplicationService {
         sortOrder: allocateUserSortOrder(max._max.sortOrder),
         status: PROCESS_STEP_STATUS.PENDING,
         scheduledAt: input.scheduledAt ?? null,
+        deadlineAt: input.deadlineAt ?? null,
         notes: input.notes ?? null,
         source: PROCESS_STEP_SOURCE.USER,
       },
@@ -277,6 +280,7 @@ export class ApplicationService {
     category?: string;
     label?: string;
     scheduledAt?: Date | null;
+    deadlineAt?: Date | null;
     notes?: string | null;
     result?: string | null;
   }) {
@@ -309,6 +313,8 @@ export class ApplicationService {
         label: input.label === undefined ? existing.label : input.label.trim(),
         scheduledAt:
           input.scheduledAt === undefined ? existing.scheduledAt : input.scheduledAt,
+        deadlineAt:
+          input.deadlineAt === undefined ? existing.deadlineAt : input.deadlineAt,
         notes: input.notes === undefined ? existing.notes : input.notes,
         result: input.result === undefined ? existing.result : input.result,
       },
@@ -327,6 +333,20 @@ export class ApplicationService {
         status: PROCESS_STEP_STATUS.COMPLETED,
         completedAt: new Date(),
       },
+    });
+  }
+
+  async deleteUserProcessStep(stepId: string) {
+    await this.gate();
+    const existing = await this.requireOwnedStep(stepId);
+    if (existing.source !== PROCESS_STEP_SOURCE.USER) {
+      throw new CareerRuntimeError(
+        "PROCESS_STEP_DELETE_NOT_ALLOWED",
+        "Only user-created process steps can be deleted",
+      );
+    }
+    return this.db.applicationProcessStep.delete({
+      where: { id: existing.id },
     });
   }
 
@@ -380,6 +400,7 @@ export class ApplicationService {
     sortOrder: number;
     status?: string;
     scheduledAt?: Date | null;
+    deadlineAt?: Date | null;
     completedAt?: Date | null;
     result?: string | null;
     notes?: string | null;
@@ -396,6 +417,7 @@ export class ApplicationService {
       sortOrder: input.sortOrder,
       status,
       scheduledAt: input.scheduledAt ?? null,
+      deadlineAt: input.deadlineAt ?? null,
       completedAt:
         input.completedAt ??
         (status === PROCESS_STEP_STATUS.COMPLETED ? new Date() : null),
@@ -428,6 +450,7 @@ export class ApplicationService {
           sortOrder: data.sortOrder,
           status: data.status,
           scheduledAt: data.scheduledAt,
+          deadlineAt: data.deadlineAt,
           completedAt: data.completedAt,
           result: data.result,
           notes: data.notes,
