@@ -399,9 +399,18 @@ describe("Dashboard Actions", () => {
         activityType: { label },
       }));
 
+    const mockJobAndActivity = (
+      jobsApplied: number,
+      priorJobs: number,
+      activities: unknown[],
+    ) => {
+      (prisma.$transaction as any).mockResolvedValue([jobsApplied, priorJobs]);
+      (prisma.activity.findMany as any).mockResolvedValue(activities);
+    };
+
     it("returns the top three types and folds the rest into otherHours", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([
+      mockJobAndActivity(
         12,
         8,
         activityRows([
@@ -411,7 +420,7 @@ describe("Dashboard Actions", () => {
           ["Job Search", 120],
           ["Networking", 60],
         ]),
-      ]);
+      );
 
       const result = await getJobsActivitySummary(7);
 
@@ -431,7 +440,7 @@ describe("Dashboard Actions", () => {
 
     it("makes totalHours equal the sum of the values it reports", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([
+      mockJobAndActivity(
         0,
         0,
         activityRows([
@@ -440,7 +449,7 @@ describe("Dashboard Actions", () => {
           ["C", 25],
           ["D", 5],
         ]),
-      ]);
+      );
 
       const result = await getJobsActivitySummary(30);
       const sum =
@@ -452,14 +461,14 @@ describe("Dashboard Actions", () => {
 
     it("reports zero otherHours when there are three or fewer types", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([
+      mockJobAndActivity(
         3,
         3,
         activityRows([
           ["Jobsync", 120],
           ["Learning", 60],
         ]),
-      ]);
+      );
 
       const result = await getJobsActivitySummary(7);
 
@@ -470,13 +479,15 @@ describe("Dashboard Actions", () => {
 
     it("returns empty results when nothing is logged", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([0, 0, []]);
+      mockJobAndActivity(0, 0, []);
 
       const result = await getJobsActivitySummary(7);
 
       expect(result).toEqual({
         jobsApplied: 0,
         jobsTrend: 0,
+        jobsInterview: undefined,
+        jobsOffer: undefined,
         topActivities: [],
         otherActivities: [],
         otherHours: 0,
@@ -486,11 +497,7 @@ describe("Dashboard Actions", () => {
 
     it("labels activities with no type as Unknown", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([
-        0,
-        0,
-        [{ duration: 90, activityType: null }],
-      ]);
+      mockJobAndActivity(0, 0, [{ duration: 90, activityType: null }]);
 
       const result = await getJobsActivitySummary(7);
 
@@ -499,7 +506,7 @@ describe("Dashboard Actions", () => {
 
     it("reports the percent change against the preceding window", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([15, 10, []]);
+      mockJobAndActivity(15, 10, []);
 
       const result = await getJobsActivitySummary(7);
 
@@ -508,7 +515,7 @@ describe("Dashboard Actions", () => {
 
     it("reports a negative trend when the count fell", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([5, 10, []]);
+      mockJobAndActivity(5, 10, []);
 
       const result = await getJobsActivitySummary(7);
 
@@ -517,7 +524,7 @@ describe("Dashboard Actions", () => {
 
     it("reports a zero trend when the preceding window was also empty", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.$transaction as any).mockResolvedValue([0, 0, []]);
+      mockJobAndActivity(0, 0, []);
 
       const result = await getJobsActivitySummary(7);
 

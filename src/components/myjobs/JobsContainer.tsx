@@ -26,6 +26,7 @@ import { useJobsList } from "./jobs-container/useJobsList";
 import { downloadJobsList } from "./jobs-container/downloadJobsCsv";
 import { JobsToolbar } from "./jobs-container/JobsToolbar";
 import { useI18n } from "@/i18n";
+import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
 type MyJobsProps = {
   statuses: JobStatus[];
@@ -50,6 +51,7 @@ function JobsContainer({
 }: MyJobsProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const deleteIsArchive = isAbJobReadMode(careerRuntimeMode);
   const [editJob, setEditJob] = useState(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteJobId, setNoteJobId] = useState("");
@@ -96,7 +98,9 @@ function JobsContainer({
   const onDeleteJob = async (jobId: string) => {
     const { res, success, message } = await deleteJobById(jobId);
     if (success) {
-      toastSuccess(t("jobs.deletedSuccess"));
+      toastSuccess(
+        deleteIsArchive ? t("jobs.archivedSuccess") : t("jobs.deletedSuccess"),
+      );
     } else {
       toastError(message);
     }
@@ -180,6 +184,7 @@ function JobsContainer({
                 editJob={onEditJob}
                 onChangeJobStatus={onChangeJobStatus}
                 onAddNote={onAddNote}
+                deleteIsArchive={deleteIsArchive}
               />
             ) : (
               <MyJobsTable
@@ -189,6 +194,7 @@ function JobsContainer({
                 editJob={onEditJob}
                 onChangeJobStatus={onChangeJobStatus}
                 onAddNote={onAddNote}
+                deleteIsArchive={deleteIsArchive}
               />
             ))}
           {jobs.length < totalJobs && (

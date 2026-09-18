@@ -213,6 +213,10 @@
     "jobsAppliedTitle": "投递趋势",
     "jobCountOne": "{count} 个职位",
     "jobCountMany": "{count} 个职位",
+    "interviewCountOne": "{count} 个面试",
+    "interviewCountMany": "{count} 个面试",
+    "offerCountOne": "{count} 个 Offer",
+    "offerCountMany": "{count} 个 Offer",
     "activitiesTitle": "活动热度",
     "calendarTitle": "求职日程热力图",
     "jobsAndActivity": "职位与活动概况",
@@ -291,6 +295,7 @@
       "offer-accepted": "已接受 Offer",
       "offer-declined": "已谢绝 Offer",
       "rejected": "未通过",
+      "transferred": "被调剂",
       "expired": "已截止",
       "archived": "已归档"
     },
@@ -334,6 +339,7 @@
     "createdSuccess": "职位已创建",
     "updatedSuccess": "职位已更新",
     "deletedSuccess": "职位已删除",
+    "archivedSuccess": "职位已归档",
     "viewDetails": "查看详情",
     "addANote": "添加笔记",
     "changeStatus": "更改状态",
@@ -378,6 +384,9 @@
     "addNoteDescription": "为该职位申请添加一条笔记。",
     "deleteNoteConfirm": "确定要删除这条笔记吗？",
     "deleteConfirm": "确定要删除该职位吗？",
+    "archiveConfirm": "确定要归档该职位吗？",
+    "archiveConfirmDescription": "归档后它会从当前职位列表、Dashboard 求职统计和 CSV 导出中移除，但不会永久删除。",
+    "archiveAction": "归档",
     "edited": "（已编辑）",
     "searchOrAddSkill": "搜索或添加技能...",
     "typeASkill": "输入技能...",
@@ -448,7 +457,8 @@
       "WITHDRAWN": "已撤回",
       "REJECTED": "未通过",
       "OFFER": "已获 Offer",
-      "HIRED": "已入职"
+      "HIRED": "已入职",
+      "TRANSFERRED": "被调剂"
     }
   },
   "automations": {

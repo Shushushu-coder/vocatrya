@@ -236,6 +236,38 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
                 { count: jobsApplied },
               )}
             </span>
+            {current.summary.jobsInterview != null && (
+              <span
+                className={cn(
+                  "text-muted-foreground tabular-nums",
+                  roomyTotal ? "text-xs" : "text-[10px]",
+                )}
+                data-testid="jobs-activity-interview-count"
+              >
+                {t(
+                  current.summary.jobsInterview === 1
+                    ? "dashboard.interviewCountOne"
+                    : "dashboard.interviewCountMany",
+                  { count: current.summary.jobsInterview },
+                )}
+              </span>
+            )}
+            {current.summary.jobsOffer != null && (
+              <span
+                className={cn(
+                  "text-muted-foreground tabular-nums",
+                  roomyTotal ? "text-xs" : "text-[10px]",
+                )}
+                data-testid="jobs-activity-offer-count"
+              >
+                {t(
+                  current.summary.jobsOffer === 1
+                    ? "dashboard.offerCountOne"
+                    : "dashboard.offerCountMany",
+                  { count: current.summary.jobsOffer },
+                )}
+              </span>
+            )}
             {jobsTrend !== 0 && roomyTotal && (
               <span
                 className={cn(

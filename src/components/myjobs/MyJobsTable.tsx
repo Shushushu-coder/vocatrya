@@ -28,6 +28,7 @@ type MyJobsTableProps = {
   editJob: (id: string) => void;
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   onAddNote: (jobId: string) => void;
+  deleteIsArchive?: boolean;
 };
 
 import { useI18n } from "@/i18n";
@@ -39,6 +40,7 @@ function MyJobsTable({
   editJob,
   onChangeJobStatus,
   onAddNote,
+  deleteIsArchive = false,
 }: MyJobsTableProps) {
   const { t, formatDate } = useI18n();
   const [alertOpen, setAlertOpen] = useState(false);
@@ -143,7 +145,13 @@ function MyJobsTable({
       </Table>
       <DeleteAlertDialog
         pageTitle="job"
-        alertTitle={t("jobs.deleteConfirm")}
+        alertTitle={
+          deleteIsArchive ? t("jobs.archiveConfirm") : t("jobs.deleteConfirm")
+        }
+        alertDescription={
+          deleteIsArchive ? t("jobs.archiveConfirmDescription") : undefined
+        }
+        actionLabel={deleteIsArchive ? t("jobs.archiveAction") : undefined}
         open={alertOpen}
         onOpenChange={setAlertOpen}
         onDelete={() => deleteJob(jobIdToDelete)}

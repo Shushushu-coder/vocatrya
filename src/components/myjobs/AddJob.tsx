@@ -131,7 +131,7 @@ export function AddJob({
   const newJobDefaultValues = {
     type: Object.keys(JOB_TYPES)[0],
     workplaceType: "ONSITE",
-    dueDate: addDays(new Date(), 3),
+    dueDate: hideUnsupportedAbFields ? null : addDays(new Date(), 3),
     status: jobStatuses[0]?.id,
     salaryRange: "",
     jobUrl: "",
@@ -183,7 +183,7 @@ export function AddJob({
         workplaceType: editJob.workplaceType ?? undefined,
         source: editJob.JobSource?.id,
         status: editJob.Status.id,
-        dueDate: editJob.dueDate,
+        dueDate: editJob.dueDate ?? null,
         salaryRange: editJob.salaryRange ?? "",
         jobDescription: editJob.description,
         applied: editJob.applied,
@@ -548,7 +548,12 @@ export function AddJob({
                     name="dueDate"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>{t("jobs.dueDate")}</FormLabel>
+                        <FormLabel>
+                          {t("jobs.dueDate")}
+                          {hideUnsupportedAbFields
+                            ? ` (${t("common.optional")})`
+                            : ""}
+                        </FormLabel>
                         <DatePicker
                           field={field}
                           presets={true}

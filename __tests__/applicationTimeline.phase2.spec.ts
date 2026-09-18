@@ -288,8 +288,8 @@ describe("Application process step writes", () => {
   });
 });
 
-describe("Compatibility process step dedupe and history protection", () => {
-  it("does not create duplicate INTERVIEW compatibility steps", async () => {
+describe("Header status no longer creates compatibility ProcessSteps", () => {
+  it("does not create an INTERVIEW ProcessStep when status becomes interview", async () => {
     const opportunity = await createOpportunity();
     await syncApplicationFromUiStatus(
       prisma,
@@ -305,28 +305,27 @@ describe("Compatibility process step dedupe and history protection", () => {
       "interview",
       { env: FEATURE_ON },
     );
-    const steps = await prisma.applicationProcessStep.findMany();
-    expect(steps).toHaveLength(1);
-    expect(steps[0].source).toBe(PROCESS_STEP_SOURCE.SYSTEM);
-    expect(steps[0].category).toBe(ATTEMPT_STAGE.INTERVIEW);
-    expect(steps[0].label).toBe(COMPATIBILITY_PROCESS_STEPS.INTERVIEW.label);
+    const attempt = await prisma.applicationAttempt.findFirstOrThrow();
+    expect(attempt.currentStageCategory).toBe(ATTEMPT_STAGE.INTERVIEW);
+    expect(await prisma.applicationProcessStep.count()).toBe(0);
+    expect(await prisma.job.count()).toBe(0);
   });
 
-  it("does not create duplicate OFFER compatibility steps", async () => {
+  it("does not create an OFFER ProcessStep when status becomes offer", async () => {
     const opportunity = await createOpportunity();
-    await syncApplicationFromUiStatus(prisma, userId, opportunity.id, "offer", {
+    await syncApplicationFromUiStatus(prisma, userId, opportunity.id, "interview", {
       env: FEATURE_ON,
     });
     await syncApplicationFromUiStatus(prisma, userId, opportunity.id, "offer", {
       env: FEATURE_ON,
     });
-    const steps = await prisma.applicationProcessStep.findMany();
-    expect(steps).toHaveLength(1);
-    expect(steps[0].source).toBe(PROCESS_STEP_SOURCE.SYSTEM);
-    expect(steps[0].category).toBe(ATTEMPT_STAGE.OFFER);
+    const attempt = await prisma.applicationAttempt.findFirstOrThrow();
+    expect(attempt.currentStageCategory).toBe(ATTEMPT_STAGE.OFFER);
+    expect(attempt.outcome).toBe(ATTEMPT_OUTCOME.OFFER);
+    expect(await prisma.applicationProcessStep.count()).toBe(0);
   });
 
-  it("does not treat a user interview round as the compatibility step", async () => {
+  it("leaves an existing USER interview step alone when status becomes interview", async () => {
     const { applications } = services();
     const opportunity = await createOpportunity();
     await applications.createAttempt({
@@ -345,70 +344,29 @@ describe("Compatibility process step dedupe and history protection", () => {
       "interview",
       { env: FEATURE_ON },
     );
-    const steps = await prisma.applicationProcessStep.findMany({
-      orderBy: { createdAt: "asc" },
-    });
-    expect(steps).toHaveLength(2);
-    expect(steps.map((row) => row.id)).toContain(userStep.id);
-    expect(steps.some((row) => row.source === PROCESS_STEP_SOURCE.SYSTEM)).toBe(
-      true,
-    );
-    const rereadUser = await prisma.applicationProcessStep.findUniqueOrThrow({
-      where: { id: userStep.id },
-    });
-    expect(rereadUser.label).toBe("一面");
-    expect(rereadUser.source).toBe(PROCESS_STEP_SOURCE.USER);
-  });
-
-  it("does not reset or delete a completed compatibility step on later status sync", async () => {
-    const { applications } = services();
-    const opportunity = await createOpportunity();
-    await syncApplicationFromUiStatus(
-      prisma,
-      userId,
-      opportunity.id,
-      "interview",
-      { env: FEATURE_ON },
-    );
-    const created = await prisma.applicationProcessStep.findFirstOrThrow();
-    const completed = await applications.completeProcessStep(created.id);
-    await applications.updateUserProcessStep({
-      stepId: created.id,
-      notes: "went well",
-    });
-    await syncApplicationFromUiStatus(
-      prisma,
-      userId,
-      opportunity.id,
-      "interview",
-      { env: FEATURE_ON },
-    );
     const steps = await prisma.applicationProcessStep.findMany();
     expect(steps).toHaveLength(1);
-    expect(steps[0].id).toBe(created.id);
-    expect(steps[0].status).toBe(PROCESS_STEP_STATUS.COMPLETED);
-    expect(steps[0].completedAt?.toISOString()).toBe(
-      completed.completedAt?.toISOString(),
-    );
-    expect(steps[0].label).toBe(COMPATIBILITY_PROCESS_STEPS.INTERVIEW.label);
-    expect(steps[0].category).toBe(ATTEMPT_STAGE.INTERVIEW);
-    expect(steps[0].notes).toBe("went well");
+    expect(steps[0].id).toBe(userStep.id);
+    expect(steps[0].source).toBe(PROCESS_STEP_SOURCE.USER);
+    expect(steps[0].label).toBe("一面");
   });
 
-  it("reuses a legacy USER compatibility step instead of duplicating it", async () => {
+  it("still returns a historical SYSTEM compatibility step from getTimeline", async () => {
     const { applications } = services();
     const opportunity = await createOpportunity();
     const attempt = await applications.createAttempt({
       jobOpportunityId: opportunity.id,
       channelLabel: "USER",
     });
-    const legacy = await applications.upsertProcessStep({
-      attemptId: attempt.id,
-      category: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.category,
-      label: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.label,
-      sortOrder: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.sortOrder,
-      status: PROCESS_STEP_STATUS.IN_PROGRESS,
-      source: PROCESS_STEP_SOURCE.USER,
+    await prisma.applicationProcessStep.create({
+      data: {
+        applicationAttemptId: attempt.id,
+        category: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.category,
+        label: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.label,
+        sortOrder: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.sortOrder,
+        status: PROCESS_STEP_STATUS.IN_PROGRESS,
+        source: PROCESS_STEP_SOURCE.SYSTEM,
+      },
     });
     await syncApplicationFromUiStatus(
       prisma,
@@ -417,10 +375,43 @@ describe("Compatibility process step dedupe and history protection", () => {
       "interview",
       { env: FEATURE_ON },
     );
-    const steps = await prisma.applicationProcessStep.findMany();
-    expect(steps).toHaveLength(1);
-    expect(steps[0].id).toBe(legacy.id);
-    expect(steps[0].source).toBe(PROCESS_STEP_SOURCE.SYSTEM);
+    const timeline = await applications.getTimeline(opportunity.id);
+    expect(timeline.attempts[0].steps).toHaveLength(1);
+    expect(timeline.attempts[0].steps[0].source).toBe(PROCESS_STEP_SOURCE.SYSTEM);
+    expect(timeline.attempts[0].steps[0].label).toBe(
+      COMPATIBILITY_PROCESS_STEPS.INTERVIEW.label,
+    );
+    expect(await prisma.applicationProcessStep.count()).toBe(1);
+  });
+
+  it("does not allocate reserved compatibility sortOrder 20 or 30 to user steps", async () => {
+    const { applications } = services();
+    const opportunity = await createOpportunity();
+    await applications.createAttempt({
+      jobOpportunityId: opportunity.id,
+      channelLabel: "USER",
+    });
+    const first = await applications.createUserProcessStep({
+      jobOpportunityId: opportunity.id,
+      category: PROCESS_STEP_CATEGORY.OTHER,
+      label: "Prep",
+    });
+    const second = await applications.createUserProcessStep({
+      jobOpportunityId: opportunity.id,
+      category: PROCESS_STEP_CATEGORY.INTERVIEW,
+      label: "Interview",
+    });
+    const third = await applications.createUserProcessStep({
+      jobOpportunityId: opportunity.id,
+      category: PROCESS_STEP_CATEGORY.OTHER,
+      label: "Follow up",
+    });
+    expect(first.sortOrder).not.toBe(20);
+    expect(first.sortOrder).not.toBe(30);
+    expect(second.sortOrder).not.toBe(20);
+    expect(second.sortOrder).not.toBe(30);
+    expect(third.sortOrder).not.toBe(20);
+    expect(third.sortOrder).not.toBe(30);
   });
 });
 

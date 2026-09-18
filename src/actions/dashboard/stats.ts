@@ -1,5 +1,6 @@
 import prisma from "@/lib/db";
 import { calculatePercentageDifference } from "@/lib/utils";
+import { loadDashboardJobCounts } from "@/lib/career/jobsReadDispatch";
 import { requireUser } from "../shared";
 import { getLocalDayRange, roundToTenth } from "./shared";
 
@@ -11,6 +12,8 @@ export interface TopActivityType {
 export interface JobsActivitySummary {
   jobsApplied: number;
   jobsTrend: number;
+  jobsInterview?: number;
+  jobsOffer?: number;
   topActivities: TopActivityType[];
   otherActivities: TopActivityType[];
   otherHours: number;
@@ -32,21 +35,8 @@ export const getJobsActivitySummary = async (
     // The equally long window immediately before this one, for the trend.
     const { start: priorStart } = getLocalDayRange(daysAgo * 2 - 1);
 
-    const [jobsApplied, priorJobs, activities] = await prisma.$transaction([
-      prisma.job.count({
-        where: {
-          userId: user.id,
-          applied: true,
-          appliedDate: { gte: start, lte: end },
-        },
-      }),
-      prisma.job.count({
-        where: {
-          userId: user.id,
-          applied: true,
-          appliedDate: { gte: priorStart, lt: start },
-        },
-      }),
+    const [jobCounts, activities] = await Promise.all([
+      loadDashboardJobCounts(prisma, user.id, { start, end, priorStart }),
       prisma.activity.findMany({
         where: {
           userId: user.id,
@@ -58,6 +48,7 @@ export const getJobsActivitySummary = async (
         },
       }),
     ]);
+    const { jobsApplied, priorJobs, jobsInterview, jobsOffer } = jobCounts;
 
     const groupedByType = activities.reduce(
       (acc: Record<string, number>, activity) => {
@@ -95,6 +86,8 @@ export const getJobsActivitySummary = async (
     return {
       jobsApplied,
       jobsTrend,
+      jobsInterview,
+      jobsOffer,
       topActivities,
       otherActivities,
       otherHours,

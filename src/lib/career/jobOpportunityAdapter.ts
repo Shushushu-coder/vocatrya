@@ -1,15 +1,21 @@
 import { createHash } from "node:crypto";
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { CareerRuntimeError } from "./errors";
 import {
   ATTEMPT_OUTCOME,
   ATTEMPT_STAGE,
-  COMPATIBILITY_PROCESS_STEPS,
   OPPORTUNITY_STATUS,
-  PROCESS_STEP_STATUS,
 } from "./identities";
 import { ApplicationService } from "./applicationService";
 import { OpportunityService } from "./opportunityService";
+import { isAbHiddenJobFilter } from "./jobsReadCapabilities";
+import {
+  deriveUiStatus,
+  pickLatestAttempt,
+  planUiStatusWrite,
+} from "./uiStatus";
+
+export { deriveUiStatus, pickLatestAttempt, planUiStatusWrite } from "./uiStatus";
 
 export type JobFormMutationInput = {
   id?: string;
@@ -30,15 +36,6 @@ export type JobFormMutationInput = {
 };
 
 type JobStatusRow = { id: string; label: string; value: string };
-
-const PROCESS_STAGE_BY_UI: Record<string, string> = {
-  applied: ATTEMPT_STAGE.SUBMITTED,
-  interview: ATTEMPT_STAGE.INTERVIEW,
-  offer: ATTEMPT_STAGE.OFFER,
-  rejected: ATTEMPT_STAGE.CLOSED,
-  "offer-accepted": ATTEMPT_STAGE.CLOSED,
-  "offer-declined": ATTEMPT_STAGE.CLOSED,
-};
 
 function sha256Text(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -156,30 +153,22 @@ export async function syncApplicationFromUiStatus(
   } = {},
 ) {
   const applications = new ApplicationService(db, userId, options.env);
-  const value = uiStatus.toLowerCase();
   const opportunities = new OpportunityService(db, userId, options.env);
+  const plan = planUiStatusWrite(uiStatus);
 
-  if (value === "expired") {
+  if (plan.kind === "expire-opportunity") {
     await opportunities.updateSafe(opportunityId, {
       status: OPPORTUNITY_STATUS.EXPIRED,
       closedAt: new Date(),
     });
     return;
   }
-  if (value === "archived") {
+  if (plan.kind === "archive-opportunity") {
     await opportunities.updateSafe(opportunityId, { archivedAt: new Date() });
     return;
   }
 
-  const needsAttempt =
-    options.applied === true ||
-    value === "applied" ||
-    value === "interview" ||
-    value === "offer" ||
-    value === "offer-accepted" ||
-    value === "offer-declined" ||
-    value === "rejected";
-
+  const needsAttempt = plan.kind === "attempt" || options.applied === true;
   if (!needsAttempt) {
     return;
   }
@@ -190,47 +179,23 @@ export async function syncApplicationFromUiStatus(
     sourceUrl: options.sourceUrl ?? null,
   });
 
-  if (value === "applied" || options.applied === true) {
+  const shouldMarkSubmitted =
+    (plan.kind === "attempt" && plan.markSubmitted) || options.applied === true;
+  if (shouldMarkSubmitted) {
     await applications.markSubmitted({
       attemptId: attempt.id,
       submittedAt: options.appliedDate ?? undefined,
     });
   }
 
-  const stage = PROCESS_STAGE_BY_UI[value];
-  if (stage && stage !== ATTEMPT_STAGE.SUBMITTED) {
-    await applications.updateStage(attempt.id, stage);
-  }
-
-  if (value === "interview") {
-    await applications.ensureCompatibilityProcessStep({
-      attemptId: attempt.id,
-      category: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.category,
-      label: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.label,
-      sortOrder: COMPATIBILITY_PROCESS_STEPS.INTERVIEW.sortOrder,
-      status: PROCESS_STEP_STATUS.IN_PROGRESS,
-    });
-  } else if (value === "offer" || value === "offer-accepted") {
-    await applications.ensureCompatibilityProcessStep({
-      attemptId: attempt.id,
-      category: COMPATIBILITY_PROCESS_STEPS.OFFER.category,
-      label: COMPATIBILITY_PROCESS_STEPS.OFFER.label,
-      sortOrder: COMPATIBILITY_PROCESS_STEPS.OFFER.sortOrder,
-      status:
-        value === "offer-accepted"
-          ? PROCESS_STEP_STATUS.COMPLETED
-          : PROCESS_STEP_STATUS.IN_PROGRESS,
-    });
-  }
-
-  if (value === "offer") {
-    await applications.recordOutcome(attempt.id, ATTEMPT_OUTCOME.OFFER);
-  } else if (value === "offer-accepted") {
-    await applications.recordOutcome(attempt.id, ATTEMPT_OUTCOME.HIRED);
-  } else if (value === "offer-declined") {
-    await applications.recordOutcome(attempt.id, ATTEMPT_OUTCOME.WITHDRAWN);
-  } else if (value === "rejected") {
-    await applications.recordOutcome(attempt.id, ATTEMPT_OUTCOME.REJECTED);
+  if (plan.kind === "attempt") {
+    const alreadyAtStage =
+      shouldMarkSubmitted &&
+      plan.currentStageCategory === ATTEMPT_STAGE.SUBMITTED;
+    if (!alreadyAtStage) {
+      await applications.updateStage(attempt.id, plan.currentStageCategory);
+    }
+    await applications.recordOutcome(attempt.id, plan.outcome);
   }
 }
 
@@ -282,8 +247,8 @@ export async function createOpportunityFromJobForm(
     );
 
     // applied/dateApplied/status are application semantics, not opportunity fields.
-    // Map them explicitly via the same compatibility path as update; sync is a
-    // no-op when the UI state does not imply an application.
+    // Map them onto ApplicationAttempt stage/outcome; this is a no-op when the
+    // UI state does not imply an application.
     await syncApplicationFromUiStatus(client, userId, created.id, status.value, {
       applied: input.applied,
       appliedDate: input.dateApplied ?? null,
@@ -352,32 +317,6 @@ export async function archiveOpportunity(
   return opportunities.updateSafe(opportunityId, { archivedAt: new Date() });
 }
 
-function deriveUiStatus(input: {
-  archivedAt: Date | null;
-  opportunityStatus: string;
-  attempt: {
-    currentStageCategory: string;
-    outcome: string;
-    submittedAt: Date | null;
-  } | null;
-}): string {
-  if (input.archivedAt) return "archived";
-  if (input.opportunityStatus === OPPORTUNITY_STATUS.EXPIRED) return "expired";
-  const attempt = input.attempt;
-  if (!attempt) return "draft";
-  if (attempt.outcome === ATTEMPT_OUTCOME.HIRED) return "offer-accepted";
-  if (attempt.outcome === ATTEMPT_OUTCOME.WITHDRAWN) return "offer-declined";
-  if (attempt.outcome === ATTEMPT_OUTCOME.REJECTED) return "rejected";
-  if (attempt.outcome === ATTEMPT_OUTCOME.OFFER) return "offer";
-  const stage = attempt.currentStageCategory;
-  if (stage === ATTEMPT_STAGE.INTERVIEW || stage === ATTEMPT_STAGE.SCREENING || stage === ATTEMPT_STAGE.ASSESSMENT) {
-    return "interview";
-  }
-  if (stage === ATTEMPT_STAGE.OFFER) return "offer";
-  if (stage === ATTEMPT_STAGE.SUBMITTED || attempt.submittedAt) return "applied";
-  return "draft";
-}
-
 type OpportunityWithRelations = {
   id: string;
   userId: string;
@@ -402,6 +341,7 @@ type OpportunityWithRelations = {
   };
   currentJdVersion: { rawContent: string } | null;
   applicationAttempts: Array<{
+    id: string;
     currentStageCategory: string;
     outcome: string;
     submittedAt: Date | null;
@@ -480,21 +420,21 @@ export function mapOpportunityToJobView(
   opportunity: OpportunityWithRelations,
   lookups: JobViewLookups,
 ) {
-  const latestAttempt = [...opportunity.applicationAttempts].sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-  )[0] ?? null;
+  const latestAttempt = pickLatestAttempt(opportunity.applicationAttempts);
   const uiStatus = deriveUiStatus({
     archivedAt: opportunity.archivedAt,
     opportunityStatus: opportunity.status,
     attempt: latestAttempt,
   });
   const status =
-    lookups.statuses.get(uiStatus) ??
-    lookups.statuses.get("draft") ?? {
-      id: uiStatus,
-      label: uiStatus,
-      value: uiStatus,
-    };
+    uiStatus === "transferred"
+      ? { id: "transferred", label: "Transferred", value: "transferred" }
+      : lookups.statuses.get(uiStatus) ??
+        lookups.statuses.get("draft") ?? {
+          id: uiStatus,
+          label: uiStatus,
+          value: uiStatus,
+        };
 
   const jobTitle =
     lookups.titles.get(opportunity.title) ?? {
@@ -527,11 +467,11 @@ export function mapOpportunityToJobView(
     Status: status,
     Location: location,
     JobSource: jobSource,
-    jobType: opportunity.employmentType ?? "full-time",
+    jobType: opportunity.employmentType ?? "",
     workplaceType: opportunity.workplaceType,
     createdAt: opportunity.createdAt,
     appliedDate: latestAttempt?.submittedAt ?? null,
-    dueDate: opportunity.deadline ?? opportunity.createdAt,
+    dueDate: opportunity.deadline ?? null,
     salaryRange: opportunity.salaryText,
     description:
       opportunity.currentJdVersion?.rawContent ?? opportunity.notes ?? "",
@@ -566,6 +506,7 @@ export const OPPORTUNITY_LIST_INCLUDE = {
   applicationAttempts: {
     where: { archivedAt: null },
     select: {
+      id: true,
       currentStageCategory: true,
       outcome: true,
       submittedAt: true,
@@ -575,21 +516,129 @@ export const OPPORTUNITY_LIST_INCLUDE = {
   _count: { select: { opportunityNotes: true } },
 } as const;
 
-export async function listOpportunitiesAsJobs(
+const DERIVED_UI_STATUS_FILTERS = new Set([
+  "draft",
+  "applied",
+  "interview",
+  "offer",
+  "rejected",
+  "offer-accepted",
+  "offer-declined",
+  "transferred",
+]);
+
+type OpportunityListOptions = {
+  skip?: number;
+  take?: number;
+  includeArchived?: boolean;
+  search?: string;
+  appliedOnly?: boolean;
+  filter?: string;
+  companyValue?: string;
+  titleValue?: string;
+  locationValue?: string;
+  sourceValue?: string;
+};
+
+function derivedUiStatusSql() {
+  return Prisma.sql`
+    CASE
+      WHEN o.archivedAt IS NOT NULL THEN 'archived'
+      WHEN o.status = ${OPPORTUNITY_STATUS.EXPIRED} THEN 'expired'
+      WHEN latest.id IS NULL THEN 'draft'
+      WHEN latest.outcome = ${ATTEMPT_OUTCOME.HIRED} THEN 'offer-accepted'
+      WHEN latest.outcome = ${ATTEMPT_OUTCOME.WITHDRAWN} THEN 'offer-declined'
+      WHEN latest.outcome = ${ATTEMPT_OUTCOME.REJECTED} THEN 'rejected'
+      WHEN latest.outcome = ${ATTEMPT_OUTCOME.TRANSFERRED} THEN 'transferred'
+      WHEN latest.outcome = ${ATTEMPT_OUTCOME.OFFER} THEN 'offer'
+      WHEN latest.currentStageCategory IN (
+        ${ATTEMPT_STAGE.INTERVIEW},
+        ${ATTEMPT_STAGE.SCREENING},
+        ${ATTEMPT_STAGE.ASSESSMENT}
+      ) THEN 'interview'
+      WHEN latest.currentStageCategory = ${ATTEMPT_STAGE.OFFER} THEN 'offer'
+      WHEN latest.currentStageCategory = ${ATTEMPT_STAGE.SUBMITTED}
+        OR latest.submittedAt IS NOT NULL THEN 'applied'
+      ELSE 'draft'
+    END
+  `;
+}
+
+function latestAttemptJoinSql() {
+  return Prisma.sql`
+    LEFT JOIN "ApplicationAttempt" latest ON latest.id = (
+      SELECT a.id FROM "ApplicationAttempt" a
+      WHERE a.jobOpportunityId = o.id AND a.archivedAt IS NULL
+      ORDER BY COALESCE(a.submittedAt, a.createdAt) DESC,
+        a.createdAt DESC,
+        a.id DESC
+      LIMIT 1
+    )
+  `;
+}
+
+function opportunityListWhereSql(
+  userId: string,
+  options: OpportunityListOptions,
+  labels: {
+    title: string | null;
+    location: string | null;
+    source: string | null;
+  },
+) {
+  const parts: Prisma.Sql[] = [Prisma.sql`o.userId = ${userId}`];
+  if (!options.includeArchived && options.filter !== "archived") {
+    parts.push(Prisma.sql`o.archivedAt IS NULL`);
+  }
+  if (options.filter === "archived") {
+    parts.push(Prisma.sql`o.archivedAt IS NOT NULL`);
+  }
+  if (options.filter === "expired") {
+    parts.push(Prisma.sql`o.status = ${OPPORTUNITY_STATUS.EXPIRED}`);
+  }
+  if (options.companyValue) {
+    parts.push(Prisma.sql`c.value = ${options.companyValue}`);
+  }
+  if (options.titleValue) {
+    parts.push(Prisma.sql`o.title = ${labels.title ?? "\0"}`);
+  }
+  if (options.locationValue) {
+    parts.push(Prisma.sql`o.locationText = ${labels.location ?? "\0"}`);
+  }
+  if (options.sourceValue) {
+    parts.push(Prisma.sql`o.sourceLabel = ${labels.source ?? "\0"}`);
+  }
+  if (options.appliedOnly) {
+    parts.push(Prisma.sql`latest.submittedAt IS NOT NULL`);
+  }
+  if (options.filter && DERIVED_UI_STATUS_FILTERS.has(options.filter)) {
+    parts.push(Prisma.sql`(${derivedUiStatusSql()}) = ${options.filter}`);
+  } else if (
+    options.filter &&
+    options.filter !== "archived" &&
+    options.filter !== "expired" &&
+    !isAbHiddenJobFilter(options.filter)
+  ) {
+    parts.push(Prisma.sql`o.employmentType = ${options.filter}`);
+  }
+  if (options.search) {
+    const q = `%${options.search}%`;
+    parts.push(Prisma.sql`(
+      o.title LIKE ${q}
+      OR IFNULL(o.notes, '') LIKE ${q}
+      OR IFNULL(o.locationText, '') LIKE ${q}
+      OR IFNULL(o.sourceLabel, '') LIKE ${q}
+      OR c.label LIKE ${q}
+      OR IFNULL(jdv.rawContent, '') LIKE ${q}
+    )`);
+  }
+  return Prisma.join(parts, " AND ");
+}
+
+async function resolveListLabels(
   db: PrismaClient,
   userId: string,
-  options: {
-    skip?: number;
-    take?: number;
-    includeArchived?: boolean;
-    search?: string;
-    appliedOnly?: boolean;
-    filter?: string;
-    companyValue?: string;
-    titleValue?: string;
-    locationValue?: string;
-    sourceValue?: string;
-  } = {},
+  options: OpportunityListOptions,
 ) {
   const [title, location, source] = await Promise.all([
     options.titleValue
@@ -611,59 +660,66 @@ export async function listOpportunitiesAsJobs(
         })
       : null,
   ]);
-  const where: Prisma.JobOpportunityWhereInput = {
-    userId,
-    ...(options.includeArchived || options.filter === "archived"
-      ? {}
-      : { archivedAt: null }),
-    ...(options.companyValue
-      ? { company: { value: options.companyValue } }
-      : {}),
-    ...(options.titleValue ? { title: title?.label ?? "\0" } : {}),
-    ...(options.locationValue
-      ? { locationText: location?.label ?? "\0" }
-      : {}),
-    ...(options.sourceValue ? { sourceLabel: source?.label ?? "\0" } : {}),
-    ...(options.appliedOnly
-      ? {
-          applicationAttempts: {
-            some: { archivedAt: null, submittedAt: { not: null } },
-          },
-        }
-      : {}),
-    ...opportunityStatusWhere(options.filter),
-    ...(options.search
-      ? {
-          OR: [
-            { title: { contains: options.search } },
-            { notes: { contains: options.search } },
-            { locationText: { contains: options.search } },
-            { sourceLabel: { contains: options.search } },
-            { company: { label: { contains: options.search } } },
-            {
-              currentJdVersion: {
-                rawContent: { contains: options.search },
-              },
-            },
-          ],
-        }
-      : {}),
+  return {
+    title: title?.label ?? null,
+    location: location?.label ?? null,
+    source: source?.label ?? null,
   };
+}
+
+export async function listOpportunitiesAsJobs(
+  db: PrismaClient,
+  userId: string,
+  options: OpportunityListOptions = {},
+) {
+  if (options.filter && isAbHiddenJobFilter(options.filter)) {
+    return { data: [], total: 0 };
+  }
+  const labels = await resolveListLabels(db, userId, options);
+  const whereSql = opportunityListWhereSql(userId, options, labels);
   const skip = options.skip ?? 0;
   const take = options.take;
-  const [rows, total] = await Promise.all([
-    db.jobOpportunity.findMany({
-      where,
-      include: OPPORTUNITY_LIST_INCLUDE,
-      orderBy: { createdAt: "desc" },
-      skip,
-      ...(take === undefined ? {} : { take }),
-    }),
-    db.jobOpportunity.count({ where }),
-  ]);
-  const lookups = await loadJobViewLookups(db, userId, rows);
+  const fromSql = Prisma.sql`
+    FROM "JobOpportunity" o
+    INNER JOIN "Company" c ON c.id = o.companyId
+    LEFT JOIN "JobDescriptionVersion" jdv ON jdv.id = o.currentJdVersionId
+    ${latestAttemptJoinSql()}
+    WHERE ${whereSql}
+  `;
+  const countRows = await db.$queryRaw<Array<{ n: number | bigint }>>(
+    Prisma.sql`SELECT COUNT(*) as n ${fromSql}`,
+  );
+  const total = Number(countRows[0]?.n ?? 0);
+  const idSql =
+    take === undefined
+      ? Prisma.sql`
+          SELECT o.id
+          ${fromSql}
+          ORDER BY o.createdAt DESC
+        `
+      : Prisma.sql`
+          SELECT o.id
+          ${fromSql}
+          ORDER BY o.createdAt DESC
+          LIMIT ${take} OFFSET ${skip}
+        `;
+  const idRows = await db.$queryRaw<Array<{ id: string }>>(idSql);
+  const ids = idRows.map((row) => row.id);
+  if (ids.length === 0) {
+    return { data: [], total };
+  }
+  const rows = await db.jobOpportunity.findMany({
+    where: { id: { in: ids }, userId },
+    include: OPPORTUNITY_LIST_INCLUDE,
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const ordered = ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+  const lookups = await loadJobViewLookups(db, userId, ordered);
   return {
-    data: rows.map((row) => mapOpportunityToJobView(userId, row, lookups)),
+    data: ordered.map((row) => mapOpportunityToJobView(userId, row, lookups)),
     total,
   };
 }
@@ -680,65 +736,4 @@ export async function getOpportunityAsJob(
   if (!row) return null;
   const lookups = await loadJobViewLookups(db, userId, [row]);
   return mapOpportunityToJobView(userId, row, lookups);
-}
-
-function opportunityStatusWhere(
-  filter?: string,
-): Prisma.JobOpportunityWhereInput {
-  if (!filter) return {};
-  if (filter === "archived") return { archivedAt: { not: null } };
-  if (filter === "expired") return { status: OPPORTUNITY_STATUS.EXPIRED };
-  if (filter === "draft") {
-    return {
-      applicationAttempts: {
-        none: { archivedAt: null },
-      },
-    };
-  }
-  if (filter === "applied") {
-    return {
-      applicationAttempts: {
-        some: {
-          archivedAt: null,
-          submittedAt: { not: null },
-          currentStageCategory: ATTEMPT_STAGE.SUBMITTED,
-          outcome: ATTEMPT_OUTCOME.ACTIVE,
-        },
-      },
-    };
-  }
-  if (filter === "interview") {
-    return {
-      applicationAttempts: {
-        some: {
-          archivedAt: null,
-          currentStageCategory: {
-            in: [
-              ATTEMPT_STAGE.SCREENING,
-              ATTEMPT_STAGE.ASSESSMENT,
-              ATTEMPT_STAGE.INTERVIEW,
-            ],
-          },
-          outcome: ATTEMPT_OUTCOME.ACTIVE,
-        },
-      },
-    };
-  }
-  const outcomeByFilter: Record<string, string> = {
-    offer: ATTEMPT_OUTCOME.OFFER,
-    rejected: ATTEMPT_OUTCOME.REJECTED,
-    "offer-accepted": ATTEMPT_OUTCOME.HIRED,
-    "offer-declined": ATTEMPT_OUTCOME.WITHDRAWN,
-  };
-  if (outcomeByFilter[filter]) {
-    return {
-      applicationAttempts: {
-        some: {
-          archivedAt: null,
-          outcome: outcomeByFilter[filter],
-        },
-      },
-    };
-  }
-  return { employmentType: filter };
 }

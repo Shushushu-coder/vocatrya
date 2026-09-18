@@ -213,6 +213,10 @@
     "jobsAppliedTitle": "Jobs Applied",
     "jobCountOne": "{count} job",
     "jobCountMany": "{count} jobs",
+    "interviewCountOne": "{count} interview",
+    "interviewCountMany": "{count} interviews",
+    "offerCountOne": "{count} offer",
+    "offerCountMany": "{count} offers",
     "activitiesTitle": "Activities",
     "calendarTitle": "Application & Activity Calendar",
     "jobsAndActivity": "Jobs & Activity",
@@ -291,6 +295,7 @@
       "offer-accepted": "Offer Accepted",
       "offer-declined": "Offer Declined",
       "rejected": "Rejected",
+      "transferred": "Transferred",
       "expired": "Expired",
       "archived": "Archived"
     },
@@ -335,6 +340,10 @@
     "createdSuccess": "Job has been created successfully",
     "updatedSuccess": "Job has been updated successfully",
     "deletedSuccess": "Job has been deleted successfully",
+    "archivedSuccess": "Job has been archived",
+    "archiveConfirm": "Archive this job?",
+    "archiveConfirmDescription": "This removes it from your current Jobs list, dashboard job stats, and CSV export. The record is kept, not permanently deleted.",
+    "archiveAction": "Archive",
     "viewDetails": "View Details",
     "addANote": "Add a Note",
     "changeStatus": "Change status",
@@ -449,7 +458,8 @@
       "WITHDRAWN": "Withdrawn",
       "REJECTED": "Rejected",
       "OFFER": "Offer",
-      "HIRED": "Hired"
+      "HIRED": "Hired",
+      "TRANSFERRED": "Transferred"
     }
   },
   "automations": {

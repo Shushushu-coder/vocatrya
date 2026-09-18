@@ -232,9 +232,7 @@ describe("Phase 7 opportunity/application cutover", () => {
 
     const attempt = await prisma.applicationAttempt.findFirstOrThrow();
     expect(attempt.currentStageCategory).toBe(ATTEMPT_STAGE.INTERVIEW);
-    expect(await prisma.applicationProcessStep.count()).toBe(1);
-    const step = await prisma.applicationProcessStep.findFirstOrThrow();
-    expect(step.category).toBe(ATTEMPT_STAGE.INTERVIEW);
+    expect(await prisma.applicationProcessStep.count()).toBe(0);
     expect(await prisma.job.count()).toBe(0);
   });
 

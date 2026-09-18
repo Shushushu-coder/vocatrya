@@ -27,6 +27,7 @@ import {
   Tag,
 } from "@/models/job.model";
 import { useI18n } from "@/i18n";
+import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
 // Presentational: the Jobs card header — title/count, active filter chips,
 // view toggle, search, filter select, export and Add Job.
@@ -94,6 +95,7 @@ export function JobsToolbar({
   careerRuntimeMode?: string;
 }) {
   const { t } = useI18n();
+  const hideDiscoveryFilters = isAbJobReadMode(careerRuntimeMode);
 
   return (
     <CardHeader className="flex-row flex-wrap justify-between items-center gap-3">
@@ -172,15 +174,21 @@ export function JobsToolbar({
               <SelectLabel>{t("jobs.filterByStatus")}</SelectLabel>
               <SelectSeparator />
               <SelectItem value="none">
-                {t("jobs.allExceptDismissed")}
+                {hideDiscoveryFilters
+                  ? t("jobs.allJobs")
+                  : t("jobs.allExceptDismissed")}
               </SelectItem>
               <SelectItem value="applied">{t("jobs.statuses.applied")}</SelectItem>
               <SelectItem value="interview">{t("jobs.statuses.interview")}</SelectItem>
               <SelectItem value="draft">{t("jobs.statuses.draft")}</SelectItem>
               <SelectItem value="rejected">{t("jobs.statuses.rejected")}</SelectItem>
               <SelectItem value="PT">{t("jobs.jobTypes.part-time")}</SelectItem>
-              <SelectItem value="accepted">{t("automations.acceptJob")}</SelectItem>
-              <SelectItem value="dismissed">{t("automations.dismissJob")}</SelectItem>
+              {!hideDiscoveryFilters && (
+                <SelectItem value="accepted">{t("automations.acceptJob")}</SelectItem>
+              )}
+              {!hideDiscoveryFilters && (
+                <SelectItem value="dismissed">{t("automations.dismissJob")}</SelectItem>
+              )}
             </SelectGroup>
           </SelectContent>
         </Select>

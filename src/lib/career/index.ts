@@ -10,6 +10,8 @@ export {
   RESUME_VERSION_STATUS,
   ATTEMPT_STAGE,
   ATTEMPT_OUTCOME,
+  TERMINAL_ATTEMPT_OUTCOMES,
+  isTerminalAttemptOutcome,
   PROCESS_STEP_STATUS,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_CATEGORY,
@@ -22,6 +24,18 @@ export {
   MATCH_STALE_REASON,
 } from "./identities";
 export { CareerRuntimeError } from "./errors";
+export {
+  deriveUiStatus,
+  planUiStatusWrite,
+  pickLatestAttempt,
+  isOfferUiStatus,
+} from "./uiStatus";
+export type { UiStatusWritePlan } from "./uiStatus";
+export {
+  AB_HIDDEN_JOB_FILTERS,
+  isAbJobReadMode,
+  isAbHiddenJobFilter,
+} from "./jobsReadCapabilities";
 export { canonicalize, hashCanonical, sha256Utf8 } from "./hash";
 export { isAbRuntimeFeatureEnabled } from "./featureGate";
 export {

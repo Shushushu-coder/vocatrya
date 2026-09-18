@@ -1310,6 +1310,29 @@ describe("jobActions", () => {
         message: "Not authenticated",
       });
     });
+    it("should set applied without appliedDate for interview in LEGACY_ONLY", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.update as any).mockResolvedValue(jobData);
+      const interviewStatus = {
+        id: "interview-status-id",
+        label: "Interview",
+        value: "interview",
+      };
+
+      const result = await updateJobStatus(jobData.id, interviewStatus);
+
+      expect(result).toStrictEqual({ job: jobData, success: true });
+      expect(prisma.job.update).toHaveBeenCalledWith({
+        where: {
+          id: jobData.id,
+          userId: mockUser.id,
+        },
+        data: {
+          statusId: interviewStatus.id,
+          applied: true,
+        },
+      });
+    });
   });
   describe("deleteJobById", () => {
     it("should return error when user is not authenticated", async () => {

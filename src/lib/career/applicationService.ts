@@ -3,6 +3,7 @@ import { CareerRuntimeError } from "./errors";
 import {
   ATTEMPT_OUTCOME,
   ATTEMPT_STAGE,
+  COMPATIBILITY_PROCESS_STEPS,
   PROCESS_STEP_CATEGORIES,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_STATUS,
@@ -16,6 +17,19 @@ import {
 } from "./applicationTimeline";
 import { ResumeVariantService } from "./resumeVariantService";
 import { assertAbWritesAllowed } from "./writeGuard";
+
+const RESERVED_COMPATIBILITY_SORT_ORDERS = new Set<number>([
+  COMPATIBILITY_PROCESS_STEPS.INTERVIEW.sortOrder,
+  COMPATIBILITY_PROCESS_STEPS.OFFER.sortOrder,
+]);
+
+function allocateUserSortOrder(maxSortOrder: number | null): number {
+  let next = (maxSortOrder ?? 0) + 10;
+  while (RESERVED_COMPATIBILITY_SORT_ORDERS.has(next)) {
+    next += 10;
+  }
+  return next;
+}
 
 export class ApplicationService {
   constructor(
@@ -249,7 +263,7 @@ export class ApplicationService {
         applicationAttemptId: attempt.id,
         category: input.category,
         label,
-        sortOrder: (max._max.sortOrder ?? 0) + 10,
+        sortOrder: allocateUserSortOrder(max._max.sortOrder),
         status: PROCESS_STEP_STATUS.PENDING,
         scheduledAt: input.scheduledAt ?? null,
         notes: input.notes ?? null,
@@ -328,8 +342,6 @@ export class ApplicationService {
     const existing = await this.findCompatibilityStep(
       attempt.id,
       input.category,
-      input.label,
-      input.sortOrder,
     );
 
     if (existing) {
@@ -466,28 +478,12 @@ export class ApplicationService {
     });
   }
 
-  private async findCompatibilityStep(
-    attemptId: string,
-    category: string,
-    label: string,
-    sortOrder: number,
-  ) {
-    const system = await this.db.applicationProcessStep.findFirst({
-      where: {
-        applicationAttemptId: attemptId,
-        category,
-        source: PROCESS_STEP_SOURCE.SYSTEM,
-      },
-      orderBy: { createdAt: "asc" },
-    });
-    if (system) return system;
+  private async findCompatibilityStep(attemptId: string, category: string) {
     return this.db.applicationProcessStep.findFirst({
       where: {
         applicationAttemptId: attemptId,
         category,
-        source: PROCESS_STEP_SOURCE.USER,
-        label,
-        sortOrder,
+        source: PROCESS_STEP_SOURCE.SYSTEM,
       },
       orderBy: { createdAt: "asc" },
     });

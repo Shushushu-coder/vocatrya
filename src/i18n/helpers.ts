@@ -16,6 +16,7 @@ export function getLocalizedJobStatus(
     "offer-accepted": "jobs.statuses.offer-accepted",
     "offer-declined": "jobs.statuses.offer-declined",
     rejected: "jobs.statuses.rejected",
+    transferred: "jobs.statuses.transferred",
     expired: "jobs.statuses.expired",
     archived: "jobs.statuses.archived",
     dismissed: "automations.discoveryStatuses.dismissed",

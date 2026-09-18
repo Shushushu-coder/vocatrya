@@ -76,7 +76,22 @@ export const ATTEMPT_OUTCOME = {
   REJECTED: "REJECTED",
   OFFER: "OFFER",
   HIRED: "HIRED",
+  TRANSFERRED: "TRANSFERRED",
 } as const;
+
+export type AttemptOutcome =
+  (typeof ATTEMPT_OUTCOME)[keyof typeof ATTEMPT_OUTCOME];
+
+export const TERMINAL_ATTEMPT_OUTCOMES = new Set<string>([
+  ATTEMPT_OUTCOME.WITHDRAWN,
+  ATTEMPT_OUTCOME.REJECTED,
+  ATTEMPT_OUTCOME.HIRED,
+  ATTEMPT_OUTCOME.TRANSFERRED,
+]);
+
+export function isTerminalAttemptOutcome(outcome: string): boolean {
+  return TERMINAL_ATTEMPT_OUTCOMES.has(outcome);
+}
 
 export const PROCESS_STEP_STATUS = {
   PENDING: "PENDING",

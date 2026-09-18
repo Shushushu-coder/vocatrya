@@ -189,7 +189,9 @@ function JobDetails({
   const onDeleteJob = async () => {
     const { success, message } = await deleteJobById(job.id);
     if (success) {
-      toastSuccess(t("jobs.deletedSuccess"));
+      toastSuccess(
+        showTimeline ? t("jobs.archivedSuccess") : t("jobs.deletedSuccess"),
+      );
       router.push("/dashboard/myjobs");
     } else {
       toastError(message);
@@ -328,7 +330,13 @@ function JobDetails({
       />
       <DeleteAlertDialog
         pageTitle="job"
-        alertTitle={t("jobs.deleteConfirm")}
+        alertTitle={
+          showTimeline ? t("jobs.archiveConfirm") : t("jobs.deleteConfirm")
+        }
+        alertDescription={
+          showTimeline ? t("jobs.archiveConfirmDescription") : undefined
+        }
+        actionLabel={showTimeline ? t("jobs.archiveAction") : undefined}
         open={deleteAlertOpen}
         onOpenChange={setDeleteAlertOpen}
         onDelete={onDeleteJob}

@@ -11,7 +11,7 @@ export interface JobForm {
   company: string;
   location: string;
   status: string;
-  dueDate: Date;
+  dueDate?: Date | null;
   dateApplied?: Date;
   salaryRange?: string;
   jobDescription: string;
@@ -43,8 +43,8 @@ export interface JobResponse {
   jobType: string;
   workplaceType?: string | null;
   createdAt: Date;
-  appliedDate: Date;
-  dueDate: Date;
+  appliedDate: Date | null;
+  dueDate: Date | null;
   salaryRange: string | null;
   description: string;
   jobUrl: string;

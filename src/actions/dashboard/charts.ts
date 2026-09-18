@@ -2,6 +2,7 @@ import prisma from "@/lib/db";
 import { getLast7Days } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { OTHER_SLICE_ID } from "@/components/dashboard/jobsActivityChart";
+import { loadJobsAppliedDateCounts } from "@/lib/career/jobsReadDispatch";
 import { requireUser } from "../shared";
 import { getLocalDayRange, roundToTenth } from "./shared";
 
@@ -111,28 +112,14 @@ export const getJobsActivityForPeriod = async (): Promise<any | undefined> => {
     const user = await requireUser();
     // Use local time for date range to match grouping and getLast7Days
     const { start: sevenDaysAgo, end: today } = getLocalDayRange(6);
-    const jobData = await prisma.job.groupBy({
-      by: "appliedDate",
-      _count: {
-        _all: true,
-      },
-      where: {
-        userId: user.id,
-        applied: true,
-        appliedDate: {
-          gte: sevenDaysAgo,
-          lte: today,
-        },
-      },
-      orderBy: {
-        appliedDate: "asc",
-      },
+    const jobData = await loadJobsAppliedDateCounts(prisma, user.id, {
+      start: sevenDaysAgo,
+      end: today,
     });
     // Reduce to a format that groups by unique date (YYYY-MM-DD) using local time
-    const groupedPosts = jobData.reduce((acc: any, post: any) => {
-      if (!post.appliedDate) return acc;
+    const groupedPosts = jobData.reduce((acc: Record<string, number>, post) => {
       const date = format(new Date(post.appliedDate), "yyyy-MM-dd");
-      acc[date] = (acc[date] || 0) + post._count._all;
+      acc[date] = (acc[date] || 0) + post.count;
       return acc;
     }, {});
     // Get the last 7 days in local time
@@ -156,22 +143,9 @@ export const getActivityCalendarData = async (): Promise<any | undefined> => {
     const user = await requireUser();
     // Use local time for date range to match grouping
     const { start: daysAgo, end: today } = getLocalDayRange(365);
-    const jobData = await prisma.job.groupBy({
-      by: "appliedDate",
-      _count: {
-        _all: true,
-      },
-      where: {
-        userId: user.id,
-        applied: true,
-        appliedDate: {
-          gte: daysAgo,
-          lte: today,
-        },
-      },
-      orderBy: {
-        appliedDate: "asc",
-      },
+    const jobData = await loadJobsAppliedDateCounts(prisma, user.id, {
+      start: daysAgo,
+      end: today,
     });
 
     const activityData = await prisma.activity.findMany({
@@ -184,10 +158,9 @@ export const getActivityCalendarData = async (): Promise<any | undefined> => {
     });
 
     const groupedJobs: Record<string, number> = jobData.reduce(
-      (acc: Record<string, number>, job: any) => {
-        if (!job.appliedDate) return acc;
+      (acc: Record<string, number>, job) => {
         const date = format(new Date(job.appliedDate), "yyyy-MM-dd");
-        acc[date] = (acc[date] || 0) + job._count._all;
+        acc[date] = (acc[date] || 0) + job.count;
         return acc;
       },
       {},

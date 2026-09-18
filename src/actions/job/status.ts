@@ -49,6 +49,8 @@ export const updateJobStatus = async (
       );
     }
     if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+      // Header status writes Attempt stage/outcome only. It must not touch
+      // legacy Job rows or create ApplicationProcessStep records.
       await syncApplicationFromUiStatus(prisma, user.id, jobId, status.value, {
         applied: status.value === "applied" || status.value === "interview",
       });
