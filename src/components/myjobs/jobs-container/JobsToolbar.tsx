@@ -60,6 +60,7 @@ export function JobsToolbar({
   resetEditJob,
   addJobInitialOpen,
   hideAddJob = false,
+  careerRuntimeMode,
 }: {
   jobsCount: number;
   totalJobs: number;
@@ -90,6 +91,7 @@ export function JobsToolbar({
   resetEditJob: () => void;
   addJobInitialOpen: boolean;
   hideAddJob?: boolean;
+  careerRuntimeMode?: string;
 }) {
   const { t } = useI18n();
 
@@ -205,6 +207,7 @@ export function JobsToolbar({
             editJob={editJob}
             resetEditJob={resetEditJob}
             initialOpen={addJobInitialOpen}
+            careerRuntimeMode={careerRuntimeMode}
           />
         )}
       </div>

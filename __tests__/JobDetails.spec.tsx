@@ -3,6 +3,7 @@ import JobDetails from "@/components/myjobs/JobDetails";
 import { JobResponse, Tag } from "@/models/job.model";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { getApplicationTimeline } from "@/actions/application.actions";
 
 // The active tab lives in the URL, so a click only calls router.replace —
 // what the user sees next comes from the re-render with the new params.
@@ -63,6 +64,16 @@ vi.mock("@/components/CircularScore", () => ({
   CircularScore: ({ score }: { score: number }) => (
     <div data-testid="circular-score">{score}%</div>
   ),
+}));
+
+vi.mock("@/actions/application.actions", () => ({
+  getApplicationTimeline: vi.fn().mockResolvedValue({
+    success: true,
+    data: { opportunityId: "job-1", attempts: [] },
+  }),
+  createApplicationProcessStep: vi.fn(),
+  updateApplicationProcessStep: vi.fn(),
+  completeApplicationProcessStep: vi.fn(),
 }));
 
 const baseProps = {
@@ -293,6 +304,67 @@ describe("JobDetails – tabs", () => {
     expect(screen.getByRole("tab", { name: /cover letter/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /notes/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Contacts" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /timeline/i })).not.toBeInTheDocument();
+  });
+
+  it("adds the application timeline tab in A+B mode", () => {
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="AB_ENABLED"
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: /timeline/i })).toBeInTheDocument();
+  });
+
+  it("shows an honest unbound submitted resume on the timeline", async () => {
+    vi.mocked(getApplicationTimeline).mockResolvedValue({
+      success: true,
+      data: {
+        opportunityId: "job-1",
+        attempts: [
+          {
+            id: "att-1",
+            submittedAt: "2024-01-01T00:00:00.000Z",
+            createdAt: "2024-01-01T00:00:00.000Z",
+            currentStageCategory: "INTERVIEW",
+            outcome: "ACTIVE",
+            submittedResume: null,
+            steps: [
+              {
+                id: "step-1",
+                category: "INTERVIEW",
+                label: "Interview",
+                status: "IN_PROGRESS",
+                source: "SYSTEM",
+                scheduledAt: null,
+                completedAt: null,
+                result: null,
+                notes: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    onTab("timeline");
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="AB_ENABLED"
+      />,
+    );
+
+    expect(
+      await screen.findByText("No submitted resume linked"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/not linked to the resume version/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("application-process-step")).toBeInTheDocument();
   });
 
   it("opens on the Description tab", () => {

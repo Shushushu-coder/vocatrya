@@ -388,7 +388,68 @@
     "skillsNoun": "技能",
     "downloadFailed": "下载职位失败！",
     "downloadSuccess": "下载成功！",
-    "unknownError": "发生未知错误。"
+    "unknownError": "发生未知错误。",
+    "timelineTab": "申请流程",
+    "timelineEmptyTitle": "暂无申请流程",
+    "timelineEmptyDescription": "切换申请状态，或手动添加流程步骤，即可开始记录这次申请。",
+    "addProcessStep": "添加流程步骤",
+    "editProcessStep": "编辑流程步骤",
+    "markStepComplete": "标记完成",
+    "stepCategory": "步骤类型",
+    "stepLabel": "步骤名称",
+    "stepScheduledAt": "计划时间",
+    "stepNotes": "备注",
+    "stepResult": "结果",
+    "stepStatus": "状态",
+    "stepCompletedAt": "完成时间",
+    "submittedResume": "投递简历",
+    "submittedResumeUnbound": "未绑定投递简历",
+    "submittedResumeUnboundHint": "此申请记录中尚未关联实际投递使用的简历版本。",
+    "attemptSubmittedAt": "投递时间",
+    "attemptCreatedAt": "记录时间",
+    "attemptStage": "当前阶段",
+    "attemptOutcome": "最终结果",
+    "noAttemptsYet": "暂无申请记录",
+    "stepAdded": "流程步骤已添加",
+    "stepUpdated": "流程步骤已更新",
+    "stepCompleted": "流程步骤已标记完成",
+    "abUnsupportedFieldsHint": "A+B 模式下暂不支持选择简历、求职信和技能标签。请先不填写这些字段后保存。",
+    "resumeVersionNumber": "第 {number} 版",
+    "stepSources": {
+      "USER": "手动添加",
+      "SYSTEM": "系统记录",
+      "IMPORT": "导入",
+      "AUTOMATION": "自动记录"
+    },
+    "stepStatuses": {
+      "PENDING": "待开始",
+      "IN_PROGRESS": "进行中",
+      "COMPLETED": "已完成"
+    },
+    "stepCategories": {
+      "SCREENING": "筛选",
+      "ASSESSMENT": "笔试 / 测评",
+      "INTERVIEW": "面试",
+      "OFFER": "Offer",
+      "ONBOARDING": "入职",
+      "OTHER": "其他"
+    },
+    "attemptStages": {
+      "DRAFT": "草稿",
+      "SUBMITTED": "已投递",
+      "SCREENING": "筛选",
+      "ASSESSMENT": "测评",
+      "INTERVIEW": "面试",
+      "OFFER": "Offer",
+      "CLOSED": "已结束"
+    },
+    "attemptOutcomes": {
+      "ACTIVE": "进行中",
+      "WITHDRAWN": "已撤回",
+      "REJECTED": "未通过",
+      "OFFER": "已获 Offer",
+      "HIRED": "已入职"
+    }
   },
   "automations": {
     "title": "自动化巡检",

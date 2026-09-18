@@ -389,7 +389,68 @@
     "skillsNoun": "skills",
     "downloadFailed": "Failed to download jobs!",
     "downloadSuccess": "Downloaded successfully!",
-    "unknownError": "Unknown error occurred."
+    "unknownError": "Unknown error occurred.",
+    "timelineTab": "Timeline",
+    "timelineEmptyTitle": "No application timeline yet",
+    "timelineEmptyDescription": "Change the job status or add a process step to start recording this application.",
+    "addProcessStep": "Add process step",
+    "editProcessStep": "Edit process step",
+    "markStepComplete": "Mark complete",
+    "stepCategory": "Step type",
+    "stepLabel": "Step name",
+    "stepScheduledAt": "Scheduled time",
+    "stepNotes": "Notes",
+    "stepResult": "Result",
+    "stepStatus": "Status",
+    "stepCompletedAt": "Completed",
+    "submittedResume": "Submitted resume",
+    "submittedResumeUnbound": "No submitted resume linked",
+    "submittedResumeUnboundHint": "This application record is not linked to the resume version that was actually submitted.",
+    "attemptSubmittedAt": "Submitted",
+    "attemptCreatedAt": "Recorded",
+    "attemptStage": "Current stage",
+    "attemptOutcome": "Outcome",
+    "noAttemptsYet": "No application records yet",
+    "stepAdded": "Process step added",
+    "stepUpdated": "Process step updated",
+    "stepCompleted": "Process step marked complete",
+    "abUnsupportedFieldsHint": "Resume, cover letter, and tags are not available in A+B mode yet. Submit this job without those fields.",
+    "resumeVersionNumber": "Version {number}",
+    "stepSources": {
+      "USER": "Added manually",
+      "SYSTEM": "System record",
+      "IMPORT": "Imported",
+      "AUTOMATION": "Automatic record"
+    },
+    "stepStatuses": {
+      "PENDING": "Pending",
+      "IN_PROGRESS": "In progress",
+      "COMPLETED": "Completed"
+    },
+    "stepCategories": {
+      "SCREENING": "Screening",
+      "ASSESSMENT": "Assessment",
+      "INTERVIEW": "Interview",
+      "OFFER": "Offer",
+      "ONBOARDING": "Onboarding",
+      "OTHER": "Other"
+    },
+    "attemptStages": {
+      "DRAFT": "Draft",
+      "SUBMITTED": "Submitted",
+      "SCREENING": "Screening",
+      "ASSESSMENT": "Assessment",
+      "INTERVIEW": "Interview",
+      "OFFER": "Offer",
+      "CLOSED": "Closed"
+    },
+    "attemptOutcomes": {
+      "ACTIVE": "Active",
+      "WITHDRAWN": "Withdrawn",
+      "REJECTED": "Rejected",
+      "OFFER": "Offer",
+      "HIRED": "Hired"
+    }
   },
   "automations": {
     "title": "Automations",

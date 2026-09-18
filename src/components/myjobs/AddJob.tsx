@@ -63,6 +63,7 @@ import {
   getFromLocalStorage,
   saveToLocalStorage,
 } from "@/utils/localstorage.utils";
+import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 
 type AddJobProps = {
   jobStatuses: JobStatus[];
@@ -76,6 +77,7 @@ type AddJobProps = {
   initialOpen?: boolean;
   hideTrigger?: boolean;
   redirectPath?: string;
+  careerRuntimeMode?: string;
 };
 
 export function AddJob({
@@ -90,6 +92,7 @@ export function AddJob({
   initialOpen,
   hideTrigger,
   redirectPath,
+  careerRuntimeMode,
 }: AddJobProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -100,6 +103,9 @@ export function AddJob({
   const [coverLetters, setCoverLetters] = useState<CoverLetter[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>(tags);
   const [isPending, startTransition] = useTransition();
+  const hideUnsupportedAbFields =
+    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_ENABLED ||
+    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_READY_DISABLED;
 
   useEffect(() => {
     if (!dialogOpen && searchParams.get("add-job") === "true") {
@@ -200,10 +206,10 @@ export function AddJob({
   }, [editJob, reset]);
 
   useEffect(() => {
-    if (!dialogOpen) return;
+    if (!dialogOpen || hideUnsupportedAbFields) return;
     loadResumes();
     loadCoverLetters();
-  }, [dialogOpen, loadResumes, loadCoverLetters]);
+  }, [dialogOpen, hideUnsupportedAbFields, loadResumes, loadCoverLetters]);
 
   const setNewResumeId = (id: string) => {
     setTimeout(() => {
@@ -213,7 +219,10 @@ export function AddJob({
 
   function onSubmit(data: z.infer<typeof AddJobFormSchema>) {
     startTransition(async () => {
-      const result = editJob ? await updateJob(data) : await addJob(data);
+      const payload = hideUnsupportedAbFields
+        ? { ...data, resume: undefined, coverLetter: undefined, tags: [] }
+        : data;
+      const result = editJob ? await updateJob(payload) : await addJob(payload);
       toastActionResult(result, {
         success: editJob ? t("jobs.updatedSuccess") : t("jobs.createdSuccess"),
         onSuccess: () => {
@@ -572,73 +581,78 @@ export function AddJob({
                   />
                 </div>
 
-                {/* Resume */}
-                <div className="flex items-end">
-                  <FormField
-                    control={form.control}
-                    name="resume"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>{t("jobs.resume")}</FormLabel>
-                        <SelectFormCtrl
-                          label={t("jobs.resume")}
-                          options={resumes}
-                          field={field}
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button variant="link" type="button" onClick={createResume}>
-                    {t("jobs.addNew")}
-                  </Button>
-                  <CreateResume
-                    resumeDialogOpen={resumeDialogOpen}
-                    setResumeDialogOpen={setResumeDialogOpen}
-                    reloadResumes={loadResumes}
-                    setNewResumeId={setNewResumeId}
-                  />
-                </div>
+                {hideUnsupportedAbFields ? (
+                  <div className="md:col-span-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                    {t("jobs.abUnsupportedFieldsHint")}
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-end">
+                      <FormField
+                        control={form.control}
+                        name="resume"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>{t("jobs.resume")}</FormLabel>
+                            <SelectFormCtrl
+                              label={t("jobs.resume")}
+                              options={resumes}
+                              field={field}
+                            />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button variant="link" type="button" onClick={createResume}>
+                        {t("jobs.addNew")}
+                      </Button>
+                      <CreateResume
+                        resumeDialogOpen={resumeDialogOpen}
+                        setResumeDialogOpen={setResumeDialogOpen}
+                        reloadResumes={loadResumes}
+                        setNewResumeId={setNewResumeId}
+                      />
+                    </div>
 
-                {/* Cover Letter */}
-                <div className="flex items-end">
-                  <FormField
-                    control={form.control}
-                    name="coverLetter"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>{t("jobs.coverLetter")}</FormLabel>
-                        <SelectFormCtrl
-                          label={t("jobs.coverLetter")}
-                          options={coverLetters}
-                          field={field}
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                    <div className="flex items-end">
+                      <FormField
+                        control={form.control}
+                        name="coverLetter"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>{t("jobs.coverLetter")}</FormLabel>
+                            <SelectFormCtrl
+                              label={t("jobs.coverLetter")}
+                              options={coverLetters}
+                              field={field}
+                            />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                {/* Add Skill Tags */}
-                <div className="md:col-span-2">
-                  <FormField
-                    control={form.control}
-                    name="tags"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>{t("jobs.addSkill")}</FormLabel>
-                        <FormControl>
-                          <TagInput
-                            availableTags={availableTags}
-                            selectedTagIds={field.value ?? []}
-                            onChange={(ids) => field.onChange(ids)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                    <div className="md:col-span-2">
+                      <FormField
+                        control={form.control}
+                        name="tags"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>{t("jobs.addSkill")}</FormLabel>
+                            <FormControl>
+                              <TagInput
+                                availableTags={availableTags}
+                                selectedTagIds={field.value ?? []}
+                                onChange={(ids) => field.onChange(ids)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </>
+                )}
 
                 {/* Job Description */}
                 <div className="md:col-span-2">

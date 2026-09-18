@@ -32,6 +32,16 @@ vi.mock("@/actions/tag.actions", () => ({
   getAllTags: vi.fn(async () => []),
 }));
 
+vi.mock("@/actions/career.runtime", () => ({
+  getCareerRuntimeSnapshot: vi.fn(async () => ({
+    mode: "LEGACY_ONLY",
+    reason: "test",
+    migrationStatus: "NOT_STARTED",
+    featureEnabled: false,
+    writeFamily: "legacy",
+  })),
+}));
+
 vi.mock("@/components/myjobs/JobDetails", () => ({
   default: () => <div data-testid="job-details" />,
 }));

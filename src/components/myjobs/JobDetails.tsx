@@ -40,10 +40,21 @@ import { JobTabEmptyState } from "./job-details/JobTabEmptyState";
 import { CoverLetterTab } from "./job-details/CoverLetterTab";
 import { useAutoMatch } from "./job-details/useAutoMatch";
 import { JobContactsTab } from "./job-details/JobContactsTab";
+import { ApplicationTimelineTab } from "./job-details/ApplicationTimelineTab";
+import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { useI18n } from "@/i18n";
 
-const JOB_DETAIL_TABS = [
+const LEGACY_JOB_DETAIL_TABS = [
   "description",
+  "match",
+  "letter",
+  "notes",
+  "contacts",
+] as const;
+
+const AB_JOB_DETAIL_TABS = [
+  "description",
+  "timeline",
   "match",
   "letter",
   "notes",
@@ -58,6 +69,7 @@ type JobDetailsProps = {
   locations: JobLocation[];
   sources: JobSource[];
   tags: Tag[];
+  careerRuntimeMode?: string;
 };
 
 function JobDetails({
@@ -68,8 +80,14 @@ function JobDetails({
   locations,
   sources,
   tags,
+  careerRuntimeMode,
 }: JobDetailsProps) {
   const { t } = useI18n();
+  const showTimeline =
+    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_ENABLED ||
+    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_READY_DISABLED;
+  const canMutateTimeline = careerRuntimeMode === CAREER_RUNTIME_MODE.AB_ENABLED;
+  const jobDetailTabs = showTimeline ? AB_JOB_DETAIL_TABS : LEGACY_JOB_DETAIL_TABS;
   const {
     open: openChat,
     clear: clearChat,
@@ -86,9 +104,10 @@ function JobDetails({
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   const [noteOpenTrigger, setNoteOpenTrigger] = useState(0);
   const [notesCount, setNotesCount] = useState(0);
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
   const router = useRouter();
   const [activeTab, handleTabChange] = useTabQueryParam(
-    JOB_DETAIL_TABS,
+    jobDetailTabs,
     "description",
   );
   const goBack = () => router.back();
@@ -160,6 +179,7 @@ function JobDetails({
     const { success, message } = await updateJobStatus(job.id, status);
     if (success) {
       setCurrentStatus(status);
+      setTimelineRefreshKey((prev) => prev + 1);
       toastSuccess(t("jobs.updatedSuccess"));
     } else {
       toastError(message);
@@ -203,6 +223,9 @@ function JobDetails({
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="description">{t("common.description")}</TabsTrigger>
+            {showTimeline && (
+              <TabsTrigger value="timeline">{t("jobs.timelineTab")}</TabsTrigger>
+            )}
             <TabsTrigger value="match">{t("automations.aiMatch")}</TabsTrigger>
             <TabsTrigger value="letter">{t("jobs.coverLetter")}</TabsTrigger>
             <TabsTrigger value="notes">
@@ -227,6 +250,17 @@ function JobDetails({
               <TipTapContentViewer content={job?.description} />
             </Card>
           </TabsContent>
+          {showTimeline && (
+            <TabsContent value="timeline" className="mt-4">
+              <Card className="p-6">
+                <ApplicationTimelineTab
+                  jobId={job.id}
+                  refreshKey={timelineRefreshKey}
+                  canMutate={canMutateTimeline}
+                />
+              </Card>
+            </TabsContent>
+          )}
           <TabsContent value="match" className="mt-4">
             <Card className="p-6">
               {parsedMatchData && parsedMatchData.analyzed !== false ? (
@@ -289,6 +323,7 @@ function JobDetails({
         editJob={editJobTarget}
         resetEditJob={resetEditJob}
         hideTrigger
+        careerRuntimeMode={careerRuntimeMode}
         redirectPath={`/dashboard/myjobs/${job.id}?tab=${activeTab}`}
       />
       <DeleteAlertDialog

@@ -510,6 +510,44 @@ describe("AddJob Component - Edit Mode", () => {
   });
 });
 
+describe("AddJob A+B unsupported fields", () => {
+  const mockJobStatuses = JOB_STATUSES;
+  const mockJobSources = JOB_SOURCES;
+  const mockResetEditJob = vi.fn();
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+
+  it("hides resume, cover letter and tags in A+B mode", async () => {
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+        initialOpen={true}
+        careerRuntimeMode="AB_ENABLED"
+      />,
+    );
+
+    expect(
+      screen.getByText(/not available in A\+B mode yet/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /select resume/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /select cover letter/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("AddJob Component - Error Handling", () => {
   const mockJobStatuses = JOB_STATUSES;
   const mockJobSources = JOB_SOURCES;

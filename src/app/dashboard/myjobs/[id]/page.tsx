@@ -41,6 +41,7 @@ async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
         locations={locations}
         sources={sources}
         tags={tags ?? []}
+        careerRuntimeMode={runtime.mode}
       />
     </div>
   );

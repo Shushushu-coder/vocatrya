@@ -35,6 +35,7 @@ type MyJobsProps = {
   sources: JobSource[];
   tags: Tag[];
   allowJobMutations?: boolean;
+  careerRuntimeMode?: string;
 };
 
 function JobsContainer({
@@ -45,6 +46,7 @@ function JobsContainer({
   sources,
   tags,
   allowJobMutations = true,
+  careerRuntimeMode,
 }: MyJobsProps) {
   const router = useRouter();
   const { t } = useI18n();
@@ -165,6 +167,7 @@ function JobsContainer({
             allowJobMutations && queryParams.get("add-job") === "true"
           }
           hideAddJob={!allowJobMutations}
+          careerRuntimeMode={careerRuntimeMode}
         />
         <CardContent>
           {initialLoading && <Loading />}
