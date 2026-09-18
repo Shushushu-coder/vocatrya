@@ -109,6 +109,32 @@ function assertBirthDate(
   return text;
 }
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_PATTERN = /^[+()\-.\s\d]{5,30}$/;
+
+function assertEmail(
+  value: string | null | undefined,
+): string | null | undefined {
+  const text = optionalText(value);
+  if (text === undefined || text === null) return text;
+  if (!EMAIL_PATTERN.test(text) || text.length > 254) {
+    throw new CareerRuntimeError("INVALID_EMAIL", "Invalid email address.");
+  }
+  return text;
+}
+
+function assertPhone(
+  value: string | null | undefined,
+): string | null | undefined {
+  const text = optionalText(value);
+  if (text === undefined || text === null) return text;
+  const digits = text.replace(/\D/g, "");
+  if (!PHONE_PATTERN.test(text) || digits.length < 5 || digits.length > 15) {
+    throw new CareerRuntimeError("INVALID_PHONE", "Invalid phone number.");
+  }
+  return text;
+}
+
 export class CandidateProfileService {
   constructor(
     private readonly db: PrismaClient,
@@ -132,8 +158,8 @@ export class CandidateProfileService {
     const data = {
       fullName: optionalText(input.fullName),
       headline: optionalText(input.headline),
-      email: optionalText(input.email),
-      phone: optionalText(input.phone),
+      email: assertEmail(input.email),
+      phone: assertPhone(input.phone),
       address: optionalText(input.address),
       linksData: optionalText(input.linksData),
       extraData: optionalText(input.extraData),
@@ -168,7 +194,7 @@ export class CandidateProfileService {
       idNumber: optionalText(input.idNumber),
       emergencyContactName: optionalText(input.emergencyContactName),
       emergencyContactRelation: optionalText(input.emergencyContactRelation),
-      emergencyContactPhone: optionalText(input.emergencyContactPhone),
+      emergencyContactPhone: assertPhone(input.emergencyContactPhone),
     };
     try {
       return await this.db.candidateSensitiveInfo.upsert({

@@ -54,6 +54,14 @@ export {
   assertLegacyCareerWriteAllowed,
 } from "./writeGuard";
 export {
+  canReadCareerData,
+  canWriteCareerData,
+  canCopyCareerData,
+  assertCareerDataReadable,
+  assertCareerDataWritable,
+  assertCareerDataCopyable,
+} from "./access";
+export {
   OpportunityService,
   normalizeOptionalText,
 } from "./opportunityService";
@@ -91,6 +99,23 @@ export type {
   UpcomingBucket,
 } from "./upcomingReadModel";
 export { CareerMaterialService } from "./careerMaterialService";
+export { JobSearchPreferenceService } from "./jobSearchPreferenceService";
+export type { JobSearchPreferenceInput } from "./jobSearchPreferenceService";
+export { resolveLocalDbDisplayPath } from "./localDbPath";
+export type { LocalDbPathDisplay } from "./localDbPath";
+export { maskName, maskPhone, isSensitiveFieldKey } from "./sensitiveMask";
+export {
+  buildMaterialItemText,
+  buildEducationSectionText,
+  buildExperienceSectionText,
+  buildSkillsSectionText,
+  buildApplicationProjectionText,
+} from "./applicationCopy";
+export type {
+  EvidenceLike,
+  MaterialLike,
+  ApplicationProjectionInput,
+} from "./applicationCopy";
 export {
   CandidateProfileService,
   CANDIDATE_GENDER,

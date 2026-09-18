@@ -126,6 +126,41 @@ export class CareerMaterialService {
     });
   }
 
+  async list(input: { type?: string; includeArchived?: boolean } = {}) {
+    const where: { userId: string; type?: string; archivedAt: null | undefined } = {
+      userId: this.userId,
+      archivedAt: input.includeArchived ? undefined : null,
+    } as { userId: string; type?: string; archivedAt: null | undefined };
+    if (input.type !== undefined) {
+      where.type = assertType(input.type);
+    }
+    return this.db.careerMaterialItem.findMany({
+      where,
+      orderBy: [{ updatedAt: "desc" }],
+      include: fullDetailInclude,
+    });
+  }
+
+  async get(id: string) {
+    const item = await this.db.careerMaterialItem.findFirst({
+      where: { id, userId: this.userId, archivedAt: null },
+      include: fullDetailInclude,
+    });
+    if (!item) {
+      throw new CareerRuntimeError("MATERIAL_NOT_FOUND", "Career material not found");
+    }
+    return item;
+  }
+
+  async archive(id: string) {
+    await this.gate();
+    const item = await this.requireOwned(id);
+    return this.db.careerMaterialItem.update({
+      where: { id: item.id },
+      data: { archivedAt: new Date() },
+    });
+  }
+
   async confirm(id: string) {
     await this.gate();
     const item = await this.requireOwned(id);
@@ -173,3 +208,22 @@ export class CareerMaterialService {
 function detailInclude(type: CareerMaterialType): Prisma.CareerMaterialItemInclude {
   return { [detailCreateKey(type)]: true } as Prisma.CareerMaterialItemInclude;
 }
+
+const fullDetailInclude: Prisma.CareerMaterialItemInclude = {
+  internshipDetail: true,
+  employmentDetail: true,
+  projectDetail: true,
+  researchDetail: true,
+  publicationDetail: true,
+  competitionDetail: true,
+  campusActivityDetail: true,
+  educationDetail: true,
+  awardDetail: true,
+  skillDetail: true,
+  certificationDetail: true,
+  customDetail: true,
+  evidence: {
+    where: { archivedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  },
+};
