@@ -26,7 +26,9 @@ describe("buildManifest", () => {
       ],
     });
     const manifest = buildManifest(data, "me@example.com");
-    expect(manifest.formatVersion).toBe(2);
+    expect(manifest.formatVersion).toBe(3);
+    expect(manifest.containsSensitiveData).toBe(false);
+    expect(manifest.counts).not.toHaveProperty("CandidateSensitiveInfo");
     expect(manifest.sourceEmail).toBe("me@example.com");
     expect(manifest.counts.Tag).toBe(2);
     expect(manifest.counts.Job).toBe(0);
@@ -101,7 +103,7 @@ describe("readManifest", () => {
     const zip = await openBackupZip(
       await zipOf({ "manifest.json": JSON.stringify(manifest) }),
     );
-    await expect(readManifest(zip)).rejects.toThrow(/version 1 or 2.*found 99|found 99/i);
+    await expect(readManifest(zip)).rejects.toThrow(/found 99/i);
   });
 
   it("reads a v1 manifest written before the A+B format bump", async () => {
@@ -109,6 +111,8 @@ describe("readManifest", () => {
     const zip = await openBackupZip(
       await zipOf({ "manifest.json": JSON.stringify(manifest) }),
     );
-    expect((await readManifest(zip)).formatVersion).toBe(1);
+    const read = await readManifest(zip);
+    expect(read.formatVersion).toBe(1);
+    expect(read.containsSensitiveData).toBe(false);
   });
 });

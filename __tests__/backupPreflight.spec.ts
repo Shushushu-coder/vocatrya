@@ -2,14 +2,14 @@ import JSZip from "jszip";
 import db from "@/lib/db";
 import { preflightBackup } from "@/lib/backup/import";
 import { BackupError } from "@/lib/backup/manifest";
-import { BackupDataSchema } from "@/lib/backup/schema";
+import { emptyStandardBackupData } from "@/lib/backup/compat";
 import { buildManifest } from "@/lib/backup/manifest";
 
 vi.mock("@/lib/db", async () => {
-  const { EMPTINESS_MODELS, MODEL_SPECS } = await import("@/lib/backup/ordering");
+  const { INSERT_ORDER, MODEL_SPECS } = await import("@/lib/backup/ordering");
   const counted = () => ({ count: vi.fn().mockResolvedValue(0) });
   const mock: Record<string, unknown> = {};
-  for (const model of EMPTINESS_MODELS) {
+  for (const model of INSERT_ORDER) {
     mock[MODEL_SPECS[model].delegate] = counted();
   }
   return { default: mock };
@@ -20,11 +20,11 @@ const mockDb = db as unknown as Record<string, { count: ReturnType<typeof vi.fn>
 async function zipWith(manifest: unknown): Promise<Buffer> {
   const zip = new JSZip();
   zip.file("manifest.json", JSON.stringify(manifest));
-  zip.file("data.json", JSON.stringify(BackupDataSchema.parse({})));
+  zip.file("data.json", JSON.stringify(emptyStandardBackupData()));
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
-const manifest = () => buildManifest(BackupDataSchema.parse({}), "owner@example.com");
+const manifest = () => buildManifest(emptyStandardBackupData(), "owner@example.com");
 
 describe("preflightBackup", () => {
   it("returns the manifest without writing anything", async () => {

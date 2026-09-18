@@ -1,17 +1,27 @@
 import { z } from "zod";
 
-export const BACKUP_FORMAT_VERSION = 2;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2] as const;
+// Carries a message safe to hand straight back to the user. Anything else
+// thrown out of the backup module is an internal error and gets a generic 500.
+export class BackupError extends Error {
+  constructor(public userMessage: string) {
+    super(userMessage);
+    this.name = "BackupError";
+  }
+}
+
+export const BACKUP_FORMAT_VERSION = 3;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
 export const ManifestSchema = z.object({
-  formatVersion: z.union([z.literal(1), z.literal(2)]),
+  formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   appVersion: z.string(),
   appName: z.string().optional(),
   exportedAt: z.string(),
   sourceEmail: z.string(),
   counts: z.record(z.string(), z.number()),
+  containsSensitiveData: z.boolean().optional(),
 });
 
 export type BackupManifest = z.infer<typeof ManifestSchema>;
@@ -612,6 +622,9 @@ const CareerEducationDetail = z.object({
   degree: optStr,
   fieldOfStudy: optStr,
   locationText: optStr,
+  gpaValue: z.number().nullable().optional(),
+  gpaScale: z.number().nullable().optional(),
+  rankText: optStr.optional(),
   structuredData: str,
   createdAt: dt,
   updatedAt: dt,
@@ -673,7 +686,7 @@ const CareerEvidence = z.object({
   updatedAt: dt,
 });
 
-const ResumeContactProfile = z.object({
+const CandidateProfile = z.object({
   id,
   fullName: optStr,
   headline: optStr,
@@ -682,6 +695,36 @@ const ResumeContactProfile = z.object({
   address: optStr,
   linksData: optStr,
   extraData: optStr,
+  gender: optStr.optional(),
+  birthDate: optStr.optional(),
+  ethnicity: optStr.optional(),
+  politicalStatus: optStr.optional(),
+  nativePlace: optStr.optional(),
+  householdRegistration: optStr.optional(),
+  graduationCohort: optStr.optional(),
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const CandidateSensitiveInfo = z.object({
+  id,
+  idNumber: optStr,
+  emergencyContactName: optStr,
+  emergencyContactRelation: optStr,
+  emergencyContactPhone: optStr,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const CandidateFamilyMember = z.object({
+  id,
+  sensitiveInfoId: id,
+  name: optStr,
+  relation: optStr,
+  employer: optStr,
+  position: optStr,
+  phone: optStr,
+  sortOrder: int,
   createdAt: dt,
   updatedAt: dt,
 });
@@ -904,7 +947,9 @@ export const BackupDataSchema = z.object({
   CareerCertificationDetail: group(CareerCertificationDetail),
   CareerCustomDetail: group(CareerCustomDetail),
   CareerEvidence: group(CareerEvidence),
-  ResumeContactProfile: group(ResumeContactProfile),
+  CandidateProfile: group(CandidateProfile),
+  CandidateSensitiveInfo: group(CandidateSensitiveInfo),
+  CandidateFamilyMember: group(CandidateFamilyMember),
   ResumeVariant: group(ResumeVariant),
   ResumeVariantVersion: group(ResumeVariantVersion),
   ResumeVariantSection: group(ResumeVariantSection),

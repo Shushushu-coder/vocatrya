@@ -42,17 +42,18 @@ model User {
 
   // Vocatrya A+B foundation (additive). Cross-user relation equality is a
   // service-layer invariant and cannot be fully guaranteed by Prisma FKs alone.
-  recruitmentCampaigns RecruitmentCampaign[]
-  jobOpportunities     JobOpportunity[]
-  jobOpportunityNotes  JobOpportunityNote[]
-  applicationAttempts  ApplicationAttempt[]
-  jobSearchPreference  JobSearchPreference?
-  careerMaterialItems  CareerMaterialItem[]
-  resumeContactProfile ResumeContactProfile?
-  resumeVariants       ResumeVariant[]
-  matchAnalyses        MatchAnalysis[]
-  legacyMigrationMaps  LegacyMigrationMap[]
-  dataMigrationRuns    DataMigrationRun[]
+  recruitmentCampaigns   RecruitmentCampaign[]
+  jobOpportunities       JobOpportunity[]
+  jobOpportunityNotes    JobOpportunityNote[]
+  applicationAttempts    ApplicationAttempt[]
+  jobSearchPreference    JobSearchPreference?
+  careerMaterialItems    CareerMaterialItem[]
+  candidateProfile       CandidateProfile?
+  candidateSensitiveInfo CandidateSensitiveInfo?
+  resumeVariants         ResumeVariant[]
+  matchAnalyses          MatchAnalysis[]
+  legacyMigrationMaps    LegacyMigrationMap[]
+  dataMigrationRuns      DataMigrationRun[]
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -1126,6 +1127,9 @@ model CareerEducationDetail {
   degree         String?
   fieldOfStudy   String?
   locationText   String?
+  gpaValue       Float?
+  gpaScale       Float?
+  rankText       String?
   structuredData String   @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1205,7 +1209,7 @@ model CareerEvidence {
   @@index([materialItemId, kind])
 }
 
-model ResumeContactProfile {
+model CandidateProfile {
   id     String @id @default(uuid())
   userId String @unique
 
@@ -1217,10 +1221,53 @@ model ResumeContactProfile {
   linksData String?
   extraData String?
 
+  gender                String?
+  birthDate             String?
+  ethnicity             String?
+  politicalStatus       String?
+  nativePlace           String?
+  householdRegistration String?
+  graduationCohort      String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+model CandidateSensitiveInfo {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  idNumber                 String?
+  emergencyContactName     String?
+  emergencyContactRelation String?
+  emergencyContactPhone    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMembers CandidateFamilyMember[]
+}
+
+model CandidateFamilyMember {
+  id              String @id @default(uuid())
+  sensitiveInfoId String
+
+  name      String?
+  relation  String?
+  employer  String?
+  position  String?
+  phone     String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sensitiveInfo CandidateSensitiveInfo @relation(fields: [sensitiveInfoId], references: [id], onDelete: Cascade)
+
+  @@index([sensitiveInfoId, sortOrder])
 }
 
 model ResumeVariant {

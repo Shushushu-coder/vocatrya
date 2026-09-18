@@ -1,4 +1,8 @@
-import { LEGACY, TARGET } from "@/lib/legacy-migration/identities";
+import {
+  canonicalTargetEntityType,
+  LEGACY,
+  TARGET,
+} from "@/lib/legacy-migration/identities";
 import type { IdMap } from "./idmap";
 import type { BackupModel } from "./ordering";
 
@@ -23,7 +27,9 @@ const TARGET_ID_MODELS: Record<string, BackupModel> = {
   [TARGET.RESUME_VARIANT_VERSION]: "ResumeVariantVersion",
   [TARGET.CAREER_MATERIAL_ITEM]: "CareerMaterialItem",
   [TARGET.CAREER_EVIDENCE]: "CareerEvidence",
-  [TARGET.RESUME_CONTACT_PROFILE]: "ResumeContactProfile",
+  [TARGET.CANDIDATE_PROFILE]: "CandidateProfile",
+  // Legacy alias: v1/v2 backups and old mappings. Canonical target is CandidateProfile.
+  ResumeContactProfile: "CandidateProfile",
   // Phase 3 stores the skipped Job id as the sentinel target.
   [TARGET.UNMAPPED_UNKNOWN_STATUS]: "Job",
 };
@@ -59,18 +65,23 @@ export function remapLegacyMigrationMapIds(
   },
   idMap: IdMap,
   sessionUserId: string,
-): { legacyEntityId: string; targetEntityId: string } {
+): {
+  legacyEntityId: string;
+  targetEntityId: string;
+  targetEntityType: string;
+} {
   const legacyEntityId =
     row.legacyEntityType === LEGACY.USER_CONTACT_INFO
       ? sessionUserId
       : remapSemanticId(row.legacyEntityType, row.legacyEntityId, idMap, "legacy");
 
+  const targetEntityType = canonicalTargetEntityType(row.targetEntityType);
   const targetEntityId = remapSemanticId(
-    row.targetEntityType,
+    targetEntityType,
     row.targetEntityId,
     idMap,
     "target",
   );
 
-  return { legacyEntityId, targetEntityId };
+  return { legacyEntityId, targetEntityId, targetEntityType };
 }

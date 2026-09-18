@@ -33,9 +33,28 @@ export const TARGET = {
   RESUME_VARIANT_VERSION: "ResumeVariantVersion",
   CAREER_MATERIAL_ITEM: "CareerMaterialItem",
   CAREER_EVIDENCE: "CareerEvidence",
-  RESUME_CONTACT_PROFILE: "ResumeContactProfile",
+  CANDIDATE_PROFILE: "CandidateProfile",
   UNMAPPED_UNKNOWN_STATUS: "UNMAPPED_UNKNOWN_STATUS",
 } as const;
+
+/** Legacy alias persisted in older LegacyMigrationMap rows and v1/v2 backups. */
+export const LEGACY_TARGET_ALIAS = {
+  RESUME_CONTACT_PROFILE: "ResumeContactProfile",
+} as const;
+
+export function canonicalTargetEntityType(type: string): string {
+  if (type === LEGACY_TARGET_ALIAS.RESUME_CONTACT_PROFILE) {
+    return TARGET.CANDIDATE_PROFILE;
+  }
+  return type;
+}
+
+export function isCandidateProfileTarget(type: string): boolean {
+  return (
+    type === TARGET.CANDIDATE_PROFILE ||
+    type === LEGACY_TARGET_ALIAS.RESUME_CONTACT_PROFILE
+  );
+}
 
 export type LegacyEntityType = (typeof LEGACY)[keyof typeof LEGACY];
 export type TargetEntityType = (typeof TARGET)[keyof typeof TARGET];

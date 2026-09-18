@@ -1,5 +1,5 @@
 /**
- * Conflict-free ContactInfo → ResumeContactProfile resolution.
+ * Conflict-free ContactInfo → CandidateProfile resolution.
  *
  * Missing/empty values are ignored. Conflicting non-empty values leave that
  * field unset. No frequency / newest / first-row heuristic is used to pick a

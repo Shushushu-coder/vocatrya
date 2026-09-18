@@ -588,7 +588,7 @@ describe("Phase 3 disposable SQLite backfill", () => {
       const skill = materials.find((m) => m.type === "SKILL");
       expect(skill?.skillDetail?.structuredData).toMatch(/"skillOrder":3/);
 
-      const profile = await verify.resumeContactProfile.findUnique({
+      const profile = await verify.candidateProfile.findUnique({
         where: { userId: ids.userId },
       });
       expect(profile).toBeNull();

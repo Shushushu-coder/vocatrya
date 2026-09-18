@@ -91,6 +91,17 @@ export type {
   UpcomingBucket,
 } from "./upcomingReadModel";
 export { CareerMaterialService } from "./careerMaterialService";
+export {
+  CandidateProfileService,
+  CANDIDATE_GENDER,
+  CANDIDATE_POLITICAL_STATUS,
+  isValidIsoDate,
+} from "./candidateProfileService";
+export type {
+  CandidateProfileInput,
+  CandidateSensitiveInfoInput,
+  CandidateFamilyMemberInput,
+} from "./candidateProfileService";
 export { ResumeVariantService } from "./resumeVariantService";
 export {
   ResumeProvenanceService,

@@ -2,29 +2,30 @@ import JSZip from "jszip";
 import pkg from "../../../package.json";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { preflightZip } from "@/lib/ai/import/extract-text";
-import { INSERT_ORDER } from "./ordering";
+import { modelsForBackup } from "./ordering";
 import {
   BACKUP_FORMAT_VERSION,
+  BackupError,
   ManifestSchema,
   SUPPORTED_BACKUP_FORMAT_VERSIONS,
   type BackupData,
   type BackupManifest,
 } from "./schema";
+import { normalizeManifest } from "./compat";
 
-// Carries a message safe to hand straight back to the user. Anything else
-// thrown out of the backup module is an internal error and gets a generic 500.
-export class BackupError extends Error {
-  constructor(public userMessage: string) {
-    super(userMessage);
-    this.name = "BackupError";
-  }
-}
+export { BackupError };
 
-const COUNTED_GROUPS = [...INSERT_ORDER, "_JobToTag", "_QuestionToTag"] as const;
-
-export function countRows(data: BackupData): Record<string, number> {
+export function countRows(
+  data: BackupData,
+  options?: { includeSensitiveData?: boolean },
+): Record<string, number> {
+  const includeSensitiveData = options?.includeSensitiveData === true;
   const counts: Record<string, number> = {};
-  for (const group of COUNTED_GROUPS) {
+  for (const group of [
+    ...modelsForBackup(includeSensitiveData),
+    "_JobToTag",
+    "_QuestionToTag",
+  ] as const) {
     counts[group] = (data as unknown as Record<string, unknown[]>)[group].length;
   }
   return counts;
@@ -33,14 +34,17 @@ export function countRows(data: BackupData): Record<string, number> {
 export function buildManifest(
   data: BackupData,
   sourceEmail: string,
+  options?: { includeSensitiveData?: boolean },
 ): BackupManifest {
+  const includeSensitiveData = options?.includeSensitiveData === true;
   return {
     formatVersion: BACKUP_FORMAT_VERSION,
     appName: "Vocatrya",
     appVersion: pkg.version,
     exportedAt: new Date().toISOString(),
     sourceEmail,
-    counts: countRows(data),
+    counts: countRows(data, { includeSensitiveData }),
+    containsSensitiveData: includeSensitiveData,
   };
 }
 
@@ -96,13 +100,13 @@ export async function readManifest(zip: JSZip): Promise<BackupManifest> {
   if (!parsed.success) {
     if (
       found !== undefined &&
-      !SUPPORTED_BACKUP_FORMAT_VERSIONS.includes(found as 1 | 2)
+      !SUPPORTED_BACKUP_FORMAT_VERSIONS.includes(found as 1 | 2 | 3)
     ) {
       throw new BackupError(
-        `This backup was made by a different version of Vocatrya. Expected format version 1 or ${BACKUP_FORMAT_VERSION}, found ${String(found)}.`,
+        `This backup was made by a different version of Vocatrya. Expected format version 1, 2 or ${BACKUP_FORMAT_VERSION}, found ${String(found)}.`,
       );
     }
     throw new BackupError("manifest.json is missing required fields.");
   }
-  return parsed.data;
+  return normalizeManifest(parsed.data);
 }

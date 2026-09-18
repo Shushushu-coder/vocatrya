@@ -11,6 +11,7 @@ import {
   PROCESS_STEP_DEADLINE_MIGRATION,
   CAMPUS_CORE_FIELDS_MIGRATION,
   INTERVIEW_REFLECTION_MIGRATION,
+  CANDIDATE_PROFILE_MIGRATION,
 } from "./helpers/abSchemaTestDb";
 
 const LEGACY_TABLES = [
@@ -64,7 +65,9 @@ const NEW_TABLES = [
   "CareerCertificationDetail",
   "CareerCustomDetail",
   "CareerEvidence",
-  "ResumeContactProfile",
+  "CandidateProfile",
+  "CandidateSensitiveInfo",
+  "CandidateFamilyMember",
   "ResumeVariant",
   "ResumeVariantVersion",
   "ResumeVariantSection",
@@ -173,6 +176,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
         PROCESS_STEP_DEADLINE_MIGRATION,
         CAMPUS_CORE_FIELDS_MIGRATION,
         INTERVIEW_REFLECTION_MIGRATION,
+        CANDIDATE_PROFILE_MIGRATION,
       ],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -250,6 +254,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
       copyMigrationBySuffix(ctx.dir, PROCESS_STEP_DEADLINE_MIGRATION);
       copyMigrationBySuffix(ctx.dir, CAMPUS_CORE_FIELDS_MIGRATION);
       copyMigrationBySuffix(ctx.dir, INTERVIEW_REFLECTION_MIGRATION);
+      copyMigrationBySuffix(ctx.dir, CANDIDATE_PROFILE_MIGRATION);
       migrateDeploy(ctx.url, schemaPath);
 
       expect(await prisma.job.count()).toBe(before.jobs);

@@ -2,9 +2,14 @@ import fs from "fs/promises";
 import path from "path";
 import JSZip from "jszip";
 import db from "@/lib/db";
-import { INSERT_ORDER, MODEL_SPECS, type BackupModel } from "./ordering";
+import {
+  MODEL_SPECS,
+  modelsForBackup,
+  type BackupModel,
+} from "./ordering";
 import { BackupDataSchema, type BackupData } from "./schema";
 import { buildManifest } from "./manifest";
+import { stripSensitiveBackupGroups } from "./compat";
 import { isResumeFilePath } from "@/lib/resumeFiles";
 import {
   isAbsoluteStorageKey,
@@ -28,10 +33,23 @@ function stripOwnership(model: BackupModel, row: Row): Row {
   return rest;
 }
 
-export async function collectBackupData(userId: string): Promise<BackupData> {
+export type CollectBackupOptions = {
+  includeSensitiveData?: boolean;
+};
+
+function includeSensitiveDataFrom(options?: CollectBackupOptions): boolean {
+  return options?.includeSensitiveData === true;
+}
+
+export async function collectBackupData(
+  userId: string,
+  options?: CollectBackupOptions,
+): Promise<BackupData> {
+  const includeSensitiveData = includeSensitiveDataFrom(options);
+  const models = modelsForBackup(includeSensitiveData);
   // Array form: a read-only batch that sees one snapshot without the 5s
   // interactive-transaction timeout. See the spec's Snapshot consistency note.
-  const reads = INSERT_ORDER.map((model) => {
+  const reads = models.map((model) => {
     const spec = MODEL_SPECS[model];
     const delegate = (db as unknown as Record<string, { findMany: (a: unknown) => Promise<Row[]> }>)[
       spec.delegate
@@ -59,15 +77,15 @@ export async function collectBackupData(userId: string): Promise<BackupData> {
   ];
 
   const batchResults = (await db.$transaction(batch as never)) as unknown as unknown[];
-  const results = batchResults.slice(0, INSERT_ORDER.length) as Row[][];
-  const userRow = batchResults[INSERT_ORDER.length] as { defaultResumeId: string | null } | null;
-  const statuses = batchResults[INSERT_ORDER.length + 1] as { label: string; value: string }[];
+  const results = batchResults.slice(0, models.length) as Row[][];
+  const userRow = batchResults[models.length] as { defaultResumeId: string | null } | null;
+  const statuses = batchResults[models.length + 1] as { label: string; value: string }[];
 
   const raw: Record<string, unknown> = {};
   const jobToTag: { jobId: string; tagId: string }[] = [];
   const questionToTag: { questionId: string; tagId: string }[] = [];
 
-  INSERT_ORDER.forEach((model, index) => {
+  models.forEach((model, index) => {
     raw[model] = results[index].map((row) => {
       const clean = stripOwnership(model, row);
 
@@ -115,8 +133,10 @@ export async function collectBackupData(userId: string): Promise<BackupData> {
 export async function buildBackupZip(
   userId: string,
   sourceEmail: string,
+  options?: CollectBackupOptions,
 ): Promise<{ buffer: Buffer; fileName: string }> {
-  const data = await collectBackupData(userId);
+  const includeSensitiveData = includeSensitiveDataFrom(options);
+  const data = await collectBackupData(userId, { includeSensitiveData });
 
   // File bytes are read outside the read transaction. A row committed inside
   // the snapshot whose bytes land later is covered by the fileMissing marker.
@@ -135,9 +155,12 @@ export async function buildBackupZip(
     }
   }
 
-  const manifest = buildManifest(data, sourceEmail);
+  const manifest = buildManifest(data, sourceEmail, { includeSensitiveData });
+  const serialized = includeSensitiveData
+    ? data
+    : stripSensitiveBackupGroups(data as unknown as Record<string, unknown>);
   zip.file("manifest.json", JSON.stringify(manifest, null, 2));
-  zip.file("data.json", JSON.stringify(data));
+  zip.file("data.json", JSON.stringify(serialized));
 
   const buffer = await zip.generateAsync({
     type: "nodebuffer",

@@ -5,6 +5,9 @@ import {
   LOOKUP_MODELS,
   EMPTINESS_MODELS,
   DEFERRED_FKS,
+  STANDARD_BACKUP_MODELS,
+  SENSITIVE_BACKUP_MODELS,
+  modelsForWipe,
   type BackupModel,
 } from "@/lib/backup/ordering";
 
@@ -132,6 +135,7 @@ describe("emptiness models", () => {
       "Activity",
       "ApplicationAttempt",
       "Automation",
+      "CandidateProfile",
       "CareerMaterialItem",
       "Contact",
       "CoverLetter",
@@ -144,7 +148,6 @@ describe("emptiness models", () => {
       "Question",
       "RecruitmentCampaign",
       "Resume",
-      "ResumeContactProfile",
       "ResumeVariant",
       "Task",
     ]);
@@ -158,5 +161,36 @@ describe("emptiness models", () => {
 
   it("includes Profile, so an import cannot add a second one", () => {
     expect(EMPTINESS_MODELS).toContain("Profile");
+  });
+});
+
+describe("backup datasets", () => {
+  it("keeps sensitive models out of the standard restore wipe", () => {
+    expect([...SENSITIVE_BACKUP_MODELS]).toEqual([
+      "CandidateSensitiveInfo",
+      "CandidateFamilyMember",
+    ]);
+    expect(STANDARD_BACKUP_MODELS).not.toEqual(
+      expect.arrayContaining([...SENSITIVE_BACKUP_MODELS]),
+    );
+    expect(modelsForWipe(false)).not.toEqual(
+      expect.arrayContaining([...SENSITIVE_BACKUP_MODELS]),
+    );
+    expect(modelsForWipe(true)).toEqual(
+      expect.arrayContaining([...SENSITIVE_BACKUP_MODELS]),
+    );
+    expect(
+      INSERT_ORDER.indexOf("CandidateSensitiveInfo"),
+    ).toBeLessThan(INSERT_ORDER.indexOf("CandidateFamilyMember"));
+    expect(DELETE_ORDER.indexOf("CandidateFamilyMember")).toBeLessThan(
+      DELETE_ORDER.indexOf("CandidateSensitiveInfo"),
+    );
+  });
+
+  it("does not put sensitive models on the global DELETE_ORDER-only path by accident", () => {
+    expect(DELETE_ORDER).toEqual([...INSERT_ORDER].reverse());
+    for (const model of SENSITIVE_BACKUP_MODELS) {
+      expect(MODEL_SPECS[model].dataset).toBe("sensitive");
+    }
   });
 });

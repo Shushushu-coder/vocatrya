@@ -1,8 +1,9 @@
-export { BackupError, buildManifest, countRows, openBackupZip, readManifest } from "./manifest";
+export { buildManifest, countRows, openBackupZip, readManifest } from "./manifest";
 export { buildBackupZip, collectBackupData } from "./export";
 export {
   BACKUP_FORMAT_VERSION,
   BackupDataSchema,
+  BackupError,
   ManifestSchema,
   SUPPORTED_BACKUP_FORMAT_VERSIONS,
 } from "./schema";

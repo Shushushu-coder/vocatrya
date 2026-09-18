@@ -778,10 +778,10 @@ export const FIELD_MAPPING_MATRIX: FieldMappingRow[] = [
   },
   {
     legacyField: "ContactInfo (per Resume)",
-    destination: "ResumeContactProfile (per User)",
+    destination: "CandidateProfile (per User)",
     classification: "CONDITIONAL",
-    notes: "Map to ResumeContactProfile only when all of a user's ContactInfo rows agree on email, phone, and address (normalized). If they conflict, leave ResumeContactProfile unmapped and report contact_conflicts. Never pick one resume as current truth.",
-    codeEvidence: "schema ContactInfo.resumeId @unique vs ResumeContactProfile.userId @unique",
+    notes: "Map to CandidateProfile only when all of a user's ContactInfo rows agree on email, phone, and address (normalized). If they conflict, leave CandidateProfile unmapped and report contact_conflicts. Never pick one resume as current truth.",
+    codeEvidence: "schema ContactInfo.resumeId @unique vs CandidateProfile.userId @unique",
   },
   {
     legacyField: "WorkExperience",
@@ -1046,7 +1046,7 @@ export function gatherInventory(db: ReadOnlyDb): LegacyInventory {
     "JobDescriptionVersion",
     "CareerMaterialItem",
     "ResumeVariant",
-    "ResumeContactProfile",
+    "CandidateProfile",
     "LegacyMigrationMap",
     "DataMigrationRun",
   ];
@@ -1728,7 +1728,7 @@ export function auditOpenDatabase(
   if (contactConflicts.length) {
     conflicts.push({
       kind: "contact_profile_conflict",
-      detail: "User has ContactInfo rows that disagree on email/phone/address. Do not manufacture ResumeContactProfile.",
+      detail: "User has ContactInfo rows that disagree on email/phone/address. Do not manufacture CandidateProfile.",
       count: contactConflicts.length,
     });
   }

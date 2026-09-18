@@ -27,9 +27,9 @@ import { LEGACY, TARGET } from "@/lib/legacy-migration/identities";
 const SCHEMA_PATH = path.resolve(__dirname, "../prisma/schema.prisma");
 
 describe("Phase 4 backup contract", () => {
-  it("writes formatVersion 2 and still reads v1", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(2);
-    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2]);
+  it("writes formatVersion 3 and still reads v1 and v2", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(3);
+    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2, 3]);
     expect(ManifestSchema.parse({
       formatVersion: 1,
       appVersion: "1.0.0",
@@ -100,7 +100,9 @@ describe("Phase 4 backup contract", () => {
       "CareerCertificationDetail",
       "CareerCustomDetail",
       "CareerEvidence",
-      "ResumeContactProfile",
+      "CandidateProfile",
+      "CandidateSensitiveInfo",
+      "CandidateFamilyMember",
       "ResumeVariant",
       "ResumeVariantVersion",
       "ResumeVariantSection",
@@ -205,7 +207,7 @@ describe("Phase 4 backup contract", () => {
       {
         legacyEntityType: LEGACY.USER_CONTACT_INFO,
         legacyEntityId: "source-user",
-        targetEntityType: TARGET.RESUME_CONTACT_PROFILE,
+        targetEntityType: TARGET.CANDIDATE_PROFILE,
         targetEntityId: "profile-old",
       },
       idMap,
@@ -213,6 +215,25 @@ describe("Phase 4 backup contract", () => {
     );
     expect(remapped.legacyEntityId).toBe("session-user");
     expect(remapped.targetEntityId).toBe(profileNew);
+    expect(remapped.targetEntityType).toBe(TARGET.CANDIDATE_PROFILE);
+  });
+
+  it("remaps legacy ResumeContactProfile mapping targets to CandidateProfile", () => {
+    const idMap = new IdMap();
+    const profileNew = idMap.mint("profile-old");
+    const remapped = remapLegacyMigrationMapIds(
+      {
+        legacyEntityType: LEGACY.USER_CONTACT_INFO,
+        legacyEntityId: "source-user",
+        targetEntityType: "ResumeContactProfile",
+        targetEntityId: "profile-old",
+      },
+      idMap,
+      "session-user",
+    );
+    expect(remapped.legacyEntityId).toBe("session-user");
+    expect(remapped.targetEntityId).toBe(profileNew);
+    expect(remapped.targetEntityType).toBe(TARGET.CANDIDATE_PROFILE);
   });
 
   it("fails closed when a mapping points at an unknown type or missing row", () => {

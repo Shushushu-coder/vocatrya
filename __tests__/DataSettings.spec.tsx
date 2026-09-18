@@ -18,6 +18,8 @@ const preflight = {
   emailMatches: true,
   targetIsEmpty: false,
   targetCounts: { Job: 4, Resume: 1, Profile: 1, Task: 0, Activity: 0, Note: 0, Question: 0, Automation: 0, CoverLetter: 0 },
+  wipeCounts: { Job: 4, Resume: 1, Profile: 1, Task: 0, Activity: 0, Note: 0, Question: 0, Automation: 0, CoverLetter: 0 },
+  containsSensitiveData: false,
 };
 
 function mockFetch(body: unknown, ok = true) {
@@ -38,6 +40,11 @@ describe("DataSettings", () => {
     render(<DataSettings />);
     expect(screen.getByText(/no API keys/i)).toBeInTheDocument();
     expect(screen.getByText(/full text/i)).toBeInTheDocument();
+    expect(screen.getByText(/include sensitive candidate data/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /download backup/i })).toHaveAttribute(
+      "href",
+      "/api/backup/export",
+    );
   });
 
   it("shows the backup preview after a preflight, without importing", async () => {
@@ -74,6 +81,9 @@ describe("DataSettings", () => {
     await userEvent.click(screen.getByRole("button", { name: /replace my data/i }));
 
     expect(await screen.findByText(/4 jobs/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not include sensitive candidate data/i),
+    ).toBeInTheDocument();
   });
 
   it("sends confirmWipe only after the confirmation is accepted", async () => {

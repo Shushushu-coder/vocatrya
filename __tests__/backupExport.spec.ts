@@ -5,7 +5,12 @@ import JSZip from "jszip";
 import db from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { buildBackupZip, collectBackupData } from "@/lib/backup/export";
-import { MODEL_SPECS, INSERT_ORDER } from "@/lib/backup/ordering";
+import {
+  MODEL_SPECS,
+  INSERT_ORDER,
+  STANDARD_BACKUP_MODELS,
+  SENSITIVE_BACKUP_MODELS,
+} from "@/lib/backup/ordering";
 
 vi.mock("@/lib/db", async () => {
   const { INSERT_ORDER, MODEL_SPECS } = await import("@/lib/backup/ordering");
@@ -28,12 +33,23 @@ const mockDb = db as unknown as Record<string, { findMany: ReturnType<typeof vi.
 describe("collectBackupData", () => {
   it("scopes every read to the user with the model's ownership chain", async () => {
     await collectBackupData("user-1");
-    for (const model of INSERT_ORDER) {
+    for (const model of STANDARD_BACKUP_MODELS) {
       const spec = MODEL_SPECS[model];
       const call = mockDb[spec.delegate].findMany.mock.calls[0][0];
       expect(call.where, `${model} was not scoped`).toEqual(
         spec.scope("user-1"),
       );
+    }
+    for (const model of SENSITIVE_BACKUP_MODELS) {
+      expect(mockDb[MODEL_SPECS[model].delegate].findMany).not.toHaveBeenCalled();
+    }
+  });
+
+  it("reads sensitive models only when includeSensitiveData is true", async () => {
+    await collectBackupData("user-1", { includeSensitiveData: true });
+    for (const model of INSERT_ORDER) {
+      const spec = MODEL_SPECS[model];
+      expect(mockDb[spec.delegate].findMany).toHaveBeenCalled();
     }
   });
 

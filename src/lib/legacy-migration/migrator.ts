@@ -22,6 +22,7 @@ import {
 } from "./phase2Auditor";
 import {
   LEGACY,
+  isCandidateProfileTarget,
   PHASE3_CREATED_VIA,
   PHASE3_MIGRATION_VERSION,
   TARGET,
@@ -100,6 +101,29 @@ async function findMapping(
     );
   }
   return rows[0] ?? null;
+}
+
+async function findContactProfileMapping(
+  client: Tx | PrismaClient,
+  userId: string,
+) {
+  const rows = await client.legacyMigrationMap.findMany({
+    where: {
+      userId,
+      legacyEntityType: LEGACY.USER_CONTACT_INFO,
+      legacyEntityId: userId,
+      migrationVersion: PHASE3_MIGRATION_VERSION,
+    },
+  });
+  const matches = rows.filter((row) =>
+    isCandidateProfileTarget(row.targetEntityType),
+  );
+  if (matches.length > 1) {
+    throw new Error(
+      `DUPLICATE_MAPPING ${LEGACY.USER_CONTACT_INFO}:${userId} -> CandidateProfile`,
+    );
+  }
+  return matches[0] ?? null;
 }
 
 async function writeMapping(
@@ -1544,15 +1568,7 @@ async function migrateContactProfiles(
         fields: resolution.conflicts.map((c) => c.field),
       });
     }
-    const existing = await prisma.legacyMigrationMap.findFirst({
-      where: {
-        userId,
-        legacyEntityType: LEGACY.USER_CONTACT_INFO,
-        legacyEntityId: userId,
-        targetEntityType: TARGET.RESUME_CONTACT_PROFILE,
-        migrationVersion: PHASE3_MIGRATION_VERSION,
-      },
-    });
+    const existing = await findContactProfileMapping(prisma, userId);
     if (existing) {
       bump(acc.skippedAlreadyMigrated, "contactProfiles");
       continue;
@@ -1564,31 +1580,26 @@ async function migrateContactProfiles(
     const snap = snapshotAcc(acc);
     try {
       await prisma.$transaction(async (tx) => {
-        const already = await tx.resumeContactProfile.findUnique({
+        const already = await tx.candidateProfile.findUnique({
           where: { userId },
         });
         if (already) {
-          const mapped = await findMapping(tx, {
-            userId,
-            legacyEntityType: LEGACY.USER_CONTACT_INFO,
-            legacyEntityId: userId,
-            targetEntityType: TARGET.RESUME_CONTACT_PROFILE,
-          });
+          const mapped = await findContactProfileMapping(tx, userId);
           if (!mapped) {
             await writeMapping(tx, {
               userId,
               legacyEntityType: LEGACY.USER_CONTACT_INFO,
               legacyEntityId: userId,
-              targetEntityType: TARGET.RESUME_CONTACT_PROFILE,
+              targetEntityType: TARGET.CANDIDATE_PROFILE,
               targetEntityId: already.id,
-              mappingReason: "Existing ResumeContactProfile linked without duplicating",
+              mappingReason: "Existing CandidateProfile linked without duplicating",
             });
             acc.countWrite(acc.created, "mappings");
           }
           bump(acc.skippedAlreadyMigrated, "contactProfiles");
           return;
         }
-        const profile = await tx.resumeContactProfile.create({
+        const profile = await tx.candidateProfile.create({
           data: {
             userId,
             ...resolution.profile,
@@ -1598,7 +1609,7 @@ async function migrateContactProfiles(
           userId,
           legacyEntityType: LEGACY.USER_CONTACT_INFO,
           legacyEntityId: userId,
-          targetEntityType: TARGET.RESUME_CONTACT_PROFILE,
+          targetEntityType: TARGET.CANDIDATE_PROFILE,
           targetEntityId: profile.id,
           mappingReason: "all comparable email/phone/address values agreed",
         });

@@ -1,6 +1,6 @@
 // The single table that drives export scoping, wipe scoping, FK rewriting and
-// ownership injection. A second list of models anywhere is a bug waiting to
-// happen — everything reads this one.
+// ownership injection. Dataset membership is declared on each spec so standard
+// vs sensitive restore cannot drift into a second handwritten list.
 
 export type BackupModel =
   | "Company"
@@ -54,7 +54,9 @@ export type BackupModel =
   | "CareerCertificationDetail"
   | "CareerCustomDetail"
   | "CareerEvidence"
-  | "ResumeContactProfile"
+  | "CandidateProfile"
+  | "CandidateSensitiveInfo"
+  | "CandidateFamilyMember"
   | "ResumeVariant"
   | "ResumeVariantVersion"
   | "ResumeVariantSection"
@@ -74,6 +76,8 @@ export type BackupModel =
   | "ApplicationOfferDetail"
   | "LegacyMigrationMap";
 
+export type BackupDataset = "standard" | "sensitive";
+
 export interface ModelSpec {
   // Prisma client delegate key, e.g. prisma[spec.delegate].findMany(...)
   delegate: string;
@@ -87,6 +91,9 @@ export interface ModelSpec {
   fks: Record<string, BackupModel>;
   // Ownership-scoped where clause, per CLAUDE.md's IDOR rules.
   scope: (userId: string) => Record<string, unknown>;
+  // Omitted dataset means standard. Sensitive models are opt-in on export
+  // and wiped only when the backup manifest declares containsSensitiveData.
+  dataset?: BackupDataset;
 }
 
 const byUser = (userId: string) => ({ userId });
@@ -126,6 +133,7 @@ const byExpression = (userId: string) => ({
   },
 });
 const byMatch = (userId: string) => ({ matchAnalysis: { userId } });
+const bySensitiveInfo = (userId: string) => ({ sensitiveInfo: { userId } });
 
 export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
   Company: { delegate: "company", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
@@ -375,11 +383,24 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: { materialItemId: "CareerMaterialItem" },
     scope: byMaterial,
   },
-  ResumeContactProfile: {
-    delegate: "resumeContactProfile",
+  CandidateProfile: {
+    delegate: "candidateProfile",
     owner: "userId",
     fks: {},
     scope: byUser,
+  },
+  CandidateSensitiveInfo: {
+    delegate: "candidateSensitiveInfo",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+    dataset: "sensitive",
+  },
+  CandidateFamilyMember: {
+    delegate: "candidateFamilyMember",
+    fks: { sensitiveInfoId: "CandidateSensitiveInfo" },
+    scope: bySensitiveInfo,
+    dataset: "sensitive",
   },
   ResumeVariant: {
     delegate: "resumeVariant",
@@ -553,7 +574,9 @@ export const INSERT_ORDER: BackupModel[] = [
   "CareerCertificationDetail",
   "CareerCustomDetail",
   "CareerEvidence",
-  "ResumeContactProfile",
+  "CandidateProfile",
+  "CandidateSensitiveInfo",
+  "CandidateFamilyMember",
   "ResumeVariant",
   "ResumeVariantVersion",
   "ResumeVariantSection",
@@ -575,6 +598,36 @@ export const INSERT_ORDER: BackupModel[] = [
 ];
 
 export const DELETE_ORDER: BackupModel[] = [...INSERT_ORDER].reverse();
+
+export function backupDataset(model: BackupModel): BackupDataset {
+  return MODEL_SPECS[model].dataset ?? "standard";
+}
+
+export function includedInStandardBackup(model: BackupModel): boolean {
+  return backupDataset(model) === "standard";
+}
+
+export function includedInSensitiveBackup(model: BackupModel): boolean {
+  return backupDataset(model) === "sensitive";
+}
+
+export const STANDARD_BACKUP_MODELS: BackupModel[] = INSERT_ORDER.filter(
+  includedInStandardBackup,
+);
+
+export const SENSITIVE_BACKUP_MODELS: BackupModel[] = INSERT_ORDER.filter(
+  includedInSensitiveBackup,
+);
+
+export function modelsForBackup(includeSensitiveData: boolean): BackupModel[] {
+  return includeSensitiveData ? [...INSERT_ORDER] : [...STANDARD_BACKUP_MODELS];
+}
+
+export function modelsForWipe(containsSensitiveData: boolean): BackupModel[] {
+  return DELETE_ORDER.filter(
+    (model) => includedInStandardBackup(model) || containsSensitiveData,
+  );
+}
 
 export const LOOKUP_MODELS: BackupModel[] = INSERT_ORDER.filter(
   (m) => MODEL_SPECS[m].lookup,
@@ -618,7 +671,7 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "RecruitmentCampaign",
   "CareerMaterialItem",
   "ResumeVariant",
-  "ResumeContactProfile",
+  "CandidateProfile",
   "JobSearchPreference",
   "MatchAnalysis",
   "ApplicationAttempt",

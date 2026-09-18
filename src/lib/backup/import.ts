@@ -5,6 +5,7 @@ import db from "@/lib/db";
 import { APP_CONSTANTS, CONTACT_ROLES } from "@/lib/constants";
 import { IdMap, buildCreateData } from "./idmap";
 import { BackupError, openBackupZip, readManifest } from "./manifest";
+import { normalizeBackupData } from "./compat";
 import {
   checkImportedFile,
   importedFilePath,
@@ -15,11 +16,13 @@ import {
 } from "./normalize";
 import {
   DEFERRED_FKS,
-  DELETE_ORDER,
   EMPTINESS_MODELS,
   INSERT_ORDER,
   LOOKUP_MODELS,
   MODEL_SPECS,
+  SENSITIVE_BACKUP_MODELS,
+  backupDataset,
+  modelsForWipe,
   type BackupModel,
 } from "./ordering";
 import { remapLegacyMigrationMapIds } from "./migrationMap";
@@ -33,15 +36,18 @@ export interface PreflightResult {
   emailMatches: boolean;
   targetIsEmpty: boolean;
   targetCounts: Record<string, number>;
+  wipeCounts: Record<string, number>;
+  containsSensitiveData: boolean;
 }
 
 // Counts read from the target database, not from the file — the manifest is
 // self-reported and cannot be allowed to size the destructive confirmation.
-export async function countTargetContent(
+async function countModels(
   userId: string,
+  models: readonly BackupModel[],
 ): Promise<Record<string, number>> {
   const entries = await Promise.all(
-    EMPTINESS_MODELS.map(async (model) => {
+    models.map(async (model) => {
       const spec = MODEL_SPECS[model];
       const delegate = (db as unknown as Record<string, { count: (a: unknown) => Promise<number> }>)[
         spec.delegate
@@ -52,7 +58,21 @@ export async function countTargetContent(
   return Object.fromEntries(entries);
 }
 
-// Reads manifest.json only, writes nothing to the database and nothing to disk.
+export async function countTargetContent(
+  userId: string,
+): Promise<Record<string, number>> {
+  return countModels(userId, EMPTINESS_MODELS);
+}
+
+export async function countWipeTargets(
+  userId: string,
+  containsSensitiveData: boolean,
+): Promise<Record<string, number>> {
+  return countModels(userId, modelsForWipe(containsSensitiveData));
+}
+
+// Reads manifest.json and validates data.json, writes nothing to the database
+// and nothing to disk. Data is normalized before any wipe can run.
 export async function preflightBackup(
   bytes: Buffer,
   userId: string,
@@ -64,8 +84,14 @@ export async function preflightBackup(
   if (!zip.file("data.json")) {
     throw new BackupError("Backup is missing data.json.");
   }
+  await readData(zip, manifest.containsSensitiveData === true);
 
-  const targetCounts = await countTargetContent(userId);
+  const containsSensitiveData = manifest.containsSensitiveData === true;
+  const emptinessModels = containsSensitiveData
+    ? [...EMPTINESS_MODELS, ...SENSITIVE_BACKUP_MODELS]
+    : EMPTINESS_MODELS;
+  const targetCounts = await countModels(userId, emptinessModels);
+  const wipeCounts = await countWipeTargets(userId, containsSensitiveData);
   const targetIsEmpty = Object.values(targetCounts).every((n) => n === 0);
 
   return {
@@ -73,6 +99,8 @@ export async function preflightBackup(
     emailMatches: manifest.sourceEmail === userEmail,
     targetIsEmpty,
     targetCounts,
+    wipeCounts,
+    containsSensitiveData,
   };
 }
 
@@ -85,7 +113,10 @@ export interface ImportResult {
 
 type Tx = Record<string, Record<string, (a: unknown) => Promise<unknown>>>;
 
-async function readData(zip: JSZip): Promise<BackupData> {
+async function readData(
+  zip: JSZip,
+  containsSensitiveData: boolean,
+): Promise<BackupData> {
   const entry = zip.file("data.json");
   if (!entry) throw new BackupError("Backup is missing data.json.");
   let raw: unknown;
@@ -94,10 +125,12 @@ async function readData(zip: JSZip): Promise<BackupData> {
   } catch {
     throw new BackupError("data.json is not valid JSON.");
   }
-  const parsed = BackupDataSchema.safeParse(raw);
+  const normalized = normalizeBackupData(raw, containsSensitiveData);
+  const parsed = BackupDataSchema.safeParse(normalized);
   if (!parsed.success) {
+    const issue = parsed.error.issues[0];
     throw new BackupError(
-      `Backup data failed validation: ${parsed.error.issues[0]?.path.join(".")} ${parsed.error.issues[0]?.message}`,
+      `Backup data failed validation: ${issue?.path.join(".")} ${issue?.code}`,
     );
   }
   return parsed.data;
@@ -163,7 +196,11 @@ async function insertLookups(
   }
 }
 
-async function wipe(tx: Tx, userId: string): Promise<void> {
+async function wipe(
+  tx: Tx,
+  userId: string,
+  containsSensitiveData: boolean,
+): Promise<void> {
   // Null the back-reference first: User.defaultResumeId is a foreign key into
   // a table the wipe is about to empty.
   await tx.user.update({
@@ -187,7 +224,7 @@ async function wipe(tx: Tx, userId: string): Promise<void> {
     });
   }
 
-  for (const model of DELETE_ORDER) {
+  for (const model of modelsForWipe(containsSensitiveData)) {
     const spec = MODEL_SPECS[model];
     await tx[spec.delegate].deleteMany({ where: spec.scope(userId) });
   }
@@ -248,9 +285,13 @@ export async function importBackup(
 
   const zip = await openBackupZip(bytes);
   const manifest = await readManifest(zip);
-  const data = await readData(zip);
+  const containsSensitiveData = manifest.containsSensitiveData === true;
+  const data = await readData(zip, containsSensitiveData);
 
-  const targetCounts = await countTargetContent(userId);
+  const emptinessModels = containsSensitiveData
+    ? [...EMPTINESS_MODELS, ...SENSITIVE_BACKUP_MODELS]
+    : EMPTINESS_MODELS;
+  const targetCounts = await countModels(userId, emptinessModels);
   const targetIsEmpty = Object.values(targetCounts).every((n) => n === 0);
   if (!targetIsEmpty && !confirmWipe) {
     throw new BackupError(
@@ -276,6 +317,7 @@ export async function importBackup(
   const idMap = new IdMap();
   for (const model of INSERT_ORDER) {
     if (MODEL_SPECS[model].lookup) continue;
+    if (backupDataset(model) === "sensitive" && !containsSensitiveData) continue;
     for (const row of rowsFor(data, model)) idMap.mint(row.id as string);
   }
 
@@ -348,7 +390,7 @@ export async function importBackup(
       async (transaction) => {
         const tx = transaction as unknown as Tx;
 
-        await wipe(tx, userId);
+        await wipe(tx, userId, containsSensitiveData);
         await insertLookups(tx, data, idMap, userId);
 
         // A backup from before contacts carries no roles, and the wipe above
@@ -365,6 +407,9 @@ export async function importBackup(
 
         for (const model of INSERT_ORDER) {
           if (MODEL_SPECS[model].lookup) continue;
+          if (backupDataset(model) === "sensitive" && !containsSensitiveData) {
+            continue;
+          }
           const spec = MODEL_SPECS[model];
           const rows = rowsFor(data, model);
           counts[model] = rows.length;
@@ -464,7 +509,7 @@ export async function importBackup(
     if (/database is locked|SQLITE_BUSY/i.test(message)) {
       throw new BackupError("The database is busy. Please try the import again.");
     }
-    log.error("[Backup] Import transaction failed", { error: String(error) });
+    log.error("[Backup] Import transaction failed");
     throw new BackupError("Import failed and nothing was changed.");
   }
 

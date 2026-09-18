@@ -6,7 +6,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import db from "@/lib/db";
 import { importBackup } from "@/lib/backup/import";
 import { BackupError, buildManifest } from "@/lib/backup/manifest";
-import { BackupDataSchema } from "@/lib/backup/schema";
+import { emptyStandardBackupData } from "@/lib/backup/compat";
 import { syncSchedulerState } from "@/lib/scheduler";
 import { writeSnapshot } from "@/lib/backup/snapshot";
 
@@ -48,7 +48,7 @@ vi.mock("@/lib/db", async () => {
 const mockDb = db as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>;
 
 async function emptyBackup(): Promise<Buffer> {
-  const data = BackupDataSchema.parse({});
+  const data = emptyStandardBackupData();
   const zip = new JSZip();
   zip.file("manifest.json", JSON.stringify(buildManifest(data, "owner@example.com")));
   zip.file("data.json", JSON.stringify(data));
@@ -95,7 +95,7 @@ describe("importBackup guards", () => {
 
   it("refuses a payload whose data.json fails validation", async () => {
     const zip = new JSZip();
-    const data = BackupDataSchema.parse({});
+    const data = emptyStandardBackupData();
     zip.file("manifest.json", JSON.stringify(buildManifest(data, "a@b.com")));
     zip.file("data.json", JSON.stringify({ Job: [{ id: "j1" }] }));
     const bytes = await zip.generateAsync({ type: "nodebuffer" });

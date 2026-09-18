@@ -402,7 +402,7 @@ async function seedPhase4Graph() {
       preferredCities: JSON.stringify(["Beijing"]),
     },
   });
-  await prisma.resumeContactProfile.upsert({
+  await prisma.candidateProfile.upsert({
     where: { userId },
     update: { fullName: "Ada Lovelace", email: "ada@example.com" },
     create: {
@@ -424,12 +424,15 @@ function migrateOpts() {
 }
 
 describe("Phase 4 v2 backup / restore round-trip", () => {
-  it("writes formatVersion 2 and omits DataMigrationRun", async () => {
+  it("writes formatVersion 3 and omits DataMigrationRun", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
     const manifest = JSON.parse(await zip.file("manifest.json")!.async("string"));
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
-    expect(manifest.formatVersion).toBe(2);
+    expect(manifest.formatVersion).toBe(3);
+    expect(manifest.containsSensitiveData).toBe(false);
+    expect(data).not.toHaveProperty("CandidateSensitiveInfo");
+    expect(data).not.toHaveProperty("ResumeContactProfile");
     expect(data.DataMigrationRun).toBeUndefined();
     expect(JSON.stringify(data)).not.toContain("sourcePath");
     expect(data.Company[0].notes).toBe("Strategic notes");
@@ -608,6 +611,7 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
       "ApplicationProcessStep",
       "CareerMaterialItem",
       "CareerEvidence",
+      "CandidateProfile",
       "ResumeVariant",
       "ResumeVariantVersion",
       "ResumeExpression",

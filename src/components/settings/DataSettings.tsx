@@ -28,10 +28,13 @@ interface PreflightResult {
     exportedAt: string;
     sourceEmail: string;
     counts: Record<string, number>;
+    containsSensitiveData?: boolean;
   };
   emailMatches: boolean;
   targetIsEmpty: boolean;
   targetCounts: Record<string, number>;
+  wipeCounts: Record<string, number>;
+  containsSensitiveData: boolean;
 }
 
 interface SnapshotInfo {
@@ -67,6 +70,7 @@ export default function DataSettings() {
   const [busy, setBusy] = useState(false);
   const [snapshots, setSnapshots] = useState<SnapshotInfo[]>([]);
   const [restoring, setRestoring] = useState<SnapshotInfo | null>(null);
+  const [includeSensitiveData, setIncludeSensitiveData] = useState(false);
 
   const loadSnapshots = useCallback(async () => {
     try {
@@ -110,7 +114,7 @@ export default function DataSettings() {
   };
 
   const destroyed = preflight
-    ? Object.entries(preflight.targetCounts).filter(([, n]) => n > 0)
+    ? Object.entries(preflight.wipeCounts).filter(([, n]) => n > 0)
     : [];
 
   const onSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,8 +198,31 @@ export default function DataSettings() {
             <strong> {t("settings.fullText")}</strong>
             {t("settings.exportNoCredentialsTail")}
           </p>
+          <div className="space-y-2 rounded-md border p-3">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={includeSensitiveData}
+                onChange={(event) =>
+                  setIncludeSensitiveData(event.target.checked)
+                }
+              />
+              <span>{t("settings.includeSensitiveCandidateData")}</span>
+            </label>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.includeSensitiveCandidateDataWarning")}
+            </p>
+          </div>
           <Button asChild>
-            <a href="/api/backup/export" download>
+            <a
+              href={
+                includeSensitiveData
+                  ? "/api/backup/export?includeSensitiveData=true"
+                  : "/api/backup/export"
+              }
+              download
+            >
               <Download className="mr-2 h-4 w-4" />
               {t("settings.downloadBackup")}
             </a>
@@ -347,6 +374,14 @@ export default function DataSettings() {
                 <p>
                   {t("settings.deleteAccountDataDescription")}
                 </p>
+                {preflight && !preflight.containsSensitiveData && (
+                  <p>{t("settings.restorePreservesSensitiveData")}</p>
+                )}
+                {preflight?.containsSensitiveData && (
+                  <p className="font-medium text-destructive">
+                    {t("settings.restoreReplacesSensitiveData")}
+                  </p>
+                )}
                 <ul className="list-inside list-disc text-sm">
                   {destroyed.map(([model, n]) => (
                     <li key={model}>
