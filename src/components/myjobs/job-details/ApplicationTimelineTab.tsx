@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { DeleteAlertDialog } from "@/components/DeleteAlertDialog";
 import { JobTabEmptyState } from "./JobTabEmptyState";
 import { ProcessStepDialog, type ProcessStepFormValues } from "./ProcessStepDialog";
+import { InterviewReflectionDialog } from "./InterviewReflectionDialog";
 import {
   completeApplicationProcessStep,
   createApplicationProcessStep,
@@ -29,6 +30,8 @@ type ApplicationTimelineTabProps = {
   jobId: string;
   refreshKey: number;
   canMutate: boolean;
+  companyName?: string | null;
+  roleTitle?: string | null;
 };
 
 function isCompleted(step: ApplicationProcessStepDTO): boolean {
@@ -41,6 +44,8 @@ export function ApplicationTimelineTab({
   jobId,
   refreshKey,
   canMutate,
+  companyName,
+  roleTitle,
 }: ApplicationTimelineTabProps) {
   const { t, formatDate, formatDateTime } = useI18n();
   const [timeline, setTimeline] = useState<ApplicationTimelineDTO | null>(null);
@@ -49,6 +54,8 @@ export function ApplicationTimelineTab({
   const [stepToDelete, setStepToDelete] = useState<ApplicationProcessStepDTO | null>(
     null,
   );
+  const [reflectionStep, setReflectionStep] =
+    useState<ApplicationProcessStepDTO | null>(null);
   const [completingId, startComplete] = useTransition();
   const [deletingId, startDelete] = useTransition();
 
@@ -302,6 +309,8 @@ export function ApplicationTimelineTab({
                 !isCompleted(step) &&
                 isUserStep;
               const canDelete = canMutate && isUserStep;
+              const canOpenReflection =
+                canMutate && step.category === PROCESS_STEP_CATEGORY.INTERVIEW;
               return (
                 <li
                   key={step.id}
@@ -381,6 +390,17 @@ export function ApplicationTimelineTab({
                       >
                         {t("common.edit")}
                       </Button>
+                      {canOpenReflection && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setReflectionStep(step)}
+                          data-testid="interview-reflection-entry"
+                        >
+                          {t("jobs.interviewReflection")}
+                        </Button>
+                      )}
                       {canComplete && (
                         <Button
                           type="button"
@@ -420,6 +440,17 @@ export function ApplicationTimelineTab({
           editStep={editStep}
           restrictFields={restrictFields}
           onSubmit={onSave}
+        />
+      )}
+      {canMutate && (
+        <InterviewReflectionDialog
+          open={reflectionStep != null}
+          onOpenChange={(open) => {
+            if (!open) setReflectionStep(null);
+          }}
+          step={reflectionStep}
+          companyName={companyName}
+          roleTitle={roleTitle}
         />
       )}
       {canMutate && (

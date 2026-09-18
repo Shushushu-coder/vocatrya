@@ -260,6 +260,8 @@ function JobDetails({
                   jobId={job.id}
                   refreshKey={timelineRefreshKey}
                   canMutate={canMutateTimeline}
+                  companyName={job.Company?.label}
+                  roleTitle={job.JobTitle?.label}
                 />
               </Card>
             </TabsContent>

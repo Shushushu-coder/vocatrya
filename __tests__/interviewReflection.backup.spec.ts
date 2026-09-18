@@ -7,7 +7,14 @@ import { buildBackupZip } from "@/lib/backup/export";
 import { importBackup } from "@/lib/backup/import";
 import { BackupDataSchema } from "@/lib/backup/schema";
 import { INSERT_ORDER, MODEL_SPECS } from "@/lib/backup/ordering";
-import { PROCESS_STEP_CATEGORY } from "@/lib/career";
+import {
+  AB_MIGRATION_STATUS,
+  AB_RUNTIME_FEATURE_ENV,
+  ApplicationService,
+  OpportunityService,
+  PROCESS_STEP_CATEGORY,
+  writeInstanceMigrationState,
+} from "@/lib/career";
 import {
   makeTestDbUrl,
   pushSchema,
@@ -254,5 +261,84 @@ describe("interview reflection backup contract", () => {
     expect(items[1].answerNotes).toBe("讲了冷启动，但缺少量化结果");
     expect(items[1].sortOrder).toBe(20);
     expect(items[0].id).not.toBe(items[1].id);
+  }, 120_000);
+
+  it("round-trips reflection written through saveInterviewReflection", async () => {
+    await writeInstanceMigrationState(prisma, {
+      status: AB_MIGRATION_STATUS.COMPLETED,
+      completedAt: new Date(),
+      verifiedAt: new Date(),
+    });
+    const featureOn = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+    const company = await prisma.company.create({
+      data: {
+        label: "ByteDance",
+        value: `bytedance-interview-reflection-${Date.now()}`,
+        createdBy: userId,
+      },
+    });
+    const opportunities = new OpportunityService(prisma, userId, featureOn);
+    const applications = new ApplicationService(prisma, userId, featureOn);
+    const opportunity = await opportunities.create({
+      companyId: company.id,
+      title: "软件工程师",
+    });
+    const step = await applications.createUserProcessStep({
+      jobOpportunityId: opportunity.id,
+      category: PROCESS_STEP_CATEGORY.INTERVIEW,
+      label: "二面",
+    });
+    const saved = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "项目经历回答还是太散。",
+      items: [
+        {
+          questionText: "介绍一下你的推荐系统项目",
+          answerNotes: "讲了模型，但没有明确个人贡献",
+        },
+        {
+          questionText: "最大的技术挑战是什么",
+          answerNotes: "冷启动",
+        },
+      ],
+    });
+
+    const { buffer } = await buildBackupZip(
+      userId,
+      "interview-reflection-product@example.com",
+    );
+    const result = await importBackup(
+      buffer,
+      userId,
+      "interview-reflection-product@example.com",
+      true,
+    );
+    expect(result.counts.ApplicationInterviewDetail).toBe(1);
+    expect(result.counts.ApplicationInterviewReflectionItem).toBe(2);
+
+    const restoredStep = await prisma.applicationProcessStep.findFirstOrThrow({
+      where: {
+        applicationAttempt: { userId },
+        category: PROCESS_STEP_CATEGORY.INTERVIEW,
+      },
+      include: {
+        interviewDetail: {
+          include: {
+            reflectionItems: { orderBy: { sortOrder: "asc" } },
+          },
+        },
+      },
+    });
+    expect(restoredStep.interviewDetail?.reflectionText).toBe(
+      saved.reflectionText,
+    );
+    const items = restoredStep.interviewDetail?.reflectionItems ?? [];
+    expect(items.map((item) => item.questionText)).toEqual(
+      saved.items.map((item) => item.questionText),
+    );
+    expect(items.map((item) => item.answerNotes)).toEqual(
+      saved.items.map((item) => item.answerNotes),
+    );
+    expect(items.map((item) => item.sortOrder)).toEqual([10, 20]);
   }, 120_000);
 });

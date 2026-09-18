@@ -16,6 +16,17 @@ import {
   compareProcessSteps,
   toIso,
 } from "./applicationTimeline";
+import {
+  assertInterviewReflectionStep,
+  emptyInterviewReflection,
+  isEmptyInterviewReflectionSave,
+  interviewReflectionSortOrder,
+  normalizeReflectionText,
+  normalizeSaveInterviewReflectionItems,
+  toInterviewReflectionDTO,
+  type InterviewReflectionDTO,
+  type SaveInterviewReflectionInput,
+} from "./interviewReflection";
 import { ResumeVariantService } from "./resumeVariantService";
 import { assertAbWritesAllowed } from "./writeGuard";
 
@@ -321,6 +332,133 @@ export class ApplicationService {
         })),
       })),
     };
+  }
+
+  async getInterviewReflection(stepId: string): Promise<InterviewReflectionDTO> {
+    const step = await this.db.applicationProcessStep.findFirst({
+      where: {
+        id: stepId,
+        applicationAttempt: { userId: this.userId },
+      },
+      include: {
+        interviewDetail: {
+          include: {
+            reflectionItems: { orderBy: { sortOrder: "asc" } },
+          },
+        },
+      },
+    });
+    if (!step) {
+      throw new CareerRuntimeError("PROCESS_STEP_NOT_FOUND", "Process step not found");
+    }
+    assertInterviewReflectionStep(step.category);
+    if (!step.interviewDetail) {
+      return emptyInterviewReflection(step.id);
+    }
+    return toInterviewReflectionDTO(
+      step.id,
+      step.interviewDetail.reflectionText,
+      step.interviewDetail.reflectionItems,
+    );
+  }
+
+  async saveInterviewReflection(
+    input: SaveInterviewReflectionInput,
+  ): Promise<InterviewReflectionDTO> {
+    await this.gate();
+    const step = await this.requireOwnedStep(input.applicationProcessStepId);
+    assertInterviewReflectionStep(step.category);
+    const reflectionText = normalizeReflectionText(input.reflectionText);
+    const items = normalizeSaveInterviewReflectionItems(input.items ?? []);
+    const emptySave = isEmptyInterviewReflectionSave(reflectionText, items);
+
+    return this.db.$transaction(async (tx) => {
+      const existingDetail = await tx.applicationInterviewDetail.findUnique({
+        where: { applicationProcessStepId: step.id },
+        include: { reflectionItems: true },
+      });
+
+      if (!existingDetail && emptySave) {
+        return emptyInterviewReflection(step.id);
+      }
+
+      const detail =
+        existingDetail ??
+        (await tx.applicationInterviewDetail.create({
+          data: { applicationProcessStepId: step.id },
+          include: { reflectionItems: true },
+        }));
+
+      const existingById = new Map(
+        detail.reflectionItems.map((item) => [item.id, item]),
+      );
+      const suppliedExistingIds = new Set<string>();
+      for (const item of items) {
+        if (!item.id) continue;
+        if (!existingById.has(item.id)) {
+          throw new CareerRuntimeError(
+            "INTERVIEW_REFLECTION_ITEM_NOT_OWNED",
+            "Interview reflection item does not belong to this interview step",
+          );
+        }
+        suppliedExistingIds.add(item.id);
+      }
+
+      const savedItems: Array<{
+        id: string;
+        questionText: string;
+        answerNotes: string | null;
+        sortOrder: number;
+      }> = [];
+
+      for (const [index, item] of items.entries()) {
+        const sortOrder = interviewReflectionSortOrder(index);
+        if (item.id) {
+          const updated = await tx.applicationInterviewReflectionItem.update({
+            where: { id: item.id },
+            data: {
+              questionText: item.questionText,
+              answerNotes: item.answerNotes,
+              sortOrder,
+            },
+          });
+          savedItems.push(updated);
+        } else {
+          const created = await tx.applicationInterviewReflectionItem.create({
+            data: {
+              applicationInterviewDetailId: detail.id,
+              questionText: item.questionText,
+              answerNotes: item.answerNotes,
+              sortOrder,
+            },
+          });
+          savedItems.push(created);
+        }
+      }
+
+      const omittedIds = detail.reflectionItems
+        .filter((item) => !suppliedExistingIds.has(item.id))
+        .map((item) => item.id);
+      if (omittedIds.length > 0) {
+        await tx.applicationInterviewReflectionItem.deleteMany({
+          where: {
+            id: { in: omittedIds },
+            applicationInterviewDetailId: detail.id,
+          },
+        });
+      }
+
+      const updatedDetail = await tx.applicationInterviewDetail.update({
+        where: { id: detail.id },
+        data: { reflectionText },
+      });
+
+      return toInterviewReflectionDTO(
+        step.id,
+        updatedDetail.reflectionText,
+        savedItems,
+      );
+    });
   }
 
   async createUserProcessStep(input: {

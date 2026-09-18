@@ -2,6 +2,10 @@
 import prisma from "@/lib/db";
 import { ApplicationService } from "@/lib/career/applicationService";
 import type { ApplicationTimelineDTO } from "@/lib/career/applicationTimeline";
+import type {
+  InterviewReflectionDTO,
+  SaveInterviewReflectionInput,
+} from "@/lib/career/interviewReflection";
 import {
   listUpcomingApplicationEvents as queryUpcomingApplicationEvents,
   type UpcomingApplicationEvent,
@@ -51,6 +55,43 @@ function parseOptionalDate(
 
 function applicationsFor(userId: string) {
   return new ApplicationService(prisma, userId);
+}
+
+export async function getInterviewReflection(
+  stepId: string,
+): Promise<ActionResult<InterviewReflectionDTO>> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (!isAbReadMode(runtime.mode)) {
+      throw new CareerRuntimeError(
+        "APPLICATION_TIMELINE_UNAVAILABLE",
+        `Interview reflection is not available in ${runtime.mode}`,
+      );
+    }
+    const data = await applicationsFor(user.id).getInterviewReflection(stepId);
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to load interview reflection.");
+  }
+}
+
+export async function saveInterviewReflection(
+  input: SaveInterviewReflectionInput,
+): Promise<ActionResult<InterviewReflectionDTO>> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertAbApplicationWrites(runtime.mode);
+    const data = await applicationsFor(user.id).saveInterviewReflection({
+      applicationProcessStepId: input.applicationProcessStepId,
+      reflectionText: input.reflectionText,
+      items: input.items ?? [],
+    });
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to save interview reflection.");
+  }
 }
 
 export async function getApplicationTimeline(

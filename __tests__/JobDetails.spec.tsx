@@ -75,6 +75,8 @@ vi.mock("@/actions/application.actions", () => ({
   updateApplicationProcessStep: vi.fn(),
   completeApplicationProcessStep: vi.fn(),
   deleteApplicationProcessStep: vi.fn(),
+  getInterviewReflection: vi.fn(),
+  saveInterviewReflection: vi.fn(),
 }));
 
 const baseProps = {
