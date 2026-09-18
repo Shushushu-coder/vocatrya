@@ -82,6 +82,7 @@ describe("Phase 4 backup contract", () => {
       "ApplicationAttempt",
       "ApplicationProcessStep",
       "ApplicationInterviewDetail",
+      "ApplicationInterviewReflectionItem",
       "ApplicationAssessmentDetail",
       "ApplicationOfferDetail",
       "JobSearchPreference",

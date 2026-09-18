@@ -893,6 +893,14 @@ model ApplicationProcessStep {
   @@index([scheduledAt])
 }
 
+/// Interview-specific root hanging off ApplicationProcessStep (optional 1:1).
+/// Domain invariant (service-layer; Prisma cannot enforce it): parent
+/// ProcessStep.category must be INTERVIEW.
+/// Timeline / Upcoming facts stay on ProcessStep (label, status, scheduledAt,
+/// deadlineAt, completedAt, result, notes, source, sortOrder).
+/// roundLabel is retained but is NOT the round source of truth.
+/// structuredData is retained but is NOT the interview reflection store.
+/// Metadata columns are additive-only and are not productized in this phase.
 model ApplicationInterviewDetail {
   id                       String   @id @default(uuid())
   applicationProcessStepId String   @unique
@@ -902,10 +910,32 @@ model ApplicationInterviewDetail {
   interviewerNames         String?
   durationMinutes          Int?
   structuredData           String   @default("{}")
+  /// Whole-interview free-text reflection. Not a per-question note.
+  reflectionText           String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
-  processStep ApplicationProcessStep @relation(fields: [applicationProcessStepId], references: [id], onDelete: Cascade)
+  processStep     ApplicationProcessStep               @relation(fields: [applicationProcessStepId], references: [id], onDelete: Cascade)
+  reflectionItems ApplicationInterviewReflectionItem[]
+}
+
+/// Ordered question + answer-notes child of ApplicationInterviewDetail.
+/// Belongs to an INTERVIEW step only through the parent detail.
+/// sortOrder is a stable ordering key; duplicates are allowed so reorder
+/// can be implemented without a unique constraint. New items should follow
+/// the 10/20/30 increment convention used by ApplicationProcessStep.
+model ApplicationInterviewReflectionItem {
+  id                           String   @id @default(uuid())
+  applicationInterviewDetailId String
+  questionText                 String
+  answerNotes                  String?
+  sortOrder                    Int
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  applicationInterviewDetail ApplicationInterviewDetail @relation(fields: [applicationInterviewDetailId], references: [id], onDelete: Cascade)
+
+  @@index([applicationInterviewDetailId, sortOrder])
 }
 
 model ApplicationAssessmentDetail {

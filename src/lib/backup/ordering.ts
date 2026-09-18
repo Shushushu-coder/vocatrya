@@ -69,6 +69,7 @@ export type BackupModel =
   | "ApplicationAttempt"
   | "ApplicationProcessStep"
   | "ApplicationInterviewDetail"
+  | "ApplicationInterviewReflectionItem"
   | "ApplicationAssessmentDetail"
   | "ApplicationOfferDetail"
   | "LegacyMigrationMap";
@@ -102,6 +103,11 @@ const byJdVersion = (userId: string) => ({
 const byAttempt = (userId: string) => ({ applicationAttempt: { userId } });
 const byProcessStep = (userId: string) => ({
   processStep: { applicationAttempt: { userId } },
+});
+const byInterviewDetail = (userId: string) => ({
+  applicationInterviewDetail: {
+    processStep: { applicationAttempt: { userId } },
+  },
 });
 const byMaterial = (userId: string) => ({ materialItem: { userId } });
 const byVariant = (userId: string) => ({ resumeVariant: { userId } });
@@ -470,6 +476,11 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: { applicationProcessStepId: "ApplicationProcessStep" },
     scope: byProcessStep,
   },
+  ApplicationInterviewReflectionItem: {
+    delegate: "applicationInterviewReflectionItem",
+    fks: { applicationInterviewDetailId: "ApplicationInterviewDetail" },
+    scope: byInterviewDetail,
+  },
   ApplicationAssessmentDetail: {
     delegate: "applicationAssessmentDetail",
     fks: { applicationProcessStepId: "ApplicationProcessStep" },
@@ -557,6 +568,7 @@ export const INSERT_ORDER: BackupModel[] = [
   "ApplicationAttempt",
   "ApplicationProcessStep",
   "ApplicationInterviewDetail",
+  "ApplicationInterviewReflectionItem",
   "ApplicationAssessmentDetail",
   "ApplicationOfferDetail",
   "LegacyMigrationMap",

@@ -66,6 +66,17 @@ export type {
   TransferredFromDTO,
 } from "./applicationTimeline";
 export {
+  assertInterviewReflectionStep,
+  emptyInterviewReflection,
+  INTERVIEW_REFLECTION_SORT_STEP,
+} from "./interviewReflection";
+export type {
+  InterviewReflectionDTO,
+  InterviewReflectionItemDTO,
+  SaveInterviewReflectionInput,
+  SaveInterviewReflectionItemInput,
+} from "./interviewReflection";
+export {
   UPCOMING_EVENT_KIND,
   UPCOMING_BUCKET_ID,
   listUpcomingApplicationEvents,

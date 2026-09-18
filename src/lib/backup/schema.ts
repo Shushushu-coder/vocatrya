@@ -458,6 +458,17 @@ const ApplicationInterviewDetail = z.object({
   interviewerNames: optStr,
   durationMinutes: optInt,
   structuredData: str,
+  reflectionText: optStr.optional(),
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const ApplicationInterviewReflectionItem = z.object({
+  id,
+  applicationInterviewDetailId: id,
+  questionText: str,
+  answerNotes: optStr,
+  sortOrder: int,
   createdAt: dt,
   updatedAt: dt,
 });
@@ -908,6 +919,7 @@ export const BackupDataSchema = z.object({
   ApplicationAttempt: group(ApplicationAttempt),
   ApplicationProcessStep: group(ApplicationProcessStep),
   ApplicationInterviewDetail: group(ApplicationInterviewDetail),
+  ApplicationInterviewReflectionItem: group(ApplicationInterviewReflectionItem),
   ApplicationAssessmentDetail: group(ApplicationAssessmentDetail),
   ApplicationOfferDetail: group(ApplicationOfferDetail),
   LegacyMigrationMap: group(LegacyMigrationMap),
