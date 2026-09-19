@@ -1,6 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
+import {
+  isResumeV1CapabilityEnabled,
+  resolveAbRolloutScope,
+  type AbRolloutScope,
+} from "./capabilities";
 import { CareerRuntimeError } from "./errors";
-import { CAREER_RUNTIME_MODE, type CareerRuntimeMode } from "./identities";
+import { type CareerRuntimeMode } from "./identities";
 import { resolveCareerRuntimeMode } from "./runtimeMode";
 
 /**
@@ -11,27 +16,38 @@ import { resolveCareerRuntimeMode } from "./runtimeMode";
  * CareerMaterial / JobSearchPreference / Application Profile aggregation.
  *
  * Matrix (locked):
- *   AB_ENABLED        -> READ/COPY/WRITE YES
- *   AB_READY_DISABLED -> READ/COPY/WRITE NO
- *   LEGACY_ONLY       -> READ/COPY/WRITE NO
+ *   AB_ENABLED + resume_v1|full -> READ/COPY/WRITE YES
+ *   AB_ENABLED + none           -> READ/COPY/WRITE NO
+ *   AB_READY_DISABLED           -> READ/COPY/WRITE NO
+ *   LEGACY_ONLY                 -> READ/COPY/WRITE NO
  *
  * COPY uses the READ gate. A separate canCopy/assert helper exists so tests
  * cover COPY independently without duplicating the matrix.
  *
- * The底层 `assertAbWritesAllowed` stays as defense-in-depth inside services
- * and is never bypassed by this guard.
+ * Missing scope defaults to none (fail closed). Runtime mode remains the
+ * integrity gate; rollout scope cannot enable data in LEGACY_ONLY /
+ * AB_READY_DISABLED / BLOCKED.
  */
 
-export function canReadCareerData(mode: CareerRuntimeMode | string): boolean {
-  return mode === CAREER_RUNTIME_MODE.AB_ENABLED;
+export function canReadCareerData(
+  mode: CareerRuntimeMode | string,
+  scope: AbRolloutScope = "none",
+): boolean {
+  return isResumeV1CapabilityEnabled(mode, scope);
 }
 
-export function canWriteCareerData(mode: CareerRuntimeMode | string): boolean {
-  return mode === CAREER_RUNTIME_MODE.AB_ENABLED;
+export function canWriteCareerData(
+  mode: CareerRuntimeMode | string,
+  scope: AbRolloutScope = "none",
+): boolean {
+  return isResumeV1CapabilityEnabled(mode, scope);
 }
 
-export function canCopyCareerData(mode: CareerRuntimeMode | string): boolean {
-  return canReadCareerData(mode);
+export function canCopyCareerData(
+  mode: CareerRuntimeMode | string,
+  scope: AbRolloutScope = "none",
+): boolean {
+  return canReadCareerData(mode, scope);
 }
 
 export async function assertCareerDataReadable(
@@ -39,7 +55,8 @@ export async function assertCareerDataReadable(
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
   const resolved = await resolveCareerRuntimeMode(db, { env });
-  if (!canReadCareerData(resolved.mode)) {
+  const scope = resolveAbRolloutScope(env ?? process.env);
+  if (!canReadCareerData(resolved.mode, scope)) {
     throw new CareerRuntimeError(
       "CAREER_READ_NOT_ENABLED",
       `Career data is only readable when A+B is enabled; current mode is ${resolved.mode}`,
@@ -53,7 +70,8 @@ export async function assertCareerDataWritable(
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
   const resolved = await resolveCareerRuntimeMode(db, { env });
-  if (!canWriteCareerData(resolved.mode)) {
+  const scope = resolveAbRolloutScope(env ?? process.env);
+  if (!canWriteCareerData(resolved.mode, scope)) {
     throw new CareerRuntimeError(
       "CAREER_WRITE_NOT_ENABLED",
       `Career data is only writable when A+B is enabled; current mode is ${resolved.mode}`,

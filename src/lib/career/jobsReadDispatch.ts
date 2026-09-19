@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { format } from "date-fns";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { JOB_TYPES } from "@/models/job.model";
+import { resolveAbRolloutScope } from "./capabilities";
 import { CAREER_RUNTIME_MODE } from "./identities";
 import {
   getOpportunityAsJob,
@@ -127,7 +128,7 @@ export async function resolveJobsReadFamily(
   if (runtime.mode === CAREER_RUNTIME_MODE.BLOCKED) {
     return { family: "blocked", mode: runtime.mode, reason: runtime.reason };
   }
-  if (isAbJobReadMode(runtime.mode)) {
+  if (isAbJobReadMode(runtime.mode, resolveAbRolloutScope(env))) {
     return { family: "ab", mode: runtime.mode, reason: runtime.reason };
   }
   return { family: "legacy", mode: runtime.mode, reason: runtime.reason };

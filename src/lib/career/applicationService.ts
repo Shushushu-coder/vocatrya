@@ -12,6 +12,8 @@ import {
 } from "./identities";
 import {
   type ApplicationTimelineDTO,
+  type SubmittedResumeBindingsDTO,
+  type SubmittedResumeDTO,
   attemptSortKey,
   compareProcessSteps,
   toIso,
@@ -28,7 +30,12 @@ import {
   type SaveInterviewReflectionInput,
 } from "./interviewReflection";
 import { ResumeVariantService } from "./resumeVariantService";
-import { assertAbWritesAllowed } from "./writeGuard";
+import {
+  assertFullAbWritable,
+  assertResumeV1Readable,
+  assertResumeV1Writable,
+} from "./capabilities";
+import { resolveOwnedMappedOpportunityId } from "./legacyJobOpportunityMapping";
 
 const RESERVED_COMPATIBILITY_SORT_ORDERS = new Set<number>([
   COMPATIBILITY_PROCESS_STEPS.INTERVIEW.sortOrder,
@@ -51,7 +58,7 @@ export class ApplicationService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertFullAbWritable(this.db, this.env);
   }
 
   async createAttempt(input: {
@@ -94,6 +101,27 @@ export class ApplicationService {
     submittedAt?: Date;
   }) {
     await this.gate();
+    return this.applySubmittedResumeBinding(input);
+  }
+
+  async bindSubmittedResumeVersion(input: {
+    attemptId: string;
+    submittedResumeVersionId: string;
+  }) {
+    await assertResumeV1Writable(this.db, this.env);
+    return this.applySubmittedResumeBinding({
+      attemptId: input.attemptId,
+      submittedResumeVersionId: input.submittedResumeVersionId,
+    });
+  }
+
+  private async applySubmittedResumeBinding(input: {
+    attemptId: string;
+    submittedResumeVersionId?: string | null;
+    submittedResumeArtifactId?: string | null;
+    submittedAgainstJdVersionId?: string | null;
+    submittedAt?: Date;
+  }) {
     const attempt = await this.requireOwnedAttempt(input.attemptId);
     const requestedVersionId = input.submittedResumeVersionId ?? null;
 
@@ -265,6 +293,70 @@ export class ApplicationService {
     });
   }
 
+  async getSubmittedResumeBindingsForLegacyJob(
+    legacyJobId: string,
+  ): Promise<SubmittedResumeBindingsDTO> {
+    await assertResumeV1Readable(this.db, this.env);
+    const opportunityId = await resolveOwnedMappedOpportunityId({
+      db: this.db,
+      userId: this.userId,
+      legacyJobId,
+    });
+    if (!opportunityId) {
+      return { opportunityId: null, attempts: [] };
+    }
+    return this.getSubmittedResumeBindings(opportunityId);
+  }
+
+  async getSubmittedResumeBindings(
+    jobOpportunityId: string,
+  ): Promise<SubmittedResumeBindingsDTO> {
+    await assertResumeV1Readable(this.db, this.env);
+    const opportunity = await this.db.jobOpportunity.findFirst({
+      where: { id: jobOpportunityId, userId: this.userId },
+      select: { id: true },
+    });
+    if (!opportunity) {
+      return { opportunityId: null, attempts: [] };
+    }
+
+    const attempts = await this.db.applicationAttempt.findMany({
+      where: { jobOpportunityId: opportunity.id, userId: this.userId },
+      select: {
+        id: true,
+        channelLabel: true,
+        submittedAt: true,
+        createdAt: true,
+        submittedResumeVersion: {
+          select: {
+            id: true,
+            versionNumber: true,
+            resumeVariant: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const orderedAttempts = [...attempts].sort((a, b) => {
+      const byKey = attemptSortKey(a) - attemptSortKey(b);
+      if (byKey !== 0) return byKey;
+      const byCreated = a.createdAt.getTime() - b.createdAt.getTime();
+      if (byCreated !== 0) return byCreated;
+      return a.id.localeCompare(b.id);
+    });
+
+    return {
+      opportunityId: opportunity.id,
+      attempts: orderedAttempts.map((attempt) => ({
+        id: attempt.id,
+        channelLabel: attempt.channelLabel,
+        createdAt: attempt.createdAt.toISOString(),
+        submittedAt: toIso(attempt.submittedAt),
+        submittedResume: this.toSubmittedResume(attempt.submittedResumeVersion),
+      })),
+    };
+  }
+
   async getTimeline(jobOpportunityId: string): Promise<ApplicationTimelineDTO> {
     const opportunity = await this.db.jobOpportunity.findFirst({
       where: { id: jobOpportunityId, userId: this.userId },
@@ -323,15 +415,7 @@ export class ApplicationService {
               company: attempt.transferredFromAttempt.jobOpportunity.company.label,
             }
           : null,
-        submittedResume: attempt.submittedResumeVersion
-          ? {
-              id: attempt.submittedResumeVersion.id,
-              title: attempt.submittedResumeVersion.resumeVariant.name,
-              versionNumber: attempt.submittedResumeVersion.versionNumber,
-              resumeVariantId: attempt.submittedResumeVersion.resumeVariant.id,
-              resumeVariantVersionId: attempt.submittedResumeVersion.id,
-            }
-          : null,
+        submittedResume: this.toSubmittedResume(attempt.submittedResumeVersion),
         steps: [...attempt.processSteps].sort(compareProcessSteps).map((step) => ({
           id: step.id,
           category: step.category,
@@ -758,6 +842,26 @@ export class ApplicationService {
       throw new CareerRuntimeError("PROCESS_STEP_NOT_FOUND", "Process step not found");
     }
     return existing;
+  }
+
+  private toSubmittedResume(
+    version:
+      | {
+          id: string;
+          versionNumber: number;
+          resumeVariant: { id: string; name: string };
+        }
+      | null
+      | undefined,
+  ): SubmittedResumeDTO {
+    if (!version) return null;
+    return {
+      id: version.id,
+      title: version.resumeVariant.name,
+      versionNumber: version.versionNumber,
+      resumeVariantId: version.resumeVariant.id,
+      resumeVariantVersionId: version.id,
+    };
   }
 
   private async requireOwnedAttempt(attemptId: string) {

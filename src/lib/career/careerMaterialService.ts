@@ -4,7 +4,7 @@ import {
   CAREER_MATERIAL_TYPE,
   type CareerMaterialType,
 } from "./identities";
-import { assertAbWritesAllowed } from "./writeGuard";
+import { assertResumeV1Writable } from "./capabilities";
 
 function detailCreateKey(
   type: CareerMaterialType,
@@ -59,7 +59,7 @@ export class CareerMaterialService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertResumeV1Writable(this.db, this.env);
   }
 
   async create(input: {

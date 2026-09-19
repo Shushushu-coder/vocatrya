@@ -39,8 +39,26 @@ describe("MyJobsPageTabs", () => {
   });
 
   it("shows Upcoming next to Jobs in A+B mode", () => {
-    render(<MyJobsPageTabs {...props} careerRuntimeMode="AB_ENABLED" />);
+    render(
+      <MyJobsPageTabs
+        {...props}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
+      />,
+    );
     expect(screen.getByRole("tab", { name: "Jobs" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Upcoming" })).toBeInTheDocument();
+  });
+
+  it("does not show Upcoming in AB_ENABLED resume_v1 scope", () => {
+    render(
+      <MyJobsPageTabs
+        {...props}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="resume_v1"
+      />,
+    );
+    expect(screen.queryByRole("tab", { name: "Upcoming" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("jobs-container")).toBeInTheDocument();
   });
 });

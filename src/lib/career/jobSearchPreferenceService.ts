@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { assertAbWritesAllowed } from "./writeGuard";
+import { assertResumeV1Writable } from "./capabilities";
 import { normalizeOptionalText } from "./opportunityService";
 
 export type JobSearchPreferenceInput = {
@@ -24,7 +24,7 @@ export class JobSearchPreferenceService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertResumeV1Writable(this.db, this.env);
   }
 
   async getJobSearchPreference(userId: string = this.userId) {

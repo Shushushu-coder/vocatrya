@@ -26,6 +26,7 @@ import { useJobsList } from "./jobs-container/useJobsList";
 import { downloadJobsList } from "./jobs-container/downloadJobsCsv";
 import { JobsToolbar } from "./jobs-container/JobsToolbar";
 import { useI18n } from "@/i18n";
+import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
 type MyJobsProps = {
@@ -37,6 +38,7 @@ type MyJobsProps = {
   tags: Tag[];
   allowJobMutations?: boolean;
   careerRuntimeMode?: string;
+  abRolloutScope?: AbRolloutScope;
 };
 
 function JobsContainer({
@@ -48,10 +50,11 @@ function JobsContainer({
   tags,
   allowJobMutations = true,
   careerRuntimeMode,
+  abRolloutScope,
 }: MyJobsProps) {
   const router = useRouter();
   const { t } = useI18n();
-  const deleteIsArchive = isAbJobReadMode(careerRuntimeMode);
+  const deleteIsArchive = isAbJobReadMode(careerRuntimeMode, abRolloutScope);
   const [editJob, setEditJob] = useState(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteJobId, setNoteJobId] = useState("");
@@ -172,6 +175,7 @@ function JobsContainer({
           }
           hideAddJob={!allowJobMutations}
           careerRuntimeMode={careerRuntimeMode}
+          abRolloutScope={abRolloutScope}
         />
         <CardContent>
           {initialLoading && <Loading />}

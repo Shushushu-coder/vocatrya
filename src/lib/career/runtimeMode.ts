@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { isAbRuntimeFeatureEnabled } from "./featureGate";
+import { resolveAbRolloutScope } from "./rolloutScope";
 import {
   AB_MIGRATION_STATUS,
   AB_MIGRATION_KEY,
@@ -156,6 +157,7 @@ export async function resolveCareerRuntimeMode(
       client,
       featureEnabled,
       state,
+      env: options.env ?? process.env,
       integrity: await checkFreshNativeIntegrity(client),
       unverifiedReason: "fresh-unverified",
     });
@@ -188,6 +190,7 @@ export async function resolveCareerRuntimeMode(
     client,
     featureEnabled,
     state,
+    env: options.env ?? process.env,
     integrity: !state.verifiedAt
       ? {
           ok: false,
@@ -223,6 +226,7 @@ async function resolveReadyState(input: {
   client: PrismaClient;
   featureEnabled: boolean;
   state: Awaited<ReturnType<typeof readInstanceMigrationState>>;
+  env: NodeJS.ProcessEnv;
   integrity: IntegrityResult;
   unverifiedReason: string;
 }): Promise<CareerRuntimeResolution> {
@@ -246,13 +250,22 @@ async function resolveReadyState(input: {
   }
 
   if (!integrity.ok) {
-    return blocked({
-      featureEnabled,
-      migrationStatus: state.status,
-      verifiedAt: state.verifiedAt,
-      integrity,
-      reason: "integrity-failed",
-    });
+    const scope = resolveAbRolloutScope(input.env);
+    const fullCutoverOnly =
+      integrity.code === "FRESH_HAS_LEGACY_JOBS" ||
+      integrity.code === "FRESH_HAS_LEGACY_RESUMES" ||
+      integrity.code === "FRESH_HAS_LEGACY_CAREER_ROWS" ||
+      integrity.code === "UNMAPPED_LEGACY_JOBS" ||
+      integrity.code === "UNMAPPED_LEGACY_RESUMES";
+    if (scope === "full" || !fullCutoverOnly) {
+      return blocked({
+        featureEnabled,
+        migrationStatus: state.status,
+        verifiedAt: state.verifiedAt,
+        integrity,
+        reason: "integrity-failed",
+      });
+    }
   }
 
   if (!featureEnabled) {

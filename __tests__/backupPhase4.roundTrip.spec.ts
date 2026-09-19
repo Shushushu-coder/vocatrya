@@ -18,6 +18,7 @@ import { runLegacyMigration } from "@/lib/legacy-migration/migrator";
 import {
   AB_MIGRATION_STATUS,
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   CAREER_RUNTIME_MODE,
   resolveCareerRuntimeMode,
 } from "@/lib/career";
@@ -576,7 +577,7 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     const restoredMode = await resolveCareerRuntimeMode(prisma);
     expect(restoredMode.mode).not.toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
     expect(restoredMode.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
-    const enabledEnv = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+    const enabledEnv = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
     const flagged = await resolveCareerRuntimeMode(prisma, { env: enabledEnv });
     expect(flagged.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
   }, 180_000);

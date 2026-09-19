@@ -10,7 +10,7 @@ import {
   VERSION_NUMBER_UNIQUE_RETRY,
 } from "./resumeVariantConstants";
 import { sanitizeResumeHeaderSnapshot } from "./resumeHeaderSnapshot";
-import { assertAbWritesAllowed } from "./writeGuard";
+import { assertResumeV1Writable } from "./capabilities";
 
 const IMMUTABLE = new Set<string>([
   RESUME_VERSION_STATUS.FROZEN,
@@ -82,7 +82,7 @@ export class ResumeVariantService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertResumeV1Writable(this.db, this.env);
   }
 
   async createVariant(input: {

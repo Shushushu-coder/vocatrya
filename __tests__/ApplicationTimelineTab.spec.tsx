@@ -11,12 +11,14 @@ import {
 
 vi.mock("@/actions/application.actions", () => ({
   getApplicationTimeline: vi.fn(),
+  getSubmittedResumeBindings: vi.fn(),
   createApplicationProcessStep: vi.fn(),
   updateApplicationProcessStep: vi.fn(),
   completeApplicationProcessStep: vi.fn(),
   deleteApplicationProcessStep: vi.fn(),
   getInterviewReflection: vi.fn(),
   saveInterviewReflection: vi.fn(),
+  submitAttemptResumeVersion: vi.fn(),
 }));
 
 vi.mock("@/lib/toast", () => ({

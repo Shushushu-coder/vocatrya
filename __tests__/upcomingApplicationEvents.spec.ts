@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import {
   AB_MIGRATION_STATUS,
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   ApplicationService,
   ATTEMPT_OUTCOME,
   bucketUpcomingApplicationEvents,
@@ -23,7 +24,7 @@ import {
   seedAccount,
 } from "./helpers/backupTestDb";
 
-const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
 
 const ctx = makeTestDbUrl();
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });

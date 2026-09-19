@@ -36,6 +36,9 @@ const NEW_FILES = [
   "src/components/career/resume-variant/ResumeVariantWorkspace.tsx",
   "src/components/career/resume-variant/ResumePreview.tsx",
   "src/components/career/resume-variant/SubmitResumePicker.tsx",
+  "src/components/career/resume-variant/SubmittedResumePanel.tsx",
+  "src/components/myjobs/job-details/ApplicationResumeBindingPanel.tsx",
+  "src/lib/career/legacyJobOpportunityMapping.ts",
 ];
 
 describe("Resume Variant V1 AI no-regression", () => {
@@ -69,13 +72,30 @@ describe("Resume Variant V1 legacy no-regression", () => {
     expect(workspace).not.toContain("Download PDF");
   });
 
-  it("gates B-side fetch behind canReadCareerData", () => {
+  it("does not treat legacy Job.id as JobOpportunity.id on the restricted path", () => {
+    const action = read("src/actions/application.actions.ts");
+    expect(action).toContain("getSubmittedResumeBindingsForLegacyJob");
+    const service = read("src/lib/career/applicationService.ts");
+    expect(service).toContain("resolveOwnedMappedOpportunityId");
+    const mapping = read("src/lib/career/legacyJobOpportunityMapping.ts");
+    expect(mapping).toContain("legacyMigrationMap");
+    expect(mapping).toContain("LEGACY.JOB");
+    expect(mapping).toContain("TARGET.JOB_OPPORTUNITY");
+    expect(mapping).not.toMatch(/title|company/);
+    const panel = read(
+      "src/components/myjobs/job-details/ApplicationResumeBindingPanel.tsx",
+    );
+    expect(panel).not.toContain("jobOpportunityId");
+    expect(panel).not.toContain("legacyMigrationMap");
+  });
+
+  it("gates B-side fetch behind resume_v1 capability", () => {
     const listPage = read("src/app/dashboard/profile/resumes/page.tsx");
     const workspacePage = read(
       "src/app/dashboard/profile/resumes/[variantId]/page.tsx",
     );
-    expect(listPage).toContain("canReadCareerData");
-    expect(workspacePage).toContain("canReadCareerData");
+    expect(listPage).toContain("isResumeV1CapabilityEnabled");
+    expect(workspacePage).toContain("isResumeV1CapabilityEnabled");
     expect(listPage).not.toContain("listResumeVariants");
     expect(workspacePage).not.toContain("getResumeVariant(");
     expect(listPage).not.toContain("CAREER_RUNTIME_MODE.AB_ENABLED");

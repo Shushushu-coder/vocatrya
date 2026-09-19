@@ -5,7 +5,7 @@ import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
 import { resolveResumeVariantWorkspaceVersion } from "@/actions/resumeVariant.actions";
 import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
 import { ResumeVariantWorkspace } from "@/components/career/resume-variant/ResumeVariantWorkspace";
-import { canReadCareerData } from "@/lib/career/access";
+import { isResumeV1CapabilityEnabled } from "@/lib/career/capabilities";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -23,7 +23,7 @@ export default async function ResumeVariantWorkspacePage({
   const query = await searchParams;
   const runtime = await getCareerRuntimeSnapshot();
   const { t } = await getServerI18n();
-  if (!canReadCareerData(runtime.mode)) {
+  if (!isResumeV1CapabilityEnabled(runtime.mode, runtime.rolloutScope)) {
     return (
       <div className="col-span-3">
         <CareerRuntimeNotice mode={runtime.mode} />

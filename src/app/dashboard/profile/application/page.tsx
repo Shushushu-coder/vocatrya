@@ -3,7 +3,7 @@ import { getServerI18n } from "@/i18n/server";
 import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
 import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
 import { ApplicationProfileWorkspace } from "@/components/career/application-profile/ApplicationProfileWorkspace";
-import { canReadCareerData } from "@/lib/career/access";
+import { isResumeV1CapabilityEnabled } from "@/lib/career/capabilities";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -16,7 +16,7 @@ export default async function ApplicationProfilePage() {
   // Non-AB modes: never fetch B-side personal data. Render only the runtime
   // notice so no CandidateProfile / Material / Preference / Sensitive bytes
   // reach the HTML / RSC payload.
-  if (!canReadCareerData(runtime.mode)) {
+  if (!isResumeV1CapabilityEnabled(runtime.mode, runtime.rolloutScope)) {
     return (
       <div className="col-span-3">
         <CareerRuntimeNotice mode={runtime.mode} />

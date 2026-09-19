@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { CareerRuntimeError } from "./errors";
-import { assertAbWritesAllowed } from "./writeGuard";
+import { assertResumeV1Writable } from "./capabilities";
 import { normalizeOptionalText } from "./opportunityService";
 
 export const CANDIDATE_GENDER = ["男", "女", "其他"] as const;
@@ -143,7 +143,7 @@ export class CandidateProfileService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertResumeV1Writable(this.db, this.env);
   }
 
   async getCandidateProfile(userId: string = this.userId) {

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import {
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   ApplicationService,
   ATTEMPT_OUTCOME,
   ATTEMPT_STAGE,
@@ -31,7 +32,7 @@ import {
   seedAccount,
 } from "./helpers/backupTestDb";
 
-const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
 const FEATURE_OFF = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "false" };
 const ctx = makeTestDbUrl();
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });

@@ -64,7 +64,8 @@ import {
   getFromLocalStorage,
   saveToLocalStorage,
 } from "@/utils/localstorage.utils";
-import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import type { AbRolloutScope } from "@/lib/career/capabilities";
+import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
 type AddJobProps = {
   jobStatuses: JobStatus[];
@@ -79,6 +80,7 @@ type AddJobProps = {
   hideTrigger?: boolean;
   redirectPath?: string;
   careerRuntimeMode?: string;
+  abRolloutScope?: AbRolloutScope;
 };
 
 export function AddJob({
@@ -94,6 +96,7 @@ export function AddJob({
   hideTrigger,
   redirectPath,
   careerRuntimeMode,
+  abRolloutScope,
 }: AddJobProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -104,9 +107,10 @@ export function AddJob({
   const [coverLetters, setCoverLetters] = useState<CoverLetter[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>(tags);
   const [isPending, startTransition] = useTransition();
-  const hideUnsupportedAbFields =
-    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_ENABLED ||
-    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_READY_DISABLED;
+  const hideUnsupportedAbFields = isAbJobReadMode(
+    careerRuntimeMode,
+    abRolloutScope,
+  );
 
   useEffect(() => {
     if (!dialogOpen && searchParams.get("add-job") === "true") {

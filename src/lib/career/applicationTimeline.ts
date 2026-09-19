@@ -43,6 +43,19 @@ export type ApplicationTimelineDTO = {
   attempts: ApplicationAttemptTimelineDTO[];
 };
 
+export type SubmittedResumeBindingAttemptDTO = {
+  id: string;
+  channelLabel: string;
+  createdAt: string;
+  submittedAt: string | null;
+  submittedResume: SubmittedResumeDTO;
+};
+
+export type SubmittedResumeBindingsDTO = {
+  opportunityId: string | null;
+  attempts: SubmittedResumeBindingAttemptDTO[];
+};
+
 export function toIso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
 }

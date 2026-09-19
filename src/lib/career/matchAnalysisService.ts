@@ -7,7 +7,7 @@ import {
   MATCH_ANALYSIS_TYPE,
 } from "./identities";
 import { hashEvidenceContent } from "./resumeProvenanceService";
-import { assertAbWritesAllowed } from "./writeGuard";
+import { assertFullAbWritable } from "./capabilities";
 
 export type FastScreeningHashInput = {
   analysisType: typeof MATCH_ANALYSIS_TYPE.FAST_SCREENING;
@@ -66,7 +66,7 @@ export class MatchAnalysisService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertFullAbWritable(this.db, this.env);
   }
 
   async getAnalysis(analysisId: string) {

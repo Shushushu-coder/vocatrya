@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { isFullAbCapabilityEnabled, resolveAbRolloutScope } from "./capabilities";
 import { CareerRuntimeError } from "./errors";
 import {
   CAREER_RUNTIME_MODE,
@@ -36,7 +37,13 @@ export async function assertLegacyCareerWriteAllowed(
       "AB_READY_DISABLED: legacy Job/Resume writes would drift a ready A+B instance",
     );
   }
-  if (resolved.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+  if (
+    resolved.mode === CAREER_RUNTIME_MODE.AB_ENABLED &&
+    isFullAbCapabilityEnabled(
+      resolved.mode,
+      resolveAbRolloutScope(env ?? process.env),
+    )
+  ) {
     throw new CareerRuntimeError(
       "LEGACY_WRITE_BLOCKED",
       "AB_ENABLED: write Job/Resume through OpportunityService / ResumeVariantService, not legacy Prisma",

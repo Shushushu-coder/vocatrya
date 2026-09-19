@@ -7,6 +7,8 @@ services:
     environment:
       - NODE_ENV=production
       - MCP_ENABLED=${MCP_ENABLED:-true}
+      - VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-false}
+      - VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-none}
       - DATABASE_URL=file:/data/dev.db
       - AUTH_SECRET=${AUTH_SECRET:-your-auth-secret}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-you-encryption-key-here}

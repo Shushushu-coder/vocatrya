@@ -10,6 +10,7 @@ import { INSERT_ORDER, MODEL_SPECS } from "@/lib/backup/ordering";
 import {
   AB_MIGRATION_STATUS,
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   ApplicationService,
   OpportunityService,
   PROCESS_STEP_CATEGORY,
@@ -269,7 +270,7 @@ describe("interview reflection backup contract", () => {
       completedAt: new Date(),
       verifiedAt: new Date(),
     });
-    const featureOn = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+    const featureOn = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
     const company = await prisma.company.create({
       data: {
         label: "ByteDance",

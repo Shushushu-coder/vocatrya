@@ -36,6 +36,7 @@ async function MyJobs() {
         tags={tags ?? []}
         allowJobMutations={runtime.writeFamily !== "blocked"}
         careerRuntimeMode={runtime.mode}
+        abRolloutScope={runtime.rolloutScope}
       />
     </div>
   );

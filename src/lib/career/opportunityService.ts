@@ -4,7 +4,7 @@ import {
   FORBIDDEN_OPPORTUNITY_STATUSES,
   OPPORTUNITY_STATUS,
 } from "./identities";
-import { assertAbWritesAllowed } from "./writeGuard";
+import { assertFullAbWritable } from "./capabilities";
 
 const ALLOWED_STATUS = new Set<string>(Object.values(OPPORTUNITY_STATUS));
 const FORBIDDEN_STATUS = new Set<string>(
@@ -66,7 +66,7 @@ export class OpportunityService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertFullAbWritable(this.db, this.env);
   }
 
   async create(input: {

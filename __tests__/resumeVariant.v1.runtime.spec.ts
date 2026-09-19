@@ -1,7 +1,7 @@
 // @vitest-environment node
 import fs from "node:fs";
 import { PrismaClient } from "@prisma/client";
-import { AB_RUNTIME_FEATURE_ENV } from "@/lib/career/identities";
+import { AB_RUNTIME_FEATURE_ENV, AB_ROLLOUT_SCOPE_ENV } from "@/lib/career/identities";
 import { activateFreshAbNative } from "@/lib/career";
 import {
   makeTestDbUrl,
@@ -41,20 +41,30 @@ import {
   listResumeVariants,
   renameResumeVariant,
 } from "@/actions/resumeVariant.actions";
-import { submitAttemptResumeVersion } from "@/actions/application.actions";
+import {
+  createApplicationProcessStep,
+  saveInterviewReflection,
+  submitAttemptResumeVersion,
+} from "@/actions/application.actions";
 
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
 let userId: string;
 const mockedUser = vi.mocked(getCurrentUser);
 
-function setFeature(on: boolean) {
-  if (on) process.env[AB_RUNTIME_FEATURE_ENV] = "true";
-  else delete process.env[AB_RUNTIME_FEATURE_ENV];
+function setFeature(on: boolean, scope = "full") {
+  if (on) {
+    process.env[AB_RUNTIME_FEATURE_ENV] = "true";
+    process.env[AB_ROLLOUT_SCOPE_ENV] = scope;
+  } else {
+    delete process.env[AB_RUNTIME_FEATURE_ENV];
+    delete process.env[AB_ROLLOUT_SCOPE_ENV];
+  }
 }
 
 afterAll(async () => {
   await prisma.$disconnect();
   delete process.env[AB_RUNTIME_FEATURE_ENV];
+  delete process.env[AB_ROLLOUT_SCOPE_ENV];
   try {
     fs.rmSync(ctx.dir, { recursive: true, force: true });
   } catch {
@@ -140,6 +150,35 @@ describe("Resume Variant V1 runtime matrix", () => {
     ).toEqual([id]);
     const loaded = await getResumeVariant(id);
     expect(loaded.success).toBe(true);
+  });
+
+  it("AB_ENABLED + none denies resume actions", async () => {
+    await activateFreshAbNative(prisma);
+    setFeature(true, "none");
+    const listed = await listResumeVariants();
+    expect(listed.success).toBe(false);
+    const created = await createResumeVariant({ name: "Nope" });
+    expect(created.success).toBe(false);
+  });
+
+  it("AB_ENABLED + resume_v1 allows resume and denies full A-side actions", async () => {
+    await activateFreshAbNative(prisma);
+    setFeature(true, "resume_v1");
+    const created = await createResumeVariant({ name: "Scoped" });
+    expect(created.success).toBe(true);
+    const listed = await listResumeVariants();
+    expect(listed.success).toBe(true);
+    const step = await createApplicationProcessStep({
+      jobOpportunityId: "opp",
+      category: "INTERVIEW",
+      label: "Nope",
+    });
+    expect(step.success).toBe(false);
+    const reflection = await saveInterviewReflection({
+      applicationProcessStepId: "step",
+      items: [{ questionText: "Nope" }],
+    });
+    expect(reflection.success).toBe(false);
   });
 
   it("archive action hides the variant from the default list without deleting", async () => {

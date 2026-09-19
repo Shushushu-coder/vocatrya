@@ -41,7 +41,13 @@ import { CoverLetterTab } from "./job-details/CoverLetterTab";
 import { useAutoMatch } from "./job-details/useAutoMatch";
 import { JobContactsTab } from "./job-details/JobContactsTab";
 import { ApplicationTimelineTab } from "./job-details/ApplicationTimelineTab";
-import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import { ApplicationResumeBindingPanel } from "./job-details/ApplicationResumeBindingPanel";
+import type { AbRolloutScope } from "@/lib/career/capabilities";
+import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
+import {
+  isFullAbCapabilityEnabled,
+  isRestrictedResumeBindingSurfaceEnabled,
+} from "@/lib/career/capabilities";
 import { useI18n } from "@/i18n";
 
 const LEGACY_JOB_DETAIL_TABS = [
@@ -70,6 +76,7 @@ type JobDetailsProps = {
   sources: JobSource[];
   tags: Tag[];
   careerRuntimeMode?: string;
+  abRolloutScope?: AbRolloutScope;
 };
 
 function JobDetails({
@@ -81,12 +88,18 @@ function JobDetails({
   sources,
   tags,
   careerRuntimeMode,
+  abRolloutScope,
 }: JobDetailsProps) {
   const { t } = useI18n();
-  const showTimeline =
-    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_ENABLED ||
-    careerRuntimeMode === CAREER_RUNTIME_MODE.AB_READY_DISABLED;
-  const canMutateTimeline = careerRuntimeMode === CAREER_RUNTIME_MODE.AB_ENABLED;
+  const showTimeline = isAbJobReadMode(careerRuntimeMode, abRolloutScope);
+  const showRestrictedResumePanel = isRestrictedResumeBindingSurfaceEnabled(
+    careerRuntimeMode ?? "",
+    abRolloutScope ?? "none",
+  );
+  const canMutateTimeline = isFullAbCapabilityEnabled(
+    careerRuntimeMode ?? "",
+    abRolloutScope ?? "none",
+  );
   const jobDetailTabs = showTimeline ? AB_JOB_DETAIL_TABS : LEGACY_JOB_DETAIL_TABS;
   const {
     open: openChat,
@@ -223,6 +236,18 @@ function JobDetails({
           showCampusFields={showTimeline}
         />
 
+        {showRestrictedResumePanel && (
+          <Card
+            className="p-6"
+            data-testid="restricted-submitted-resume-panel"
+          >
+            <ApplicationResumeBindingPanel
+              jobId={job.id}
+              refreshKey={timelineRefreshKey}
+            />
+          </Card>
+        )}
+
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="description">{t("common.description")}</TabsTrigger>
@@ -329,6 +354,7 @@ function JobDetails({
         resetEditJob={resetEditJob}
         hideTrigger
         careerRuntimeMode={careerRuntimeMode}
+        abRolloutScope={abRolloutScope}
         redirectPath={`/dashboard/myjobs/${job.id}?tab=${activeTab}`}
       />
       <DeleteAlertDialog

@@ -2,6 +2,7 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTabQueryParam } from "@/hooks/useTabQueryParam";
+import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 import { useI18n } from "@/i18n";
 import JobsContainer from "./JobsContainer";
@@ -26,11 +27,15 @@ type MyJobsPageTabsProps = {
   tags: Tag[];
   allowJobMutations?: boolean;
   careerRuntimeMode?: string;
+  abRolloutScope?: AbRolloutScope;
 };
 
 export function MyJobsPageTabs(props: MyJobsPageTabsProps) {
   const { t } = useI18n();
-  const showUpcoming = isAbJobReadMode(props.careerRuntimeMode);
+  const showUpcoming = isAbJobReadMode(
+    props.careerRuntimeMode,
+    props.abRolloutScope,
+  );
   const [tab, setTab] = useTabQueryParam(
     showUpcoming ? JOBS_TABS : (["jobs"] as const),
     "jobs",

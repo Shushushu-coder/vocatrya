@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { CareerRuntimeError } from "./errors";
 import { EVIDENCE_STATUS, RESUME_VERSION_STATUS } from "./identities";
 import { sha256Utf8 } from "./hash";
-import { assertAbWritesAllowed } from "./writeGuard";
+import { assertResumeV1Writable } from "./capabilities";
 
 export function hashEvidenceContent(content: string): string {
   return sha256Utf8(content);
@@ -16,7 +16,7 @@ export class ResumeProvenanceService {
   ) {}
 
   private async gate(): Promise<void> {
-    await assertAbWritesAllowed(this.db, this.env);
+    await assertResumeV1Writable(this.db, this.env);
   }
 
   async getExpressionEvidence(expressionId: string) {

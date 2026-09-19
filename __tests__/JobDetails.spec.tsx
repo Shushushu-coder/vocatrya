@@ -3,7 +3,10 @@ import JobDetails from "@/components/myjobs/JobDetails";
 import { JobResponse, Tag } from "@/models/job.model";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { getApplicationTimeline } from "@/actions/application.actions";
+import {
+  getApplicationTimeline,
+  getSubmittedResumeBindings,
+} from "@/actions/application.actions";
 
 // The active tab lives in the URL, so a click only calls router.replace —
 // what the user sees next comes from the re-render with the new params.
@@ -66,10 +69,30 @@ vi.mock("@/components/CircularScore", () => ({
   ),
 }));
 
+vi.mock("@/actions/resumeVariant.actions", () => ({
+  listSubmittableResumeVersions: vi.fn().mockResolvedValue({
+    success: true,
+    data: [
+      {
+        id: "var-1",
+        name: "Campus",
+        versions: [
+          { id: "ver-draft", versionNumber: 2, status: "DRAFT" },
+          { id: "ver-a", versionNumber: 1, status: "SUBMITTED" },
+        ],
+      },
+    ],
+  }),
+}));
+
 vi.mock("@/actions/application.actions", () => ({
   getApplicationTimeline: vi.fn().mockResolvedValue({
     success: true,
     data: { opportunityId: "job-1", attempts: [] },
+  }),
+  getSubmittedResumeBindings: vi.fn().mockResolvedValue({
+    success: true,
+    data: { opportunityId: null, attempts: [] },
   }),
   createApplicationProcessStep: vi.fn(),
   updateApplicationProcessStep: vi.fn(),
@@ -77,6 +100,7 @@ vi.mock("@/actions/application.actions", () => ({
   deleteApplicationProcessStep: vi.fn(),
   getInterviewReflection: vi.fn(),
   saveInterviewReflection: vi.fn(),
+  submitAttemptResumeVersion: vi.fn(),
 }));
 
 const baseProps = {
@@ -187,6 +211,7 @@ describe("JobDetails – campus recruitment fields", () => {
       <JobDetails
         {...baseProps}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
         job={makeJob({
           recruitmentCohort: "2027届",
           recruitmentBatch: "秋招",
@@ -206,6 +231,7 @@ describe("JobDetails – campus recruitment fields", () => {
       <JobDetails
         {...baseProps}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
         job={makeJob({
           recruitmentCohort: null,
           recruitmentBatch: null,
@@ -366,6 +392,7 @@ describe("JobDetails – tabs", () => {
         {...baseProps}
         job={makeJob()}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
       />,
     );
 
@@ -411,6 +438,7 @@ describe("JobDetails – tabs", () => {
         {...baseProps}
         job={makeJob()}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
       />,
     );
 
@@ -454,6 +482,7 @@ describe("JobDetails – tabs", () => {
         {...baseProps}
         job={makeJob()}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
       />,
     );
 
@@ -710,5 +739,161 @@ describe("JobDetails – company link", () => {
     expect(
       screen.getByRole("link", { name: "Acme Corp" }).parentElement,
     ).toHaveTextContent("Acme Corp · Remote · Full-time");
+  });
+});
+
+describe("JobDetails – restricted submitted resume surface", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chat.approvalPending = false;
+    searchParams = new URLSearchParams();
+    vi.mocked(getSubmittedResumeBindings).mockResolvedValue({
+      success: true,
+      data: { opportunityId: null, attempts: [] },
+    });
+    vi.mocked(getApplicationTimeline).mockResolvedValue({
+      success: true,
+      data: { opportunityId: "job-1", attempts: [] },
+    });
+  });
+
+  it("hides the restricted resume panel and timeline when scope is none", () => {
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="none"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("restricted-submitted-resume-panel"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /timeline/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /description/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /ai match/i })).toBeInTheDocument();
+    expect(getApplicationTimeline).not.toHaveBeenCalled();
+    expect(getSubmittedResumeBindings).not.toHaveBeenCalled();
+  });
+
+  it("shows the restricted resume panel and hides full A-side surfaces in resume_v1", async () => {
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob({
+          recruitmentCohort: "2027届",
+          recruitmentBatch: "秋招",
+        })}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="resume_v1"
+      />,
+    );
+
+    expect(
+      await screen.findByTestId("restricted-submitted-resume-panel"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("restricted-submitted-resume-no-attempt"),
+    ).toHaveTextContent(
+      "This job has no application record that can be bound to a resume.",
+    );
+    expect(screen.queryByRole("tab", { name: /timeline/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("application-timeline")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("application-process-step"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("interview-reflection-entry"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Interview reflection")).not.toBeInTheDocument();
+    expect(screen.queryByText("Add process step")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upcoming")).not.toBeInTheDocument();
+    expect(screen.queryByText("Deep Match")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fast Screening")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recruitment cohort")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /description/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /ai match/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /cover letter/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /notes/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Contacts" })).toBeInTheDocument();
+    expect(getApplicationTimeline).not.toHaveBeenCalled();
+    expect(getSubmittedResumeBindings).toHaveBeenCalledWith("job-1");
+  });
+
+  it("shows the restricted panel for a legacy job whose mapped opportunity uses a different id", async () => {
+    vi.mocked(getSubmittedResumeBindings).mockResolvedValue({
+      success: true,
+      data: {
+        opportunityId: "opp-987",
+        attempts: [
+          {
+            id: "att-a",
+            channelLabel: "Campus",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            submittedAt: "2026-01-02T00:00:00.000Z",
+            submittedResume: {
+              id: "ver-a",
+              title: "Campus",
+              versionNumber: 1,
+              resumeVariantId: "var-1",
+              resumeVariantVersionId: "ver-a",
+            },
+          },
+          {
+            id: "att-b",
+            channelLabel: "Referral",
+            createdAt: "2026-02-01T00:00:00.000Z",
+            submittedAt: null,
+            submittedResume: null,
+          },
+        ],
+      },
+    });
+
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob({ id: "legacy-job-123" })}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="resume_v1"
+      />,
+    );
+
+    expect(
+      await screen.findByTestId("restricted-submitted-resume-panel"),
+    ).toBeInTheDocument();
+    const cards = await screen.findAllByTestId(
+      "restricted-submitted-resume-attempt",
+    );
+    expect(cards).toHaveLength(2);
+    expect(screen.getByTestId("view-submitted-resume-version")).toHaveAttribute(
+      "href",
+      "/dashboard/profile/resumes/var-1?version=ver-a",
+    );
+    expect(screen.getByTestId("submit-resume-picker")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /timeline/i })).not.toBeInTheDocument();
+    expect(getSubmittedResumeBindings).toHaveBeenCalledWith("legacy-job-123");
+    expect(getSubmittedResumeBindings).not.toHaveBeenCalledWith("opp-987");
+    expect(getApplicationTimeline).not.toHaveBeenCalled();
+  });
+
+  it("keeps full Timeline and does not duplicate the restricted panel in full scope", async () => {
+    onTab("timeline");
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: /timeline/i })).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("restricted-submitted-resume-panel"),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByText("No application timeline yet")).toBeInTheDocument();
+    expect(getSubmittedResumeBindings).not.toHaveBeenCalled();
   });
 });

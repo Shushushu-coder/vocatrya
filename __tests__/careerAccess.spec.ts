@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import {
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   CAREER_RUNTIME_MODE,
   activateFreshAbNative,
   assertCareerDataCopyable,
@@ -21,7 +22,7 @@ import {
   seedAccount,
 } from "./helpers/backupTestDb";
 
-const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
 const FEATURE_OFF = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "false" };
 const ctx = makeTestDbUrl();
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -47,8 +48,13 @@ beforeEach(async () => {
 });
 
 describe("career domain access guard matrix", () => {
-  it("READ allows in AB_ENABLED", () => {
-    expect(canReadCareerData(CAREER_RUNTIME_MODE.AB_ENABLED)).toBe(true);
+  it("READ allows in AB_ENABLED with resume_v1 or full scope", () => {
+    expect(canReadCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "full")).toBe(true);
+    expect(canReadCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "resume_v1")).toBe(
+      true,
+    );
+    expect(canReadCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "none")).toBe(false);
+    expect(canReadCareerData(CAREER_RUNTIME_MODE.AB_ENABLED)).toBe(false);
   });
   it("READ denies in AB_READY_DISABLED", () => {
     expect(canReadCareerData(CAREER_RUNTIME_MODE.AB_READY_DISABLED)).toBe(false);
@@ -56,8 +62,12 @@ describe("career domain access guard matrix", () => {
   it("READ denies in LEGACY_ONLY", () => {
     expect(canReadCareerData(CAREER_RUNTIME_MODE.LEGACY_ONLY)).toBe(false);
   });
-  it("WRITE allows in AB_ENABLED", () => {
-    expect(canWriteCareerData(CAREER_RUNTIME_MODE.AB_ENABLED)).toBe(true);
+  it("WRITE allows in AB_ENABLED with resume_v1 or full scope", () => {
+    expect(canWriteCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "full")).toBe(true);
+    expect(canWriteCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "resume_v1")).toBe(
+      true,
+    );
+    expect(canWriteCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "none")).toBe(false);
   });
   it("WRITE denies in AB_READY_DISABLED", () => {
     expect(canWriteCareerData(CAREER_RUNTIME_MODE.AB_READY_DISABLED)).toBe(false);
@@ -65,8 +75,11 @@ describe("career domain access guard matrix", () => {
   it("WRITE denies in LEGACY_ONLY", () => {
     expect(canWriteCareerData(CAREER_RUNTIME_MODE.LEGACY_ONLY)).toBe(false);
   });
-  it("COPY allows in AB_ENABLED (READ gate, independently covered)", () => {
-    expect(canCopyCareerData(CAREER_RUNTIME_MODE.AB_ENABLED)).toBe(true);
+  it("COPY allows in AB_ENABLED with resume_v1 or full scope", () => {
+    expect(canCopyCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "full")).toBe(true);
+    expect(canCopyCareerData(CAREER_RUNTIME_MODE.AB_ENABLED, "resume_v1")).toBe(
+      true,
+    );
   });
   it("COPY denies in AB_READY_DISABLED", () => {
     expect(canCopyCareerData(CAREER_RUNTIME_MODE.AB_READY_DISABLED)).toBe(false);

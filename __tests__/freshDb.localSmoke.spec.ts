@@ -76,7 +76,7 @@ describe.skipIf(!RUN_LOCAL_DB_SMOKE)(
         expect(resolved.mode).not.toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
 
         const flagged = await resolveCareerRuntimeMode(prisma, {
-          env: { ...process.env, VOCATRYA_AB_RUNTIME_ENABLED: "true" },
+          env: { ...process.env, VOCATRYA_AB_RUNTIME_ENABLED: "true", VOCATRYA_AB_ROLLOUT_SCOPE: "full" },
         });
         expect(flagged.mode).not.toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
         expect(flagged.mode).toBe(CAREER_RUNTIME_MODE.LEGACY_ONLY);

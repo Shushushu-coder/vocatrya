@@ -56,6 +56,7 @@ vi.mock("@/actions/resumeVariant.actions", () => ({
 
 vi.mock("@/actions/application.actions", () => ({
   getApplicationTimeline: vi.fn(),
+  getSubmittedResumeBindings: vi.fn(),
   createApplicationProcessStep: vi.fn(),
   updateApplicationProcessStep: vi.fn(),
   completeApplicationProcessStep: vi.fn(),

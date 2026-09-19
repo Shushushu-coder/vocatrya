@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useState, useTransition } from "react";
-import Link from "next/link";
 import { CalendarClock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +14,7 @@ import {
   getApplicationTimeline,
   updateApplicationProcessStep,
 } from "@/actions/application.actions";
-import { SubmitResumePicker } from "@/components/career/resume-variant/SubmitResumePicker";
+import { SubmittedResumePanel } from "@/components/career/resume-variant/SubmittedResumePanel";
 import type {
   ApplicationProcessStepDTO,
   ApplicationTimelineDTO,
@@ -275,48 +274,12 @@ export function ApplicationTimelineTab({
               <p className="text-sm text-muted-foreground">
                 {t("jobs.submittedResume")}
               </p>
-              {attempt.submittedResume ? (
-                <div className="mt-1">
-                  <p className="font-medium">
-                    {attempt.submittedResume.title}
-                    {" · "}
-                    {t("jobs.resumeVersionNumber", {
-                      number: attempt.submittedResume.versionNumber,
-                    })}
-                  </p>
-                  {attempt.submittedResume.resumeVariantId &&
-                  attempt.submittedResume.resumeVariantVersionId ? (
-                    <Link
-                      className="mt-1 inline-block text-sm text-primary underline"
-                      href={`/dashboard/profile/resumes/${attempt.submittedResume.resumeVariantId}?version=${attempt.submittedResume.resumeVariantVersionId}`}
-                      data-testid="view-submitted-resume-version"
-                    >
-                      {t("jobs.viewSubmittedResumeVersion")}
-                    </Link>
-                  ) : null}
-                  {canMutate ? (
-                    <SubmitResumePicker
-                      attemptId={attempt.id}
-                      locked
-                      onBound={loadTimeline}
-                    />
-                  ) : null}
-                </div>
-              ) : (
-                <div className="mt-1">
-                  <p className="font-medium">{t("jobs.submittedResumeUnbound")}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {t("jobs.submittedResumeUnboundHint")}
-                  </p>
-                  {canMutate ? (
-                    <SubmitResumePicker
-                      attemptId={attempt.id}
-                      locked={false}
-                      onBound={loadTimeline}
-                    />
-                  ) : null}
-                </div>
-              )}
+              <SubmittedResumePanel
+                attemptId={attempt.id}
+                submittedResume={attempt.submittedResume}
+                canMutate={canMutate}
+                onBound={loadTimeline}
+              />
             </div>
           </div>
 

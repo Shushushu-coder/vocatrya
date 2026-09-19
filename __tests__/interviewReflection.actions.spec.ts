@@ -2,7 +2,10 @@ import {
   getInterviewReflection,
   saveInterviewReflection,
 } from "@/actions/application.actions";
-import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import {
+  AB_ROLLOUT_SCOPE_ENV,
+  CAREER_RUNTIME_MODE,
+} from "@/lib/career/identities";
 import { getCurrentUser } from "@/utils/user.utils";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 
@@ -77,20 +80,46 @@ describe("interview reflection actions", () => {
     expect(saveServiceReflection).not.toHaveBeenCalled();
   });
 
-  it("saves through ApplicationService when AB_ENABLED", async () => {
-    resolveRuntime.mockResolvedValue({
-      mode: CAREER_RUNTIME_MODE.AB_ENABLED,
-    } as never);
-    const result = await saveInterviewReflection({
-      applicationProcessStepId: "step-1",
-      reflectionText: "整场复盘",
-      items: [{ questionText: "介绍一下你的推荐系统项目" }],
-    });
-    expect(result.success).toBe(true);
-    expect(saveServiceReflection).toHaveBeenCalledWith({
-      applicationProcessStepId: "step-1",
-      reflectionText: "整场复盘",
-      items: [{ questionText: "介绍一下你的推荐系统项目" }],
-    });
+  it("saves through ApplicationService when AB_ENABLED with full scope", async () => {
+    const previous = process.env[AB_ROLLOUT_SCOPE_ENV];
+    process.env[AB_ROLLOUT_SCOPE_ENV] = "full";
+    try {
+      resolveRuntime.mockResolvedValue({
+        mode: CAREER_RUNTIME_MODE.AB_ENABLED,
+      } as never);
+      const result = await saveInterviewReflection({
+        applicationProcessStepId: "step-1",
+        reflectionText: "整场复盘",
+        items: [{ questionText: "介绍一下你的推荐系统项目" }],
+      });
+      expect(result.success).toBe(true);
+      expect(saveServiceReflection).toHaveBeenCalledWith({
+        applicationProcessStepId: "step-1",
+        reflectionText: "整场复盘",
+        items: [{ questionText: "介绍一下你的推荐系统项目" }],
+      });
+    } finally {
+      if (previous === undefined) delete process.env[AB_ROLLOUT_SCOPE_ENV];
+      else process.env[AB_ROLLOUT_SCOPE_ENV] = previous;
+    }
+  });
+
+  it("rejects reflection writes in AB_ENABLED resume_v1 scope", async () => {
+    const previous = process.env[AB_ROLLOUT_SCOPE_ENV];
+    process.env[AB_ROLLOUT_SCOPE_ENV] = "resume_v1";
+    try {
+      resolveRuntime.mockResolvedValue({
+        mode: CAREER_RUNTIME_MODE.AB_ENABLED,
+      } as never);
+      const result = await saveInterviewReflection({
+        applicationProcessStepId: "step-1",
+        items: [{ questionText: "介绍一下你的推荐系统项目" }],
+      });
+      expect(result.success).toBe(false);
+      expect(saveServiceReflection).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env[AB_ROLLOUT_SCOPE_ENV];
+      else process.env[AB_ROLLOUT_SCOPE_ENV] = previous;
+    }
   });
 });

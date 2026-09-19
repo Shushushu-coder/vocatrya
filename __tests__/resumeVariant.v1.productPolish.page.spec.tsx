@@ -55,7 +55,10 @@ describe("ResumeVariantWorkspacePage fail-closed version query", () => {
     notFound.mockClear();
     renderWorkspace.mockClear();
     resolveVersion.mockReset();
-    getCareerRuntimeSnapshot.mockResolvedValue({ mode: "AB_ENABLED" });
+    getCareerRuntimeSnapshot.mockResolvedValue({
+      mode: "AB_ENABLED",
+      rolloutScope: "full",
+    });
   });
 
   it("404s on a non-empty nonexistent version instead of opening current", async () => {

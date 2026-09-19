@@ -8,6 +8,7 @@ import { seedAccount } from "./helpers/backupTestDb";
 import {
   AB_MIGRATION_STATUS,
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   CAREER_RUNTIME_MODE,
   FRESH_NATIVE_KEY,
   activateFreshAbNative,
@@ -82,7 +83,7 @@ describe("Phase 7 FRESH_READY backup v2", () => {
     expect(off.mode).not.toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
 
     const on = await resolveCareerRuntimeMode(prisma, {
-      env: { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" },
+      env: { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" },
     });
     expect(on.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
   }, 120_000);

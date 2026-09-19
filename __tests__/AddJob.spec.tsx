@@ -533,6 +533,7 @@ describe("AddJob A+B unsupported fields", () => {
         resetEditJob={mockResetEditJob}
         initialOpen={true}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
       />,
     );
 
@@ -563,6 +564,7 @@ describe("AddJob A+B unsupported fields", () => {
         resetEditJob={mockResetEditJob}
         initialOpen={true}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
       />,
     );
     expect(screen.getByLabelText(/due date/i)).toHaveTextContent("Pick a date");
@@ -584,6 +586,7 @@ describe("AddJob A+B unsupported fields", () => {
         resetEditJob={mockResetEditJob}
         initialOpen={true}
         careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
       />,
     );
     expect(screen.getByLabelText(/recruitment cohort/i)).toBeInTheDocument();

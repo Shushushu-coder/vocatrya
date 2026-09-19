@@ -4,8 +4,10 @@ import Link from "next/link";
 import { getServerI18n } from "@/i18n/server";
 import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
 import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
-import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
-import { canReadCareerData } from "@/lib/career/access";
+import {
+  isLegacyResumeEditorReadOnly,
+  isResumeV1CapabilityEnabled,
+} from "@/lib/career/capabilities";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -15,8 +17,14 @@ export async function generateMetadata() {
 async function Profile() {
   const runtime = await getCareerRuntimeSnapshot();
   const { t } = await getServerI18n();
-  const resumeReadOnly = runtime.mode !== CAREER_RUNTIME_MODE.LEGACY_ONLY;
-  const showApplicationEntry = canReadCareerData(runtime.mode);
+  const resumeReadOnly = isLegacyResumeEditorReadOnly(
+    runtime.mode,
+    runtime.rolloutScope,
+  );
+  const showApplicationEntry = isResumeV1CapabilityEnabled(
+    runtime.mode,
+    runtime.rolloutScope,
+  );
   return (
     <div className="col-span-3">
       <CareerRuntimeNotice mode={runtime.mode} />

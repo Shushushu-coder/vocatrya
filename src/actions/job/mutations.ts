@@ -2,6 +2,7 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { createJobRecord } from "@/lib/jobs/createJobRecord";
+import { isFullAbCapabilityEnabled, resolveAbRolloutScope } from "@/lib/career/capabilities";
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
@@ -109,7 +110,7 @@ export const addJob = async (
 
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertJobMutationsAllowed(runtime.mode);
-    if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+    if (isFullAbCapabilityEnabled(runtime.mode, resolveAbRolloutScope())) {
       if (coverLetter) {
         throw new CareerRuntimeError(
           "LEGACY_COVER_LETTER_UNSUPPORTED",
@@ -222,7 +223,7 @@ export const updateJob = async (
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertJobMutationsAllowed(runtime.mode);
 
-    if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+    if (isFullAbCapabilityEnabled(runtime.mode, resolveAbRolloutScope())) {
       if (coverLetter) {
         throw new CareerRuntimeError(
           "LEGACY_COVER_LETTER_UNSUPPORTED",
@@ -337,7 +338,7 @@ export const deleteJobById = async (
 
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertJobMutationsAllowed(runtime.mode);
-    if (runtime.mode === CAREER_RUNTIME_MODE.AB_ENABLED) {
+    if (isFullAbCapabilityEnabled(runtime.mode, resolveAbRolloutScope())) {
       const res = await archiveOpportunity(prisma, user.id, jobId);
       revalidatePath("/dashboard");
       return { res, success: true };

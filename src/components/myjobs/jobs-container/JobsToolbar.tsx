@@ -27,6 +27,7 @@ import {
   Tag,
 } from "@/models/job.model";
 import { useI18n } from "@/i18n";
+import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
 // Presentational: the Jobs card header — title/count, active filter chips,
@@ -62,6 +63,7 @@ export function JobsToolbar({
   addJobInitialOpen,
   hideAddJob = false,
   careerRuntimeMode,
+  abRolloutScope,
 }: {
   jobsCount: number;
   totalJobs: number;
@@ -93,9 +95,13 @@ export function JobsToolbar({
   addJobInitialOpen: boolean;
   hideAddJob?: boolean;
   careerRuntimeMode?: string;
+  abRolloutScope?: AbRolloutScope;
 }) {
   const { t } = useI18n();
-  const hideDiscoveryFilters = isAbJobReadMode(careerRuntimeMode);
+  const hideDiscoveryFilters = isAbJobReadMode(
+    careerRuntimeMode,
+    abRolloutScope,
+  );
 
   return (
     <CardHeader className="flex-row flex-wrap justify-between items-center gap-3">
@@ -216,6 +222,7 @@ export function JobsToolbar({
             resetEditJob={resetEditJob}
             initialOpen={addJobInitialOpen}
             careerRuntimeMode={careerRuntimeMode}
+            abRolloutScope={abRolloutScope}
           />
         )}
       </div>

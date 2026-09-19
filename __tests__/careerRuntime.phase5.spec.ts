@@ -5,6 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import {
   AB_MIGRATION_STATUS,
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   CAREER_RUNTIME_MODE,
   CAREER_WRITE_FAMILY,
   careerReadFamilyFor,
@@ -23,7 +24,7 @@ import {
 } from "./helpers/backupTestDb";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
-const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
 
 const ctx = makeTestDbUrl();
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -280,7 +281,9 @@ describe("Phase 5 career runtime gates", () => {
       verifiedAt: new Date(),
     });
     const previous = process.env[AB_RUNTIME_FEATURE_ENV];
+    const previousScope = process.env[AB_ROLLOUT_SCOPE_ENV];
     process.env[AB_RUNTIME_FEATURE_ENV] = "true";
+    process.env[AB_ROLLOUT_SCOPE_ENV] = "full";
     try {
       await expect(
         createJobRecord(
@@ -307,6 +310,11 @@ describe("Phase 5 career runtime gates", () => {
         delete process.env[AB_RUNTIME_FEATURE_ENV];
       } else {
         process.env[AB_RUNTIME_FEATURE_ENV] = previous;
+      }
+      if (previousScope === undefined) {
+        delete process.env[AB_ROLLOUT_SCOPE_ENV];
+      } else {
+        process.env[AB_ROLLOUT_SCOPE_ENV] = previousScope;
       }
     }
   });

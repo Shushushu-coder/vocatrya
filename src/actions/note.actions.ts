@@ -3,21 +3,19 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { NoteFormSchema } from "@/models/note.schema";
 import { NoteResponse } from "@/models/note.model";
-import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
+import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
+import { isFullAbCapabilityEnabled, resolveAbRolloutScope } from "@/lib/career/capabilities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { requireUser } from "./shared";
 import { z } from "zod";
 
-function isAbReadMode(mode: string): boolean {
-  return (
-    mode === CAREER_RUNTIME_MODE.AB_ENABLED ||
-    mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED
-  );
+function isAbNoteSurface(mode: string): boolean {
+  return isAbJobReadMode(mode, resolveAbRolloutScope());
 }
 
 function assertAbNoteWrites(mode: string): void {
-  if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return;
+  if (isFullAbCapabilityEnabled(mode, resolveAbRolloutScope())) return;
   throw new CareerRuntimeError(
     "JOB_MUTATIONS_DISABLED",
     `Opportunity notes cannot be mutated in ${mode}`,
@@ -30,7 +28,7 @@ export const getNotesByJobId = async (
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbReadMode(runtime.mode)) {
+    if (isAbNoteSurface(runtime.mode)) {
       const opportunity = await prisma.jobOpportunity.findFirst({
         where: { id: jobId, userId: user.id },
         select: { id: true },
@@ -87,7 +85,7 @@ export const addNote = async (
 
     const validated = NoteFormSchema.parse(data);
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbReadMode(runtime.mode)) {
+    if (isAbNoteSurface(runtime.mode)) {
       assertAbNoteWrites(runtime.mode);
       const opportunity = await prisma.jobOpportunity.findFirst({
         where: { id: validated.jobId, userId: user.id },
@@ -140,7 +138,7 @@ export const updateNote = async (
       throw new Error("Note ID is required for update");
     }
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbReadMode(runtime.mode)) {
+    if (isAbNoteSurface(runtime.mode)) {
       assertAbNoteWrites(runtime.mode);
       const existing = await prisma.jobOpportunityNote.findFirst({
         where: { id: validated.id, userId: user.id },
@@ -174,7 +172,7 @@ export const deleteNote = async (
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbReadMode(runtime.mode)) {
+    if (isAbNoteSurface(runtime.mode)) {
       assertAbNoteWrites(runtime.mode);
       const existing = await prisma.jobOpportunityNote.findFirst({
         where: { id: noteId, userId: user.id },

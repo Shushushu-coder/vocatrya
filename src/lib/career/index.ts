@@ -3,6 +3,7 @@ export {
   AB_MIGRATION_KEY,
   FRESH_NATIVE_KEY,
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   AB_MIGRATION_STATUS,
   CAREER_RUNTIME_MODE,
   CAREER_WRITE_FAMILY,
@@ -40,6 +41,19 @@ export {
 export { canonicalize, hashCanonical, sha256Utf8 } from "./hash";
 export { isAbRuntimeFeatureEnabled } from "./featureGate";
 export {
+  AB_ROLLOUT_SCOPE,
+  resolveAbRolloutScope,
+  isResumeV1CapabilityEnabled,
+  isFullAbCapabilityEnabled,
+  isRestrictedResumeBindingSurfaceEnabled,
+  isLegacyResumeEditorReadOnly,
+  assertResumeV1Readable,
+  assertResumeV1Writable,
+  assertFullAbReadable,
+  assertFullAbWritable,
+} from "./capabilities";
+export type { AbRolloutScope } from "./capabilities";
+export {
   isKnownAbMigrationStatus,
   readInstanceMigrationState,
   writeInstanceMigrationState,
@@ -67,11 +81,14 @@ export {
   normalizeOptionalText,
 } from "./opportunityService";
 export { ApplicationService } from "./applicationService";
+export { resolveOwnedMappedOpportunityId } from "./legacyJobOpportunityMapping";
 export type {
   ApplicationTimelineDTO,
   ApplicationAttemptTimelineDTO,
   ApplicationProcessStepDTO,
   SubmittedResumeDTO,
+  SubmittedResumeBindingAttemptDTO,
+  SubmittedResumeBindingsDTO,
   TransferredFromDTO,
 } from "./applicationTimeline";
 export {

@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import {
   AB_MIGRATION_STATUS,
   AB_RUNTIME_FEATURE_ENV,
+  AB_ROLLOUT_SCOPE_ENV,
   ApplicationService,
   CareerRuntimeError,
   OpportunityService,
@@ -15,7 +16,7 @@ import {
   seedAccount,
 } from "./helpers/backupTestDb";
 
-const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true" };
+const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
 
 const ctx = await vi.hoisted(async () => {
   const helpers = await import("./helpers/backupTestDb");
@@ -48,9 +49,14 @@ let otherUserId: string;
 let companyId: string;
 const mockedUser = vi.mocked(getCurrentUser);
 
-function setFeature(on: boolean) {
-  if (on) process.env[AB_RUNTIME_FEATURE_ENV] = "true";
-  else delete process.env[AB_RUNTIME_FEATURE_ENV];
+function setFeature(on: boolean, scope = "full") {
+  if (on) {
+    process.env[AB_RUNTIME_FEATURE_ENV] = "true";
+    process.env[AB_ROLLOUT_SCOPE_ENV] = scope;
+  } else {
+    delete process.env[AB_RUNTIME_FEATURE_ENV];
+    delete process.env[AB_ROLLOUT_SCOPE_ENV];
+  }
 }
 
 function variants(owner = userId) {
@@ -68,6 +74,7 @@ function opportunities(owner = userId) {
 afterAll(async () => {
   await prisma.$disconnect();
   delete process.env[AB_RUNTIME_FEATURE_ENV];
+  delete process.env[AB_ROLLOUT_SCOPE_ENV];
   try {
     fs.rmSync(ctx.dir, { recursive: true, force: true });
   } catch {

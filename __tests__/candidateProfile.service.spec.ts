@@ -1,8 +1,8 @@
 import { CandidateProfileService } from "@/lib/career/candidateProfileService";
 import { CareerRuntimeError } from "@/lib/career/errors";
 
-vi.mock("@/lib/career/writeGuard", () => ({
-  assertAbWritesAllowed: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/career/capabilities", () => ({
+  assertResumeV1Writable: vi.fn().mockResolvedValue("AB_ENABLED"),
 }));
 
 function dbMock() {

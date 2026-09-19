@@ -42,6 +42,7 @@ async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
         sources={sources}
         tags={tags ?? []}
         careerRuntimeMode={runtime.mode}
+        abRolloutScope={runtime.rolloutScope}
       />
     </div>
   );

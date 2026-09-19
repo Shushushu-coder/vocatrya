@@ -4,6 +4,7 @@ export const AB_INSTANCE_SCOPE_KEY = "instance";
 export const AB_MIGRATION_KEY = PHASE3_MIGRATION_VERSION;
 export const FRESH_NATIVE_KEY = "vocatrya-ab-fresh-native-v1";
 export const AB_RUNTIME_FEATURE_ENV = "VOCATRYA_AB_RUNTIME_ENABLED";
+export const AB_ROLLOUT_SCOPE_ENV = "VOCATRYA_AB_ROLLOUT_SCOPE";
 
 export const AB_MIGRATION_STATUS = {
   NOT_STARTED: "NOT_STARTED",

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import fs from "node:fs";
 import { PrismaClient } from "@prisma/client";
-import { AB_RUNTIME_FEATURE_ENV } from "@/lib/career/identities";
+import { AB_RUNTIME_FEATURE_ENV, AB_ROLLOUT_SCOPE_ENV } from "@/lib/career/identities";
 import { activateFreshAbNative } from "@/lib/career";
 import {
   makeTestDbUrl,
@@ -51,9 +51,14 @@ const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
 let userId: string;
 const mockedUser = vi.mocked(getCurrentUser);
 
-function setFeature(on: boolean) {
-  if (on) process.env[AB_RUNTIME_FEATURE_ENV] = "true";
-  else delete process.env[AB_RUNTIME_FEATURE_ENV];
+function setFeature(on: boolean, scope = "full") {
+  if (on) {
+    process.env[AB_RUNTIME_FEATURE_ENV] = "true";
+    process.env[AB_ROLLOUT_SCOPE_ENV] = scope;
+  } else {
+    delete process.env[AB_RUNTIME_FEATURE_ENV];
+    delete process.env[AB_ROLLOUT_SCOPE_ENV];
+  }
 }
 
 beforeAll(() => {
@@ -63,6 +68,7 @@ beforeAll(() => {
 afterAll(async () => {
   await prisma.$disconnect();
   delete process.env[AB_RUNTIME_FEATURE_ENV];
+  delete process.env[AB_ROLLOUT_SCOPE_ENV];
   try {
     fs.rmSync(ctx.dir, { recursive: true, force: true });
   } catch {

@@ -1,7 +1,10 @@
 "use server";
 import prisma from "@/lib/db";
 import { ApplicationService } from "@/lib/career/applicationService";
-import type { ApplicationTimelineDTO } from "@/lib/career/applicationTimeline";
+import type {
+  ApplicationTimelineDTO,
+  SubmittedResumeBindingsDTO,
+} from "@/lib/career/applicationTimeline";
 import type {
   InterviewReflectionDTO,
   SaveInterviewReflectionInput,
@@ -10,25 +13,28 @@ import {
   listUpcomingApplicationEvents as queryUpcomingApplicationEvents,
   type UpcomingApplicationEvent,
 } from "@/lib/career/upcomingReadModel";
+import {
+  assertResumeV1Readable,
+  assertResumeV1Writable,
+  isFullAbCapabilityEnabled,
+  resolveAbRolloutScope,
+} from "@/lib/career/capabilities";
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
-import { assertCareerDataWritable } from "@/lib/career/access";
 import { handleError } from "@/lib/utils";
 import type { ActionResult } from "@/models/action.model";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./shared";
 import type { ApplicationProcessStep } from "@prisma/client";
 
-function isAbReadMode(mode: string): boolean {
-  return (
-    mode === CAREER_RUNTIME_MODE.AB_ENABLED ||
-    mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED
-  );
+function isFullAbReadSurface(mode: string): boolean {
+  if (mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) return true;
+  return isFullAbCapabilityEnabled(mode, resolveAbRolloutScope());
 }
 
 function assertAbApplicationWrites(mode: string): void {
-  if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return;
+  if (isFullAbCapabilityEnabled(mode, resolveAbRolloutScope())) return;
   throw new CareerRuntimeError(
     "JOB_MUTATIONS_DISABLED",
     `Application process steps cannot be mutated in ${mode}`,
@@ -64,7 +70,7 @@ export async function getInterviewReflection(
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (!isAbReadMode(runtime.mode)) {
+    if (!isFullAbReadSurface(runtime.mode)) {
       throw new CareerRuntimeError(
         "APPLICATION_TIMELINE_UNAVAILABLE",
         `Interview reflection is not available in ${runtime.mode}`,
@@ -95,13 +101,32 @@ export async function saveInterviewReflection(
   }
 }
 
+export async function getSubmittedResumeBindings(
+  legacyJobId: string,
+): Promise<ActionResult<SubmittedResumeBindingsDTO>> {
+  try {
+    const user = await requireUser();
+    await assertResumeV1Readable(prisma as never);
+    if (typeof legacyJobId !== "string" || legacyJobId.trim() === "") {
+      throw new CareerRuntimeError("INVALID_ID", "Invalid job id");
+    }
+    const data =
+      await applicationsFor(user.id).getSubmittedResumeBindingsForLegacyJob(
+        legacyJobId.trim(),
+      );
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to load submitted resume binding.");
+  }
+}
+
 export async function getApplicationTimeline(
   jobOpportunityId: string,
 ): Promise<ActionResult<ApplicationTimelineDTO>> {
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (!isAbReadMode(runtime.mode)) {
+    if (!isFullAbReadSurface(runtime.mode)) {
       throw new CareerRuntimeError(
         "APPLICATION_TIMELINE_UNAVAILABLE",
         `Application timeline is not available in ${runtime.mode}`,
@@ -120,7 +145,7 @@ export async function listUpcomingApplicationEvents(): Promise<
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (!isAbReadMode(runtime.mode)) {
+    if (!isFullAbReadSurface(runtime.mode)) {
       throw new CareerRuntimeError(
         "UPCOMING_UNAVAILABLE",
         `Upcoming events are not available in ${runtime.mode}`,
@@ -229,7 +254,7 @@ export async function submitAttemptResumeVersion(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     if (
       typeof input?.attemptId !== "string" ||
       input.attemptId.trim() === "" ||
@@ -238,7 +263,7 @@ export async function submitAttemptResumeVersion(input: {
     ) {
       throw new CareerRuntimeError("INVALID_ID", "Invalid submit binding input");
     }
-    const data = await applicationsFor(user.id).markSubmitted({
+    const data = await applicationsFor(user.id).bindSubmittedResumeVersion({
       attemptId: input.attemptId.trim(),
       submittedResumeVersionId: input.submittedResumeVersionId.trim(),
     });

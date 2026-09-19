@@ -4,9 +4,9 @@ import { handleError } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./shared";
 import {
-  assertCareerDataReadable,
-  assertCareerDataWritable,
-} from "@/lib/career/access";
+  assertResumeV1Readable,
+  assertResumeV1Writable,
+} from "@/lib/career/capabilities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import { CandidateProfileService } from "@/lib/career/candidateProfileService";
 import { CareerMaterialService } from "@/lib/career/careerMaterialService";
@@ -59,7 +59,7 @@ function optionalId(value: unknown): string | null {
 export async function listResumeVariants(): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataReadable(prisma as never);
+    await assertResumeV1Readable(prisma as never);
     const data = await variantsFor(user.id).listVariants();
     return { success: true, data };
   } catch (error) {
@@ -70,7 +70,7 @@ export async function listResumeVariants(): Promise<ActionResult> {
 export async function getResumeVariant(variantId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataReadable(prisma as never);
+    await assertResumeV1Readable(prisma as never);
     const data = await variantsFor(user.id).getVariant(requireId(variantId, "VARIANT_NOT_FOUND"));
     return { success: true, data };
   } catch (error) {
@@ -84,7 +84,7 @@ export async function createResumeVariant(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const name = requireId(input?.name, "VARIANT_NAME_REQUIRED");
     const profile = await new CandidateProfileService(
       prisma as never,
@@ -119,7 +119,7 @@ export async function renameResumeVariant(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).renameVariant(
       requireId(input?.variantId, "VARIANT_NOT_FOUND"),
       requireId(input?.name, "VARIANT_NAME_REQUIRED"),
@@ -135,7 +135,7 @@ export async function renameResumeVariant(input: {
 export async function archiveResumeVariant(variantId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).archiveVariant(
       requireId(variantId, "VARIANT_NOT_FOUND"),
     );
@@ -152,7 +152,7 @@ export async function listResumeVariantVersions(
 ): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataReadable(prisma as never);
+    await assertResumeV1Readable(prisma as never);
     const data = await variantsFor(user.id).listVariantVersions(
       requireId(variantId, "VARIANT_NOT_FOUND"),
     );
@@ -167,7 +167,7 @@ export async function getResumeVariantVersion(
 ): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataReadable(prisma as never);
+    await assertResumeV1Readable(prisma as never);
     const data = await variantsFor(user.id).getVersion(
       requireId(versionId, "VERSION_NOT_FOUND"),
     );
@@ -183,7 +183,7 @@ export async function resolveResumeVariantWorkspaceVersion(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataReadable(prisma as never);
+    await assertResumeV1Readable(prisma as never);
     const data = await variantsFor(user.id).resolveWorkspaceVersion(
       requireId(input?.variantId, "VARIANT_NOT_FOUND"),
       requireId(input?.versionId, "VERSION_NOT_FOUND"),
@@ -197,7 +197,7 @@ export async function resolveResumeVariantWorkspaceVersion(input: {
 export async function listSubmittableResumeVersions(): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataReadable(prisma as never);
+    await assertResumeV1Readable(prisma as never);
     const data = await variantsFor(user.id).listSubmittableVersions();
     return { success: true, data };
   } catch (error) {
@@ -208,7 +208,7 @@ export async function listSubmittableResumeVersions(): Promise<ActionResult> {
 export async function createBlankResumeDraft(variantId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).createBlankDraft(
       requireId(variantId, "VARIANT_NOT_FOUND"),
     );
@@ -224,7 +224,7 @@ export async function cloneResumeVersionAsDraft(
 ): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).cloneAsDraft(
       requireId(versionId, "VERSION_NOT_FOUND"),
     );
@@ -239,7 +239,7 @@ export async function cloneResumeVersionAsDraft(
 export async function freezeResumeVersion(versionId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).freeze(
       requireId(versionId, "VERSION_NOT_FOUND"),
     );
@@ -260,7 +260,7 @@ export async function updateResumeHeaderSnapshot(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).updateHeaderSnapshot(
       requireId(input?.versionId, "VERSION_NOT_FOUND"),
       {
@@ -285,7 +285,7 @@ export async function createResumeSection(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).createSection({
       versionId: requireId(input?.versionId, "VERSION_NOT_FOUND"),
       title: requireId(input?.title, "SECTION_TITLE_REQUIRED"),
@@ -304,7 +304,7 @@ export async function updateResumeSection(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).updateSection({
       sectionId: requireId(input?.sectionId, "SECTION_NOT_FOUND"),
       title: input.title === undefined ? undefined : requireId(input.title, "SECTION_TITLE_REQUIRED"),
@@ -319,7 +319,7 @@ export async function updateResumeSection(input: {
 export async function deleteResumeSection(sectionId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).deleteSection(
       requireId(sectionId, "SECTION_NOT_FOUND"),
     );
@@ -335,7 +335,7 @@ export async function reorderResumeSections(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).reorderSections(
       requireId(input?.versionId, "VERSION_NOT_FOUND"),
       requireIdList(input?.orderedIds),
@@ -353,7 +353,7 @@ export async function createResumeSectionItem(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).createSectionItem({
       sectionId: requireId(input?.sectionId, "SECTION_NOT_FOUND"),
       careerMaterialItemId: optionalId(input?.careerMaterialItemId),
@@ -371,7 +371,7 @@ export async function updateResumeSectionItem(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).updateSectionItem({
       itemId: requireId(input?.itemId, "ITEM_NOT_FOUND"),
       itemKind: input.itemKind === undefined ? undefined : requireId(input.itemKind, "INVALID_ITEM_KIND"),
@@ -385,7 +385,7 @@ export async function updateResumeSectionItem(input: {
 export async function deleteResumeSectionItem(itemId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).deleteSectionItem(
       requireId(itemId, "ITEM_NOT_FOUND"),
     );
@@ -401,7 +401,7 @@ export async function reorderResumeSectionItems(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).reorderSectionItems(
       requireId(input?.sectionId, "SECTION_NOT_FOUND"),
       requireIdList(input?.orderedIds),
@@ -419,7 +419,7 @@ export async function createResumeExpression(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).createExpression({
       itemId: requireId(input?.itemId, "ITEM_NOT_FOUND"),
       content: requireId(input?.content, "EXPRESSION_CONTENT_REQUIRED"),
@@ -438,7 +438,7 @@ export async function updateResumeExpression(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).updateExpression({
       expressionId: requireId(input?.expressionId, "EXPRESSION_NOT_FOUND"),
       content:
@@ -458,7 +458,7 @@ export async function deleteResumeExpression(
 ): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).deleteExpression(
       requireId(expressionId, "EXPRESSION_NOT_FOUND"),
     );
@@ -474,7 +474,7 @@ export async function reorderResumeExpressions(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await variantsFor(user.id).reorderExpressions(
       requireId(input?.itemId, "ITEM_NOT_FOUND"),
       requireIdList(input?.orderedIds),
@@ -491,7 +491,7 @@ export async function replaceResumeExpressionEvidence(input: {
 }): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataWritable(prisma as never);
+    await assertResumeV1Writable(prisma as never);
     const data = await provenanceFor(user.id).replaceExpressionEvidence({
       expressionId: requireId(input?.expressionId, "EXPRESSION_NOT_FOUND"),
       evidenceIds: requireIdList(input?.evidenceIds ?? []),
@@ -505,7 +505,7 @@ export async function replaceResumeExpressionEvidence(input: {
 export async function listResumeCareerMaterials(): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    await assertCareerDataReadable(prisma as never);
+    await assertResumeV1Readable(prisma as never);
     const rows = await materialsFor(user.id).list();
     const data = rows.map((row) => ({
       id: row.id,

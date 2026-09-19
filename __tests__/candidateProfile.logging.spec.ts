@@ -3,8 +3,8 @@ import { log } from "@/lib/telemetry";
 import { BackupError } from "@/lib/backup/schema";
 import { normalizeBackupData } from "@/lib/backup/compat";
 
-vi.mock("@/lib/career/writeGuard", () => ({
-  assertAbWritesAllowed: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/career/capabilities", () => ({
+  assertResumeV1Writable: vi.fn().mockResolvedValue("AB_ENABLED"),
 }));
 
 const ID = "SENSITIVE_ID_SENTINEL_123";
