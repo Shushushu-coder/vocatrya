@@ -257,7 +257,7 @@ describe("ApplicationResumeBindingPanel", () => {
       within(cards[0]).queryByTestId("submit-resume-picker"),
     ).not.toBeInTheDocument();
     expect(
-      within(cards[1]).getByTestId("submit-resume-picker"),
+      await within(cards[1]).findByTestId("submit-resume-picker"),
     ).toBeInTheDocument();
     expect(
       within(cards[1]).queryByTestId("view-submitted-resume-version"),

@@ -871,7 +871,7 @@ describe("JobDetails – restricted submitted resume surface", () => {
       "href",
       "/dashboard/profile/resumes/var-1?version=ver-a",
     );
-    expect(screen.getByTestId("submit-resume-picker")).toBeInTheDocument();
+    expect(await screen.findByTestId("submit-resume-picker")).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /timeline/i })).not.toBeInTheDocument();
     expect(getSubmittedResumeBindings).toHaveBeenCalledWith("legacy-job-123");
     expect(getSubmittedResumeBindings).not.toHaveBeenCalledWith("opp-987");
