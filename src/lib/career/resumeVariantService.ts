@@ -30,13 +30,42 @@ type HeaderFields = {
   layoutConfig?: string | null;
 };
 
-function isPrismaUniqueConflict(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: string }).code === "P2002",
-  );
+/** Prisma `@@unique([resumeVariantId, versionNumber])` on ResumeVariantVersion. */
+const VERSION_NUMBER_UNIQUE_FIELDS = ["resumeVariantId", "versionNumber"] as const;
+const VERSION_NUMBER_UNIQUE_INDEX =
+  "ResumeVariantVersion_resumeVariantId_versionNumber_key";
+
+function isVersionNumberUniqueTarget(target: unknown): boolean {
+  if (typeof target === "string") {
+    return target === VERSION_NUMBER_UNIQUE_INDEX;
+  }
+  if (!Array.isArray(target) || target.length === 0) {
+    return false;
+  }
+  if (target.some((part) => typeof part !== "string")) {
+    return false;
+  }
+  if (target.length === 1) {
+    return target[0] === VERSION_NUMBER_UNIQUE_INDEX;
+  }
+  if (target.length !== VERSION_NUMBER_UNIQUE_FIELDS.length) {
+    return false;
+  }
+  const fields = new Set(target);
+  if (fields.size !== VERSION_NUMBER_UNIQUE_FIELDS.length) {
+    return false;
+  }
+  return VERSION_NUMBER_UNIQUE_FIELDS.every((field) => fields.has(field));
+}
+
+export function isResumeVersionNumberConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  if (!("code" in error) || (error as { code?: unknown }).code !== "P2002") {
+    return false;
+  }
+  const meta = "meta" in error ? (error as { meta?: unknown }).meta : undefined;
+  if (!meta || typeof meta !== "object") return false;
+  return isVersionNumberUniqueTarget((meta as { target?: unknown }).target);
 }
 
 function optionalTrimmed(value: string | null | undefined): string | null {
@@ -443,7 +472,10 @@ export class ResumeVariantService {
           return version;
         });
       } catch (error) {
-        if (attempt < VERSION_NUMBER_UNIQUE_RETRY && isPrismaUniqueConflict(error)) {
+        if (
+          attempt < VERSION_NUMBER_UNIQUE_RETRY &&
+          isResumeVersionNumberConflict(error)
+        ) {
           continue;
         }
         throw error;
@@ -465,7 +497,10 @@ export class ResumeVariantService {
       try {
         return await this.copyVersionGraph(sourceVersionId, sanitized);
       } catch (error) {
-        if (attempt < VERSION_NUMBER_UNIQUE_RETRY && isPrismaUniqueConflict(error)) {
+        if (
+          attempt < VERSION_NUMBER_UNIQUE_RETRY &&
+          isResumeVersionNumberConflict(error)
+        ) {
           continue;
         }
         throw error;

@@ -115,12 +115,24 @@ export class ApplicationService {
           id: requestedVersionId,
           resumeVariant: { userId: this.userId },
         },
-        select: { id: true, status: true },
+        select: {
+          id: true,
+          status: true,
+          resumeVariant: { select: { archivedAt: true } },
+        },
       });
       if (!version) {
         throw new CareerRuntimeError(
           "VERSION_NOT_FOUND",
           "submittedResumeVersionId does not reference an owned resume version",
+        );
+      }
+
+      const isNewBinding = attempt.submittedResumeVersionId !== version.id;
+      if (isNewBinding && version.resumeVariant.archivedAt != null) {
+        throw new CareerRuntimeError(
+          "VARIANT_ARCHIVED",
+          "Archived resume variants cannot be bound to a new application attempt",
         );
       }
 
