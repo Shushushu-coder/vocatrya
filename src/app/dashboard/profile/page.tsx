@@ -21,12 +21,21 @@ async function Profile() {
     <div className="col-span-3">
       <CareerRuntimeNotice mode={runtime.mode} />
       {showApplicationEntry && (
-        <div className="mb-4 rounded-lg border p-4">
-          <div className="text-sm font-medium">{t("applicationProfile.entryTitle")}</div>
-          <div className="text-sm text-muted-foreground">{t("applicationProfile.entryDescription")}</div>
-          <Link className="text-sm text-primary underline underline-offset-2" href="/dashboard/profile/application">
-            {t("applicationProfile.openApplicationProfile")}
-          </Link>
+        <div className="mb-4 space-y-3">
+          <div className="rounded-lg border p-4">
+            <div className="text-sm font-medium">{t("applicationProfile.entryTitle")}</div>
+            <div className="text-sm text-muted-foreground">{t("applicationProfile.entryDescription")}</div>
+            <Link className="text-sm text-primary underline underline-offset-2" href="/dashboard/profile/application">
+              {t("applicationProfile.openApplicationProfile")}
+            </Link>
+          </div>
+          <div className="rounded-lg border p-4">
+            <div className="text-sm font-medium">{t("resumeVariants.entryTitle")}</div>
+            <div className="text-sm text-muted-foreground">{t("resumeVariants.entryDescription")}</div>
+            <Link className="text-sm text-primary underline underline-offset-2" href="/dashboard/profile/resumes">
+              {t("resumeVariants.openResumeVariants")}
+            </Link>
+          </div>
         </div>
       )}
       <ProfileContainer resumeReadOnly={resumeReadOnly} />

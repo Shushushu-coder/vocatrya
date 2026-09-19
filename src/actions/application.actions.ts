@@ -13,6 +13,7 @@ import {
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
+import { assertCareerDataWritable } from "@/lib/career/access";
 import { handleError } from "@/lib/utils";
 import type { ActionResult } from "@/models/action.model";
 import { revalidatePath } from "next/cache";
@@ -219,6 +220,32 @@ export async function completeApplicationProcessStep(
     return { success: true, data };
   } catch (error) {
     return handleError(error, "Failed to complete process step.");
+  }
+}
+
+export async function submitAttemptResumeVersion(input: {
+  attemptId: string;
+  submittedResumeVersionId: string;
+}): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertCareerDataWritable(prisma as never);
+    if (
+      typeof input?.attemptId !== "string" ||
+      input.attemptId.trim() === "" ||
+      typeof input?.submittedResumeVersionId !== "string" ||
+      input.submittedResumeVersionId.trim() === ""
+    ) {
+      throw new CareerRuntimeError("INVALID_ID", "Invalid submit binding input");
+    }
+    const data = await applicationsFor(user.id).markSubmitted({
+      attemptId: input.attemptId.trim(),
+      submittedResumeVersionId: input.submittedResumeVersionId.trim(),
+    });
+    revalidatePath("/dashboard");
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to bind submitted resume version.");
   }
 }
 

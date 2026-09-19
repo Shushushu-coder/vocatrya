@@ -122,11 +122,27 @@ export class ResumeProvenanceService {
 
   private async requireOwnedMutableExpression(expressionId: string) {
     const expression = await this.requireOwnedExpression(expressionId);
-    const status = expression.sectionItem.section.version.status;
-    if (status !== RESUME_VERSION_STATUS.DRAFT) {
+    const version = expression.sectionItem.section.version;
+    if (version.resumeVariant.archivedAt) {
+      throw new CareerRuntimeError(
+        "VARIANT_ARCHIVED",
+        "Archived resume variants cannot be edited",
+      );
+    }
+    if (version.status !== RESUME_VERSION_STATUS.DRAFT) {
       throw new CareerRuntimeError(
         "VERSION_IMMUTABLE",
-        `Cannot change provenance on ${status} version`,
+        `Cannot change provenance on ${version.status} version`,
+      );
+    }
+    const referenced = await this.db.applicationAttempt.findFirst({
+      where: { submittedResumeVersionId: version.id },
+      select: { id: true },
+    });
+    if (referenced) {
+      throw new CareerRuntimeError(
+        "SUBMITTED_RESUME_PROVENANCE",
+        "Versions referenced by ApplicationAttempt.submittedResumeVersionId cannot be overwritten",
       );
     }
     return expression;
@@ -146,7 +162,17 @@ export class ResumeProvenanceService {
         evidenceLinks: { orderBy: { createdAt: "asc" } },
         sectionItem: {
           include: {
-            section: { include: { version: { select: { id: true, status: true } } } },
+            section: {
+              include: {
+                version: {
+                  select: {
+                    id: true,
+                    status: true,
+                    resumeVariant: { select: { archivedAt: true } },
+                  },
+                },
+              },
+            },
           },
         },
       },

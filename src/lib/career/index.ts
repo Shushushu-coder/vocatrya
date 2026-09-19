@@ -18,6 +18,7 @@ export {
   PROCESS_STEP_CATEGORIES,
   COMPATIBILITY_PROCESS_STEPS,
   EVIDENCE_STATUS,
+  CAREER_MATERIAL_TYPE,
   MATCH_ANALYSIS_TYPE,
   MATCH_ANALYSIS_STATUS,
   MATCH_ANALYSIS_SCHEMA_VERSION,
@@ -128,6 +129,27 @@ export type {
   CandidateFamilyMemberInput,
 } from "./candidateProfileService";
 export { ResumeVariantService } from "./resumeVariantService";
+export {
+  RESUME_SECTION_SYSTEM_KIND,
+  RESUME_SECTION_SYSTEM_KINDS,
+  RESUME_SECTION_ITEM_KIND,
+  RESUME_SECTION_ITEM_KINDS,
+  RESUME_EXPRESSION_KIND,
+  RESUME_EXPRESSION_KINDS,
+  VERSION_NUMBER_UNIQUE_RETRY,
+} from "./resumeVariantConstants";
+export {
+  buildResumeHeaderSnapshot,
+  parseResumeHeaderSnapshot,
+  serializeResumeHeaderSnapshot,
+  sanitizeResumeHeaderSnapshot,
+  emptyResumeHeaderSnapshot,
+} from "./resumeHeaderSnapshot";
+export type {
+  ResumeHeaderSnapshot,
+  ResumeHeaderLink,
+  ResumeHeaderProfileSource,
+} from "./resumeHeaderSnapshot";
 export {
   ResumeProvenanceService,
   hashEvidenceContent,

@@ -14,6 +14,7 @@ import {
   getApplicationTimeline,
   updateApplicationProcessStep,
 } from "@/actions/application.actions";
+import { SubmitResumePicker } from "@/components/career/resume-variant/SubmitResumePicker";
 import type {
   ApplicationProcessStepDTO,
   ApplicationTimelineDTO,
@@ -274,19 +275,35 @@ export function ApplicationTimelineTab({
                 {t("jobs.submittedResume")}
               </p>
               {attempt.submittedResume ? (
-                <p className="mt-1 font-medium">
-                  {attempt.submittedResume.title}
-                  {" · "}
-                  {t("jobs.resumeVersionNumber", {
-                    number: attempt.submittedResume.versionNumber,
-                  })}
-                </p>
+                <div className="mt-1">
+                  <p className="font-medium">
+                    {attempt.submittedResume.title}
+                    {" · "}
+                    {t("jobs.resumeVersionNumber", {
+                      number: attempt.submittedResume.versionNumber,
+                    })}
+                  </p>
+                  {canMutate ? (
+                    <SubmitResumePicker
+                      attemptId={attempt.id}
+                      locked
+                      onBound={loadTimeline}
+                    />
+                  ) : null}
+                </div>
               ) : (
                 <div className="mt-1">
                   <p className="font-medium">{t("jobs.submittedResumeUnbound")}</p>
                   <p className="text-sm text-muted-foreground">
                     {t("jobs.submittedResumeUnboundHint")}
                   </p>
+                  {canMutate ? (
+                    <SubmitResumePicker
+                      attemptId={attempt.id}
+                      locked={false}
+                      onBound={loadTimeline}
+                    />
+                  ) : null}
                 </div>
               )}
             </div>

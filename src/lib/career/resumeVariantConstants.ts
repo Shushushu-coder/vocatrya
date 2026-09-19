@@ -1,0 +1,55 @@
+export const RESUME_SECTION_SYSTEM_KIND = {
+  SUMMARY: "SUMMARY",
+  EXPERIENCE: "EXPERIENCE",
+  EDUCATION: "EDUCATION",
+  SKILLS: "SKILLS",
+  PROJECTS: "PROJECTS",
+  CUSTOM: "CUSTOM",
+} as const;
+
+export type ResumeSectionSystemKind =
+  (typeof RESUME_SECTION_SYSTEM_KIND)[keyof typeof RESUME_SECTION_SYSTEM_KIND];
+
+export const RESUME_SECTION_SYSTEM_KINDS = new Set<string>(
+  Object.values(RESUME_SECTION_SYSTEM_KIND),
+);
+
+export const RESUME_SECTION_ITEM_KIND = {
+  SUMMARY: "SUMMARY",
+  EXPERIENCE: "EXPERIENCE",
+  EDUCATION: "EDUCATION",
+  EMPLOYMENT: "EMPLOYMENT",
+  INTERNSHIP: "INTERNSHIP",
+  PROJECT: "PROJECT",
+  RESEARCH: "RESEARCH",
+  PUBLICATION: "PUBLICATION",
+  COMPETITION: "COMPETITION",
+  CAMPUS_ACTIVITY: "CAMPUS_ACTIVITY",
+  AWARD: "AWARD",
+  SKILL: "SKILL",
+  CERTIFICATION: "CERTIFICATION",
+  CUSTOM: "CUSTOM",
+  MANUAL: "MANUAL",
+} as const;
+
+export type ResumeSectionItemKind =
+  (typeof RESUME_SECTION_ITEM_KIND)[keyof typeof RESUME_SECTION_ITEM_KIND];
+
+export const RESUME_SECTION_ITEM_KINDS = new Set<string>(
+  Object.values(RESUME_SECTION_ITEM_KIND),
+);
+
+export const RESUME_EXPRESSION_KIND = {
+  BODY: "BODY",
+  BULLET: "BULLET",
+  HEADLINE: "HEADLINE",
+} as const;
+
+export type ResumeExpressionKind =
+  (typeof RESUME_EXPRESSION_KIND)[keyof typeof RESUME_EXPRESSION_KIND];
+
+export const RESUME_EXPRESSION_KINDS = new Set<string>(
+  Object.values(RESUME_EXPRESSION_KIND),
+);
+
+export const VERSION_NUMBER_UNIQUE_RETRY = 1;
