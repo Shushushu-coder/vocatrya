@@ -177,6 +177,23 @@ export async function getResumeVariantVersion(
   }
 }
 
+export async function resolveResumeVariantWorkspaceVersion(input: {
+  variantId: string;
+  versionId: string;
+}): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertCareerDataReadable(prisma as never);
+    const data = await variantsFor(user.id).resolveWorkspaceVersion(
+      requireId(input?.variantId, "VARIANT_NOT_FOUND"),
+      requireId(input?.versionId, "VERSION_NOT_FOUND"),
+    );
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to resolve resume version.");
+  }
+}
+
 export async function listSubmittableResumeVersions(): Promise<ActionResult> {
   try {
     const user = await requireUser();

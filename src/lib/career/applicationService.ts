@@ -282,7 +282,7 @@ export class ApplicationService {
           select: {
             id: true,
             versionNumber: true,
-            resumeVariant: { select: { name: true } },
+            resumeVariant: { select: { id: true, name: true } },
           },
         },
         transferredFromAttempt: {
@@ -328,6 +328,8 @@ export class ApplicationService {
               id: attempt.submittedResumeVersion.id,
               title: attempt.submittedResumeVersion.resumeVariant.name,
               versionNumber: attempt.submittedResumeVersion.versionNumber,
+              resumeVariantId: attempt.submittedResumeVersion.resumeVariant.id,
+              resumeVariantVersionId: attempt.submittedResumeVersion.id,
             }
           : null,
         steps: [...attempt.processSteps].sort(compareProcessSteps).map((step) => ({

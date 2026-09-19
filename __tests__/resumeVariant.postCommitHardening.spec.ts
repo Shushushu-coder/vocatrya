@@ -344,6 +344,8 @@ describe("R2 archived variant cannot bind to a new attempt", () => {
       id: versionId,
       title: "General",
       versionNumber: 1,
+      resumeVariantId: variant.id,
+      resumeVariantVersionId: versionId,
     });
     const readable = await service.getVersion(versionId);
     expect(readable.id).toBe(versionId);

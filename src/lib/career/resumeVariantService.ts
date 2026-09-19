@@ -328,6 +328,16 @@ export class ResumeVariantService {
     return version;
   }
 
+  async resolveWorkspaceVersion(variantId: string, versionId: string) {
+    await this.gate();
+    const variant = await this.requireOwnedVariant(variantId);
+    const version = await this.requireOwnedVersion(versionId);
+    if (version.resumeVariant.id !== variant.id) {
+      throw new CareerRuntimeError("VERSION_NOT_FOUND", "Resume version not found");
+    }
+    return { variantId: variant.id, versionId: version.id };
+  }
+
   async updateDraft(versionId: string, fields: HeaderFields) {
     await this.gate();
     await this.requireOwnedEditableVersion(versionId);

@@ -59,7 +59,7 @@ function timeline(
         outcome: "ACTIVE",
         transferredFromAttemptId: null,
         transferredFrom: null,
-        submittedResume: null,
+        submittedResume: null as ApplicationTimelineDTO["attempts"][number]["submittedResume"],
         steps,
       },
     ],
@@ -279,5 +279,39 @@ describe("ApplicationTimelineTab process step actions", () => {
     );
     expect(await screen.findByText("Imported")).toBeInTheDocument();
     expect(screen.queryByTestId("delete-process-step")).not.toBeInTheDocument();
+  });
+
+  it("links a bound submitted resume to the historical workspace version", async () => {
+    const data = timeline([]);
+    data.attempts[0].submittedResume = {
+      id: "ver-1",
+      title: "Campus",
+      versionNumber: 1,
+      resumeVariantId: "var-1",
+      resumeVariantVersionId: "ver-1",
+    };
+    getTimeline.mockResolvedValue({ success: true, data });
+    render(
+      <ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />,
+    );
+    const link = await screen.findByTestId("view-submitted-resume-version");
+    expect(link).toHaveAttribute(
+      "href",
+      "/dashboard/profile/resumes/var-1?version=ver-1",
+    );
+    expect(link).toHaveTextContent("View submitted version (read-only)");
+    expect(link.textContent).not.toContain("var-1");
+    expect(link.textContent).not.toContain("ver-1");
+  });
+
+  it("does not show a historical version link when resume is unbound", async () => {
+    getTimeline.mockResolvedValue({ success: true, data: timeline([]) });
+    render(
+      <ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />,
+    );
+    expect(await screen.findByText("No submitted resume linked")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("view-submitted-resume-version"),
+    ).not.toBeInTheDocument();
   });
 });

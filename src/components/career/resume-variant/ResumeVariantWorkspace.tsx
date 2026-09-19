@@ -124,7 +124,13 @@ function moveIds(ids: string[], index: number, direction: -1 | 1): string[] | nu
   return copy;
 }
 
-export function ResumeVariantWorkspace({ variantId }: { variantId: string }) {
+export function ResumeVariantWorkspace({
+  variantId,
+  initialVersionId,
+}: {
+  variantId: string;
+  initialVersionId?: string;
+}) {
   const { t } = useI18n();
   const [variantName, setVariantName] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
@@ -168,7 +174,6 @@ export function ResumeVariantWorkspace({ variantId }: { variantId: string }) {
         );
         return;
       }
-      setLoadError(false);
       const summary = variantResult.data as {
         name: string;
         currentVersionId: string | null;
@@ -176,10 +181,24 @@ export function ResumeVariantWorkspace({ variantId }: { variantId: string }) {
       const list = (versionList.data as VersionSummary[]) ?? [];
       setVariantName(summary.name);
       setVersions(list);
+      // Fail closed (defense-in-depth): an explicitly requested version that
+      // is missing from this variant list must surface a safe load error
+      // instead of silently falling back to the current version. An omitted
+      // preferredVersionId keeps the current-version fallback.
+      if (
+        preferredVersionId &&
+        !list.some((row) => row.id === preferredVersionId)
+      ) {
+        setLoadError(true);
+        toastError(t("resumeVariants.loadFailed"));
+        return;
+      }
+      setLoadError(false);
       const nextId =
-        preferredVersionId && list.some((row) => row.id === preferredVersionId)
-          ? preferredVersionId
-          : summary.currentVersionId ?? list[list.length - 1]?.id ?? null;
+        preferredVersionId ??
+        summary.currentVersionId ??
+        list[list.length - 1]?.id ??
+        null;
       setSelectedVersionId(nextId);
       if (!nextId) {
         setVersion(null);
@@ -206,8 +225,8 @@ export function ResumeVariantWorkspace({ variantId }: { variantId: string }) {
   );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(initialVersionId);
+  }, [load, initialVersionId]);
 
   const editable = Boolean(
     version &&
@@ -943,9 +962,15 @@ export function ResumeVariantWorkspace({ variantId }: { variantId: string }) {
               ? t("resumeVariants.deleteSectionConfirm")
               : t("resumeVariants.deleteItemConfirm")
         }
+        alertDescription={
+          confirm?.kind === "freeze"
+            ? t("resumeVariants.freezeConfirmDescription")
+            : undefined
+        }
         actionLabel={
           confirm?.kind === "freeze" ? t("resumeVariants.freeze") : t("common.delete")
         }
+        actionVariant={confirm?.kind === "freeze" ? "default" : "destructive"}
       />
     </div>
   );

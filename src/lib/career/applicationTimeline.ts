@@ -2,6 +2,8 @@ export type SubmittedResumeDTO = {
   id: string;
   title: string;
   versionNumber: number;
+  resumeVariantId: string;
+  resumeVariantVersionId: string;
 } | null;
 
 export type ApplicationProcessStepDTO = {

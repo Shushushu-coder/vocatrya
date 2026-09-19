@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { listSubmittableResumeVersions } from "@/actions/resumeVariant.actions";
 import { submitAttemptResumeVersion } from "@/actions/application.actions";
@@ -61,6 +62,7 @@ export function SubmitResumePicker({
 
   const selected = variants.find((variant) => variant.id === variantId);
   const versions = selected?.versions ?? [];
+  const selectedVersion = versions.find((version) => version.id === versionId);
 
   const onSubmit = () => {
     if (!versionId) return;
@@ -77,6 +79,22 @@ export function SubmitResumePicker({
       await onBound();
     });
   };
+
+  if (variants.length === 0) {
+    return (
+      <div className="mt-3 space-y-2" data-testid="submit-resume-picker-empty">
+        <p className="text-sm font-medium">{t("jobs.bindSubmittedResume")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("jobs.submitResumeEmptyVariants")}
+        </p>
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/dashboard/profile/resumes">
+            {t("jobs.submitResumeCreateLink")}
+          </Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 space-y-2" data-testid="submit-resume-picker">
@@ -98,26 +116,47 @@ export function SubmitResumePicker({
             </option>
           ))}
         </select>
-        <select
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={versionId}
-          onChange={(event) => setVersionId(event.target.value)}
-          disabled={!selected}
-          aria-label={t("jobs.selectResumeVersion")}
-        >
-          <option value="">{t("jobs.selectResumeVersion")}</option>
-          {versions.map((version) => (
-            <option key={version.id} value={version.id}>
-              {t("resumeVariants.versionNumber", { number: version.versionNumber })}
-              {" · "}
-              {t(statusKey(version.status))}
-            </option>
-          ))}
-        </select>
+        {selected && versions.length === 0 ? (
+          <div data-testid="submit-resume-picker-no-versions">
+            <p className="text-sm text-muted-foreground">
+              {t("jobs.submitResumeEmptyVersions")}
+            </p>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/dashboard/profile/resumes/${selected.id}`}>
+                {t("jobs.submitResumeOpenLink")}
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <select
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={versionId}
+            onChange={(event) => setVersionId(event.target.value)}
+            disabled={!selected}
+            aria-label={t("jobs.selectResumeVersion")}
+          >
+            <option value="">{t("jobs.selectResumeVersion")}</option>
+            {versions.map((version) => (
+              <option key={version.id} value={version.id}>
+                {t("resumeVariants.versionNumber", { number: version.versionNumber })}
+                {" · "}
+                {t(statusKey(version.status))}
+              </option>
+            ))}
+          </select>
+        )}
         <Button size="sm" onClick={onSubmit} disabled={!versionId || pending}>
           {t("jobs.submitResumeBind")}
         </Button>
       </div>
+      {selectedVersion?.status === "DRAFT" ? (
+        <p
+          className="text-sm text-amber-700"
+          data-testid="submit-draft-lock-warning"
+        >
+          {t("jobs.submitDraftLockWarning")}
+        </p>
+      ) : null}
     </div>
   );
 }

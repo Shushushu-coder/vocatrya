@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { CalendarClock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -283,6 +284,16 @@ export function ApplicationTimelineTab({
                       number: attempt.submittedResume.versionNumber,
                     })}
                   </p>
+                  {attempt.submittedResume.resumeVariantId &&
+                  attempt.submittedResume.resumeVariantVersionId ? (
+                    <Link
+                      className="mt-1 inline-block text-sm text-primary underline"
+                      href={`/dashboard/profile/resumes/${attempt.submittedResume.resumeVariantId}?version=${attempt.submittedResume.resumeVariantVersionId}`}
+                      data-testid="view-submitted-resume-version"
+                    >
+                      {t("jobs.viewSubmittedResumeVersion")}
+                    </Link>
+                  ) : null}
                   {canMutate ? (
                     <SubmitResumePicker
                       attemptId={attempt.id}

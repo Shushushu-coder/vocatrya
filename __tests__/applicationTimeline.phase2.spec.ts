@@ -132,6 +132,8 @@ describe("Application timeline read", () => {
       id: variant.currentVersionId,
       title: "General",
       versionNumber: 1,
+      resumeVariantId: variant.id,
+      resumeVariantVersionId: variant.currentVersionId,
     });
   });
 

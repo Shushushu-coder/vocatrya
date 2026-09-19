@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,7 @@ export function ResumeVariantList() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [archiveId, setArchiveId] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const result = await listResumeVariants();
@@ -111,10 +112,12 @@ export function ResumeVariantList() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Input
+            ref={nameInputRef}
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder={t("resumeVariants.name")}
             className="max-w-sm"
+            data-testid="resume-variant-name-input"
           />
           <Button onClick={() => void onCreate()} disabled={creating}>
             {t("resumeVariants.create")}
@@ -123,7 +126,41 @@ export function ResumeVariantList() {
       </Card>
 
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("resumeVariants.empty")}</p>
+        <Card data-testid="resume-variant-empty-state">
+          <CardContent className="space-y-3 p-4">
+            <p className="text-sm text-muted-foreground">
+              {t("resumeVariants.emptyLead")}
+            </p>
+            <p className="text-sm font-medium">{t("resumeVariants.emptyHowTo")}</p>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>{t("resumeVariants.emptyStep1")}</li>
+              <li>{t("resumeVariants.emptyStep2")}</li>
+              <li>{t("resumeVariants.emptyStep3")}</li>
+              <li>{t("resumeVariants.emptyStep4")}</li>
+            </ol>
+            <p className="text-sm text-muted-foreground">
+              {t("resumeVariants.emptyProfileHint")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => {
+                  nameInputRef.current?.scrollIntoView({
+                    block: "center",
+                    behavior: "smooth",
+                  });
+                  nameInputRef.current?.focus();
+                }}
+              >
+                {t("resumeVariants.create")}
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/dashboard/profile/application">
+                  {t("resumeVariants.completeApplicationProfile")}
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-3">
           {rows.map((row) => (
