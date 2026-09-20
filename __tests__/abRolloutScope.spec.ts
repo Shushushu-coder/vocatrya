@@ -58,6 +58,10 @@ describe("direct env read sites", () => {
       path.join(REPO, "src/lib/career/identities.ts"),
       path.join(REPO, "docker-compose.yml"),
       path.join(REPO, ".env.example"),
+      // Windows Desktop Shell POC forces the disposable backend scope to
+      // fail-closed "none" for isolation. It never reads the scope to enable
+      // product capabilities; see WINDOWS_DESKTOP_SHELL_POC audit.
+      path.join(REPO, "desktop", "main", "runtime.js"),
     ]);
     const violations: string[] = [];
     for (const file of walk(REPO)) {
