@@ -15,6 +15,8 @@ const {
 } = require("./runtime");
 const { resolveAndEnsureDesktopLayout, buildDesktopFilesystemConfig } = require("./local-data");
 const { loadOrCreateDesktopSecrets } = require("./secrets");
+const { prepareDatabase } = require("./database-migration");
+const { runStartupSequence } = require("./startup");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -58,6 +60,7 @@ if (!singleInstance) {
   let mainWindow;
   let backend;
   let backendPort;
+  let migrationChild = null;
   let shuttingDown = false;
   let backendExpectedExit = false;
   let logDirectory;
@@ -141,40 +144,72 @@ if (!singleInstance) {
         secretStorePath: foundationConfig.secretStorePath,
         safeStorage,
       });
-      const started = await startBackendWithRetry({
-        attempts: DEFAULT_PORT_ATTEMPTS,
-        allocatePort: allocateLoopbackPort,
-        spawnChild: async (port) => {
-          const env = buildBackendEnvironment({
-            port,
-            dataDir: foundationLayout.dataDir,
-            baseEnv: process.env,
-            secret: secrets.authSecret,
-            encryptionKey: secrets.encryptionKey,
-            uploadsDir: foundationConfig.uploadsDir,
+      // Formal startup chain: database preparation runs exactly ONCE per
+      // launch and must succeed before any backend spawn is attempted.
+      // Backend port/readiness retries stay inside startBackend and never
+      // re-run migration or backup. Any backup/migration/integrity failure
+      // is fail-closed: no backend start, no window.
+      await runStartupSequence({
+        prepareDatabase: () =>
+          prepareDatabase({
+            backendRoot,
+            databasePath: foundationConfig.databasePath,
             databaseUrl: foundationConfig.databaseUrl,
-          });
-          backendExpectedExit = true;
-          const child = spawnBackend({
+            tmpDir: foundationLayout.tmpDir,
+            backupsDir: foundationLayout.backupsDir,
+            logDirectory: foundationConfig.logDirectory,
+            appVersion: app.getVersion(),
             nodeExecutable,
-            serverPath,
-            cwd: backendRoot,
-            env,
-            logDirectory,
+            baseEnv: process.env,
+            onMigrationChild: (child) => {
+              migrationChild = child;
+            },
+          }),
+        startBackend: async () => {
+          const started = await startBackendWithRetry({
+            attempts: DEFAULT_PORT_ATTEMPTS,
+            allocatePort: allocateLoopbackPort,
+            spawnChild: async (port) => {
+              const env = buildBackendEnvironment({
+                port,
+                dataDir: foundationLayout.dataDir,
+                baseEnv: process.env,
+                secret: secrets.authSecret,
+                encryptionKey: secrets.encryptionKey,
+                uploadsDir: foundationConfig.uploadsDir,
+                databaseUrl: foundationConfig.databaseUrl,
+              });
+              backendExpectedExit = true;
+              const child = spawnBackend({
+                nodeExecutable,
+                serverPath,
+                cwd: backendRoot,
+                env,
+                logDirectory,
+              });
+              backend = child;
+              backendPort = port;
+              child.once("exit", (code, signal) => {
+                if (!backendExpectedExit && !shuttingDown) showBackendCrash(code, signal);
+              });
+              return child;
+            },
+            waitReady: (port, child) => waitForReadiness(`http://127.0.0.1:${port}/signin`, { child }),
+            terminate: terminateChildTree,
           });
-          backend = child;
-          backendPort = port;
-          child.once("exit", (code, signal) => {
-            if (!backendExpectedExit && !shuttingDown) showBackendCrash(code, signal);
-          });
-          return child;
+          backendExpectedExit = false;
+          console.log(`Desktop backend ready at http://127.0.0.1:${started.port} using ${nodeExecutable}`);
+          return started;
         },
-        waitReady: (port, child) => waitForReadiness(`http://127.0.0.1:${port}/signin`, { child }),
-        terminate: terminateChildTree,
+        createWindow: async () => {
+          await createMainWindow();
+        },
+        onFailure: async () => {
+          migrationChild = null;
+        },
       });
-      backendExpectedExit = false;
-      console.log(`Desktop backend ready at http://127.0.0.1:${started.port} using ${nodeExecutable}`);
-      return;
+      migrationChild = null;
+      return true;
     }
     fs.mkdirSync(dataRoot(), { recursive: true });
     logDirectory = path.join(stateRoot(), "logs");
@@ -203,6 +238,7 @@ if (!singleInstance) {
     });
     backendExpectedExit = false;
     console.log(`Desktop backend ready at http://127.0.0.1:${started.port} using ${nodeExecutable}`);
+    return false;
   }
 
   async function createMainWindow() {
@@ -235,21 +271,28 @@ if (!singleInstance) {
 
   app.whenReady().then(async () => {
     try {
-      await startBackend();
-      await createMainWindow();
+      const windowOpened = await startBackend();
+      if (!windowOpened) {
+        await createMainWindow();
+      }
     } catch (error) {
-      showStartupFailure(error);
+      if (!shuttingDown) {
+        showStartupFailure(error);
+      }
       await terminateChildTree(backend);
       setTimeout(() => app.quit(), 100);
     }
   });
 
   app.on("before-quit", (event) => {
-    if (!backend || shuttingDown) return;
+    const ownedMigrationChild = migrationChild && migrationChild.exitCode === null ? migrationChild : null;
+    if ((!backend && !ownedMigrationChild) || shuttingDown) return;
     event.preventDefault();
     shuttingDown = true;
     backendExpectedExit = true;
-    terminateChildTree(backend).finally(() => app.quit());
+    // Only owned startup children are terminated here; unrelated
+    // Node/Prisma processes are never touched.
+    Promise.all([terminateChildTree(ownedMigrationChild), terminateChildTree(backend)]).finally(() => app.quit());
   });
 
   app.on("window-all-closed", () => {
