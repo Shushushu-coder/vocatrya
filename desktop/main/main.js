@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, dialog, shell, safeStorage } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const {
@@ -13,6 +13,43 @@ const {
   terminateChildTree,
   waitForReadiness,
 } = require("./runtime");
+const { resolveAndEnsureDesktopLayout, buildDesktopFilesystemConfig } = require("./local-data");
+const { loadOrCreateDesktopSecrets } = require("./secrets");
+
+// Windows desktop local-data foundation. This resolves BEFORE the
+// single-instance lock and before app ready so the Chromium singleton lock,
+// session state, and os_crypt all live inside the stable local-first root
+// instead of roaming %APPDATA%\Electron (whose stale locks/keys fail closed).
+// Packaged runtime always uses %LOCALAPPDATA%\Vocatrya. Development/POC uses
+// the foundation only when the internal VOCATRYA_DESKTOP_DATA_ROOT override is
+// set; otherwise the legacy disposable .codex-tmp/desktop-poc layout is kept
+// so the real user profile is never touched during ordinary development.
+function shouldUseDesktopFoundation() {
+  if (app.isPackaged) return true;
+  return Boolean((process.env.VOCATRYA_DESKTOP_DATA_ROOT || "").trim());
+}
+
+let foundationLayout = null;
+let foundationConfig = null;
+let foundationInitError = null;
+if (shouldUseDesktopFoundation()) {
+  try {
+    foundationLayout = resolveAndEnsureDesktopLayout();
+    foundationConfig = buildDesktopFilesystemConfig(foundationLayout);
+    // Pin Chromium/Electron session state inside the local-first boundary
+    // before app ready. Database files, uploads, and secret ciphertext
+    // never live under this session directory.
+    app.setPath("userData", foundationLayout.electronDir);
+    try {
+      app.setPath("sessionData", foundationLayout.electronDir);
+    } catch {
+      // Older Electron builds honor userData pinning only; session state
+      // then stays within the pinned profile by default.
+    }
+  } catch (error) {
+    foundationInitError = error;
+  }
+}
 
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) {
@@ -81,18 +118,66 @@ if (!singleInstance) {
   }
 
   async function startBackend() {
+    if (foundationInitError) {
+      throw foundationInitError;
+    }
     const backendRoot = runtimeRoot();
     const serverPath = path.join(backendRoot, "server.js");
     if (!fs.existsSync(serverPath)) {
       throw new Error(`Standalone backend not found: ${serverPath}. Run npm run desktop:assemble first.`);
     }
-    fs.mkdirSync(dataRoot(), { recursive: true });
-    logDirectory = path.join(stateRoot(), "logs");
     const nodeExecutable = resolveNodeExecutable({
       isPackaged: app.isPackaged,
       appPath: app.isPackaged ? process.resourcesPath : process.cwd(),
       env: process.env,
     });
+    if (foundationConfig) {
+      fs.mkdirSync(foundationConfig.logDirectory, { recursive: true });
+      logDirectory = foundationConfig.logDirectory;
+      // Secrets resolve only after app ready with DPAPI-backed safeStorage.
+      // Fail-closed: corruption or unavailable encryption aborts startup
+      // without regenerating, deleting, or logging secret values.
+      const secrets = loadOrCreateDesktopSecrets({
+        secretStorePath: foundationConfig.secretStorePath,
+        safeStorage,
+      });
+      const started = await startBackendWithRetry({
+        attempts: DEFAULT_PORT_ATTEMPTS,
+        allocatePort: allocateLoopbackPort,
+        spawnChild: async (port) => {
+          const env = buildBackendEnvironment({
+            port,
+            dataDir: foundationLayout.dataDir,
+            baseEnv: process.env,
+            secret: secrets.authSecret,
+            encryptionKey: secrets.encryptionKey,
+            uploadsDir: foundationConfig.uploadsDir,
+            databaseUrl: foundationConfig.databaseUrl,
+          });
+          backendExpectedExit = true;
+          const child = spawnBackend({
+            nodeExecutable,
+            serverPath,
+            cwd: backendRoot,
+            env,
+            logDirectory,
+          });
+          backend = child;
+          backendPort = port;
+          child.once("exit", (code, signal) => {
+            if (!backendExpectedExit && !shuttingDown) showBackendCrash(code, signal);
+          });
+          return child;
+        },
+        waitReady: (port, child) => waitForReadiness(`http://127.0.0.1:${port}/signin`, { child }),
+        terminate: terminateChildTree,
+      });
+      backendExpectedExit = false;
+      console.log(`Desktop backend ready at http://127.0.0.1:${started.port} using ${nodeExecutable}`);
+      return;
+    }
+    fs.mkdirSync(dataRoot(), { recursive: true });
+    logDirectory = path.join(stateRoot(), "logs");
     const started = await startBackendWithRetry({
       attempts: DEFAULT_PORT_ATTEMPTS,
       allocatePort: allocateLoopbackPort,

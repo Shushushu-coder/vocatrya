@@ -20,7 +20,7 @@
     "desktop:poc": "npm run build && npm run desktop:assemble && npm run desktop:prepare-runtime && npm run desktop:prepare-db && electron desktop/main/main.js",
     "desktop:smoke": "electron desktop/scripts/smoke-electron.cjs",
     "lint": "eslint .",
-    "test:desktop": "vitest run --config desktop/vitest.config.mjs desktop/main/runtime.test.mjs",
+    "test:desktop": "vitest run --config desktop/vitest.config.mjs desktop/main",
     "test": "vitest run",
     "test:e2e": "npx playwright test --project=chromium",
     "test:watch": "vitest",
@@ -136,3 +136,4 @@
     "postcss": "^8.5.12"
   }
 }
+

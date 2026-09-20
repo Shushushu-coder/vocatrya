@@ -49,7 +49,7 @@ function toPrismaFileUrl(filePath) {
   return `file:${path.resolve(filePath).replaceAll("\\", "/")}`;
 }
 
-function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret() }) {
+function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl }) {
   assertLoopbackHost("127.0.0.1");
   const env = {
     NODE_ENV: "production",
@@ -58,7 +58,7 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
     NEXTAUTH_URL: `http://127.0.0.1:${port}`,
     AUTH_TRUST_HOST: "true",
     AUTH_SECRET: secret,
-    DATABASE_URL: toPrismaFileUrl(path.join(dataDir, "desktop-poc.db")),
+    DATABASE_URL: databaseUrl || toPrismaFileUrl(path.join(dataDir, "desktop-poc.db")),
     TZ: baseEnv.TZ || "UTC",
     NEXT_TELEMETRY_DISABLED: "1",
     VOCATRYA_AB_ROLLOUT_SCOPE: "none",
@@ -72,8 +72,18 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA"]) {
     if (baseEnv[key]) env[key] = baseEnv[key];
   }
+  // Desktop foundation injection: stable uploads root + persistent encryption
+  // key. Both are explicit parameters only; inherited host values are never
+  // trusted here so Docker/web defaults stay untouched.
+  for (const key of ["UPLOADS_DIR", "VOCATRYA_UPLOADS_DIR"]) delete env[key];
+  if (uploadsDir) env.UPLOADS_DIR = uploadsDir;
   for (const key of SENSITIVE_ENV_KEYS) {
-    if (key !== "AUTH_SECRET" && key !== "DATABASE_URL") delete env[key];
+    if (key !== "AUTH_SECRET" && key !== "DATABASE_URL" && key !== "ENCRYPTION_KEY") delete env[key];
+  }
+  if (encryptionKey) {
+    env.ENCRYPTION_KEY = encryptionKey;
+  } else {
+    delete env.ENCRYPTION_KEY;
   }
   return env;
 }
@@ -262,3 +272,5 @@ module.exports = {
   terminateChildTree,
   waitForReadiness,
 };
+
+

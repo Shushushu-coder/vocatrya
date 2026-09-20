@@ -224,8 +224,10 @@ export const APP_CONSTANTS = {
   // Not the same thing as jobsync.input.truncated — see spec section 8.
   TELEMETRY_MAX_ATTR_CHARS: 32_000,
 
-  // File uploads
-  UPLOADS_DIR: process.env.NODE_ENV !== "production" ? "data" : "/data",
+  // File uploads: desktop packaged runtime injects an explicit absolute
+  // UPLOADS_DIR (stable <data-root>/files); Docker keeps /data and dev keeps
+  // data. No Electron import is permitted here - plain env contract only.
+  UPLOADS_DIR: (() => { const o = ((process.env.UPLOADS_DIR || process.env.VOCATRYA_UPLOADS_DIR) || "").trim(); if (o) return o; return process.env.NODE_ENV !== "production" ? "data" : "/data"; })(),
 
   // Backup caps. Everything is held in RAM at once, so the upload cap is what
   // bounds memory on a box also running Next and the scheduler; the
@@ -363,3 +365,4 @@ export const SIDEBAR_LINKS = [
     devOnly: true,
   },
 ];
+
