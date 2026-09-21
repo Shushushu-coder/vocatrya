@@ -41,7 +41,11 @@
     "eval:mcp-tools": "npm --prefix evals run eval:mcp-tools",
     "eval:agent-chat": "npm --prefix evals run eval:agent-chat",
     "eval:all": "npm --prefix evals run eval:all",
-    "eval:view": "npm --prefix evals run eval:view"
+    "eval:view": "npm --prefix evals run eval:view",
+    "desktop:release:manifest": "node desktop/scripts/release-manifest.mjs",
+    "desktop:release:verify": "node desktop/scripts/release-verify.mjs",
+    "desktop:release:gate": "node desktop/scripts/release-gate.mjs --policy internal-unsigned",
+    "desktop:release:gate:public": "node desktop/scripts/release-gate.mjs --policy public-signed"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.4",

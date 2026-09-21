@@ -8,6 +8,7 @@ import { assembleDesktopBackend } from "./assemble.mjs";
 import { generateNotices } from "./generate-notices.mjs";
 import { prepareBundledNode } from "./node-runtime.mjs";
 import { verifyInstalledLayout } from "./verify-installer.mjs";
+import { migrationNamesSha256 } from "./release-manifest.mjs";
 
 const require = createRequire(import.meta.url);
 const identity = require("../main/installer-identity.js");
@@ -55,6 +56,14 @@ function sha256File(filePath) {
   return hash.digest("hex");
 }
 
+function installedPackageVersion(name) {
+  try {
+    return require(path.join(repoRoot, "node_modules", name, "package.json")).version;
+  } catch {
+    return "unknown";
+  }
+}
+
 function packageVersion() {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
 }
@@ -93,6 +102,11 @@ const buildInfo = {
   productName: identity.PRODUCT_NAME,
   nodeVersion: identity.NODE_VERSION,
   nodeExeSha256: identity.NODE_EXE_SHA256,
+  electronVersion: installedPackageVersion("electron"),
+  prismaVersion: installedPackageVersion("prisma"),
+  architecture: identity.TARGET_ARCH,
+  migrationCount: assembly.prismaRuntime.migrationCount,
+  migrationNamesSha256: migrationNamesSha256(assembly.prismaRuntime.migrationNames || []),
   codeSigning: "NOT_IMPLEMENTED",
   autoUpdate: "NOT_IMPLEMENTED",
 };
