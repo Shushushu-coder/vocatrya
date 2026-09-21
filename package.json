@@ -2,6 +2,9 @@
   "name": "vocatrya",
   "version": "1.1.20",
   "private": true,
+  "author": "Vocatrya contributors",
+  "description": "The self-hosted career companion with AI-powered resume review, job matching, and automated discovery",
+  "main": "desktop/main/main.js",
   "browserslist": [
     "chrome >= 111",
     "edge >= 111",
@@ -19,6 +22,9 @@
     "desktop:dev": "npm run desktop:assemble && npm run desktop:prepare-db && electron desktop/main/main.js",
     "desktop:poc": "npm run build && npm run desktop:assemble && npm run desktop:prepare-runtime && npm run desktop:prepare-db && electron desktop/main/main.js",
     "desktop:smoke": "electron desktop/scripts/smoke-electron.cjs",
+    "desktop:package": "node desktop/scripts/package.mjs --dir",
+    "desktop:installer": "node desktop/scripts/package.mjs",
+    "desktop:installer:verify": "node desktop/scripts/verify-installer.mjs",
     "lint": "eslint .",
     "test:desktop": "vitest run --config desktop/vitest.config.mjs desktop/main",
     "test": "vitest run",
@@ -119,9 +125,11 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.3",
     "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.4",
     "eslint-config-next": "15.5.25",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "jsdom": "^26.1.0",
     "postcss": "^8.5.12",
     "prisma": "^6.19.0",
     "tailwindcss": "^4.3.3",
@@ -136,4 +144,3 @@
     "postcss": "^8.5.12"
   }
 }
-

@@ -1,0 +1,83 @@
+# Vocatrya Windows x64 NSIS installer configuration.
+# Review independently of Career/backend product code.
+# Version comes from package.json; do not add a second desktop version.
+
+appId: com.vocatrya.desktop
+productName: Vocatrya
+copyright: Copyright (c) 2026 Vocatrya contributors
+
+directories:
+  output: .codex-tmp/windows-installer/dist
+
+files:
+  - package.json
+  - LICENSE
+  - desktop/main/**/*.js
+  - desktop/main/**/*.cjs
+  - "!desktop/main/**/*.test.js"
+  - "!desktop/main/**/*.test.mjs"
+  - "!desktop/main/test-runtime.mjs"
+  - "!node_modules"
+  - "!node_modules/**"
+
+extraMetadata:
+  main: desktop/main/main.js
+  name: vocatrya
+  author:
+    name: Vocatrya contributors
+
+asar: true
+npmRebuild: false
+nodeGypRebuild: false
+electronLanguages:
+  - en-US
+  - zh-CN
+afterPack: desktop/scripts/after-pack.cjs
+
+extraResources:
+  - from: .codex-tmp/windows-installer/stage/resources/backend
+    to: backend
+    filter:
+      - "**/*"
+      - "!node_modules"
+      - "!node_modules/**"
+  - from: .codex-tmp/windows-installer/stage/resources/backend/node_modules
+    to: backend/node_modules
+    filter:
+      - "**/*"
+      - "**/.*"
+      - "**/.prisma/**"
+  - from: .codex-tmp/windows-installer/stage/resources/runtime
+    to: runtime
+  - from: .codex-tmp/windows-installer/stage/resources/licenses
+    to: licenses
+  - from: .codex-tmp/windows-installer/stage/resources/build-info.json
+    to: build-info.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Vocatrya-Setup-${version}-x64.${ext}
+  executableName: Vocatrya
+  requestedExecutionLevel: asInvoker
+  signAndEditExecutable: false
+  forceCodeSigning: false
+  legalTrademarks: Vocatrya contributors
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: false
+  packElevateHelper: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Vocatrya
+  uninstallDisplayName: Vocatrya
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false
+  license: LICENSE
+  artifactName: Vocatrya-Setup-${version}-x64.${ext}
+  include: desktop/installer.nsh

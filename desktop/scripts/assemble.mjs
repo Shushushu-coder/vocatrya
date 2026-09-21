@@ -7,10 +7,8 @@ const require = createRequire(import.meta.url);
 const { findMissingPrismaRuntimeArtifacts, isForbiddenArtifact, scanForbiddenArtifacts } = require("../main/artifacts.js");
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const standaloneRoot = path.join(repoRoot, ".next", "standalone");
-const outputRoot = path.join(repoRoot, ".codex-tmp", "desktop-poc");
-const backendRoot = path.join(outputRoot, "backend");
-const packagedBackendRoot = path.join(outputRoot, "resources", "backend");
+const DEFAULT_OUTPUT_ROOT = path.join(repoRoot, ".codex-tmp", "desktop-poc");
+const backendRoot = path.join(DEFAULT_OUTPUT_ROOT, "backend");
 
 function copyFiltered(source, destination) {
   if (!fs.existsSync(source)) throw new Error(`Required build path is missing: ${source}`);
@@ -18,12 +16,6 @@ function copyFiltered(source, destination) {
     recursive: true,
     filter: (entry) => !isForbiddenArtifact(entry),
   });
-}
-
-function required(relativePath) {
-  const absolute = path.join(backendRoot, relativePath);
-  if (!fs.existsSync(absolute)) throw new Error(`POC assembly missing ${relativePath}`);
-  return absolute;
 }
 
 // Offline migration runtime: everything `prisma migrate deploy` needs,
@@ -40,6 +32,28 @@ function copyPrismaPackage(repoRootDir, targetModulesDir, packageName) {
     recursive: true,
     filter: (entry) => !isForbiddenArtifact(entry) && !path.basename(entry).includes(".tmp"),
   });
+}
+
+function readPackageDependencies(repoRootDir, packageName) {
+  const packageJsonPath = path.join(repoRootDir, "node_modules", ...packageName.split("/"), "package.json");
+  if (!fs.existsSync(packageJsonPath)) return [];
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+    return Object.keys(pkg.dependencies || {});
+  } catch {
+    return [];
+  }
+}
+
+function copyPrismaPackageTree(repoRootDir, targetModulesDir, packageName, seen = new Set()) {
+  if (seen.has(packageName)) return;
+  const source = path.join(repoRootDir, "node_modules", ...packageName.split("/"));
+  if (!fs.existsSync(source)) return;
+  seen.add(packageName);
+  copyPrismaPackage(repoRootDir, targetModulesDir, packageName);
+  for (const dep of readPackageDependencies(repoRootDir, packageName)) {
+    copyPrismaPackageTree(repoRootDir, targetModulesDir, dep, seen);
+  }
 }
 
 export function assemblePrismaRuntime({ repoRoot: root = repoRoot, backendRoot: backend = backendRoot } = {}) {
@@ -59,8 +73,9 @@ export function assemblePrismaRuntime({ repoRoot: root = repoRoot, backendRoot: 
     filter: (entry) => !isForbiddenArtifact(entry),
   });
 
+  const copied = new Set();
   for (const packageName of PRISMA_PACKAGES) {
-    copyPrismaPackage(root, targetModulesDir, packageName);
+    copyPrismaPackageTree(root, targetModulesDir, packageName, copied);
   }
 
   const dbToolSource = path.join(root, "desktop", "main", "db-tool.cjs");
@@ -99,23 +114,34 @@ export function assemblePrismaRuntime({ repoRoot: root = repoRoot, backendRoot: 
   return inventory;
 }
 
-const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMainModule) {
-  fs.rmSync(backendRoot, { recursive: true, force: true });
-  fs.rmSync(packagedBackendRoot, { recursive: true, force: true });
-  fs.mkdirSync(outputRoot, { recursive: true });
-  const excludedSourceArtifacts = scanForbiddenArtifacts(standaloneRoot).map((entry) => path.relative(standaloneRoot, entry));
-  copyFiltered(standaloneRoot, backendRoot);
-  copyFiltered(path.join(repoRoot, "public"), path.join(backendRoot, "public"));
-  copyFiltered(path.join(repoRoot, ".next", "static"), path.join(backendRoot, ".next", "static"));
-  const prismaRuntime = assemblePrismaRuntime({ repoRoot, backendRoot });
-  fs.cpSync(backendRoot, packagedBackendRoot, { recursive: true });
+export function assembleDesktopBackend({
+  repoRoot: root = repoRoot,
+  outputRoot: output = DEFAULT_OUTPUT_ROOT,
+  standaloneRoot: standalone = path.join(root, ".next", "standalone"),
+} = {}) {
+  const assembledBackendRoot = path.join(output, "backend");
+  const assembledPackagedBackendRoot = path.join(output, "resources", "backend");
+  fs.rmSync(assembledBackendRoot, { recursive: true, force: true });
+  fs.rmSync(assembledPackagedBackendRoot, { recursive: true, force: true });
+  fs.mkdirSync(output, { recursive: true });
+  const excludedSourceArtifacts = scanForbiddenArtifacts(standalone).map((entry) => path.relative(standalone, entry));
+  copyFiltered(standalone, assembledBackendRoot);
+  copyFiltered(path.join(root, "public"), path.join(assembledBackendRoot, "public"));
+  copyFiltered(path.join(root, ".next", "static"), path.join(assembledBackendRoot, ".next", "static"));
+  const prismaRuntime = assemblePrismaRuntime({ repoRoot: root, backendRoot: assembledBackendRoot });
+  fs.cpSync(assembledBackendRoot, assembledPackagedBackendRoot, { recursive: true });
 
-  const serverPath = required("server.js");
-  const prismaEngine = required("node_modules/.prisma/client/query_engine-windows.dll.node");
-  const sharpRuntime = required("node_modules/@img/sharp-win32-x64/index.cjs");
-  const forbidden = scanForbiddenArtifacts(backendRoot);
-  forbidden.push(...scanForbiddenArtifacts(packagedBackendRoot));
+  function requireAssembled(relativePath) {
+    const absolute = path.join(assembledBackendRoot, relativePath);
+    if (!fs.existsSync(absolute)) throw new Error(`POC assembly missing ${relativePath}`);
+    return absolute;
+  }
+
+  const serverPath = requireAssembled("server.js");
+  const prismaEngine = requireAssembled("node_modules/.prisma/client/query_engine-windows.dll.node");
+  const sharpRuntime = requireAssembled("node_modules/@img/sharp-win32-x64/index.cjs");
+  const forbidden = scanForbiddenArtifacts(assembledBackendRoot);
+  forbidden.push(...scanForbiddenArtifacts(assembledPackagedBackendRoot));
   if (forbidden.length > 0) {
     throw new Error(`Forbidden artifacts found in desktop bundle:\n${forbidden.join("\n")}`);
   }
@@ -123,15 +149,20 @@ if (isMainModule) {
   const inventory = {
     generatedAt: new Date().toISOString(),
     serverPath,
-    publicAssets: fs.existsSync(path.join(backendRoot, "public")),
-    nextStaticAssets: fs.existsSync(path.join(backendRoot, ".next", "static")),
+    publicAssets: fs.existsSync(path.join(assembledBackendRoot, "public")),
+    nextStaticAssets: fs.existsSync(path.join(assembledBackendRoot, ".next", "static")),
     prismaQueryEngine: prismaEngine,
     sharpWindowsRuntime: sharpRuntime,
     prismaRuntime,
-    packagedBackendRoot,
+    packagedBackendRoot: assembledPackagedBackendRoot,
     excludedSourceArtifacts,
     forbiddenArtifacts: [],
   };
-  fs.writeFileSync(path.join(outputRoot, "bundle-inventory.json"), `${JSON.stringify(inventory, null, 2)}\n`, "utf8");
-  console.log(JSON.stringify(inventory, null, 2));
+  fs.writeFileSync(path.join(output, "bundle-inventory.json"), `${JSON.stringify(inventory, null, 2)}\n`, "utf8");
+  return inventory;
+}
+
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMainModule) {
+  console.log(JSON.stringify(assembleDesktopBackend(), null, 2));
 }

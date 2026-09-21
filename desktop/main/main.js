@@ -1,6 +1,9 @@
 const { app, BrowserWindow, dialog, shell, safeStorage } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const { DESKTOP_APP_ID } = require("./installer-identity");
+
+app.setAppUserModelId(DESKTOP_APP_ID);
 const {
   DEFAULT_PORT_ATTEMPTS,
   allocateLoopbackPort,
@@ -269,8 +272,23 @@ if (!singleInstance) {
     mainWindow.focus();
   });
 
+  function readBuildInfo() {
+    try {
+      const infoPath = path.join(process.resourcesPath, "build-info.json");
+      return JSON.parse(fs.readFileSync(infoPath, "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
   app.whenReady().then(async () => {
     try {
+      const buildInfo = readBuildInfo();
+      if (buildInfo) {
+        console.log(
+          `Vocatrya ${buildInfo.appVersion} commit ${buildInfo.buildCommit} (${DESKTOP_APP_ID})`,
+        );
+      }
       const windowOpened = await startBackend();
       if (!windowOpened) {
         await createMainWindow();
