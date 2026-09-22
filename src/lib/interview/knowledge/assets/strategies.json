@@ -1,0 +1,135 @@
+{
+  "metadata": {
+    "version": "v1.0",
+    "type": "strategies",
+    "frozen_at": "2026-04-24T08:57:49+00:00"
+  },
+  "entries": [
+    {
+      "id": "str_001",
+      "target_problem_type": "Missing Situation Context",
+      "suggestion_template": "先用一句话补充事件背景，包括时间场景、参与方、你的角色和当时的关键约束。",
+      "suggestion_with_reason": "缺少场景背景时，面试官难以判断案例的复杂度和你的角色位置。建议先用一句话补充事件背景，包括时间场景、参与方、你的角色和当时的关键约束。",
+      "example": "改进前：有一次我负责处理一个项目问题。 → 改进后：在上季度一个面向企业客户的交付项目中，我作为项目协调人，需要在上线前两周处理需求变更带来的排期冲突。"
+    },
+    {
+      "id": "str_002",
+      "target_problem_type": "Task-Action Confusion",
+      "suggestion_template": "把任务目标和实际行动分成两句话表达，先说明你要达成什么，再说明你做了什么。",
+      "suggestion_with_reason": "任务和行动混在一起时，面试官会难以区分你的责任目标和执行过程。建议把任务目标和实际行动分成两句话表达，先说明你要达成什么，再说明你做了什么。",
+      "example": "改进前：我的任务是去协调大家同步进度。 → 改进后：我的任务是让三个团队在周五前确认上线方案；我先整理分歧点，再组织一次负责人同步会。"
+    },
+    {
+      "id": "str_003",
+      "target_problem_type": "Missing Action Detail",
+      "suggestion_template": "补充两到三个关键行动步骤，说明你联系了谁、判断了什么、产出了什么。",
+      "suggestion_with_reason": "行动细节不足时，面试官只能听到概括动作，不能评估你的实际贡献。建议补充两到三个关键行动步骤，说明你联系了谁、判断了什么、产出了什么。",
+      "example": "改进前：我就协调各方把问题解决了。 → 改进后：我先找产品确认优先级，再和研发拆分影响范围，最后整理出三项可延期需求给客户确认。"
+    },
+    {
+      "id": "str_004",
+      "target_problem_type": "Unclear Result",
+      "suggestion_template": "在结尾补一句具体结果，说明问题最终状态、反馈来源或带来的变化。",
+      "suggestion_with_reason": "结果不清楚时，面试官无法判断你的行动是否真正产生了影响。建议在结尾补一句具体结果，说明问题最终状态、反馈来源或带来的变化。",
+      "example": "改进前：最后整体还不错。 → 改进后：最后项目按原定日期上线，客户在验收会上确认核心流程满足上线要求。"
+    },
+    {
+      "id": "str_005",
+      "target_problem_type": "Vague Language",
+      "suggestion_template": "把模糊词替换成具体对象、动作或范围，例如说明是哪类人、哪项问题、哪个流程。",
+      "suggestion_with_reason": "模糊词过多时，面试官难以还原实际发生的事情。建议把模糊词替换成具体对象、动作或范围，例如说明是哪类人、哪项问题、哪个流程。",
+      "example": "改进前：我处理了一些相关问题。 → 改进后：我处理了客服团队反馈的三类高频退款问题，包括重复扣款、状态延迟和通知缺失。"
+    },
+    {
+      "id": "str_006",
+      "target_problem_type": "Generic Example",
+      "suggestion_template": "把原则性回答改成一次具体经历，补充项目、时间、对象和当时发生的事件。",
+      "suggestion_with_reason": "例子过于通用时，面试官难以判断这是否来自真实经验。建议把原则性回答改成一次具体经历，补充项目、时间、对象和当时发生的事件。",
+      "example": "改进前：我一般都会先沟通再复盘。 → 改进后：在三月的候选人邀约项目中，我发现邀约转化下降后，先和两位招聘顾问复盘话术，再调整邮件模板。"
+    },
+    {
+      "id": "str_007",
+      "target_problem_type": "Missing Quantitative Detail",
+      "suggestion_template": "补充能表达规模、频率、时长或变化幅度的数字，无法精确时给出合理区间。",
+      "suggestion_with_reason": "缺少数量信息时，面试官难以判断问题规模和结果影响。建议补充能表达规模、频率、时长或变化幅度的数字，无法精确时给出合理区间。",
+      "example": "改进前：效率提升了不少。 → 改进后：平均处理时间从约两天缩短到半天以内，每周能多处理二十多条请求。"
+    },
+    {
+      "id": "str_008",
+      "target_problem_type": "Overgeneralized Claim",
+      "suggestion_template": "给结论加上适用边界，说明它适用于什么场景、团队规模或约束条件。",
+      "suggestion_with_reason": "结论过度泛化时，面试官会怀疑你是否能根据情境调整判断。建议给结论加上适用边界，说明它适用于什么场景、团队规模或约束条件。",
+      "example": "改进前：这类问题都应该先开会对齐。 → 改进后：在跨团队依赖多、上线时间紧的场景里，我会先开短会对齐优先级和责任人。"
+    },
+    {
+      "id": "str_009",
+      "target_problem_type": "Off-Topic Response",
+      "suggestion_template": "先复述题目中的核心要求，再选择一个直接匹配该要求的案例展开。",
+      "suggestion_with_reason": "回答偏题时，面试官无法用当前案例评价题目要考察的能力。建议先复述题目中的核心要求，再选择一个直接匹配该要求的案例展开。",
+      "example": "改进前：被问冲突处理时，我介绍了项目架构。 → 改进后：被问冲突处理时，我先说明一次和产品经理在优先级上产生分歧的经历。"
+    },
+    {
+      "id": "str_010",
+      "target_problem_type": "Misaligned Competency",
+      "suggestion_template": "围绕题目要考察的 competency 选择证据，删掉主要体现其他能力的内容。",
+      "suggestion_with_reason": "能力点错位时，面试官会得到与评分目标不匹配的证据。建议围绕题目要考察的 competency 选择证据，删掉主要体现其他能力的内容。",
+      "example": "改进前：被问领导力时，我强调自己加班把任务做完。 → 改进后：被问领导力时，我说明如何拆分目标、协调两名同事并推动共识。"
+    },
+    {
+      "id": "str_011",
+      "target_problem_type": "Tangential Detail",
+      "suggestion_template": "保留能支持能力判断的细节，删减组织历史、工具背景和旁支事件。",
+      "suggestion_with_reason": "旁支细节过多时，面试官需要从大量噪音中提取关键信息。建议保留能支持能力判断的细节，删减组织历史、工具背景和旁支事件。",
+      "example": "改进前：我先讲一下公司部门变化和系统历史。 → 改进后：我直接说明当时涉及产品、研发和客服三方，分歧集中在上线优先级。"
+    },
+    {
+      "id": "str_012",
+      "target_problem_type": "No Cause-Effect Link",
+      "suggestion_template": "在行动和结果之间补充机制句，说明哪项行动带来了哪种变化。",
+      "suggestion_with_reason": "缺少因果连接时，面试官只能看到时间顺序，不能判断你的行动为什么有效。建议在行动和结果之间补充机制句，说明哪项行动带来了哪种变化。",
+      "example": "改进前：我整理了问题清单，后来进度就恢复了。 → 改进后：我整理问题清单后，团队能优先处理阻塞项，研发等待时间从每天多次中断降到一次集中确认。"
+    },
+    {
+      "id": "str_013",
+      "target_problem_type": "Superficial Attribution",
+      "suggestion_template": "把宽泛归因拆成具体驱动因素，说明是哪一项行为、条件或变化起了关键作用。",
+      "suggestion_with_reason": "归因过于表层时，面试官难以看出你是否理解结果背后的真正驱动因素。建议把宽泛归因拆成具体驱动因素，说明是哪一项行为、条件或变化起了关键作用。",
+      "example": "改进前：主要是沟通比较到位。 → 改进后：关键是我把争议点拆成成本、周期和风险三类，让双方能逐项确认取舍。"
+    },
+    {
+      "id": "str_014",
+      "target_problem_type": "Unsupported Causal Claim",
+      "suggestion_template": "为因果判断补充证据，使用反馈、数据、前后对比或现场观察支撑结论。",
+      "suggestion_with_reason": "因果判断缺少依据时，面试官会难以相信该结论来自可靠观察。建议为因果判断补充证据，使用反馈、数据、前后对比或现场观察支撑结论。",
+      "example": "改进前：应该是换方案后客户更满意了。 → 改进后：换方案后，客户在两次周会上都减少了对交付风险的追问，并确认新排期可以接受。"
+    },
+    {
+      "id": "str_015",
+      "target_problem_type": "No Learning Mentioned",
+      "suggestion_template": "在结尾补充一句具体学习，说明你对方法、判断或沟通方式有什么新认识。",
+      "suggestion_with_reason": "缺少学习总结时，面试官难以判断你是否能从经历中沉淀经验。建议在结尾补充一句具体学习，说明你对方法、判断或沟通方式有什么新认识。",
+      "example": "改进前：最后项目按时完成了。 → 改进后：最后项目按时完成了，我也意识到跨团队任务要尽早把责任人和验收标准写清楚。"
+    },
+    {
+      "id": "str_016",
+      "target_problem_type": "Deflected Responsibility",
+      "suggestion_template": "在说明外部限制后，补充你自己当时可以改进的一项具体行为。",
+      "suggestion_with_reason": "只强调外部限制时，面试官会担心你缺少责任意识和自我修正能力。建议在说明外部限制后，补充你自己当时可以改进的一项具体行为。",
+      "example": "改进前：主要是对方没有及时配合。 → 改进后：对方响应确实慢，但我也应该更早设置截止时间，并在风险出现当天同步负责人。"
+    },
+    {
+      "id": "str_017",
+      "target_problem_type": "Growth Not Articulated",
+      "suggestion_template": "把“成长很多”改成具体变化，说明你后来在哪个判断、动作或习惯上发生了改变。",
+      "suggestion_with_reason": "成长表达不具体时，面试官难以判断这次经历是否真正改变了你的工作方式。建议把“成长很多”改成具体变化，说明你后来在哪个判断、动作或习惯上发生了改变。",
+      "example": "改进前：这件事让我成长很多。 → 改进后：这件事之后，我在接新项目时会先列出关键依赖和备选方案，而不是等风险暴露后再协调。"
+    },
+    {
+      "id": "str_018",
+      "target_problem_type": "Weak Future Application",
+      "suggestion_template": "把未来改进写成可执行动作，说明下次在什么场景、什么节点、做哪一步。",
+      "suggestion_with_reason": "未来应用过于笼统时，面试官难以判断你能否把经验迁移到下一次类似场景。建议把未来改进写成可执行动作，说明下次在什么场景、什么节点、做哪一步。",
+      "example": "改进前：以后我会更主动沟通。 → 改进后：以后遇到跨团队延期风险时，我会在当天同步影响范围，并约定下一次确认时间和责任人。"
+    }
+  ]
+}

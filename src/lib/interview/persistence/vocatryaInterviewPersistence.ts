@@ -753,6 +753,60 @@ export class VocatryaInterviewPersistence {
     }
   }
 
+  async completeAttemptForUser(input: {
+    actorUserId: string;
+    answerAttemptId: string;
+    submittedAt: Date;
+    completedAt: Date;
+    durationMs?: number | null;
+  }): Promise<AnswerAttemptRecord> {
+    const attempt = await this.loadOwnedAttempt(
+      this.db,
+      input.answerAttemptId,
+      input.actorUserId,
+    );
+    const session = await this.loadOwnedSession(this.db, attempt.sessionId, input.actorUserId);
+    if (isArchivedRow(session)) throw new ArchivedSessionError();
+    const row = await this.db.answerAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        status: "COMPLETED",
+        submittedAt: input.submittedAt,
+        completedAt: input.completedAt,
+        durationMs: input.durationMs ?? null,
+      },
+    });
+    return row as unknown as AnswerAttemptRecord;
+  }
+
+  async getRevisionForUser(
+    revisionId: string,
+    actorUserId: string,
+  ): Promise<TranscriptRevisionRecord> {
+    assertActor(actorUserId);
+    const revision = await this.db.transcriptRevision.findUnique({
+      where: { id: revisionId },
+    });
+    if (!revision) {
+      throw new NotFoundError("Transcript revision not found", "INVALID_INPUT_REVISION");
+    }
+    await this.loadOwnedAttempt(this.db, revision.answerAttemptId, actorUserId);
+    return revision as unknown as TranscriptRevisionRecord;
+  }
+
+  async deletePendingSummaryForUser(
+    generationId: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const generation = await this.db.sessionSummaryGeneration.findUnique({
+      where: { id: generationId },
+    });
+    if (!generation) return;
+    await this.loadOwnedSession(this.db, generation.sessionId, actorUserId);
+    if (generation.status !== "PENDING") return;
+    await this.db.sessionSummaryGeneration.delete({ where: { id: generation.id } });
+  }
+
   async setActiveRevisionForUser(input: {
     actorUserId: string;
     answerAttemptId: string;

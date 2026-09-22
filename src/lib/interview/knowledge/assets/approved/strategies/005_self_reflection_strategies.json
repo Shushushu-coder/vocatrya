@@ -1,0 +1,30 @@
+[
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "No Learning Mentioned",
+    "suggestion_template": "在结尾补充一句具体学习，说明你对方法、判断或沟通方式有什么新认识。",
+    "suggestion_with_reason": "缺少学习总结时，面试官难以判断你是否能从经历中沉淀经验。建议在结尾补充一句具体学习，说明你对方法、判断或沟通方式有什么新认识。",
+    "example": "改进前：最后项目按时完成了。 → 改进后：最后项目按时完成了，我也意识到跨团队任务要尽早把责任人和验收标准写清楚。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Deflected Responsibility",
+    "suggestion_template": "在说明外部限制后，补充你自己当时可以改进的一项具体行为。",
+    "suggestion_with_reason": "只强调外部限制时，面试官会担心你缺少责任意识和自我修正能力。建议在说明外部限制后，补充你自己当时可以改进的一项具体行为。",
+    "example": "改进前：主要是对方没有及时配合。 → 改进后：对方响应确实慢，但我也应该更早设置截止时间，并在风险出现当天同步负责人。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Growth Not Articulated",
+    "suggestion_template": "把“成长很多”改成具体变化，说明你后来在哪个判断、动作或习惯上发生了改变。",
+    "suggestion_with_reason": "成长表达不具体时，面试官难以判断这次经历是否真正改变了你的工作方式。建议把“成长很多”改成具体变化，说明你后来在哪个判断、动作或习惯上发生了改变。",
+    "example": "改进前：这件事让我成长很多。 → 改进后：这件事之后，我在接新项目时会先列出关键依赖和备选方案，而不是等风险暴露后再协调。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Weak Future Application",
+    "suggestion_template": "把未来改进写成可执行动作，说明下次在什么场景、什么节点、做哪一步。",
+    "suggestion_with_reason": "未来应用过于笼统时，面试官难以判断你能否把经验迁移到下一次类似场景。建议把未来改进写成可执行动作，说明下次在什么场景、什么节点、做哪一步。",
+    "example": "改进前：以后我会更主动沟通。 → 改进后：以后遇到跨团队延期风险时，我会在当天同步影响范围，并约定下一次确认时间和责任人。"
+  }
+]

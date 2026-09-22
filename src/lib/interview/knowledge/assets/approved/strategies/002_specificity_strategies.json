@@ -1,0 +1,30 @@
+[
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Vague Language",
+    "suggestion_template": "把模糊词替换成具体对象、动作或范围，例如说明是哪类人、哪项问题、哪个流程。",
+    "suggestion_with_reason": "模糊词过多时，面试官难以还原实际发生的事情。建议把模糊词替换成具体对象、动作或范围，例如说明是哪类人、哪项问题、哪个流程。",
+    "example": "改进前：我处理了一些相关问题。 → 改进后：我处理了客服团队反馈的三类高频退款问题，包括重复扣款、状态延迟和通知缺失。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Generic Example",
+    "suggestion_template": "把原则性回答改成一次具体经历，补充项目、时间、对象和当时发生的事件。",
+    "suggestion_with_reason": "例子过于通用时，面试官难以判断这是否来自真实经验。建议把原则性回答改成一次具体经历，补充项目、时间、对象和当时发生的事件。",
+    "example": "改进前：我一般都会先沟通再复盘。 → 改进后：在三月的候选人邀约项目中，我发现邀约转化下降后，先和两位招聘顾问复盘话术，再调整邮件模板。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Missing Quantitative Detail",
+    "suggestion_template": "补充能表达规模、频率、时长或变化幅度的数字，无法精确时给出合理区间。",
+    "suggestion_with_reason": "缺少数量信息时，面试官难以判断问题规模和结果影响。建议补充能表达规模、频率、时长或变化幅度的数字，无法精确时给出合理区间。",
+    "example": "改进前：效率提升了不少。 → 改进后：平均处理时间从约两天缩短到半天以内，每周能多处理二十多条请求。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Overgeneralized Claim",
+    "suggestion_template": "给结论加上适用边界，说明它适用于什么场景、团队规模或约束条件。",
+    "suggestion_with_reason": "结论过度泛化时，面试官会怀疑你是否能根据情境调整判断。建议给结论加上适用边界，说明它适用于什么场景、团队规模或约束条件。",
+    "example": "改进前：这类问题都应该先开会对齐。 → 改进后：在跨团队依赖多、上线时间紧的场景里，我会先开短会对齐优先级和责任人。"
+  }
+]

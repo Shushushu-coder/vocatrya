@@ -1,0 +1,23 @@
+[
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "No Cause-Effect Link",
+    "suggestion_template": "在行动和结果之间补充机制句，说明哪项行动带来了哪种变化。",
+    "suggestion_with_reason": "缺少因果连接时，面试官只能看到时间顺序，不能判断你的行动为什么有效。建议在行动和结果之间补充机制句，说明哪项行动带来了哪种变化。",
+    "example": "改进前：我整理了问题清单，后来进度就恢复了。 → 改进后：我整理问题清单后，团队能优先处理阻塞项，研发等待时间从每天多次中断降到一次集中确认。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Superficial Attribution",
+    "suggestion_template": "把宽泛归因拆成具体驱动因素，说明是哪一项行为、条件或变化起了关键作用。",
+    "suggestion_with_reason": "归因过于表层时，面试官难以看出你是否理解结果背后的真正驱动因素。建议把宽泛归因拆成具体驱动因素，说明是哪一项行为、条件或变化起了关键作用。",
+    "example": "改进前：主要是沟通比较到位。 → 改进后：关键是我把争议点拆成成本、周期和风险三类，让双方能逐项确认取舍。"
+  },
+  {
+    "id": "str_TEMP",
+    "target_problem_type": "Unsupported Causal Claim",
+    "suggestion_template": "为因果判断补充证据，使用反馈、数据、前后对比或现场观察支撑结论。",
+    "suggestion_with_reason": "因果判断缺少依据时，面试官会难以相信该结论来自可靠观察。建议为因果判断补充证据，使用反馈、数据、前后对比或现场观察支撑结论。",
+    "example": "改进前：应该是换方案后客户更满意了。 → 改进后：换方案后，客户在两次周会上都减少了对交付风险的追问，并确认新排期可以接受。"
+  }
+]
