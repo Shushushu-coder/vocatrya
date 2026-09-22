@@ -28,6 +28,7 @@ export function getSidebarNavLabel(
   if (route.startsWith("/dashboard/tasks")) return t("nav.tasks");
   if (route.startsWith("/dashboard/activities")) return t("nav.activities");
   if (route.startsWith("/dashboard/questions")) return t("nav.questions");
+  if (route.startsWith("/dashboard/interview")) return t("nav.interview");
   if (route.startsWith("/dashboard/profile")) return t("nav.profile");
   if (route.startsWith("/dashboard/admin")) return t("nav.library");
   if (route.startsWith("/dashboard/developer")) return t("nav.developer");

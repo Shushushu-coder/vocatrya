@@ -8,6 +8,7 @@ import {
   Wrench,
   Zap,
   BookOpen,
+  MessagesSquare,
 } from "lucide-react";
 
 export const APP_CONSTANTS = {
@@ -347,6 +348,11 @@ export const SIDEBAR_LINKS = [
     icon: BookOpen,
     route: "/dashboard/questions",
     label: "Questions",
+  },
+  {
+    icon: MessagesSquare,
+    route: "/dashboard/interview",
+    label: "Interview",
   },
   {
     icon: UserRound,
