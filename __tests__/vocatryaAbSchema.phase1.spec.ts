@@ -12,6 +12,7 @@ import {
   CAMPUS_CORE_FIELDS_MIGRATION,
   INTERVIEW_REFLECTION_MIGRATION,
   CANDIDATE_PROFILE_MIGRATION,
+  PHASE3A_INTERVIEW_MIGRATION,
 } from "./helpers/abSchemaTestDb";
 
 const LEGACY_TABLES = [
@@ -177,6 +178,10 @@ describe("Vocatrya A+B phase 1 schema", () => {
         CAMPUS_CORE_FIELDS_MIGRATION,
         INTERVIEW_REFLECTION_MIGRATION,
         CANDIDATE_PROFILE_MIGRATION,
+        // Phase 3A Interview migration needs the A+B foundation tables
+        // (JobDescriptionVersion composite unique), so it joins the
+        // upgrade wave instead of the legacy base.
+        PHASE3A_INTERVIEW_MIGRATION,
       ],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -255,6 +260,8 @@ describe("Vocatrya A+B phase 1 schema", () => {
       copyMigrationBySuffix(ctx.dir, CAMPUS_CORE_FIELDS_MIGRATION);
       copyMigrationBySuffix(ctx.dir, INTERVIEW_REFLECTION_MIGRATION);
       copyMigrationBySuffix(ctx.dir, CANDIDATE_PROFILE_MIGRATION);
+      // Timestamp-ordered after the foundation, so it applies last.
+      copyMigrationBySuffix(ctx.dir, PHASE3A_INTERVIEW_MIGRATION);
       migrateDeploy(ctx.url, schemaPath);
 
       expect(await prisma.job.count()).toBe(before.jobs);

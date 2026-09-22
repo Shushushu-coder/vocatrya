@@ -10,6 +10,9 @@ export type BackupCoverageStatus =
 
 // Prisma models that are not user-state ZIP groups. A missing classification
 // for any other schema model fails the coverage guard test.
+// Phase 3A Interview tables are intentionally excluded: the transplant is
+// schema+migration only and no backup/restore path covers them yet.
+// Backup coverage for Interview data belongs to the later wiring phase.
 export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "User",
   "ApiKey",
@@ -17,6 +20,20 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "ChatConversation",
   "JobStatus",
   "DataMigrationRun",
+  "QuestionBank",
+  "QuestionBankItem",
+  "InterviewSession",
+  "QuestionInstance",
+  "AnswerAttempt",
+  "AnswerInputArtifact",
+  "Transcript",
+  "TranscriptRevision",
+  "FeedbackGeneration",
+  "FeedbackItem",
+  "SessionSummaryGeneration",
+  "SessionSummaryInput",
+  "CoachingConversation",
+  "DialogueTurn",
 ] as const;
 
 export const BACKED_UP_PRISMA_MODELS: readonly BackupModel[] = INSERT_ORDER;

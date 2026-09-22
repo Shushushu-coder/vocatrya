@@ -54,6 +54,10 @@ model User {
   matchAnalyses          MatchAnalysis[]
   legacyMigrationMaps    LegacyMigrationMap[]
   dataMigrationRuns      DataMigrationRun[]
+
+  // Phase 3A Interview transplant (additive backrelations only).
+  interviewSessions   InterviewSession[]
+  transcriptRevisions TranscriptRevision[] @relation("RevisionAuthor")
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -638,7 +642,23 @@ model Question {
   updatedAt  DateTime @updatedAt
   createdVia String? // MCP provenance: which agent/token created this, mirrors Job.createdVia
 
+  // Phase 3A Interview additive metadata (port canonical naming:
+  // presetBankKey/presetItemKey, see PORT port contract). Existing rows
+  // keep NULL/defaults; no backfill. onDelete on `user` intentionally
+  // unchanged to keep migration additive (ALTER TABLE ADD COLUMN only).
+  sourceKind    String?
+  category      String?
+  locale        String?   @default("zh")
+  isActive      Boolean   @default(true)
+  deletedAt     DateTime?
+  presetBankKey String?
+  presetItemKey String?
+
+  questionInstances QuestionInstance[]
+  bankItems         QuestionBankItem[]
+
   @@index([createdBy])
+  @@unique([presetBankKey, presetItemKey])
 }
 
 model McpAccessToken {
@@ -755,6 +775,9 @@ model JobOpportunity {
   matchAnalyses          MatchAnalysis[]
   targetedResumeVariants ResumeVariant[]
 
+  // Phase 3A Interview transplant (additive backrelation only).
+  interviewSessions InterviewSession[]
+
   @@index([userId, status])
   @@index([userId, deadline])
   @@index([companyId, campaignId])
@@ -799,8 +822,16 @@ model JobDescriptionVersion {
   submittedAttempts      ApplicationAttempt[]   @relation("AttemptSubmittedAgainstJd")
   targetedResumeVersions ResumeVariantVersion[] @relation("ResumeVersionTargetJd")
 
+  // Phase 3A Interview transplant (additive backrelation only).
+  interviewSessions InterviewSession[]
+
   @@unique([jobOpportunityId, versionNumber])
   @@unique([jobOpportunityId, contentHash])
+  // Phase 3A: composite-FK support for
+  // InterviewSession.(jobDescriptionVersionId, jobOpportunityId).
+  // Logically redundant for uniqueness, required for Prisma composite FK.
+  // Additive unique index only; no JD business semantics change.
+  @@unique([id, jobOpportunityId])
 }
 
 model JobDescriptionParse {
@@ -1533,4 +1564,344 @@ model DataMigrationRun {
 
   @@index([userId, startedAt])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3A Interview transplant — Interview-owned persistence graph only.
+// Source: InterviewDx port prisma/schema.prisma (standalone, verified) via
+// prisma/transplant/interview-models.prisma fragment + interview-host-relations.
+// Enums stay String; allowed values enforced by manual CHECK SQL in migration.
+// No services, knowledge, preset data, UI/API transplanted here.
+// ---------------------------------------------------------------------------
+
+model QuestionBank {
+  id        String   @id @default(uuid())
+  bankKey   String
+  version   String
+  title     String
+  locale    String   @default("zh")
+  kind      String   @default("SAMPLE_FIXTURE")
+  createdAt DateTime @default(now())
+
+  items QuestionBankItem[]
+
+  @@unique([bankKey, version])
+}
+
+model QuestionBankItem {
+  id           String   @id @default(uuid())
+  bankId       String
+  questionId   String
+  displayOrder Int
+  createdAt    DateTime @default(now())
+
+  bank     QuestionBank @relation(fields: [bankId], references: [id], onDelete: Restrict)
+  question Question     @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([bankId, questionId])
+  @@unique([bankId, displayOrder])
+}
+
+model InterviewSession {
+  id                    String    @id @default(uuid())
+  userId                String
+  // status: DRAFT | IN_PROGRESS | COACHING | COMPLETED | ARCHIVED
+  status                String    @default("DRAFT")
+  // coachingMode: PRACTICE | MOCK
+  coachingMode          String
+  // feedbackReleasePolicy: IMMEDIATE | ON_SESSION_COMPLETE
+  feedbackReleasePolicy String
+  feedbackReleasedAt    DateTime?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  archivedAt            DateTime?
+  statusBeforeArchive   String?
+  knowledgeBaseVersion  String
+  currentQuestionInstanceId String?
+  jobOpportunityId          String?
+  jobDescriptionVersionId   String?
+  createdVia            String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  jobOpportunity        JobOpportunity?       @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
+  jobDescriptionVersion JobDescriptionVersion? @relation(fields: [jobDescriptionVersionId, jobOpportunityId], references: [id, jobOpportunityId], onDelete: Restrict)
+  currentQuestionInstance QuestionInstance?          @relation("SessionCurrentQuestion", fields: [currentQuestionInstanceId], references: [id], onDelete: Restrict)
+  questionInstances       QuestionInstance[]         @relation("SessionQuestions")
+  answerAttempts          AnswerAttempt[]
+  inputArtifacts          AnswerInputArtifact[]
+  transcripts             Transcript[]
+  feedbackGenerations     FeedbackGeneration[]
+  feedbackItems           FeedbackItem[]
+  summaryGenerations      SessionSummaryGeneration[]
+  coachingConversation    CoachingConversation?
+  dialogueTurns           DialogueTurn[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+
+model QuestionInstance {
+  id                      String   @id @default(uuid())
+  sessionId               String
+  sourceQuestionId        String?
+  displayOrder            Int
+  displayedText           String
+  // sourceKind: USER_PROVIDED | QUESTION_BANK | AI_GENERATED | TEMPLATE
+  sourceKind              String
+  category                String?
+  sourceMetadata          String?
+  referenceAnswerSnapshot String?
+  // status: PENDING | IN_PROGRESS | ANSWERED | SKIPPED
+  status                  String   @default("PENDING")
+  createdAt               DateTime @default(now())
+
+  session        InterviewSession   @relation("SessionQuestions", fields: [sessionId], references: [id], onDelete: Restrict)
+  sourceQuestion Question?          @relation(fields: [sourceQuestionId], references: [id], onDelete: Restrict)
+  currentFor     InterviewSession[] @relation("SessionCurrentQuestion")
+  answerAttempts AnswerAttempt[]
+  dialogueTurns  DialogueTurn[]
+
+  @@unique([sessionId, displayOrder])
+  @@unique([id, sessionId])
+}
+
+model AnswerAttempt {
+  id                 String    @id @default(uuid())
+  questionInstanceId String
+  sessionId          String
+  attemptNumber      Int
+  // inputType: TEXT | AUDIO
+  inputType          String
+  // status: STARTED | SUBMITTED | COMPLETED | FAILED | DISCARDED
+  status             String    @default("STARTED")
+  startedAt          DateTime?
+  submittedAt        DateTime?
+  completedAt        DateTime?
+  durationMs         Int?
+  activeRevisionId   String?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+
+  session             InterviewSession      @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  questionInstance    QuestionInstance      @relation(fields: [questionInstanceId, sessionId], references: [id, sessionId], onDelete: Restrict)
+  activeRevision      TranscriptRevision?   @relation("AttemptActiveRevision", fields: [activeRevisionId, id], references: [id, answerAttemptId], onDelete: Restrict)
+  inputArtifacts      AnswerInputArtifact[]
+  transcripts         Transcript[]
+  revisions           TranscriptRevision[]  @relation("AttemptRevisions")
+  feedbackGenerations FeedbackGeneration[]
+  dialogueTurns       DialogueTurn[]
+
+  @@unique([questionInstanceId, attemptNumber])
+  @@unique([id, sessionId])
+  @@unique([id, questionInstanceId, sessionId])
+  @@index([sessionId, createdAt])
+}
+
+model AnswerInputArtifact {
+  id              String   @id @default(uuid())
+  answerAttemptId String
+  sessionId       String
+  // inputType: TEXT | AUDIO
+  inputType       String
+  // role: SOURCE | NORMALIZED
+  role            String
+  filePath        String?
+  fileFormat      String?
+  durationSeconds Float?
+  fileSizeBytes   Int?
+  textContent     String?
+  createdAt       DateTime @default(now())
+
+  session     InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  attempt     AnswerAttempt    @relation(fields: [answerAttemptId, sessionId], references: [id, sessionId], onDelete: Restrict)
+  transcripts Transcript[]
+
+  @@index([answerAttemptId])
+}
+
+model Transcript {
+  id               String   @id @default(uuid())
+  sessionId        String
+  answerAttemptId  String
+  sourceArtifactId String?
+  fullText         String
+  segments         String   @default("[]")
+  asrModel         String?
+  asrStatus        String?
+  errorMessage     String?
+  createdAt        DateTime @default(now())
+
+  session        InterviewSession     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  attempt        AnswerAttempt        @relation(fields: [answerAttemptId], references: [id], onDelete: Restrict)
+  sourceArtifact AnswerInputArtifact? @relation(fields: [sourceArtifactId], references: [id], onDelete: Restrict)
+  revisions      TranscriptRevision[]
+  feedbackItems  FeedbackItem[]
+
+  @@index([answerAttemptId])
+}
+
+model TranscriptRevision {
+  id              String   @id @default(uuid())
+  transcriptId    String
+  answerAttemptId String
+  revisionNumber  Int
+  // revisionKind: ORIGINAL_ASR | ORIGINAL_TEXT | USER_CORRECTED
+  revisionKind    String
+  fullText        String
+  segments        String?
+  // alignmentStatus: PRESERVED | PARTIAL | DROPPED | NOT_APPLICABLE
+  alignmentStatus String
+  contentHash     String
+  createdByUserId String?
+  createdVia      String?
+  createdAt       DateTime @default(now())
+
+  transcript          Transcript           @relation(fields: [transcriptId], references: [id], onDelete: Restrict)
+  attempt             AnswerAttempt        @relation("AttemptRevisions", fields: [answerAttemptId], references: [id], onDelete: Restrict)
+  createdByUser       User?                @relation("RevisionAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  activeFor           AnswerAttempt[]      @relation("AttemptActiveRevision")
+  feedbackGenerations FeedbackGeneration[]
+
+  @@unique([transcriptId, revisionNumber])
+  @@unique([id, answerAttemptId])
+}
+
+model FeedbackGeneration {
+  id                   String    @id @default(uuid())
+  answerAttemptId      String
+  questionInstanceId   String
+  sessionId            String
+  versionNumber        Int
+  isCurrent            Boolean   @default(false)
+  // status: PENDING | SUCCEEDED | FAILED | CANCELLED
+  status               String    @default("PENDING")
+  inputRevisionId      String
+  inputContentHash     String
+  model                String?
+  provider             String?
+  promptVersion        String?
+  knowledgeBaseVersion String?
+  failureCode          String?
+  failureMessage       String?
+  createdAt            DateTime  @default(now())
+  completedAt          DateTime?
+
+  session       InterviewSession      @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  attempt       AnswerAttempt         @relation(fields: [answerAttemptId, questionInstanceId, sessionId], references: [id, questionInstanceId, sessionId], onDelete: Restrict)
+  inputRevision TranscriptRevision    @relation(fields: [inputRevisionId, answerAttemptId], references: [id, answerAttemptId], onDelete: Restrict)
+  items         FeedbackItem[]
+  summaryInputs SessionSummaryInput[]
+
+  @@unique([answerAttemptId, versionNumber])
+  @@unique([id, answerAttemptId])
+  @@unique([id, questionInstanceId, sessionId])
+}
+
+model FeedbackItem {
+  id           String   @id @default(uuid())
+  sessionId    String
+  transcriptId String
+  generationId String
+  itemOrder    Int
+  problemLabel String
+  evidence     String
+  explanation  String
+  suggestion   String
+  createdAt    DateTime @default(now())
+
+  session       InterviewSession   @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  transcript    Transcript         @relation(fields: [transcriptId], references: [id], onDelete: Restrict)
+  generation    FeedbackGeneration @relation(fields: [generationId], references: [id], onDelete: Restrict)
+  dialogueTurns DialogueTurn[]
+
+  @@unique([id, sessionId])
+  @@index([generationId, itemOrder])
+}
+
+model SessionSummaryGeneration {
+  id                   String    @id @default(uuid())
+  sessionId            String
+  versionNumber        Int
+  // status: PENDING | SUCCEEDED | FAILED | CANCELLED
+  status               String    @default("PENDING")
+  isCurrent            Boolean   @default(false)
+  bodyText             String?
+  structuredPayload    String?
+  inputHash            String
+  model                String?
+  provider             String?
+  promptVersion        String?
+  knowledgeBaseVersion String?
+  failureCode          String?
+  failureMessage       String?
+  createdAt            DateTime  @default(now())
+  completedAt          DateTime?
+
+  session       InterviewSession      @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  inputs        SessionSummaryInput[]
+  dialogueTurns DialogueTurn[]
+
+  @@unique([sessionId, versionNumber])
+  @@unique([id, sessionId])
+}
+
+model SessionSummaryInput {
+  id                   String   @id @default(uuid())
+  summaryGenerationId  String
+  sessionId            String
+  questionInstanceId   String
+  feedbackGenerationId String
+  inputOrder           Int
+  createdAt            DateTime @default(now())
+
+  summary  SessionSummaryGeneration @relation(fields: [summaryGenerationId, sessionId], references: [id, sessionId], onDelete: Restrict)
+  feedback FeedbackGeneration       @relation(fields: [feedbackGenerationId, questionInstanceId, sessionId], references: [id, questionInstanceId, sessionId], onDelete: Restrict)
+
+  @@unique([summaryGenerationId, inputOrder])
+  @@unique([summaryGenerationId, questionInstanceId])
+}
+
+model CoachingConversation {
+  id        String    @id @default(uuid())
+  sessionId String    @unique
+  // status: OPEN | CLOSED
+  status    String    @default("OPEN")
+  createdAt DateTime  @default(now())
+  closedAt  DateTime?
+
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  turns   DialogueTurn[]
+
+  @@unique([id, sessionId])
+}
+
+model DialogueTurn {
+  id                       String   @id @default(uuid())
+  sessionId                String
+  conversationId           String
+  turnNumber               Int
+  userText                 String
+  entryMode                String
+  assistantReply           String   @default("")
+  replyModel               String?
+  replyPromptVersion       String?
+  contextSnapshot          String?
+  // targetType: SESSION | QUESTION_INSTANCE | ANSWER_ATTEMPT | FEEDBACK_ITEM | SESSION_SUMMARY
+  targetType               String
+  questionInstanceId       String?
+  answerAttemptId          String?
+  commercialFeedbackItemId String?
+  summaryGenerationId      String?
+  createdAt                DateTime @default(now())
+
+  session          InterviewSession          @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  conversation     CoachingConversation      @relation(fields: [conversationId, sessionId], references: [id, sessionId], onDelete: Restrict)
+  questionInstance QuestionInstance?         @relation(fields: [questionInstanceId, sessionId], references: [id, sessionId], onDelete: Restrict)
+  answerAttempt    AnswerAttempt?            @relation(fields: [answerAttemptId, sessionId], references: [id, sessionId], onDelete: Restrict)
+  feedbackItem     FeedbackItem?             @relation(fields: [commercialFeedbackItemId, sessionId], references: [id, sessionId], onDelete: Restrict)
+  summary          SessionSummaryGeneration? @relation(fields: [summaryGenerationId, sessionId], references: [id, sessionId], onDelete: Restrict)
+
+  @@unique([sessionId, turnNumber])
 }
