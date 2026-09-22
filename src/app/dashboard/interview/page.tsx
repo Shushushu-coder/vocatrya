@@ -42,9 +42,13 @@ export default async function InterviewLandingPage() {
         </CardContent>
       </Card>
       <div className="flex gap-3">
-        <Button asChild disabled={!configured}>
-          <Link href="/dashboard/interview/new">{t("interview.startNew")}</Link>
-        </Button>
+        {configured ? (
+          <Button asChild>
+            <Link href="/dashboard/interview/new">{t("interview.startNew")}</Link>
+          </Button>
+        ) : (
+          <Button disabled>{t("interview.startNew")}</Button>
+        )}
       </div>
       <Card>
         <CardHeader>
