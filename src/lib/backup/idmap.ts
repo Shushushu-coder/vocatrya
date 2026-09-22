@@ -41,6 +41,14 @@ const OPTIONAL_FKS = new Set<string>([
   "MatchAnalysis.resumeVariantVersionId",
   "MatchEvidenceLink.careerEvidenceId",
   "MatchEvidenceLink.resumeExpressionId",
+  "InterviewSession.jobOpportunityId",
+  "InterviewSession.jobDescriptionVersionId",
+  "QuestionInstance.sourceQuestionId",
+  "Transcript.sourceArtifactId",
+  "DialogueTurn.questionInstanceId",
+  "DialogueTurn.answerAttemptId",
+  "DialogueTurn.commercialFeedbackItemId",
+  "DialogueTurn.summaryGenerationId",
 ]);
 
 export class IdMap {

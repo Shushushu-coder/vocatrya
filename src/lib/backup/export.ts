@@ -85,8 +85,15 @@ export async function collectBackupData(
   const jobToTag: { jobId: string; tagId: string }[] = [];
   const questionToTag: { questionId: string; tagId: string }[] = [];
 
+  // Deterministic export: never rely on database default row order. Rows are
+  // sorted by stable primary key so two consecutive exports of the same
+  // disposable DB produce identical Interview sections (modulo export
+  // timestamp metadata, which lives in the manifest, not data.json).
+  const byId = (a: Row, b: Row) =>
+    String(a.id ?? "").localeCompare(String(b.id ?? ""));
   models.forEach((model, index) => {
-    raw[model] = results[index].map((row) => {
+    const sorted = [...results[index]].sort(byId);
+    raw[model] = sorted.map((row) => {
       const clean = stripOwnership(model, row);
 
       if (model === "Job") {
@@ -122,8 +129,12 @@ export async function collectBackupData(
     });
   });
 
-  raw._JobToTag = jobToTag;
-  raw._QuestionToTag = questionToTag;
+  raw._JobToTag = jobToTag.sort((a, b) =>
+    `${a.jobId}${a.tagId}`.localeCompare(`${b.jobId}${b.tagId}`),
+  );
+  raw._QuestionToTag = questionToTag.sort((a, b) =>
+    `${a.questionId}${a.tagId}`.localeCompare(`${b.questionId}${b.tagId}`),
+  );
   raw.jobStatuses = statuses;
   raw.user = { defaultResumeId: userRow?.defaultResumeId ?? null };
 

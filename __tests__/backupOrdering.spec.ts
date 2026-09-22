@@ -1,7 +1,15 @@
 import {
+  INTERVIEW_SPEC_COMMIT,
+  INTERVIEW_SPEC_TAG,
   MODEL_SPECS,
   INSERT_ORDER,
   DELETE_ORDER,
+  USER_WIPE_ORDER,
+  QUESTION_BANK_CANONICAL_METADATA_FIELDS,
+  QUESTION_BANK_EXCLUDED_COMPARISON_FIELDS,
+  QUESTION_BANK_IDENTITY_FIELDS,
+  QUESTION_BANK_IN_DELETE_ORDER,
+  QUESTION_BANK_VERSION_CONFLICT,
   LOOKUP_MODELS,
   EMPTINESS_MODELS,
   DEFERRED_FKS,
@@ -40,8 +48,55 @@ describe("backup ordering", () => {
     }
   });
 
-  it("deletes in the exact reverse of the insert order", () => {
-    expect(DELETE_ORDER).toEqual([...INSERT_ORDER].reverse());
+  it("wipes in reverse insert order minus reference data (QuestionBank never wiped)", () => {
+    // Spec v1 §15: QuestionBank = REFERENCE_DATA restored but not wiped, so
+    // the global DELETE_ORDER = exact reverse INSERT_ORDER invariant no longer
+    // holds. The per-user wipe set is the filtered reverse.
+    expect(QUESTION_BANK_IN_DELETE_ORDER).toBe(false);
+    expect(DELETE_ORDER).not.toContain("QuestionBank");
+    expect(USER_WIPE_ORDER).not.toContain("QuestionBank");
+    expect(USER_WIPE_ORDER).toEqual(DELETE_ORDER);
+    expect(DELETE_ORDER).toEqual(
+      [...INSERT_ORDER].reverse().filter((m) => m !== "QuestionBank"),
+    );
+    expect(MODEL_SPECS.QuestionBank.wipeMode).toBe("none");
+    expect(modelsForWipe(false)).not.toContain("QuestionBank");
+    expect(modelsForWipe(true)).not.toContain("QuestionBank");
+  });
+
+  it("keeps QuestionBank in the restore graph before QuestionBankItem", () => {
+    // NOT_WIPED != NOT_RESTORED: reference banks resolve before memberships
+    // so QuestionBankItem.bankId can map source → final target id.
+    expect(INSERT_ORDER).toContain("QuestionBank");
+    expect(INSERT_ORDER).toContain("QuestionBankItem");
+    expect(INSERT_ORDER.indexOf("QuestionBank")).toBeLessThan(
+      INSERT_ORDER.indexOf("QuestionBankItem"),
+    );
+    expect(MODEL_SPECS.QuestionBankItem.fks.bankId).toBe("QuestionBank");
+  });
+
+  it("freezes QuestionBank identity and canonical metadata field sets", () => {
+    expect([...QUESTION_BANK_IDENTITY_FIELDS]).toEqual(["bankKey", "version"]);
+    expect([...QUESTION_BANK_CANONICAL_METADATA_FIELDS]).toEqual([
+      "title",
+      "locale",
+      "kind",
+    ]);
+    expect([...QUESTION_BANK_EXCLUDED_COMPARISON_FIELDS]).toEqual([
+      "id",
+      "createdAt",
+      "updatedAt",
+    ]);
+    expect(QUESTION_BANK_VERSION_CONFLICT).toBe(
+      "QUESTION_BANK_VERSION_CONFLICT",
+    );
+  });
+
+  it("records the exact InterviewDx spec identity under test", () => {
+    expect(INTERVIEW_SPEC_TAG).toBe("interview-vocatrya-spec-v1");
+    expect(INTERVIEW_SPEC_COMMIT).toBe(
+      "a7a8e2ed75e3797c207851f62e3a13732d405f6d",
+    );
   });
 
   // The two edges the intuitive reading gets backwards.
@@ -108,6 +163,15 @@ describe("backup ordering", () => {
         expect(where).toEqual({});
         continue;
       }
+      // QuestionBank is system-managed global reference data (spec v1 §8):
+      // no owner column, exports every bank as a REFERENCE_DATA_SNAPSHOT so a
+      // restore can rebuild a missing canonical bank, but it is never
+      // user-wiped (wipeMode "none"). QuestionBankItem stays user-scoped via
+      // Question.createdBy.
+      if (model === "QuestionBank") {
+        expect(where).toEqual({});
+        continue;
+      }
       expect(JSON.stringify(where)).toContain("user-1");
     }
   });
@@ -139,6 +203,7 @@ describe("emptiness models", () => {
       "CareerMaterialItem",
       "Contact",
       "CoverLetter",
+      "InterviewSession",
       "Job",
       "JobOpportunity",
       "JobSearchPreference",
@@ -188,9 +253,21 @@ describe("backup datasets", () => {
   });
 
   it("does not put sensitive models on the global DELETE_ORDER-only path by accident", () => {
-    expect(DELETE_ORDER).toEqual([...INSERT_ORDER].reverse());
+    expect(DELETE_ORDER).toEqual(
+      [...INSERT_ORDER].reverse().filter((m) => m !== "QuestionBank"),
+    );
     for (const model of SENSITIVE_BACKUP_MODELS) {
       expect(MODEL_SPECS[model].dataset).toBe("sensitive");
     }
+  });
+
+  it("keeps QuestionBankItem user-scoped via Question.createdBy", () => {
+    expect(MODEL_SPECS.QuestionBankItem.scope("u1")).toEqual({
+      question: { createdBy: "u1" },
+    });
+    expect(MODEL_SPECS.QuestionBankItem.fks).toEqual({
+      bankId: "QuestionBank",
+      questionId: "Question",
+    });
   });
 });

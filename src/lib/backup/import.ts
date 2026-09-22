@@ -20,6 +20,9 @@ import {
   INSERT_ORDER,
   LOOKUP_MODELS,
   MODEL_SPECS,
+  QUESTION_BANK_CANONICAL_METADATA_FIELDS,
+  QUESTION_BANK_IDENTITY_FIELDS,
+  QUESTION_BANK_VERSION_CONFLICT,
   SENSITIVE_BACKUP_MODELS,
   backupDataset,
   modelsForWipe,
@@ -174,6 +177,125 @@ async function resolveJobStatuses(
   return byValue;
 }
 
+// QuestionBank reference resolver (spec v1 §9–§13, frozen).
+// Natural identity: (bankKey, version). Canonical metadata: title/locale/kind.
+// Comparison ignores id/createdAt/updatedAt. Missing → CREATE, equal → REUSE
+// existing target id, conflict → throw QUESTION_BANK_VERSION_CONFLICT.
+// Never overwrite/update/delete/duplicate, never silently prefer either side.
+// Must run inside the restore transaction before any QuestionBankItem insert
+// so membership bankId can map source → final target id; a conflict aborts the
+// whole transaction (atomic rollback, no partial wipe/insert residue).
+type QuestionBankRow = Record<string, unknown> & { id: string };
+
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function tryParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function canonicalFieldEqual(a: unknown, b: unknown): boolean {
+  const left = a ?? null;
+  const right = b ?? null;
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  if (typeof left === "object" && typeof right === "object") {
+    return stableStringify(left) === stableStringify(right);
+  }
+  if (typeof left === "string" && typeof right === "string") {
+    const parsedLeft = tryParseJson(left);
+    const parsedRight = tryParseJson(right);
+    if (parsedLeft !== undefined && parsedRight !== undefined) {
+      return stableStringify(parsedLeft) === stableStringify(parsedRight);
+    }
+    return false;
+  }
+  return false;
+}
+
+function diffQuestionBankCanonicalFields(
+  a: QuestionBankRow,
+  b: QuestionBankRow,
+): string[] {
+  const differing: string[] = [];
+  for (const field of [
+    ...QUESTION_BANK_IDENTITY_FIELDS,
+    ...QUESTION_BANK_CANONICAL_METADATA_FIELDS,
+  ] as const) {
+    if (!canonicalFieldEqual(a[field], b[field])) differing.push(field);
+  }
+  return differing;
+}
+
+function sameCanonicalBank(a: QuestionBankRow, b: QuestionBankRow): boolean {
+  if (String(a.bankKey) !== String(b.bankKey)) return false;
+  if (String(a.version) !== String(b.version)) return false;
+  return diffQuestionBankCanonicalFields(a, b).length === 0;
+}
+
+async function resolveQuestionBanks(
+  tx: Tx,
+  data: BackupData,
+  idMap: IdMap,
+  userId: string,
+): Promise<void> {
+  const rows = (data as unknown as Record<string, QuestionBankRow[]>).QuestionBank ?? [];
+  for (const backupBank of rows) {
+    const bankKey = String(backupBank.bankKey);
+    const version = String(backupBank.version);
+    const existing = (await tx.questionBank.findUnique({
+      where: { bankKey_version: { bankKey, version } },
+    })) as unknown as QuestionBankRow | null;
+    if (!existing) {
+      const newId = idMap.mint(String(backupBank.id));
+      const payload = buildCreateData("QuestionBank", backupBank, idMap, userId);
+      // buildCreateData minted-mapping already set newId above; ensure the
+      // created row keeps the reference snapshot's canonical metadata with a
+      // new local id (id/createdAt from backup are not identity).
+      await tx.questionBank.create({
+        data: {
+          ...(payload as Record<string, unknown>),
+          id: newId,
+          bankKey,
+          version,
+          title: backupBank.title as string,
+          locale: backupBank.locale as string,
+          kind: backupBank.kind as string,
+        },
+      });
+      continue;
+    }
+    if (sameCanonicalBank(backupBank, existing)) {
+      // REUSE: do not update the existing row; map source id → existing id.
+      idMap.set(String(backupBank.id), String(existing.id));
+      continue;
+    }
+    const differing = diffQuestionBankCanonicalFields(backupBank, existing);
+    throw new BackupError(
+      `${QUESTION_BANK_VERSION_CONFLICT}: bankKey=${bankKey} version=${version} ` +
+        `differs in ${differing.join(",") || "canonical-metadata"}. ` +
+        `Target bank is left unchanged; restore aborted atomically.`,
+    );
+  }
+}
+
 // Straight inserts, no upsert. The wipe on the line above deleted every lookup
 // row this user owned, so there is nothing left to resolve against — an
 // "existing row" check here can never match. Replace-not-merge is the point:
@@ -225,6 +347,9 @@ async function wipe(
   }
 
   for (const model of modelsForWipe(containsSensitiveData)) {
+    // QuestionBank has MODEL_SPECS.wipeMode "none" so it never appears here
+    // (spec v1 §15: QuestionBank ∉ per-user wipe; unrelated canonical banks
+    // survive). There is intentionally no deleteMany QuestionBank in this flow.
     const spec = MODEL_SPECS[model];
     await tx[spec.delegate].deleteMany({ where: spec.scope(userId) });
   }
@@ -314,8 +439,13 @@ export async function importBackup(
 
   // Mint every non-lookup id up front so the file writes below can name their
   // targets, and so a forward reference in the FK rewrite never misses.
+  // QuestionBank is excluded: it resolves by natural key (bankKey, version)
+  // inside the transaction (missing → CREATE, equal → REUSE existing id,
+  // conflict → QUESTION_BANK_VERSION_CONFLICT), so its source ids must not be
+  // pre-minted to fresh UUIDs.
   const idMap = new IdMap();
   for (const model of INSERT_ORDER) {
+    if (model === "QuestionBank") continue;
     if (MODEL_SPECS[model].lookup) continue;
     if (backupDataset(model) === "sensitive" && !containsSensitiveData) continue;
     for (const row of rowsFor(data, model)) idMap.mint(row.id as string);
@@ -405,7 +535,17 @@ export async function importBackup(
           });
         }
 
+        // QuestionBank reference resolution must precede every QuestionBankItem
+        // insert (restore topology: resolve reference banks → insert user-scoped
+        // memberships). It runs inside the same atomic transaction so a
+        // QUESTION_BANK_VERSION_CONFLICT rolls back wipe + all inserts.
+        await resolveQuestionBanks(tx, data, idMap, userId);
+        counts.QuestionBank = (
+          (data as unknown as Record<string, unknown[]>).QuestionBank ?? []
+        ).length;
+
         for (const model of INSERT_ORDER) {
+          if (model === "QuestionBank") continue;
           if (MODEL_SPECS[model].lookup) continue;
           if (backupDataset(model) === "sensitive" && !containsSensitiveData) {
             continue;
@@ -416,6 +556,23 @@ export async function importBackup(
 
           for (const row of rows) {
             let payload = buildCreateData(model, row, idMap, userId);
+
+            // TranscriptRevision author rule (spec v1 §19, frozen):
+            // TRANSCRIPT_REVISION_AUTHOR_POLICY:
+            // NORMALIZED_TO_IMPORTING_USER_ON_CROSS_USER_RESTORE
+            // PROVENANCE_TRADEOFF: KNOWN_PROVENANCE_TRADEOFF —
+            // original author identity is not preserved across cross-user restore
+            // (ownership consistency > original author provenance). Same-user
+            // restore is semantically unchanged (same id rewrite is a no-op);
+            // null author stays null. createdByUserId points at User, which is
+            // intentionally never in the backup: attribute the restored
+            // revision to the importing user instead of replaying a stale
+            // cross-account id that would violate the Restrict FK.
+            if (model === "TranscriptRevision") {
+              if (payload.createdByUserId !== null && payload.createdByUserId !== undefined) {
+                payload = { ...payload, createdByUserId: userId };
+              }
+            }
 
             if (model === "File") {
               const { fileMissing: _marker, ...rest } = payload;

@@ -10,9 +10,15 @@ export type BackupCoverageStatus =
 
 // Prisma models that are not user-state ZIP groups. A missing classification
 // for any other schema model fails the coverage guard test.
-// Phase 3A Interview tables are intentionally excluded: the transplant is
-// schema+migration only and no backup/restore path covers them yet.
-// Backup coverage for Interview data belongs to the later wiring phase.
+// Interview models are included in product backup starting from this change:
+// legacy backups without Interview sections still restore (groups default to
+// []), and new backups carry the full 14-model Interview graph.
+// Dataset axis (spec v1 §20, frozen; payload shape unchanged, no format bump):
+// QuestionBank = COVERED REFERENCE_DATA (REFERENCE_DATA_SNAPSHOT, present in
+// export, used during restore, never user-wiped) — not INTENTIONALLY_EXCLUDED
+// and not USER_DATA. QuestionBankItem = COVERED USER_DATA membership
+// (user-scoped via Question.createdBy). Remaining Interview models keep their
+// existing user-closure semantics.
 export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "User",
   "ApiKey",
@@ -20,20 +26,6 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "ChatConversation",
   "JobStatus",
   "DataMigrationRun",
-  "QuestionBank",
-  "QuestionBankItem",
-  "InterviewSession",
-  "QuestionInstance",
-  "AnswerAttempt",
-  "AnswerInputArtifact",
-  "Transcript",
-  "TranscriptRevision",
-  "FeedbackGeneration",
-  "FeedbackItem",
-  "SessionSummaryGeneration",
-  "SessionSummaryInput",
-  "CoachingConversation",
-  "DialogueTurn",
 ] as const;
 
 export const BACKED_UP_PRISMA_MODELS: readonly BackupModel[] = INSERT_ORDER;

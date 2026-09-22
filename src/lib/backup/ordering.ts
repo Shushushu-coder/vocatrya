@@ -1,6 +1,52 @@
 // The single table that drives export scoping, wipe scoping, FK rewriting and
 // ownership injection. Dataset membership is declared on each spec so standard
 // vs sensitive restore cannot drift into a second handwritten list.
+//
+// InterviewDx frozen spec identity (spec v1) — the sole domain semantic source
+// for the Interview backup implementation (READ_ONLY, never redefined here):
+//   docs/INTERVIEW_PERSISTENCE_DATA_CONTRACT.md
+//   docs/INTERVIEW_RESTORE_TOPOLOGY.md
+//   docs/INTERVIEW_BACKUP_ROUNDTRIP_INVARIANTS.md
+//   src/backup/interviewPersistenceModels.ts
+//   src/backup/backupManifest.ts
+//   src/backup/restoreTopology.ts
+//   src/backup/questionBankRestorePolicy.ts
+//   + canonical round-trip fixture / questionbank restore fixtures / roundtripAssertions.ts
+// Direction: InterviewDx frozen spec → Vocatrya implementation → conformance audit.
+export const INTERVIEW_SPEC_TAG = "interview-vocatrya-spec-v1" as const;
+export const INTERVIEW_SPEC_COMMIT =
+  "a7a8e2ed75e3797c207851f62e3a13732d405f6d" as const;
+
+// QuestionBank natural identity + canonical metadata (spec v1 §9–§11, frozen).
+// Identity: (bankKey, version). Canonical metadata: title/locale/kind.
+// Comparison explicitly ignores id/createdAt/updatedAt.
+export const QUESTION_BANK_IDENTITY_FIELDS = ["bankKey", "version"] as const;
+export const QUESTION_BANK_CANONICAL_METADATA_FIELDS = [
+  "title",
+  "locale",
+  "kind",
+] as const;
+export const QUESTION_BANK_EXCLUDED_COMPARISON_FIELDS = [
+  "id",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+// Normative restore error (spec v1 §12 Case C, frozen).
+export const QUESTION_BANK_VERSION_CONFLICT =
+  "QUESTION_BANK_VERSION_CONFLICT" as const;
+
+// QuestionBank ∉ per-user wipe/delete set (spec v1 §15, frozen).
+export const QUESTION_BANK_IN_DELETE_ORDER = false as const;
+
+// TranscriptRevision cross-user author rule (spec v1 §19, frozen):
+// non-null createdByUserId → normalized to importing user (ACCEPTED).
+export const TRANSCRIPT_REVISION_AUTHOR_POLICY =
+  "NORMALIZED_TO_IMPORTING_USER_ON_CROSS_USER_RESTORE" as const;
+// Explicit provenance trade-off (spec v1 §19, frozen). Never describe as
+// AUTHOR_PROVENANCE_LOSS: NONE.
+export const KNOWN_PROVENANCE_TRADEOFF =
+  "original author identity is not preserved across cross-user restore" as const;
 
 export type BackupModel =
   | "Company"
@@ -74,7 +120,21 @@ export type BackupModel =
   | "ApplicationInterviewReflectionItem"
   | "ApplicationAssessmentDetail"
   | "ApplicationOfferDetail"
-  | "LegacyMigrationMap";
+  | "LegacyMigrationMap"
+  | "QuestionBank"
+  | "QuestionBankItem"
+  | "InterviewSession"
+  | "QuestionInstance"
+  | "AnswerAttempt"
+  | "AnswerInputArtifact"
+  | "Transcript"
+  | "TranscriptRevision"
+  | "FeedbackGeneration"
+  | "FeedbackItem"
+  | "SessionSummaryGeneration"
+  | "SessionSummaryInput"
+  | "CoachingConversation"
+  | "DialogueTurn";
 
 export type BackupDataset = "standard" | "sensitive";
 
@@ -94,6 +154,11 @@ export interface ModelSpec {
   // Omitted dataset means standard. Sensitive models are opt-in on export
   // and wiped only when the backup manifest declares containsSensitiveData.
   dataset?: BackupDataset;
+  // Wipe scope for per-user restore. Omitted means "user" (scoped rows are
+  // deleted on restore). "none" means the model is never deleted by a
+  // per-user restore — used for system-managed global reference data
+  // (spec v1: QuestionBank = REFERENCE_DATA, never wiped).
+  wipeMode?: "user" | "none";
 }
 
 const byUser = (userId: string) => ({ userId });
@@ -134,6 +199,7 @@ const byExpression = (userId: string) => ({
 });
 const byMatch = (userId: string) => ({ matchAnalysis: { userId } });
 const bySensitiveInfo = (userId: string) => ({ sensitiveInfo: { userId } });
+const byInterviewSession = (userId: string) => ({ session: { userId } });
 
 export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
   Company: { delegate: "company", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
@@ -520,6 +586,122 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: {},
     scope: byUser,
   },
+  // Interview models are included in product backup starting from this change.
+  // QuestionBank is system-managed global reference data (spec v1 §8, §14–§15:
+  // REFERENCE_DATA_SNAPSHOT, not USER_DATA, never per-user wiped):
+  // identity = (bankKey, version); canonical metadata = title/locale/kind;
+  // restore resolves each referenced bank BEFORE its QuestionBankItems
+  // (missing → CREATE, equal → REUSE existing id, conflict → FAIL CLOSED with
+  // QUESTION_BANK_VERSION_CONFLICT). It exports every bank so a restore can
+  // rebuild a missing referenced canonical bank, but a per-user restore must
+  // never delete unrelated or existing canonical banks.
+  // QuestionBankItem is user-scoped membership (spec v1 §16): ownership via
+  // QuestionBankItem.questionId → Question.createdBy; a per-user export only
+  // carries memberships for that user's own questions and a restore only
+  // replaces the current user's memberships.
+  QuestionBank: {
+    delegate: "questionBank",
+    fks: {},
+    scope: () => ({}),
+    wipeMode: "none",
+  },
+  QuestionBankItem: {
+    delegate: "questionBankItem",
+    fks: { bankId: "QuestionBank", questionId: "Question" },
+    scope: (userId) => ({ question: { createdBy: userId } }),
+  },
+  InterviewSession: {
+    delegate: "interviewSession",
+    owner: "userId",
+    fks: {
+      jobOpportunityId: "JobOpportunity",
+      jobDescriptionVersionId: "JobDescriptionVersion",
+    },
+    scope: byUser,
+  },
+  QuestionInstance: {
+    delegate: "questionInstance",
+    fks: { sessionId: "InterviewSession", sourceQuestionId: "Question" },
+    scope: byInterviewSession,
+  },
+  AnswerAttempt: {
+    delegate: "answerAttempt",
+    fks: {
+      questionInstanceId: "QuestionInstance",
+      sessionId: "InterviewSession",
+    },
+    scope: byInterviewSession,
+  },
+  AnswerInputArtifact: {
+    delegate: "answerInputArtifact",
+    fks: { answerAttemptId: "AnswerAttempt", sessionId: "InterviewSession" },
+    scope: byInterviewSession,
+  },
+  Transcript: {
+    delegate: "transcript",
+    fks: {
+      sessionId: "InterviewSession",
+      answerAttemptId: "AnswerAttempt",
+      sourceArtifactId: "AnswerInputArtifact",
+    },
+    scope: byInterviewSession,
+  },
+  TranscriptRevision: {
+    delegate: "transcriptRevision",
+    fks: { transcriptId: "Transcript", answerAttemptId: "AnswerAttempt" },
+    scope: (userId) => ({ transcript: { session: { userId } } }),
+  },
+  FeedbackGeneration: {
+    delegate: "feedbackGeneration",
+    fks: {
+      answerAttemptId: "AnswerAttempt",
+      questionInstanceId: "QuestionInstance",
+      sessionId: "InterviewSession",
+      inputRevisionId: "TranscriptRevision",
+    },
+    scope: byInterviewSession,
+  },
+  FeedbackItem: {
+    delegate: "feedbackItem",
+    fks: {
+      sessionId: "InterviewSession",
+      transcriptId: "Transcript",
+      generationId: "FeedbackGeneration",
+    },
+    scope: byInterviewSession,
+  },
+  SessionSummaryGeneration: {
+    delegate: "sessionSummaryGeneration",
+    fks: { sessionId: "InterviewSession" },
+    scope: byInterviewSession,
+  },
+  SessionSummaryInput: {
+    delegate: "sessionSummaryInput",
+    fks: {
+      summaryGenerationId: "SessionSummaryGeneration",
+      sessionId: "InterviewSession",
+      questionInstanceId: "QuestionInstance",
+      feedbackGenerationId: "FeedbackGeneration",
+    },
+    scope: (userId) => ({ summary: { session: { userId } } }),
+  },
+  CoachingConversation: {
+    delegate: "coachingConversation",
+    fks: { sessionId: "InterviewSession" },
+    scope: byInterviewSession,
+  },
+  DialogueTurn: {
+    delegate: "dialogueTurn",
+    fks: {
+      sessionId: "InterviewSession",
+      conversationId: "CoachingConversation",
+      questionInstanceId: "QuestionInstance",
+      answerAttemptId: "AnswerAttempt",
+      commercialFeedbackItemId: "FeedbackItem",
+      summaryGenerationId: "SessionSummaryGeneration",
+    },
+    scope: byInterviewSession,
+  },
 };
 
 export const INSERT_ORDER: BackupModel[] = [
@@ -595,9 +777,32 @@ export const INSERT_ORDER: BackupModel[] = [
   "ApplicationAssessmentDetail",
   "ApplicationOfferDetail",
   "LegacyMigrationMap",
+  "QuestionBank",
+  "QuestionBankItem",
+  "InterviewSession",
+  "QuestionInstance",
+  "AnswerAttempt",
+  "AnswerInputArtifact",
+  "Transcript",
+  "TranscriptRevision",
+  "FeedbackGeneration",
+  "FeedbackItem",
+  "SessionSummaryGeneration",
+  "SessionSummaryInput",
+  "CoachingConversation",
+  "DialogueTurn",
 ];
 
-export const DELETE_ORDER: BackupModel[] = [...INSERT_ORDER].reverse();
+export const DELETE_ORDER: BackupModel[] = [...INSERT_ORDER]
+  .reverse()
+  .filter((model) => MODEL_SPECS[model].wipeMode !== "none");
+
+// Per-user wipe order (spec v1 topology §6): QuestionBank is restored but
+// never wiped, so the wipe set is the reverse insert order minus reference
+// data. modelsForWipe() filters this by dataset; callers must use
+// modelsForWipe()/DELETE_ORDER/USER_WIPE_ORDER, never a hand-rolled
+// `if (model === QuestionBank) continue` outside this metadata.
+export const USER_WIPE_ORDER: BackupModel[] = [...DELETE_ORDER];
 
 export function backupDataset(model: BackupModel): BackupDataset {
   return MODEL_SPECS[model].dataset ?? "standard";
@@ -646,6 +851,8 @@ export const DEFERRED_FKS: ReadonlyArray<{
   { model: "ResumeVariantVersion", field: "parentVersionId", target: "ResumeVariantVersion" },
   { model: "ResumeVariantVersion", field: "sourceMatchAnalysisId", target: "MatchAnalysis" },
   { model: "ApplicationAttempt", field: "transferredFromAttemptId", target: "ApplicationAttempt" },
+  { model: "InterviewSession", field: "currentQuestionInstanceId", target: "QuestionInstance" },
+  { model: "AnswerAttempt", field: "activeRevisionId", target: "TranscriptRevision" },
 ];
 
 export const DEFERRED_FK_FIELDS = new Set(
@@ -675,4 +882,5 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "JobSearchPreference",
   "MatchAnalysis",
   "ApplicationAttempt",
+  "InterviewSession",
 ];

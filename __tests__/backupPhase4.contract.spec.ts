@@ -10,6 +10,7 @@ import {
   DEFERRED_FKS,
   INSERT_ORDER,
   MODEL_SPECS,
+  QUESTION_BANK_IN_DELETE_ORDER,
 } from "@/lib/backup/ordering";
 import {
   backupCoverageStatus,
@@ -72,6 +73,43 @@ describe("Phase 4 backup contract", () => {
     }
   });
 
+  it("keeps QuestionBank as covered reference data without a format bump", () => {
+    // Spec v1 §14–§16, §20–§21, §30: QuestionBank stays in the payload as
+    // REFERENCE_DATA_SNAPSHOT (present in export, used during restore, never
+    // user-wiped) — still BACKED_UP, never INTENTIONALLY_EXCLUDED, and the
+    // payload shape is unchanged so BACKUP_FORMAT_VERSION stays 3.
+    expect(BACKUP_FORMAT_VERSION).toBe(3);
+    expect(backupCoverageStatus("QuestionBank")).toBe(
+      BACKUP_COVERAGE_STATUS.BACKED_UP,
+    );
+    expect(backupCoverageStatus("QuestionBankItem")).toBe(
+      BACKUP_COVERAGE_STATUS.BACKED_UP,
+    );
+    expect([...INTENTIONALLY_EXCLUDED_PRISMA_MODELS]).not.toContain(
+      "QuestionBank",
+    );
+    expect([...INTENTIONALLY_EXCLUDED_PRISMA_MODELS]).not.toContain(
+      "QuestionBankItem",
+    );
+    expect(QUESTION_BANK_IN_DELETE_ORDER).toBe(false);
+    expect(BackupDataSchema.shape).toHaveProperty("QuestionBank");
+    expect(BackupDataSchema.shape).toHaveProperty("QuestionBankItem");
+  });
+
+  it("leaves global/infra models untouched by the QuestionBank reference rule", () => {
+    // Step 29 audit: adding wipeMode none for QuestionBank must not change
+    // AbMigrationState (instance singleton, still whole-set replaced),
+    // LegacyMigrationMap (still user-owned), or JobStatus infra (still
+    // intentionally excluded, resolved by natural key outside the transaction).
+    expect(MODEL_SPECS.AbMigrationState.wipeMode).toBeUndefined();
+    expect(MODEL_SPECS.LegacyMigrationMap.owner).toBe("userId");
+    expect(backupCoverageStatus("JobStatus")).toBe(
+      BACKUP_COVERAGE_STATUS.INTENTIONALLY_EXCLUDED,
+    );
+    expect(INSERT_ORDER).toContain("AbMigrationState");
+    expect(INSERT_ORDER).toContain("LegacyMigrationMap");
+  });
+
   it("covers every required A+B user-state model", () => {
     const required = [
       "RecruitmentCampaign",
@@ -127,7 +165,9 @@ describe("Phase 4 backup contract", () => {
   it("keeps deferred FKs out of the linear FK map", () => {
     const fields = DEFERRED_FKS.map((entry) => `${entry.model}.${entry.field}`).sort();
     expect(fields).toEqual([
+      "AnswerAttempt.activeRevisionId",
       "ApplicationAttempt.transferredFromAttemptId",
+      "InterviewSession.currentQuestionInstanceId",
       "JobDescriptionVersion.currentParseId",
       "JobOpportunity.currentJdVersionId",
       "ResumeVariant.currentVersionId",

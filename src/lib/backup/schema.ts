@@ -892,6 +892,210 @@ const AbMigrationState = z.object({
   updatedAt: dt,
 });
 
+// Interview models are included in product backup starting from this change.
+// Owner columns (InterviewSession.userId) are omitted like every other owned
+// model: export strips them, restore injects the session user. The backup
+// preserves ids, FK ids, snapshots, and provider/model provenance verbatim and
+// never calls an AI provider on restore. Legacy backups without these groups
+// still parse via the .default([]) groups below.
+const QuestionBank = z.object({
+  id,
+  bankKey: str,
+  version: str,
+  title: str,
+  locale: str,
+  kind: str,
+  createdAt: dt,
+});
+
+const QuestionBankItem = z.object({
+  id,
+  bankId: id,
+  questionId: id,
+  displayOrder: int,
+  createdAt: dt,
+});
+
+const InterviewSession = z.object({
+  id,
+  status: str,
+  coachingMode: str,
+  feedbackReleasePolicy: str,
+  feedbackReleasedAt: optDt,
+  startedAt: optDt,
+  completedAt: optDt,
+  archivedAt: optDt,
+  statusBeforeArchive: optStr,
+  knowledgeBaseVersion: str,
+  currentQuestionInstanceId: optId,
+  jobOpportunityId: optId,
+  jobDescriptionVersionId: optId,
+  createdVia: optStr,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const QuestionInstance = z.object({
+  id,
+  sessionId: id,
+  sourceQuestionId: optId,
+  displayOrder: int,
+  displayedText: str,
+  sourceKind: str,
+  category: optStr,
+  sourceMetadata: optStr,
+  referenceAnswerSnapshot: optStr,
+  status: str,
+  createdAt: dt,
+});
+
+const AnswerAttempt = z.object({
+  id,
+  questionInstanceId: id,
+  sessionId: id,
+  attemptNumber: int,
+  inputType: str,
+  status: str,
+  startedAt: optDt,
+  submittedAt: optDt,
+  completedAt: optDt,
+  durationMs: optInt,
+  activeRevisionId: optId,
+  deletedAt: optDt,
+  createdAt: dt,
+});
+
+const AnswerInputArtifact = z.object({
+  id,
+  answerAttemptId: id,
+  sessionId: id,
+  inputType: str,
+  role: str,
+  filePath: optStr,
+  fileFormat: optStr,
+  durationSeconds: z.number().nullable(),
+  fileSizeBytes: optInt,
+  textContent: optStr,
+  createdAt: dt,
+});
+
+const Transcript = z.object({
+  id,
+  sessionId: id,
+  answerAttemptId: id,
+  sourceArtifactId: optId,
+  fullText: str,
+  segments: str,
+  asrModel: optStr,
+  asrStatus: optStr,
+  errorMessage: optStr,
+  createdAt: dt,
+});
+
+const TranscriptRevision = z.object({
+  id,
+  transcriptId: id,
+  answerAttemptId: id,
+  revisionNumber: int,
+  revisionKind: str,
+  fullText: str,
+  segments: optStr,
+  alignmentStatus: str,
+  contentHash: str,
+  createdByUserId: optId,
+  createdVia: optStr,
+  createdAt: dt,
+});
+
+const FeedbackGeneration = z.object({
+  id,
+  answerAttemptId: id,
+  questionInstanceId: id,
+  sessionId: id,
+  versionNumber: int,
+  isCurrent: z.boolean(),
+  status: str,
+  inputRevisionId: id,
+  inputContentHash: str,
+  model: optStr,
+  provider: optStr,
+  promptVersion: optStr,
+  knowledgeBaseVersion: optStr,
+  failureCode: optStr,
+  failureMessage: optStr,
+  createdAt: dt,
+  completedAt: optDt,
+});
+
+const FeedbackItem = z.object({
+  id,
+  sessionId: id,
+  transcriptId: id,
+  generationId: id,
+  itemOrder: int,
+  problemLabel: str,
+  evidence: str,
+  explanation: str,
+  suggestion: str,
+  createdAt: dt,
+});
+
+const SessionSummaryGeneration = z.object({
+  id,
+  sessionId: id,
+  versionNumber: int,
+  status: str,
+  isCurrent: z.boolean(),
+  bodyText: optStr,
+  structuredPayload: optStr,
+  inputHash: str,
+  model: optStr,
+  provider: optStr,
+  promptVersion: optStr,
+  knowledgeBaseVersion: optStr,
+  failureCode: optStr,
+  failureMessage: optStr,
+  createdAt: dt,
+  completedAt: optDt,
+});
+
+const SessionSummaryInput = z.object({
+  id,
+  summaryGenerationId: id,
+  sessionId: id,
+  questionInstanceId: id,
+  feedbackGenerationId: id,
+  inputOrder: int,
+  createdAt: dt,
+});
+
+const CoachingConversation = z.object({
+  id,
+  sessionId: id,
+  status: str,
+  createdAt: dt,
+  closedAt: optDt,
+});
+
+const DialogueTurn = z.object({
+  id,
+  sessionId: id,
+  conversationId: id,
+  turnNumber: int,
+  userText: str,
+  entryMode: str,
+  assistantReply: str,
+  replyModel: optStr,
+  replyPromptVersion: optStr,
+  contextSnapshot: optStr,
+  targetType: str,
+  questionInstanceId: optId,
+  answerAttemptId: optId,
+  commercialFeedbackItemId: optId,
+  summaryGenerationId: optId,
+  createdAt: dt,
+});
+
 const group = <T extends z.ZodTypeAny>(schema: T) =>
   z.array(schema).default([]);
 
@@ -968,6 +1172,20 @@ export const BackupDataSchema = z.object({
   ApplicationAssessmentDetail: group(ApplicationAssessmentDetail),
   ApplicationOfferDetail: group(ApplicationOfferDetail),
   LegacyMigrationMap: group(LegacyMigrationMap),
+  QuestionBank: group(QuestionBank),
+  QuestionBankItem: group(QuestionBankItem),
+  InterviewSession: group(InterviewSession),
+  QuestionInstance: group(QuestionInstance),
+  AnswerAttempt: group(AnswerAttempt),
+  AnswerInputArtifact: group(AnswerInputArtifact),
+  Transcript: group(Transcript),
+  TranscriptRevision: group(TranscriptRevision),
+  FeedbackGeneration: group(FeedbackGeneration),
+  FeedbackItem: group(FeedbackItem),
+  SessionSummaryGeneration: group(SessionSummaryGeneration),
+  SessionSummaryInput: group(SessionSummaryInput),
+  CoachingConversation: group(CoachingConversation),
+  DialogueTurn: group(DialogueTurn),
 
   // Implicit Prisma m2m relations are not models, so they travel as id pairs.
   _JobToTag: group(z.object({ jobId: id, tagId: id })),
