@@ -181,6 +181,10 @@ if (!singleInstance) {
                 encryptionKey: secrets.encryptionKey,
                 uploadsDir: foundationConfig.uploadsDir,
                 databaseUrl: foundationConfig.databaseUrl,
+                // app.getVersion() only reflects the packaged installer
+                // version when packaged; dev/foundation probes must not leak
+                // Electron's own version into the backend.
+                appVersion: app.isPackaged ? app.getVersion() : undefined,
               });
               backendExpectedExit = true;
               const child = spawnBackend({

@@ -29,7 +29,12 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const current = packageJson.version;
+  // The desktop backend receives the installed app's Electron version via
+  // VOCATRYA_APP_VERSION so the displayed version always matches the
+  // installer, even when the bundled web build was produced from a stale
+  // .next output. Other deployments fall back to the bundled package.json.
+  const current =
+    (process.env.VOCATRYA_APP_VERSION ?? "").trim() || packageJson.version;
   let release: Awaited<ReturnType<typeof fetchLatestRelease>> = null;
 
   try {

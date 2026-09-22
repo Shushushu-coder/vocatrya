@@ -49,7 +49,7 @@ function toPrismaFileUrl(filePath) {
   return `file:${path.resolve(filePath).replaceAll("\\", "/")}`;
 }
 
-function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl }) {
+function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion }) {
   assertLoopbackHost("127.0.0.1");
   const env = {
     NODE_ENV: "production",
@@ -84,6 +84,14 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
     env.ENCRYPTION_KEY = encryptionKey;
   } else {
     delete env.ENCRYPTION_KEY;
+  }
+  // Installed-app version the About/Support dialog reports. The packaged app
+  // supplies its Electron app.getVersion() so a stale web bundle cannot show
+  // an older inlined package.json version; unset means "use package.json".
+  if (typeof appVersion === "string" && appVersion.trim()) {
+    env.VOCATRYA_APP_VERSION = appVersion.trim();
+  } else {
+    delete env.VOCATRYA_APP_VERSION;
   }
   return env;
 }

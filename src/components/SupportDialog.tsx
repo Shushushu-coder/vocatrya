@@ -23,7 +23,10 @@ export function SupportDialog({
   version,
 }: SupportDialogProps) {
   const { t } = useI18n();
-  const appVersion = packageJson.version;
+  // Prefer the runtime-reported version (installed desktop app injects its
+  // real Electron app version); fall back to the bundled package.json while
+  // the /api/version fetch is pending or on non-desktop deployments.
+  const appVersion = version?.current ?? packageJson.version;
   const currentYear = new Date().getFullYear();
 
   return (
