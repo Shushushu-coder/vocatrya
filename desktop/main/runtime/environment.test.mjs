@@ -197,23 +197,29 @@ describe("runtime process environment isolation", () => {
     expect(env.GITHUB_TOKEN).toBeUndefined();
   });
 
-  it("gives Devin isolated APPDATA/XDG/HOME roots plus --config metadata", () => {
+  it("anchors Devin isolation on USERPROFILE, not --config", () => {
+    // Verified against devin 3000.10.31: credentials resolve through
+    // USERPROFILE (…\AppData\Roaming\devin\credentials.toml). APPDATA/XDG
+    // are belt-and-suspenders; --config never moved credentials and is gone.
     const devin = getRuntimeDefinition("DEVIN_RUNTIME");
     const env = buildRuntimeProcessEnvironment({
       baseEnv: HOSTILE_BASE_ENV,
       definition: devin,
       profileDir: PROFILE_DIR,
     });
-    expect(env.APPDATA).toBe(`${PROFILE_DIR}\\appdata`);
+    const home = `${PROFILE_DIR}\\home`;
+    expect(env.USERPROFILE).toBe(home);
+    expect(env.HOME).toBe(home);
+    expect(env.APPDATA).toBe(`${home}\\AppData\\Roaming`);
+    expect(env.LOCALAPPDATA).toBe(`${home}\\AppData\\Local`);
     expect(env.XDG_CONFIG_HOME).toBe(`${PROFILE_DIR}\\xdg-config`);
     expect(env.XDG_DATA_HOME).toBe(`${PROFILE_DIR}\\xdg-data`);
-    expect(env.HOME).toBe(`${PROFILE_DIR}\\home`);
-    expect(env.USERPROFILE).toBe(`${PROFILE_DIR}\\home`);
+    expect(env.HOMEDRIVE).toBeUndefined();
+    expect(env.HOMEPATH).toBeUndefined();
     expect(env.DEVIN_API_KEY).toBeUndefined();
-    expect(buildRuntimeInvocationArgs({ definition: devin, profileDir: PROFILE_DIR })).toEqual([
-      "--config",
-      `${PROFILE_DIR}\\config\\devin.toml`,
-    ]);
+    expect(
+      buildRuntimeInvocationArgs({ definition: devin, profileDir: PROFILE_DIR }),
+    ).toEqual([]);
     // Runtimes without invocation metadata contribute no extra args.
     expect(
       buildRuntimeInvocationArgs({

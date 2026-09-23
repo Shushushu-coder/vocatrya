@@ -35,6 +35,7 @@ const { CLAUDE_BACKEND_KIND, claudeAdapter } = require("./claude");
 const { CURSOR_BACKEND_KIND, cursorAdapter } = require("./cursor");
 const { GROK_BACKEND_KIND, grokAdapter } = require("./grok");
 const { OPENCODE_BACKEND_KIND, opencodeAdapter } = require("./opencode");
+const { DEVIN_BACKEND_KIND, devinAdapter } = require("./devin");
 
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000; // browser auth is user-paced
 const LOGOUT_TIMEOUT_MS = 30 * 1000;
@@ -54,6 +55,7 @@ const PROVIDER_ADAPTERS = Object.freeze({
   [CURSOR_BACKEND_KIND]: cursorAdapter,
   [GROK_BACKEND_KIND]: grokAdapter,
   [OPENCODE_BACKEND_KIND]: opencodeAdapter,
+  [DEVIN_BACKEND_KIND]: devinAdapter,
 });
 
 const CONNECTION_OP_CODES = Object.freeze({
@@ -387,6 +389,20 @@ function createConnectionService({
         return fail(failure);
       }
 
+      // Provider-specific post-auth setup inside the managed profile
+      // (Devin pins devin.org_id so `devin -p` never hits the interactive
+      // organization picker). Best-effort — it never blocks the flow.
+      if (typeof adapter.prepareSession === "function") {
+        await adapter.prepareSession({
+          executablePath: runtime.executable,
+          profileDir: pendingProfile.profileDir,
+          baseEnv: deps.env,
+          runner,
+          timeoutMs: statusTimeoutMs,
+          signal: controller.signal,
+        });
+      }
+
       const complete = await backend.completeOperation(resolved.resolved.operationId, {
         outcome: "authenticated",
         // The adapter-verified provider — only a successful OAuth
@@ -478,6 +494,16 @@ function createConnectionService({
           return fail(failure);
         }
         if (!failure) {
+          if (typeof adapter.prepareSession === "function") {
+            await adapter.prepareSession({
+              executablePath: runtime.executable,
+              profileDir,
+              baseEnv: deps.env,
+              runner,
+              timeoutMs: statusTimeoutMs,
+              signal: controller.signal,
+            });
+          }
           const complete = await backend.completeOperation(
             resolved.resolved.operationId,
             {
@@ -671,6 +697,19 @@ function createConnectionService({
       const profileDir = profileManager.ensureProfile(
         connection.runtimeProfileRef,
       );
+
+      // Provider-specific session prerequisites (Devin org pinning) —
+      // best-effort, the smoke itself reports failure if they are unmet.
+      if (typeof adapter.prepareSession === "function") {
+        await adapter.prepareSession({
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          runner,
+          timeoutMs: statusTimeoutMs,
+          signal: controller.signal,
+        });
+      }
 
       // Multi-provider runtimes must pin the smoke to the account
       // provider's route; adapters can normalize, refuse foreign routes,

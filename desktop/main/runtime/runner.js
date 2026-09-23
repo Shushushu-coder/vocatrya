@@ -60,13 +60,15 @@ function createCappedAccumulator(limit) {
 }
 
 // runRuntimeCommand({ executable, args, cwd, env, timeoutMs, signal,
-//   sanitize, onStdout, onStderr })
+//   sanitize, onStdout, onStderr, maxCaptureBytes })
 //   → { exitCode, signal, timedOut, aborted, stdout, stderr, error? }
 // Never throws for process failure; throws only for invalid input.
 // onStdout/onStderr (optional) observe raw chunks as they arrive — used by
 // login flows to surface a vendor OAuth URL while the process still runs
 // (some CLIs print it on stderr, e.g. `grok login`). Observers never affect
-// the run; their errors are swallowed.
+// the run; their errors are swallowed. maxCaptureBytes overrides the 256KB
+// per-stream cap for commands whose contract legitimately emits larger
+// payloads (e.g. `devin models list --format json` catalogs).
 function runRuntimeCommand({
   executable,
   args,
@@ -77,6 +79,7 @@ function runRuntimeCommand({
   sanitize = true,
   onStdout,
   onStderr,
+  maxCaptureBytes = MAX_CAPTURE_BYTES,
   spawnImpl = spawn,
 } = {}) {
   if (typeof executable !== "string" || executable.length === 0) {
@@ -87,8 +90,8 @@ function runRuntimeCommand({
   }
 
   return new Promise((resolve) => {
-    const stdout = createCappedAccumulator(MAX_CAPTURE_BYTES);
-    const stderr = createCappedAccumulator(MAX_CAPTURE_BYTES);
+    const stdout = createCappedAccumulator(maxCaptureBytes);
+    const stderr = createCappedAccumulator(maxCaptureBytes);
     let timedOut = false;
     let aborted = false;
     let settled = false;

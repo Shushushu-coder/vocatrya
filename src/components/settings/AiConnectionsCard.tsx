@@ -46,6 +46,15 @@ const ACCOUNT_LOGIN_BACKENDS = [
     connectLabelKey: "settings.connectCursor",
     accountProvider: "CURSOR",
   },
+  {
+    backendKind: "DEVIN_RUNTIME",
+    name: "Devin",
+    connectLabelKey: "settings.connectDevin",
+    accountProvider: "DEVIN",
+    // Devin login opens a real terminal window (the CLI's method menu needs
+    // console input) — the pending hint tells the user what to do there.
+    pendingHintKey: "settings.aiConnDevinLoginHint",
+  },
 ] as const;
 
 type BackendKind = (typeof ACCOUNT_LOGIN_BACKENDS)[number]["backendKind"];
@@ -339,6 +348,14 @@ function AiConnectionsCard() {
                 </Button>
               )}
             </div>
+
+            {busy === `connect:${backend.backendKind}` &&
+              "pendingHintKey" in backend &&
+              backend.pendingHintKey && (
+                <p className="text-sm text-muted-foreground">
+                  {t(backend.pendingHintKey)}
+                </p>
+              )}
 
             {busy === `connect:${backend.backendKind}` && oauthUrl && (
               <div className="rounded-md border p-2 text-sm space-y-1">

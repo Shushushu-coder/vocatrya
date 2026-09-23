@@ -172,18 +172,42 @@ describe("runtime definition registry", () => {
     expect(cursor.bundle.entrypoint).toBe("index.js");
   });
 
-  it("models Devin as isolated roots, not a single HOME env", () => {
+  it("models Devin as isolated roots anchored on USERPROFILE", () => {
+    // Verified against devin 3000.10.31: credentials persist at
+    // %USERPROFILE%\AppData\Roaming\devin\credentials.toml — USERPROFILE is
+    // the isolation boundary, APPDATA alone is not. --config relocates
+    // config.json only, so there is no invocation.configArgs boundary.
     const devin = getRuntimeDefinition("DEVIN_RUNTIME");
     expect(devin.profile.strategy).toBe("ISOLATED_ROOTS");
     for (const key of [
+      "USERPROFILE",
+      "HOME",
       "APPDATA",
+      "LOCALAPPDATA",
       "XDG_CONFIG_HOME",
       "XDG_DATA_HOME",
-      "HOME",
+      "XDG_CACHE_HOME",
+      "XDG_STATE_HOME",
     ]) {
       expect(devin.profile.env[key]).toContain("$PROFILE_DIR");
+      expect(devin.profile.env[key]).not.toBe("$PROFILE_DIR");
     }
-    expect(devin.profile.invocation.configArgs[0]).toBe("--config");
+    expect(devin.profile.invocation).toBeUndefined();
+    for (const key of [
+      "DEVIN_API_KEY",
+      "DEVIN_TOKEN",
+      "DEVIN_ACCESS_TOKEN",
+      "DEVIN_PAT",
+      "WINDSURF_API_KEY",
+      "COGNITION_API_KEY",
+      "DEVIN_API_URL",
+      "DEVIN_WEBAPP_HOST",
+      "DEVIN_ACP_BACKEND",
+      "HOMEDRIVE",
+      "HOMEPATH",
+    ]) {
+      expect(devin.profile.stripEnv).toContain(key);
+    }
   });
 
   it("collects the union of provider credential-override env keys", () => {

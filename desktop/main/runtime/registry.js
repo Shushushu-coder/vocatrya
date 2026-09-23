@@ -808,28 +808,71 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       {
         commands: ["devin.exe", "devin.cmd", "devin"],
         knownLocations: [
-          "{LOCALAPPDATA}\\Programs\\Devin\\devin.exe",
-          "{USERPROFILE}\\.devin\\bin\\devin.exe",
+          // Verified on devin 3000.10.31: the official Windows install is a
+          // versioned bundle under %LOCALAPPDATA%\devin\cli — bin\devin.exe
+          // is a real PE executable, directly spawnable with shell:false.
+          "{LOCALAPPDATA}\\devin\\cli\\bin\\devin.exe",
         ],
       },
     ],
     profile: {
-      // WORKABLE_WITH_PROCESS_ENV_ISOLATION: Devin has no official profile
-      // primitive, so each connection gets its own APPDATA / XDG roots and
-      // HOME plus an explicit --config path. If Devin ships a native profile
-      // flag later, this strategy is replaced, not extended.
+      // Verified against devin 3000.10.31 on win32: credentials persist at
+      // %USERPROFILE%\AppData\Roaming\devin\credentials.toml — resolved via
+      // USERPROFILE, NOT the APPDATA/XDG_* env vars (redirecting APPDATA
+      // alone leaves the CLI on the real profile). The CLI canonicalizes
+      // <USERPROFILE>\AppData\Roaming and <USERPROFILE>\AppData\Local at
+      // startup and fails closed if they do not exist, so the adapter
+      // materializes that skeleton before every spawn. HOME and the XDG
+      // roots are redirected too so no other home resolution can fall back
+      // to the real profile. The --config flag only relocates config.json —
+      // it does NOT move credentials, so it is not part of the boundary.
       strategy: PROFILE_STRATEGIES.ISOLATED_ROOTS,
       env: {
-        APPDATA: "$PROFILE_DIR\\appdata",
+        USERPROFILE: "$PROFILE_DIR\\home",
+        HOME: "$PROFILE_DIR\\home",
+        APPDATA: "$PROFILE_DIR\\home\\AppData\\Roaming",
+        LOCALAPPDATA: "$PROFILE_DIR\\home\\AppData\\Local",
         XDG_CONFIG_HOME: "$PROFILE_DIR\\xdg-config",
         XDG_DATA_HOME: "$PROFILE_DIR\\xdg-data",
-        HOME: "$PROFILE_DIR\\home",
-        USERPROFILE: "$PROFILE_DIR\\home",
+        XDG_CACHE_HOME: "$PROFILE_DIR\\xdg-cache",
+        XDG_STATE_HOME: "$PROFILE_DIR\\xdg-state",
       },
-      stripEnv: ["DEVIN_API_KEY", "DEVIN_TOKEN"],
-      invocation: {
-        configArgs: ["--config", "$PROFILE_DIR\\config\\devin.toml"],
-      },
+      // Every env route that could override authentication, redirect the
+      // backend, or change the auth method inside a managed profile. The
+      // base env is allowlist-built so most never arrive; the list
+      // documents intent and guards future allowlist growth.
+      stripEnv: [
+        // Credential / auth-method overrides — WINDSURF_API_KEY is a real
+        // credential input for `devin acp` (verified in the bundled
+        // commands reference) and would bypass the account session.
+        "DEVIN_API_KEY",
+        "DEVIN_TOKEN",
+        "DEVIN_ACCESS_TOKEN",
+        "DEVIN_PAT",
+        "WINDSURF_API_KEY",
+        "WINDSURF_TOKEN",
+        "COGNITION_API_KEY",
+        "COGNITION_TOKEN",
+        // Endpoint / backend / credential-policy redirects.
+        "DEVIN_API_URL",
+        "DEVIN_API_BASE_URL",
+        "DEVIN_WEBAPP_HOST",
+        "DEVIN_BACKEND",
+        "DEVIN_ACP_BACKEND",
+        "ACP_BACKEND",
+        // Session/behavior overrides — a managed profile pins its own
+        // permission mode and never inherits an ambient model/sandbox.
+        "DEVIN_MODEL",
+        "DEVIN_PERMISSION_MODE",
+        "DEVIN_SANDBOX",
+        "DEVIN_PLUGIN_DISCOVERY",
+        "DEVIN_HAH",
+        "DEVIN_SAH",
+        // ~ fallbacks that could point a managed child at the real
+        // profile roots (USERPROFILE is the credential boundary).
+        "HOMEDRIVE",
+        "HOMEPATH",
+      ],
     },
     install: {
       executionEnabled: false,
@@ -871,11 +914,39 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     authProbe: {
       args: ["auth", "status"],
       mode: "READ_ONLY",
-      notes: "Reports Devin auth state for the isolated config roots.",
+      // Verified on devin 3000.10.31: prints "Logged in (via Devin)." plus
+      // User/Account blocks (email, user id, tier, team) when an account
+      // session exists, or "Not logged in." with the credentials path when
+      // not. Token/API-key logins print a different "(via ...)" method.
+      notes:
+        "Reads Devin CLI auth state for the redirected USERPROFILE. The " +
+        "(via <method>) suffix is the auth-method classification surface; " +
+        "only 'via Devin' (account login) may complete ACCOUNT_LOGIN.",
+    },
+    // Verified against devin 3000.10.31 (devin <cmd> --help). All commands
+    // run with USERPROFILE pointed at the managed profile home.
+    commands: {
+      // `devin auth login` opens an interactive TUI menu (browser / manual
+      // token / enterprise). It cannot be driven over pipes — the adapter
+      // launches it inside a real console window and the CLI owns the
+      // browser flow entirely. Long-running; cancelled via AbortSignal.
+      login: ["auth", "login"],
+      logout: ["auth", "logout"],
+      status: ["auth", "status"],
+      // `models list --format json` prints the account-visible catalog as
+      // {families:[{slug,label,variants:[{model_uid,label,...}]}]}.
+      models: ["models", "list", "--format", "json"],
+      // One-shot headless inference; the adapter appends the safety flags.
+      print: ["-p"],
+      // Read-only account/org metadata used to pin devin.org_id so -p does
+      // not hit the interactive organization picker.
+      orgInfo: ["cloud", "drs", "whoami"],
     },
     capabilities: {
       accountLogin: true,
       modelDiscovery: true,
+      streaming: true,
+      acp: true,
     },
   },
 ]);

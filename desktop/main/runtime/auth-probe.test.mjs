@@ -99,7 +99,10 @@ describe("runtime auth probe", () => {
     expect(calls[0].env.OPENAI_API_KEY).toBeUndefined();
   });
 
-  it("prepends provider invocation args (Devin --config) to probe args", async () => {
+  it("probes Devin inside the USERPROFILE-anchored profile roots", async () => {
+    // Verified against devin 3000.10.31: credentials resolve via
+    // USERPROFILE — the probe env must carry the redirected home roots and
+    // no --config arg (the flag never moved credentials).
     const calls = [];
     const fakeRunner = async (cmd) => {
       calls.push(cmd);
@@ -112,13 +115,13 @@ describe("runtime auth probe", () => {
       profileDir,
       runner: fakeRunner,
     });
-    expect(calls[0].args).toEqual([
-      "--config",
-      `${profileDir}\\config\\devin.toml`,
-      "auth",
-      "status",
-    ]);
-    expect(calls[0].env.APPDATA).toBe(`${profileDir}\\appdata`);
+    expect(calls[0].args).toEqual(["auth", "status"]);
+    const home = `${profileDir}\\home`;
+    expect(calls[0].env.USERPROFILE).toBe(home);
+    expect(calls[0].env.HOME).toBe(home);
+    expect(calls[0].env.APPDATA).toBe(`${home}\\AppData\\Roaming`);
+    expect(calls[0].env.LOCALAPPDATA).toBe(`${home}\\AppData\\Local`);
+    expect(calls[0].env.DEVIN_API_KEY).toBeUndefined();
   });
 
   it("maps runner failures and timeouts to UNKNOWN", async () => {
