@@ -60,12 +60,13 @@ function createCappedAccumulator(limit) {
 }
 
 // runRuntimeCommand({ executable, args, cwd, env, timeoutMs, signal,
-//   sanitize, onStdout })
+//   sanitize, onStdout, onStderr })
 //   → { exitCode, signal, timedOut, aborted, stdout, stderr, error? }
 // Never throws for process failure; throws only for invalid input.
-// onStdout (optional) observes raw stdout chunks as they arrive — used by
-// login flows to surface a vendor OAuth URL while the process still runs.
-// The observer never affects the run; its errors are swallowed.
+// onStdout/onStderr (optional) observe raw chunks as they arrive — used by
+// login flows to surface a vendor OAuth URL while the process still runs
+// (some CLIs print it on stderr, e.g. `grok login`). Observers never affect
+// the run; their errors are swallowed.
 function runRuntimeCommand({
   executable,
   args,
@@ -75,6 +76,7 @@ function runRuntimeCommand({
   signal,
   sanitize = true,
   onStdout,
+  onStderr,
   spawnImpl = spawn,
 } = {}) {
   if (typeof executable !== "string" || executable.length === 0) {
@@ -153,7 +155,17 @@ function runRuntimeCommand({
           }
         }
       });
-    if (child.stderr) child.stderr.on("data", (chunk) => stderr.push(chunk));
+    if (child.stderr)
+      child.stderr.on("data", (chunk) => {
+        stderr.push(chunk);
+        if (typeof onStderr === "function") {
+          try {
+            onStderr(chunk.toString("utf8"));
+          } catch {
+            // An observer failure must never break the process run.
+          }
+        }
+      });
     child.once("error", (error) => {
       finish({ exitCode: null, error: error.message });
     });

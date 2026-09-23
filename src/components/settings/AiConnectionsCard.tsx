@@ -34,6 +34,12 @@ const ACCOUNT_LOGIN_BACKENDS = [
     connectLabelKey: "settings.connectChatGPTViaOpenCode",
     accountProvider: "OPENAI",
   },
+  {
+    backendKind: "GROK_RUNTIME",
+    name: "Grok",
+    connectLabelKey: "settings.connectGrok",
+    accountProvider: "XAI",
+  },
 ] as const;
 
 type BackendKind = (typeof ACCOUNT_LOGIN_BACKENDS)[number]["backendKind"];

@@ -28,6 +28,7 @@ const { RuntimeProfileManager } = require("./profiles");
 const { AUTH_PROBE_TIMEOUT_MS } = require("./auth-probe");
 const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
 const { CLAUDE_BACKEND_KIND, claudeAdapter } = require("./claude");
+const { GROK_BACKEND_KIND, grokAdapter } = require("./grok");
 const { OPENCODE_BACKEND_KIND, opencodeAdapter } = require("./opencode");
 
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000; // browser auth is user-paced
@@ -45,6 +46,7 @@ const SMOKE_TIMEOUT_MS = 120 * 1000;
 const PROVIDER_ADAPTERS = Object.freeze({
   [CODEX_BACKEND_KIND]: codexAdapter,
   [CLAUDE_BACKEND_KIND]: claudeAdapter,
+  [GROK_BACKEND_KIND]: grokAdapter,
   [OPENCODE_BACKEND_KIND]: opencodeAdapter,
 });
 
@@ -205,7 +207,21 @@ function createConnectionService({
     return { resolved, connection, adapter };
   }
 
-  async function probeAccountStatus(adapter, executable, profileDir) {
+  async function probeAccountStatus(adapter, executable, profileDir, signal) {
+    // Adapters whose runtime has no one-shot status command (Grok: auth is
+    // only observable through the ACP stdio handshake) expose probeAuth,
+    // which drives the exchange itself under the same managed env.
+    if (typeof adapter.probeAuth === "function") {
+      return adapter.probeAuth({
+        executablePath: executable,
+        profileDir,
+        baseEnv: deps.env,
+        timeoutMs: statusTimeoutMs,
+        signal,
+        spawnImpl: deps.spawnImpl,
+        terminateImpl: deps.terminateImpl,
+      });
+    }
     const invocation = adapter.buildStatusInvocation({
       executablePath: executable,
       profileDir,
@@ -221,7 +237,7 @@ function createConnectionService({
   // Spawns the provider login command and waits. The CLI owns the browser
   // flow entirely. When the runtime cannot open a browser itself (e.g.
   // OpenCode spawned non-interactively), the adapter's extractLoginUrl
-  // pulls the vendor's authorize URL out of the raw stdout stream and it
+  // pulls the vendor's authorize URL out of the raw output stream and it
   // is forwarded to the renderer via deps.notifyOAuthUrl — the URL is the
   // official authorization entry point, not credential material, and it
   // is never written to diag/logs.
@@ -231,30 +247,34 @@ function createConnectionService({
       profileDir,
       baseEnv: deps.env,
     });
-    let stdoutBuffer = "";
+    let loginOutputBuffer = "";
     let urlSent = false;
+    // Some CLIs print the authorize URL on stdout (OpenCode), others on
+    // stderr (`grok login`); both streams feed the same bounded buffer.
+    const observeChunk =
+      typeof adapter.extractLoginUrl === "function" &&
+      typeof deps.notifyOAuthUrl === "function"
+        ? (chunk) => {
+            if (urlSent || loginOutputBuffer.length > 64 * 1024) return;
+            loginOutputBuffer += chunk;
+            const url = adapter.extractLoginUrl(loginOutputBuffer);
+            if (url) {
+              urlSent = true;
+              deps.notifyOAuthUrl({
+                backendKind: adapter.backendKind,
+                accountProvider: adapter.accountProvider,
+                url,
+              });
+            }
+          }
+        : undefined;
     return runner({
       ...invocation,
       timeoutMs: loginTimeoutMs,
       signal,
       sanitize: true,
-      onStdout:
-        typeof adapter.extractLoginUrl === "function" &&
-        typeof deps.notifyOAuthUrl === "function"
-          ? (chunk) => {
-              if (urlSent) return;
-              stdoutBuffer += chunk;
-              const url = adapter.extractLoginUrl(stdoutBuffer);
-              if (url) {
-                urlSent = true;
-                deps.notifyOAuthUrl({
-                  backendKind: adapter.backendKind,
-                  accountProvider: adapter.accountProvider,
-                  url,
-                });
-              }
-            }
-          : undefined,
+      onStdout: observeChunk,
+      onStderr: observeChunk,
     });
   }
 
@@ -325,6 +345,7 @@ function createConnectionService({
         adapter,
         runtime.executable,
         pendingProfile.profileDir,
+        controller.signal,
       );
       const failure = classifyLoginOutcome(
         adapter,
@@ -398,7 +419,12 @@ function createConnectionService({
           profileDir,
           controller.signal,
         );
-        const status = await probeAccountStatus(adapter, runtime.executable, profileDir);
+        const status = await probeAccountStatus(
+          adapter,
+          runtime.executable,
+          profileDir,
+          controller.signal,
+        );
         const failure = classifyLoginOutcome(
           adapter,
           loginResult,
@@ -538,7 +564,12 @@ function createConnectionService({
       const profileDir = profileManager.ensureProfile(
         connection.runtimeProfileRef,
       );
-      const status = await probeAccountStatus(adapter, runtime.executable, profileDir);
+      const status = await probeAccountStatus(
+        adapter,
+        runtime.executable,
+        profileDir,
+        controller.signal,
+      );
       const reported = adapter.reportableAuthState(status);
       const complete = await backend.completeOperation(
         resolved.resolved.operationId,

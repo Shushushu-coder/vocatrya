@@ -79,6 +79,8 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
         profileDir,
         baseEnv: deps.env,
         runner: deps.runner,
+        spawnImpl: deps.spawnImpl,
+        terminateImpl: deps.terminateImpl,
       });
       status.authState = probe.authState;
       return status;

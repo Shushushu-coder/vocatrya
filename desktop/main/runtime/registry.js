@@ -249,10 +249,129 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         // The leader socket must be per-profile or two managed accounts can
         // attach to the same leader process.
         GROK_LEADER_SOCKET: "$PROFILE_DIR\\grok-leader.sock",
+        // Verified on grok 1.0.34/1.0.41: trusted_folders.toml, the
+        // Claude/Cursor compatibility scanners (skills, hooks, MCP config —
+        // e.g. ~/.claude.json), and the project-discovery home boundary all
+        // resolve through ~ (HOME/USERPROFILE), NOT GROK_HOME. Redirecting
+        // home — including the %APPDATA%/%LOCALAPPDATA% data roots — into
+        // the managed profile is what actually stops foreign MCP servers/
+        // hooks and host project trust from leaking into managed sessions.
+        // HOMEDRIVE/HOMEPATH are stripped (not settable per-drive) so ~
+        // resolution can only fall back to USERPROFILE.
+        HOME: "$PROFILE_DIR\\home",
+        USERPROFILE: "$PROFILE_DIR\\home",
+        APPDATA: "$PROFILE_DIR\\home\\AppData\\Roaming",
+        LOCALAPPDATA: "$PROFILE_DIR\\home\\AppData\\Local",
       },
-      // GROK_DEPLOYMENT_KEY takes precedence over the profile auth store and
-      // would silently bypass ACCOUNT_LOGIN isolation.
-      stripEnv: ["GROK_API_KEY", "XAI_API_KEY", "GROK_DEPLOYMENT_KEY"],
+      // Every documented env route that could override authentication,
+      // redirect endpoints, inject config, or widen the tool surface inside
+      // a managed profile (grok 1.0.34 config-reference). The base env is
+      // already allowlist-built so most of these never arrive; the list
+      // documents intent and guards future allowlist growth.
+      stripEnv: [
+        // Credential / auth-method overrides.
+        "XAI_API_KEY",
+        "GROK_API_KEY",
+        "GROK_DEPLOYMENT_KEY",
+        "GROK_AUTH_PROVIDER_COMMAND",
+        "GROK_AUTH_PROVIDER_LABEL",
+        "GROK_AUTH_TOKEN_TTL",
+        "GROK_AUTH_EXPIRED",
+        "GROK_AUTH_EARLY_INVALIDATION_SECS",
+        "GROK_OIDC_ISSUER",
+        "GROK_OIDC_CLIENT_ID",
+        "GROK_OIDC_AUDIENCE",
+        "GROK_OIDC_SCOPES",
+        "GROK_OAUTH2_CLIENT_ID",
+        "GROK_OAUTH2_ISSUER",
+        "GROK_OAUTH2_PRINCIPAL_ID",
+        "GROK_OAUTH2_PRINCIPAL_TYPE",
+        "GROK_OAUTH2_REFERRER",
+        "GROK_OAUTH2_SCOPES",
+        "GROK_DISABLE_API_KEY_AUTH",
+        "GROK_FORCE_LOGIN_TEAM_ID",
+        // Endpoint / relay / managed-config redirects.
+        "GROK_CLI_CHAT_PROXY_BASE_URL",
+        "GROK_MODELS_BASE_URL",
+        "GROK_MODELS_LIST_URL",
+        "GROK_XAI_API_BASE_URL",
+        "GROK_WS_ORIGIN",
+        "GROK_WS_URL",
+        "GROK_MANAGED_CONFIG_URL",
+        "GROK_FEEDBACK_BASE_URL",
+        "GROK_WEB_FETCH_PROXY",
+        "GROK_TRACE_UPLOAD_URL",
+        "GROK_TRACE_UPLOAD_BUCKET",
+        "GROK_TRACE_UPLOAD_CREDENTIALS_FILE",
+        "GROK_TRACE_UPLOAD_ENDPOINT_URL",
+        "GROK_TRACE_UPLOAD_REGION",
+        "GROK_EXTERNAL_OTEL",
+        // Config injection (JSON inline or file path — can carry
+        // auth_provider_command, custom endpoints, per-model keys).
+        "GROK_CONFIG",
+        "GROK_CONFIG_PATH",
+        // Home-resolution fallbacks — stripped so ~ can only resolve through
+        // the redirected USERPROFILE/HOME inside the managed profile.
+        "HOMEDRIVE",
+        "HOMEPATH",
+        // Compatibility scanners — an env toggle would beat the managed
+        // config.toml compat cells (env layer wins over user config).
+        "GROK_CLAUDE_AGENTS_ENABLED",
+        "GROK_CLAUDE_HOOKS_ENABLED",
+        "GROK_CLAUDE_MCPS_ENABLED",
+        "GROK_CLAUDE_RULES_ENABLED",
+        "GROK_CLAUDE_SKILLS_ENABLED",
+        "GROK_CURSOR_AGENTS_ENABLED",
+        "GROK_CURSOR_HOOKS_ENABLED",
+        "GROK_CURSOR_MCPS_ENABLED",
+        "GROK_CURSOR_RULES_ENABLED",
+        "GROK_CURSOR_SKILLS_ENABLED",
+        // Tool/agent surface and behaviour overrides.
+        "GROK_AGENT",
+        "GROK_SANDBOX",
+        "GROK_SANDBOX_AUTO_ALLOW_BASH",
+        "GROK_DEFAULT_MODEL",
+        "GROK_DEFAULT_SELECTED_PERMISSION",
+        "GROK_REMEMBER_TOOL_APPROVALS",
+        "GROK_SUBAGENTS",
+        "GROK_SUBAGENT_MODEL_INHERITANCE",
+        "GROK_SUBAGENT_WORKTREE_SNAPSHOT",
+        "GROK_ASK_USER_QUESTION",
+        "GROK_WRITE_FILE",
+        "GROK_WEB_FETCH",
+        "GROK_BACKEND_SEARCH",
+        "GROK_LSP_TOOLS",
+        "GROK_ZDR_ACCESS_ENABLED",
+        "GROK_DISABLE_ZDR_INCOMPATIBLE_TOOLS",
+        "GROK_MANAGED_MCPS_ENABLED",
+        "GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED",
+        "GROK_MCP_AUTO_RESTART",
+        "GROK_MCP_PUSH_SERVER_STATUS",
+        "GROK_MEMORY",
+        "GROK_AUTO_WAKE",
+        "GROK_ACTIVE_AGENT_MESSAGES",
+        "GROK_RESPECT_GITIGNORE",
+        // Runtime management channels.
+        "GROK_DISABLE_AUTOUPDATER",
+        "GROK_MAXIMUM_VERSION",
+        "GROK_MINIMUM_VERSION",
+        "GROK_REQUIRED_MAXIMUM_VERSION",
+        "GROK_REQUIRED_MINIMUM_VERSION",
+        "GROK_GROVE",
+        "GROK_CLONE",
+        "GROVE_CLONE",
+        "GROVE_AUTH_TOKEN",
+        "GROK_WORKTREE_TYPE",
+        "GROK_CAMPAIGNS",
+        "GROK_MARKETPLACE_REQUIRE_SHA",
+        "GROK_DEBUG_LOG",
+        "GROK_LOG_FILE",
+        "GROK_HOOKS_LOG",
+        "GROK_LEADER_LOG",
+        "GROK_LOG_SAMPLING",
+        "GROK_INSTRUMENTATION",
+        "GROK_CRASH_HANDLER",
+      ],
     },
     install: {
       executionEnabled: false,
@@ -283,16 +402,42 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       ],
     },
     versionProbe: { args: ["version"] },
+    // Verified against grok 1.0.34/1.0.41: there is NO `login status` /
+    // `auth status` / `whoami` command. Auth state is probed over ACP —
+    // `grok agent --no-leader stdio` advertises a `cached_token` auth method
+    // only when a session exists in the profile's auth.json, and
+    // authenticate(cached_token) returns account metadata (email,
+    // auth_mode, subscription_tier). Handled by the grok adapter's ACP
+    // probe, not by a one-shot command.
     authProbe: {
-      args: ["auth", "status"],
+      kind: "ACP_STDIO",
+      args: ["agent", "--no-leader", "stdio"],
       mode: "READ_ONLY",
       notes:
-        "Provisional: vendor auth-status surface is not fully confirmed; the " +
-        "parser treats unrecognized output as UNKNOWN.",
+        "ACP initialize + authenticate(cached_token) handshake. initialize " +
+        "never authenticates; cached_token is advertised only when the " +
+        "managed profile already holds a session.",
+    },
+    // Verified against grok 1.0.34/1.0.41 (grok <cmd> --help). All commands
+    // run with GROK_HOME pointed at the managed profile directory.
+    commands: {
+      // Browser OAuth via auth.x.ai. Long-running: binds a 127.0.0.1
+      // callback listener, prints the authorize URL on stderr, and exits
+      // when the flow completes. Cancelled via AbortSignal.
+      login: ["login", "--oauth"],
+      logout: ["logout"],
+      // `grok models` prints the account-visible catalog ("Available
+      // models:" + "* id (default)" / "- id" lines). When unauthenticated
+      // it prints "You are not authenticated." and only the bundled list —
+      // the adapter treats that as discovery-unavailable, not a catalog.
+      models: ["models"],
+      // One-shot headless inference; the adapter appends the safety flags.
+      print: ["-p"],
     },
     capabilities: {
       accountLogin: true,
       modelDiscovery: true,
+      streaming: true,
       acp: true,
     },
   },

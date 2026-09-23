@@ -12,7 +12,10 @@ const HOSTILE_BASE_ENV = {
   PATH: "C:\\Windows;C:\\Tools",
   TEMP: "C:\\Temp",
   USERPROFILE: "C:\\Users\\host",
+  HOMEDRIVE: "C:",
+  HOMEPATH: "\\Users\\host",
   APPDATA: "C:\\Users\\host\\AppData\\Roaming",
+  LOCALAPPDATA: "C:\\Users\\host\\AppData\\Local",
   OPENAI_API_KEY: "sk-host-openai",
   ANTHROPIC_API_KEY: "sk-host-anthropic",
   GROK_API_KEY: "grok-host",
@@ -60,7 +63,7 @@ describe("runtime process environment isolation", () => {
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
   });
 
-  it("isolates Grok via GROK_HOME + per-profile leader socket, strips API keys", () => {
+  it("isolates Grok via GROK_HOME + redirected home roots, strips API keys", () => {
     const env = buildRuntimeProcessEnvironment({
       baseEnv: HOSTILE_BASE_ENV,
       definition: getRuntimeDefinition("GROK_RUNTIME"),
@@ -68,6 +71,17 @@ describe("runtime process environment isolation", () => {
     });
     expect(env.GROK_HOME).toBe(PROFILE_DIR);
     expect(env.GROK_LEADER_SOCKET).toBe(`${PROFILE_DIR}\\grok-leader.sock`);
+    // Grok's compat scanners and folder-trust store resolve through ~ —
+    // every home root must point inside the managed profile or host
+    // ~/.claude.json / .grok markers leak in.
+    expect(env.HOME).toBe(`${PROFILE_DIR}\\home`);
+    expect(env.USERPROFILE).toBe(`${PROFILE_DIR}\\home`);
+    expect(env.APPDATA).toBe(`${PROFILE_DIR}\\home\\AppData\\Roaming`);
+    expect(env.LOCALAPPDATA).toBe(`${PROFILE_DIR}\\home\\AppData\\Local`);
+    // The drive+path fallback pair is stripped so ~ can only resolve via
+    // the redirected USERPROFILE.
+    expect(env.HOMEDRIVE).toBeUndefined();
+    expect(env.HOMEPATH).toBeUndefined();
     expect(env.GROK_API_KEY).toBeUndefined();
     expect(env.XAI_API_KEY).toBeUndefined();
     expect(env.GROK_DEPLOYMENT_KEY).toBeUndefined();

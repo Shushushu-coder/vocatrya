@@ -57,13 +57,15 @@ async function probeRuntimeAuthState({
   baseEnv,
   runner = runRuntimeCommand,
   timeoutMs = AUTH_PROBE_TIMEOUT_MS,
+  spawnImpl,
+  terminateImpl,
 } = {}) {
   const definition = getRuntimeDefinition(backendKind);
   if (!definition) {
     throw new Error(`Unknown runtime backendKind: ${backendKind}`);
   }
   const probe = definition.authProbe;
-  if (!probe || !Array.isArray(probe.args)) {
+  if (!probe) {
     return { backendKind, authState: "UNKNOWN", reason: "NO_PROBE_DEFINED" };
   }
   if (!executablePath) {
@@ -71,6 +73,27 @@ async function probeRuntimeAuthState({
   }
   if (!profileDir) {
     return { backendKind, authState: "UNKNOWN", reason: "PROFILE_REQUIRED" };
+  }
+
+  // Some runtimes have no one-shot status command — Grok's only verified
+  // auth surface is the ACP stdio handshake (`agent --no-leader stdio`,
+  // authenticate(cached_token)). The adapter owns that exchange; this probe
+  // delegates so getRuntimeStatus stays truthful for ACP_STDIO backends.
+  if (probe.kind === "ACP_STDIO") {
+    const { runGrokAcpAuthProbe } = require("./grok");
+    const result = await runGrokAcpAuthProbe({
+      executablePath,
+      profileDir,
+      baseEnv,
+      timeoutMs,
+      spawnImpl,
+      terminateImpl,
+    });
+    return { backendKind, authState: result.authState };
+  }
+
+  if (!Array.isArray(probe.args)) {
+    return { backendKind, authState: "UNKNOWN", reason: "NO_PROBE_DEFINED" };
   }
 
   const env = buildRuntimeProcessEnvironment({
