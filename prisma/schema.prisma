@@ -58,6 +58,10 @@ model User {
   // Phase 3A Interview transplant (additive backrelations only).
   interviewSessions   InterviewSession[]
   transcriptRevisions TranscriptRevision[] @relation("RevisionAuthor")
+
+  // Phase B account-login foundation (additive backrelations only).
+  aiConnections         AIConnection[]
+  aiBusinessAssignments AIBusinessAssignment[]
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -586,6 +590,12 @@ model AutomationRun {
   // UNIQUE(automationId) WHERE status IN ('running', 'cancelling')
   // See migrations/20260710000001_automation_run_single_active
 
+  // Phase B: nullable AI lock captured at resolution time. NO_GUESS_BACKFILL:
+  // existing rows keep NULL and rely on provider/model provenance alone.
+  resolvedConnectionId String?
+  resolvedModel        String?
+  resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
+
   @@index([automationId])
   @@index([startedAt])
 }
@@ -657,8 +667,8 @@ model Question {
   questionInstances QuestionInstance[]
   bankItems         QuestionBankItem[]
 
-  @@index([createdBy])
   @@unique([presetBankKey, presetItemKey])
+  @@index([createdBy])
 }
 
 model McpAccessToken {
@@ -849,6 +859,11 @@ model JobDescriptionParse {
   errorCode      String?
   parsedAt       DateTime?
   createdAt      DateTime  @default(now())
+
+  // Phase B: nullable AI connection lock. `model` above already carries the
+  // resolved model provenance, so no resolvedModel synonym is added here.
+  resolvedConnectionId String?
+  resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
 
   jobDescriptionVersion JobDescriptionVersion  @relation("JdVersionParses", fields: [jobDescriptionVersionId], references: [id], onDelete: Restrict)
   currentForVersion     JobDescriptionVersion? @relation("JdVersionCurrentParse")
@@ -1339,6 +1354,11 @@ model ResumeVariantVersion {
   createdAt             DateTime  @default(now())
   frozenAt              DateTime?
 
+  // Phase B: nullable AI lock captured at resolution time. NO_GUESS_BACKFILL.
+  resolvedConnectionId String?
+  resolvedModel        String?
+  resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
+
   resumeVariant       ResumeVariant          @relation("ResumeVariantVersions", fields: [resumeVariantId], references: [id], onDelete: Restrict)
   currentForVariant   ResumeVariant?         @relation("ResumeVariantCurrentVersion")
   parentVersion       ResumeVariantVersion?  @relation("ResumeVersionParent", fields: [parentVersionId], references: [id], onDelete: Restrict)
@@ -1462,6 +1482,11 @@ model MatchAnalysis {
 
   createdAt   DateTime  @default(now())
   completedAt DateTime?
+
+  // Phase B: nullable AI connection lock. `model` above already carries the
+  // resolved model provenance, so no resolvedModel synonym is added here.
+  resolvedConnectionId String?
+  resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
 
   user                    User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
   jobOpportunity          JobOpportunity         @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
@@ -1603,30 +1628,36 @@ model QuestionBankItem {
 }
 
 model InterviewSession {
-  id                    String    @id @default(uuid())
-  userId                String
+  id                        String    @id @default(uuid())
+  userId                    String
   // status: DRAFT | IN_PROGRESS | COACHING | COMPLETED | ARCHIVED
-  status                String    @default("DRAFT")
+  status                    String    @default("DRAFT")
   // coachingMode: PRACTICE | MOCK
-  coachingMode          String
+  coachingMode              String
   // feedbackReleasePolicy: IMMEDIATE | ON_SESSION_COMPLETE
-  feedbackReleasePolicy String
-  feedbackReleasedAt    DateTime?
-  startedAt             DateTime?
-  completedAt           DateTime?
-  archivedAt            DateTime?
-  statusBeforeArchive   String?
-  knowledgeBaseVersion  String
+  feedbackReleasePolicy     String
+  feedbackReleasedAt        DateTime?
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  archivedAt                DateTime?
+  statusBeforeArchive       String?
+  knowledgeBaseVersion      String
   currentQuestionInstanceId String?
   jobOpportunityId          String?
   jobDescriptionVersionId   String?
-  createdVia            String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdVia                String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
-  user                  User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
-  jobOpportunity        JobOpportunity?       @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
-  jobDescriptionVersion JobDescriptionVersion? @relation(fields: [jobDescriptionVersionId, jobOpportunityId], references: [id, jobOpportunityId], onDelete: Restrict)
+  // Phase B: nullable AI lock captured at resolution time. NO_GUESS_BACKFILL:
+  // existing rows keep NULL and rely on provider/model provenance alone.
+  resolvedConnectionId String?
+  resolvedModel        String?
+  resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
+
+  user                    User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  jobOpportunity          JobOpportunity?            @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
+  jobDescriptionVersion   JobDescriptionVersion?     @relation(fields: [jobDescriptionVersionId, jobOpportunityId], references: [id, jobOpportunityId], onDelete: Restrict)
   currentQuestionInstance QuestionInstance?          @relation("SessionCurrentQuestion", fields: [currentQuestionInstanceId], references: [id], onDelete: Restrict)
   questionInstances       QuestionInstance[]         @relation("SessionQuestions")
   answerAttempts          AnswerAttempt[]
@@ -1904,4 +1935,69 @@ model DialogueTurn {
   summary          SessionSummaryGeneration? @relation(fields: [summaryGenerationId, sessionId], references: [id, sessionId], onDelete: Restrict)
 
   @@unique([sessionId, turnNumber])
+}
+
+/// Phase B account-login foundation. One row per (user, external account
+/// connection); multiple rows per provider are allowed so multi-account is
+/// expressible. provider/authType/backendKind/status are plain Strings on
+/// purpose — the sets evolve and are validated by the service/runtime
+/// registry (src/lib/ai/connections.ts), never by SQLite CHECK constraints
+/// that are expensive to change. accountIdentity is display-only and is
+/// intentionally NOT unique: it is not guaranteed immutable, provider-wide
+/// unique, or organization-independent; duplicate-account detection is a
+/// provider-aware service concern. credentialRef is an opaque future
+/// API_KEY seam and runtimeProfileRef an opaque runtime profile ref —
+/// neither ever stores tokens, absolute paths, or model names.
+/// providerMetadata is a non-secret JSON string (secret-key guard in
+/// src/lib/ai/connections.ts). archive-not-delete: every inbound reference
+/// is onDelete: Restrict, so a connection still referenced by assignments
+/// or resolved locks cannot be removed, only archived.
+model AIConnection {
+  id                String    @id @default(uuid())
+  userId            String
+  provider          String
+  authType          String    @default("ACCOUNT_LOGIN")
+  backendKind       String
+  displayName       String
+  accountIdentity   String?
+  status            String    @default("CONNECTED")
+  credentialRef     String?
+  runtimeProfileRef String?
+  providerMetadata  String?
+  lastVerifiedAt    DateTime?
+  archivedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  businessAssignments   AIBusinessAssignment[]
+  interviewSessions     InterviewSession[]
+  matchAnalyses         MatchAnalysis[]
+  jobDescriptionParses  JobDescriptionParse[]
+  resumeVariantVersions ResumeVariantVersion[]
+  automationRuns        AutomationRun[]
+
+  @@index([userId])
+  @@index([userId, provider])
+  @@index([userId, archivedAt])
+}
+
+/// (userId, purpose) pins which AIConnection + model a business surface
+/// resolves to; GLOBAL_DEFAULT is the fallback purpose. Service-layer
+/// invariants (not enforceable here): assignment.userId ===
+/// connection.userId, and the referenced connection is not archived.
+model AIBusinessAssignment {
+  id           String   @id @default(uuid())
+  userId       String
+  purpose      String
+  connectionId String
+  model        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  connection AIConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, purpose])
+  @@index([connectionId])
 }

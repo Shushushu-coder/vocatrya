@@ -10,6 +10,7 @@ import {
   checkImportedFile,
   importedFilePath,
   logicalResumeArtifactStorageKey,
+  normalizeAIConnection,
   normalizeAutomation,
   normalizeAutomationRun,
   safeEntryName,
@@ -594,6 +595,11 @@ export async function importBackup(
             }
             if (model === "AutomationRun") {
               payload = normalizeAutomationRun(payload as never);
+            }
+            // Credentials never travel in a backup: a CONNECTED
+            // ACCOUNT_LOGIN row must come back demanding re-auth.
+            if (model === "AIConnection") {
+              payload = normalizeAIConnection(payload as never);
             }
             if (model === "ResumeArtifact") {
               const { bytesMissing: _marker, storageKey: _ignored, ...rest } = payload;

@@ -13,6 +13,8 @@ export const INTERVIEW_REFLECTION_MIGRATION = "add_interview_reflection_items";
 export const CANDIDATE_PROFILE_MIGRATION =
   "rename_resume_contact_profile_to_candidate_profile";
 export const PHASE3A_INTERVIEW_MIGRATION = "phase3a_interview_schema";
+export const ACCOUNT_LOGIN_FOUNDATION_MIGRATION =
+  "phase_account_login_connection_foundation";
 
 export function makeAbTestDbUrl(): { url: string; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-ab-schema-"));

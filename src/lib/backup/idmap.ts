@@ -43,6 +43,15 @@ const OPTIONAL_FKS = new Set<string>([
   "MatchEvidenceLink.resumeExpressionId",
   "InterviewSession.jobOpportunityId",
   "InterviewSession.jobDescriptionVersionId",
+  // Phase B lock columns: a legacy backup has no AIConnection group, and a
+  // pruned/dangling resolvedConnectionId degrades to null rather than
+  // failing the import. AIBusinessAssignment.connectionId is deliberately
+  // NOT here — it stays required/fail-closed.
+  "InterviewSession.resolvedConnectionId",
+  "MatchAnalysis.resolvedConnectionId",
+  "JobDescriptionParse.resolvedConnectionId",
+  "ResumeVariantVersion.resolvedConnectionId",
+  "AutomationRun.resolvedConnectionId",
   "QuestionInstance.sourceQuestionId",
   "Transcript.sourceArtifactId",
   "DialogueTurn.questionInstanceId",

@@ -93,3 +93,19 @@ export function normalizeAutomation<
   if (row.status !== "active") return { ...row, nextRunAt: null };
   return { ...row, nextRunAt: calculateNextRunAt(row.scheduleHour) };
 }
+
+// A backup carries connection metadata only — credential and runtime login
+// state never leave the source machine. A CONNECTED ACCOUNT_LOGIN row would
+// therefore be a lie on the target: it claims a live login the restore does
+// not have. Normalize it to REAUTH_REQUIRED so the user re-authenticates
+// before the connection can serve traffic. Other statuses (DISCONNECTED,
+// ERROR, already REAUTH_REQUIRED) describe connection state that survives
+// the move and are kept verbatim.
+export function normalizeAIConnection<
+  T extends { authType: string; status: string },
+>(row: T): T {
+  if (row.authType !== "ACCOUNT_LOGIN" || row.status !== "CONNECTED") {
+    return row;
+  }
+  return { ...row, status: "REAUTH_REQUIRED" };
+}

@@ -328,6 +328,40 @@ const AutomationRun = z.object({
   funnelStats: optStr,
   startedAt: dt,
   completedAt: optDt,
+  // Phase B lock fields: optional as well as nullable — a backup taken
+  // before they existed carries no such key.
+  resolvedConnectionId: optId.optional(),
+  resolvedModel: optStr.optional(),
+});
+
+// Phase B account-login foundation. userId is the owner column: stripped on
+// export, injected on restore — same as every other owned model. Credentials
+// never travel; on import a CONNECTED ACCOUNT_LOGIN row is normalized to
+// REAUTH_REQUIRED (see normalizeAIConnection).
+const AIConnection = z.object({
+  id,
+  provider: str,
+  authType: str,
+  backendKind: str,
+  displayName: str,
+  accountIdentity: optStr,
+  status: str,
+  credentialRef: optStr,
+  runtimeProfileRef: optStr,
+  providerMetadata: optStr,
+  lastVerifiedAt: optDt,
+  archivedAt: optDt,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const AIBusinessAssignment = z.object({
+  id,
+  purpose: str,
+  connectionId: id,
+  model: str,
+  createdAt: dt,
+  updatedAt: dt,
 });
 
 const UserSettings = z.object({
@@ -420,6 +454,7 @@ const JobDescriptionParse = z.object({
   errorCode: optStr,
   parsedAt: optDt,
   createdAt: dt,
+  resolvedConnectionId: optId.optional(),
 });
 
 const ApplicationAttempt = z.object({
@@ -753,6 +788,8 @@ const ResumeVariantVersion = z.object({
   createdVia: str,
   createdAt: dt,
   frozenAt: optDt,
+  resolvedConnectionId: optId.optional(),
+  resolvedModel: optStr.optional(),
 });
 
 const ResumeVariantSection = z.object({
@@ -825,6 +862,7 @@ const MatchAnalysis = z.object({
   staleAt: optDt,
   createdAt: dt,
   completedAt: optDt,
+  resolvedConnectionId: optId.optional(),
 });
 
 const FastScreeningDetail = z.object({
@@ -933,6 +971,8 @@ const InterviewSession = z.object({
   createdVia: optStr,
   createdAt: dt,
   updatedAt: dt,
+  resolvedConnectionId: optId.optional(),
+  resolvedModel: optStr.optional(),
 });
 
 const QuestionInstance = z.object({
@@ -1128,6 +1168,8 @@ export const BackupDataSchema = z.object({
   Task: group(Task),
   Activity: group(Activity),
   Question: group(Question),
+  AIConnection: group(AIConnection),
+  AIBusinessAssignment: group(AIBusinessAssignment),
   AutomationRun: group(AutomationRun),
   UserSettings: group(UserSettings),
   AbMigrationState: group(AbMigrationState),

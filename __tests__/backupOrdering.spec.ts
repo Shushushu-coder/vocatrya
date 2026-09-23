@@ -196,6 +196,8 @@ describe("backup ordering", () => {
 describe("emptiness models", () => {
   it("counts content models only, so seeded JobSource rows do not demand a wipe", () => {
     expect([...EMPTINESS_MODELS].sort()).toEqual([
+      "AIBusinessAssignment",
+      "AIConnection",
       "Activity",
       "ApplicationAttempt",
       "Automation",

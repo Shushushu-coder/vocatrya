@@ -77,6 +77,8 @@ export type BackupModel =
   | "Task"
   | "Activity"
   | "Question"
+  | "AIConnection"
+  | "AIBusinessAssignment"
   | "AutomationRun"
   | "UserSettings"
   | "AbMigrationState"
@@ -325,9 +327,28 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     scope: byUser,
   },
   Question: { delegate: "question", owner: "createdBy", fks: {}, scope: byCreatedBy },
+  // Phase B account-login foundation: user business config, so both models
+  // travel in the standard backup. Connection metadata only — credentials
+  // and runtime login state never leave the machine, so a restored
+  // ACCOUNT_LOGIN row is normalized to REAUTH_REQUIRED on import.
+  AIConnection: {
+    delegate: "aIConnection",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+  },
+  // connectionId is required fail-closed: an assignment without its
+  // connection is meaningless, so it is intentionally absent from
+  // OPTIONAL_FKS.
+  AIBusinessAssignment: {
+    delegate: "aIBusinessAssignment",
+    owner: "userId",
+    fks: { connectionId: "AIConnection" },
+    scope: byUser,
+  },
   AutomationRun: {
     delegate: "automationRun",
-    fks: { automationId: "Automation" },
+    fks: { automationId: "Automation", resolvedConnectionId: "AIConnection" },
     scope: (userId) => ({ automation: { userId } }),
   },
   UserSettings: { delegate: "userSettings", owner: "userId", fks: {}, scope: byUser },
@@ -369,7 +390,10 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
   },
   JobDescriptionParse: {
     delegate: "jobDescriptionParse",
-    fks: { jobDescriptionVersionId: "JobDescriptionVersion" },
+    fks: {
+      jobDescriptionVersionId: "JobDescriptionVersion",
+      resolvedConnectionId: "AIConnection",
+    },
     scope: byJdVersion,
   },
   JobOpportunityNote: {
@@ -479,6 +503,7 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: {
       resumeVariantId: "ResumeVariant",
       targetJdVersionId: "JobDescriptionVersion",
+      resolvedConnectionId: "AIConnection",
     },
     scope: byVariant,
   },
@@ -520,6 +545,7 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
       jobOpportunityId: "JobOpportunity",
       jobDescriptionParseId: "JobDescriptionParse",
       resumeVariantVersionId: "ResumeVariantVersion",
+      resolvedConnectionId: "AIConnection",
     },
     scope: byUser,
   },
@@ -616,6 +642,7 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: {
       jobOpportunityId: "JobOpportunity",
       jobDescriptionVersionId: "JobDescriptionVersion",
+      resolvedConnectionId: "AIConnection",
     },
     scope: byUser,
   },
@@ -733,6 +760,11 @@ export const INSERT_ORDER: BackupModel[] = [
   "Task",
   "Activity",
   "Question",
+  // AIConnection must precede every model that can lock onto it:
+  // AIBusinessAssignment, AutomationRun, JobDescriptionParse,
+  // ResumeVariantVersion, MatchAnalysis, InterviewSession.
+  "AIConnection",
+  "AIBusinessAssignment",
   "AutomationRun",
   "UserSettings",
   "AbMigrationState",
@@ -883,4 +915,6 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "MatchAnalysis",
   "ApplicationAttempt",
   "InterviewSession",
+  "AIConnection",
+  "AIBusinessAssignment",
 ];
