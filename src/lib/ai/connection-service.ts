@@ -67,7 +67,7 @@ const CONNECTION_SUMMARY_SELECT = {
 // The runtime is part of the name so e.g. "ChatGPT" (Codex) and
 // "ChatGPT via OpenCode" stay visually distinct.
 const ACCOUNT_LOGIN_DISPLAY_NAMES: Record<string, string> = {
-  "OPENAI:CODEX_RUNTIME": "ChatGPT",
+  "OPENAI:CODEX_RUNTIME": "ChatGPT via Codex",
   "OPENAI:OPENCODE_RUNTIME": "ChatGPT via OpenCode",
   "ANTHROPIC:CLAUDE_RUNTIME": "Claude",
   "XAI:GROK_RUNTIME": "Grok",

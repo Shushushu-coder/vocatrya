@@ -10,54 +10,69 @@ import {
   mintAiConnectionTicket,
 } from "@/actions/aiConnection.actions";
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
+import type { AccountRuntimeCapabilities } from "@/lib/ai/runtime/capabilities";
 
 // Implemented account-login backends. Each entry pins the account provider
 // it requests — the server re-validates the provider/runtime pairing when
 // minting the ticket, and the runtime adapter verifies the real auth
-// outcome. The IPC surface is identical for all of them.
+// outcome. Everything else (runtime name, login interaction, capability
+// hints) comes from the unified runtime capability descriptor fetched via
+// the vocatryaRuntime bridge — never hardcoded per provider here.
 const ACCOUNT_LOGIN_BACKENDS = [
   {
     backendKind: "CODEX_RUNTIME",
-    name: "Codex",
+    providerLabel: "ChatGPT",
     connectLabelKey: "settings.connectChatGPT",
     accountProvider: "OPENAI",
   },
   {
     backendKind: "CLAUDE_RUNTIME",
-    name: "Claude",
+    providerLabel: "Claude",
     connectLabelKey: "settings.connectClaude",
     accountProvider: "ANTHROPIC",
   },
   {
     backendKind: "OPENCODE_RUNTIME",
-    name: "OpenCode",
+    providerLabel: "ChatGPT",
     connectLabelKey: "settings.connectChatGPTViaOpenCode",
     accountProvider: "OPENAI",
   },
   {
     backendKind: "GROK_RUNTIME",
-    name: "Grok",
+    providerLabel: "Grok",
     connectLabelKey: "settings.connectGrok",
     accountProvider: "XAI",
   },
   {
     backendKind: "CURSOR_RUNTIME",
-    name: "Cursor",
+    providerLabel: "Cursor",
     connectLabelKey: "settings.connectCursor",
     accountProvider: "CURSOR",
   },
   {
     backendKind: "DEVIN_RUNTIME",
-    name: "Devin",
+    providerLabel: "Devin",
     connectLabelKey: "settings.connectDevin",
     accountProvider: "DEVIN",
-    // Devin login opens a real terminal window (the CLI's method menu needs
-    // console input) — the pending hint tells the user what to do there.
-    pendingHintKey: "settings.aiConnDevinLoginHint",
   },
 ] as const;
 
 type BackendKind = (typeof ACCOUNT_LOGIN_BACKENDS)[number]["backendKind"];
+
+type RuntimeListEntry = {
+  displayName: string;
+  capabilities: AccountRuntimeCapabilities;
+};
+
+type RuntimeState = { state: string; version?: string };
+
+type InstallMethod = {
+  kind: string;
+  summary: string;
+  executable: string;
+  args: string[];
+  documentationUrl?: string;
+};
 
 type ModelEntry = {
   id: string;
@@ -73,6 +88,16 @@ const STATUS_KEY: Record<string, string> = {
   ERROR: "settings.aiConnStatusError",
 };
 
+// Unified runtime install-state labels (NOT_INSTALLED/READY/
+// UPDATE_AVAILABLE/BROKEN) — runtime state and connection auth state are
+// separate axes and render in separate places.
+const RUNTIME_STATE_KEY: Record<string, string> = {
+  NOT_INSTALLED: "settings.aiConnRuntimeStateNotInstalled",
+  READY: "settings.aiConnRuntimeStateReady",
+  UPDATE_AVAILABLE: "settings.aiConnRuntimeStateUpdateAvailable",
+  BROKEN: "settings.aiConnRuntimeStateBroken",
+};
+
 const OP_DONE_KEY: Record<string, string> = {
   reconnect: "settings.aiConnReconnectDone",
   disconnect: "settings.aiConnDisconnectDone",
@@ -82,6 +107,7 @@ const OP_DONE_KEY: Record<string, string> = {
 const ERROR_KEY: Record<string, string> = {
   RUNTIME_NOT_INSTALLED: "settings.aiConnErrRuntimeNotInstalled",
   RUNTIME_BROKEN: "settings.aiConnErrRuntimeBroken",
+  RUNTIME_UPDATE_REQUIRED: "settings.aiConnErrRuntimeUpdateRequired",
   LOGIN_ALREADY_IN_PROGRESS: "settings.aiConnErrInProgress",
   LOGIN_CANCELLED: "settings.aiConnErrLoginCancelled",
   LOGIN_TIMEOUT: "settings.aiConnErrLoginTimeout",
@@ -93,6 +119,7 @@ const ERROR_KEY: Record<string, string> = {
     "settings.aiConnErrUnsupportedCombination",
   MODEL_DISCOVERY_UNAVAILABLE: "settings.aiConnErrModelUnavailable",
   MODEL_UNAVAILABLE: "settings.aiConnErrModelUnavailable",
+  PERMISSION_BOUNDARY_NOT_READY: "settings.aiConnErrPermissionBoundary",
   PROVIDER_POLICY_RESTRICTED: "settings.aiConnErrProviderPolicyRestricted",
   REAUTH_REQUIRED: "settings.aiConnErrReauthRequired",
   ACCOUNT_IDENTITY_CONFLICT: "settings.aiConnErrIdentityConflict",
@@ -105,17 +132,27 @@ const ERROR_KEY: Record<string, string> = {
 };
 
 /**
- * Phase D/E minimal account-login surface. Renders only inside the desktop
- * shell — without the vocatryaAi preload bridge there is no managed runtime
- * to orchestrate, so the card stays hidden on the web.
+ * Consolidated account-login surface for the six ACCOUNT_LOGIN runtimes.
+ * Renders only inside the desktop shell — without the vocatryaAi preload
+ * bridge there is no managed runtime to orchestrate, so the card stays
+ * hidden on the web.
  */
 function AiConnectionsCard() {
   const { t } = useI18n();
   const [bridgeAvailable] = useState(
     () => typeof window !== "undefined" && Boolean(window.vocatryaAi),
   );
+  const [runtimeInfo, setRuntimeInfo] = useState<
+    Partial<Record<BackendKind, RuntimeListEntry>>
+  >({});
   const [runtimeStates, setRuntimeStates] = useState<
-    Partial<Record<BackendKind, { state: string; version?: string }>>
+    Partial<Record<BackendKind, RuntimeState>>
+  >({});
+  const [installInfo, setInstallInfo] = useState<
+    Partial<Record<BackendKind, InstallMethod[]>>
+  >({});
+  const [updateInfo, setUpdateInfo] = useState<
+    Partial<Record<BackendKind, InstallMethod[]>>
   >({});
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -138,18 +175,61 @@ function AiConnectionsCard() {
   useEffect(() => {
     if (!bridgeAvailable) return;
     void refresh();
+    void window.vocatryaRuntime
+      ?.list()
+      .then((list) => {
+        const next: Partial<Record<BackendKind, RuntimeListEntry>> = {};
+        for (const entry of list) {
+          if (
+            ACCOUNT_LOGIN_BACKENDS.some(
+              (b) => b.backendKind === entry.backendKind,
+            )
+          ) {
+            next[entry.backendKind as BackendKind] = {
+              displayName: entry.displayName,
+              capabilities: entry.capabilities,
+            };
+          }
+        }
+        setRuntimeInfo(next);
+      })
+      .catch(() => undefined);
     for (const backend of ACCOUNT_LOGIN_BACKENDS) {
       void window.vocatryaRuntime
         ?.detect(backend.backendKind)
-        .then((status) =>
+        .then((status) => {
           setRuntimeStates((prev) => ({
             ...prev,
             [backend.backendKind]: {
               state: status.state,
               version: status.version,
             },
-          })),
-        )
+          }));
+          // Install/update metadata is fetched only when the runtime state
+          // needs it — a READY runtime never pays for it.
+          if (status.state === "NOT_INSTALLED" || status.state === "BROKEN") {
+            void window.vocatryaRuntime
+              ?.getInstallInfo(backend.backendKind)
+              .then((info) =>
+                setInstallInfo((prev) => ({
+                  ...prev,
+                  [backend.backendKind]: info.methods,
+                })),
+              )
+              .catch(() => undefined);
+          }
+          if (status.state === "UPDATE_AVAILABLE") {
+            void window.vocatryaRuntime
+              ?.getUpdateInfo(backend.backendKind)
+              .then((info) =>
+                setUpdateInfo((prev) => ({
+                  ...prev,
+                  [backend.backendKind]: info.methods,
+                })),
+              )
+              .catch(() => undefined);
+          }
+        })
         .catch(() => undefined);
     }
   }, [bridgeAvailable, refresh]);
@@ -160,8 +240,10 @@ function AiConnectionsCard() {
     [t],
   );
 
-  // The vendor's authorize URL surfaces mid-login for runtimes that cannot
-  // open a browser themselves (OpenCode). Cleared when the login ends.
+  // The vendor's authorize URL surfaces mid-login for runtimes whose
+  // capability descriptor marks surfacesAuthorizationUrl — the spawned
+  // CLI cannot open a browser itself (OpenCode/Grok/Cursor). Cleared when
+  // the login ends. Never persisted.
   useEffect(() => {
     const unsubscribe = window.vocatryaAi?.onOAuthUrl?.(setOauthUrl);
     return () => unsubscribe?.();
@@ -309,27 +391,96 @@ function AiConnectionsCard() {
       </div>
 
       {ACCOUNT_LOGIN_BACKENDS.map((backend) => {
+        const runtime = runtimeInfo[backend.backendKind];
         const runtimeState = runtimeStates[backend.backendKind];
         const backendConnections = connections.filter(
           (c) => c.backendKind === backend.backendKind,
         );
+        const runtimeName = runtime?.displayName ?? backend.backendKind;
+        const isConnecting = busy === `connect:${backend.backendKind}`;
         return (
           <section
             key={backend.backendKind}
             className="space-y-3 rounded-md border p-3"
           >
-            <div className="text-sm text-muted-foreground">
-              {runtimeState
-                ? t("settings.aiConnRuntimeStatus", {
-                    name: backend.name,
-                    state: runtimeState.state,
-                    version: runtimeState.version ?? "?",
-                  })
-                : t("settings.checking")}
+            {/* Provider + runtime are both always visible — two account
+                providers can share a provider name (ChatGPT via Codex vs
+                ChatGPT via OpenCode) so the runtime label disambiguates. */}
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium">
+                {backend.providerLabel}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  {t("settings.aiConnViaRuntime", { name: runtimeName })}
+                </span>
+              </h4>
+              <span className="text-sm text-muted-foreground">
+                {runtimeState
+                  ? `${t(
+                      RUNTIME_STATE_KEY[runtimeState.state] ??
+                        "settings.aiConnStatusError",
+                    )}${runtimeState.version ? ` (v${runtimeState.version})` : ""}`
+                  : t("settings.checking")}
+              </span>
             </div>
 
+            {/* Unified install/update UX: NOT_INSTALLED and BROKEN surface
+                the registry's install metadata; UPDATE_AVAILABLE surfaces
+                update metadata. Install/update never runs implicitly — the
+                user always performs an explicit action (and runtime-side
+                execution stays disabled this phase). */}
+            {(runtimeState?.state === "NOT_INSTALLED" ||
+              runtimeState?.state === "BROKEN") && (
+              <div className="rounded-md border border-dashed p-2 text-sm space-y-1">
+                <p className="text-muted-foreground">
+                  {runtimeState.state === "BROKEN"
+                    ? t("settings.aiConnReinstallHint")
+                    : t("settings.aiConnInstallHint")}
+                </p>
+                {(installInfo[backend.backendKind] ?? []).map((method) => (
+                  <div
+                    key={`${method.kind}:${method.executable}`}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="text-muted-foreground">
+                      {method.summary}
+                    </span>
+                    {method.documentationUrl && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          window.open(
+                            method.documentationUrl,
+                            "_blank",
+                            "noopener",
+                          )
+                        }
+                      >
+                        {t("settings.aiConnInstallDocs")}
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {runtimeState?.state === "UPDATE_AVAILABLE" && (
+              <div className="rounded-md border border-dashed p-2 text-sm space-y-1">
+                <p className="text-muted-foreground">
+                  {t("settings.aiConnUpdateAvailable")}
+                </p>
+                {(updateInfo[backend.backendKind] ?? []).map((method) => (
+                  <p
+                    key={`${method.kind}:${method.executable}`}
+                    className="text-muted-foreground"
+                  >
+                    {method.summary}
+                  </p>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
-              {busy === `connect:${backend.backendKind}` ? (
+              {isConnecting ? (
                 <>
                   <Button variant="outline" onClick={cancelLogin}>
                     {t("settings.aiConnCancelLogin")}
@@ -349,15 +500,17 @@ function AiConnectionsCard() {
               )}
             </div>
 
-            {busy === `connect:${backend.backendKind}` &&
-              "pendingHintKey" in backend &&
-              backend.pendingHintKey && (
+            {/* Capability-driven login hint: runtimes whose login runs in a
+                visible console window tell the user where to look. */}
+            {isConnecting &&
+              runtime?.capabilities.login.interaction ===
+                "VISIBLE_CONSOLE" && (
                 <p className="text-sm text-muted-foreground">
-                  {t(backend.pendingHintKey)}
+                  {t("settings.aiConnConsoleLoginHint")}
                 </p>
               )}
 
-            {busy === `connect:${backend.backendKind}` && oauthUrl && (
+            {isConnecting && oauthUrl && (
               <div className="rounded-md border p-2 text-sm space-y-1">
                 <p className="text-muted-foreground">
                   {t("settings.aiConnOAuthHint")}
@@ -387,6 +540,11 @@ function AiConnectionsCard() {
                       <div>
                         <span className="font-medium">
                           {connection.displayName}
+                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {t("settings.aiConnViaRuntime", {
+                            name: runtimeName,
+                          })}
                         </span>
                         {connection.accountIdentity && (
                           <span className="ml-2 text-sm text-muted-foreground">
@@ -475,7 +633,7 @@ function AiConnectionsCard() {
                         {t("settings.aiConnViewModels")}
                       </Button>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         disabled={
                           busy !== null || connection.status !== "CONNECTED"

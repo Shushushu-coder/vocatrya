@@ -247,7 +247,10 @@ describe("startLogin", () => {
       backendKind: "CODEX_RUNTIME",
       ticket: "t",
     });
-    expect(result.code).toBe("AUTH_NOT_CONFIRMED");
+    // Unified taxonomy: a recognized credential override is
+    // UNSUPPORTED_AUTH_METHOD (the user signed in the wrong way), not
+    // AUTH_NOT_CONFIRMED (the probe could not decide).
+    expect(result.code).toBe("UNSUPPORTED_AUTH_METHOD");
     expect(fs.readdirSync(profilesRoot)).toHaveLength(0);
     expect(backend.completeOperation).not.toHaveBeenCalled();
   });

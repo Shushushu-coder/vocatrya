@@ -11,8 +11,12 @@ interface VocatryaRuntimeBridge {
       supportedAccountProviders: string[];
       displayName: string;
       profileStrategy: string;
-      capabilities: Record<string, boolean | undefined>;
+      /** Consolidated capability descriptor — see AccountRuntimeCapabilities. */
+      capabilities: import("../lib/ai/runtime/capabilities").AccountRuntimeCapabilities;
     }[]
+  >;
+  getCapabilities(backendKind: string): Promise<
+    import("../lib/ai/runtime/capabilities").AccountRuntimeCapabilities
   >;
   detect(backendKind: string): Promise<{
     backendKind: string;

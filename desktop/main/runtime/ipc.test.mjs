@@ -55,6 +55,7 @@ describe("runtime IPC boundary", () => {
       "runtime:detect",
       "runtime:getVersion",
       "runtime:getStatus",
+      "runtime:getCapabilities",
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
     ]);
@@ -85,6 +86,7 @@ describe("runtime IPC boundary", () => {
       "runtime:detect",
       "runtime:getVersion",
       "runtime:getStatus",
+      "runtime:getCapabilities",
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
     ]) {
@@ -113,6 +115,25 @@ describe("runtime IPC boundary", () => {
     });
     expect(result.state).toBe("NOT_INSTALLED");
     expect(result.runtimeVendor).toBe("OPENAI");
+  });
+
+  it("serves the consolidated capability descriptor per runtime", async () => {
+    const ipcMain = fakeIpcMain();
+    registerRuntimeIpcHandlers(ipcMain, service);
+    const codex = await ipcMain.invoke("runtime:getCapabilities", {
+      backendKind: "CODEX_RUNTIME",
+    });
+    expect(codex.implemented).toBe(true);
+    expect(codex.permission.level).toBe("STRONG_SANDBOX");
+    expect(codex.profile.credentialBoundary).toContain("CODEX_HOME");
+    const devin = await ipcMain.invoke("runtime:getCapabilities", {
+      backendKind: "DEVIN_RUNTIME",
+    });
+    expect(devin.login.interaction).toBe("VISIBLE_CONSOLE");
+    expect(devin.profile.browserLoginEnvPassthrough).toEqual([
+      "APPDATA",
+      "LOCALAPPDATA",
+    ]);
   });
 
   it("returns structured install/update metadata with execution disabled", async () => {

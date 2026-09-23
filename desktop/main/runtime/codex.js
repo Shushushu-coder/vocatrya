@@ -293,20 +293,25 @@ const codexAdapter = {
   parseAuthStatus: parseCodexLoginStatus,
   checkLoginPolicy: null,
 
-  // Post-login verification: only a ChatGPT account session counts. A
-  // credential override that slipped through (e.g. API key) is
-  // AUTH_NOT_CONFIRMED, never a success.
+  // Post-login verification: only a ChatGPT account session counts.
+  // Unified taxonomy — a recognized credential override (API key, PAT,
+  // workload identity) is UNSUPPORTED_AUTH_METHOD like every other
+  // runtime; an authenticated-but-unclassified session is
+  // AUTH_METHOD_UNVERIFIED; never a silent success.
   loginFailureCode(status) {
     if (status.authState !== "AUTHENTICATED") return "AUTH_NOT_CONFIRMED";
-    return status.authMethod === "chatgpt" ? null : "AUTH_NOT_CONFIRMED";
+    if (status.authMethod === "chatgpt") return null;
+    return status.authMethod
+      ? "UNSUPPORTED_AUTH_METHOD"
+      : "AUTH_METHOD_UNVERIFIED";
   },
 
   // A verified non-ChatGPT session is reported as UNKNOWN so it can never
-  // flip an ACCOUNT_LOGIN connection to CONNECTED.
+  // flip an ACCOUNT_LOGIN connection to CONNECTED — including an
+  // authenticated-but-unclassified shape (authMethod null).
   reportableAuthState(status) {
     if (
       status.authState === "AUTHENTICATED" &&
-      status.authMethod &&
       status.authMethod !== "chatgpt"
     ) {
       return "UNKNOWN";

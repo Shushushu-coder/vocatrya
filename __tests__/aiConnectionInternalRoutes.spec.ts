@@ -190,7 +190,7 @@ describe("POST /api/internal/ai-connections/complete", () => {
           credentialRef: null,
           runtimeProfileRef: RP,
           accountIdentity: "me@example.com",
-          displayName: "ChatGPT",
+          displayName: "ChatGPT via Codex",
         }),
       }),
     );

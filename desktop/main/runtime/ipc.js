@@ -11,6 +11,7 @@ const RUNTIME_IPC_CHANNELS = Object.freeze({
   detect: "runtime:detect",
   getVersion: "runtime:getVersion",
   getStatus: "runtime:getStatus",
+  getCapabilities: "runtime:getCapabilities",
   getInstallInfo: "runtime:getInstallInfo",
   getUpdateInfo: "runtime:getUpdateInfo",
 });
@@ -47,6 +48,10 @@ function registerRuntimeIpcHandlers(ipcMain, service) {
           ? payload.runtimeProfileRef
           : undefined,
     }),
+  );
+
+  ipcMain.handle(RUNTIME_IPC_CHANNELS.getCapabilities, (_event, payload) =>
+    service.getRuntimeCapabilities(readBackendKind(payload)),
   );
 
   ipcMain.handle(RUNTIME_IPC_CHANNELS.getInstallInfo, (_event, payload) =>

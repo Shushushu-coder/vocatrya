@@ -195,41 +195,20 @@ function writeManagedDevinConfig(
   writeFileSyncImpl(target, serialized, "utf8");
 }
 
-function devinEnv({ profileDir, baseEnv, browserRoots = false }) {
-  const base = baseEnv || process.env;
-  const extraEnv = {};
-  // Ordinary network settings pass through — the account's proxy (env or
-  // PAC) must still work inside a managed profile. Credential-shaped keys
-  // are filtered by buildRuntimeProcessEnvironment regardless.
-  for (const key of [
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "ALL_PROXY",
-    "NO_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "all_proxy",
-    "no_proxy",
-  ]) {
-    if (typeof base[key] === "string" && base[key]) extraEnv[key] = base[key];
-  }
-  // Login only: the CLI opens the default browser with ShellExecute, and
-  // the spawned browser resolves its user-data dir from %LOCALAPPDATA%
-  // (Chrome/Edge) or %APPDATA% (Firefox). Redirected roots would launch a
-  // fresh browser profile without the user's existing app.devin.ai
-  // session. Restoring the host roots for the login window keeps the
-  // seamless browser flow; USERPROFILE — the credentials.toml boundary —
-  // stays managed, so the account session still lands in the profile.
-  if (browserRoots) {
-    for (const key of ["APPDATA", "LOCALAPPDATA"]) {
-      if (typeof base[key] === "string" && base[key]) extraEnv[key] = base[key];
-    }
-  }
+// browserLogin — only for `devin auth login`: the CLI opens the default
+// browser with ShellExecute, and the spawned browser resolves its
+// user-data dir from %LOCALAPPDATA% (Chrome/Edge) or %APPDATA% (Firefox).
+// Redirected roots would launch a fresh browser profile without the
+// user's existing app.devin.ai session. The registry-declared
+// browserLoginEnvPassthrough restores those host roots for the login
+// process; USERPROFILE — the credentials.toml boundary — stays managed,
+// so the account session still lands in the profile.
+function devinEnv({ profileDir, baseEnv, browserLogin = false }) {
   return buildRuntimeProcessEnvironment({
-    baseEnv: base,
+    baseEnv: baseEnv || process.env,
     definition: devinDefinition(),
     profileDir,
-    extraEnv,
+    browserLogin,
   });
 }
 
@@ -268,7 +247,7 @@ function buildDevinLoginInvocation({ executablePath, profileDir, baseEnv }) {
       ...devinDefinition().commands.login,
     ],
     cwd: profileDir,
-    env: devinEnv({ profileDir, baseEnv, browserRoots: true }),
+    env: devinEnv({ profileDir, baseEnv, browserLogin: true }),
   };
 }
 

@@ -285,4 +285,91 @@ describe("runtime process environment isolation", () => {
     expect(env.GITHUB_TOKEN).toBeUndefined();
     expect(env.SAFE_FLAG).toBe("1");
   });
+
+  it("preserves proxy/CA network env for every runtime", () => {
+    // §48: credential stripping must never eat connectivity settings — the
+    // account's proxy and custom CA bundle apply to all managed runtimes.
+    const networked = {
+      ...HOSTILE_BASE_ENV,
+      HTTP_PROXY: "http://127.0.0.1:7897",
+      HTTPS_PROXY: "http://127.0.0.1:7897",
+      NO_PROXY: "localhost,127.0.0.1",
+      NODE_EXTRA_CA_CERTS: "C:\\certs\\corp.pem",
+    };
+    for (const kind of [
+      "CODEX_RUNTIME",
+      "CLAUDE_RUNTIME",
+      "GROK_RUNTIME",
+      "OPENCODE_RUNTIME",
+      "CURSOR_RUNTIME",
+      "DEVIN_RUNTIME",
+    ]) {
+      const env = buildRuntimeProcessEnvironment({
+        baseEnv: networked,
+        definition: getRuntimeDefinition(kind),
+        profileDir: PROFILE_DIR,
+      });
+      expect(env.HTTP_PROXY, kind).toBe("http://127.0.0.1:7897");
+      expect(env.HTTPS_PROXY, kind).toBe("http://127.0.0.1:7897");
+      expect(env.NO_PROXY, kind).toBe("localhost,127.0.0.1");
+      expect(env.NODE_EXTRA_CA_CERTS, kind).toBe("C:\\certs\\corp.pem");
+    }
+  });
+
+  it("restores browser-login passthrough roots only where the registry declares them", () => {
+    const baseEnv = {
+      PATH: "C:\\Windows",
+      USERPROFILE: "C:\\Users\\real",
+      APPDATA: "C:\\Users\\real\\AppData\\Roaming",
+      LOCALAPPDATA: "C:\\Users\\real\\AppData\\Local",
+    };
+    // Devin: APPDATA/LOCALAPPDATA pass back to the host for the browser
+    // process only — USERPROFILE (credentials.toml boundary) stays managed.
+    const devinLogin = buildRuntimeProcessEnvironment({
+      baseEnv,
+      definition: getRuntimeDefinition("DEVIN_RUNTIME"),
+      profileDir: PROFILE_DIR,
+      browserLogin: true,
+    });
+    expect(devinLogin.APPDATA).toBe("C:\\Users\\real\\AppData\\Roaming");
+    expect(devinLogin.LOCALAPPDATA).toBe("C:\\Users\\real\\AppData\\Local");
+    expect(devinLogin.USERPROFILE).toBe(`${PROFILE_DIR}\\home`);
+    // Without browserLogin the roots stay redirected.
+    const devinPlain = buildRuntimeProcessEnvironment({
+      baseEnv,
+      definition: getRuntimeDefinition("DEVIN_RUNTIME"),
+      profileDir: PROFILE_DIR,
+    });
+    expect(devinPlain.APPDATA).not.toBe("C:\\Users\\real\\AppData\\Roaming");
+    // No other runtime declares a passthrough — the flag is a no-op even
+    // where APPDATA is a redirected root (Cursor manages APPDATA as its
+    // credential boundary).
+    const cursorLogin = buildRuntimeProcessEnvironment({
+      baseEnv,
+      definition: getRuntimeDefinition("CURSOR_RUNTIME"),
+      profileDir: PROFILE_DIR,
+      browserLogin: true,
+    });
+    expect(cursorLogin.APPDATA).toBe(`${PROFILE_DIR}\\appdata`);
+    expect(cursorLogin.USERPROFILE).toBe(`${PROFILE_DIR}\\home`);
+  });
+
+  it("a credential-boundary passthrough declaration is refused", () => {
+    // Registry-bug guard: even if a definition tried to passthrough its
+    // credential root, the builder must not restore the host value.
+    const definition = {
+      ...getRuntimeDefinition("CODEX_RUNTIME"),
+      profile: {
+        ...getRuntimeDefinition("CODEX_RUNTIME").profile,
+        browserLoginEnvPassthrough: ["CODEX_HOME"],
+      },
+    };
+    const env = buildRuntimeProcessEnvironment({
+      baseEnv: { PATH: "C:\\Windows", CODEX_HOME: "C:\\evil" },
+      definition,
+      profileDir: PROFILE_DIR,
+      browserLogin: true,
+    });
+    expect(env.CODEX_HOME).toBe(PROFILE_DIR);
+  });
 });

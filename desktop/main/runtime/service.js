@@ -10,6 +10,9 @@ const {
 const { detectRuntime } = require("./detector");
 const { probeRuntimeAuthState } = require("./auth-probe");
 const { RuntimeProfileManager } = require("./profiles");
+const {
+  getAccountRuntimeCapabilities,
+} = require("./capabilities");
 
 function summarizeDefinition(definition) {
   return {
@@ -18,7 +21,10 @@ function summarizeDefinition(definition) {
     supportedAccountProviders: definition.supportedAccountProviders.slice(),
     displayName: definition.displayName,
     profileStrategy: definition.profile.strategy,
-    capabilities: definition.capabilities,
+    // The consolidated capability descriptor — the UI and any future
+    // execution surface read capabilities ONLY from here, never by
+    // branching on backendKind.
+    capabilities: getAccountRuntimeCapabilities(definition.backendKind),
   };
 }
 
@@ -84,6 +90,13 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
       });
       status.authState = probe.authState;
       return status;
+    },
+
+    // The consolidated capability descriptor for one runtime — the unified
+    // query entry for Settings and future execution surfaces.
+    getRuntimeCapabilities(backendKind) {
+      assertKnown(backendKind);
+      return getAccountRuntimeCapabilities(backendKind);
     },
 
     // Structured install/update metadata only. Phase C does not execute

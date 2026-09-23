@@ -384,6 +384,13 @@ function parseCursorSmokeResult(result) {
 const cursorAdapter = {
   backendKind: CURSOR_BACKEND_KIND,
   accountProvider: CURSOR_ACCOUNT_PROVIDER,
+  // Same binding contract as every other adapter — a foreign provider
+  // request binds to null, never to this adapter.
+  forAccountProvider(provider) {
+    return provider == null || provider === CURSOR_ACCOUNT_PROVIDER
+      ? cursorAdapter
+      : null;
+  },
   loginGuardKey: "cursor:login",
   smokeExpected: CURSOR_SMOKE_EXPECTED,
 
@@ -421,7 +428,16 @@ const cursorAdapter = {
       : "UNSUPPORTED_AUTH_METHOD";
   },
 
+  // Defense in depth: an AUTHENTICATED status whose method is not the
+  // managed browser-account flow must never flip a connection to
+  // CONNECTED — reported as UNKNOWN, which maps to ERROR.
   reportableAuthState(status) {
+    if (
+      status.authState === "AUTHENTICATED" &&
+      status.authMethod !== "CURSOR_BROWSER_ACCOUNT"
+    ) {
+      return "UNKNOWN";
+    }
     return status.authState;
   },
 

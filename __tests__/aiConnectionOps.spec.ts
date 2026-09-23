@@ -128,7 +128,7 @@ describe("connection service", () => {
       provider: "OPENAI",
       authType: "ACCOUNT_LOGIN",
       backendKind: "CODEX_RUNTIME",
-      displayName: "ChatGPT",
+      displayName: "ChatGPT via Codex",
       accountIdentity: "me@example.com",
       status: "CONNECTED",
       credentialRef: null,
@@ -262,7 +262,7 @@ describe("connection service", () => {
       },
       fakeDb(),
     );
-    expect(row.displayName).toBe("ChatGPT 3");
+    expect(row.displayName).toBe("ChatGPT via Codex 3");
   });
 
   it("creates a Claude account-login connection with whitelisted metadata", async () => {

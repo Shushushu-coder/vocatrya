@@ -61,6 +61,9 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     profile: {
       strategy: PROFILE_STRATEGIES.PROFILE_DIR_ENV,
       env: { CODEX_HOME: "$PROFILE_DIR" },
+      // env keys whose redirect constitutes the credential boundary —
+      // auth material can only persist where these point. Primary first.
+      credentialBoundary: ["CODEX_HOME"],
       // An inherited API key or access token silently overrides
       // account-login routing inside the managed profile.
       stripEnv: ["OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN"],
@@ -149,6 +152,7 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       // Claude Code writes credentials into CLAUDE_CONFIG_DIR, giving true
       // per-connection isolation.
       env: { CLAUDE_CONFIG_DIR: "$PROFILE_DIR" },
+      credentialBoundary: ["CLAUDE_CONFIG_DIR"],
       // Every env route that would outrank a Claude.ai subscription login
       // or redirect the provider backend (spec §8): API keys, OAuth/env
       // tokens, federation/profile routing, cloud providers, base URL.
@@ -263,6 +267,16 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         APPDATA: "$PROFILE_DIR\\home\\AppData\\Roaming",
         LOCALAPPDATA: "$PROFILE_DIR\\home\\AppData\\Local",
       },
+      // auth.json lives under GROK_HOME; the compat scanners and folder
+      // trust resolve through the redirected home roots, so both halves of
+      // the boundary are listed.
+      credentialBoundary: [
+        "GROK_HOME",
+        "USERPROFILE",
+        "HOME",
+        "APPDATA",
+        "LOCALAPPDATA",
+      ],
       // Every documented env route that could override authentication,
       // redirect endpoints, inject config, or widen the tool surface inside
       // a managed profile (grok 1.0.34 config-reference). The base env is
@@ -476,6 +490,17 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         HOME: "$PROFILE_DIR\\home",
         USERPROFILE: "$PROFILE_DIR\\home",
       },
+      // auth.json lives at $XDG_DATA_HOME\opencode — the four XDG roots
+      // are the credential boundary; the home redirects guard fallback
+      // resolution paths.
+      credentialBoundary: [
+        "XDG_DATA_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "HOME",
+        "USERPROFILE",
+      ],
       // Any ambient provider key/token would silently bypass the managed
       // OAuth session — OpenCode reads credential env for every provider.
       stripEnv: [
@@ -605,6 +630,21 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         XDG_CACHE_HOME: "$PROFILE_DIR\\xdg-cache",
         XDG_STATE_HOME: "$PROFILE_DIR\\xdg-state",
       },
+      // auth.json persists under the redirected APPDATA — that is the
+      // credential boundary. CURSOR_CONFIG_DIR covers config only; the
+      // home/XDG roots are defensive redirects that keep ~/.cursor and
+      // cross-platform fallbacks out of the real profile.
+      credentialBoundary: [
+        "APPDATA",
+        "CURSOR_CONFIG_DIR",
+        "USERPROFILE",
+        "HOME",
+        "LOCALAPPDATA",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+      ],
       stripEnv: [
         // Credential overrides — these bypass the browser session and
         // would let a managed child authenticate with the host's key.
@@ -747,6 +787,7 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     profile: {
       strategy: PROFILE_STRATEGIES.PROFILE_DIR_ENV,
       env: { COPILOT_HOME: "$PROFILE_DIR" },
+      credentialBoundary: ["COPILOT_HOME"],
       // Any ambient GitHub token overrides the managed account session.
       stripEnv: ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"],
     },
@@ -837,6 +878,18 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         XDG_CACHE_HOME: "$PROFILE_DIR\\xdg-cache",
         XDG_STATE_HOME: "$PROFILE_DIR\\xdg-state",
       },
+      // credentials.toml resolves through USERPROFILE — the credential
+      // boundary. HOME/APPDATA/LOCALAPPDATA/XDG_* are defensive isolation
+      // roots (still redirected via profile.env) but are not
+      // credential-bearing, which is what makes the browser-login
+      // passthrough below safe.
+      credentialBoundary: ["USERPROFILE"],
+      // Browser-facing login only: the CLI opens the default browser via
+      // ShellExecute, and the spawned browser resolves its user-data dir
+      // from %APPDATA%/%LOCALAPPDATA%. These host roots are restored for
+      // the login process so the browser keeps the user's existing session;
+      // USERPROFILE — the credentials.toml boundary — stays managed.
+      browserLoginEnvPassthrough: ["APPDATA", "LOCALAPPDATA"],
       // Every env route that could override authentication, redirect the
       // backend, or change the auth method inside a managed profile. The
       // base env is allowlist-built so most never arrive; the list
