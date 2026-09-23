@@ -173,7 +173,7 @@ describe("startLogin", () => {
 
   it("rejects unsupported backends without touching profiles", async () => {
     const result = await service.startLogin({
-      backendKind: "CLAUDE_RUNTIME",
+      backendKind: "GROK_RUNTIME",
       ticket: "t",
     });
     expect(result.ok).toBe(false);

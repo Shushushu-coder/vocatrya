@@ -34,6 +34,14 @@ function asNullableString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+// Whitelisted non-secret metadata object (e.g. Claude org/subscription
+// name). The service layer re-validates key names before persisting.
+function asMetadataObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 /**
  * Completion sink for runtime operations. Electron main reports only the
  * verified outcome — an auth state enum, an opaque profile ref, an optional
@@ -79,6 +87,7 @@ export async function POST(request: Request) {
           backendKind: record.backendKind,
           runtimeProfileRef,
           accountIdentity: asNullableString(result.accountIdentity),
+          providerMetadata: asMetadataObject(result.providerMetadata),
         });
         return NextResponse.json({ ok: true, connection });
       }
@@ -88,6 +97,7 @@ export async function POST(request: Request) {
             userId: record.userId,
             connectionId: record.connectionId ?? "",
             accountIdentity: asNullableString(result.accountIdentity),
+            providerMetadata: asMetadataObject(result.providerMetadata),
           });
           return NextResponse.json({ ok: true, connection });
         }

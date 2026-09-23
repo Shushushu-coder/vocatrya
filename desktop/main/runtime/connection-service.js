@@ -1,4 +1,4 @@
-// Phase D AIConnection orchestrator — the only place account-login
+// Phase D/E AIConnection orchestrator — the only place account-login
 // operations are coordinated.
 //
 // Boundaries this module enforces:
@@ -6,13 +6,18 @@
 //   Tickets are single-use proofs minted by an authenticated backend action;
 //   they bind the userId (and for connection ops, the connectionId) so the
 //   renderer can never drive operations on someone else's connection.
-// - Codex owns authentication. We spawn `codex login`/`logout`/`login
-//   status`/`debug models`/`exec` inside the managed profile env and never
-//   read auth.json or any credential material.
+// - The provider runtime owns authentication. We spawn the vendor's
+//   documented login/logout/status/print commands inside the managed
+//   profile env and never read credential files.
 // - AIConnection rows are mutated ONLY by the backend through the internal
 //   loopback client, after the runtime verified the outcome.
 // - Every spawned process goes through runRuntimeCommand: shell:false,
 //   capped output, timeout/abort support, sanitized capture.
+//
+// Phase E refactor: provider specifics live behind a small adapter
+// contract (codex.js / claude.js). This module coordinates tickets,
+// guards, pending profiles, and outcome reporting — it contains no
+// provider-specific command knowledge.
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
@@ -21,30 +26,22 @@ const { findRuntimeExecutable, probeRuntimeVersion } = require("./detector");
 const { runRuntimeCommand } = require("./runner");
 const { RuntimeProfileManager } = require("./profiles");
 const { AUTH_PROBE_TIMEOUT_MS } = require("./auth-probe");
-const {
-  CODEX_BACKEND_KIND,
-  CODEX_CURATED_MODELS,
-  CODEX_SMOKE_EXPECTED,
-  CODEX_SMOKE_PROMPT,
-  buildCodexExecInvocation,
-  buildCodexLoginInvocation,
-  buildCodexLogoutInvocation,
-  buildCodexModelsInvocation,
-  buildCodexStatusInvocation,
-  parseCodexLoginStatus,
-  parseCodexModelCatalog,
-  resolveCodexExecutable,
-} = require("./codex");
+const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
+const { CLAUDE_BACKEND_KIND, claudeAdapter } = require("./claude");
 
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000; // browser auth is user-paced
 const LOGOUT_TIMEOUT_MS = 30 * 1000;
 const MODELS_TIMEOUT_MS = 20 * 1000;
 const SMOKE_TIMEOUT_MS = 120 * 1000;
 
-// `codex login` binds a fixed local callback port — two concurrent login
-// processes (connect or reconnect) would collide, so all login spawns share
-// one in-process mutex on top of the per-ticket/per-connection guards.
-const LOGIN_GUARD = "codex:login";
+// Implemented account-login providers. Each adapter owns its login guard
+// key (`<vendor>:login`) so a login process per provider can run in
+// parallel while same-provider logins stay serialized — the CLIs bind
+// fixed local callback resources that would otherwise collide.
+const PROVIDER_ADAPTERS = Object.freeze({
+  [CODEX_BACKEND_KIND]: codexAdapter,
+  [CLAUDE_BACKEND_KIND]: claudeAdapter,
+});
 
 const CONNECTION_OP_CODES = Object.freeze({
   RUNTIME_NOT_INSTALLED: "RUNTIME_NOT_INSTALLED",
@@ -54,6 +51,9 @@ const CONNECTION_OP_CODES = Object.freeze({
   LOGIN_TIMEOUT: "LOGIN_TIMEOUT",
   LOGIN_FAILED: "LOGIN_FAILED",
   AUTH_NOT_CONFIRMED: "AUTH_NOT_CONFIRMED",
+  AUTH_METHOD_UNVERIFIED: "AUTH_METHOD_UNVERIFIED",
+  UNSUPPORTED_AUTH_METHOD: "UNSUPPORTED_AUTH_METHOD",
+  PROVIDER_POLICY_RESTRICTED: "PROVIDER_POLICY_RESTRICTED",
   REAUTH_REQUIRED: "REAUTH_REQUIRED",
   ACCOUNT_IDENTITY_CONFLICT: "ACCOUNT_IDENTITY_CONFLICT",
   CONNECTION_NOT_FOUND: "CONNECTION_NOT_FOUND",
@@ -99,12 +99,16 @@ function createConnectionService({
     for (const key of keys) activeOps.delete(key);
   }
 
-  // Runtime resolution that survives npm .cmd shims: findRuntimeExecutable
+  function adapterFor(backendKind) {
+    return PROVIDER_ADAPTERS[backendKind] || null;
+  }
+
+  // Runtime resolution that survives shim installs: findRuntimeExecutable
   // may return an extensionless/.cmd shim which cannot be spawned with
-  // shell:false, so it is unwrapped to the vendored codex.exe before the
-  // version probe decides READY vs BROKEN.
-  function resolveCodexRuntime() {
-    const definition = getRuntimeDefinition(CODEX_BACKEND_KIND);
+  // shell:false, so the adapter unwraps it to the real vendored binary
+  // before the version probe decides READY vs BROKEN.
+  function resolveRuntime(adapter) {
+    const definition = getRuntimeDefinition(adapter.backendKind);
     const rawPath = findRuntimeExecutable(definition, {
       platform: deps.platform || process.platform,
       env: deps.env || process.env,
@@ -114,7 +118,7 @@ function createConnectionService({
     if (!rawPath) {
       return { error: fail(CONNECTION_OP_CODES.RUNTIME_NOT_INSTALLED) };
     }
-    const executable = resolveCodexExecutable(rawPath, deps);
+    const executable = adapter.resolveExecutable(rawPath, deps);
     if (!executable) {
       return { error: fail(CONNECTION_OP_CODES.RUNTIME_BROKEN) };
     }
@@ -146,40 +150,39 @@ function createConnectionService({
     if (resolved.operation !== expectedOperation) {
       return { error: fail(CONNECTION_OP_CODES.INVALID_TICKET) };
     }
-    if (resolved.backendKind !== CODEX_BACKEND_KIND) {
+    const adapter = adapterFor(resolved.backendKind);
+    if (!adapter) {
       return { error: fail(CONNECTION_OP_CODES.UNSUPPORTED_BACKEND) };
     }
     if (expectedOperation === "login") {
-      return { resolved };
+      return { resolved, adapter };
     }
     const connection = resolved.connection;
     if (!connection || connection.id !== connectionId) {
       return { error: fail(CONNECTION_OP_CODES.CONNECTION_NOT_FOUND) };
     }
-    return { resolved, connection };
+    return { resolved, connection, adapter };
   }
 
-  async function probeAccountStatus(executable, profileDir) {
-    const invocation = buildCodexStatusInvocation({
+  async function probeAccountStatus(adapter, executable, profileDir) {
+    const invocation = adapter.buildStatusInvocation({
       executablePath: executable,
       profileDir,
       baseEnv: deps.env,
     });
     const result = await runner({ ...invocation, timeoutMs: statusTimeoutMs });
-    if (result.error) {
+    if (result.error || result.timedOut) {
       return { authState: "UNKNOWN", authMethod: null, accountIdentity: null };
     }
-    if (result.timedOut) {
-      return { authState: "UNKNOWN", authMethod: null, accountIdentity: null };
-    }
-    return parseCodexLoginStatus(result);
+    return adapter.parseAuthStatus(result);
   }
 
-  // Spawns `codex login` and waits. The CLI owns the browser flow entirely;
-  // its stdout (which contains the OAuth authorize URL) stays inside the
-  // sanitized runner capture and is never forwarded or logged.
-  async function runLoginProcess(executable, profileDir, signal) {
-    const invocation = buildCodexLoginInvocation({
+  // Spawns the provider login command and waits. The CLI owns the browser
+  // flow entirely; its stdout (which may contain the OAuth authorize URL)
+  // stays inside the sanitized runner capture and is never forwarded or
+  // logged.
+  async function runLoginProcess(adapter, executable, profileDir, signal) {
+    const invocation = adapter.buildLoginInvocation({
       executablePath: executable,
       profileDir,
       baseEnv: deps.env,
@@ -192,7 +195,7 @@ function createConnectionService({
     });
   }
 
-  function classifyLoginOutcome(loginResult, status, signal) {
+  function classifyLoginOutcome(adapter, loginResult, status, signal) {
     if (loginResult.aborted || signal.aborted) {
       return CONNECTION_OP_CODES.LOGIN_CANCELLED;
     }
@@ -202,37 +205,17 @@ function createConnectionService({
     if (loginResult.error || loginResult.exitCode !== 0) {
       return CONNECTION_OP_CODES.LOGIN_FAILED;
     }
-    if (status.authState !== "AUTHENTICATED") {
-      return CONNECTION_OP_CODES.AUTH_NOT_CONFIRMED;
-    }
-    // A verified session that is not ChatGPT account auth means a credential
-    // override slipped in — never treat it as ACCOUNT_LOGIN.
-    if (status.authMethod !== "chatgpt") {
-      return CONNECTION_OP_CODES.AUTH_NOT_CONFIRMED;
-    }
-    return null;
-  }
-
-  // Auth state as it may be reported to the backend. An authenticated
-  // session that is not ChatGPT account login (e.g. an API key slipping
-  // through) must never mark an ACCOUNT_LOGIN connection as CONNECTED —
-  // it is reported as UNKNOWN, which maps to ERROR.
-  function reportableAuthState(status) {
-    if (
-      status.authState === "AUTHENTICATED" &&
-      status.authMethod &&
-      status.authMethod !== "chatgpt"
-    ) {
-      return "UNKNOWN";
-    }
-    return status.authState;
+    // The process finished — the adapter decides whether the verified auth
+    // state is a real account login for this provider.
+    return adapter.loginFailureCode(status);
   }
 
   async function startLogin({ backendKind, ticket } = {}) {
-    if (backendKind !== CODEX_BACKEND_KIND) {
+    const adapter = adapterFor(backendKind);
+    if (!adapter) {
       return fail(CONNECTION_OP_CODES.UNSUPPORTED_BACKEND);
     }
-    const guardKeys = [LOGIN_GUARD, `ticket:${ticket}`];
+    const guardKeys = [adapter.loginGuardKey, `ticket:${ticket}`];
     const controller = acquire(guardKeys);
     if (!controller) {
       return fail(CONNECTION_OP_CODES.LOGIN_ALREADY_IN_PROGRESS);
@@ -241,21 +224,44 @@ function createConnectionService({
     try {
       const resolved = await resolveOperation(ticket, "login");
       if (resolved.error) return resolved.error;
+      if (resolved.resolved.backendKind !== adapter.backendKind) {
+        return fail(CONNECTION_OP_CODES.UNSUPPORTED_BACKEND);
+      }
 
-      const runtime = resolveCodexRuntime();
+      // An org/device managed policy that forces a non-Claude.ai login
+      // method is surfaced, never circumvented.
+      const policy = adapter.checkLoginPolicy?.({
+        platform: deps.platform || process.platform,
+        env: deps.env || process.env,
+        existsSyncImpl: deps.existsSyncImpl || fs.existsSync,
+        readFileSyncImpl: deps.readFileSyncImpl || fs.readFileSync,
+      });
+      if (policy && policy.restricted) {
+        diag({
+          operation: "login",
+          code: CONNECTION_OP_CODES.PROVIDER_POLICY_RESTRICTED,
+          forcedLoginMethod: policy.forcedLoginMethod,
+        });
+        return fail(CONNECTION_OP_CODES.PROVIDER_POLICY_RESTRICTED);
+      }
+
+      const runtime = resolveRuntime(adapter);
       if (runtime.error) return runtime.error;
 
       pendingProfile = profileManager.createProfile();
       const loginResult = await runLoginProcess(
+        adapter,
         runtime.executable,
         pendingProfile.profileDir,
         controller.signal,
       );
       const status = await probeAccountStatus(
+        adapter,
         runtime.executable,
         pendingProfile.profileDir,
       );
       const failure = classifyLoginOutcome(
+        adapter,
         loginResult,
         status,
         controller.signal,
@@ -274,6 +280,9 @@ function createConnectionService({
         outcome: "authenticated",
         runtimeProfileRef: pendingProfile.runtimeProfileRef,
         accountIdentity: status.accountIdentity ?? null,
+        ...(status.providerMetadata
+          ? { providerMetadata: status.providerMetadata }
+          : {}),
       });
       if (!complete || complete.ok !== true) {
         return fail(complete?.code || CONNECTION_OP_CODES.LOGIN_FAILED);
@@ -292,7 +301,7 @@ function createConnectionService({
   }
 
   async function reconnect({ connectionId, ticket } = {}) {
-    const guardKeys = [LOGIN_GUARD, `conn:${connectionId}`, `ticket:${ticket}`];
+    const guardKeys = [`conn:${connectionId}`, `ticket:${ticket}`];
     const controller = acquire(guardKeys);
     if (!controller) {
       return fail(CONNECTION_OP_CODES.LOGIN_ALREADY_IN_PROGRESS);
@@ -300,78 +309,95 @@ function createConnectionService({
     try {
       const resolved = await resolveOperation(ticket, "reconnect", connectionId);
       if (resolved.error) return resolved.error;
-      const connection = resolved.connection;
+      const { adapter, connection } = resolved;
 
-      const runtime = resolveCodexRuntime();
-      if (runtime.error) return runtime.error;
-
-      const profileDir = profileManager.ensureProfile(
-        connection.runtimeProfileRef,
-      );
-      const loginResult = await runLoginProcess(
-        runtime.executable,
-        profileDir,
-        controller.signal,
-      );
-      const status = await probeAccountStatus(runtime.executable, profileDir);
-      const failure = classifyLoginOutcome(
-        loginResult,
-        status,
-        controller.signal,
-      );
-
-      if (
-        !failure &&
-        connection.accountIdentity &&
-        status.accountIdentity &&
-        connection.accountIdentity !== status.accountIdentity
-      ) {
-        // The re-auth landed on a different account. Never silently swap
-        // identity — surface the conflict for explicit user action.
-        await backend.completeOperation(resolved.resolved.operationId, {
-          outcome: "identity_conflict",
-          accountIdentity: status.accountIdentity,
-        });
-        return fail(CONNECTION_OP_CODES.ACCOUNT_IDENTITY_CONFLICT);
+      const guardWithLogin = [adapter.loginGuardKey];
+      if (!acquire(guardWithLogin)) {
+        return fail(CONNECTION_OP_CODES.LOGIN_ALREADY_IN_PROGRESS);
       }
+      try {
+        const runtime = resolveRuntime(adapter);
+        if (runtime.error) return runtime.error;
 
-      if (failure === CONNECTION_OP_CODES.LOGIN_CANCELLED) {
-        return fail(failure);
-      }
-      if (failure === CONNECTION_OP_CODES.LOGIN_TIMEOUT) {
-        return fail(failure);
-      }
-      if (!failure) {
+        const profileDir = profileManager.ensureProfile(
+          connection.runtimeProfileRef,
+        );
+        const loginResult = await runLoginProcess(
+          adapter,
+          runtime.executable,
+          profileDir,
+          controller.signal,
+        );
+        const status = await probeAccountStatus(adapter, runtime.executable, profileDir);
+        const failure = classifyLoginOutcome(
+          adapter,
+          loginResult,
+          status,
+          controller.signal,
+        );
+
+        if (
+          !failure &&
+          connection.accountIdentity &&
+          status.accountIdentity &&
+          connection.accountIdentity !== status.accountIdentity
+        ) {
+          // The re-auth landed on a different account. Never silently swap
+          // identity — surface the conflict for explicit user action.
+          await backend.completeOperation(resolved.resolved.operationId, {
+            outcome: "identity_conflict",
+            accountIdentity: status.accountIdentity,
+          });
+          return fail(CONNECTION_OP_CODES.ACCOUNT_IDENTITY_CONFLICT);
+        }
+
+        if (
+          failure === CONNECTION_OP_CODES.LOGIN_CANCELLED ||
+          failure === CONNECTION_OP_CODES.LOGIN_TIMEOUT
+        ) {
+          return fail(failure);
+        }
+        if (!failure) {
+          const complete = await backend.completeOperation(
+            resolved.resolved.operationId,
+            {
+              outcome: "authenticated",
+              accountIdentity:
+                status.accountIdentity ?? connection.accountIdentity ?? null,
+              ...(status.providerMetadata
+                ? { providerMetadata: status.providerMetadata }
+                : {}),
+            },
+          );
+          if (!complete || complete.ok !== true) {
+            return fail(complete?.code || CONNECTION_OP_CODES.LOGIN_FAILED);
+          }
+          return { ok: true, connection: complete.connection };
+        }
+        // Process ran but no valid session materialized — report the
+        // observed auth state so the row reflects reality
+        // (REAUTH_REQUIRED / ERROR). A wrong-method session is reported as
+        // UNKNOWN so it can never flip ACCOUNT_LOGIN to CONNECTED.
         const complete = await backend.completeOperation(
           resolved.resolved.operationId,
           {
-            outcome: "authenticated",
-            accountIdentity:
-              status.accountIdentity ?? connection.accountIdentity ?? null,
+            outcome: "auth_state",
+            authState: adapter.reportableAuthState(status),
           },
         );
-        if (!complete || complete.ok !== true) {
-          return fail(complete?.code || CONNECTION_OP_CODES.LOGIN_FAILED);
-        }
-        return { ok: true, connection: complete.connection };
+        const updated =
+          complete && complete.ok === true ? complete.connection : null;
+        return fail(
+          status.authState === "AUTHENTICATED"
+            ? failure
+            : failure === CONNECTION_OP_CODES.AUTH_NOT_CONFIRMED
+              ? CONNECTION_OP_CODES.REAUTH_REQUIRED
+              : failure,
+          updated ? { connection: updated } : undefined,
+        );
+      } finally {
+        release(guardWithLogin);
       }
-      // Process ran but no valid session materialized — report the observed
-      // auth state so the row reflects reality (REAUTH_REQUIRED / ERROR).
-      // A wrong-method session (e.g. API key) is reported as UNKNOWN so it
-      // can never flip an ACCOUNT_LOGIN connection to CONNECTED.
-      const complete = await backend.completeOperation(
-        resolved.resolved.operationId,
-        { outcome: "auth_state", authState: reportableAuthState(status) },
-      );
-      const updated = complete && complete.ok === true ? complete.connection : null;
-      return fail(
-        status.authState === "AUTHENTICATED"
-          ? CONNECTION_OP_CODES.AUTH_NOT_CONFIRMED
-          : failure === CONNECTION_OP_CODES.AUTH_NOT_CONFIRMED
-            ? CONNECTION_OP_CODES.REAUTH_REQUIRED
-            : failure,
-        updated ? { connection: updated } : undefined,
-      );
     } finally {
       release(guardKeys);
     }
@@ -386,17 +412,17 @@ function createConnectionService({
     try {
       const resolved = await resolveOperation(ticket, "disconnect", connectionId);
       if (resolved.error) return resolved.error;
-      const connection = resolved.connection;
+      const { adapter, connection } = resolved;
 
-      // Best-effort official logout inside the connection's own profile. If
-      // the runtime is gone the local disconnect still proceeds — the
+      // Best-effort official logout inside the connection's own profile.
+      // If the runtime is gone the local disconnect still proceeds — the
       // connection row and profile ref are retained either way.
-      const runtime = resolveCodexRuntime();
+      const runtime = resolveRuntime(adapter);
       if (!runtime.error) {
         const profileDir = profileManager.ensureProfile(
           connection.runtimeProfileRef,
         );
-        const invocation = buildCodexLogoutInvocation({
+        const invocation = adapter.buildLogoutInvocation({
           executablePath: runtime.executable,
           profileDir,
           baseEnv: deps.env,
@@ -434,16 +460,16 @@ function createConnectionService({
     try {
       const resolved = await resolveOperation(ticket, "verify", connectionId);
       if (resolved.error) return resolved.error;
-      const connection = resolved.connection;
+      const { adapter, connection } = resolved;
 
-      const runtime = resolveCodexRuntime();
+      const runtime = resolveRuntime(adapter);
       if (runtime.error) return runtime.error; // runtime state stays separate
 
       const profileDir = profileManager.ensureProfile(
         connection.runtimeProfileRef,
       );
-      const status = await probeAccountStatus(runtime.executable, profileDir);
-      const reported = reportableAuthState(status);
+      const status = await probeAccountStatus(adapter, runtime.executable, profileDir);
+      const reported = adapter.reportableAuthState(status);
       const complete = await backend.completeOperation(
         resolved.resolved.operationId,
         { outcome: "auth_state", authState: reported },
@@ -466,57 +492,32 @@ function createConnectionService({
     try {
       const resolved = await resolveOperation(ticket, "listModels", connectionId);
       if (resolved.error) return resolved.error;
-      const connection = resolved.connection;
+      const { adapter, connection } = resolved;
 
-      const runtime = resolveCodexRuntime();
+      const runtime = resolveRuntime(adapter);
       if (runtime.error) return runtime.error;
       const profileDir = profileManager.ensureProfile(
         connection.runtimeProfileRef,
       );
 
-      // Official machine-readable catalog: `codex debug models` (account-
-      // aware refresh), then the binary's bundled catalog, then the curated
-      // fallback — every step still produces {id, displayName, source}.
-      for (const bundled of [false, true]) {
-        const invocation = buildCodexModelsInvocation({
-          executablePath: runtime.executable,
-          profileDir,
-          baseEnv: deps.env,
-          bundled,
-        });
-        const result = await runner({
-          ...invocation,
-          timeoutMs: modelsTimeoutMs,
-          signal: controller.signal,
-        });
-        if (result.error || result.timedOut || result.exitCode !== 0) continue;
-        const models = parseCodexModelCatalog(result.stdout);
-        if (models) {
-          await backend.completeOperation(resolved.resolved.operationId, {
-            outcome: "consumed",
-          });
-          return {
-            ok: true,
-            dynamicDiscoverySupported: true,
-            models: models.map((m) => ({
-              ...m,
-              source: "RUNTIME",
-              availability: "available",
-            })),
-          };
-        }
-      }
+      // The adapter decides between runtime discovery and a curated
+      // fallback; either way the response is {id, displayName, source,
+      // availability}[] — a catalog, never an entitlement claim.
+      const catalog = await adapter.listModels({
+        executablePath: runtime.executable,
+        profileDir,
+        baseEnv: deps.env,
+        runner,
+        timeoutMs: modelsTimeoutMs,
+        signal: controller.signal,
+      });
       await backend.completeOperation(resolved.resolved.operationId, {
         outcome: "consumed",
       });
       return {
         ok: true,
-        dynamicDiscoverySupported: false,
-        models: CODEX_CURATED_MODELS.map((m) => ({
-          ...m,
-          source: "CURATED",
-          availability: "unknown",
-        })),
+        dynamicDiscoverySupported: catalog.dynamicDiscoverySupported === true,
+        models: catalog.models,
       };
     } finally {
       release(guardKeys);
@@ -533,25 +534,24 @@ function createConnectionService({
     try {
       const resolved = await resolveOperation(ticket, "smoke", connectionId);
       if (resolved.error) return resolved.error;
-      const connection = resolved.connection;
+      const { adapter, connection } = resolved;
 
-      const runtime = resolveCodexRuntime();
+      const runtime = resolveRuntime(adapter);
       if (runtime.error) return runtime.error;
       const profileDir = profileManager.ensureProfile(
         connection.runtimeProfileRef,
       );
 
       fs.mkdirSync(smokeWorkRoot, { recursive: true });
-      workDir = fs.mkdtempSync(path.join(smokeWorkRoot, "codex-smoke-"));
-      const outputFile = path.join(workDir, "last-message.txt");
-      const invocation = buildCodexExecInvocation({
+      workDir = fs.mkdtempSync(
+        path.join(smokeWorkRoot, `${adapter.backendKind.toLowerCase()}-smoke-`),
+      );
+      const invocation = adapter.buildSmokeInvocation({
         executablePath: runtime.executable,
         profileDir,
         baseEnv: deps.env,
         workingDirectory: workDir,
-        outputFile,
         model,
-        prompt: CODEX_SMOKE_PROMPT,
       });
       const result = await runner({
         ...invocation,
@@ -566,26 +566,19 @@ function createConnectionService({
         diag({ operation: "smoke", exitCode: result.exitCode });
         return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
       }
-      let text = "";
-      try {
-        text = fs.readFileSync(outputFile, "utf8");
-      } catch {
-        text = "";
-      }
-      if (!text.trim()) {
-        // Fallback: last non-empty stdout line carries the final message in
-        // non-json exec output.
-        const lines = (result.stdout || "")
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean);
-        text = lines[lines.length - 1] || "";
+      const { text, reportedError } = adapter.extractSmokeText({
+        result,
+        workDir,
+      });
+      if (reportedError) {
+        diag({ operation: "smoke", exitCode: result.exitCode, reportedError });
+        return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
       }
       return {
         ok: true,
-        text: text.trim(),
-        expected: CODEX_SMOKE_EXPECTED,
-        matched: text.trim() === CODEX_SMOKE_EXPECTED,
+        text,
+        expected: adapter.smokeExpected,
+        matched: text === adapter.smokeExpected,
       };
     } finally {
       release(guardKeys);
@@ -627,5 +620,6 @@ function createConnectionService({
 module.exports = {
   CONNECTION_OP_CODES,
   LOGIN_TIMEOUT_MS,
+  PROVIDER_ADAPTERS,
   createConnectionService,
 };

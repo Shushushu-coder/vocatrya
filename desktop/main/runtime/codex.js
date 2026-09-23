@@ -271,6 +271,119 @@ function parseCodexModelCatalog(stdout) {
   return models.length > 0 ? models : null;
 }
 
+// Provider adapter contract consumed by connection-service.js (Phase E:
+// the service is provider-neutral; every Codex-specific decision lives in
+// this object — invocation shapes, auth classification, model discovery,
+// and smoke result extraction).
+const codexAdapter = {
+  backendKind: CODEX_BACKEND_KIND,
+  loginGuardKey: "codex:login",
+  smokePrompt: CODEX_SMOKE_PROMPT,
+  smokeExpected: CODEX_SMOKE_EXPECTED,
+  resolveExecutable: resolveCodexExecutable,
+  buildLoginInvocation: buildCodexLoginInvocation,
+  buildLogoutInvocation: buildCodexLogoutInvocation,
+  buildStatusInvocation: buildCodexStatusInvocation,
+  parseAuthStatus: parseCodexLoginStatus,
+  checkLoginPolicy: null,
+
+  // Post-login verification: only a ChatGPT account session counts. A
+  // credential override that slipped through (e.g. API key) is
+  // AUTH_NOT_CONFIRMED, never a success.
+  loginFailureCode(status) {
+    if (status.authState !== "AUTHENTICATED") return "AUTH_NOT_CONFIRMED";
+    return status.authMethod === "chatgpt" ? null : "AUTH_NOT_CONFIRMED";
+  },
+
+  // A verified non-ChatGPT session is reported as UNKNOWN so it can never
+  // flip an ACCOUNT_LOGIN connection to CONNECTED.
+  reportableAuthState(status) {
+    if (
+      status.authState === "AUTHENTICATED" &&
+      status.authMethod &&
+      status.authMethod !== "chatgpt"
+    ) {
+      return "UNKNOWN";
+    }
+    return status.authState;
+  },
+
+  // Official machine-readable catalog: `codex debug models` (account-aware
+  // refresh), then the binary's bundled catalog, then the curated fallback.
+  async listModels({ executablePath, profileDir, baseEnv, runner, timeoutMs, signal }) {
+    for (const bundled of [false, true]) {
+      const invocation = buildCodexModelsInvocation({
+        executablePath,
+        profileDir,
+        baseEnv,
+        bundled,
+      });
+      const result = await runner({
+        ...invocation,
+        timeoutMs,
+        signal,
+      });
+      if (result.error || result.timedOut || result.exitCode !== 0) continue;
+      const models = parseCodexModelCatalog(result.stdout);
+      if (models) {
+        return {
+          dynamicDiscoverySupported: true,
+          models: models.map((m) => ({
+            ...m,
+            source: "RUNTIME",
+            availability: "available",
+          })),
+        };
+      }
+    }
+    return {
+      dynamicDiscoverySupported: false,
+      models: CODEX_CURATED_MODELS.map((m) => ({
+        ...m,
+        source: "CURATED",
+        availability: "unknown",
+      })),
+    };
+  },
+
+  buildSmokeInvocation({
+    executablePath,
+    profileDir,
+    baseEnv,
+    workingDirectory,
+    model,
+  }) {
+    return buildCodexExecInvocation({
+      executablePath,
+      profileDir,
+      baseEnv,
+      workingDirectory,
+      outputFile: path.join(workingDirectory, "last-message.txt"),
+      model,
+      prompt: CODEX_SMOKE_PROMPT,
+    });
+  },
+
+  // The last agent message is written to last-message.txt inside the work
+  // dir; the last non-empty stdout line is the non-json fallback.
+  extractSmokeText({ result, workDir }) {
+    let text = "";
+    try {
+      text = fs.readFileSync(path.join(workDir, "last-message.txt"), "utf8");
+    } catch {
+      text = "";
+    }
+    if (!text.trim()) {
+      const lines = (result.stdout || "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      text = lines[lines.length - 1] || "";
+    }
+    return { text: text.trim(), reportedError: false };
+  },
+};
+
 module.exports = {
   CODEX_BACKEND_KIND,
   CODEX_CURATED_MODELS,
@@ -281,6 +394,7 @@ module.exports = {
   buildCodexLogoutInvocation,
   buildCodexModelsInvocation,
   buildCodexStatusInvocation,
+  codexAdapter,
   parseCodexLoginStatus,
   parseCodexModelCatalog,
   resolveCodexExecutable,

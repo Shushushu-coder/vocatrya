@@ -186,6 +186,69 @@ describe("POST /api/internal/ai-connections/complete", () => {
     expect(JSON.stringify(created)).not.toMatch(/sk-|token|auth\.json/i);
   });
 
+  it("creates a Claude connection with whitelisted provider metadata", async () => {
+    store.count.mockResolvedValue(0);
+    store.create.mockImplementation(async ({ data }) => data);
+
+    const record = mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "CLAUDE_RUNTIME",
+    });
+    const resolved = await (
+      await resolvePOST(req({ ticket: record.ticket }))
+    ).json();
+
+    const res = await completePOST(
+      req({
+        operationId: resolved.operationId,
+        result: {
+          outcome: "authenticated",
+          runtimeProfileRef: RP,
+          accountIdentity: "me@example.com",
+          providerMetadata: {
+            organizationName: "My Org",
+            subscriptionType: "pro",
+            loginMethod: "claude.ai",
+          },
+        },
+      }),
+    );
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.ok).toBe(true);
+    const created = store.create.mock.calls[0][0].data;
+    expect(created.provider).toBe("ANTHROPIC");
+    expect(created.backendKind).toBe("CLAUDE_RUNTIME");
+    expect(created.displayName).toBe("Claude");
+    expect(created.providerMetadata).toBe(
+      '{"organizationName":"My Org","subscriptionType":"pro","loginMethod":"claude.ai"}',
+    );
+  });
+
+  it("rejects a login completion whose metadata carries credential keys", async () => {
+    const record = mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "CLAUDE_RUNTIME",
+    });
+    const resolved = await (
+      await resolvePOST(req({ ticket: record.ticket }))
+    ).json();
+    const res = await completePOST(
+      req({
+        operationId: resolved.operationId,
+        result: {
+          outcome: "authenticated",
+          runtimeProfileRef: RP,
+          providerMetadata: { refreshToken: "not-allowed" },
+        },
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
   it("rejects a login completion without the verified outcome", async () => {
     const record = mintConnectionTicket({
       userId: "user-1",

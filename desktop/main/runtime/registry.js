@@ -130,6 +130,10 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         commands: ["claude.exe", "claude.cmd", "claude"],
         knownLocations: [
           "{USERPROFILE}\\.local\\bin\\claude.exe",
+          // WinGet installs a real .exe link (verified 2.1.203).
+          "{LOCALAPPDATA}\\Microsoft\\WinGet\\Links\\claude.exe",
+          // npm global: the declared bin inside @anthropic-ai/claude-code.
+          "{APPDATA}\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe",
           "{APPDATA}\\npm\\claude.cmd",
         ],
       },
@@ -137,8 +141,26 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     profile: {
       strategy: PROFILE_STRATEGIES.PROFILE_DIR_ENV,
       // Absolute managed path required — never the host ~/.claude.
+      // Claude Code writes credentials into CLAUDE_CONFIG_DIR, giving true
+      // per-connection isolation.
       env: { CLAUDE_CONFIG_DIR: "$PROFILE_DIR" },
-      stripEnv: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_API_KEY"],
+      // Every env route that would outrank a Claude.ai subscription login
+      // or redirect the provider backend (spec §8): API keys, OAuth/env
+      // tokens, federation/profile routing, cloud providers, base URL.
+      stripEnv: [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "ANTHROPIC_PROFILE",
+        "ANTHROPIC_FEDERATION_RULE_ID",
+        "ANTHROPIC_ORGANIZATION_ID",
+        "ANTHROPIC_IDENTITY_TOKEN_FILE",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "CLAUDE_CODE_USE_FOUNDRY",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_API_KEY",
+      ],
     },
     install: {
       executionEnabled: false,
@@ -178,11 +200,25 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     authProbe: {
       args: ["auth", "status", "--json"],
       mode: "READ_ONLY",
-      notes: "Structured auth status for the injected CLAUDE_CONFIG_DIR.",
+      notes:
+        "Structured auth status for the injected CLAUDE_CONFIG_DIR. " +
+        "Verified 2.1.203: exit 0 + authMethod/apiProvider JSON when " +
+        "logged in; exit 1 + loggedIn:false when not.",
+    },
+    // Verified against claude 2.1.203 (claude <cmd> --help). All commands
+    // run with CLAUDE_CONFIG_DIR pointed at the managed profile directory.
+    commands: {
+      // Claude.ai subscription login: starts the OAuth browser flow and
+      // waits on the local callback. Long-running; cancelled via
+      // AbortSignal. --claudeai pins the subscription path explicitly.
+      login: ["auth", "login", "--claudeai"],
+      logout: ["auth", "logout"],
     },
     capabilities: {
       accountLogin: true,
-      modelDiscovery: true,
+      // claude 2.1.203 has no machine-readable model enumeration — the
+      // curated `--model` alias catalog is used instead.
+      modelDiscovery: false,
       streaming: true,
       acp: true,
     },

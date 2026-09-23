@@ -24,7 +24,7 @@ function classifyAuthProbeOutput({ exitCode, stdout, stderr }) {
     return "REAUTH_REQUIRED";
   }
   if (
-    /not\s+(logged|authenticated|signed)|unauthorized|unauthenticated|login required|no credentials|not logged in/.test(
+    /not\s+(logged|authenticated|signed)|unauthorized|unauthenticated|login required|no credentials|not logged in|"loggedin"\s*:\s*false/.test(
       text,
     )
   ) {
@@ -37,7 +37,10 @@ function classifyAuthProbeOutput({ exitCode, stdout, stderr }) {
   ) {
     return "AUTHENTICATED";
   }
-  if (exitCode === 0 && /"authenticated"\s*:\s*true/.test(text)) {
+  if (
+    exitCode === 0 &&
+    (/"authenticated"\s*:\s*true/.test(text) || /"loggedin"\s*:\s*true/.test(text))
+  ) {
     return "AUTHENTICATED";
   }
   return "UNKNOWN";

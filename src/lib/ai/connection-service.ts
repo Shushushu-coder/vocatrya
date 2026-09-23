@@ -14,6 +14,8 @@ import prisma from "@/lib/db";
 import {
   AI_BACKEND_PROVIDER,
   AI_CONNECTION_OP_ERROR_CODES,
+  assertProviderMetadataSafe,
+  type AIConnectionProvider,
 } from "@/lib/ai/connections";
 import { isRuntimeProfileRef } from "@/lib/ai/runtime/contract";
 import type { PrismaClient } from "@prisma/client";
@@ -58,6 +60,44 @@ const CONNECTION_SUMMARY_SELECT = {
   lastVerifiedAt: true,
   createdAt: true,
 } as const;
+
+// Default display names per account-login provider; a second connection of
+// the same provider is numbered ("Claude 2", ...).
+const ACCOUNT_LOGIN_DISPLAY_NAMES: Record<AIConnectionProvider, string> = {
+  OPENAI: "ChatGPT",
+  ANTHROPIC: "Claude",
+  XAI: "Grok",
+  OPENCODE: "OpenCode",
+  CURSOR: "Cursor",
+  GITHUB_COPILOT: "Copilot",
+  DEVIN: "Devin",
+};
+
+/**
+ * Normalizes the non-secret provider metadata reported by the runtime
+ * (e.g. Claude's org name / subscription type). Any credential-shaped key
+ * is rejected — a provider row must never become a credential store.
+ */
+function serializeProviderMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): string | null {
+  if (metadata === null || metadata === undefined) return null;
+  if (typeof metadata !== "object" || Array.isArray(metadata)) {
+    throw new ConnectionOpError(
+      AI_CONNECTION_OP_ERROR_CODES.LOGIN_FAILED,
+      "Invalid provider metadata",
+    );
+  }
+  try {
+    assertProviderMetadataSafe(metadata);
+  } catch {
+    throw new ConnectionOpError(
+      AI_CONNECTION_OP_ERROR_CODES.LOGIN_FAILED,
+      "Provider metadata contains forbidden fields",
+    );
+  }
+  return JSON.stringify(metadata);
+}
 
 export async function listConnectionsForUser(
   userId: string,
@@ -111,11 +151,13 @@ export async function createVerifiedAccountConnection(
     backendKind,
     runtimeProfileRef,
     accountIdentity,
+    providerMetadata,
   }: {
     userId: string;
     backendKind: string;
     runtimeProfileRef: string;
     accountIdentity: string | null;
+    providerMetadata?: Record<string, unknown> | null;
   },
   dbClient: DbClient = prisma,
 ): Promise<ConnectionSummary> {
@@ -146,8 +188,9 @@ export async function createVerifiedAccountConnection(
   const siblingCount = await dbClient.aIConnection.count({
     where: { userId, provider, authType: "ACCOUNT_LOGIN" },
   });
+  const baseName = ACCOUNT_LOGIN_DISPLAY_NAMES[provider] ?? provider;
   const displayName =
-    siblingCount === 0 ? "ChatGPT" : `ChatGPT ${siblingCount + 1}`;
+    siblingCount === 0 ? baseName : `${baseName} ${siblingCount + 1}`;
   return dbClient.aIConnection.create({
     data: {
       id: randomUUID(),
@@ -160,6 +203,7 @@ export async function createVerifiedAccountConnection(
       status: "CONNECTED",
       credentialRef: null,
       runtimeProfileRef,
+      providerMetadata: serializeProviderMetadata(providerMetadata),
       lastVerifiedAt: new Date(),
     },
     select: CONNECTION_SUMMARY_SELECT,
@@ -172,16 +216,24 @@ export async function applyReconnectAuthenticated(
     userId,
     connectionId,
     accountIdentity,
-  }: { userId: string; connectionId: string; accountIdentity: string | null },
+    providerMetadata,
+  }: {
+    userId: string;
+    connectionId: string;
+    accountIdentity: string | null;
+    providerMetadata?: Record<string, unknown> | null;
+  },
   dbClient: DbClient = prisma,
 ): Promise<ConnectionSummary> {
   await getConnectionOperationContext({ userId, connectionId }, dbClient);
+  const serialized = serializeProviderMetadata(providerMetadata);
   return dbClient.aIConnection.update({
     where: { id: connectionId },
     data: {
       status: "CONNECTED",
       lastVerifiedAt: new Date(),
       ...(accountIdentity ? { accountIdentity } : {}),
+      ...(serialized ? { providerMetadata: serialized } : {}),
     },
     select: CONNECTION_SUMMARY_SELECT,
   });

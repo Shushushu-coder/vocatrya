@@ -152,6 +152,69 @@ describe("connection service", () => {
     expect(row.displayName).toBe("ChatGPT 3");
   });
 
+  it("creates a Claude account-login connection with whitelisted metadata", async () => {
+    store.count.mockResolvedValue(0);
+    store.create.mockImplementation(async ({ data }) => data);
+    const row = await createVerifiedAccountConnection(
+      {
+        userId: "user-1",
+        backendKind: "CLAUDE_RUNTIME",
+        runtimeProfileRef: RP,
+        accountIdentity: "me@example.com",
+        providerMetadata: {
+          organizationName: "My Org",
+          subscriptionType: "pro",
+          loginMethod: "claude.ai",
+        },
+      },
+      fakeDb(),
+    );
+    expect(row).toMatchObject({
+      provider: "ANTHROPIC",
+      authType: "ACCOUNT_LOGIN",
+      backendKind: "CLAUDE_RUNTIME",
+      displayName: "Claude",
+      accountIdentity: "me@example.com",
+      status: "CONNECTED",
+      credentialRef: null,
+      runtimeProfileRef: RP,
+      providerMetadata:
+        '{"organizationName":"My Org","subscriptionType":"pro","loginMethod":"claude.ai"}',
+    });
+    // No model, no token, no absolute profile path is ever persisted.
+    expect(JSON.stringify(row)).not.toMatch(/accesstoken|AppData|CLAUDE_CONFIG_DIR/i);
+  });
+
+  it("numbers additional Claude accounts", async () => {
+    store.count.mockResolvedValue(1);
+    store.create.mockImplementation(async ({ data }) => data);
+    const row = await createVerifiedAccountConnection(
+      {
+        userId: "user-1",
+        backendKind: "CLAUDE_RUNTIME",
+        runtimeProfileRef: RP,
+        accountIdentity: null,
+      },
+      fakeDb(),
+    );
+    expect(row.displayName).toBe("Claude 2");
+  });
+
+  it("rejects provider metadata carrying credential-shaped keys", async () => {
+    await expect(
+      createVerifiedAccountConnection(
+        {
+          userId: "user-1",
+          backendKind: "CLAUDE_RUNTIME",
+          runtimeProfileRef: RP,
+          accountIdentity: null,
+          providerMetadata: { oauthAccessToken: "steal-me" },
+        },
+        fakeDb(),
+      ),
+    ).rejects.toMatchObject({ code: "LOGIN_FAILED" });
+  });
+
   it("rejects a malformed profile ref", async () => {
     await expect(
       createVerifiedAccountConnection(

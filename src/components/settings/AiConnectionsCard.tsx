@@ -11,7 +11,22 @@ import {
 } from "@/actions/aiConnection.actions";
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
 
-const CODEX_BACKEND = "CODEX_RUNTIME";
+// Implemented account-login backends. Each renders its own connect button
+// and connection list; the IPC surface is identical for both.
+const ACCOUNT_LOGIN_BACKENDS = [
+  {
+    backendKind: "CODEX_RUNTIME",
+    name: "Codex",
+    connectLabelKey: "settings.connectChatGPT",
+  },
+  {
+    backendKind: "CLAUDE_RUNTIME",
+    name: "Claude",
+    connectLabelKey: "settings.connectClaude",
+  },
+] as const;
+
+type BackendKind = (typeof ACCOUNT_LOGIN_BACKENDS)[number]["backendKind"];
 
 type ModelEntry = {
   id: string;
@@ -41,6 +56,9 @@ const ERROR_KEY: Record<string, string> = {
   LOGIN_TIMEOUT: "settings.aiConnErrLoginTimeout",
   LOGIN_FAILED: "settings.aiConnErrLoginFailed",
   AUTH_NOT_CONFIRMED: "settings.aiConnErrAuthNotConfirmed",
+  AUTH_METHOD_UNVERIFIED: "settings.aiConnErrAuthMethodUnverified",
+  UNSUPPORTED_AUTH_METHOD: "settings.aiConnErrUnsupportedAuthMethod",
+  PROVIDER_POLICY_RESTRICTED: "settings.aiConnErrProviderPolicyRestricted",
   REAUTH_REQUIRED: "settings.aiConnErrReauthRequired",
   ACCOUNT_IDENTITY_CONFLICT: "settings.aiConnErrIdentityConflict",
   CONNECTION_NOT_FOUND: "settings.aiConnErrNotFound",
@@ -52,7 +70,7 @@ const ERROR_KEY: Record<string, string> = {
 };
 
 /**
- * Phase D minimal account-login surface. Renders only inside the desktop
+ * Phase D/E minimal account-login surface. Renders only inside the desktop
  * shell — without the vocatryaAi preload bridge there is no managed runtime
  * to orchestrate, so the card stays hidden on the web.
  */
@@ -61,10 +79,9 @@ function AiConnectionsCard() {
   const [bridgeAvailable] = useState(
     () => typeof window !== "undefined" && Boolean(window.vocatryaAi),
   );
-  const [runtimeState, setRuntimeState] = useState<{
-    state: string;
-    version?: string;
-  } | null>(null);
+  const [runtimeStates, setRuntimeStates] = useState<
+    Partial<Record<BackendKind, { state: string; version?: string }>>
+  >({});
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingTicket, setPendingTicket] = useState<string | null>(null);
@@ -75,7 +92,9 @@ function AiConnectionsCard() {
     const result = await listAiConnections();
     if (result.success && result.data) {
       setConnections(
-        result.data.filter((c) => c.backendKind === CODEX_BACKEND),
+        result.data.filter((c) =>
+          ACCOUNT_LOGIN_BACKENDS.some((b) => b.backendKind === c.backendKind),
+        ),
       );
     }
   }, []);
@@ -83,12 +102,20 @@ function AiConnectionsCard() {
   useEffect(() => {
     if (!bridgeAvailable) return;
     void refresh();
-    void window.vocatryaRuntime
-      ?.detect(CODEX_BACKEND)
-      .then((status) =>
-        setRuntimeState({ state: status.state, version: status.version }),
-      )
-      .catch(() => setRuntimeState(null));
+    for (const backend of ACCOUNT_LOGIN_BACKENDS) {
+      void window.vocatryaRuntime
+        ?.detect(backend.backendKind)
+        .then((status) =>
+          setRuntimeStates((prev) => ({
+            ...prev,
+            [backend.backendKind]: {
+              state: status.state,
+              version: status.version,
+            },
+          })),
+        )
+        .catch(() => undefined);
+    }
   }, [bridgeAvailable, refresh]);
 
   const errorMessage = useCallback(
@@ -98,10 +125,10 @@ function AiConnectionsCard() {
   );
 
   const mintTicket = useCallback(
-    async (operation: string, connectionId?: string) => {
+    async (operation: string, backendKind: BackendKind, connectionId?: string) => {
       const result = await mintAiConnectionTicket({
         operation,
-        backendKind: CODEX_BACKEND,
+        backendKind,
         connectionId,
       });
       if (!result.success || !result.data) {
@@ -113,26 +140,29 @@ function AiConnectionsCard() {
     [t],
   );
 
-  const connect = useCallback(async () => {
-    const ai = window.vocatryaAi;
-    if (!ai) return;
-    const ticket = await mintTicket("login");
-    if (!ticket) return;
-    setPendingTicket(ticket);
-    setBusy("connect");
-    try {
-      const result = await ai.startLogin({ backendKind: CODEX_BACKEND, ticket });
-      if (result.ok) {
-        toastSuccess(t("settings.aiConnConnected"));
-        await refresh();
-      } else {
-        toastError(errorMessage(result.code));
+  const connect = useCallback(
+    async (backendKind: BackendKind) => {
+      const ai = window.vocatryaAi;
+      if (!ai) return;
+      const ticket = await mintTicket("login", backendKind);
+      if (!ticket) return;
+      setPendingTicket(ticket);
+      setBusy(`connect:${backendKind}`);
+      try {
+        const result = await ai.startLogin({ backendKind, ticket });
+        if (result.ok) {
+          toastSuccess(t("settings.aiConnConnected"));
+          await refresh();
+        } else {
+          toastError(errorMessage(result.code));
+        }
+      } finally {
+        setBusy(null);
+        setPendingTicket(null);
       }
-    } finally {
-      setBusy(null);
-      setPendingTicket(null);
-    }
-  }, [mintTicket, refresh, errorMessage, t]);
+    },
+    [mintTicket, refresh, errorMessage, t],
+  );
 
   const cancelLogin = useCallback(async () => {
     if (!pendingTicket) return;
@@ -142,11 +172,12 @@ function AiConnectionsCard() {
   const runConnectionOp = useCallback(
     async (
       connectionId: string,
+      backendKind: BackendKind,
       operation: "reconnect" | "disconnect" | "verify",
     ) => {
       const ai = window.vocatryaAi;
       if (!ai) return;
-      const ticket = await mintTicket(operation, connectionId);
+      const ticket = await mintTicket(operation, backendKind, connectionId);
       if (!ticket) return;
       setBusy(`${operation}:${connectionId}`);
       try {
@@ -166,10 +197,10 @@ function AiConnectionsCard() {
   );
 
   const loadModels = useCallback(
-    async (connectionId: string) => {
+    async (connectionId: string, backendKind: BackendKind) => {
       const ai = window.vocatryaAi;
       if (!ai) return;
-      const ticket = await mintTicket("listModels", connectionId);
+      const ticket = await mintTicket("listModels", backendKind, connectionId);
       if (!ticket) return;
       setBusy(`models:${connectionId}`);
       try {
@@ -187,10 +218,10 @@ function AiConnectionsCard() {
   );
 
   const runSmoke = useCallback(
-    async (connectionId: string) => {
+    async (connectionId: string, backendKind: BackendKind) => {
       const ai = window.vocatryaAi;
       if (!ai) return;
-      const ticket = await mintTicket("smoke", connectionId);
+      const ticket = await mintTicket("smoke", backendKind, connectionId);
       if (!ticket) return;
       setBusy(`smoke:${connectionId}`);
       try {
@@ -219,139 +250,187 @@ function AiConnectionsCard() {
         </p>
       </div>
 
-      <div className="text-sm text-muted-foreground">
-        {runtimeState
-          ? t("settings.aiConnRuntimeStatus", {
-              state: runtimeState.state,
-              version: runtimeState.version ?? "?",
-            })
-          : t("settings.checking")}
-      </div>
-
-      <div className="flex items-center gap-2">
-        {busy === "connect" ? (
-          <>
-            <Button variant="outline" onClick={cancelLogin}>
-              {t("settings.aiConnCancelLogin")}
-            </Button>
-            <span className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {t("settings.aiConnLoginInProgress")}
-            </span>
-          </>
-        ) : (
-          <Button
-            onClick={connect}
-            disabled={busy !== null || runtimeState?.state !== "READY"}
+      {ACCOUNT_LOGIN_BACKENDS.map((backend) => {
+        const runtimeState = runtimeStates[backend.backendKind];
+        const backendConnections = connections.filter(
+          (c) => c.backendKind === backend.backendKind,
+        );
+        return (
+          <section
+            key={backend.backendKind}
+            className="space-y-3 rounded-md border p-3"
           >
-            {t("settings.connectChatGPT")}
-          </Button>
-        )}
-      </div>
+            <div className="text-sm text-muted-foreground">
+              {runtimeState
+                ? t("settings.aiConnRuntimeStatus", {
+                    name: backend.name,
+                    state: runtimeState.state,
+                    version: runtimeState.version ?? "?",
+                  })
+                : t("settings.checking")}
+            </div>
 
-      {connections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {t("settings.aiConnNone")}
-        </p>
-      ) : (
-        <ul className="space-y-3">
-          {connections.map((connection) => (
-            <li key={connection.id} className="rounded-md border p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-medium">{connection.displayName}</span>
-                  {connection.accountIdentity && (
-                    <span className="ml-2 text-sm text-muted-foreground">
-                      {connection.accountIdentity}
-                    </span>
-                  )}
-                </div>
-                <span className="text-sm">
-                  {t(STATUS_KEY[connection.status] ?? "settings.aiConnStatusError")}
-                </span>
-              </div>
-              {connection.lastVerifiedAt && (
-                <p className="text-xs text-muted-foreground">
-                  {t("settings.aiConnLastVerified", {
-                    at: new Date(connection.lastVerifiedAt).toLocaleString(),
-                  })}
-                </p>
+            <div className="flex items-center gap-2">
+              {busy === `connect:${backend.backendKind}` ? (
+                <>
+                  <Button variant="outline" onClick={cancelLogin}>
+                    {t("settings.aiConnCancelLogin")}
+                  </Button>
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t("settings.aiConnLoginInProgress")}
+                  </span>
+                </>
+              ) : (
+                <Button
+                  onClick={() => connect(backend.backendKind)}
+                  disabled={busy !== null || runtimeState?.state !== "READY"}
+                >
+                  {t(backend.connectLabelKey)}
+                </Button>
               )}
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => runConnectionOp(connection.id, "reconnect")}
-                >
-                  {busy === `reconnect:${connection.id}` && (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  )}
-                  {t("settings.aiConnReconnect")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => runConnectionOp(connection.id, "disconnect")}
-                >
-                  {t("settings.aiConnDisconnect")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => runConnectionOp(connection.id, "verify")}
-                >
-                  {busy === `verify:${connection.id}` ? (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-1 h-3 w-3" />
-                  )}
-                  {t("settings.aiConnVerify")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => loadModels(connection.id)}
-                >
-                  {busy === `models:${connection.id}` && (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  )}
-                  {t("settings.aiConnViewModels")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy !== null || connection.status !== "CONNECTED"}
-                  onClick={() => runSmoke(connection.id)}
-                >
-                  {busy === `smoke:${connection.id}` && (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  )}
-                  {t("settings.aiConnRunSmoke")}
-                </Button>
-              </div>
-              {models[connection.id] && (
-                <ul className="text-sm text-muted-foreground list-disc pl-5">
-                  {models[connection.id].map((model) => (
-                    <li key={model.id}>
-                      {model.displayName}{" "}
-                      <span className="text-xs">({model.id})</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {smokeText[connection.id] && (
-                <p className="text-xs font-mono text-muted-foreground">
-                  {smokeText[connection.id]}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+            </div>
+
+            {backendConnections.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("settings.aiConnNone")}
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {backendConnections.map((connection) => (
+                  <li
+                    key={connection.id}
+                    className="rounded-md border p-3 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium">
+                          {connection.displayName}
+                        </span>
+                        {connection.accountIdentity && (
+                          <span className="ml-2 text-sm text-muted-foreground">
+                            {connection.accountIdentity}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm">
+                        {t(
+                          STATUS_KEY[connection.status] ??
+                            "settings.aiConnStatusError",
+                        )}
+                      </span>
+                    </div>
+                    {connection.lastVerifiedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.aiConnLastVerified", {
+                          at: new Date(
+                            connection.lastVerifiedAt,
+                          ).toLocaleString(),
+                        })}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy !== null}
+                        onClick={() =>
+                          runConnectionOp(
+                            connection.id,
+                            backend.backendKind,
+                            "reconnect",
+                          )
+                        }
+                      >
+                        {busy === `reconnect:${connection.id}` && (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        )}
+                        {t("settings.aiConnReconnect")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy !== null}
+                        onClick={() =>
+                          runConnectionOp(
+                            connection.id,
+                            backend.backendKind,
+                            "disconnect",
+                          )
+                        }
+                      >
+                        {t("settings.aiConnDisconnect")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy !== null}
+                        onClick={() =>
+                          runConnectionOp(
+                            connection.id,
+                            backend.backendKind,
+                            "verify",
+                          )
+                        }
+                      >
+                        {busy === `verify:${connection.id}` ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-1 h-3 w-3" />
+                        )}
+                        {t("settings.aiConnVerify")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy !== null}
+                        onClick={() =>
+                          loadModels(connection.id, backend.backendKind)
+                        }
+                      >
+                        {busy === `models:${connection.id}` && (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        )}
+                        {t("settings.aiConnViewModels")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          busy !== null || connection.status !== "CONNECTED"
+                        }
+                        onClick={() =>
+                          runSmoke(connection.id, backend.backendKind)
+                        }
+                      >
+                        {busy === `smoke:${connection.id}` && (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        )}
+                        {t("settings.aiConnRunSmoke")}
+                      </Button>
+                    </div>
+                    {models[connection.id] && (
+                      <ul className="text-sm text-muted-foreground list-disc pl-5">
+                        {models[connection.id].map((model) => (
+                          <li key={model.id}>
+                            {model.displayName}{" "}
+                            <span className="text-xs">({model.id})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {smokeText[connection.id] && (
+                      <p className="text-xs font-mono text-muted-foreground">
+                        {smokeText[connection.id]}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
