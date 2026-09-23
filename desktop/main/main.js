@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, safeStorage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DESKTOP_APP_ID } = require("./installer-identity");
@@ -20,6 +20,8 @@ const { resolveAndEnsureDesktopLayout, buildDesktopFilesystemConfig } = require(
 const { loadOrCreateDesktopSecrets } = require("./secrets");
 const { prepareDatabase } = require("./database-migration");
 const { runStartupSequence } = require("./startup");
+const { createRuntimeStatusService } = require("./runtime/service");
+const { registerRuntimeIpcHandlers } = require("./runtime/ipc");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -82,6 +84,14 @@ if (!singleInstance) {
 
   function dataRoot() {
     return path.join(stateRoot(), "data");
+  }
+
+  // Managed runtime profiles live inside the app-owned local-first root —
+  // never under the repo, Downloads, or the user's native ~/.codex etc.
+  function runtimeProfilesRoot() {
+    return foundationLayout
+      ? foundationLayout.runtimeProfilesDir
+      : path.join(stateRoot(), "runtime-profiles");
   }
 
   function showStartupFailure(error) {
@@ -287,6 +297,12 @@ if (!singleInstance) {
 
   app.whenReady().then(async () => {
     try {
+      // Registry-keyed runtime IPC: detection/version/status only. No
+      // arbitrary command execution crosses this boundary.
+      registerRuntimeIpcHandlers(
+        ipcMain,
+        createRuntimeStatusService({ profilesRoot: runtimeProfilesRoot() }),
+      );
       const buildInfo = readBuildInfo();
       if (buildInfo) {
         console.log(

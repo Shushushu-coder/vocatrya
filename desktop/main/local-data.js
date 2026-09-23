@@ -52,6 +52,7 @@ function buildDesktopLayout(root) {
   const backupsDir = path.join(root, "backups");
   const tmpDir = path.join(root, "tmp");
   const electronDir = path.join(root, "electron");
+  const runtimeProfilesDir = path.join(root, "runtime-profiles");
   return {
     root,
     dataDir,
@@ -61,13 +62,14 @@ function buildDesktopLayout(root) {
     backupsDir,
     tmpDir,
     electronDir,
+    runtimeProfilesDir,
     databasePath: path.join(dataDir, DESKTOP_DATABASE_FILE_NAME),
     secretStorePath: path.join(configDir, DESKTOP_SECRET_FILE_NAME),
   };
 }
 
 function ensureDesktopLayout(layout) {
-  for (const key of ["dataDir", "filesDir", "configDir", "logsDir", "backupsDir", "tmpDir", "electronDir"]) {
+  for (const key of ["dataDir", "filesDir", "configDir", "logsDir", "backupsDir", "tmpDir", "electronDir", "runtimeProfilesDir"]) {
     fs.mkdirSync(layout[key], { recursive: true });
   }
   return layout;

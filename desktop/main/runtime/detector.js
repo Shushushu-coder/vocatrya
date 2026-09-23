@@ -1,0 +1,145 @@
+// Phase C RuntimeDetector + RuntimeVersionProbe — safe, read-only binary
+// discovery for the seven managed runtimes.
+//
+// Detection order: registry-declared known install locations (existence
+// check only) → PATH lookup via where.exe (Windows) / which (POSIX). No disk
+// scans, no registry reads, no user-directory crawls.
+const fs = require("node:fs");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const { getRuntimeDefinition } = require("./registry");
+
+const PATH_LOOKUP_TIMEOUT_MS = 5_000;
+const VERSION_PROBE_TIMEOUT_MS = 10_000;
+
+function expandKnownLocation(template, env) {
+  return template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => {
+    const value = env?.[name];
+    return typeof value === "string" && value.length > 0 ? value : match;
+  });
+}
+
+function resolvePathLookupCommand(platform) {
+  return platform === "win32" ? "where.exe" : "which";
+}
+
+function lookupOnPath(command, { platform, env, spawnSyncImpl }) {
+  const lookup = resolvePathLookupCommand(platform);
+  try {
+    const result = spawnSyncImpl(lookup, [command], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: PATH_LOOKUP_TIMEOUT_MS,
+      env,
+    });
+    if (result.status !== 0 || !result.stdout) return null;
+    const first = result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)[0];
+    return first || null;
+  } catch {
+    return null;
+  }
+}
+
+// Returns the first resolvable executable path for the definition, or null.
+function findRuntimeExecutable(definition, { platform, env, spawnSyncImpl, existsSyncImpl }) {
+  for (const candidate of definition.binaries || []) {
+    for (const known of candidate.knownLocations || []) {
+      const expanded = expandKnownLocation(known, env);
+      if (expanded.includes("{")) continue; // unresolved placeholder
+      if (existsSyncImpl(expanded)) return path.resolve(expanded);
+    }
+    for (const command of candidate.commands || []) {
+      const found = lookupOnPath(command, { platform, env, spawnSyncImpl });
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function parseVersionFromOutput(output) {
+  if (typeof output !== "string") return null;
+  const match = output.match(/\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?/);
+  return match ? match[0] : null;
+}
+
+// Read-only version probe: runs the detected binary with the definition's
+// version args and a bounded timeout. Never logs raw output.
+function probeRuntimeVersion(executablePath, definition, { env, spawnSyncImpl }) {
+  const args = definition.versionProbe?.args || ["--version"];
+  const result = spawnSyncImpl(executablePath, args, {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: VERSION_PROBE_TIMEOUT_MS,
+    env,
+    shell: false,
+  });
+  if (result.error || result.status === null) {
+    return { version: null, ok: false };
+  }
+  const output = `${result.stdout || ""}\n${result.stderr || ""}`;
+  return { version: parseVersionFromOutput(output), ok: result.status === 0 };
+}
+
+// detectRuntime(backendKind, deps) →
+//   { backendKind, provider, state, installed, executablePath?, version? }
+// state ∈ NOT_INSTALLED | READY | UPDATE_AVAILABLE | BROKEN
+// UPDATE_AVAILABLE is only produced once an update-check implementation lands;
+// the state machine already carries it.
+function detectRuntime(backendKind, deps = {}) {
+  const definition = getRuntimeDefinition(backendKind);
+  if (!definition) {
+    throw new Error(`Unknown runtime backendKind: ${backendKind}`);
+  }
+  const platform = deps.platform || process.platform;
+  const env = deps.env || process.env;
+  const spawnSyncImpl = deps.spawnSyncImpl || spawnSync;
+  const existsSyncImpl = deps.existsSyncImpl || fs.existsSync;
+
+  const executablePath = findRuntimeExecutable(definition, {
+    platform,
+    env,
+    spawnSyncImpl,
+    existsSyncImpl,
+  });
+  if (!executablePath) {
+    return {
+      backendKind,
+      provider: definition.provider,
+      state: "NOT_INSTALLED",
+      installed: false,
+    };
+  }
+
+  const version = probeRuntimeVersion(executablePath, definition, {
+    env,
+    spawnSyncImpl,
+  });
+  if (!version.ok) {
+    return {
+      backendKind,
+      provider: definition.provider,
+      state: "BROKEN",
+      installed: true,
+      executablePath,
+    };
+  }
+  return {
+    backendKind,
+    provider: definition.provider,
+    state: "READY",
+    installed: true,
+    executablePath,
+    version: version.version,
+  };
+}
+
+module.exports = {
+  detectRuntime,
+  expandKnownLocation,
+  findRuntimeExecutable,
+  parseVersionFromOutput,
+  probeRuntimeVersion,
+};
