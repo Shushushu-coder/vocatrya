@@ -14,7 +14,8 @@ const { RuntimeProfileManager } = require("./profiles");
 function summarizeDefinition(definition) {
   return {
     backendKind: definition.backendKind,
-    provider: definition.provider,
+    runtimeVendor: definition.runtimeVendor,
+    supportedAccountProviders: definition.supportedAccountProviders.slice(),
     displayName: definition.displayName,
     profileStrategy: definition.profile.strategy,
     capabilities: definition.capabilities,

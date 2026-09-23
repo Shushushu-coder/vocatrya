@@ -26,6 +26,12 @@ export interface ConnectionTicketRecord {
   userId: string;
   operation: AIConnectionOperation;
   backendKind: string;
+  /**
+   * Account provider the login must authenticate for (server-validated at
+   * mint time against the runtime's supported-provider matrix). Null only
+   * for connection-scoped operations, where the connection row carries it.
+   */
+  accountProvider: string | null;
   connectionId: string | null;
   expiresAt: number;
   /** Set once the ticket has been redeemed via resolve. */
@@ -48,6 +54,7 @@ export function mintConnectionTicket(input: {
   userId: string;
   operation: AIConnectionOperation;
   backendKind: string;
+  accountProvider?: string | null;
   connectionId?: string | null;
   now?: number;
 }): ConnectionTicketRecord {
@@ -59,6 +66,7 @@ export function mintConnectionTicket(input: {
     userId: input.userId,
     operation: input.operation,
     backendKind: input.backendKind,
+    accountProvider: input.accountProvider ?? null,
     connectionId: input.connectionId ?? null,
     expiresAt: now + CONNECTION_TICKET_TTL_MS,
     resolved: false,

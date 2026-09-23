@@ -81,10 +81,27 @@ export async function POST(request: Request) {
       case "login": {
         if (result.outcome !== "authenticated") return invalidResult();
         const runtimeProfileRef = asNullableString(result.runtimeProfileRef);
-        if (!runtimeProfileRef) return invalidResult();
+        const verifiedProvider = asNullableString(result.verifiedProvider);
+        if (!runtimeProfileRef || !verifiedProvider) return invalidResult();
+        // The runtime's verified provider must match the provider the
+        // minted ticket requested — a runtime cannot pivot the account
+        // provider mid-operation.
+        if (
+          record.accountProvider &&
+          verifiedProvider !== record.accountProvider
+        ) {
+          return NextResponse.json(
+            {
+              ok: false,
+              code: AI_CONNECTION_OP_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION,
+            },
+            { status: 409 },
+          );
+        }
         const connection = await createVerifiedAccountConnection({
           userId: record.userId,
           backendKind: record.backendKind,
+          verifiedProvider,
           runtimeProfileRef,
           accountIdentity: asNullableString(result.accountIdentity),
           providerMetadata: asMetadataObject(result.providerMetadata),

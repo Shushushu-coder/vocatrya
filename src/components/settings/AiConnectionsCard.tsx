@@ -11,18 +11,28 @@ import {
 } from "@/actions/aiConnection.actions";
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
 
-// Implemented account-login backends. Each renders its own connect button
-// and connection list; the IPC surface is identical for both.
+// Implemented account-login backends. Each entry pins the account provider
+// it requests — the server re-validates the provider/runtime pairing when
+// minting the ticket, and the runtime adapter verifies the real auth
+// outcome. The IPC surface is identical for all of them.
 const ACCOUNT_LOGIN_BACKENDS = [
   {
     backendKind: "CODEX_RUNTIME",
     name: "Codex",
     connectLabelKey: "settings.connectChatGPT",
+    accountProvider: "OPENAI",
   },
   {
     backendKind: "CLAUDE_RUNTIME",
     name: "Claude",
     connectLabelKey: "settings.connectClaude",
+    accountProvider: "ANTHROPIC",
+  },
+  {
+    backendKind: "OPENCODE_RUNTIME",
+    name: "OpenCode",
+    connectLabelKey: "settings.connectChatGPTViaOpenCode",
+    accountProvider: "OPENAI",
   },
 ] as const;
 
@@ -58,6 +68,10 @@ const ERROR_KEY: Record<string, string> = {
   AUTH_NOT_CONFIRMED: "settings.aiConnErrAuthNotConfirmed",
   AUTH_METHOD_UNVERIFIED: "settings.aiConnErrAuthMethodUnverified",
   UNSUPPORTED_AUTH_METHOD: "settings.aiConnErrUnsupportedAuthMethod",
+  UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION:
+    "settings.aiConnErrUnsupportedCombination",
+  MODEL_DISCOVERY_UNAVAILABLE: "settings.aiConnErrModelUnavailable",
+  MODEL_UNAVAILABLE: "settings.aiConnErrModelUnavailable",
   PROVIDER_POLICY_RESTRICTED: "settings.aiConnErrProviderPolicyRestricted",
   REAUTH_REQUIRED: "settings.aiConnErrReauthRequired",
   ACCOUNT_IDENTITY_CONFLICT: "settings.aiConnErrIdentityConflict",
@@ -85,6 +99,7 @@ function AiConnectionsCard() {
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingTicket, setPendingTicket] = useState<string | null>(null);
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [models, setModels] = useState<Record<string, ModelEntry[]>>({});
   const [smokeText, setSmokeText] = useState<Record<string, string>>({});
 
@@ -124,12 +139,25 @@ function AiConnectionsCard() {
     [t],
   );
 
+  // The vendor's authorize URL surfaces mid-login for runtimes that cannot
+  // open a browser themselves (OpenCode). Cleared when the login ends.
+  useEffect(() => {
+    const unsubscribe = window.vocatryaAi?.onOAuthUrl?.(setOauthUrl);
+    return () => unsubscribe?.();
+  }, []);
+
   const mintTicket = useCallback(
-    async (operation: string, backendKind: BackendKind, connectionId?: string) => {
+    async (
+      operation: string,
+      backendKind: BackendKind,
+      connectionId?: string,
+      accountProvider?: string,
+    ) => {
       const result = await mintAiConnectionTicket({
         operation,
         backendKind,
         connectionId,
+        accountProvider,
       });
       if (!result.success || !result.data) {
         toastError(result.message || t("settings.aiConnErrGeneric"));
@@ -141,15 +169,23 @@ function AiConnectionsCard() {
   );
 
   const connect = useCallback(
-    async (backendKind: BackendKind) => {
+    async (backend: (typeof ACCOUNT_LOGIN_BACKENDS)[number]) => {
       const ai = window.vocatryaAi;
       if (!ai) return;
-      const ticket = await mintTicket("login", backendKind);
+      const ticket = await mintTicket(
+        "login",
+        backend.backendKind,
+        undefined,
+        backend.accountProvider,
+      );
       if (!ticket) return;
       setPendingTicket(ticket);
-      setBusy(`connect:${backendKind}`);
+      setBusy(`connect:${backend.backendKind}`);
       try {
-        const result = await ai.startLogin({ backendKind, ticket });
+        const result = await ai.startLogin({
+          backendKind: backend.backendKind,
+          ticket,
+        });
         if (result.ok) {
           toastSuccess(t("settings.aiConnConnected"));
           await refresh();
@@ -159,6 +195,7 @@ function AiConnectionsCard() {
       } finally {
         setBusy(null);
         setPendingTicket(null);
+        setOauthUrl(null);
       }
     },
     [mintTicket, refresh, errorMessage, t],
@@ -283,13 +320,28 @@ function AiConnectionsCard() {
                 </>
               ) : (
                 <Button
-                  onClick={() => connect(backend.backendKind)}
+                  onClick={() => connect(backend)}
                   disabled={busy !== null || runtimeState?.state !== "READY"}
                 >
                   {t(backend.connectLabelKey)}
                 </Button>
               )}
             </div>
+
+            {busy === `connect:${backend.backendKind}` && oauthUrl && (
+              <div className="rounded-md border p-2 text-sm space-y-1">
+                <p className="text-muted-foreground">
+                  {t("settings.aiConnOAuthHint")}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(oauthUrl, "_blank", "noopener")}
+                >
+                  {t("settings.aiConnOpenAuthPage")}
+                </Button>
+              </div>
+            )}
 
             {backendConnections.length === 0 ? (
               <p className="text-sm text-muted-foreground">

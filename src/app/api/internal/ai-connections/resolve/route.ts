@@ -59,6 +59,9 @@ export async function POST(request: Request) {
       operationId: record.operationId,
       operation: record.operation,
       backendKind: record.backendKind,
+      // Server-validated at mint time: the account provider the runtime
+      // must authenticate for (e.g. OPENAI on OPENCODE_RUNTIME).
+      accountProvider: record.accountProvider,
     });
   }
 
@@ -77,6 +80,7 @@ export async function POST(request: Request) {
       connection: {
         id: connection.id,
         backendKind: connection.backendKind,
+        provider: connection.provider,
         runtimeProfileRef: connection.runtimeProfileRef,
         accountIdentity: connection.accountIdentity,
         status: connection.status,

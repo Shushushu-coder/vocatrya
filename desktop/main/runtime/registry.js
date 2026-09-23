@@ -3,10 +3,13 @@
 // only: install/update commands are never assembled from renderer input and
 // are not executed by this phase (executionEnabled: false).
 //
-// Each definition maps one AIConnection.backendKind to its provider, binary
+// Each definition maps one AIConnection.backendKind to its runtime vendor,
+// the account providers that runtime can authenticate
+// (supportedAccountProviders — a runtime may host several account
+// providers; vendor and account provider are separate axes), binary
 // candidates, managed-profile isolation strategy, official install/update
-// metadata, and read-only probe contracts. The backend-side typed mirror for
-// pure contracts lives in src/lib/ai/runtime/contract.ts — provider
+// metadata, and read-only probe contracts. The backend-side typed mirror
+// for pure contracts lives in src/lib/ai/runtime/contract.ts — provider
 // definitions exist ONLY here so the two layers cannot drift on behaviour.
 
 const PROFILE_STRATEGIES = Object.freeze({
@@ -39,7 +42,8 @@ const RUNTIME_AUTH_STATES = Object.freeze([
 const RUNTIME_DEFINITIONS = Object.freeze([
   {
     backendKind: "CODEX_RUNTIME",
-    provider: "OPENAI",
+    runtimeVendor: "OPENAI",
+    supportedAccountProviders: ["OPENAI"],
     displayName: "OpenAI Codex CLI",
     binaries: [
       {
@@ -123,7 +127,8 @@ const RUNTIME_DEFINITIONS = Object.freeze([
   },
   {
     backendKind: "CLAUDE_RUNTIME",
-    provider: "ANTHROPIC",
+    runtimeVendor: "ANTHROPIC",
+    supportedAccountProviders: ["ANTHROPIC"],
     displayName: "Claude Code",
     binaries: [
       {
@@ -225,7 +230,8 @@ const RUNTIME_DEFINITIONS = Object.freeze([
   },
   {
     backendKind: "GROK_RUNTIME",
-    provider: "XAI",
+    runtimeVendor: "XAI",
+    supportedAccountProviders: ["XAI"],
     displayName: "Grok CLI",
     binaries: [
       {
@@ -292,18 +298,61 @@ const RUNTIME_DEFINITIONS = Object.freeze([
   },
   {
     backendKind: "OPENCODE_RUNTIME",
-    provider: "OPENCODE",
+    runtimeVendor: "OPENCODE",
+    // OpenCode is a multi-provider runtime: it hosts account logins for
+    // OpenAI (ChatGPT OAuth) and GitHub Copilot. OpenCode itself (Zen/Go)
+    // is API-key only and is never an ACCOUNT_LOGIN provider.
+    supportedAccountProviders: ["OPENAI", "GITHUB_COPILOT"],
     displayName: "OpenCode",
     binaries: [
       {
         commands: ["opencode.exe", "opencode.cmd", "opencode"],
-        knownLocations: ["{APPDATA}\\npm\\opencode.cmd"],
+        knownLocations: [
+          "{APPDATA}\\npm\\opencode.cmd",
+          "{APPDATA}\\npm\\node_modules\\opencode-ai\\bin\\opencode.exe",
+        ],
       },
     ],
     profile: {
-      strategy: PROFILE_STRATEGIES.PROFILE_DIR_ENV,
-      env: { OPENCODE_CONFIG_DIR: "$PROFILE_DIR" },
-      stripEnv: [],
+      // Verified against opencode 1.18.31 (`opencode debug paths`):
+      // auth.json lives under XDG_DATA_HOME\opencode — OPENCODE_CONFIG_DIR
+      // alone does NOT isolate credentials. The credential boundary is the
+      // four XDG roots, each redirected into the managed profile.
+      strategy: PROFILE_STRATEGIES.ISOLATED_ROOTS,
+      env: {
+        XDG_DATA_HOME: "$PROFILE_DIR\\data",
+        XDG_CONFIG_HOME: "$PROFILE_DIR\\config",
+        XDG_CACHE_HOME: "$PROFILE_DIR\\cache",
+        XDG_STATE_HOME: "$PROFILE_DIR\\state",
+        // Config/plugin override only — never the credential boundary.
+        OPENCODE_CONFIG_DIR: "$PROFILE_DIR\\config\\opencode",
+        // Belt-and-suspenders home redirect so nothing falls back to the
+        // real user profile if a future version stops honoring XDG.
+        HOME: "$PROFILE_DIR\\home",
+        USERPROFILE: "$PROFILE_DIR\\home",
+      },
+      // Any ambient provider key/token would silently bypass the managed
+      // OAuth session — OpenCode reads credential env for every provider.
+      stripEnv: [
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "XAI_API_KEY",
+        "GROK_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+        "GEMINI_API_KEY",
+        "GROQ_API_KEY",
+        "MISTRAL_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "COPILOT_GITHUB_TOKEN",
+        "OPENCODE_API_KEY",
+      ],
     },
     install: {
       executionEnabled: false,
@@ -332,16 +381,33 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     authProbe: {
       args: ["auth", "list"],
       mode: "READ_ONLY",
-      notes: "Lists configured auth entries for the injected config dir.",
+      notes:
+        "Lists credential entries (provider name + auth type label) for " +
+        "the injected XDG roots. ANSI-decorated text only — no JSON — so " +
+        "the adapter parses it strictly.",
+    },
+    // Verified against opencode 1.18.31 (`opencode <cmd> --help`). The
+    // registry holds vendor-neutral command heads; the adapter appends the
+    // account-provider (-p) and method (-m) selectors.
+    commands: {
+      // `auth login -p <provider> -m "<method label>"` selects the OAuth
+      // method non-interactively; it starts a localhost callback and
+      // prints the authorize URL. Long-running; cancelled via AbortSignal.
+      login: ["auth", "login"],
+      logout: ["auth", "logout"],
+      models: ["models"],
+      run: ["run"],
     },
     capabilities: {
       accountLogin: true,
       modelDiscovery: true,
+      streaming: true,
     },
   },
   {
     backendKind: "CURSOR_RUNTIME",
-    provider: "CURSOR",
+    runtimeVendor: "CURSOR",
+    supportedAccountProviders: ["CURSOR"],
     displayName: "Cursor Agent CLI",
     binaries: [
       {
@@ -406,7 +472,8 @@ const RUNTIME_DEFINITIONS = Object.freeze([
   },
   {
     backendKind: "COPILOT_RUNTIME",
-    provider: "GITHUB_COPILOT",
+    runtimeVendor: "GITHUB_COPILOT",
+    supportedAccountProviders: ["GITHUB_COPILOT"],
     displayName: "GitHub Copilot CLI",
     binaries: [
       {
@@ -471,7 +538,8 @@ const RUNTIME_DEFINITIONS = Object.freeze([
   },
   {
     backendKind: "DEVIN_RUNTIME",
-    provider: "DEVIN",
+    runtimeVendor: "DEVIN",
+    supportedAccountProviders: ["DEVIN"],
     displayName: "Devin CLI",
     binaries: [
       {

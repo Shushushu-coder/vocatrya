@@ -24,7 +24,7 @@ function classifyAuthProbeOutput({ exitCode, stdout, stderr }) {
     return "REAUTH_REQUIRED";
   }
   if (
-    /not\s+(logged|authenticated|signed)|unauthorized|unauthenticated|login required|no credentials|not logged in|"loggedin"\s*:\s*false/.test(
+    /not\s+(logged|authenticated|signed)|unauthorized|unauthenticated|login required|no credentials|not logged in|"loggedin"\s*:\s*false|\b0 credentials?\b/.test(
       text,
     )
   ) {

@@ -58,6 +58,9 @@ describe("aiConnection IPC boundary", () => {
       env: { CODEX_HOME: "C:\\evil" },
       cwd: "C:\\",
       command: "codex login --device-auth",
+      // A renderer-supplied provider must never reach the service — the
+      // account provider is pinned by the minted ticket, not the payload.
+      accountProvider: "GITHUB_COPILOT",
     });
     expect(service.startLogin).toHaveBeenCalledWith({
       backendKind: "CODEX_RUNTIME",

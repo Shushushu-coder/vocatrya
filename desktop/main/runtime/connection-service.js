@@ -28,19 +28,24 @@ const { RuntimeProfileManager } = require("./profiles");
 const { AUTH_PROBE_TIMEOUT_MS } = require("./auth-probe");
 const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
 const { CLAUDE_BACKEND_KIND, claudeAdapter } = require("./claude");
+const { OPENCODE_BACKEND_KIND, opencodeAdapter } = require("./opencode");
 
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000; // browser auth is user-paced
 const LOGOUT_TIMEOUT_MS = 30 * 1000;
 const MODELS_TIMEOUT_MS = 20 * 1000;
 const SMOKE_TIMEOUT_MS = 120 * 1000;
 
-// Implemented account-login providers. Each adapter owns its login guard
-// key (`<vendor>:login`) so a login process per provider can run in
-// parallel while same-provider logins stay serialized — the CLIs bind
+// Implemented account-login runtimes. Each adapter owns its login guard
+// key (`<vendor>:login`) so a login process per runtime can run in
+// parallel while same-runtime logins stay serialized — the CLIs bind
 // fixed local callback resources that would otherwise collide.
+// Multi-provider runtimes (OpenCode) expose forAccountProvider() so the
+// account provider is bound only after the minted ticket / connection row
+// has been resolved — never from raw renderer input.
 const PROVIDER_ADAPTERS = Object.freeze({
   [CODEX_BACKEND_KIND]: codexAdapter,
   [CLAUDE_BACKEND_KIND]: claudeAdapter,
+  [OPENCODE_BACKEND_KIND]: opencodeAdapter,
 });
 
 const CONNECTION_OP_CODES = Object.freeze({
@@ -56,6 +61,8 @@ const CONNECTION_OP_CODES = Object.freeze({
   PROVIDER_POLICY_RESTRICTED: "PROVIDER_POLICY_RESTRICTED",
   REAUTH_REQUIRED: "REAUTH_REQUIRED",
   ACCOUNT_IDENTITY_CONFLICT: "ACCOUNT_IDENTITY_CONFLICT",
+  UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION:
+    "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
   CONNECTION_NOT_FOUND: "CONNECTION_NOT_FOUND",
   CONNECTION_ARCHIVED: "CONNECTION_ARCHIVED",
   MODEL_DISCOVERY_UNAVAILABLE: "MODEL_DISCOVERY_UNAVAILABLE",
@@ -101,6 +108,18 @@ function createConnectionService({
 
   function adapterFor(backendKind) {
     return PROVIDER_ADAPTERS[backendKind] || null;
+  }
+
+  // Binds the backend adapter to the account provider proven by the
+  // minted ticket (login) or the persisted connection row (connection
+  // ops). A pairing the runtime cannot authenticate binds to null —
+  // never to a guessed provider.
+  function bindAdapter(backendKind, accountProvider) {
+    const adapter = adapterFor(backendKind);
+    if (!adapter) return null;
+    return typeof adapter.forAccountProvider === "function"
+      ? adapter.forAccountProvider(accountProvider)
+      : adapter;
   }
 
   // Runtime resolution that survives shim installs: findRuntimeExecutable
@@ -150,16 +169,38 @@ function createConnectionService({
     if (resolved.operation !== expectedOperation) {
       return { error: fail(CONNECTION_OP_CODES.INVALID_TICKET) };
     }
-    const adapter = adapterFor(resolved.backendKind);
-    if (!adapter) {
+    if (!adapterFor(resolved.backendKind)) {
       return { error: fail(CONNECTION_OP_CODES.UNSUPPORTED_BACKEND) };
     }
     if (expectedOperation === "login") {
+      // The minted ticket pins the account provider (server-validated);
+      // the adapter binds it or the combination is refused.
+      const adapter = bindAdapter(
+        resolved.backendKind,
+        resolved.accountProvider,
+      );
+      if (!adapter) {
+        return {
+          error: fail(
+            CONNECTION_OP_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION,
+          ),
+        };
+      }
       return { resolved, adapter };
     }
     const connection = resolved.connection;
     if (!connection || connection.id !== connectionId) {
       return { error: fail(CONNECTION_OP_CODES.CONNECTION_NOT_FOUND) };
+    }
+    // The persisted row is the provider source of truth for connection
+    // ops — the renderer never re-states it.
+    const adapter = bindAdapter(resolved.backendKind, connection.provider);
+    if (!adapter) {
+      return {
+        error: fail(
+          CONNECTION_OP_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION,
+        ),
+      };
     }
     return { resolved, connection, adapter };
   }
@@ -178,20 +219,42 @@ function createConnectionService({
   }
 
   // Spawns the provider login command and waits. The CLI owns the browser
-  // flow entirely; its stdout (which may contain the OAuth authorize URL)
-  // stays inside the sanitized runner capture and is never forwarded or
-  // logged.
+  // flow entirely. When the runtime cannot open a browser itself (e.g.
+  // OpenCode spawned non-interactively), the adapter's extractLoginUrl
+  // pulls the vendor's authorize URL out of the raw stdout stream and it
+  // is forwarded to the renderer via deps.notifyOAuthUrl — the URL is the
+  // official authorization entry point, not credential material, and it
+  // is never written to diag/logs.
   async function runLoginProcess(adapter, executable, profileDir, signal) {
     const invocation = adapter.buildLoginInvocation({
       executablePath: executable,
       profileDir,
       baseEnv: deps.env,
     });
+    let stdoutBuffer = "";
+    let urlSent = false;
     return runner({
       ...invocation,
       timeoutMs: loginTimeoutMs,
       signal,
       sanitize: true,
+      onStdout:
+        typeof adapter.extractLoginUrl === "function" &&
+        typeof deps.notifyOAuthUrl === "function"
+          ? (chunk) => {
+              if (urlSent) return;
+              stdoutBuffer += chunk;
+              const url = adapter.extractLoginUrl(stdoutBuffer);
+              if (url) {
+                urlSent = true;
+                deps.notifyOAuthUrl({
+                  backendKind: adapter.backendKind,
+                  accountProvider: adapter.accountProvider,
+                  url,
+                });
+              }
+            }
+          : undefined,
     });
   }
 
@@ -211,11 +274,11 @@ function createConnectionService({
   }
 
   async function startLogin({ backendKind, ticket } = {}) {
-    const adapter = adapterFor(backendKind);
-    if (!adapter) {
+    const baseAdapter = adapterFor(backendKind);
+    if (!baseAdapter) {
       return fail(CONNECTION_OP_CODES.UNSUPPORTED_BACKEND);
     }
-    const guardKeys = [adapter.loginGuardKey, `ticket:${ticket}`];
+    const guardKeys = [baseAdapter.loginGuardKey, `ticket:${ticket}`];
     const controller = acquire(guardKeys);
     if (!controller) {
       return fail(CONNECTION_OP_CODES.LOGIN_ALREADY_IN_PROGRESS);
@@ -224,9 +287,12 @@ function createConnectionService({
     try {
       const resolved = await resolveOperation(ticket, "login");
       if (resolved.error) return resolved.error;
-      if (resolved.resolved.backendKind !== adapter.backendKind) {
+      if (resolved.resolved.backendKind !== baseAdapter.backendKind) {
         return fail(CONNECTION_OP_CODES.UNSUPPORTED_BACKEND);
       }
+      // The provider-bound adapter — for multi-provider runtimes this is
+      // the only object carrying provider-specific command knowledge.
+      const adapter = resolved.adapter;
 
       // An org/device managed policy that forces a non-Claude.ai login
       // method is surfaced, never circumvented.
@@ -278,6 +344,10 @@ function createConnectionService({
 
       const complete = await backend.completeOperation(resolved.resolved.operationId, {
         outcome: "authenticated",
+        // The adapter-verified provider — only a successful OAuth
+        // classification reached this point, so this is proven, not
+        // asserted. The backend re-validates it against the matrix.
+        verifiedProvider: adapter.accountProvider,
         runtimeProfileRef: pendingProfile.runtimeProfileRef,
         accountIdentity: status.accountIdentity ?? null,
         ...(status.providerMetadata
@@ -511,6 +581,11 @@ function createConnectionService({
         timeoutMs: modelsTimeoutMs,
         signal: controller.signal,
       });
+      if (catalog && catalog.ok === false) {
+        return fail(
+          catalog.code || CONNECTION_OP_CODES.MODEL_DISCOVERY_UNAVAILABLE,
+        );
+      }
       await backend.completeOperation(resolved.resolved.operationId, {
         outcome: "consumed",
       });
@@ -542,6 +617,26 @@ function createConnectionService({
         connection.runtimeProfileRef,
       );
 
+      // Multi-provider runtimes must pin the smoke to the account
+      // provider's route; adapters can normalize, refuse foreign routes,
+      // or discover a model when none was supplied.
+      let smokeModel = model;
+      if (typeof adapter.resolveSmokeModel === "function") {
+        const resolvedModel = await adapter.resolveSmokeModel({
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          runner,
+          timeoutMs: modelsTimeoutMs,
+          signal: controller.signal,
+          model,
+        });
+        if (resolvedModel.error) {
+          return fail(resolvedModel.error);
+        }
+        smokeModel = resolvedModel.model;
+      }
+
       fs.mkdirSync(smokeWorkRoot, { recursive: true });
       workDir = fs.mkdtempSync(
         path.join(smokeWorkRoot, `${adapter.backendKind.toLowerCase()}-smoke-`),
@@ -551,7 +646,7 @@ function createConnectionService({
         profileDir,
         baseEnv: deps.env,
         workingDirectory: workDir,
-        model,
+        model: smokeModel,
       });
       const result = await runner({
         ...invocation,

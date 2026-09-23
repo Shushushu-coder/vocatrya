@@ -8,6 +8,7 @@ const {
   DEFAULT_PORT_ATTEMPTS,
   allocateLoopbackPort,
   buildBackendEnvironment,
+  createPocSecret,
   isAllowedNavigation,
   isExternalHttpUrl,
   resolveNodeExecutable,
@@ -122,6 +123,14 @@ if (!singleInstance) {
         // Structured internal diagnostics only — operation, codes, opaque
         // refs. No stdout/stderr, URLs, env, or credential material.
         console.log("ai-connection op", JSON.stringify(event));
+      },
+      // Some runtimes (OpenCode) cannot open a browser when spawned
+      // non-interactively — the adapter surfaces the vendor's authorize
+      // URL and we forward it to the renderer so the user can open it.
+      notifyOAuthUrl: ({ url }) => {
+        if (mainWindow && !mainWindow.isDestroyed() && typeof url === "string") {
+          mainWindow.webContents.send("aiConnection:oauthUrl", url);
+        }
       },
     });
   }

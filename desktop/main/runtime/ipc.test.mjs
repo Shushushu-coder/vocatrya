@@ -112,7 +112,7 @@ describe("runtime IPC boundary", () => {
       args: ["--evil"],
     });
     expect(result.state).toBe("NOT_INSTALLED");
-    expect(result.provider).toBe("OPENAI");
+    expect(result.runtimeVendor).toBe("OPENAI");
   });
 
   it("returns structured install/update metadata with execution disabled", async () => {

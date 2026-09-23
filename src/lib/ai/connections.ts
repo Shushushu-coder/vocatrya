@@ -134,19 +134,46 @@ export function assertProviderMetadataSafe(
 }
 
 /**
- * Which provider a runtime backend authenticates for. Account-login
- * connections persist the provider name; the backend kind stays the
- * execution detail.
+ * Which account providers a runtime backend can authenticate for.
+ * provider (account/subscription ownership) and backendKind (execution
+ * runtime) are independent axes: the same OpenAI account can authenticate
+ * through CODEX_RUNTIME or OPENCODE_RUNTIME, and a multi-provider runtime
+ * like OpenCode can host several account providers. This matrix only bounds
+ * which pairings are eligible — the persisted provider is always the
+ * adapter-verified one, never derived from backendKind alone.
  */
-export const AI_BACKEND_PROVIDER: Record<AIBackendKind, AIConnectionProvider> = {
-  CODEX_RUNTIME: "OPENAI",
-  CLAUDE_RUNTIME: "ANTHROPIC",
-  GROK_RUNTIME: "XAI",
-  OPENCODE_RUNTIME: "OPENCODE",
-  CURSOR_RUNTIME: "CURSOR",
-  COPILOT_RUNTIME: "GITHUB_COPILOT",
-  DEVIN_RUNTIME: "DEVIN",
+export const AI_BACKEND_SUPPORTED_ACCOUNT_PROVIDERS: Record<
+  AIBackendKind,
+  readonly AIConnectionProvider[]
+> = {
+  CODEX_RUNTIME: ["OPENAI"],
+  CLAUDE_RUNTIME: ["ANTHROPIC"],
+  GROK_RUNTIME: ["XAI"],
+  OPENCODE_RUNTIME: ["OPENAI", "GITHUB_COPILOT"],
+  CURSOR_RUNTIME: ["CURSOR"],
+  COPILOT_RUNTIME: ["GITHUB_COPILOT"],
+  DEVIN_RUNTIME: ["DEVIN"],
 };
+
+export function supportedAccountProvidersForBackend(
+  backendKind: string,
+): readonly AIConnectionProvider[] {
+  return (
+    (AI_BACKEND_SUPPORTED_ACCOUNT_PROVIDERS as Record<
+      string,
+      readonly AIConnectionProvider[]
+    >)[backendKind] ?? []
+  );
+}
+
+export function isSupportedAccountProviderForBackend(
+  backendKind: string,
+  provider: string,
+): boolean {
+  return supportedAccountProvidersForBackend(backendKind).includes(
+    provider as AIConnectionProvider,
+  );
+}
 
 /**
  * Operations a desktop runtime may perform against a connection. Tickets
@@ -187,6 +214,8 @@ export const AI_CONNECTION_OP_ERROR_CODES = {
   MODEL_DISCOVERY_UNAVAILABLE: "MODEL_DISCOVERY_UNAVAILABLE",
   INFERENCE_FAILED: "INFERENCE_FAILED",
   UNSUPPORTED_BACKEND: "UNSUPPORTED_BACKEND",
+  UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION:
+    "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
   INVALID_TICKET: "INVALID_TICKET",
   BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
 } as const;

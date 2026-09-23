@@ -84,7 +84,7 @@ function probeRuntimeVersion(executablePath, definition, { env, spawnSyncImpl })
 }
 
 // detectRuntime(backendKind, deps) →
-//   { backendKind, provider, state, installed, executablePath?, version? }
+//   { backendKind, runtimeVendor, state, installed, executablePath?, version? }
 // state ∈ NOT_INSTALLED | READY | UPDATE_AVAILABLE | BROKEN
 // UPDATE_AVAILABLE is only produced once an update-check implementation lands;
 // the state machine already carries it.
@@ -107,7 +107,7 @@ function detectRuntime(backendKind, deps = {}) {
   if (!executablePath) {
     return {
       backendKind,
-      provider: definition.provider,
+      runtimeVendor: definition.runtimeVendor,
       state: "NOT_INSTALLED",
       installed: false,
     };
@@ -120,7 +120,7 @@ function detectRuntime(backendKind, deps = {}) {
   if (!version.ok) {
     return {
       backendKind,
-      provider: definition.provider,
+      runtimeVendor: definition.runtimeVendor,
       state: "BROKEN",
       installed: true,
       executablePath,
@@ -128,7 +128,7 @@ function detectRuntime(backendKind, deps = {}) {
   }
   return {
     backendKind,
-    provider: definition.provider,
+    runtimeVendor: definition.runtimeVendor,
     state: "READY",
     installed: true,
     executablePath,

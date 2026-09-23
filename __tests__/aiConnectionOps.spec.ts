@@ -118,6 +118,7 @@ describe("connection service", () => {
       {
         userId: "user-1",
         backendKind: "CODEX_RUNTIME",
+        verifiedProvider: "OPENAI",
         runtimeProfileRef: RP,
         accountIdentity: "me@example.com",
       },
@@ -137,6 +138,117 @@ describe("connection service", () => {
     expect(JSON.stringify(row)).not.toMatch(/model|token|AppData|CODEX_HOME/i);
   });
 
+  it("persists provider=OPENAI + backendKind=OPENCODE_RUNTIME for OpenCode login", async () => {
+    store.count.mockResolvedValue(0);
+    store.create.mockImplementation(async ({ data }) => data);
+
+    const row = await createVerifiedAccountConnection(
+      {
+        userId: "user-1",
+        backendKind: "OPENCODE_RUNTIME",
+        verifiedProvider: "OPENAI",
+        runtimeProfileRef: RP,
+        accountIdentity: null,
+      },
+      fakeDb(),
+    );
+    // The verified provider wins — never "OPENCODE" (the runtime vendor).
+    expect(row).toMatchObject({
+      provider: "OPENAI",
+      authType: "ACCOUNT_LOGIN",
+      backendKind: "OPENCODE_RUNTIME",
+      displayName: "ChatGPT via OpenCode",
+      status: "CONNECTED",
+      credentialRef: null,
+      runtimeProfileRef: RP,
+    });
+  });
+
+  it("numbers ChatGPT-via-OpenCode accounts independently from Codex", async () => {
+    // Two Codex ChatGPT connections exist; the first OpenCode one still
+    // gets the unnumbered "ChatGPT via OpenCode" name.
+    store.count.mockResolvedValue(0);
+    store.create.mockImplementation(async ({ data }) => data);
+    const first = await createVerifiedAccountConnection(
+      {
+        userId: "user-1",
+        backendKind: "OPENCODE_RUNTIME",
+        verifiedProvider: "OPENAI",
+        runtimeProfileRef: RP,
+        accountIdentity: null,
+      },
+      fakeDb(),
+    );
+    expect(store.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          provider: "OPENAI",
+          backendKind: "OPENCODE_RUNTIME",
+        }),
+      }),
+    );
+    expect(first.displayName).toBe("ChatGPT via OpenCode");
+
+    store.count.mockResolvedValue(1);
+    const second = await createVerifiedAccountConnection(
+      {
+        userId: "user-1",
+        backendKind: "OPENCODE_RUNTIME",
+        verifiedProvider: "OPENAI",
+        runtimeProfileRef: RP,
+        accountIdentity: null,
+      },
+      fakeDb(),
+    );
+    expect(second.displayName).toBe("ChatGPT via OpenCode 2");
+  });
+
+  it("rejects provider/runtime combinations outside the matrix", async () => {
+    for (const [backendKind, verifiedProvider] of [
+      // The runtime vendor is never an ACCOUNT_LOGIN provider.
+      ["OPENCODE_RUNTIME", "OPENCODE"],
+      // Anthropic through OpenCode is not a supported account-login path.
+      ["OPENCODE_RUNTIME", "ANTHROPIC"],
+      // OpenAI cannot authenticate through Claude Code.
+      ["CLAUDE_RUNTIME", "OPENAI"],
+      // Codex only authenticates OpenAI.
+      ["CODEX_RUNTIME", "ANTHROPIC"],
+    ] as const) {
+      await expect(
+        createVerifiedAccountConnection(
+          {
+            userId: "user-1",
+            backendKind,
+            verifiedProvider,
+            runtimeProfileRef: RP,
+            accountIdentity: null,
+          },
+          fakeDb(),
+        ),
+      ).rejects.toMatchObject({
+        code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+      });
+    }
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unrecognized verified provider", async () => {
+    await expect(
+      createVerifiedAccountConnection(
+        {
+          userId: "user-1",
+          backendKind: "OPENCODE_RUNTIME",
+          verifiedProvider: "MYSTERY",
+          runtimeProfileRef: RP,
+          accountIdentity: null,
+        },
+        fakeDb(),
+      ),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+    });
+  });
+
   it("numbers additional ChatGPT accounts", async () => {
     store.count.mockResolvedValue(2);
     store.create.mockImplementation(async ({ data }) => data);
@@ -144,6 +256,7 @@ describe("connection service", () => {
       {
         userId: "user-1",
         backendKind: "CODEX_RUNTIME",
+        verifiedProvider: "OPENAI",
         runtimeProfileRef: RP,
         accountIdentity: null,
       },
@@ -159,6 +272,7 @@ describe("connection service", () => {
       {
         userId: "user-1",
         backendKind: "CLAUDE_RUNTIME",
+        verifiedProvider: "ANTHROPIC",
         runtimeProfileRef: RP,
         accountIdentity: "me@example.com",
         providerMetadata: {
@@ -192,6 +306,7 @@ describe("connection service", () => {
       {
         userId: "user-1",
         backendKind: "CLAUDE_RUNTIME",
+        verifiedProvider: "ANTHROPIC",
         runtimeProfileRef: RP,
         accountIdentity: null,
       },
@@ -206,6 +321,7 @@ describe("connection service", () => {
         {
           userId: "user-1",
           backendKind: "CLAUDE_RUNTIME",
+          verifiedProvider: "ANTHROPIC",
           runtimeProfileRef: RP,
           accountIdentity: null,
           providerMetadata: { oauthAccessToken: "steal-me" },
@@ -221,6 +337,7 @@ describe("connection service", () => {
         {
           userId: "user-1",
           backendKind: "CODEX_RUNTIME",
+          verifiedProvider: "OPENAI",
           runtimeProfileRef: "C:\\temp\\escape",
           accountIdentity: null,
         },
@@ -235,6 +352,7 @@ describe("connection service", () => {
         {
           userId: "user-1",
           backendKind: "MYSTERY",
+          verifiedProvider: "OPENAI",
           runtimeProfileRef: RP,
           accountIdentity: null,
         },
@@ -356,6 +474,74 @@ describe("mintAiConnectionTicket", () => {
     });
     expect(result.success).toBe(true);
     expect(result.data?.ticket).toBeTruthy();
+  });
+
+  it("mints an OpenAI login ticket for OpenCode when requested", async () => {
+    mockedGetCurrentUser.mockResolvedValue(USER as any);
+    const result = await mintAiConnectionTicket({
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+      accountProvider: "OPENAI",
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.ticket).toBeTruthy();
+  });
+
+  it("requires an explicit provider on a multi-provider runtime", async () => {
+    mockedGetCurrentUser.mockResolvedValue(USER as any);
+    const result = await mintAiConnectionTicket({
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+    });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
+  });
+
+  it("rejects the runtime vendor as an account provider", async () => {
+    mockedGetCurrentUser.mockResolvedValue(USER as any);
+    const result = await mintAiConnectionTicket({
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+      accountProvider: "OPENCODE",
+    });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
+  });
+
+  it("rejects provider/runtime pairs outside the matrix", async () => {
+    mockedGetCurrentUser.mockResolvedValue(USER as any);
+    for (const [backendKind, accountProvider] of [
+      ["CODEX_RUNTIME", "ANTHROPIC"],
+      ["OPENCODE_RUNTIME", "ANTHROPIC"],
+      ["CLAUDE_RUNTIME", "OPENAI"],
+      ["CODEX_RUNTIME", "NOT_A_PROVIDER"],
+    ] as const) {
+      const result = await mintAiConnectionTicket({
+        operation: "login",
+        backendKind,
+        accountProvider,
+      });
+      expect(result.success).toBe(false);
+      expect(result.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
+    }
+  });
+
+  it("rejects a connection op whose provider mismatches the row", async () => {
+    mockedGetCurrentUser.mockResolvedValue(USER as any);
+    store.findUnique.mockResolvedValue({
+      userId: "user-1",
+      backendKind: "OPENCODE_RUNTIME",
+      provider: "OPENAI",
+      archivedAt: null,
+    });
+    const result = await mintAiConnectionTicket({
+      operation: "verify",
+      backendKind: "OPENCODE_RUNTIME",
+      connectionId: "c1",
+      accountProvider: "GITHUB_COPILOT",
+    });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
   });
 
   it("rejects connection ops for connections the user does not own", async () => {

@@ -277,6 +277,12 @@ function parseCodexModelCatalog(stdout) {
 // and smoke result extraction).
 const codexAdapter = {
   backendKind: CODEX_BACKEND_KIND,
+  // Codex only ever authenticates an OpenAI account — the binding is the
+  // identity unless a different provider is requested.
+  accountProvider: "OPENAI",
+  forAccountProvider(provider) {
+    return provider == null || provider === "OPENAI" ? codexAdapter : null;
+  },
   loginGuardKey: "codex:login",
   smokePrompt: CODEX_SMOKE_PROMPT,
   smokeExpected: CODEX_SMOKE_EXPECTED,

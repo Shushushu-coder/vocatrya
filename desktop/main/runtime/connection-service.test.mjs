@@ -166,6 +166,7 @@ describe("startLogin", () => {
     assertManagedEnv(statusInv, profileDir);
     expect(backend.completeOperation).toHaveBeenCalledWith("op_1", {
       outcome: "authenticated",
+      verifiedProvider: "OPENAI",
       runtimeProfileRef: profileRef,
       accountIdentity: null,
     });

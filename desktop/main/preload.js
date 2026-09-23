@@ -27,6 +27,11 @@ const AI_CONNECTION_CHANNELS = Object.freeze({
   runSmoke: "aiConnection:runSmoke",
 });
 
+// Main → renderer events.
+const AI_CONNECTION_EVENTS = Object.freeze({
+  oauthUrl: "aiConnection:oauthUrl",
+});
+
 contextBridge.exposeInMainWorld("vocatryaRuntime", {
   list: () => ipcRenderer.invoke(RUNTIME_CHANNELS.list),
   detect: (backendKind) =>
@@ -81,4 +86,15 @@ contextBridge.exposeInMainWorld("vocatryaAi", {
       ticket,
       model,
     }),
+  // Subscribe to the vendor OAuth authorize URL while a login runs —
+  // for runtimes that cannot open a browser themselves. Returns an
+  // unsubscribe function.
+  onOAuthUrl: (callback) => {
+    const listener = (_event, url) => {
+      if (typeof url === "string") callback(url);
+    };
+    ipcRenderer.on(AI_CONNECTION_EVENTS.oauthUrl, listener);
+    return () =>
+      ipcRenderer.removeListener(AI_CONNECTION_EVENTS.oauthUrl, listener);
+  },
 });

@@ -14,6 +14,13 @@ const AI_CONNECTION_IPC_CHANNELS = Object.freeze({
   runSmoke: "aiConnection:runSmoke",
 });
 
+// Main → renderer events (webContents.send — not invokable channels).
+// oauthUrl carries the vendor's authorize URL for runtimes that cannot
+// open a browser themselves; it is the login entry point, not a secret.
+const AI_CONNECTION_EVENTS = Object.freeze({
+  oauthUrl: "aiConnection:oauthUrl",
+});
+
 function readString(payload, key) {
   const value = payload && typeof payload === "object" ? payload[key] : null;
   return typeof value === "string" && value.length > 0 ? value : null;
@@ -82,4 +89,8 @@ function registerConnectionIpcHandlers(ipcMain, service) {
   return AI_CONNECTION_IPC_CHANNELS;
 }
 
-module.exports = { AI_CONNECTION_IPC_CHANNELS, registerConnectionIpcHandlers };
+module.exports = {
+  AI_CONNECTION_EVENTS,
+  AI_CONNECTION_IPC_CHANNELS,
+  registerConnectionIpcHandlers,
+};

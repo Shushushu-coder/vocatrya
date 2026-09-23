@@ -106,6 +106,19 @@ describe("POST /api/internal/ai-connections/resolve", () => {
     expect(replay.status).toBe(400);
   });
 
+  it("carries the minted accountProvider to the runtime for login", async () => {
+    const record = mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+      accountProvider: "OPENAI",
+    });
+    const res = await resolvePOST(req({ ticket: record.ticket }));
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.accountProvider).toBe("OPENAI");
+  });
+
   it("returns the verified connection context for connection ops", async () => {
     store.findUnique.mockResolvedValue(connRow());
     const record = mintConnectionTicket({
@@ -157,6 +170,7 @@ describe("POST /api/internal/ai-connections/complete", () => {
         operationId: resolved.operationId,
         result: {
           outcome: "authenticated",
+          verifiedProvider: "OPENAI",
           runtimeProfileRef: RP,
           accountIdentity: "me@example.com",
         },
@@ -204,6 +218,7 @@ describe("POST /api/internal/ai-connections/complete", () => {
         operationId: resolved.operationId,
         result: {
           outcome: "authenticated",
+          verifiedProvider: "ANTHROPIC",
           runtimeProfileRef: RP,
           accountIdentity: "me@example.com",
           providerMetadata: {
@@ -226,6 +241,97 @@ describe("POST /api/internal/ai-connections/complete", () => {
     );
   });
 
+  it("creates an OpenCode connection as OPENAI, never OPENCODE", async () => {
+    store.count.mockResolvedValue(0);
+    store.create.mockImplementation(async ({ data }) => data);
+
+    const record = mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+      accountProvider: "OPENAI",
+    });
+    const resolved = await (
+      await resolvePOST(req({ ticket: record.ticket }))
+    ).json();
+    expect(resolved.accountProvider).toBe("OPENAI");
+
+    const res = await completePOST(
+      req({
+        operationId: resolved.operationId,
+        result: {
+          outcome: "authenticated",
+          verifiedProvider: "OPENAI",
+          runtimeProfileRef: RP,
+          accountIdentity: null,
+        },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const created = store.create.mock.calls[0][0].data;
+    expect(created).toMatchObject({
+      provider: "OPENAI",
+      backendKind: "OPENCODE_RUNTIME",
+      authType: "ACCOUNT_LOGIN",
+      displayName: "ChatGPT via OpenCode",
+      credentialRef: null,
+    });
+  });
+
+  it("rejects a completion whose verifiedProvider mismatches the ticket", async () => {
+    const record = mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+      accountProvider: "OPENAI",
+    });
+    const resolved = await (
+      await resolvePOST(req({ ticket: record.ticket }))
+    ).json();
+    const res = await completePOST(
+      req({
+        operationId: resolved.operationId,
+        result: {
+          outcome: "authenticated",
+          verifiedProvider: "GITHUB_COPILOT",
+          runtimeProfileRef: RP,
+        },
+      }),
+    );
+    expect(res.status).toBe(409);
+    const data = await res.json();
+    expect(data.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects the runtime vendor persisted as an ACCOUNT_LOGIN provider", async () => {
+    const record = mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+      // A forged/minted OPENCODE request still cannot complete — the
+      // runtime vendor is not a supported account provider.
+      accountProvider: null,
+    });
+    const resolved = await (
+      await resolvePOST(req({ ticket: record.ticket }))
+    ).json();
+    const res = await completePOST(
+      req({
+        operationId: resolved.operationId,
+        result: {
+          outcome: "authenticated",
+          verifiedProvider: "OPENCODE",
+          runtimeProfileRef: RP,
+        },
+      }),
+    );
+    expect(res.status).toBe(409);
+    const data = await res.json();
+    expect(data.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
   it("rejects a login completion whose metadata carries credential keys", async () => {
     const record = mintConnectionTicket({
       userId: "user-1",
@@ -240,6 +346,7 @@ describe("POST /api/internal/ai-connections/complete", () => {
         operationId: resolved.operationId,
         result: {
           outcome: "authenticated",
+          verifiedProvider: "ANTHROPIC",
           runtimeProfileRef: RP,
           providerMetadata: { refreshToken: "not-allowed" },
         },
@@ -282,6 +389,7 @@ describe("POST /api/internal/ai-connections/complete", () => {
         operationId: resolved.operationId,
         result: {
           outcome: "authenticated",
+          verifiedProvider: "OPENAI",
           runtimeProfileRef: "..\\..\\escape",
         },
       }),
@@ -304,13 +412,21 @@ describe("POST /api/internal/ai-connections/complete", () => {
     await completePOST(
       req({
         operationId: resolved.operationId,
-        result: { outcome: "authenticated", runtimeProfileRef: RP },
+        result: {
+          outcome: "authenticated",
+          verifiedProvider: "OPENAI",
+          runtimeProfileRef: RP,
+        },
       }),
     );
     const replay = await completePOST(
       req({
         operationId: resolved.operationId,
-        result: { outcome: "authenticated", runtimeProfileRef: RP },
+        result: {
+          outcome: "authenticated",
+          verifiedProvider: "OPENAI",
+          runtimeProfileRef: RP,
+        },
       }),
     );
     expect(replay.status).toBe(400);

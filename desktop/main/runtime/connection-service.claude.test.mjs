@@ -210,6 +210,7 @@ describe("startLogin (Claude)", () => {
     assertManagedEnv(statusInv, profileDir);
     expect(backend.completeOperation).toHaveBeenCalledWith("op_1", {
       outcome: "authenticated",
+      verifiedProvider: "ANTHROPIC",
       runtimeProfileRef: profileRef,
       accountIdentity: "first@example.com",
       providerMetadata: {

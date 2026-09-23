@@ -6,6 +6,9 @@ import { handleError } from "@/lib/utils";
 import {
   isAIBackendKind,
   isAIConnectionOperation,
+  isAIConnectionProvider,
+  isSupportedAccountProviderForBackend,
+  supportedAccountProvidersForBackend,
 } from "@/lib/ai/connections";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
 import {
@@ -42,6 +45,7 @@ export async function listAiConnections(): Promise<{
 export async function mintAiConnectionTicket(input: {
   operation: string;
   backendKind?: string;
+  accountProvider?: string;
   connectionId?: string;
 }): Promise<{
   success: boolean;
@@ -59,6 +63,36 @@ export async function mintAiConnectionTicket(input: {
       return { success: false, code: "UNSUPPORTED_BACKEND", message: "Unsupported backend" };
     }
 
+    // The requested account provider is a renderer *request* — it only
+    // becomes binding after server-side validation against the runtime's
+    // supported-provider matrix. Single-provider backends default to their
+    // sole provider; multi-provider runtimes require an explicit choice.
+    const supported = supportedAccountProvidersForBackend(backendKind);
+    let accountProvider: string | null = null;
+    if (input.operation === "login") {
+      if (typeof input.accountProvider === "string" && input.accountProvider) {
+        if (
+          !isAIConnectionProvider(input.accountProvider) ||
+          !isSupportedAccountProviderForBackend(backendKind, input.accountProvider)
+        ) {
+          return {
+            success: false,
+            code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+            message: "Provider is not supported on this runtime",
+          };
+        }
+        accountProvider = input.accountProvider;
+      } else if (supported.length === 1) {
+        accountProvider = supported[0];
+      } else {
+        return {
+          success: false,
+          code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+          message: "An account provider is required for this runtime",
+        };
+      }
+    }
+
     let connectionId: string | null = null;
     if (input.operation !== "login") {
       if (typeof input.connectionId !== "string" || !input.connectionId) {
@@ -66,7 +100,7 @@ export async function mintAiConnectionTicket(input: {
       }
       const connection = await db.aIConnection.findUnique({
         where: { id: input.connectionId },
-        select: { userId: true, backendKind: true, archivedAt: true },
+        select: { userId: true, backendKind: true, provider: true, archivedAt: true },
       });
       if (!connection || connection.userId !== user.id) {
         return { success: false, code: "CONNECTION_NOT_FOUND", message: "Connection not found" };
@@ -77,13 +111,26 @@ export async function mintAiConnectionTicket(input: {
       if (connection.backendKind !== backendKind) {
         return { success: false, code: "UNSUPPORTED_BACKEND", message: "Backend mismatch" };
       }
+      if (
+        typeof input.accountProvider === "string" &&
+        input.accountProvider &&
+        input.accountProvider !== connection.provider
+      ) {
+        return {
+          success: false,
+          code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+          message: "Provider does not match this connection",
+        };
+      }
       connectionId = input.connectionId;
+      accountProvider = connection.provider;
     }
 
     const record = mintConnectionTicket({
       userId: user.id,
       operation: input.operation,
       backendKind,
+      accountProvider,
       connectionId,
     });
     return { success: true, data: { ticket: record.ticket } };

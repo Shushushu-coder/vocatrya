@@ -7,7 +7,8 @@ interface VocatryaRuntimeBridge {
   list(): Promise<
     {
       backendKind: string;
-      provider: string;
+      runtimeVendor: string;
+      supportedAccountProviders: string[];
       displayName: string;
       profileStrategy: string;
       capabilities: Record<string, boolean | undefined>;
@@ -15,7 +16,7 @@ interface VocatryaRuntimeBridge {
   >;
   detect(backendKind: string): Promise<{
     backendKind: string;
-    provider: string;
+    runtimeVendor: string;
     state: string;
     installed: boolean;
     executablePath?: string;
@@ -32,7 +33,7 @@ interface VocatryaRuntimeBridge {
     runtimeProfileRef?: string,
   ): Promise<{
     backendKind: string;
-    provider: string;
+    runtimeVendor: string;
     state: string;
     installed: boolean;
     executablePath?: string;
@@ -134,6 +135,12 @@ interface VocatryaAiBridge {
     ticket: string;
     model?: string;
   }): Promise<AiConnectionSmokeResult>;
+  /**
+   * Fires while a login op runs when the runtime cannot open a browser
+   * itself (e.g. OpenCode). The URL is the vendor's official authorize
+   * entry point. Returns an unsubscribe function.
+   */
+  onOAuthUrl(callback: (url: string) => void): () => void;
 }
 
 interface Window {

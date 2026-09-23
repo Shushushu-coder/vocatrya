@@ -9,7 +9,11 @@ const {
   listRuntimeDefinitions,
 } = registry;
 
-const EXPECTED_PROVIDER_BY_BACKEND = {
+// Runtime vendor ≠ account provider: the vendor labels the runtime, the
+// supported list bounds which account providers may authenticate through
+// it. OpenCode intentionally lists two — vendor semantics never collapse
+// to a single provider.
+const EXPECTED_VENDOR_BY_BACKEND = {
   CODEX_RUNTIME: "OPENAI",
   CLAUDE_RUNTIME: "ANTHROPIC",
   GROK_RUNTIME: "XAI",
@@ -19,22 +23,46 @@ const EXPECTED_PROVIDER_BY_BACKEND = {
   DEVIN_RUNTIME: "DEVIN",
 };
 
+const EXPECTED_ACCOUNT_PROVIDERS_BY_BACKEND = {
+  CODEX_RUNTIME: ["OPENAI"],
+  CLAUDE_RUNTIME: ["ANTHROPIC"],
+  GROK_RUNTIME: ["XAI"],
+  OPENCODE_RUNTIME: ["OPENAI", "GITHUB_COPILOT"],
+  CURSOR_RUNTIME: ["CURSOR"],
+  COPILOT_RUNTIME: ["GITHUB_COPILOT"],
+  DEVIN_RUNTIME: ["DEVIN"],
+};
+
 describe("runtime definition registry", () => {
   it("contains exactly the seven first-wave runtimes", () => {
     expect(RUNTIME_DEFINITIONS).toHaveLength(7);
     const kinds = RUNTIME_DEFINITIONS.map((d) => d.backendKind);
     expect(new Set(kinds).size).toBe(7);
-    for (const kind of Object.keys(EXPECTED_PROVIDER_BY_BACKEND)) {
+    for (const kind of Object.keys(EXPECTED_VENDOR_BY_BACKEND)) {
       expect(kinds).toContain(kind);
     }
   });
 
-  it("maps every backendKind to the contracted provider", () => {
-    for (const [backendKind, provider] of Object.entries(
-      EXPECTED_PROVIDER_BY_BACKEND,
+  it("labels every backendKind with its runtime vendor", () => {
+    for (const [backendKind, vendor] of Object.entries(
+      EXPECTED_VENDOR_BY_BACKEND,
     )) {
-      expect(getRuntimeDefinition(backendKind).provider).toBe(provider);
+      expect(getRuntimeDefinition(backendKind).runtimeVendor).toBe(vendor);
     }
+  });
+
+  it("maps every backendKind to its supported account providers", () => {
+    for (const [backendKind, providers] of Object.entries(
+      EXPECTED_ACCOUNT_PROVIDERS_BY_BACKEND,
+    )) {
+      expect(getRuntimeDefinition(backendKind).supportedAccountProviders)
+        .toEqual(providers);
+    }
+    // OpenCode is the multi-provider runtime — the vendor is never an
+    // account provider for ACCOUNT_LOGIN.
+    const opencode = getRuntimeDefinition("OPENCODE_RUNTIME");
+    expect(opencode.supportedAccountProviders).toContain("OPENAI");
+    expect(opencode.supportedAccountProviders).not.toContain("OPENCODE");
   });
 
   it("gives every runtime the required definition fields", () => {
@@ -66,6 +94,37 @@ describe("runtime definition registry", () => {
         expect(typeof method.executable).toBe("string");
         expect(Array.isArray(method.args)).toBe(true);
       }
+    }
+  });
+
+  it("models OpenCode as XDG-root isolation, never OPENCODE_CONFIG_DIR alone", () => {
+    // Regression for the corrected boundary: opencode stores auth.json
+    // under XDG_DATA_HOME\opencode — a lone config dir cannot isolate
+    // credentials. All four XDG roots must redirect into the profile.
+    const opencode = getRuntimeDefinition("OPENCODE_RUNTIME");
+    expect(opencode.profile.strategy).toBe("ISOLATED_ROOTS");
+    for (const key of [
+      "XDG_DATA_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "XDG_STATE_HOME",
+    ]) {
+      expect(opencode.profile.env[key]).toContain("$PROFILE_DIR");
+      expect(opencode.profile.env[key]).not.toBe("$PROFILE_DIR");
+    }
+    // OPENCODE_CONFIG_DIR may exist as a config override but must live
+    // inside the XDG config root — never the credential boundary itself.
+    expect(opencode.profile.env.OPENCODE_CONFIG_DIR).toContain("$PROFILE_DIR");
+    // Provider credential env that would bypass managed OAuth is stripped.
+    for (const key of [
+      "OPENAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "GITHUB_TOKEN",
+      "GH_TOKEN",
+      "ANTHROPIC_API_KEY",
+      "XAI_API_KEY",
+    ]) {
+      expect(opencode.profile.stripEnv).toContain(key);
     }
   });
 

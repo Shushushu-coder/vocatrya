@@ -12,10 +12,11 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import prisma from "@/lib/db";
 import {
-  AI_BACKEND_PROVIDER,
   AI_CONNECTION_OP_ERROR_CODES,
   assertProviderMetadataSafe,
-  type AIConnectionProvider,
+  isAIBackendKind,
+  isAIConnectionProvider,
+  isSupportedAccountProviderForBackend,
 } from "@/lib/ai/connections";
 import { isRuntimeProfileRef } from "@/lib/ai/runtime/contract";
 import type { PrismaClient } from "@prisma/client";
@@ -61,16 +62,19 @@ const CONNECTION_SUMMARY_SELECT = {
   createdAt: true,
 } as const;
 
-// Default display names per account-login provider; a second connection of
-// the same provider is numbered ("Claude 2", ...).
-const ACCOUNT_LOGIN_DISPLAY_NAMES: Record<AIConnectionProvider, string> = {
-  OPENAI: "ChatGPT",
-  ANTHROPIC: "Claude",
-  XAI: "Grok",
-  OPENCODE: "OpenCode",
-  CURSOR: "Cursor",
-  GITHUB_COPILOT: "Copilot",
-  DEVIN: "Devin",
+// Default display names per account-login provider + runtime pairing; a
+// second connection of the same pairing is numbered ("Claude 2", ...).
+// The runtime is part of the name so e.g. "ChatGPT" (Codex) and
+// "ChatGPT via OpenCode" stay visually distinct.
+const ACCOUNT_LOGIN_DISPLAY_NAMES: Record<string, string> = {
+  "OPENAI:CODEX_RUNTIME": "ChatGPT",
+  "OPENAI:OPENCODE_RUNTIME": "ChatGPT via OpenCode",
+  "ANTHROPIC:CLAUDE_RUNTIME": "Claude",
+  "XAI:GROK_RUNTIME": "Grok",
+  "CURSOR:CURSOR_RUNTIME": "Cursor",
+  "GITHUB_COPILOT:COPILOT_RUNTIME": "Copilot",
+  "GITHUB_COPILOT:OPENCODE_RUNTIME": "Copilot via OpenCode",
+  "DEVIN:DEVIN_RUNTIME": "Devin",
 };
 
 /**
@@ -144,32 +148,47 @@ export async function getConnectionOperationContext(
  * Creates the AIConnection row after the runtime has verified the account
  * login. The pending profile becomes the connection's managed profile —
  * nothing is persisted before this point.
+ *
+ * `verifiedProvider` is the account provider the runtime adapter actually
+ * verified during authentication (e.g. OpenAI ChatGPT OAuth inside the
+ * OpenCode profile) — never a renderer-supplied value and never derived
+ * from backendKind alone. The provider/runtime pairing is re-validated
+ * against the supported-provider matrix before anything is written.
  */
 export async function createVerifiedAccountConnection(
   {
     userId,
     backendKind,
+    verifiedProvider,
     runtimeProfileRef,
     accountIdentity,
     providerMetadata,
   }: {
     userId: string;
     backendKind: string;
+    verifiedProvider: string;
     runtimeProfileRef: string;
     accountIdentity: string | null;
     providerMetadata?: Record<string, unknown> | null;
   },
   dbClient: DbClient = prisma,
 ): Promise<ConnectionSummary> {
-  const provider = AI_BACKEND_PROVIDER[
-    backendKind as keyof typeof AI_BACKEND_PROVIDER
-  ];
-  if (!provider) {
+  if (!isAIBackendKind(backendKind)) {
     throw new ConnectionOpError(
       AI_CONNECTION_OP_ERROR_CODES.UNSUPPORTED_BACKEND,
       `Unsupported backend kind: ${backendKind}`,
     );
   }
+  if (
+    !isAIConnectionProvider(verifiedProvider) ||
+    !isSupportedAccountProviderForBackend(backendKind, verifiedProvider)
+  ) {
+    throw new ConnectionOpError(
+      AI_CONNECTION_OP_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION,
+      `Provider ${verifiedProvider} is not supported on backend ${backendKind}`,
+    );
+  }
+  const provider = verifiedProvider;
   if (!isRuntimeProfileRef(runtimeProfileRef)) {
     throw new ConnectionOpError(
       AI_CONNECTION_OP_ERROR_CODES.LOGIN_FAILED,
@@ -186,9 +205,10 @@ export async function createVerifiedAccountConnection(
     );
   }
   const siblingCount = await dbClient.aIConnection.count({
-    where: { userId, provider, authType: "ACCOUNT_LOGIN" },
+    where: { userId, provider, backendKind, authType: "ACCOUNT_LOGIN" },
   });
-  const baseName = ACCOUNT_LOGIN_DISPLAY_NAMES[provider] ?? provider;
+  const baseName =
+    ACCOUNT_LOGIN_DISPLAY_NAMES[`${provider}:${backendKind}`] ?? provider;
   const displayName =
     siblingCount === 0 ? baseName : `${baseName} ${siblingCount + 1}`;
   return dbClient.aIConnection.create({

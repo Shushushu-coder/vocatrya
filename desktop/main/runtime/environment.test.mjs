@@ -73,13 +73,60 @@ describe("runtime process environment isolation", () => {
     expect(env.GROK_DEPLOYMENT_KEY).toBeUndefined();
   });
 
-  it("isolates OpenCode via OPENCODE_CONFIG_DIR", () => {
+  it("isolates OpenCode via all four XDG roots, not OPENCODE_CONFIG_DIR alone", () => {
+    // Regression for the corrected Phase F1 boundary: opencode stores
+    // auth.json under XDG_DATA_HOME\opencode — a lone config dir never
+    // isolates credentials. Each root must be a distinct managed subdir.
     const env = buildRuntimeProcessEnvironment({
       baseEnv: HOSTILE_BASE_ENV,
       definition: getRuntimeDefinition("OPENCODE_RUNTIME"),
       profileDir: PROFILE_DIR,
     });
-    expect(env.OPENCODE_CONFIG_DIR).toBe(PROFILE_DIR);
+    expect(env.XDG_DATA_HOME).toBe(`${PROFILE_DIR}\\data`);
+    expect(env.XDG_CONFIG_HOME).toBe(`${PROFILE_DIR}\\config`);
+    expect(env.XDG_CACHE_HOME).toBe(`${PROFILE_DIR}\\cache`);
+    expect(env.XDG_STATE_HOME).toBe(`${PROFILE_DIR}\\state`);
+    // Config override lives inside the managed config root — it is a
+    // config/plugin override, never the credential boundary.
+    expect(env.OPENCODE_CONFIG_DIR).toBe(`${PROFILE_DIR}\\config\\opencode`);
+    // The host profile can never leak through as a fallback root.
+    expect(env.HOME).toBe(`${PROFILE_DIR}\\home`);
+    expect(env.USERPROFILE).toBe(`${PROFILE_DIR}\\home`);
+    // Host env values that point at the real user profile are replaced.
+    expect(env.XDG_DATA_HOME).not.toContain("C:\\Users\\host");
+  });
+
+  it("strips ambient provider credentials so OAuth routing is never bypassed", () => {
+    // Spec §43: a hostile host env must not let API keys or GitHub tokens
+    // silently override the managed OAuth session inside OpenCode.
+    const hostile = {
+      ...HOSTILE_BASE_ENV,
+      OPENROUTER_API_KEY: "or-host",
+      GOOGLE_GENERATIVE_AI_API_KEY: "g-host",
+      OPENCODE_API_KEY: "oc-host",
+    };
+    const env = buildRuntimeProcessEnvironment({
+      baseEnv: hostile,
+      definition: getRuntimeDefinition("OPENCODE_RUNTIME"),
+      profileDir: PROFILE_DIR,
+    });
+    for (const key of [
+      "OPENAI_API_KEY",
+      "OPENAI_BASE_URL",
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "XAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "GOOGLE_GENERATIVE_AI_API_KEY",
+      "GITHUB_TOKEN",
+      "GH_TOKEN",
+      "COPILOT_GITHUB_TOKEN",
+      "OPENCODE_API_KEY",
+    ]) {
+      expect(env[key], `leaked ${key}`).toBeUndefined();
+    }
+    // The caller's env object is never mutated.
+    expect(hostile.OPENAI_API_KEY).toBe("sk-host-openai");
   });
 
   it("isolates Cursor and strips CURSOR_API_KEY", () => {

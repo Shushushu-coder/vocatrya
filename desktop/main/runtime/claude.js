@@ -383,6 +383,13 @@ function parseClaudePrintResult({ stdout, stderr }) {
 // through this surface.
 const claudeAdapter = {
   backendKind: CLAUDE_BACKEND_KIND,
+  // Claude Code only ever authenticates an Anthropic account.
+  accountProvider: "ANTHROPIC",
+  forAccountProvider(provider) {
+    return provider == null || provider === "ANTHROPIC"
+      ? claudeAdapter
+      : null;
+  },
   loginGuardKey: "claude:login",
   smokePrompt: CLAUDE_SMOKE_PROMPT,
   smokeExpected: CLAUDE_SMOKE_EXPECTED,
