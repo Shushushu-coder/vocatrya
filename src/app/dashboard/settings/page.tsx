@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import AiSettings from "@/components/settings/AiSettings";
+import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
 import InterviewAiSettings from "@/components/settings/InterviewAiSettings";
 import ApiKeySettings from "@/components/settings/ApiKeySettings";
 import DataSettings from "@/components/settings/DataSettings";
@@ -28,6 +29,7 @@ function Settings() {
           {activeSection === "ai-provider" && (
             <div className="space-y-6">
               <AiSettings />
+              <AiConnectionsCard />
               <InterviewAiSettings />
             </div>
           )}

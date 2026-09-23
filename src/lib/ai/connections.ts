@@ -133,6 +133,63 @@ export function assertProviderMetadataSafe(
   }
 }
 
+/**
+ * Which provider a runtime backend authenticates for. Account-login
+ * connections persist the provider name; the backend kind stays the
+ * execution detail.
+ */
+export const AI_BACKEND_PROVIDER: Record<AIBackendKind, AIConnectionProvider> = {
+  CODEX_RUNTIME: "OPENAI",
+  CLAUDE_RUNTIME: "ANTHROPIC",
+  GROK_RUNTIME: "XAI",
+  OPENCODE_RUNTIME: "OPENCODE",
+  CURSOR_RUNTIME: "CURSOR",
+  COPILOT_RUNTIME: "GITHUB_COPILOT",
+  DEVIN_RUNTIME: "DEVIN",
+};
+
+/**
+ * Operations a desktop runtime may perform against a connection. Tickets
+ * minted for these operations are the renderer's proof of user intent;
+ * the Electron main process redeems them through the internal API.
+ */
+export const AI_CONNECTION_OPERATIONS = [
+  "login",
+  "reconnect",
+  "disconnect",
+  "verify",
+  "listModels",
+  "smoke",
+] as const;
+export type AIConnectionOperation = (typeof AI_CONNECTION_OPERATIONS)[number];
+export function isAIConnectionOperation(
+  value: string,
+): value is AIConnectionOperation {
+  return (AI_CONNECTION_OPERATIONS as readonly string[]).includes(value);
+}
+
+export const AI_CONNECTION_OP_ERROR_CODES = {
+  RUNTIME_NOT_INSTALLED: "RUNTIME_NOT_INSTALLED",
+  RUNTIME_BROKEN: "RUNTIME_BROKEN",
+  LOGIN_ALREADY_IN_PROGRESS: "LOGIN_ALREADY_IN_PROGRESS",
+  LOGIN_CANCELLED: "LOGIN_CANCELLED",
+  LOGIN_TIMEOUT: "LOGIN_TIMEOUT",
+  LOGIN_FAILED: "LOGIN_FAILED",
+  AUTH_NOT_CONFIRMED: "AUTH_NOT_CONFIRMED",
+  REAUTH_REQUIRED: "REAUTH_REQUIRED",
+  ACCOUNT_IDENTITY_CONFLICT: "ACCOUNT_IDENTITY_CONFLICT",
+  CONNECTION_NOT_FOUND: "CONNECTION_NOT_FOUND",
+  CONNECTION_ARCHIVED: "CONNECTION_ARCHIVED",
+  MODEL_UNAVAILABLE: "MODEL_UNAVAILABLE",
+  MODEL_DISCOVERY_UNAVAILABLE: "MODEL_DISCOVERY_UNAVAILABLE",
+  INFERENCE_FAILED: "INFERENCE_FAILED",
+  UNSUPPORTED_BACKEND: "UNSUPPORTED_BACKEND",
+  INVALID_TICKET: "INVALID_TICKET",
+  BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
+} as const;
+export type AIConnectionOpErrorCode =
+  (typeof AI_CONNECTION_OP_ERROR_CODES)[keyof typeof AI_CONNECTION_OP_ERROR_CODES];
+
 export const AI_RESOLUTION_ERROR_CODES = {
   AI_NOT_CONFIGURED: "AI_NOT_CONFIGURED",
   CONNECTION_ARCHIVED: "CONNECTION_ARCHIVED",

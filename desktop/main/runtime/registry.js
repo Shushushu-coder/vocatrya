@@ -46,6 +46,10 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         commands: ["codex.exe", "codex.cmd", "codex"],
         knownLocations: [
           "{LOCALAPPDATA}\\Programs\\OpenAI\\Codex\\bin\\codex.exe",
+          // npm global install: the PATH shims (codex / codex.cmd) are not
+          // spawnable with shell:false; the real binary is vendored inside
+          // the platform package.
+          "{APPDATA}\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe",
           "{APPDATA}\\npm\\codex.cmd",
         ],
       },
@@ -53,8 +57,9 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     profile: {
       strategy: PROFILE_STRATEGIES.PROFILE_DIR_ENV,
       env: { CODEX_HOME: "$PROFILE_DIR" },
-      // An inherited API key silently overrides account-login routing.
-      stripEnv: ["OPENAI_API_KEY", "CODEX_API_KEY"],
+      // An inherited API key or access token silently overrides
+      // account-login routing inside the managed profile.
+      stripEnv: ["OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN"],
     },
     install: {
       executionEnabled: false,
@@ -95,6 +100,19 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       args: ["login", "status"],
       mode: "READ_ONLY",
       notes: "Reads local Codex auth state for the injected CODEX_HOME.",
+    },
+    // Verified against codex-cli 0.154.0 (codex <cmd> --help). All commands
+    // run with CODEX_HOME pointed at the managed profile directory.
+    commands: {
+      // Interactive ChatGPT login: starts a local callback server and opens
+      // the system browser. Long-running; cancelled via AbortSignal.
+      login: ["login"],
+      logout: ["logout"],
+      // `codex debug models` prints the raw model catalog as JSON
+      // ({models:[{slug,display_name,visibility,...}]}). --bundled skips the
+      // remote refresh and dumps the catalog shipped inside the binary.
+      models: ["debug", "models"],
+      modelsBundled: ["debug", "models", "--bundled"],
     },
     capabilities: {
       accountLogin: true,

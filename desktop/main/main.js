@@ -22,6 +22,9 @@ const { prepareDatabase } = require("./database-migration");
 const { runStartupSequence } = require("./startup");
 const { createRuntimeStatusService } = require("./runtime/service");
 const { registerRuntimeIpcHandlers } = require("./runtime/ipc");
+const { createConnectionService } = require("./runtime/connection-service");
+const { registerConnectionIpcHandlers } = require("./runtime/connection-ipc");
+const { createBackendClient } = require("./runtime/backend-client");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -92,6 +95,35 @@ if (!singleInstance) {
     return foundationLayout
       ? foundationLayout.runtimeProfilesDir
       : path.join(stateRoot(), "runtime-profiles");
+  }
+
+  // Vocatrya-owned scratch space for inference smoke runs — an exec working
+  // directory that is never the repo root or a user folder.
+  function smokeWorkRoot() {
+    const tmpBase = foundationLayout
+      ? foundationLayout.tmpDir
+      : path.join(stateRoot(), "tmp");
+    return path.join(tmpBase, "codex-smoke");
+  }
+
+  // Per-launch bearer for the backend's internal AI-connection endpoints.
+  // Generated in main, injected into the backend env, never leaves main.
+  const internalToken = createPocSecret();
+
+  function createConnectionOpsService() {
+    return createConnectionService({
+      profilesRoot: runtimeProfilesRoot(),
+      smokeWorkRoot: smokeWorkRoot(),
+      backend: createBackendClient({
+        getBaseUrl: () => `http://127.0.0.1:${backendPort}`,
+        token: internalToken,
+      }),
+      diag: (event) => {
+        // Structured internal diagnostics only — operation, codes, opaque
+        // refs. No stdout/stderr, URLs, env, or credential material.
+        console.log("ai-connection op", JSON.stringify(event));
+      },
+    });
   }
 
   function showStartupFailure(error) {
@@ -191,6 +223,7 @@ if (!singleInstance) {
                 encryptionKey: secrets.encryptionKey,
                 uploadsDir: foundationConfig.uploadsDir,
                 databaseUrl: foundationConfig.databaseUrl,
+                internalToken,
                 // app.getVersion() only reflects the packaged installer
                 // version when packaged; dev/foundation probes must not leak
                 // Electron's own version into the backend.
@@ -234,7 +267,12 @@ if (!singleInstance) {
       attempts: DEFAULT_PORT_ATTEMPTS,
       allocatePort: allocateLoopbackPort,
       spawnChild: async (port) => {
-        const env = buildBackendEnvironment({ port, dataDir: dataRoot(), baseEnv: process.env });
+        const env = buildBackendEnvironment({
+          port,
+          dataDir: dataRoot(),
+          baseEnv: process.env,
+          internalToken,
+        });
         backendExpectedExit = true;
         const child = spawnBackend({
           nodeExecutable,
@@ -303,6 +341,10 @@ if (!singleInstance) {
         ipcMain,
         createRuntimeStatusService({ profilesRoot: runtimeProfilesRoot() }),
       );
+      // Account-login IPC: connection lifecycle operations keyed by
+      // backend-minted tickets. backendPort is read lazily at call time, so
+      // registering before the backend starts is safe.
+      registerConnectionIpcHandlers(ipcMain, createConnectionOpsService());
       const buildInfo = readBuildInfo();
       if (buildInfo) {
         console.log(

@@ -14,6 +14,7 @@ const SENSITIVE_ENV_KEYS = new Set([
   "DEEPSEEK_API_KEY",
   "GEMINI_API_KEY",
   "OPENROUTER_API_KEY",
+  "VOCATRYA_DESKTOP_INTERNAL_TOKEN",
 ]);
 
 function assertLoopbackHost(hostname) {
@@ -49,7 +50,7 @@ function toPrismaFileUrl(filePath) {
   return `file:${path.resolve(filePath).replaceAll("\\", "/")}`;
 }
 
-function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion }) {
+function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion, internalToken }) {
   assertLoopbackHost("127.0.0.1");
   const env = {
     NODE_ENV: "production",
@@ -92,6 +93,14 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
     env.VOCATRYA_APP_VERSION = appVersion.trim();
   } else {
     delete env.VOCATRYA_APP_VERSION;
+  }
+  // Per-launch bearer token the Electron main process uses on the backend's
+  // internal AI-connection endpoints. Generated here, never inherited, never
+  // exposed to the renderer.
+  if (typeof internalToken === "string" && internalToken.trim()) {
+    env.VOCATRYA_DESKTOP_INTERNAL_TOKEN = internalToken.trim();
+  } else {
+    delete env.VOCATRYA_DESKTOP_INTERNAL_TOKEN;
   }
   return env;
 }

@@ -8,6 +8,8 @@ export const config = {
   matcher: [
     "/dashboard",
     "/dashboard/:path*",
-    "/api/((?!auth|mcp).*)",
+    // "internal" routes carry their own loopback bearer auth (desktop main
+    // → backend); they must bypass the session middleware.
+    "/api/((?!auth|mcp|internal).*)",
   ],
 };
