@@ -143,14 +143,46 @@ describe("runtime process environment isolation", () => {
     expect(hostile.OPENAI_API_KEY).toBe("sk-host-openai");
   });
 
-  it("isolates Cursor and strips CURSOR_API_KEY", () => {
+  it("isolates Cursor via APPDATA+home roots and strips credential overrides", () => {
+    // Regression for the corrected Phase H boundary: cursor-agent persists
+    // credentials in %APPDATA%\Cursor\auth.json — CURSOR_CONFIG_DIR alone
+    // covers only cli-config.json and never isolates auth. APPDATA,
+    // LOCALAPPDATA, HOME/USERPROFILE and the XDG roots all redirect into
+    // the managed profile.
     const env = buildRuntimeProcessEnvironment({
-      baseEnv: HOSTILE_BASE_ENV,
+      baseEnv: {
+        ...HOSTILE_BASE_ENV,
+        CURSOR_API_KEY: "ck-host",
+        CURSOR_AUTH_TOKEN: "tok-host",
+        CURSOR_API_ENDPOINT: "https://evil.example.com",
+        CURSOR_WEBSITE_URL: "https://evil.example.com",
+        AGENT_CLI_CREDENTIAL_STORE: "memory",
+        CURSOR_MDM_SIGN_IN_POLICY_JSON: "{}",
+      },
       definition: getRuntimeDefinition("CURSOR_RUNTIME"),
       profileDir: PROFILE_DIR,
     });
-    expect(env.CURSOR_CONFIG_DIR).toBe(PROFILE_DIR);
-    expect(env.CURSOR_API_KEY).toBeUndefined();
+    expect(env.CURSOR_CONFIG_DIR).toBe(`${PROFILE_DIR}\\config`);
+    expect(env.APPDATA).toBe(`${PROFILE_DIR}\\appdata`);
+    expect(env.LOCALAPPDATA).toBe(`${PROFILE_DIR}\\localappdata`);
+    expect(env.HOME).toBe(`${PROFILE_DIR}\\home`);
+    expect(env.USERPROFILE).toBe(`${PROFILE_DIR}\\home`);
+    expect(env.XDG_CONFIG_HOME).toBe(`${PROFILE_DIR}\\xdg-config`);
+    expect(env.XDG_DATA_HOME).toBe(`${PROFILE_DIR}\\xdg-data`);
+    expect(env.XDG_CACHE_HOME).toBe(`${PROFILE_DIR}\\xdg-cache`);
+    expect(env.XDG_STATE_HOME).toBe(`${PROFILE_DIR}\\xdg-state`);
+    expect(env.HOMEDRIVE).toBeUndefined();
+    expect(env.HOMEPATH).toBeUndefined();
+    for (const key of [
+      "CURSOR_API_KEY",
+      "CURSOR_AUTH_TOKEN",
+      "CURSOR_API_ENDPOINT",
+      "CURSOR_WEBSITE_URL",
+      "AGENT_CLI_CREDENTIAL_STORE",
+      "CURSOR_MDM_SIGN_IN_POLICY_JSON",
+    ]) {
+      expect(env[key], `leaked ${key}`).toBeUndefined();
+    }
   });
 
   it("isolates Copilot and strips all ambient GitHub tokens", () => {

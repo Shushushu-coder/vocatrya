@@ -40,6 +40,12 @@ const ACCOUNT_LOGIN_BACKENDS = [
     connectLabelKey: "settings.connectGrok",
     accountProvider: "XAI",
   },
+  {
+    backendKind: "CURSOR_RUNTIME",
+    name: "Cursor",
+    connectLabelKey: "settings.connectCursor",
+    accountProvider: "CURSOR",
+  },
 ] as const;
 
 type BackendKind = (typeof ACCOUNT_LOGIN_BACKENDS)[number]["backendKind"];

@@ -1406,6 +1406,7 @@
     "connectChatGPT": "Connect ChatGPT",
     "connectClaude": "Connect Claude",
     "connectGrok": "Connect Grok",
+    "connectCursor": "Connect Cursor",
     "connectChatGPTViaOpenCode": "Connect ChatGPT via OpenCode",
     "aiConnLoginInProgress": "Complete sign-in in your browser...",
     "aiConnOpenAuthPage": "Open authorization page",

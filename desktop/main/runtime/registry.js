@@ -557,24 +557,130 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     binaries: [
       {
         commands: [
-          "agent.exe",
-          "agent.cmd",
-          "agent",
+          "cursor-agent.cmd",
           "cursor-agent.exe",
           "cursor-agent",
+          "agent.cmd",
+          "agent.exe",
+          "agent",
         ],
         knownLocations: [
+          "{LOCALAPPDATA}\\cursor-agent\\agent.cmd",
+          "{LOCALAPPDATA}\\cursor-agent\\cursor-agent.cmd",
           "{USERPROFILE}\\.local\\bin\\agent.exe",
-          "{LOCALAPPDATA}\\cursor-agent\\bin\\agent.exe",
         ],
       },
     ],
+    // cursor-agent installs as a versioned Node bundle: the PATH shims
+    // (agent.cmd / cursor-agent.cmd / agent.ps1) all dispatch into
+    // %LOCALAPPDATA%\cursor-agent\versions\<YYYY.MM.DD-sha>\node.exe
+    // index.js. `shell:false` cannot spawn .cmd shims, so the spawned
+    // executable is the bundle's node.exe with index.js prepended to
+    // argv. The version dir also anchors identity — a PATH `agent` that
+    // resolves elsewhere (e.g. Grok's agent.exe) is not this runtime.
+    bundle: {
+      kind: "node-versions",
+      versionsDir: "{LOCALAPPDATA}\\cursor-agent\\versions",
+      interpreter: "node.exe",
+      entrypoint: "index.js",
+      versionDirPattern: "^\\d{4}\\.\\d{2}\\.\\d{2}-",
+    },
     profile: {
-      strategy: PROFILE_STRATEGIES.PROFILE_DIR_ENV,
-      env: { CURSOR_CONFIG_DIR: "$PROFILE_DIR" },
-      // CURSOR_API_KEY wins over the stored session — strip it so a shell
-      // key cannot masquerade as the managed account.
-      stripEnv: ["CURSOR_API_KEY"],
+      // Auth isolation boundary (probed against cursor-agent
+      // 2026.09.18-9a7762b on win32): credentials persist in
+      // %APPDATA%\Cursor\auth.json — NOT under CURSOR_CONFIG_DIR, which
+      // only covers cli-config.json / statsig-cache / mcp-auth.json.
+      // User-level MCP (~/.cursor/mcp.json) and homedir fallbacks resolve
+      // via USERPROFILE/HOME. XDG roots redirect defensively for
+      // cross-platform code paths.
+      strategy: PROFILE_STRATEGIES.ISOLATED_ROOTS,
+      env: {
+        CURSOR_CONFIG_DIR: "$PROFILE_DIR\\config",
+        APPDATA: "$PROFILE_DIR\\appdata",
+        LOCALAPPDATA: "$PROFILE_DIR\\localappdata",
+        HOME: "$PROFILE_DIR\\home",
+        USERPROFILE: "$PROFILE_DIR\\home",
+        XDG_CONFIG_HOME: "$PROFILE_DIR\\xdg-config",
+        XDG_DATA_HOME: "$PROFILE_DIR\\xdg-data",
+        XDG_CACHE_HOME: "$PROFILE_DIR\\xdg-cache",
+        XDG_STATE_HOME: "$PROFILE_DIR\\xdg-state",
+      },
+      stripEnv: [
+        // Credential overrides — these bypass the browser session and
+        // would let a managed child authenticate with the host's key.
+        "CURSOR_API_KEY",
+        "CURSOR_AUTH_TOKEN",
+        "CURSOR_LOCAL_AGENT_API_KEY",
+        "CURSOR_LOCAL_AGENT_API_KEY_HELPER",
+        "CURSOR_LOCAL_AGENT_API_KEY_HELPER_TTL_MS",
+        // Endpoint/website overrides — ACCOUNT_LOGIN pins official
+        // production routing; a host override must not redirect auth.
+        "CURSOR_API_ENDPOINT",
+        "CURSOR_API_BASE_URL",
+        "CURSOR_API_URL",
+        "CURSOR_WEBSITE_URL",
+        "CURSOR_LOCAL_AGENT_BASE_URL",
+        "CURSOR_AGENT_ENDPOINT",
+        // Bedrock / authless paths replace Cursor account auth.
+        "CURSOR_ENABLE_BEDROCK",
+        "CURSOR_ENABLE_LOCAL_BEDROCK",
+        "CURSOR_BEDROCK_AWS_AUTH_REFRESH",
+        "CURSOR_BEDROCK_BASE_URL",
+        "CURSOR_BEDROCK_DEFAULT_MODEL",
+        "CURSOR_BEDROCK_REGION",
+        "CURSOR_ENABLE_AUTHLESS",
+        "CURSOR_AGENT_CLI_AUTHLESS_MODE",
+        "CURSOR_AGENT_CLI_LOCAL_MODE",
+        // Managed-policy / credential-store / update overrides.
+        "CURSOR_MDM_SIGN_IN_POLICY_JSON",
+        "AGENT_CLI_CREDENTIAL_STORE",
+        "AGENT_CLI_UPDATE_CHECK_URL",
+        // Behavioral/session overrides that could leak host state or
+        // change execution routing inside a managed profile.
+        "CURSOR_SANDBOX",
+        "CURSOR_MODEL",
+        "CURSOR_STATSIG_OVERRIDES",
+        "CURSOR_AGENT_STORE",
+        "CURSOR_AGENT_STORE_FILES_DIR",
+        "CURSOR_AGENT_STORE_SHARED_PATHS",
+        "CURSOR_AGENT_SOCKET",
+        "CURSOR_AGENT_PERSIST_SESSION",
+        "CURSOR_AGENT_TMUX_PATH",
+        "CURSOR_AGENT_TMUX_SERVER_NAME",
+        "CURSOR_AGENT_DEBUG_PORT",
+        "CURSOR_AGENT_OOM_HEAPDUMP",
+        "CURSOR_AGENT_WORKER_ID",
+        "CURSOR_ASKPASS",
+        "CURSOR_ASKPASS_SECRET",
+        "CURSOR_ASKPASS_SOCKET",
+        "CURSOR_LOCAL_AGENT_ALLOW_CURSOR_HOST",
+        "CURSOR_LOCAL_AGENT_MAX_RETRIES",
+        "CURSOR_PRIVACY_MODE",
+        "CURSOR_REQUEST_ID",
+        "CURSOR_BC_ID",
+        "CURSOR_GROUP",
+        "CURSOR_PERSONAL",
+        "CURSOR_PROJECT",
+        "CURSOR_POOL",
+        "CURSOR_REPO_READ_ONLY_TOKEN",
+        "CURSOR_WORKER_ID",
+        "CURSOR_WAKE",
+        "CURSOR_WAKE_TIMEOUT_MS",
+        "CURSOR_RIPGREP_PATH",
+        "CURSOR_PLUGIN_ROOT",
+        "CURSOR_DATA_DIR",
+        "CURSOR_WORKTREES_ROOT",
+        "CURSOR_STATE_INPUT_FILE",
+        "CURSOR_STATE_OUTPUT_FILE",
+        "CURSOR_CONVERSATION_ID",
+        "CURSOR_USER_EMAIL",
+        "CURSOR_IDENTITY_UNAVAILABLE",
+        "CURSOR_INVOKED_AS",
+        // ~ fallbacks that could point a managed child at the real
+        // profile roots.
+        "HOMEDRIVE",
+        "HOMEPATH",
+      ],
     },
     install: {
       executionEnabled: false,
@@ -604,15 +710,27 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         },
       ],
     },
-    versionProbe: { args: ["--version"] },
+    versionProbe: {
+      args: ["--version"],
+      notes:
+        "`agent --version` prints e.g. `2026.09.18-9a7762b` (the bundle " +
+        "node.exe gets index.js prepended before this flag).",
+    },
     authProbe: {
-      args: ["status"],
+      args: ["status", "--format", "json"],
       mode: "READ_ONLY",
-      notes: "Reports agent auth/connection state for the injected config.",
+      notes:
+        "`agent status --format json` emits {status, isAuthenticated, " +
+        "hasAccessToken, hasRefreshToken, message, userInfo?}; it reads " +
+        "only the persisted credential store — ambient CURSOR_API_KEY/" +
+        "CURSOR_AUTH_TOKEN do not move it, but they are still stripped " +
+        "so inference cannot bypass the account session.",
     },
     capabilities: {
       accountLogin: true,
       modelDiscovery: true,
+      streaming: true,
+      acp: true,
     },
   },
   {

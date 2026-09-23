@@ -128,6 +128,50 @@ describe("runtime definition registry", () => {
     }
   });
 
+  it("models Cursor as isolated roots, never CURSOR_CONFIG_DIR alone", () => {
+    // Phase H boundary, verified against cursor-agent 2026.09.18-9a7762b:
+    // credentials persist in %APPDATA%\Cursor\auth.json — a lone
+    // CURSOR_CONFIG_DIR only covers cli-config.json and can never
+    // isolate authentication.
+    const cursor = getRuntimeDefinition("CURSOR_RUNTIME");
+    expect(cursor.profile.strategy).toBe("ISOLATED_ROOTS");
+    for (const key of [
+      "CURSOR_CONFIG_DIR",
+      "APPDATA",
+      "LOCALAPPDATA",
+      "HOME",
+      "USERPROFILE",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_CACHE_HOME",
+      "XDG_STATE_HOME",
+    ]) {
+      expect(cursor.profile.env[key]).toContain("$PROFILE_DIR");
+      expect(cursor.profile.env[key]).not.toBe("$PROFILE_DIR");
+    }
+    // Credential and endpoint overrides that would bypass the managed
+    // browser session are stripped globally.
+    for (const key of [
+      "CURSOR_API_KEY",
+      "CURSOR_AUTH_TOKEN",
+      "CURSOR_API_ENDPOINT",
+      "CURSOR_WEBSITE_URL",
+      "CURSOR_ENABLE_BEDROCK",
+      "CURSOR_AGENT_CLI_AUTHLESS_MODE",
+      "AGENT_CLI_CREDENTIAL_STORE",
+      "AGENT_CLI_UPDATE_CHECK_URL",
+      "HOMEDRIVE",
+      "HOMEPATH",
+    ]) {
+      expect(cursor.profile.stripEnv).toContain(key);
+    }
+    // The bundle contract anchors executable resolution to the
+    // versioned Node bundle — PATH `agent` collisions are not trusted.
+    expect(cursor.bundle.kind).toBe("node-versions");
+    expect(cursor.bundle.interpreter).toBe("node.exe");
+    expect(cursor.bundle.entrypoint).toBe("index.js");
+  });
+
   it("models Devin as isolated roots, not a single HOME env", () => {
     const devin = getRuntimeDefinition("DEVIN_RUNTIME");
     expect(devin.profile.strategy).toBe("ISOLATED_ROOTS");

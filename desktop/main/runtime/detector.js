@@ -59,6 +59,63 @@ function findRuntimeExecutable(definition, { platform, env, spawnSyncImpl, exist
   return null;
 }
 
+// Some runtimes install as a versioned interpreter bundle rather than a
+// spawnable executable: the PATH/knownLocation hits are launcher shims
+// that dispatch into `versions/<ver>/<interpreter> <entrypoint>`
+// (cursor-agent → versions/<YYYY.MM.DD-sha>/node.exe index.js). For those
+// definitions the real binary is resolved by scanning the bundle's
+// versions directory — authoritative for both detection and identity, so
+// an unrelated PATH binary with a colliding command name (e.g. Grok's
+// agent.exe) is never mistaken for this runtime.
+function resolveRuntimeBundle(
+  definition,
+  env,
+  { existsSyncImpl, readdirSyncImpl } = {},
+) {
+  const bundle = definition?.bundle;
+  if (!bundle || bundle.kind !== "node-versions") return null;
+  const exists = existsSyncImpl || fs.existsSync;
+  const readdir = readdirSyncImpl || fs.readdirSync;
+  const versionsDir = expandKnownLocation(
+    bundle.versionsDir,
+    env || process.env,
+  );
+  if (versionsDir.includes("{")) return null;
+  const dirPattern = new RegExp(bundle.versionDirPattern || ".");
+  let entries;
+  try {
+    entries = readdir(versionsDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const versions = entries
+    .filter((entry) => entry.isDirectory?.() && dirPattern.test(entry.name))
+    .map((entry) => entry.name)
+    // Version dir names start YYYY.MM.DD — lexicographic order is
+    // chronological order, so the newest bundle sorts last.
+    .sort()
+    .reverse();
+  for (const version of versions) {
+    const dir = path.join(versionsDir, version);
+    const executable = path.join(dir, bundle.interpreter);
+    const entrypoint = path.join(dir, bundle.entrypoint);
+    if (exists(executable) && exists(entrypoint)) {
+      return { executable, entrypoint, versionDir: dir, bundleVersion: version };
+    }
+  }
+  return null;
+}
+
+// argv prefix for a resolved bundle executable: `[entrypoint]` when the
+// definition declares a bundle, else []. Callers spawning a resolved
+// bundle binary (version probe, auth probe, adapter invocations) must
+// prepend this so `node.exe <entrypoint> <args>` is the real CLI call.
+function bundleEntrypointArgs(definition, executablePath) {
+  const bundle = definition?.bundle;
+  if (!bundle || !bundle.entrypoint || !executablePath) return [];
+  return [path.join(path.dirname(executablePath), bundle.entrypoint)];
+}
+
 function parseVersionFromOutput(output) {
   if (typeof output !== "string") return null;
   const match = output.match(/\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?/);
@@ -67,8 +124,15 @@ function parseVersionFromOutput(output) {
 
 // Read-only version probe: runs the detected binary with the definition's
 // version args and a bounded timeout. Never logs raw output.
-function probeRuntimeVersion(executablePath, definition, { env, spawnSyncImpl }) {
-  const args = definition.versionProbe?.args || ["--version"];
+function probeRuntimeVersion(
+  executablePath,
+  definition,
+  { env, spawnSyncImpl, argsPrefix },
+) {
+  const args = [
+    ...(Array.isArray(argsPrefix) ? argsPrefix : []),
+    ...(definition.versionProbe?.args || ["--version"]),
+  ];
   const result = spawnSyncImpl(executablePath, args, {
     encoding: "utf8",
     windowsHide: true,
@@ -80,7 +144,20 @@ function probeRuntimeVersion(executablePath, definition, { env, spawnSyncImpl })
     return { version: null, ok: false };
   }
   const output = `${result.stdout || ""}\n${result.stderr || ""}`;
-  return { version: parseVersionFromOutput(output), ok: result.status === 0 };
+  const version = parseVersionFromOutput(output);
+  // Identity guard for bundle runtimes: a PATH name collision (e.g.
+  // `agent` resolving to a different product) must not be reported as a
+  // healthy install of this runtime.
+  const identityPattern = definition.bundle?.versionDirPattern;
+  if (
+    result.status === 0 &&
+    identityPattern &&
+    version &&
+    !new RegExp(identityPattern).test(version)
+  ) {
+    return { version: null, ok: false, code: "IDENTITY_MISMATCH" };
+  }
+  return { version, ok: result.status === 0 };
 }
 
 // detectRuntime(backendKind, deps) →
@@ -98,13 +175,49 @@ function detectRuntime(backendKind, deps = {}) {
   const spawnSyncImpl = deps.spawnSyncImpl || spawnSync;
   const existsSyncImpl = deps.existsSyncImpl || fs.existsSync;
 
-  const executablePath = findRuntimeExecutable(definition, {
-    platform,
+  let executablePath = null;
+  let argsPrefix;
+  if (definition.bundle) {
+    // The bundle's versions dir is the authoritative install location;
+    // PATH/knownLocation hits are launcher shims that are not spawnable
+    // (shell:false) and may belong to a different product entirely.
+    const bundle = resolveRuntimeBundle(definition, env, {
+      existsSyncImpl,
+      readdirSyncImpl: deps.readdirSyncImpl,
+    });
+    if (!bundle) {
+      return {
+        backendKind,
+        runtimeVendor: definition.runtimeVendor,
+        state: "NOT_INSTALLED",
+        installed: false,
+      };
+    }
+    executablePath = bundle.executable;
+    argsPrefix = [bundle.entrypoint];
+  } else {
+    executablePath = findRuntimeExecutable(definition, {
+      platform,
+      env,
+      spawnSyncImpl,
+      existsSyncImpl,
+    });
+    if (!executablePath) {
+      return {
+        backendKind,
+        runtimeVendor: definition.runtimeVendor,
+        state: "NOT_INSTALLED",
+        installed: false,
+      };
+    }
+  }
+
+  const version = probeRuntimeVersion(executablePath, definition, {
     env,
     spawnSyncImpl,
-    existsSyncImpl,
+    argsPrefix,
   });
-  if (!executablePath) {
+  if (!version.ok && version.code === "IDENTITY_MISMATCH") {
     return {
       backendKind,
       runtimeVendor: definition.runtimeVendor,
@@ -112,11 +225,6 @@ function detectRuntime(backendKind, deps = {}) {
       installed: false,
     };
   }
-
-  const version = probeRuntimeVersion(executablePath, definition, {
-    env,
-    spawnSyncImpl,
-  });
   if (!version.ok) {
     return {
       backendKind,
@@ -137,9 +245,11 @@ function detectRuntime(backendKind, deps = {}) {
 }
 
 module.exports = {
+  bundleEntrypointArgs,
   detectRuntime,
   expandKnownLocation,
   findRuntimeExecutable,
   parseVersionFromOutput,
   probeRuntimeVersion,
+  resolveRuntimeBundle,
 };

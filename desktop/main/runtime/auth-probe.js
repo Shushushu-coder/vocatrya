@@ -9,6 +9,7 @@
 // callers can choose not to rely on them).
 const { getRuntimeDefinition } = require("./registry");
 const { runRuntimeCommand } = require("./runner");
+const { bundleEntrypointArgs } = require("./detector");
 const {
   buildRuntimeInvocationArgs,
   buildRuntimeProcessEnvironment,
@@ -19,6 +20,23 @@ const AUTH_PROBE_TIMEOUT_MS = 15_000;
 // Generic keyword classifier shared by providers. Conservative ordering:
 // re-auth signals beat unauthenticated signals beat authenticated signals.
 function classifyAuthProbeOutput({ exitCode, stdout, stderr }) {
+  // Machine-readable probes win over keyword matching — a JSON status
+  // payload's field names ("hasRefreshToken") would otherwise trip the
+  // re-auth keyword list even in a clean unauthenticated state.
+  const trimmed = (stdout || "").trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed.status === "string") {
+        const status = parsed.status.toLowerCase();
+        if (status === "authenticated") return "AUTHENTICATED";
+        if (status === "partially-authenticated") return "REAUTH_REQUIRED";
+        if (status === "unauthenticated") return "NOT_AUTHENTICATED";
+      }
+    } catch {
+      // not a JSON payload — fall through to keyword classification
+    }
+  }
   const text = `${stdout || ""}\n${stderr || ""}`.toLowerCase();
   if (/reauth|expired|refresh|revoked|invalid_grant/.test(text)) {
     return "REAUTH_REQUIRED";
@@ -102,6 +120,9 @@ async function probeRuntimeAuthState({
     profileDir,
   });
   const args = [
+    // Bundle runtimes spawn the interpreter, so the bundle entrypoint
+    // heads argv (e.g. node.exe index.js status --format json).
+    ...bundleEntrypointArgs(definition, executablePath),
     ...buildRuntimeInvocationArgs({ definition, profileDir }),
     ...probe.args,
   ];

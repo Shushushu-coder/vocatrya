@@ -22,12 +22,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { getRuntimeDefinition } = require("./registry");
-const { findRuntimeExecutable, probeRuntimeVersion } = require("./detector");
+const {
+  bundleEntrypointArgs,
+  findRuntimeExecutable,
+  probeRuntimeVersion,
+} = require("./detector");
 const { runRuntimeCommand } = require("./runner");
 const { RuntimeProfileManager } = require("./profiles");
 const { AUTH_PROBE_TIMEOUT_MS } = require("./auth-probe");
 const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
 const { CLAUDE_BACKEND_KIND, claudeAdapter } = require("./claude");
+const { CURSOR_BACKEND_KIND, cursorAdapter } = require("./cursor");
 const { GROK_BACKEND_KIND, grokAdapter } = require("./grok");
 const { OPENCODE_BACKEND_KIND, opencodeAdapter } = require("./opencode");
 
@@ -46,6 +51,7 @@ const SMOKE_TIMEOUT_MS = 120 * 1000;
 const PROVIDER_ADAPTERS = Object.freeze({
   [CODEX_BACKEND_KIND]: codexAdapter,
   [CLAUDE_BACKEND_KIND]: claudeAdapter,
+  [CURSOR_BACKEND_KIND]: cursorAdapter,
   [GROK_BACKEND_KIND]: grokAdapter,
   [OPENCODE_BACKEND_KIND]: opencodeAdapter,
 });
@@ -130,25 +136,43 @@ function createConnectionService({
   // before the version probe decides READY vs BROKEN.
   function resolveRuntime(adapter) {
     const definition = getRuntimeDefinition(adapter.backendKind);
-    const rawPath = findRuntimeExecutable(definition, {
-      platform: deps.platform || process.platform,
-      env: deps.env || process.env,
-      spawnSyncImpl: deps.spawnSyncImpl || spawnSync,
-      existsSyncImpl: deps.existsSyncImpl || fs.existsSync,
-    });
-    if (!rawPath) {
-      return { error: fail(CONNECTION_OP_CODES.RUNTIME_NOT_INSTALLED) };
-    }
-    const executable = adapter.resolveExecutable(rawPath, deps);
-    if (!executable) {
-      return { error: fail(CONNECTION_OP_CODES.RUNTIME_BROKEN) };
+    let executable = null;
+    if (definition.bundle) {
+      // Bundle runtimes (cursor-agent) resolve authoritatively from the
+      // versions dir — a PATH hit may be a launcher shim or an unrelated
+      // product reusing the command name, so it is never trusted.
+      executable = adapter.resolveExecutable(null, deps);
+      if (!executable) {
+        return { error: fail(CONNECTION_OP_CODES.RUNTIME_NOT_INSTALLED) };
+      }
+    } else {
+      const rawPath = findRuntimeExecutable(definition, {
+        platform: deps.platform || process.platform,
+        env: deps.env || process.env,
+        spawnSyncImpl: deps.spawnSyncImpl || spawnSync,
+        existsSyncImpl: deps.existsSyncImpl || fs.existsSync,
+      });
+      if (!rawPath) {
+        return { error: fail(CONNECTION_OP_CODES.RUNTIME_NOT_INSTALLED) };
+      }
+      executable = adapter.resolveExecutable(rawPath, deps);
+      if (!executable) {
+        return { error: fail(CONNECTION_OP_CODES.RUNTIME_BROKEN) };
+      }
     }
     const version = probeRuntimeVersion(executable, definition, {
       env: deps.env || process.env,
       spawnSyncImpl: deps.spawnSyncImpl || spawnSync,
+      argsPrefix: bundleEntrypointArgs(definition, executable),
     });
     if (!version.ok) {
-      return { error: fail(CONNECTION_OP_CODES.RUNTIME_BROKEN) };
+      return {
+        error: fail(
+          version.code === "IDENTITY_MISMATCH"
+            ? CONNECTION_OP_CODES.RUNTIME_NOT_INSTALLED
+            : CONNECTION_OP_CODES.RUNTIME_BROKEN,
+        ),
+      };
     }
     return { executable, version: version.version };
   }
