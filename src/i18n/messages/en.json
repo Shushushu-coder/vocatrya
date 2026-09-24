@@ -1493,6 +1493,8 @@
     "aiAssignErrModelRequired": "Select a connection and enter a model ID.",
     "aiAssignStructuredHint": "Structured output requires a runtime verified for structured execution. Connections on unverified runtimes are marked and cannot be saved for this purpose.",
     "aiAssignStructuredNotVerified": "Structured output is not yet verified for this runtime.",
+    "aiAssignStreamingHint": "Career Dialogue streams replies token by token, which requires a runtime verified for incremental output. No runtime has completed streaming verification yet, so nothing can be saved here.",
+    "aiAssignStreamingNotReady": "This runtime does not have verified streaming output.",
     "apiKeysDescription": "Manage your API keys for AI providers and external services.",
     "apiKeysDescriptionSecure": "Manage your API keys for AI providers and external services. Keys are encrypted and stored securely.",
     "defaultPrefix": "Default: {value}",

@@ -208,6 +208,58 @@ describe("resolveBusinessAIConfig", () => {
   });
 });
 
+describe("CAREER_DIALOGUE precedence", () => {
+  // CAREER_DIALOGUE has no legacy special-casing — the plain steady-state
+  // chain applies: purpose assignment → GLOBAL_DEFAULT → NOT_CONFIGURED.
+  it("resolves a specific assignment over GLOBAL_DEFAULT", async () => {
+    const specific = await makeConnection();
+    const global = await makeConnection({ displayName: "Global" });
+    await assign("CAREER_DIALOGUE", specific.id, "gpt-5.5");
+    await assign("GLOBAL_DEFAULT", global.id, "gpt-5.6");
+    const result = await resolveBusinessAIConfig({
+      userId,
+      purpose: "CAREER_DIALOGUE",
+    });
+    expect(result).toMatchObject({
+      status: "RESOLVED",
+      source: "BUSINESS_ASSIGNMENT",
+      connectionId: specific.id,
+      model: "gpt-5.5",
+    });
+  });
+
+  it("falls back to GLOBAL_DEFAULT, then reports NOT_CONFIGURED", async () => {
+    const global = await makeConnection();
+    await assign("GLOBAL_DEFAULT", global.id, "gpt-5.6");
+    expect(
+      await resolveBusinessAIConfig({ userId, purpose: "CAREER_DIALOGUE" }),
+    ).toMatchObject({
+      status: "RESOLVED",
+      source: "GLOBAL_DEFAULT",
+      connectionId: global.id,
+    });
+
+    await cleanup();
+    expect(
+      await resolveBusinessAIConfig({ userId, purpose: "CAREER_DIALOGUE" }),
+    ).toMatchObject({ status: "NOT_CONFIGURED" });
+  });
+
+  it("a broken explicit assignment never falls back to GLOBAL_DEFAULT", async () => {
+    const broken = await makeConnection({ status: "DISCONNECTED" });
+    const healthy = await makeConnection({ displayName: "Healthy" });
+    await assign("CAREER_DIALOGUE", broken.id, "m");
+    await assign("GLOBAL_DEFAULT", healthy.id, "g");
+    expect(
+      await resolveBusinessAIConfig({ userId, purpose: "CAREER_DIALOGUE" }),
+    ).toMatchObject({
+      status: "INVALID_ASSIGNMENT",
+      code: "CONNECTION_DISCONNECTED",
+      connectionId: broken.id,
+    });
+  });
+});
+
 describe("INTERVIEW coexistence", () => {
   async function setLegacyInterview(provider = "OPENAI", model = "gpt-4o-mini") {
     await prisma.userSettings.upsert({

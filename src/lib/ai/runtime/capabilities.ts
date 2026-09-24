@@ -206,7 +206,22 @@ export interface AccountRuntimeCapabilities {
     customModel: boolean;
     customModelConstraint?: string;
   };
-  execution: { localOneShot: boolean; acp?: boolean };
+  execution: {
+    localOneShot: boolean;
+    /**
+     * Verified consumable assistant-text deltas through the managed
+     * locked-down invocation — the capability streaming consumers (Career
+     * Dialogue) gate on. True only after a real managed run observed
+     * incremental output; a runtime whose CLI merely documents a stream
+     * mode stays false.
+     */
+    streaming: boolean;
+    /** Verification state behind `streaming` — PENDING is not permission. */
+    streamingVerification?: RuntimeVerificationState;
+    /** The candidate/verified delta transport, or null when none exists. */
+    streamingMechanism?: string | null;
+    acp?: boolean;
+  };
   permission: {
     level: RuntimePermissionLevel;
     osSandbox: string;
@@ -300,6 +315,41 @@ export function checkTextOnlyExecutionReadiness({
   }
   if (!capabilities.execution.localOneShot) {
     return { ready: false, code: "PERMISSION_BOUNDARY_NOT_READY" };
+  }
+  if (connectionStatus === "REAUTH_REQUIRED") {
+    return { ready: false, code: "REAUTH_REQUIRED" };
+  }
+  if (connectionStatus !== "CONNECTED") {
+    return { ready: false, code: "AUTH_NOT_CONFIRMED" };
+  }
+  return { ready: true };
+}
+
+/**
+ * Pure pre-flight check for a streaming conversation turn (Career
+ * Dialogue): same gates as the one-shot check plus verified incremental
+ * output. execution.streaming is the verdict — a runtime without it can
+ * never serve a streaming surface, and STREAMING_NOT_SUPPORTED is the
+ * stable failure code (no silent downgrade to a buffered one-shot, which
+ * would be fake streaming).
+ */
+export function checkStreamingExecutionReadiness({
+  capabilities,
+  connectionStatus,
+  permissionScope,
+}: {
+  capabilities: AccountRuntimeCapabilities | null | undefined;
+  connectionStatus: string;
+  permissionScope: AIPermissionScope;
+}): ExecutionReadiness {
+  if (!capabilities || !capabilities.implemented) {
+    return { ready: false, code: "UNSUPPORTED_BACKEND" };
+  }
+  if (permissionScope !== "TEXT_ONLY") {
+    return { ready: false, code: "PERMISSION_BOUNDARY_NOT_READY" };
+  }
+  if (!capabilities.execution.streaming) {
+    return { ready: false, code: "STREAMING_NOT_SUPPORTED" };
   }
   if (connectionStatus === "REAUTH_REQUIRED") {
     return { ready: false, code: "REAUTH_REQUIRED" };

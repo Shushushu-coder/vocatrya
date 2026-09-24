@@ -141,6 +141,12 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       // `codex exec --ephemeral -s read-only` in a Vocatrya temp cwd.
       localOneShot: true,
+      // `codex exec --json` emits a JSONL run-event stream; whether the
+      // managed invocation yields consumable assistant-text deltas (vs
+      // item-completed snapshots only) is unverified on codex-cli 0.154.0.
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.PENDING,
+      streamingMechanism: "codex exec --json",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.STRONG_SANDBOX,
@@ -190,6 +196,13 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       localOneShot: true,
       acp: true,
+      // `claude -p --output-format stream-json --verbose` is the CLI's
+      // NDJSON assistant-delta mode; not yet exercised through the managed
+      // locked-down print invocation.
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.PENDING,
+      streamingMechanism:
+        "claude -p --output-format stream-json --verbose",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -247,6 +260,13 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       // `opencode run --pure --format json` under a deny-all managed
       // config in a Vocatrya temp cwd.
       localOneShot: true,
+      // `opencode run --format json` is already the JSONL event stream the
+      // one-shot adapter parses — part.text cumulative snapshots are
+      // diffable into deltas. Live incremental emission (not a buffered
+      // dump at exit) inside the managed invocation is unverified.
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.PENDING,
+      streamingMechanism: "opencode run --format json",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -298,6 +318,13 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       localOneShot: true,
       acp: true,
+      // `grok -p --output-format json` is a post-run envelope — no
+      // streaming flag is verified on 1.0.41. The ACP session/update
+      // channel (session-scoped, not a print invocation) is the candidate
+      // delta path.
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.PENDING,
+      streamingMechanism: "ACP session/update",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -362,6 +389,11 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       localOneShot: true,
       acp: true,
+      // `agent -p --output-format json` is a {type:"result"} envelope; a
+      // stream-json mode is not verified on 2026.09.18-9a7762b.
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.PENDING,
+      streamingMechanism: "agent -p --output-format stream-json",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -423,6 +455,12 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       // `devin -p` under --permission-mode auto in a Vocatrya temp cwd.
       localOneShot: true,
       acp: true,
+      // `devin -p` writes plain stdout text; whether tokens flush
+      // incrementally is unverified. The ACP session/update channel is the
+      // candidate structured-delta path.
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.PENDING,
+      streamingMechanism: "ACP session/update",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -476,7 +514,13 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       dynamicDiscovery: true,
       customModel: false,
     }),
-    execution: Object.freeze({ localOneShot: false }),
+    execution: Object.freeze({
+      localOneShot: false,
+      // Lifecycle unimplemented — no invocation exists to stream from.
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.NOT_APPLICABLE,
+      streamingMechanism: null,
+    }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.NOT_READY,
       osSandbox: "UNKNOWN",

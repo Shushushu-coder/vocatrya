@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai/connections";
 import {
   AI_PERMISSION_SCOPES,
+  checkStreamingExecutionReadiness,
   checkTextOnlyExecutionReadiness,
   RUNTIME_LOGIN_INTERACTIONS,
   RUNTIME_PERMISSION_LEVELS,
@@ -234,6 +235,82 @@ describe("execution seam contract", () => {
         permissionScope: "TEXT_ONLY",
       }),
     ).toEqual({ ready: false, code: "UNSUPPORTED_BACKEND" });
+  });
+
+  it("readies no runtime for streaming today — PENDING is not permission", () => {
+    // The desktop matrix is the source of truth: every implemented
+    // runtime records a candidate delta mechanism but none has completed
+    // a managed streaming run, so streaming consumers fail closed.
+    for (const backendKind of [
+      "CODEX_RUNTIME",
+      "CLAUDE_RUNTIME",
+      "OPENCODE_RUNTIME",
+      "GROK_RUNTIME",
+      "CURSOR_RUNTIME",
+      "DEVIN_RUNTIME",
+    ]) {
+      expect(
+        checkStreamingExecutionReadiness({
+          capabilities: cap(backendKind),
+          connectionStatus: "CONNECTED",
+          permissionScope: "TEXT_ONLY",
+        }),
+        backendKind,
+      ).toEqual({ ready: false, code: "STREAMING_NOT_SUPPORTED" });
+    }
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("COPILOT_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: false, code: "UNSUPPORTED_BACKEND" });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: null,
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: false, code: "UNSUPPORTED_BACKEND" });
+  });
+
+  it("streaming readiness gates on scope and auth state once verified", () => {
+    const streamingCapable = {
+      ...cap("CODEX_RUNTIME"),
+      execution: {
+        ...cap("CODEX_RUNTIME").execution,
+        streaming: true,
+        streamingVerification: "PASS",
+      },
+    };
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: streamingCapable,
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: true });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: streamingCapable,
+        connectionStatus: "REAUTH_REQUIRED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: false, code: "REAUTH_REQUIRED" });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: streamingCapable,
+        connectionStatus: "DISCONNECTED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: false, code: "AUTH_NOT_CONFIRMED" });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: streamingCapable,
+        connectionStatus: "CONNECTED",
+        permissionScope: "USER_SELECTED_FILES_READ",
+      }),
+    ).toEqual({ ready: false, code: "PERMISSION_BOUNDARY_NOT_READY" });
   });
 });
 

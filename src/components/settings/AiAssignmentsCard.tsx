@@ -74,6 +74,13 @@ const STRUCTURED_PURPOSES = new Set<string>(["RESUME"]);
 // marked (and rejected on save) for these purposes.
 const TEXT_ONLY_PURPOSES = new Set<string>(["INTERVIEW"]);
 
+// Purposes whose execution path streams assistant output to the user
+// (Career Dialogue renders tokens as they arrive — a buffered one-shot
+// would be fake streaming). Connections on runtimes without verified
+// incremental output are marked and rejected on save; today no runtime
+// has completed streaming verification, so none can be assigned here yet.
+const STREAMING_PURPOSES = new Set<string>(["CAREER_DIALOGUE"]);
+
 type Draft = { connectionId: string; model: string };
 
 type ModelEntry = {
@@ -233,6 +240,14 @@ function AiAssignmentsCard() {
     return caps.implemented === true && caps.execution?.localOneShot === true;
   };
 
+  // Streaming consumers need verified incremental output — the same
+  // unknown-bridge convention as above: null skips marking entirely.
+  const streamingReady = (connection: ConnectionSummary): boolean | null => {
+    const caps = runtimeCaps[connection.backendKind];
+    if (!caps) return null;
+    return caps.implemented === true && caps.execution?.streaming === true;
+  };
+
   const save = async (purpose: string) => {
     const draft = drafts[purpose];
     if (!draft?.connectionId || !draft.model.trim()) {
@@ -253,6 +268,13 @@ function AiAssignmentsCard() {
       const connection = connections.find((c) => c.id === draft.connectionId);
       if (connection && textOnlyReady(connection) === false) {
         toastError(t("settings.aiAssignTextOnlyNotReady"));
+        return;
+      }
+    }
+    if (STREAMING_PURPOSES.has(purpose)) {
+      const connection = connections.find((c) => c.id === draft.connectionId);
+      if (connection && streamingReady(connection) === false) {
+        toastError(t("settings.aiAssignStreamingNotReady"));
         return;
       }
     }
@@ -322,6 +344,7 @@ function AiAssignmentsCard() {
         saved?.model !== draft.model.trim());
     const isStructuredPurpose = STRUCTURED_PURPOSES.has(purpose);
     const isTextOnlyPurpose = TEXT_ONLY_PURPOSES.has(purpose);
+    const isStreamingPurpose = STREAMING_PURPOSES.has(purpose);
 
     return (
       <section key={purpose} className="rounded-md border p-3 space-y-3">
@@ -329,6 +352,11 @@ function AiAssignmentsCard() {
         {isStructuredPurpose && (
           <p className="text-xs text-muted-foreground">
             {t("settings.aiAssignStructuredHint")}
+          </p>
+        )}
+        {isStreamingPurpose && (
+          <p className="text-xs text-muted-foreground">
+            {t("settings.aiAssignStreamingHint")}
           </p>
         )}
         {/* INTERVIEW coexistence note: what a new session would resolve to
@@ -375,10 +403,14 @@ function AiAssignmentsCard() {
                       ? structuredReady(connection)
                       : isTextOnlyPurpose
                         ? textOnlyReady(connection)
-                        : null;
+                        : isStreamingPurpose
+                          ? streamingReady(connection)
+                          : null;
                     const ineligibleKey = isStructuredPurpose
                       ? "settings.aiAssignStructuredNotVerified"
-                      : "settings.aiAssignTextOnlyNotReady";
+                      : isTextOnlyPurpose
+                        ? "settings.aiAssignTextOnlyNotReady"
+                        : "settings.aiAssignStreamingNotReady";
                     return (
                       <SelectItem
                         key={connection.id}

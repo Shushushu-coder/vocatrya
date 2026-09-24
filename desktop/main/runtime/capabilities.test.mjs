@@ -302,4 +302,26 @@ describe("account runtime capability matrix", () => {
         .verification,
     ).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.NOT_APPLICABLE);
   });
+
+  it("reports streaming honestly — no runtime has verified deltas yet", () => {
+    for (const kind of IMPLEMENTED) {
+      const execution = getAccountRuntimeCapabilities(kind).execution;
+      expect(execution.localOneShot, kind).toBe(true);
+      // PENDING is not permission: a documented stream mode without a
+      // managed delta run never flips streaming to true.
+      expect(execution.streaming, kind).toBe(false);
+      expect(execution.streamingVerification, kind).toBe(
+        VERIFICATION_STATES.PENDING,
+      );
+      expect(typeof execution.streamingMechanism, kind).toBe("string");
+      expect(execution.streamingMechanism.length, kind).toBeGreaterThan(0);
+    }
+    const copilot = getAccountRuntimeCapabilities("COPILOT_RUNTIME").execution;
+    expect(copilot.localOneShot).toBe(false);
+    expect(copilot.streaming).toBe(false);
+    expect(copilot.streamingVerification).toBe(
+      VERIFICATION_STATES.NOT_APPLICABLE,
+    );
+    expect(copilot.streamingMechanism).toBeNull();
+  });
 });

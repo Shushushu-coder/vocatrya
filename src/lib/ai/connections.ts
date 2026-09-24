@@ -286,6 +286,10 @@ export const AI_BUSINESS_ERROR_CODES = {
   PERMISSION_BOUNDARY_NOT_READY: "PERMISSION_BOUNDARY_NOT_READY",
   AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
   AI_EXECUTION_FAILED: "AI_EXECUTION_FAILED",
+  // A streaming consumer (Career Dialogue) resolved to a runtime without
+  // verified incremental output — explicit failure, never a buffered
+  // one-shot masquerading as a stream.
+  STREAMING_NOT_SUPPORTED: "STREAMING_NOT_SUPPORTED",
   AI_REQUEST_TOO_LARGE: "AI_REQUEST_TOO_LARGE",
   // The desktop could not reach the backend to redeem the ticket — a
   // transport failure, distinct from runtime/connection failures.
