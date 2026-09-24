@@ -32,6 +32,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { getRuntimeDefinition } = require("./registry");
+const { createPlainTextStreamParser } = require("./streaming");
 const {
   buildRuntimeInvocationArgs,
   buildRuntimeProcessEnvironment,
@@ -627,6 +628,16 @@ const devinAdapter = {
       prompt,
     });
   },
+
+  // Streaming TEXT_ONLY — `devin -p` has no event transport; stdout is the
+  // delta channel itself. The plain-text parser treats each delivered
+  // chunk as an increment; whether the CLI actually flushes incrementally
+  // (rather than buffering to exit) is exactly what verification measures.
+  buildStreamingInvocation(args) {
+    return buildDevinPrintInvocation(args);
+  },
+  createStreamParser: createPlainTextStreamParser,
+  streamMechanism: "devin -p",
 
   extractText({ result }) {
     return parseDevinPrintResult(result);

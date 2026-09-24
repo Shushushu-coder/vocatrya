@@ -34,6 +34,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { getRuntimeDefinition } = require("./registry");
+const { createCursorStreamParser } = require("./streaming");
 const { resolveRuntimeBundle, bundleEntrypointArgs } = require("./detector");
 const {
   buildRuntimeInvocationArgs,
@@ -249,6 +250,19 @@ function buildCursorPrintInvocation({
     env: cursorEnv({ profileDir, baseEnv }),
     cwd: workingDirectory,
   };
+}
+
+// Streaming variant (cursor-agent 2026.09.18): `--output-format
+// streaming-json` emits NDJSON — one ACP session update per line — so
+// assistant text arrives as agent_message_chunk increments. Every safety
+// flag of the print invocation is preserved unchanged.
+function buildCursorStreamingInvocation(args) {
+  const invocation = buildCursorPrintInvocation(args);
+  const nextArgs = invocation.args.slice();
+  const formatIndex = nextArgs.indexOf("--output-format");
+  if (formatIndex === -1) return invocation;
+  nextArgs[formatIndex + 1] = "streaming-json";
+  return { ...invocation, args: nextArgs };
 }
 
 // `agent status --format json` — the machine-readable auth surface.
@@ -482,6 +496,14 @@ const cursorAdapter = {
     return buildCursorPrintInvocation(args);
   },
 
+  // Streaming TEXT_ONLY — the locked-down print invocation switched to
+  // `--output-format streaming-json` (NDJSON ACP session updates).
+  buildStreamingInvocation(args) {
+    return buildCursorStreamingInvocation(args);
+  },
+  createStreamParser: createCursorStreamParser,
+  streamMechanism: "agent -p --output-format streaming-json",
+
   extractText({ result }) {
     return parseCursorSmokeResult(result);
   },
@@ -502,6 +524,7 @@ module.exports = {
   buildCursorLogoutInvocation,
   buildCursorModelsInvocation,
   buildCursorPrintInvocation,
+  buildCursorStreamingInvocation,
   buildCursorStatusInvocation,
   cursorAdapter,
   cursorEnv,

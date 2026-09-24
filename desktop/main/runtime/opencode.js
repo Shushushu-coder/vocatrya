@@ -22,6 +22,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { getRuntimeDefinition } = require("./registry");
+const { createOpencodeStreamParser } = require("./streaming");
 const {
   buildRuntimeInvocationArgs,
   buildRuntimeProcessEnvironment,
@@ -619,6 +620,12 @@ function createOpencodeAdapter(providerConfig) {
     resolveSmokeModel,
     buildSmokeInvocation,
     buildTextInvocation,
+    // Streaming uses the identical locked-down invocation — `run --format
+    // json` already emits the JSONL part-event stream; the parser diffs
+    // cumulative part.text snapshots into deltas.
+    buildStreamingInvocation: buildTextInvocation,
+    createStreamParser: createOpencodeStreamParser,
+    streamMechanism: "opencode run --format json",
     extractText: extractSmokeText,
     extractSmokeText,
   };

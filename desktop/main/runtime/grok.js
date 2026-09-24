@@ -32,6 +32,7 @@ const {
 } = require("./environment");
 const { terminateChildTree } = require("../runtime");
 const { serializeInlineSchema } = require("./structured-schema");
+const { createAnthropicStreamParser } = require("./streaming");
 
 const GROK_BACKEND_KIND = "GROK_RUNTIME";
 const GROK_ACCOUNT_PROVIDER = "XAI";
@@ -629,6 +630,21 @@ function buildGrokPrintInvocation({
   };
 }
 
+// Streaming variant (grok 1.0.41): `--output-format
+// streaming-messages-json` switches stdout to Anthropic-wire NDJSON and
+// `--include-partial-messages` emits incremental stream_event text deltas
+// alongside the whole messages. Every safety flag of the print invocation
+// is preserved unchanged.
+function buildGrokStreamingInvocation(args) {
+  const invocation = buildGrokPrintInvocation(args);
+  const nextArgs = invocation.args.slice();
+  const formatIndex = nextArgs.indexOf("--output-format");
+  if (formatIndex === -1) return invocation;
+  nextArgs[formatIndex + 1] = "streaming-messages-json";
+  nextArgs.push("--include-partial-messages");
+  return { ...invocation, args: nextArgs };
+}
+
 // NATIVE_JSON_SCHEMA (grok 1.0.41): `grok -p --json-schema <schema>`
 // constrains the model to produce JSON matching the schema and implies
 // --output-format json — the {text,...} envelope's text carries the
@@ -764,6 +780,16 @@ const grokAdapter = {
     });
   },
 
+  // Streaming TEXT_ONLY — the locked-down print invocation switched to
+  // `streaming-messages-json` + `--include-partial-messages` (incremental
+  // stream_event text deltas, no ACP session ownership).
+  buildStreamingInvocation(args) {
+    return buildGrokStreamingInvocation(args);
+  },
+  createStreamParser: createAnthropicStreamParser,
+  streamMechanism:
+    "grok -p --output-format streaming-messages-json --include-partial-messages",
+
   // NATIVE_JSON_SCHEMA — `grok -p --json-schema <schema>` inline.
   buildStructuredInvocation(args) {
     return buildGrokStructuredInvocation(args);
@@ -789,6 +815,7 @@ module.exports = {
   buildGrokLoginInvocation,
   buildGrokLogoutInvocation,
   buildGrokPrintInvocation,
+  buildGrokStreamingInvocation,
   buildGrokStructuredInvocation,
   classifyGrokAuthError,
   classifyGrokAuthMode,

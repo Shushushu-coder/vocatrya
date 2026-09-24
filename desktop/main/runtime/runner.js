@@ -61,15 +61,19 @@ function createCappedAccumulator(limit) {
 }
 
 // runRuntimeCommand({ executable, args, cwd, env, timeoutMs, signal,
-//   sanitize, onStdout, onStderr, maxCaptureBytes })
+//   sanitize, onStdout, onStderr, maxCaptureBytes, binaryStdout })
 //   → { exitCode, signal, timedOut, aborted, stdout, stderr, error? }
 // Never throws for process failure; throws only for invalid input.
 // onStdout/onStderr (optional) observe raw chunks as they arrive — used by
 // login flows to surface a vendor OAuth URL while the process still runs
 // (some CLIs print it on stderr, e.g. `grok login`). Observers never affect
-// the run; their errors are swallowed. maxCaptureBytes overrides the 256KB
-// per-stream cap for commands whose contract legitimately emits larger
-// payloads (e.g. `devin models list --format json` catalogs).
+// the run; their errors are swallowed. By default onStdout receives a
+// utf8-decoded string; binaryStdout:true delivers the raw Buffer instead
+// (streaming consumers decode incrementally — a string decode per OS chunk
+// would corrupt multi-byte UTF-8 sequences split across chunk boundaries).
+// maxCaptureBytes overrides the 256KB per-stream cap for commands whose
+// contract legitimately emits larger payloads (e.g. `devin models list
+// --format json` catalogs).
 function runRuntimeCommand({
   executable,
   args,
@@ -81,6 +85,7 @@ function runRuntimeCommand({
   onStdout,
   onStderr,
   maxCaptureBytes = MAX_CAPTURE_BYTES,
+  binaryStdout = false,
   spawnImpl = spawn,
 } = {}) {
   if (typeof executable !== "string" || executable.length === 0) {
@@ -153,7 +158,7 @@ function runRuntimeCommand({
         stdout.push(chunk);
         if (typeof onStdout === "function") {
           try {
-            onStdout(chunk.toString("utf8"));
+            onStdout(binaryStdout ? chunk : chunk.toString("utf8"));
           } catch {
             // An observer failure must never break the process run.
           }

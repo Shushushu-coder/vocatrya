@@ -303,18 +303,28 @@ describe("account runtime capability matrix", () => {
     ).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.NOT_APPLICABLE);
   });
 
-  it("reports streaming honestly — no runtime has verified deltas yet", () => {
+  it("reports streaming honestly — only the managed-verified runtime passes", () => {
+    // DEVIN_RUNTIME earned PASS through a real managed E2E (devin -p
+    // incremental stdout on 3000.10.31); the other five remain PENDING —
+    // a documented stream mode without a managed delta run never flips
+    // streaming to true.
     for (const kind of IMPLEMENTED) {
       const execution = getAccountRuntimeCapabilities(kind).execution;
       expect(execution.localOneShot, kind).toBe(true);
-      // PENDING is not permission: a documented stream mode without a
-      // managed delta run never flips streaming to true.
-      expect(execution.streaming, kind).toBe(false);
-      expect(execution.streamingVerification, kind).toBe(
-        VERIFICATION_STATES.PENDING,
-      );
       expect(typeof execution.streamingMechanism, kind).toBe("string");
       expect(execution.streamingMechanism.length, kind).toBeGreaterThan(0);
+      if (kind === "DEVIN_RUNTIME") {
+        expect(execution.streaming).toBe(true);
+        expect(execution.streamingVerification).toBe(VERIFICATION_STATES.PASS);
+        expect(execution.streamingVerifiedRuntimeVersion).toBe("3000.10.31");
+      } else {
+        expect(execution.streaming, kind).toBe(false);
+        expect(execution.streamingVerification, kind).toBe(
+          VERIFICATION_STATES.PENDING,
+        );
+        // No verified run means no version binding — never a stale PASS.
+        expect(execution.streamingVerifiedRuntimeVersion, kind).toBeNull();
+      }
     }
     const copilot = getAccountRuntimeCapabilities("COPILOT_RUNTIME").execution;
     expect(copilot.localOneShot).toBe(false);
@@ -323,5 +333,6 @@ describe("account runtime capability matrix", () => {
       VERIFICATION_STATES.NOT_APPLICABLE,
     );
     expect(copilot.streamingMechanism).toBeNull();
+    expect(copilot.streamingVerifiedRuntimeVersion).toBeNull();
   });
 });

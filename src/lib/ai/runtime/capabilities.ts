@@ -220,6 +220,12 @@ export interface AccountRuntimeCapabilities {
     streamingVerification?: RuntimeVerificationState;
     /** The candidate/verified delta transport, or null when none exists. */
     streamingMechanism?: string | null;
+    /**
+     * The runtime binary version the streaming verification ran against.
+     * A PASS applies only to this exact version — a runtime update is a
+     * new, unverified surface until a managed run proves deltas again.
+     */
+    streamingVerifiedRuntimeVersion?: string | null;
     acp?: boolean;
   };
   permission: {
@@ -328,19 +334,25 @@ export function checkTextOnlyExecutionReadiness({
 /**
  * Pure pre-flight check for a streaming conversation turn (Career
  * Dialogue): same gates as the one-shot check plus verified incremental
- * output. execution.streaming is the verdict — a runtime without it can
- * never serve a streaming surface, and STREAMING_NOT_SUPPORTED is the
- * stable failure code (no silent downgrade to a buffered one-shot, which
- * would be fake streaming).
+ * output bound to the installed runtime version. execution.streaming is
+ * the verdict — a runtime without it can never serve a streaming surface,
+ * and STREAMING_NOT_SUPPORTED is the stable failure code (no silent
+ * downgrade to a buffered one-shot, which would be fake streaming). A PASS
+ * verdict is bound to `streamingVerifiedRuntimeVersion`; the caller must
+ * supply `runtimeVersion` — the version probed on the installed binary —
+ * and any mismatch (including an absent one) is STREAMING_NOT_VERIFIED.
  */
 export function checkStreamingExecutionReadiness({
   capabilities,
   connectionStatus,
   permissionScope,
+  runtimeVersion,
 }: {
   capabilities: AccountRuntimeCapabilities | null | undefined;
   connectionStatus: string;
   permissionScope: AIPermissionScope;
+  /** The version probed on the currently installed runtime binary. */
+  runtimeVersion?: string | null;
 }): ExecutionReadiness {
   if (!capabilities || !capabilities.implemented) {
     return { ready: false, code: "UNSUPPORTED_BACKEND" };
@@ -350,6 +362,16 @@ export function checkStreamingExecutionReadiness({
   }
   if (!capabilities.execution.streaming) {
     return { ready: false, code: "STREAMING_NOT_SUPPORTED" };
+  }
+  // Verified-version binding: a PASS only applies to the runtime version
+  // it was actually measured on. PENDING/FAIL, a missing bound version,
+  // and any version drift all fail closed here.
+  if (capabilities.execution.streamingVerification !== "PASS") {
+    return { ready: false, code: "STREAMING_NOT_VERIFIED" };
+  }
+  const bound = capabilities.execution.streamingVerifiedRuntimeVersion;
+  if (!bound || runtimeVersion !== bound) {
+    return { ready: false, code: "STREAMING_NOT_VERIFIED" };
   }
   if (connectionStatus === "REAUTH_REQUIRED") {
     return { ready: false, code: "REAUTH_REQUIRED" };

@@ -258,6 +258,149 @@ describe("executeText", () => {
   });
 });
 
+describe("executeTextStream", () => {
+  // Streaming probes use the in-process verificationProbe flag — the same
+  // harness-only bypass the structured-output probe uses.
+  const PROBE = { verificationProbe: true };
+
+  // The codex adapter's streaming invocation is `exec --json`; the fake
+  // runner emits NDJSON item snapshots through the binary stdout observer.
+  function streamScript(chunks, tail = {}) {
+    return [
+      {
+        match: (h) => h.includes("exec") && h.includes("--json"),
+        respond: (inv) => {
+          for (const chunk of chunks) {
+            inv.onStdout(Buffer.from(chunk, "utf8"));
+          }
+          fs.writeFileSync(
+            path.join(inv.cwd, "last-message.txt"),
+            tail.fileText ?? "",
+          );
+          return Promise.resolve({
+            exitCode: 0,
+            stdout: "",
+            stderr: "",
+            ...tail.result,
+          });
+        },
+      },
+    ];
+  }
+
+  function streamExec(overrides = {}) {
+    return service.executeTextStream({
+      ticket: "t_exec",
+      connectionId: "conn-1",
+      model: "gpt-5.5",
+      prompt: "Summarize this job",
+      ...overrides,
+    });
+  }
+
+  it("refuses business streaming on an unverified runtime (PENDING ≠ PASS)", async () => {
+    runnerScript = [];
+    const result = await streamExec();
+    expect(result).toEqual({ ok: false, code: "STREAMING_NOT_VERIFIED" });
+    expect(invocations.find((i) => i.args.includes("--json"))).toBeUndefined();
+  });
+
+  it("streams ordered deltas and reconciles against the canonical file", async () => {
+    runnerScript = streamScript(
+      [
+        '{"type":"turn.started"}\n{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"Hel"}}\n',
+        '{"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"Hello"}}\n{"type":"turn.completed"}\n',
+      ],
+      { fileText: "Hello" },
+    );
+    const seen = [];
+    const result = await streamExec({
+      ...PROBE,
+      onEvent: (e) => seen.push(e),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("Hello");
+    expect(result.stream.deltaCount).toBe(2);
+    expect(result.stream.deltaChunkCount).toBe(2);
+    expect(result.stream.reconstruction).toBe("MATCH");
+    expect(result.stream.mechanism).toBe("codex exec --json");
+    expect(
+      seen.filter((e) => e.type === "text-delta").map((e) => e.delta),
+    ).toEqual(["Hel", "lo"]);
+    expect(seen.at(-1).type).toBe("completed");
+    // Non-content events are ignored — never presented as deltas.
+    expect(seen.filter((e) => e.type === "text-delta")).toHaveLength(2);
+  });
+
+  it("aborts on signal — terminal ABORTED, no late deltas delivered", async () => {
+    runnerScript = [
+      {
+        match: (h) => h.includes("exec"),
+        respond: (inv) => {
+          // First chunk produces a delta; the abort fires synchronously
+          // inside the observer, so the second chunk is suppressed.
+          inv.onStdout(
+            Buffer.from(
+              '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"Hel"}}\n',
+            ),
+          );
+          expect(inv.signal.aborted).toBe(true);
+          inv.onStdout(
+            Buffer.from(
+              '{"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"Hello"}}\n',
+            ),
+          );
+          return Promise.resolve({
+            exitCode: null,
+            stdout: "",
+            stderr: "",
+            aborted: true,
+          });
+        },
+      },
+    ];
+    const controller = new AbortController();
+    const seen = [];
+    const result = await streamExec({
+      ...PROBE,
+      signal: controller.signal,
+      onEvent: (e) => {
+        seen.push(e);
+        if (e.type === "text-delta") controller.abort();
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("ABORTED");
+    expect(result.stream.aborted).toBe(true);
+    // Exactly one delta was delivered; nothing arrives after the abort.
+    expect(seen.filter((e) => e.type === "text-delta")).toHaveLength(1);
+    expect(seen.at(-1)).toMatchObject({ type: "error", code: "ABORTED" });
+  });
+
+  it("fails closed on non-monotonic cumulative snapshots", async () => {
+    runnerScript = streamScript([
+      '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"Hello"}}\n' +
+        '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"rewritten"}}\n',
+    ]);
+    const result = await streamExec(PROBE);
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("STREAM_COMPLETION_INCONSISTENT");
+  });
+
+  it("reports DELTA_ONLY when the protocol carries no final envelope", async () => {
+    runnerScript = streamScript([
+      '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"partial"}}\n',
+    ]);
+    // No turn.completed and no -o content: the parser still emits a
+    // terminal completed with the snapshot text — that is the canonical.
+    const result = await streamExec(PROBE);
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("partial");
+    expect(result.stream.reconstruction).toBe("MATCH");
+  });
+
+});
+
 describe("executeText structuredOutput contract", () => {
   const SCHEMA = {
     type: "object",

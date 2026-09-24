@@ -1079,6 +1079,382 @@ function createConnectionService({
     }
   }
 
+  // Streaming TEXT_ONLY execution — in-process diagnostic/validation seam
+  // for VOCATRYA_ACCOUNT_RUNTIME_STREAMING_VALIDATION. Same security
+  // boundary as executeText (ticket → connection binding → managed profile
+  // → locked-down invocation in a fresh Vocatrya-owned cwd, shell:false),
+  // plus two additions:
+  //   - the adapter's streaming invocation is observed live through the
+  //     runner's binary stdout observer; the vendor stream is normalized
+  //     into {text-delta|completed|error} events with arrival offsets and
+  //     forwarded to the optional onEvent callback
+  //   - the delta concatenation is reconciled against the canonical final
+  //     text (vendor terminal event or adapter.extractText), so a
+  //     completed run can never silently disagree with its own stream
+  // Business gating mirrors the structured-output freeze: without
+  // verificationProbe (in-process only) the runtime must carry
+  // execution.streaming + streamingVerification PASS bound to the
+  // installed version, otherwise STREAMING_NOT_VERIFIED. Abort resolves to
+  // the stable ABORTED code — never generic INFERENCE_FAILED — and no
+  // events are delivered after the terminal abort.
+  async function executeTextStream({
+    ticket,
+    connectionId,
+    model,
+    prompt,
+    onEvent,
+    verificationProbe = false,
+    timeoutMs,
+    signal,
+  } = {}) {
+    const guardKeys = [`ticket:${ticket}`];
+    const controller = acquire(guardKeys);
+    if (!controller) {
+      return fail(CONNECTION_OP_CODES.LOGIN_ALREADY_IN_PROGRESS);
+    }
+    const onExternalAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+    if (typeof prompt !== "string" || prompt.length === 0) {
+      return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
+    }
+    let workDir = null;
+    const startedAt = Date.now();
+    let execRegistered = false;
+    let completedOperationId = null;
+    const completeResolved = async () => {
+      if (!completedOperationId) return;
+      try {
+        await backend.completeOperation(completedOperationId, {
+          outcome: "consumed",
+        });
+      } catch {
+        // Completion is best-effort hygiene; the ticket TTL sweeps it.
+      }
+      completedOperationId = null;
+    };
+
+    // Ordered normalized events with arrival offsets — the probe's timing
+    // evidence (firstTextDeltaAt < completedAt) comes from these.
+    const streamEvents = [];
+    let deltaCount = 0;
+    let deltaChunkCount = 0;
+    let totalDeltaChars = 0;
+    let firstDeltaOffsetMs = null;
+    let lastDeltaOffsetMs = null;
+    let completedOffsetMs = null;
+    let terminalErrorCode = null;
+
+    const emit = (event) => {
+      const offsetMs = Date.now() - startedAt;
+      if (
+        event.type === "text-delta" &&
+        typeof event.delta === "string" &&
+        event.delta.length > 0
+      ) {
+        deltaCount += 1;
+        totalDeltaChars += event.delta.length;
+        if (firstDeltaOffsetMs === null) firstDeltaOffsetMs = offsetMs;
+        lastDeltaOffsetMs = offsetMs;
+      } else if (event.type === "completed") {
+        completedOffsetMs = offsetMs;
+      } else if (event.type === "error") {
+        terminalErrorCode = event.code;
+      }
+      streamEvents.push({ ...event, offsetMs });
+      // Observers are never called after abort — a late delta must not be
+      // presented as delivered content.
+      if (typeof onEvent === "function" && !controller.signal.aborted) {
+        try {
+          onEvent(event);
+        } catch {
+          // An observer failure must never break the run.
+        }
+      }
+    };
+
+    const streamStats = (extra) => ({
+      deltaCount,
+      deltaChunkCount,
+      totalDeltaChars,
+      firstDeltaOffsetMs,
+      lastDeltaOffsetMs,
+      completedOffsetMs,
+      eventCount: streamEvents.length,
+      ...(extra || {}),
+    });
+
+    try {
+      const resolved = await resolveOperation(
+        ticket,
+        "executeText",
+        connectionId,
+      );
+      if (resolved.error) return resolved.error;
+      const { adapter, connection } = resolved;
+      completedOperationId = resolved.resolved.operationId;
+
+      if (connection.status === "REAUTH_REQUIRED") {
+        return fail(CONNECTION_OP_CODES.REAUTH_REQUIRED);
+      }
+      if (connection.status === "DISCONNECTED") {
+        return fail(CONNECTION_OP_CODES.CONNECTION_DISCONNECTED);
+      }
+      if (connection.status !== "CONNECTED") {
+        return fail(CONNECTION_OP_CODES.CONNECTION_ERROR);
+      }
+
+      const execCaps = getAccountRuntimeCapabilities(adapter.backendKind);
+      if (!execCaps?.execution?.localOneShot) {
+        return fail(CONNECTION_OP_CODES.PERMISSION_BOUNDARY_NOT_READY);
+      }
+      // The adapter must actually expose a streaming path — a missing hook
+      // is a mechanism gap, not a verification gap.
+      if (
+        typeof adapter.buildStreamingInvocation !== "function" ||
+        typeof adapter.createStreamParser !== "function"
+      ) {
+        return fail("STREAM_PROTOCOL_UNSUPPORTED");
+      }
+      // Business gate (verificationProbe bypasses — in-process only, same
+      // contract as the structured-output probe): streaming must be a
+      // verified capability of the runtime version actually installed.
+      if (
+        verificationProbe !== true &&
+        (execCaps.execution.streaming !== true ||
+          execCaps.execution.streamingVerification !== "PASS")
+      ) {
+        return fail("STREAMING_NOT_VERIFIED");
+      }
+
+      execAcquire(connection.id);
+      execRegistered = true;
+
+      const runtime = resolveRuntime(adapter);
+      if (runtime.error) return runtime.error;
+      if (
+        verificationProbe !== true &&
+        runtime.version !== execCaps.execution.streamingVerifiedRuntimeVersion
+      ) {
+        return fail("STREAMING_NOT_VERIFIED");
+      }
+      const profileDir = profileManager.ensureProfile(
+        connection.runtimeProfileRef,
+      );
+
+      if (typeof adapter.prepareSession === "function") {
+        await adapter.prepareSession({
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          runner,
+          timeoutMs: statusTimeoutMs,
+          signal: controller.signal,
+        });
+      }
+
+      let execModel = model;
+      if (typeof adapter.resolveSmokeModel === "function") {
+        const resolvedModel = await adapter.resolveSmokeModel({
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          runner,
+          timeoutMs: modelsTimeoutMs,
+          signal: controller.signal,
+          model,
+        });
+        if (resolvedModel.error) {
+          return fail(resolvedModel.error);
+        }
+        execModel = resolvedModel.model;
+      }
+
+      const execRoot = execWorkRoot || smokeWorkRoot;
+      fs.mkdirSync(execRoot, { recursive: true });
+      workDir = fs.mkdtempSync(
+        path.join(execRoot, `${adapter.backendKind.toLowerCase()}-stream-`),
+      );
+      const invocation = adapter.buildStreamingInvocation({
+        executablePath: runtime.executable,
+        profileDir,
+        baseEnv: deps.env,
+        workingDirectory: workDir,
+        model: execModel,
+        prompt,
+      });
+      const parser = adapter.createStreamParser();
+      const result = await runner({
+        ...invocation,
+        timeoutMs: Math.min(
+          Math.max(timeoutMs ?? execTimeoutMs, 1_000),
+          EXEC_MAX_TIMEOUT_MS,
+        ),
+        signal: controller.signal,
+        binaryStdout: true,
+        onStdout: (chunk) => {
+          // Once aborted, late chunks are drained but never parsed into
+          // delivered events.
+          if (controller.signal.aborted) return;
+          let producedDelta = false;
+          for (const event of parser.push(chunk)) {
+            if (
+              event.type === "text-delta" &&
+              typeof event.delta === "string" &&
+              event.delta.length > 0
+            ) {
+              producedDelta = true;
+            }
+            emit(event);
+          }
+          if (producedDelta) deltaChunkCount += 1;
+        },
+      });
+      // Flush the parser only for a run that actually completed — abort and
+      // timeout leave the stream terminal without a completed event.
+      if (!result.aborted && !controller.signal.aborted) {
+        for (const event of parser.finish()) emit(event);
+      }
+      const parserStats =
+        typeof parser.stats === "function" ? parser.stats() : {};
+      await completeResolved();
+
+      if (result.aborted || controller.signal.aborted) {
+        // Terminal abort event is recorded and delivered even though the
+        // controller is aborted — deltas are suppressed, the terminal
+        // state is not.
+        const abortEvent = {
+          type: "error",
+          code: "ABORTED",
+          offsetMs: Date.now() - startedAt,
+        };
+        streamEvents.push(abortEvent);
+        if (typeof onEvent === "function") {
+          try {
+            onEvent(abortEvent);
+          } catch {
+            // An observer failure must never break the run.
+          }
+        }
+        return {
+          ok: false,
+          code: "ABORTED",
+          stream: streamStats({ ...parserStats, aborted: true }),
+        };
+      }
+      if (result.timedOut) {
+        return {
+          ok: false,
+          code: CONNECTION_OP_CODES.AI_EXECUTION_TIMEOUT,
+          stream: streamStats(parserStats),
+        };
+      }
+      if (result.error || result.exitCode !== 0) {
+        diag({
+          operation: "executeTextStream",
+          exitCode: result.exitCode,
+        });
+        return {
+          ok: false,
+          code: CONNECTION_OP_CODES.INFERENCE_FAILED,
+          stream: streamStats(parserStats),
+        };
+      }
+      if (terminalErrorCode) {
+        diag({
+          operation: "executeTextStream",
+          code: terminalErrorCode,
+        });
+        return {
+          ok: false,
+          code:
+            terminalErrorCode === "STREAM_COMPLETION_INCONSISTENT"
+              ? "STREAM_COMPLETION_INCONSISTENT"
+              : CONNECTION_OP_CODES.INFERENCE_FAILED,
+          stream: streamStats(parserStats),
+        };
+      }
+
+      // Deterministic reconstruction: the delta concatenation must equal
+      // the canonical final text — the vendor terminal text when the
+      // protocol carries one, else the adapter's extracted text, else the
+      // concatenation itself (the vendor emitted no separate envelope).
+      const deltaText = streamEvents
+        .filter((e) => e.type === "text-delta")
+        .map((e) => e.delta)
+        .join("");
+      const completedEvent = [...streamEvents]
+        .reverse()
+        .find((e) => e.type === "completed");
+      let canonical =
+        typeof completedEvent?.text === "string" ? completedEvent.text : null;
+      if (canonical === null) {
+        const extracted = adapter.extractText({ result, workDir });
+        if (
+          !extracted?.reportedError &&
+          typeof extracted?.text === "string" &&
+          extracted.text.length > 0
+        ) {
+          canonical = extracted.text;
+        }
+      }
+      let reconstruction;
+      if (canonical === null) {
+        reconstruction = deltaText.length > 0 ? "DELTA_ONLY" : "NONE";
+      } else if (deltaText === canonical) {
+        reconstruction = "MATCH";
+      } else if (deltaText.trim() === canonical.trim()) {
+        // Whitespace-only difference — a canonicalization artifact of the
+        // vendor envelope, not a reconstruction failure.
+        reconstruction = "MATCH_TRIMMED";
+      } else {
+        reconstruction = "MISMATCH";
+      }
+      if (reconstruction === "MISMATCH") {
+        diag({ operation: "executeTextStream", code: "RECONSTRUCTION_MISMATCH" });
+        return {
+          ok: false,
+          code: "STREAM_COMPLETION_INCONSISTENT",
+          stream: streamStats({ ...parserStats, reconstruction }),
+        };
+      }
+      const text = canonical !== null ? canonical : deltaText;
+      if (!text) {
+        return {
+          ok: false,
+          code: CONNECTION_OP_CODES.INFERENCE_FAILED,
+          stream: streamStats({ ...parserStats, reconstruction }),
+        };
+      }
+      return {
+        ok: true,
+        text,
+        provider: connection.provider,
+        backendKind: adapter.backendKind,
+        model: execModel,
+        connectionId: connection.id,
+        runtimeVersion: runtime.version,
+        durationMs: Date.now() - startedAt,
+        stream: streamStats({
+          ...parserStats,
+          reconstruction,
+          mechanism: adapter.streamMechanism ?? null,
+          aborted: false,
+        }),
+      };
+    } finally {
+      if (signal) signal.removeEventListener("abort", onExternalAbort);
+      if (execRegistered) execRelease(connectionId);
+      release(guardKeys);
+      await completeResolved();
+      if (workDir) {
+        fs.rmSync(workDir, { recursive: true, force: true });
+      }
+    }
+  }
+
   function cancelOperation({ ticket, connectionId } = {}) {
     const keys = [];
     if (typeof ticket === "string" && ticket) keys.push(`ticket:${ticket}`);
@@ -1106,6 +1482,7 @@ function createConnectionService({
     listModels,
     runSmoke,
     executeText,
+    executeTextStream,
   };
 }
 

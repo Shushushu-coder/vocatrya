@@ -237,17 +237,16 @@ describe("execution seam contract", () => {
     ).toEqual({ ready: false, code: "UNSUPPORTED_BACKEND" });
   });
 
-  it("readies no runtime for streaming today — PENDING is not permission", () => {
-    // The desktop matrix is the source of truth: every implemented
-    // runtime records a candidate delta mechanism but none has completed
-    // a managed streaming run, so streaming consumers fail closed.
+  it("gates streaming on real verification — PENDING is not permission", () => {
+    // The desktop matrix is the source of truth: the five runtimes that
+    // never completed a managed streaming run fail closed, while Devin's
+    // verified PASS is bound to the probed runtime version.
     for (const backendKind of [
       "CODEX_RUNTIME",
       "CLAUDE_RUNTIME",
       "OPENCODE_RUNTIME",
       "GROK_RUNTIME",
       "CURSOR_RUNTIME",
-      "DEVIN_RUNTIME",
     ]) {
       expect(
         checkStreamingExecutionReadiness({
@@ -258,6 +257,31 @@ describe("execution seam contract", () => {
         backendKind,
       ).toEqual({ ready: false, code: "STREAMING_NOT_SUPPORTED" });
     }
+    // Devin passed managed delta verification on 3000.10.31: ready only
+    // when the installed binary matches the verified version.
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("DEVIN_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+        runtimeVersion: "3000.10.31",
+      }),
+    ).toEqual({ ready: true });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("DEVIN_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+        runtimeVersion: "3000.10.32",
+      }),
+    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("DEVIN_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
     expect(
       checkStreamingExecutionReadiness({
         capabilities: cap("COPILOT_RUNTIME"),
@@ -281,6 +305,7 @@ describe("execution seam contract", () => {
         ...cap("CODEX_RUNTIME").execution,
         streaming: true,
         streamingVerification: "PASS",
+        streamingVerifiedRuntimeVersion: "0.154.0",
       },
     };
     expect(
@@ -288,13 +313,48 @@ describe("execution seam contract", () => {
         capabilities: streamingCapable,
         connectionStatus: "CONNECTED",
         permissionScope: "TEXT_ONLY",
+        runtimeVersion: "0.154.0",
       }),
     ).toEqual({ ready: true });
+    // The PASS is bound to the probed version — drift or absence is never
+    // a silent accept.
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: streamingCapable,
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+        runtimeVersion: "0.155.0",
+      }),
+    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: streamingCapable,
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
+    // streaming:true without a PASS verdict is unverified, not supported.
+    const pendingCapable = {
+      ...streamingCapable,
+      execution: {
+        ...streamingCapable.execution,
+        streamingVerification: "PENDING",
+      },
+    };
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: pendingCapable,
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+        runtimeVersion: "0.154.0",
+      }),
+    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
     expect(
       checkStreamingExecutionReadiness({
         capabilities: streamingCapable,
         connectionStatus: "REAUTH_REQUIRED",
         permissionScope: "TEXT_ONLY",
+        runtimeVersion: "0.154.0",
       }),
     ).toEqual({ ready: false, code: "REAUTH_REQUIRED" });
     expect(
@@ -302,6 +362,7 @@ describe("execution seam contract", () => {
         capabilities: streamingCapable,
         connectionStatus: "DISCONNECTED",
         permissionScope: "TEXT_ONLY",
+        runtimeVersion: "0.154.0",
       }),
     ).toEqual({ ready: false, code: "AUTH_NOT_CONFIRMED" });
     expect(
@@ -309,6 +370,7 @@ describe("execution seam contract", () => {
         capabilities: streamingCapable,
         connectionStatus: "CONNECTED",
         permissionScope: "USER_SELECTED_FILES_READ",
+        runtimeVersion: "0.154.0",
       }),
     ).toEqual({ ready: false, code: "PERMISSION_BOUNDARY_NOT_READY" });
   });

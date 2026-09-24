@@ -147,6 +147,7 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       streaming: false,
       streamingVerification: VERIFICATION_STATES.PENDING,
       streamingMechanism: "codex exec --json",
+      streamingVerifiedRuntimeVersion: null,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.STRONG_SANDBOX,
@@ -196,13 +197,15 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       localOneShot: true,
       acp: true,
-      // `claude -p --output-format stream-json --verbose` is the CLI's
-      // NDJSON assistant-delta mode; not yet exercised through the managed
-      // locked-down print invocation.
+      // `claude -p --output-format stream-json --verbose
+      // --include-partial-messages` is the CLI's NDJSON assistant-delta
+      // mode (verified in --help on 2.1.203); not yet exercised through
+      // the managed locked-down print invocation.
       streaming: false,
       streamingVerification: VERIFICATION_STATES.PENDING,
       streamingMechanism:
-        "claude -p --output-format stream-json --verbose",
+        "claude -p --output-format stream-json --verbose --include-partial-messages",
+      streamingVerifiedRuntimeVersion: null,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -267,6 +270,7 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       streaming: false,
       streamingVerification: VERIFICATION_STATES.PENDING,
       streamingMechanism: "opencode run --format json",
+      streamingVerifiedRuntimeVersion: null,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -318,13 +322,16 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       localOneShot: true,
       acp: true,
-      // `grok -p --output-format json` is a post-run envelope — no
-      // streaming flag is verified on 1.0.41. The ACP session/update
-      // channel (session-scoped, not a print invocation) is the candidate
-      // delta path.
+      // `grok -p --output-format streaming-messages-json
+      // --include-partial-messages` is a direct print-mode delta channel
+      // (verified in --help on 1.0.41 — emits incremental stream_event
+      // lines in the Anthropic Messages wire format); not yet exercised
+      // through the managed locked-down invocation.
       streaming: false,
       streamingVerification: VERIFICATION_STATES.PENDING,
-      streamingMechanism: "ACP session/update",
+      streamingMechanism:
+        "grok -p --output-format streaming-messages-json --include-partial-messages",
+      streamingVerifiedRuntimeVersion: null,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -389,11 +396,14 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       localOneShot: true,
       acp: true,
-      // `agent -p --output-format json` is a {type:"result"} envelope; a
-      // stream-json mode is not verified on 2026.09.18-9a7762b.
+      // `agent -p --output-format streaming-json` exists on
+      // 2026.09.18-9a7762b (verified in --help — "one ACP session update
+      // per line"); whether it delivers consumable assistant-text deltas
+      // inside the managed invocation is unverified.
       streaming: false,
       streamingVerification: VERIFICATION_STATES.PENDING,
-      streamingMechanism: "agent -p --output-format stream-json",
+      streamingMechanism: "agent -p --output-format streaming-json",
+      streamingVerifiedRuntimeVersion: null,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -455,12 +465,17 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       // `devin -p` under --permission-mode auto in a Vocatrya temp cwd.
       localOneShot: true,
       acp: true,
-      // `devin -p` writes plain stdout text; whether tokens flush
-      // incrementally is unverified. The ACP session/update channel is the
-      // candidate structured-delta path.
-      streaming: false,
-      streamingVerification: VERIFICATION_STATES.PENDING,
-      streamingMechanism: "ACP session/update",
+      // VERIFIED_DELTA_STREAMING (managed E2E, devin 3000.10.31,
+      // scripts/runtime-streaming-probe.mts): `devin -p` flushes
+      // assistant text incrementally on stdout — P2 produced 307 deltas
+      // across 307 deliveries over ~17s with the first delta ~6s before
+      // process exit; abort terminates the child with no late deltas.
+      // `devin acp` (session/update over stdio) remains an unverified
+      // structured-delta fallback.
+      streaming: true,
+      streamingVerification: VERIFICATION_STATES.PASS,
+      streamingMechanism: "devin -p",
+      streamingVerifiedRuntimeVersion: "3000.10.31",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -520,6 +535,7 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       streaming: false,
       streamingVerification: VERIFICATION_STATES.NOT_APPLICABLE,
       streamingMechanism: null,
+      streamingVerifiedRuntimeVersion: null,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.NOT_READY,

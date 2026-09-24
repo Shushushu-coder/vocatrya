@@ -9,6 +9,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { serializeInlineSchema } = require("./structured-schema");
+const { createAnthropicStreamParser } = require("./streaming");
 const { getRuntimeDefinition } = require("./registry");
 const {
   buildRuntimeInvocationArgs,
@@ -208,6 +209,22 @@ function buildClaudePrintInvocation({
     cwd: workingDirectory,
     env: claudeEnv({ profileDir, baseEnv }),
   };
+}
+
+// Streaming variant of the locked-down print invocation (claude 2.1.203):
+// `--output-format stream-json` switches stdout to NDJSON events and
+// `--verbose` is required for it; `--include-partial-messages` emits
+// incremental stream_event lines carrying real text deltas. Every safety
+// flag of the plain print invocation is preserved unchanged.
+function buildClaudeStreamingInvocation(args) {
+  const invocation = buildClaudePrintInvocation(args);
+  const nextArgs = invocation.args.slice();
+  const formatIndex = nextArgs.indexOf("--output-format");
+  if (formatIndex === -1) return invocation;
+  nextArgs[formatIndex + 1] = "stream-json";
+  const promptIndex = nextArgs.length - 1;
+  nextArgs.splice(promptIndex, 0, "--verbose", "--include-partial-messages");
+  return { ...invocation, args: nextArgs };
 }
 
 // NATIVE_JSON_SCHEMA (claude 2.1.203): `claude -p --output-format json
@@ -499,6 +516,17 @@ const claudeAdapter = {
     });
   },
 
+  // Streaming TEXT_ONLY — the locked-down print invocation switched to
+  // NDJSON (`--output-format stream-json --verbose
+  // --include-partial-messages`); the parser consumes stream_event text
+  // deltas and the result envelope.
+  buildStreamingInvocation(args) {
+    return buildClaudeStreamingInvocation(args);
+  },
+  createStreamParser: createAnthropicStreamParser,
+  streamMechanism:
+    "claude -p --output-format stream-json --verbose --include-partial-messages",
+
   // NATIVE_JSON_SCHEMA — `claude -p --json-schema <schema>`; the schema is
   // an inline argv element, never a caller-supplied path.
   buildStructuredInvocation(args) {
@@ -523,6 +551,7 @@ module.exports = {
   buildClaudeLoginInvocation,
   buildClaudeLogoutInvocation,
   buildClaudePrintInvocation,
+  buildClaudeStreamingInvocation,
   buildClaudeStructuredInvocation,
   buildClaudeStatusInvocation,
   claudeAdapter,

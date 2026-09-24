@@ -14,6 +14,7 @@ const {
   buildRuntimeProcessEnvironment,
 } = require("./environment");
 const { classifyAuthProbeOutput } = require("./auth-probe");
+const { createCodexStreamParser } = require("./streaming");
 
 const CODEX_BACKEND_KIND = "CODEX_RUNTIME";
 
@@ -161,6 +162,8 @@ function buildCodexModelsInvocation({
 // a Vocatrya-owned working directory, no session persistence, no git
 // requirement. The last agent message is written to outputFile inside that
 // directory so callers never scrape the human-readable log.
+// jsonEvents adds `--json` — the JSONL run-event stream on stdout that the
+// streaming parser consumes; -o still carries the canonical final message.
 function buildCodexExecInvocation({
   executablePath,
   profileDir,
@@ -168,6 +171,7 @@ function buildCodexExecInvocation({
   workingDirectory,
   outputFile,
   outputSchemaFile,
+  jsonEvents = false,
   model,
   prompt,
 }) {
@@ -184,6 +188,9 @@ function buildCodexExecInvocation({
     "-o",
     outputFile,
   ];
+  if (jsonEvents) {
+    args.push("--json");
+  }
   // `codex exec --output-schema <file>` (codex-cli 0.154.0) constrains the
   // model's final response shape; the conforming JSON lands in -o
   // outputFile like any other exec result.
@@ -403,6 +410,31 @@ const codexAdapter = {
       prompt,
     });
   },
+
+  // Streaming TEXT_ONLY — the same locked-down exec plus `--json`: stdout
+  // becomes the JSONL run-event stream while -o still carries the
+  // canonical final message for reconstruction checks.
+  buildStreamingInvocation({
+    executablePath,
+    profileDir,
+    baseEnv,
+    workingDirectory,
+    model,
+    prompt,
+  }) {
+    return buildCodexExecInvocation({
+      executablePath,
+      profileDir,
+      baseEnv,
+      workingDirectory,
+      outputFile: path.join(workingDirectory, "last-message.txt"),
+      jsonEvents: true,
+      model,
+      prompt,
+    });
+  },
+  createStreamParser: createCodexStreamParser,
+  streamMechanism: "codex exec --json",
 
   // NATIVE_JSON_SCHEMA: the schema object is serialized into a
   // Vocatrya-owned file inside the fresh exec workDir — caller-supplied
