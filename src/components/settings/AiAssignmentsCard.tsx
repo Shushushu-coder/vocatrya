@@ -27,6 +27,10 @@ import {
 } from "@/actions/aiAssignment.actions";
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
 import type { BusinessAssignmentSummary } from "@/lib/ai/assignments";
+import {
+  checkStructuredOutputReadiness,
+  type AccountRuntimeCapabilities,
+} from "@/lib/ai/runtime/capabilities";
 
 // Purposes editable this phase. INTERVIEW stays a read-only legacy row —
 // the resolver supports an INTERVIEW assignment, but actual interview
@@ -57,6 +61,12 @@ const ERROR_KEY: Record<string, string> = {
     "settings.aiAssignErrUnsupportedCombination",
   MODEL_UNAVAILABLE: "settings.aiAssignErrModelRequired",
 };
+
+// Purposes whose execution path is structured output. Connections whose
+// runtime has not passed managed structured verification are marked (and
+// rejected on save) for these purposes only — they remain fully usable for
+// TEXT_ONLY purposes like MATCH_ANALYSIS. Interview is not migrated yet.
+const STRUCTURED_PURPOSES = new Set<string>(["RESUME"]);
 
 type Draft = { connectionId: string; model: string };
 
@@ -104,6 +114,11 @@ function AiAssignmentsCard() {
   const [catalogBusy, setCatalogBusy] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [interview, setInterview] = useState<InterviewResolution | null>(null);
+  // backendKind → structured-output readiness. Empty map = bridge absent
+  // (plain web/dev) — marking is skipped; execution still fails closed.
+  const [runtimeCaps, setRuntimeCaps] = useState<
+    Record<string, AccountRuntimeCapabilities>
+  >({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,6 +128,19 @@ function AiAssignmentsCard() {
         listBusinessAiAssignments(),
         resolveBusinessAiConfig({ purpose: "INTERVIEW" }),
       ]);
+      const runtime = window.vocatryaRuntime;
+      if (runtime) {
+        try {
+          const runtimes = await runtime.list();
+          const next: Record<string, AccountRuntimeCapabilities> = {};
+          for (const entry of runtimes) {
+            if (entry.capabilities) next[entry.backendKind] = entry.capabilities;
+          }
+          setRuntimeCaps(next);
+        } catch {
+          // Capability lookup is advisory — never block the card on it.
+        }
+      }
       if (connResult.success && connResult.data) {
         setConnections(connResult.data);
       }
@@ -182,11 +210,30 @@ function AiAssignmentsCard() {
     [t],
   );
 
+  // null = unknown (no desktop bridge); true/false = verified verdict.
+  const structuredReady = (connection: ConnectionSummary): boolean | null => {
+    const caps = runtimeCaps[connection.backendKind];
+    if (!caps) return null;
+    return checkStructuredOutputReadiness({ capabilities: caps }).startsWith(
+      "ELIGIBLE",
+    );
+  };
+
   const save = async (purpose: string) => {
     const draft = drafts[purpose];
     if (!draft?.connectionId || !draft.model.trim()) {
       toastError(t("settings.aiAssignErrModelRequired"));
       return;
+    }
+    // Structured purposes reject connections on runtimes whose structured
+    // output is not verified — saving a known-unrunnable assignment would
+    // surface later as a confusing execution failure.
+    if (STRUCTURED_PURPOSES.has(purpose)) {
+      const connection = connections.find((c) => c.id === draft.connectionId);
+      if (connection && structuredReady(connection) === false) {
+        toastError(t("settings.aiAssignStructuredNotVerified"));
+        return;
+      }
     }
     setBusy(`save:${purpose}`);
     try {
@@ -252,10 +299,16 @@ function AiAssignmentsCard() {
       !!draft.model.trim() &&
       (saved?.connectionId !== draft.connectionId ||
         saved?.model !== draft.model.trim());
+    const isStructuredPurpose = STRUCTURED_PURPOSES.has(purpose);
 
     return (
       <section key={purpose} className="rounded-md border p-3 space-y-3">
         <h4 className="font-medium">{t(PURPOSE_LABEL_KEY[purpose])}</h4>
+        {isStructuredPurpose && (
+          <p className="text-xs text-muted-foreground">
+            {t("settings.aiAssignStructuredHint")}
+          </p>
+        )}
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[240px]">
             <Label className="text-xs text-muted-foreground">
@@ -274,11 +327,23 @@ function AiAssignmentsCard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {connections.map((connection) => (
-                    <SelectItem key={connection.id} value={connection.id}>
-                      {connectionLabel(connection)}
-                    </SelectItem>
-                  ))}
+                  {connections.map((connection) => {
+                    const eligible = isStructuredPurpose
+                      ? structuredReady(connection)
+                      : null;
+                    return (
+                      <SelectItem
+                        key={connection.id}
+                        value={connection.id}
+                        disabled={eligible === false}
+                      >
+                        {connectionLabel(connection)}
+                        {eligible === false
+                          ? ` — ${t("settings.aiAssignStructuredNotVerified")}`
+                          : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectGroup>
               </SelectContent>
             </Select>

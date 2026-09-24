@@ -235,6 +235,11 @@ export const AI_CONNECTION_OP_ERROR_CODES = {
   // A structuredOutput probe payload could not be carried by the runtime's
   // invocation (e.g. an inline schema over the command-line budget).
   STRUCTURED_OUTPUT_UNSUPPORTED: "STRUCTURED_OUTPUT_UNSUPPORTED",
+  // The runtime's structured-output mechanism has not completed real
+  // managed verification, or the installed version no longer matches the
+  // verifiedRuntimeVersion that passed. Structured business consumers
+  // fail closed — PENDING is not permission.
+  STRUCTURED_OUTPUT_NOT_VERIFIED: "STRUCTURED_OUTPUT_NOT_VERIFIED",
 } as const;
 export type AIConnectionOpErrorCode =
   (typeof AI_CONNECTION_OP_ERROR_CODES)[keyof typeof AI_CONNECTION_OP_ERROR_CODES];
@@ -285,6 +290,17 @@ export const AI_BUSINESS_ERROR_CODES = {
   // The desktop could not reach the backend to redeem the ticket — a
   // transport failure, distinct from runtime/connection failures.
   BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
+  // Structured-execution outcomes. NOT_VERIFIED travels up from the
+  // desktop gate (runtime eligibility/version); the rest are produced by
+  // the strict validation state machine (parse → schema → ≤1 retry).
+  STRUCTURED_OUTPUT_NOT_VERIFIED: "STRUCTURED_OUTPUT_NOT_VERIFIED",
+  STRUCTURED_OUTPUT_UNSUPPORTED: "STRUCTURED_OUTPUT_UNSUPPORTED",
+  STRUCTURED_OUTPUT_PARSE_FAILED: "STRUCTURED_OUTPUT_PARSE_FAILED",
+  STRUCTURED_OUTPUT_SCHEMA_FAILED: "STRUCTURED_OUTPUT_SCHEMA_FAILED",
+  STRUCTURED_OUTPUT_NATIVE_SCHEMA_VIOLATION:
+    "STRUCTURED_OUTPUT_NATIVE_SCHEMA_VIOLATION",
+  STRUCTURED_OUTPUT_TRUNCATED: "STRUCTURED_OUTPUT_TRUNCATED",
+  STRUCTURED_OUTPUT_RETRY_EXHAUSTED: "STRUCTURED_OUTPUT_RETRY_EXHAUSTED",
 } as const;
 export type AIBusinessErrorCode =
   (typeof AI_BUSINESS_ERROR_CODES)[keyof typeof AI_BUSINESS_ERROR_CODES];

@@ -98,6 +98,11 @@ const CONNECTION_OP_CODES = Object.freeze({
   // The structuredOutput payload could not be carried by this runtime's
   // invocation (e.g. inline schema exceeds the command-line budget).
   STRUCTURED_OUTPUT_UNSUPPORTED: "STRUCTURED_OUTPUT_UNSUPPORTED",
+  // The runtime's structured-output mechanism has not completed real
+  // managed verification (or the verified version no longer matches the
+  // installed one). Business structured consumers fail closed here —
+  // capability metadata decides, never a caller-supplied backend kind.
+  STRUCTURED_OUTPUT_NOT_VERIFIED: "STRUCTURED_OUTPUT_NOT_VERIFIED",
 });
 
 function createConnectionService({
@@ -828,12 +833,18 @@ function createConnectionService({
   // adapter's locked-down one-shot invocation as a plain args element in a
   // fresh Vocatrya-owned temp cwd. No install, login, reconnect, file
   // access, or working-directory override is possible from here.
+  // `verificationProbe` is an in-process-only flag for the structured-output
+  // validation harness (scripts/structured-output-probe.mts) — it lets the
+  // probe exercise runtimes whose structuredOutput.verification is still
+  // PENDING. It is deliberately NOT part of the HTTP contract: execute-server
+  // never forwards it, so backend business calls always run the gate.
   async function executeText({
     ticket,
     connectionId,
     model,
     prompt,
     structuredOutput,
+    verificationProbe = false,
     timeoutMs,
     signal,
   } = {}) {
@@ -895,11 +906,42 @@ function createConnectionService({
         return fail(CONNECTION_OP_CODES.PERMISSION_BOUNDARY_NOT_READY);
       }
 
+      // Structured-output freeze: a business structured request may only
+      // run on a runtime whose mechanism completed real managed
+      // verification (verification === "PASS") for the version actually
+      // installed. PENDING/FAIL/UNSUPPORTED runtimes — including ones
+      // whose adapter mechanically supports a schema flag — are refused
+      // here at the trusted boundary. Only the in-process verification
+      // probe may bypass this.
+      const structuredCaps = structuredOutput
+        ? execCaps?.structuredOutput
+        : null;
+      if (
+        structuredOutput &&
+        verificationProbe !== true &&
+        (!structuredCaps ||
+          structuredCaps.strategy === "UNSUPPORTED" ||
+          structuredCaps.verification !== "PASS")
+      ) {
+        return fail(CONNECTION_OP_CODES.STRUCTURED_OUTPUT_NOT_VERIFIED);
+      }
+
       execAcquire(connection.id);
       execRegistered = true;
 
       const runtime = resolveRuntime(adapter);
       if (runtime.error) return runtime.error;
+
+      // The verified structured contract is bound to the probed version —
+      // a different installed version is an unverified surface, never a
+      // silent accept and never an automatic update.
+      if (
+        structuredOutput &&
+        verificationProbe !== true &&
+        runtime.version !== structuredCaps.verifiedRuntimeVersion
+      ) {
+        return fail(CONNECTION_OP_CODES.STRUCTURED_OUTPUT_NOT_VERIFIED);
+      }
       const profileDir = profileManager.ensureProfile(
         connection.runtimeProfileRef,
       );

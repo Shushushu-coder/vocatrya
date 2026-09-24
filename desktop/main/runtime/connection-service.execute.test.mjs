@@ -265,11 +265,17 @@ describe("executeText structuredOutput contract", () => {
     properties: { name: { type: "string" } },
     required: ["name"],
   };
+  // These transport-contract tests exercise the schema mechanism itself —
+  // the in-process verificationProbe flag bypasses the business
+  // verification gate the same way scripts/structured-output-probe.mts
+  // does (the HTTP endpoint can never set it).
+  const PROBE = { verificationProbe: true };
 
   it("native runtime (codex): schema rides --output-schema inside the fresh workDir", async () => {
     runnerScript = happyExec();
     const result = await exec({
       structuredOutput: { schema: SCHEMA, schemaName: "VocatryaProbe" },
+      ...PROBE,
     });
     expect(result.ok).toBe(true);
     expect(result.structuredStrategy).toBe("NATIVE_JSON_SCHEMA");
@@ -320,6 +326,7 @@ describe("executeText structuredOutput contract", () => {
       model: "openai/gpt-5.5",
       prompt: "task",
       structuredOutput: { schema: SCHEMA, schemaName: "VocatryaProbe" },
+      verificationProbe: true,
     });
     expect(result.ok).toBe(true);
     expect(result.structuredStrategy).toBe("PROMPT_AND_VALIDATE");
@@ -330,6 +337,123 @@ describe("executeText structuredOutput contract", () => {
   });
 
   it("plain TEXT_ONLY requests carry no structuredStrategy", async () => {
+    runnerScript = happyExec();
+    const result = await exec();
+    expect(result.ok).toBe(true);
+    expect(result.structuredStrategy).toBeNull();
+  });
+});
+
+describe("executeText structured verification gate", () => {
+  const SCHEMA = {
+    type: "object",
+    properties: { name: { type: "string" } },
+    required: ["name"],
+  };
+  const STRUCTURED = { schema: SCHEMA, schemaName: "VocatryaProbe" };
+
+  function devinService(version = "3000.10.31") {
+    backend.resolveTicket.mockResolvedValue(
+      resolveOk({
+        backendKind: "DEVIN_RUNTIME",
+        connection: connectionRow({
+          backendKind: "DEVIN_RUNTIME",
+          provider: "DEVIN",
+          displayName: "Devin",
+        }),
+      }),
+    );
+    return createConnectionService({
+      profilesRoot,
+      smokeWorkRoot,
+      execWorkRoot,
+      backend,
+      deps: {
+        platform: "win32",
+        env: { PATH: "C:\\Windows" },
+        existsSyncImpl: (p) => p === FAKE_EXE,
+        spawnSyncImpl: (cmd) =>
+          cmd === "where.exe"
+            ? { status: 0, stdout: `${FAKE_EXE}\r\n` }
+            : { status: 0, stdout: `devin ${version}\n`, stderr: "" },
+        runner: vi.fn(runnerImpl),
+      },
+    });
+  }
+
+  function devinExec(svc, overrides = {}) {
+    return svc.executeText({
+      ticket: "t",
+      connectionId: "conn-1",
+      model: "claude-opus-5-5-medium",
+      prompt: "task",
+      structuredOutput: STRUCTURED,
+      ...overrides,
+    });
+  }
+
+  it("refuses structured execution on a PENDING runtime (no bypass flag)", async () => {
+    runnerScript = happyExec();
+    const result = await exec({ structuredOutput: STRUCTURED });
+    expect(result).toEqual({
+      ok: false,
+      code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
+    });
+    // The gate fires before any exec invocation — the model is never run.
+    expect(invocations.find((i) => i.args.includes("exec"))).toBeUndefined();
+  });
+
+  it("verified Devin runtime + matching version runs PROMPT_AND_VALIDATE", async () => {
+    const svc = devinService("3000.10.31");
+    runnerScript = [
+      {
+        match: (h) => h.includes("whoami"),
+        respond: respond({ stdout: '{"org_id":"o1"}' }),
+      },
+      {
+        match: (h) => h.startsWith("-p"),
+        respond: respond({ stdout: '{"name":"x"}' }),
+      },
+    ];
+    const result = await devinExec(svc);
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe('{"name":"x"}');
+    expect(result.structuredStrategy).toBe("PROMPT_AND_VALIDATE");
+    const inv = invocations.find((i) => i.args[0] === "-p");
+    expect(inv.cwd.startsWith(execWorkRoot)).toBe(true);
+  });
+
+  it("refuses when the installed version differs from the verified one", async () => {
+    const svc = devinService("3000.10.30");
+    runnerScript = [
+      { match: (h) => h.startsWith("-p"), respond: respond({ stdout: "{}" }) },
+    ];
+    const result = await devinExec(svc);
+    expect(result).toEqual({
+      ok: false,
+      code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
+    });
+    expect(invocations.find((i) => i.args[0] === "-p")).toBeUndefined();
+  });
+
+  it("verificationProbe bypasses the gate (in-process harness only)", async () => {
+    const svc = devinService("3000.10.30");
+    runnerScript = [
+      {
+        match: (h) => h.includes("whoami"),
+        respond: respond({ exitCode: 1 }),
+      },
+      {
+        match: (h) => h.startsWith("-p"),
+        respond: respond({ stdout: '{"name":"x"}' }),
+      },
+    ];
+    const result = await devinExec(svc, { verificationProbe: true });
+    expect(result.ok).toBe(true);
+    expect(result.structuredStrategy).toBe("PROMPT_AND_VALIDATE");
+  });
+
+  it("unverified runtimes still serve plain TEXT_ONLY requests", async () => {
     runnerScript = happyExec();
     const result = await exec();
     expect(result.ok).toBe(true);

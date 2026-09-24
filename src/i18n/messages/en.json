@@ -1488,6 +1488,8 @@
     "aiAssignErrArchived": "Connection is archived.",
     "aiAssignErrUnsupportedCombination": "This account provider is not supported on that runtime.",
     "aiAssignErrModelRequired": "Select a connection and enter a model ID.",
+    "aiAssignStructuredHint": "Structured output requires a runtime verified for structured execution. Connections on unverified runtimes are marked and cannot be saved for this purpose.",
+    "aiAssignStructuredNotVerified": "Structured output is not yet verified for this runtime.",
     "apiKeysDescription": "Manage your API keys for AI providers and external services.",
     "apiKeysDescriptionSecure": "Manage your API keys for AI providers and external services. Keys are encrypted and stored securely.",
     "defaultPrefix": "Default: {value}",

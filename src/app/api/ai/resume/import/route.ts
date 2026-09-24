@@ -19,6 +19,11 @@ import {
   RESUME_IMPORT_SYSTEM_PROMPT,
   buildResumeImportPrompt,
 } from "@/lib/ai/prompts/resume-import";
+import { executeStructuredForAssignment } from "@/lib/ai/structured-execution";
+import {
+  RESUME_IMPORT_JSON_SCHEMA,
+  RESUME_IMPORT_SCHEMA_NAME,
+} from "@/lib/ai/resume-import/structured-schema";
 import {
   genAiRequestAttrs,
   genAiResponseAttrs,
@@ -28,6 +33,57 @@ import {
   startSpan,
   SURFACES,
 } from "@/lib/telemetry";
+
+// Configuration-layer failures (assignment unusable, runtime not verified
+// for structured output) are 409; transport unavailability is 503; a timed
+// out execution is 504; validation/execution failures are 502.
+const STRUCTURED_CONFIG_CODES = new Set([
+  "ASSIGNED_CONNECTION_UNAVAILABLE",
+  "REAUTH_REQUIRED",
+  "CONNECTION_DISCONNECTED",
+  "CONNECTION_ERROR",
+  "MODEL_UNAVAILABLE",
+  "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+  "STRUCTURED_OUTPUT_NOT_VERIFIED",
+]);
+
+function structuredErrorStatus(code: string): number {
+  if (STRUCTURED_CONFIG_CODES.has(code)) return 409;
+  if (code === "RUNTIME_NOT_AVAILABLE" || code === "BACKEND_UNAVAILABLE") {
+    return 503;
+  }
+  if (code === "AI_EXECUTION_TIMEOUT") return 504;
+  if (code === "AI_REQUEST_TOO_LARGE") return 413;
+  return 502;
+}
+
+function structuredErrorMessage(code: string): string {
+  switch (code) {
+    case "STRUCTURED_OUTPUT_NOT_VERIFIED":
+      return "The assigned AI runtime is not verified for structured output.";
+    case "STRUCTURED_OUTPUT_PARSE_FAILED":
+    case "STRUCTURED_OUTPUT_SCHEMA_FAILED":
+    case "STRUCTURED_OUTPUT_RETRY_EXHAUSTED":
+      return "The AI service returned data that did not match the expected format.";
+    case "STRUCTURED_OUTPUT_TRUNCATED":
+      return "The AI service output was truncated. Please try again.";
+    case "REAUTH_REQUIRED":
+      return "The assigned AI connection needs re-authentication.";
+    case "CONNECTION_DISCONNECTED":
+      return "The assigned AI connection is disconnected.";
+    case "ASSIGNED_CONNECTION_UNAVAILABLE":
+      return "The assigned AI connection is not available.";
+    case "MODEL_UNAVAILABLE":
+      return "The assigned AI model is not available.";
+    case "AI_EXECUTION_TIMEOUT":
+      return `AI request timed out after ${APP_CONSTANTS.AI_RESUME_IMPORT_TIMEOUT_MS / 1000} seconds. Please try again.`;
+    case "RUNTIME_NOT_AVAILABLE":
+    case "BACKEND_UNAVAILABLE":
+      return "Cannot connect to AI service. Please ensure the service is running.";
+    default:
+      return "AI request failed";
+  }
+}
 
 export const POST = async (req: NextRequest) => {
   const session = await auth();
@@ -47,7 +103,7 @@ export const POST = async (req: NextRequest) => {
     );
   }
 
-  let body: { resumeId: string; selectedModel: AiModel };
+  let body: { resumeId: string; selectedModel?: AiModel };
   try {
     body = await req.json();
   } catch {
@@ -58,9 +114,11 @@ export const POST = async (req: NextRequest) => {
   }
   const { resumeId, selectedModel } = body;
 
-  if (!resumeId || !selectedModel?.provider || !selectedModel?.model) {
+  // selectedModel is only required on the legacy API-key path — a resolved
+  // RESUME business assignment supplies its own connection + model.
+  if (!resumeId) {
     return NextResponse.json(
-      { error: "resumeId, provider, and model are required" },
+      { error: "resumeId is required" },
       { status: 400 },
     );
   }
@@ -114,23 +172,111 @@ export const POST = async (req: NextRequest) => {
     );
   }
 
+  const normalizedText = preprocessResult.data.normalizedText;
+
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    APP_CONSTANTS.AI_RESUME_IMPORT_TIMEOUT_MS,
+  );
+  req.signal.addEventListener("abort", () => controller.abort());
+
+  // Business Assignment path: a RESUME assignment (or GLOBAL_DEFAULT) runs
+  // the managed account runtime through the structured execution seam —
+  // strict schema validation with at most one repair retry. An explicit
+  // but broken/unverified assignment fails here; only NOT_CONFIGURED falls
+  // through to the legacy API-key path below.
+  const structuredSpan = startSpan("resume.import", {
+    "jobsync.surface": SURFACES.RESUME_IMPORT,
+    ...inputSizeAttrs({ resumeChars: normalizedText.length, truncated }),
+    "jobsync.user_id": userId,
+    "jobsync.resume_id": resumeId,
+  });
+
+  let structured;
+  try {
+    structured = await runInSpan(structuredSpan, () =>
+      executeStructuredForAssignment({
+        userId,
+        purpose: "RESUME",
+        prompt: `${RESUME_IMPORT_SYSTEM_PROMPT}\n\n${buildResumeImportPrompt(normalizedText)}`,
+        schema: RESUME_IMPORT_JSON_SCHEMA,
+        schemaName: RESUME_IMPORT_SCHEMA_NAME,
+        timeoutMs: APP_CONSTANTS.AI_RESUME_IMPORT_TIMEOUT_MS,
+        signal: controller.signal,
+      }),
+    );
+  } catch (error) {
+    // Resolver/transport-level throws land here — record the category only.
+    clearTimeout(timer);
+    structuredSpan.setError(error);
+    structuredSpan.end();
+    return NextResponse.json(
+      { error: "AI request failed", code: "AI_EXECUTION_FAILED" },
+      { status: 502 },
+    );
+  }
+
+  if (structured.status === "OK") {
+    clearTimeout(timer);
+    // Audit metadata only — never the raw prompt or model output.
+    structuredSpan.end({
+      "gen_ai.system": structured.provider,
+      "gen_ai.request.model": structured.resolvedModel,
+      "jobsync.ai.backend_kind": structured.backendKind,
+      "jobsync.ai.connection_id": structured.resolvedConnectionId,
+      "jobsync.ai.assignment_source": structured.assignmentSource,
+      "jobsync.structured.attempts": structured.attemptCount,
+      "jobsync.structured.retried": structured.retried,
+      "jobsync.structured.strategy":
+        structured.attempts[0]?.structuredStrategy ?? null,
+    });
+    // The managed seam is one-shot: the single validated object is emitted
+    // as one NDJSON line — the client takes the latest complete line.
+    return new Response(JSON.stringify(structured.value) + "\n", {
+      status: 200,
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "x-resume-import-truncated": String(truncated),
+      },
+    });
+  }
+
+  if (structured.status === "FAILED") {
+    clearTimeout(timer);
+    structuredSpan.end({
+      "jobsync.error_code": structured.code,
+      "jobsync.ai.connection_id":
+        structured.resolution?.status === "RESOLVED"
+          ? structured.resolution.connectionId
+          : null,
+      "jobsync.structured.attempts": structured.attempts.length,
+    });
+    return NextResponse.json(
+      {
+        error: structuredErrorMessage(structured.code),
+        code: structured.code,
+      },
+      { status: structuredErrorStatus(structured.code) },
+    );
+  }
+  structuredSpan.end({ "jobsync.ai.assignment_source": "LEGACY" });
+
+  // NOT_CONFIGURED — legacy API-key path (unchanged behavior).
+  if (!selectedModel?.provider || !selectedModel?.model) {
+    clearTimeout(timer);
+    return NextResponse.json(
+      { error: "provider and model are required" },
+      { status: 400 },
+    );
+  }
+
   try {
     const model = await getModel(
       selectedModel.provider,
       selectedModel.model,
       userId,
     );
-
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      APP_CONSTANTS.AI_RESUME_IMPORT_TIMEOUT_MS,
-    );
-
-    // Stop generation if the client disconnects (navigates away, closes tab,
-    // or aborts the fetch) — otherwise the model keeps running in the
-    // background until it finishes or hits the timeout.
-    req.signal.addEventListener("abort", () => controller.abort());
 
     // Only onError carries the provider's message — the error thrown from
     // partialOutputStream is a generic "No output generated".
@@ -161,7 +307,7 @@ export const POST = async (req: NextRequest) => {
         model,
         output: Output.object({ schema: ResumeImportSchema }),
         system: RESUME_IMPORT_SYSTEM_PROMPT,
-        prompt: buildResumeImportPrompt(preprocessResult.data.normalizedText),
+        prompt: buildResumeImportPrompt(normalizedText),
         temperature: TEMPERATURES.ANALYSIS,
         abortSignal: controller.signal,
         providerOptions: {
@@ -234,6 +380,7 @@ export const POST = async (req: NextRequest) => {
       },
     });
   } catch (error) {
+    clearTimeout(timer);
     if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json(
         {

@@ -1477,6 +1477,8 @@
     "aiAssignErrArchived": "连接已归档。",
     "aiAssignErrUnsupportedCombination": "该运行时不支持此账号服务商。",
     "aiAssignErrModelRequired": "请选择连接并输入模型 ID。",
+    "aiAssignStructuredHint": "结构化输出要求已通过结构化执行验证的运行时。未验证运行时上的连接会被标记，且无法保存到该用途。",
+    "aiAssignStructuredNotVerified": "该运行时尚未通过结构化输出验证。",
     "apiKeysDescription": "管理 AI 服务商与外部服务的 API 密钥。",
     "apiKeysDescriptionSecure": "管理 AI 服务商与外部服务的 API 密钥。密钥经加密后安全存储。",
     "defaultPrefix": "默认：{value}",

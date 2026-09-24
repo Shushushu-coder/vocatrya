@@ -201,6 +201,11 @@ async function main() {
         model: args.model ?? "",
         prompt,
         structuredOutput: { schema, schemaName },
+        // The probe is the verification harness itself — it must exercise
+        // PENDING runtimes. This flag is in-process only: the internal HTTP
+        // endpoint never forwards it, so business calls always run the
+        // verification gate.
+        verificationProbe: true,
         timeoutMs: args.timeoutMs ?? 120_000,
         signal,
       });
