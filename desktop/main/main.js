@@ -26,6 +26,7 @@ const { registerRuntimeIpcHandlers } = require("./runtime/ipc");
 const { createConnectionService } = require("./runtime/connection-service");
 const { registerConnectionIpcHandlers } = require("./runtime/connection-ipc");
 const { createBackendClient } = require("./runtime/backend-client");
+const { startExecutionServer } = require("./runtime/execute-server");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -69,6 +70,8 @@ if (!singleInstance) {
   let mainWindow;
   let backend;
   let backendPort;
+  let execServer = null;
+  let execServerUrl = null;
   let migrationChild = null;
   let shuttingDown = false;
   let backendExpectedExit = false;
@@ -107,6 +110,15 @@ if (!singleInstance) {
     return path.join(tmpBase, "codex-smoke");
   }
 
+  // Fresh per-request working directories for business TEXT_ONLY execution —
+  // the runtime sees an empty Vocatrya-owned cwd, never a user directory.
+  function execWorkRoot() {
+    const tmpBase = foundationLayout
+      ? foundationLayout.tmpDir
+      : path.join(stateRoot(), "tmp");
+    return path.join(tmpBase, "ai-exec");
+  }
+
   // Per-launch bearer for the backend's internal AI-connection endpoints.
   // Generated in main, injected into the backend env, never leaves main.
   const internalToken = createPocSecret();
@@ -115,6 +127,7 @@ if (!singleInstance) {
     return createConnectionService({
       profilesRoot: runtimeProfilesRoot(),
       smokeWorkRoot: smokeWorkRoot(),
+      execWorkRoot: execWorkRoot(),
       backend: createBackendClient({
         getBaseUrl: () => `http://127.0.0.1:${backendPort}`,
         token: internalToken,
@@ -233,6 +246,7 @@ if (!singleInstance) {
                 uploadsDir: foundationConfig.uploadsDir,
                 databaseUrl: foundationConfig.databaseUrl,
                 internalToken,
+                desktopExecUrl: execServerUrl || undefined,
                 // app.getVersion() only reflects the packaged installer
                 // version when packaged; dev/foundation probes must not leak
                 // Electron's own version into the backend.
@@ -281,6 +295,7 @@ if (!singleInstance) {
           dataDir: dataRoot(),
           baseEnv: process.env,
           internalToken,
+          desktopExecUrl: execServerUrl || undefined,
         });
         backendExpectedExit = true;
         const child = spawnBackend({
@@ -352,8 +367,28 @@ if (!singleInstance) {
       );
       // Account-login IPC: connection lifecycle operations keyed by
       // backend-minted tickets. backendPort is read lazily at call time, so
-      // registering before the backend starts is safe.
-      registerConnectionIpcHandlers(ipcMain, createConnectionOpsService());
+      // registering before the backend starts is safe. One shared service
+      // instance also backs the internal execution endpoint below.
+      const connectionOps = createConnectionOpsService();
+      registerConnectionIpcHandlers(ipcMain, connectionOps);
+      // Business TEXT_ONLY execution channel: loopback HTTP endpoint the
+      // backend reaches with the shared internal bearer. Binds before the
+      // backend spawns so its URL can be injected into the backend env.
+      // A bind failure is degradable — business AI reports
+      // RUNTIME_NOT_AVAILABLE instead of aborting app startup.
+      try {
+        const started = await startExecutionServer({
+          token: internalToken,
+          service: connectionOps,
+        });
+        execServer = started.server;
+        execServerUrl = `http://127.0.0.1:${started.port}`;
+      } catch (error) {
+        console.error(
+          "AI execution channel failed to bind; business AI execution is unavailable",
+          error,
+        );
+      }
       const buildInfo = readBuildInfo();
       if (buildInfo) {
         console.log(
@@ -381,6 +416,11 @@ if (!singleInstance) {
     backendExpectedExit = true;
     // Only owned startup children are terminated here; unrelated
     // Node/Prisma processes are never touched.
+    try {
+      execServer?.close();
+    } catch {
+      // Closing the loopback listener must never block shutdown.
+    }
     Promise.all([terminateChildTree(ownedMigrationChild), terminateChildTree(backend)]).finally(() => app.quit());
   });
 

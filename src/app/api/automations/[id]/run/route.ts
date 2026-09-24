@@ -8,6 +8,7 @@ import {
   getUserAiSettings,
   AutomationAlreadyRunningError,
 } from "@/lib/scraper";
+import { resolveAutomationMatchRuntime } from "@/lib/scraper/automation-run/matchRuntime";
 import { PROVIDER_VERIFIERS } from "@/lib/ai/provider-registry.server";
 import { getOllamaBaseUrl } from "@/actions/apiKey.actions";
 import { AiProvider } from "@/models/ai.model";
@@ -92,8 +93,17 @@ export async function POST(
       );
     }
 
+    // The Ollama preflight only applies to the legacy provider/model path —
+    // a MATCH_ANALYSIS (or GLOBAL_DEFAULT) account assignment runs on the
+    // desktop runtime instead, and a broken assignment fails explicitly
+    // inside the run rather than being shadowed by an unrelated Ollama
+    // check here.
+    const matchRuntime = await resolveAutomationMatchRuntime(userId);
     const aiSettings = await getUserAiSettings(userId);
-    if (aiSettings.provider === AiProvider.OLLAMA) {
+    if (
+      matchRuntime.plan.kind === "legacy" &&
+      aiSettings.provider === AiProvider.OLLAMA
+    ) {
       const baseUrl = await getOllamaBaseUrl(userId);
       const ollamaCheck = await PROVIDER_VERIFIERS.ollama(baseUrl);
       if (!ollamaCheck.success) {

@@ -55,7 +55,13 @@ export async function mintAiConnectionTicket(input: {
 }> {
   try {
     const user = await requireUser();
-    if (!input || !isAIConnectionOperation(input.operation)) {
+    // executeText tickets are minted by the business execution seam
+    // (src/lib/ai/execution.ts), never by renderer-facing actions.
+    if (
+      !input ||
+      !isAIConnectionOperation(input.operation) ||
+      input.operation === "executeText"
+    ) {
       return { success: false, code: "INVALID_OPERATION", message: "Invalid operation" };
     }
     const backendKind = input.backendKind;

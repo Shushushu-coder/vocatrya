@@ -213,19 +213,20 @@ function buildCursorModelsInvocation({ executablePath, profileDir, baseEnv }) {
   };
 }
 
-// Minimal-permission headless smoke: print mode defaults to every tool
-// (write + shell), so the boundary is layered — managed cli-config.json
-// denies all tool classes, approvalMode stays `allowlist`, ask mode is
-// read-only, the sandbox flag is enabled, project configs and workspace
-// context are excluded, auto-update is off, and cwd is a fresh
+// Minimal-permission headless print invocation: print mode defaults to
+// every tool (write + shell), so the boundary is layered — managed
+// cli-config.json denies all tool classes, approvalMode stays `allowlist`,
+// ask mode is read-only, the sandbox flag is enabled, project configs and
+// workspace context are excluded, auto-update is off, and cwd is a fresh
 // Vocatrya-owned temp dir. Never -f/--force/--yolo, never
-// approvalMode=unrestricted.
-function buildCursorSmokeInvocation({
+// approvalMode=unrestricted. The prompt is always a plain args element.
+function buildCursorPrintInvocation({
   executablePath,
   profileDir,
   baseEnv,
   workingDirectory,
   model,
+  prompt,
 }) {
   writeManagedCursorConfig(profileDir);
   const commandArgs = [
@@ -240,7 +241,7 @@ function buildCursorSmokeInvocation({
     "--disable-project-configs",
     "--exclude-workspace-context",
     ...(typeof model === "string" && model ? ["--model", model] : []),
-    CURSOR_SMOKE_PROMPT,
+    prompt,
   ];
   return {
     executable: executablePath,
@@ -472,7 +473,17 @@ const cursorAdapter = {
   },
 
   buildSmokeInvocation(args) {
-    return buildCursorSmokeInvocation(args);
+    return buildCursorPrintInvocation({ ...args, prompt: CURSOR_SMOKE_PROMPT });
+  },
+
+  // TEXT_ONLY business execution — the same minimum-permission print
+  // invocation with the caller's prompt as a plain args element.
+  buildTextInvocation(args) {
+    return buildCursorPrintInvocation(args);
+  },
+
+  extractText({ result }) {
+    return parseCursorSmokeResult(result);
   },
 
   extractSmokeText({ result }) {
@@ -490,7 +501,7 @@ module.exports = {
   buildCursorLoginInvocation,
   buildCursorLogoutInvocation,
   buildCursorModelsInvocation,
-  buildCursorSmokeInvocation,
+  buildCursorPrintInvocation,
   buildCursorStatusInvocation,
   cursorAdapter,
   cursorEnv,

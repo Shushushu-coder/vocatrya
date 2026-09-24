@@ -30,6 +30,7 @@ const {
 const { runRuntimeCommand } = require("./runner");
 const { RuntimeProfileManager } = require("./profiles");
 const { AUTH_PROBE_TIMEOUT_MS } = require("./auth-probe");
+const { getAccountRuntimeCapabilities } = require("./capabilities");
 const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
 const { CLAUDE_BACKEND_KIND, claudeAdapter } = require("./claude");
 const { CURSOR_BACKEND_KIND, cursorAdapter } = require("./cursor");
@@ -41,6 +42,8 @@ const LOGIN_TIMEOUT_MS = 10 * 60 * 1000; // browser auth is user-paced
 const LOGOUT_TIMEOUT_MS = 30 * 1000;
 const MODELS_TIMEOUT_MS = 20 * 1000;
 const SMOKE_TIMEOUT_MS = 120 * 1000;
+const EXEC_TIMEOUT_MS = 120 * 1000;
+const EXEC_MAX_TIMEOUT_MS = 300 * 1000;
 
 // Implemented account-login runtimes. Each adapter owns its login guard
 // key (`<vendor>:login`) so a login process per runtime can run in
@@ -87,11 +90,17 @@ const CONNECTION_OP_CODES = Object.freeze({
   UNSUPPORTED_BACKEND: "UNSUPPORTED_BACKEND",
   INVALID_TICKET: "INVALID_TICKET",
   BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
+  // TEXT_ONLY execution gates — kept in parity with the backend
+  // AI_CONNECTION_OP_ERROR_CODES.
+  CONNECTION_DISCONNECTED: "CONNECTION_DISCONNECTED",
+  CONNECTION_ERROR: "CONNECTION_ERROR",
+  AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
 });
 
 function createConnectionService({
   profilesRoot,
   smokeWorkRoot,
+  execWorkRoot,
   backend,
   deps = {},
   loginTimeoutMs = LOGIN_TIMEOUT_MS,
@@ -99,6 +108,7 @@ function createConnectionService({
   logoutTimeoutMs = LOGOUT_TIMEOUT_MS,
   modelsTimeoutMs = MODELS_TIMEOUT_MS,
   smokeTimeoutMs = SMOKE_TIMEOUT_MS,
+  execTimeoutMs = EXEC_TIMEOUT_MS,
   diag = () => {},
 } = {}) {
   if (!backend || typeof backend.resolveTicket !== "function") {
@@ -107,16 +117,35 @@ function createConnectionService({
   const profileManager = new RuntimeProfileManager({ profilesRoot });
   const runner = deps.runner || runRuntimeCommand;
   const activeOps = new Map(); // guard key -> AbortController
+  // In-flight TEXT_ONLY execs per connection. Execs may run concurrently
+  // on the same connection, but lifecycle ops (disconnect/reconnect/
+  // verify/listModels/smoke) must not mutate the shared runtime profile
+  // underneath them — a `conn:` guard key is therefore also considered
+  // busy while any exec count is non-zero.
+  const execCounts = new Map(); // connectionId -> in-flight count
 
   const fail = (code, extra) => ({ ok: false, code, ...(extra || {}) });
 
   function acquire(keys) {
     for (const key of keys) {
       if (activeOps.has(key)) return null;
+      if (key.startsWith("conn:") && (execCounts.get(key.slice(5)) ?? 0) > 0) {
+        return null;
+      }
     }
     const controller = new AbortController();
     for (const key of keys) activeOps.set(key, controller);
     return controller;
+  }
+
+  function execAcquire(connectionId) {
+    execCounts.set(connectionId, (execCounts.get(connectionId) ?? 0) + 1);
+  }
+
+  function execRelease(connectionId) {
+    const next = (execCounts.get(connectionId) ?? 1) - 1;
+    if (next <= 0) execCounts.delete(connectionId);
+    else execCounts.set(connectionId, next);
   }
 
   function release(keys) {
@@ -226,6 +255,11 @@ function createConnectionService({
     const connection = resolved.connection;
     if (!connection || connection.id !== connectionId) {
       return { error: fail(CONNECTION_OP_CODES.CONNECTION_NOT_FOUND) };
+    }
+    // Defense in depth: the ticket's runtime must be the connection's
+    // runtime — profile/provider bind to the row, never to the caller.
+    if (resolved.backendKind !== connection.backendKind) {
+      return { error: fail(CONNECTION_OP_CODES.INVALID_TICKET) };
     }
     // The persisted row is the provider source of truth for connection
     // ops — the renderer never re-states it.
@@ -784,6 +818,180 @@ function createConnectionService({
     }
   }
 
+  // Business TEXT_ONLY execution. Reached only through the authenticated
+  // internal execution endpoint (backend → desktop), never through the
+  // renderer IPC surface. The minted ticket is redeemed for the trusted
+  // connection binding; the prompt is business data that rides inside the
+  // adapter's locked-down one-shot invocation as a plain args element in a
+  // fresh Vocatrya-owned temp cwd. No install, login, reconnect, file
+  // access, or working-directory override is possible from here.
+  async function executeText({
+    ticket,
+    connectionId,
+    model,
+    prompt,
+    timeoutMs,
+    signal,
+  } = {}) {
+    const guardKeys = [`ticket:${ticket}`];
+    const controller = acquire(guardKeys);
+    if (!controller) {
+      return fail(CONNECTION_OP_CODES.LOGIN_ALREADY_IN_PROGRESS);
+    }
+    // The caller's deadline also aborts the child process tree.
+    const onExternalAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+    if (typeof prompt !== "string" || prompt.length === 0) {
+      return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
+    }
+    let workDir = null;
+    const startedAt = Date.now();
+    let execRegistered = false;
+    // Once the ticket resolves, the operation is always reported complete —
+    // the ticket is spent whether the invocation ran or a gate refused it.
+    let completedOperationId = null;
+    const completeResolved = async () => {
+      if (!completedOperationId) return;
+      try {
+        await backend.completeOperation(completedOperationId, {
+          outcome: "consumed",
+        });
+      } catch {
+        // Completion is best-effort hygiene; the ticket TTL sweeps it.
+      }
+      completedOperationId = null;
+    };
+    try {
+      const resolved = await resolveOperation(ticket, "executeText", connectionId);
+      if (resolved.error) return resolved.error;
+      const { adapter, connection } = resolved;
+      completedOperationId = resolved.resolved.operationId;
+
+      // Connection status is re-gated here even though the backend checked
+      // it before minting — the row is the source of truth at run time.
+      if (connection.status === "REAUTH_REQUIRED") {
+        return fail(CONNECTION_OP_CODES.REAUTH_REQUIRED);
+      }
+      if (connection.status === "DISCONNECTED") {
+        return fail(CONNECTION_OP_CODES.CONNECTION_DISCONNECTED);
+      }
+      if (connection.status !== "CONNECTED") {
+        return fail(CONNECTION_OP_CODES.CONNECTION_ERROR);
+      }
+
+      // TEXT_ONLY readiness: the runtime must implement the lifecycle and
+      // expose headless one-shot execution. This is the desktop-side
+      // equivalent of checkTextOnlyExecutionReadiness — the descriptor is
+      // resolved locally from the bound backendKind.
+      const execCaps = getAccountRuntimeCapabilities(adapter.backendKind);
+      if (!execCaps?.execution?.localOneShot) {
+        return fail(CONNECTION_OP_CODES.PERMISSION_BOUNDARY_NOT_READY);
+      }
+
+      execAcquire(connection.id);
+      execRegistered = true;
+
+      const runtime = resolveRuntime(adapter);
+      if (runtime.error) return runtime.error;
+      const profileDir = profileManager.ensureProfile(
+        connection.runtimeProfileRef,
+      );
+
+      if (typeof adapter.prepareSession === "function") {
+        await adapter.prepareSession({
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          runner,
+          timeoutMs: statusTimeoutMs,
+          signal: controller.signal,
+        });
+      }
+
+      // Multi-provider runtimes validate/normalize the requested model
+      // route; single-provider adapters pass the model through unchanged.
+      let execModel = model;
+      if (typeof adapter.resolveSmokeModel === "function") {
+        const resolvedModel = await adapter.resolveSmokeModel({
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          runner,
+          timeoutMs: modelsTimeoutMs,
+          signal: controller.signal,
+          model,
+        });
+        if (resolvedModel.error) {
+          return fail(resolvedModel.error);
+        }
+        execModel = resolvedModel.model;
+      }
+
+      const execRoot = execWorkRoot || smokeWorkRoot;
+      fs.mkdirSync(execRoot, { recursive: true });
+      workDir = fs.mkdtempSync(
+        path.join(execRoot, `${adapter.backendKind.toLowerCase()}-exec-`),
+      );
+      const invocation = adapter.buildTextInvocation({
+        executablePath: runtime.executable,
+        profileDir,
+        baseEnv: deps.env,
+        workingDirectory: workDir,
+        model: execModel,
+        prompt,
+      });
+      const result = await runner({
+        ...invocation,
+        timeoutMs: Math.min(
+          Math.max(timeoutMs ?? execTimeoutMs, 1_000),
+          EXEC_MAX_TIMEOUT_MS,
+        ),
+        signal: controller.signal,
+      });
+      await completeResolved();
+      if (result.timedOut) {
+        return fail(CONNECTION_OP_CODES.AI_EXECUTION_TIMEOUT);
+      }
+      if (result.error || result.exitCode !== 0 || result.aborted) {
+        diag({
+          operation: "executeText",
+          exitCode: result.exitCode,
+          timedOut: result.timedOut,
+          aborted: result.aborted === true,
+        });
+        return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
+      }
+      const { text, reportedError } = adapter.extractText({
+        result,
+        workDir,
+      });
+      if (reportedError || !text) {
+        diag({ operation: "executeText", reportedError: reportedError === true });
+        return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
+      }
+      return {
+        ok: true,
+        text,
+        provider: connection.provider,
+        backendKind: adapter.backendKind,
+        model: execModel,
+        connectionId: connection.id,
+        durationMs: Date.now() - startedAt,
+      };
+    } finally {
+      if (signal) signal.removeEventListener("abort", onExternalAbort);
+      if (execRegistered) execRelease(connectionId);
+      release(guardKeys);
+      await completeResolved();
+      if (workDir) {
+        fs.rmSync(workDir, { recursive: true, force: true });
+      }
+    }
+  }
+
   function cancelOperation({ ticket, connectionId } = {}) {
     const keys = [];
     if (typeof ticket === "string" && ticket) keys.push(`ticket:${ticket}`);
@@ -810,6 +1018,7 @@ function createConnectionService({
     verify,
     listModels,
     runSmoke,
+    executeText,
   };
 }
 

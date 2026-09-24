@@ -572,6 +572,17 @@ describe("mintAiConnectionTicket", () => {
     expect(result.code).toBe("CONNECTION_ARCHIVED");
   });
 
+  it("refuses executeText tickets — business execution is server-side only", async () => {
+    mockedGetCurrentUser.mockResolvedValue(USER as any);
+    const result = await mintAiConnectionTicket({
+      operation: "executeText",
+      backendKind: "CODEX_RUNTIME",
+      connectionId: "c1",
+    });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("INVALID_OPERATION");
+  });
+
   it("mints a connection ticket when ownership is proven", async () => {
     mockedGetCurrentUser.mockResolvedValue(USER as any);
     store.findUnique.mockResolvedValue({

@@ -187,6 +187,9 @@ export const AI_CONNECTION_OPERATIONS = [
   "verify",
   "listModels",
   "smoke",
+  // Minted server-side only by the business execution seam — the renderer
+  // ticket action refuses it (see aiConnection.actions.ts).
+  "executeText",
 ] as const;
 export type AIConnectionOperation = (typeof AI_CONNECTION_OPERATIONS)[number];
 export function isAIConnectionOperation(
@@ -224,6 +227,11 @@ export const AI_CONNECTION_OP_ERROR_CODES = {
     "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
   INVALID_TICKET: "INVALID_TICKET",
   BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
+  // Business TEXT_ONLY execution: connection-state gate outcomes observed
+  // at execution time (the resolve ticket already proves ownership).
+  CONNECTION_DISCONNECTED: "CONNECTION_DISCONNECTED",
+  CONNECTION_ERROR: "CONNECTION_ERROR",
+  AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
 } as const;
 export type AIConnectionOpErrorCode =
   (typeof AI_CONNECTION_OP_ERROR_CODES)[keyof typeof AI_CONNECTION_OP_ERROR_CODES];
@@ -244,6 +252,46 @@ export class AIResolutionError extends Error {
   constructor(code: AIResolutionErrorCode, message: string) {
     super(message);
     this.name = "AIResolutionError";
+    this.code = code;
+  }
+}
+
+// Stable business-layer error taxonomy for assignment resolution and
+// TEXT_ONLY execution. Values that already exist in the op/resolution
+// taxonomies reuse the same string — a code means one thing everywhere.
+export const AI_BUSINESS_ERROR_CODES = {
+  // Resolution outcomes.
+  AI_NOT_CONFIGURED: "AI_NOT_CONFIGURED",
+  // Explicitly assigned connection is gone, archived, or foreign-owned —
+  // never falls back to another account or to GLOBAL_DEFAULT.
+  ASSIGNED_CONNECTION_UNAVAILABLE: "ASSIGNED_CONNECTION_UNAVAILABLE",
+  REAUTH_REQUIRED: "REAUTH_REQUIRED",
+  CONNECTION_DISCONNECTED: "CONNECTION_DISCONNECTED",
+  CONNECTION_ERROR: "CONNECTION_ERROR",
+  RUNTIME_NOT_AVAILABLE: "RUNTIME_NOT_AVAILABLE",
+  UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION:
+    "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+  // Execution-time outcomes (mapped from the runtime op taxonomy).
+  RUNTIME_NOT_INSTALLED: "RUNTIME_NOT_INSTALLED",
+  RUNTIME_BROKEN: "RUNTIME_BROKEN",
+  MODEL_UNAVAILABLE: "MODEL_UNAVAILABLE",
+  PERMISSION_BOUNDARY_NOT_READY: "PERMISSION_BOUNDARY_NOT_READY",
+  AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
+  AI_EXECUTION_FAILED: "AI_EXECUTION_FAILED",
+  AI_REQUEST_TOO_LARGE: "AI_REQUEST_TOO_LARGE",
+  // The desktop could not reach the backend to redeem the ticket — a
+  // transport failure, distinct from runtime/connection failures.
+  BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
+} as const;
+export type AIBusinessErrorCode =
+  (typeof AI_BUSINESS_ERROR_CODES)[keyof typeof AI_BUSINESS_ERROR_CODES];
+
+export class AIBusinessError extends Error {
+  readonly code: AIBusinessErrorCode;
+
+  constructor(code: AIBusinessErrorCode, message: string) {
+    super(message);
+    this.name = "AIBusinessError";
     this.code = code;
   }
 }

@@ -147,6 +147,9 @@ describe("adapter contract — required surface", () => {
         "listModels",
         "buildSmokeInvocation",
         "extractSmokeText",
+        // Business TEXT_ONLY execution surface.
+        "buildTextInvocation",
+        "extractText",
       ]) {
         expect(typeof adapter[method], `${kind}.${method}`).toBe("function");
       }
@@ -358,6 +361,48 @@ describe("adapter contract — smoke invariants", () => {
         `${kind} marker missing`,
       ).toBe(true);
       // No ambient provider credential reaches the managed env.
+      for (const key of [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GITHUB_TOKEN",
+      ]) {
+        expect(inv.env[key], `${kind} leaked ${key}`).toBeUndefined();
+      }
+      fs.rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  it("every TEXT_ONLY invocation keeps the same boundary as smoke", () => {
+    const prompt = "Summarize this job posting: Senior Engineer at Acme";
+    for (const kind of SIX) {
+      const adapter = adapterFor(kind).forAccountProvider(
+        BINDING_PROVIDER[kind],
+      );
+      const profileDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "vocatrya-contract-profile-"),
+      );
+      const baseEnv = {
+        PATH: "C:\\Windows",
+        USERPROFILE: "C:\\Users\\Real",
+        APPDATA: "C:\\Users\\Real\\AppData\\Roaming",
+        OPENAI_API_KEY: "sk-poison",
+        ANTHROPIC_API_KEY: "sk-ant-poison",
+        GITHUB_TOKEN: "ghp_poison",
+      };
+      const inv = adapter.buildTextInvocation({
+        executable: "C:\\fake\\rt.exe",
+        profileDir,
+        workingDirectory,
+        model: "test-model",
+        accountProvider: BINDING_PROVIDER[kind],
+        baseEnv,
+        prompt,
+      });
+      // cwd is always the caller's Vocatrya-owned temp dir — never a
+      // profile dir or a user directory.
+      expect(inv.cwd, kind).toBe(workingDirectory);
+      // The prompt travels as a plain args element, never a shell string.
+      expect(inv.args, `${kind} prompt missing`).toContain(prompt);
       for (const key of [
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",

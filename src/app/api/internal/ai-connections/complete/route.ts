@@ -157,7 +157,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, connection });
       }
       case "listModels":
-      case "smoke": {
+      case "smoke":
+      case "executeText": {
         // Read-only operations: completing them just spends the ticket.
         return NextResponse.json({ ok: true });
       }

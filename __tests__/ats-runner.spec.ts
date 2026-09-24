@@ -10,6 +10,7 @@ vi.mock("@prisma/client", () => {
       updateMany: vi.fn(),
     },
     automation: { findUnique: vi.fn(), update: vi.fn() },
+    aIBusinessAssignment: { findMany: vi.fn().mockResolvedValue([]) },
     resume: { findUnique: vi.fn() },
     userSettings: { findUnique: vi.fn() },
     job: { findMany: vi.fn(), create: vi.fn() },

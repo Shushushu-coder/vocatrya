@@ -20,7 +20,10 @@ import { extractResumeSkills } from "./resumeText";
 import { buildSkillTerms } from "./skillTags";
 import { persistDiscoveredJob, scalePrerank } from "./persist";
 import { matchJobToResume } from "./match";
+import type { AutomationMatchRuntimePlan } from "./matchRuntime";
 import { finalizeRun } from "./finalize";
+import pLimit from "p-limit";
+import { APP_CONSTANTS } from "@/lib/constants";
 
 export async function runAtsRun(
   automation: Automation,
@@ -28,6 +31,8 @@ export async function runAtsRun(
   runId: string,
   resume: ResumeWithSections,
   signal?: AbortSignal,
+  // Resolved at AutomationRun creation — the run's locked match runtime.
+  matchPlan: AutomationMatchRuntimePlan = { kind: "legacy" },
 ): Promise<RunnerResult> {
   const label = `[${provider.label}]`;
   const config = parseAtsConfig(automation.sourceConfig, automation.jobBoard);
@@ -213,7 +218,12 @@ export async function runAtsRun(
     const aiSettings = await getUserAiSettings(automation.userId);
     const modelName =
       aiSettings.model || getDefaultModelForProvider(aiSettings.provider);
-    const limit = getAutomationMatchLimit(aiSettings.provider);
+    // Account-runtime execution is a managed local CLI — the same modest
+    // concurrency cap as remote API providers applies.
+    const limit =
+      matchPlan.kind === "legacy"
+        ? getAutomationMatchLimit(aiSettings.provider)
+        : pLimit(APP_CONSTANTS.AUTOMATION_MATCH_CONCURRENCY);
 
     let jobsSaved = 0;
     let jobsTagged = 0;
@@ -316,6 +326,7 @@ export async function runAtsRun(
         aiSettings,
         automation.userId,
         signal,
+        matchPlan,
       );
 
       // Abort may have fired mid-call; bail before saving this job. This
@@ -325,10 +336,14 @@ export async function runAtsRun(
       if (signal?.aborted) return;
 
       if (!matchResult.success) {
-        if (matchResult.error === "ai_unavailable") {
+        if (matchResult.error === "ai_unavailable" || matchResult.code) {
           // Only the first concurrent task to fail logs; siblings stay quiet.
+          // A business-layer code marks a systemic configuration/runtime
+          // failure — every remaining job would fail identically.
           if (!aiError) {
-            aiError = `AI provider (${aiSettings.provider}) is not available.`;
+            aiError = matchResult.code
+              ? `AI assignment failed (${matchResult.code}).`
+              : `AI provider (${aiSettings.provider}) is not available.`;
             automationLogger.log(automation.id, "error", aiError);
           }
         } else {
@@ -366,8 +381,8 @@ export async function runAtsRun(
             resumeId: resume.id,
             resumeTitle: resume.title,
             matchedAt: new Date().toISOString(),
-            provider: aiSettings.provider,
-            model: modelName,
+            provider: matchResult.provider ?? aiSettings.provider,
+            model: matchResult.model ?? modelName,
             prerankScore: scored.score,
             prerankComponents: scored.components,
             analyzed: true,

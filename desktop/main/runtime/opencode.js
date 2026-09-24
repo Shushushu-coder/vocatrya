@@ -497,12 +497,16 @@ function createOpencodeAdapter(providerConfig) {
     );
   }
 
-  function buildSmokeInvocation({
+  // Locked-down one-shot `opencode run` — deny-all managed config, --pure,
+  // JSONL output, Vocatrya temp cwd. The prompt is always a plain args
+  // element, never a shell string.
+  function buildTextInvocation({
     executablePath,
     profileDir,
     baseEnv,
     workingDirectory,
     model,
+    prompt,
   }) {
     writeManagedSmokeConfig(profileDir);
     const commandArgs = [
@@ -514,13 +518,17 @@ function createOpencodeAdapter(providerConfig) {
     if (typeof model === "string" && model.length > 0) {
       commandArgs.push("-m", model);
     }
-    commandArgs.push(OPENCODE_SMOKE_PROMPT);
+    commandArgs.push(prompt);
     return {
       executable: executablePath,
       args: opencodeArgs({ profileDir, commandArgs }),
       cwd: workingDirectory,
       env: opencodeEnv({ profileDir, baseEnv }),
     };
+  }
+
+  function buildSmokeInvocation(args) {
+    return buildTextInvocation({ ...args, prompt: OPENCODE_SMOKE_PROMPT });
   }
 
   // `run --format json` emits JSONL events; assistant text arrives in
@@ -610,6 +618,8 @@ function createOpencodeAdapter(providerConfig) {
     listModels,
     resolveSmokeModel,
     buildSmokeInvocation,
+    buildTextInvocation,
+    extractText: extractSmokeText,
     extractSmokeText,
   };
 }

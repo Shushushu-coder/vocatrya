@@ -375,25 +375,56 @@ const codexAdapter = {
     });
   },
 
+  // TEXT_ONLY business execution — identical invocation shape to smoke
+  // (read-only sandbox, ephemeral, Vocatrya-owned cwd), only the prompt
+  // differs. The prompt is an args element, never a shell string.
+  buildTextInvocation({
+    executablePath,
+    profileDir,
+    baseEnv,
+    workingDirectory,
+    model,
+    prompt,
+  }) {
+    return buildCodexExecInvocation({
+      executablePath,
+      profileDir,
+      baseEnv,
+      workingDirectory,
+      outputFile: path.join(workingDirectory, "last-message.txt"),
+      model,
+      prompt,
+    });
+  },
+
+  extractText({ result, workDir }) {
+    return extractCodexExecText({ result, workDir });
+  },
+
   // The last agent message is written to last-message.txt inside the work
   // dir; the last non-empty stdout line is the non-json fallback.
   extractSmokeText({ result, workDir }) {
-    let text = "";
-    try {
-      text = fs.readFileSync(path.join(workDir, "last-message.txt"), "utf8");
-    } catch {
-      text = "";
-    }
-    if (!text.trim()) {
-      const lines = (result.stdout || "")
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-      text = lines[lines.length - 1] || "";
-    }
-    return { text: text.trim(), reportedError: false };
+    return extractCodexExecText({ result, workDir });
   },
 };
+
+// Shared extractor for smoke and TEXT_ONLY exec results.
+function extractCodexExecText({ result, workDir }) {
+  let text = "";
+  try {
+    text = fs.readFileSync(path.join(workDir, "last-message.txt"), "utf8");
+  } catch {
+    text = "";
+  }
+  if (!text.trim()) {
+    const lines = (result.stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    text = lines[lines.length - 1] || "";
+  }
+  return { text: text.trim(), reportedError: false };
+}
 
 module.exports = {
   CODEX_BACKEND_KIND,

@@ -608,6 +608,30 @@ const devinAdapter = {
     });
   },
 
+  // TEXT_ONLY business execution — same locked-down `devin -p` invocation
+  // as smoke, caller-supplied prompt as a plain args element.
+  buildTextInvocation({
+    executablePath,
+    profileDir,
+    baseEnv,
+    workingDirectory,
+    model,
+    prompt,
+  }) {
+    return buildDevinPrintInvocation({
+      executablePath,
+      profileDir,
+      baseEnv,
+      workingDirectory,
+      model,
+      prompt,
+    });
+  },
+
+  extractText({ result }) {
+    return parseDevinPrintResult(result);
+  },
+
   extractSmokeText({ result }) {
     return parseDevinPrintResult(result);
   },

@@ -15,6 +15,10 @@ const SENSITIVE_ENV_KEYS = new Set([
   "GEMINI_API_KEY",
   "OPENROUTER_API_KEY",
   "VOCATRYA_DESKTOP_INTERNAL_TOKEN",
+  // Not a credential, but equally explicit — the desktop execution channel
+  // exists only when Electron main creates it; an inherited host value must
+  // never impersonate it.
+  "VOCATRYA_DESKTOP_EXEC_URL",
 ]);
 
 function assertLoopbackHost(hostname) {
@@ -50,7 +54,7 @@ function toPrismaFileUrl(filePath) {
   return `file:${path.resolve(filePath).replaceAll("\\", "/")}`;
 }
 
-function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion, internalToken }) {
+function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion, internalToken, desktopExecUrl }) {
   assertLoopbackHost("127.0.0.1");
   const env = {
     NODE_ENV: "production",
@@ -101,6 +105,14 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
     env.VOCATRYA_DESKTOP_INTERNAL_TOKEN = internalToken.trim();
   } else {
     delete env.VOCATRYA_DESKTOP_INTERNAL_TOKEN;
+  }
+  // Backend → desktop execution channel (TEXT_ONLY business AI). Loopback
+  // URL the backend POSTs execution requests to; unset means no desktop
+  // runtime channel exists (plain web/dev mode → RUNTIME_NOT_AVAILABLE).
+  if (typeof desktopExecUrl === "string" && desktopExecUrl.trim()) {
+    env.VOCATRYA_DESKTOP_EXEC_URL = desktopExecUrl.trim();
+  } else {
+    delete env.VOCATRYA_DESKTOP_EXEC_URL;
   }
   return env;
 }

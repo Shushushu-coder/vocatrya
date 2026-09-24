@@ -449,6 +449,23 @@ const claudeAdapter = {
     });
   },
 
+  // TEXT_ONLY business execution — same locked-down print invocation as
+  // smoke, caller-supplied prompt as a plain args element.
+  buildTextInvocation({ executablePath, profileDir, baseEnv, workingDirectory, model, prompt }) {
+    return buildClaudePrintInvocation({
+      executablePath,
+      profileDir,
+      baseEnv,
+      workingDirectory,
+      model,
+      prompt,
+    });
+  },
+
+  extractText({ result }) {
+    return parseClaudePrintResult(result);
+  },
+
   extractSmokeText({ result }) {
     return parseClaudePrintResult(result);
   },

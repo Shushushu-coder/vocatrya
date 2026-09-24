@@ -3,6 +3,7 @@
 import { useState } from "react";
 import AiSettings from "@/components/settings/AiSettings";
 import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
+import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import InterviewAiSettings from "@/components/settings/InterviewAiSettings";
 import ApiKeySettings from "@/components/settings/ApiKeySettings";
 import DataSettings from "@/components/settings/DataSettings";
@@ -30,6 +31,7 @@ function Settings() {
             <div className="space-y-6">
               <AiSettings />
               <AiConnectionsCard />
+              <AiAssignmentsCard />
               <InterviewAiSettings />
             </div>
           )}

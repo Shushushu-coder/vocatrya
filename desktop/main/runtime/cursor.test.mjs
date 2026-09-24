@@ -7,7 +7,7 @@ import cursorModule from "./cursor.js";
 
 const {
   buildCursorLoginInvocation,
-  buildCursorSmokeInvocation,
+  buildCursorPrintInvocation,
   cursorAdapter,
   parseCursorAuthStatus,
   parseCursorModelList,
@@ -238,12 +238,13 @@ describe("invocation builders", () => {
       expect(inv.args[0]).toBe(ENTRYPOINT);
       expect(inv.args.at(-1)).toBe("login");
       expect(inv.env.NO_OPEN_BROWSER).toBe("1");
-      const smoke = buildCursorSmokeInvocation({
+      const smoke = buildCursorPrintInvocation({
         executablePath: NODE_EXE,
         profileDir: dir,
         baseEnv: {},
         workingDirectory: dir,
         model: "auto",
+        prompt: "Reply with exactly: VOCATRYA_CURSOR_OK",
       });
       const head = smoke.args.slice(1).join(" ");
       expect(head).toContain("-p");

@@ -10,6 +10,7 @@ import type { ResumeWithSections, RunnerResult } from "./automation-run/types";
 import { getUserAiSettings } from "./automation-run/aiSettings";
 import { finalizeRun } from "./automation-run/finalize";
 import { runAtsRun } from "./automation-run/atsRun";
+import { resolveAutomationMatchRuntime } from "./automation-run/matchRuntime";
 
 export { getUserAiSettings };
 export type { RunnerResult };
@@ -69,12 +70,19 @@ async function runAutomationTraced(
   // but deferred transactions don't take a write lock until the first write,
   // so two racing callers could both pass the SELECT before either INSERTed —
   // relying on the DB constraint instead closes that race for good.
+  // Resolve the MATCH_ANALYSIS business assignment once, at creation —
+  // the run is locked to the resolved connectionId + model for its whole
+  // lifetime (assignment edits after this point must not affect the run,
+  // and an explicitly broken assignment fails the AI step rather than
+  // falling back to another account).
+  const matchRuntime = await resolveAutomationMatchRuntime(automation.userId);
   let run;
   try {
     run = await db.automationRun.create({
       data: {
         automationId: automation.id,
         status: "running",
+        ...matchRuntime.lock,
       },
     });
   } catch (error: any) {
@@ -139,8 +147,13 @@ async function runAutomationTraced(
   try {
     // Checked here (not just in the manual /run route) so scheduled/cron
     // runs also fail fast instead of silently completing with 0 matches.
+    // Only the legacy provider/model path needs Ollama — an account-runtime
+    // assignment never touches it.
     const aiSettings = await getUserAiSettings(automation.userId);
-    if (aiSettings.provider === AiProvider.OLLAMA) {
+    if (
+      matchRuntime.plan.kind === "legacy" &&
+      aiSettings.provider === AiProvider.OLLAMA
+    ) {
       const ollamaCheck = await PROVIDER_VERIFIERS.ollama(
         await getOllamaBaseUrl(automation.userId),
       );
@@ -241,6 +254,7 @@ async function runAutomationTraced(
       run.id,
       resume as ResumeWithSections,
       effectiveSignal,
+      matchRuntime.plan,
     );
   } catch (error) {
     // An abort surfaces here as an AbortError; finalize as cancelled, not failed.

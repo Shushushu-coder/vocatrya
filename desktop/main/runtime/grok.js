@@ -724,6 +724,30 @@ const grokAdapter = {
     });
   },
 
+  // TEXT_ONLY business execution — same minimum-permission print
+  // invocation as smoke, caller-supplied prompt as a plain args element.
+  buildTextInvocation({
+    executablePath,
+    profileDir,
+    baseEnv,
+    workingDirectory,
+    model,
+    prompt,
+  }) {
+    return buildGrokPrintInvocation({
+      executablePath,
+      profileDir,
+      baseEnv,
+      workingDirectory,
+      model,
+      prompt,
+    });
+  },
+
+  extractText({ result }) {
+    return parseGrokPrintResult(result);
+  },
+
   extractSmokeText({ result }) {
     return parseGrokPrintResult(result);
   },
