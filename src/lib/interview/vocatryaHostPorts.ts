@@ -33,8 +33,21 @@ import type {
 } from "./hostPorts";
 import { loadQuestionSnapshot } from "./questionAdapter";
 import { resolveJobJdContext } from "./jobJdResolver";
-import { VocatryaInterviewModelResolver } from "./interviewModelResolver";
+import {
+  VocatryaInterviewModelResolver,
+  type InterviewSessionModelResolver,
+} from "./interviewModelResolver";
 import { INTERVIEW_ADAPTER_ERROR_CODES } from "./errors";
+import {
+  sessionAiLockFromRow,
+  type InterviewSessionAiLock,
+} from "./sessionAiLock";
+import {
+  AIBusinessError,
+  isAIBackendKind,
+  isSupportedAccountProviderForBackend,
+} from "@/lib/ai/connections";
+import { executeAIConnectionText } from "@/lib/ai/execution";
 
 export interface SessionOwnershipReader {
   interviewSession: {
@@ -200,15 +213,86 @@ export class VocatryaJobContextAdapter implements JobContextPort {
   }
 }
 
+/**
+ * Minimal readers the session-locked model path needs. The session lock
+ * columns and the connection's provenance/state are the only fields
+ * touched — credentials never cross this boundary.
+ */
+export interface InterviewSessionLockDb {
+  interviewSession: {
+    findUnique: (args: {
+      where: { id: string };
+      select: {
+        userId: true;
+        resolvedConnectionId: true;
+        resolvedModel: true;
+      };
+    }) => Promise<{
+      userId: string;
+      resolvedConnectionId: string | null;
+      resolvedModel: string | null;
+    } | null>;
+  };
+  aIConnection: {
+    findUnique: (args: {
+      where: { id: string };
+      select: {
+        id: true;
+        userId: true;
+        provider: true;
+        backendKind: true;
+        status: true;
+        archivedAt: true;
+      };
+    }) => Promise<{
+      id: string;
+      userId: string;
+      provider: string;
+      backendKind: string;
+      status: string;
+      archivedAt: Date | null;
+    } | null>;
+  };
+}
+
+/**
+ * The ACCOUNT_LOGIN one-shot transport. Defaults to the shared
+ * TEXT_ONLY execution seam; injectable so tests can observe the locked
+ * connectionId/model without a desktop channel.
+ */
+export type InterviewAccountExec = (input: {
+  userId: string;
+  connectionId: string;
+  model: string;
+  prompt: string;
+}) => Promise<{ text: string }>;
+
+function accountUnavailable(message: string): DomainError {
+  return new DomainError("ASSIGNED_CONNECTION_UNAVAILABLE", message);
+}
+
 export class VocatryaInterviewModelAdapter implements InterviewModelPort {
   constructor(
-    private readonly resolver = new VocatryaInterviewModelResolver(),
+    private readonly db?: InterviewSessionLockDb,
+    private readonly resolver: InterviewSessionModelResolver = new VocatryaInterviewModelResolver(),
+    private readonly execText: InterviewAccountExec = executeAIConnectionText,
   ) {}
 
   async resolveInterviewModel(input: {
     requestingUserId: string;
+    sessionId?: string;
   }): Promise<ResolvedInterviewModel> {
+    const lock = await this.loadSessionLock(input);
     try {
+      if (lock.kind === "account") {
+        return await this.resolveAccountModel(input.requestingUserId, lock);
+      }
+      if (lock.kind === "legacy") {
+        return await this.resolver.resolveForConfig(input.requestingUserId, {
+          provider: lock.provider,
+          model: lock.model,
+        });
+      }
       const resolved = await this.resolver.resolve(input.requestingUserId);
       return {
         provider: resolved.provider,
@@ -225,5 +309,149 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
       }
       throw error;
     }
+  }
+
+  /**
+   * Read the persisted session lock. Never re-resolves the assignment —
+   * retries, reloads and later turns all honour whatever was locked at
+   * creation time.
+   */
+  private async loadSessionLock(input: {
+    requestingUserId: string;
+    sessionId?: string;
+  }): Promise<InterviewSessionAiLock> {
+    if (!this.db || !input.sessionId) {
+      return { kind: "unlocked" };
+    }
+    const session = await this.db.interviewSession.findUnique({
+      where: { id: input.sessionId },
+      select: {
+        userId: true,
+        resolvedConnectionId: true,
+        resolvedModel: true,
+      },
+    });
+    if (!session) {
+      // Callers resolve a session that exists; a vanished row must fail
+      // explicitly rather than silently falling back to live resolution.
+      throw new NotFoundError();
+    }
+    if (session.userId !== input.requestingUserId) {
+      throw new OwnershipError("Session is not owned by the current user");
+    }
+    return sessionAiLockFromRow(session);
+  }
+
+  /**
+   * Build a ResolvedInterviewModel bound to the session's locked
+   * AIConnection. The connection-state gate mirrors
+   * executeAIConnectionText so a dead connection fails explicitly at
+   * resolve time; generateJson still re-gates through the execution seam
+   * for every call.
+   */
+  private async resolveAccountModel(
+    requestingUserId: string,
+    lock: { connectionId: string; model: string },
+  ): Promise<ResolvedInterviewModel> {
+    const connection = await this.db!.aIConnection.findUnique({
+      where: { id: lock.connectionId },
+      select: {
+        id: true,
+        userId: true,
+        provider: true,
+        backendKind: true,
+        status: true,
+        archivedAt: true,
+      },
+    });
+    if (!connection || connection.userId !== requestingUserId) {
+      throw accountUnavailable("The assigned AI connection is not available");
+    }
+    if (connection.archivedAt !== null) {
+      throw accountUnavailable("The assigned AI connection is archived");
+    }
+    switch (connection.status) {
+      case "CONNECTED":
+        break;
+      case "REAUTH_REQUIRED":
+        throw new DomainError(
+          "REAUTH_REQUIRED",
+          "The assigned AI connection needs re-authentication",
+        );
+      case "DISCONNECTED":
+        throw new DomainError(
+          "CONNECTION_DISCONNECTED",
+          "The assigned AI connection is disconnected",
+        );
+      default:
+        throw new DomainError(
+          "CONNECTION_ERROR",
+          "The assigned AI connection is in an error state",
+        );
+    }
+    if (!isAIBackendKind(connection.backendKind)) {
+      throw new DomainError(
+        "RUNTIME_NOT_AVAILABLE",
+        "The assigned AI connection has no recognized runtime",
+      );
+    }
+    if (
+      !isSupportedAccountProviderForBackend(
+        connection.backendKind,
+        connection.provider,
+      )
+    ) {
+      throw new DomainError(
+        "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+        "Provider is not supported on this runtime",
+      );
+    }
+    const model = typeof lock.model === "string" ? lock.model.trim() : "";
+    if (!model) {
+      throw new DomainError("MODEL_UNAVAILABLE", "Model is required");
+    }
+    const connectionId = lock.connectionId;
+    const userId = requestingUserId;
+    return {
+      provider: connection.provider,
+      model,
+      // The runtime CLI accepts a single TEXT_ONLY prompt; the adapter
+      // deterministically flattens system + prompt here, never per
+      // backendKind. Output is strict-parsed exactly like the legacy path.
+      generateJson: async ({ system, prompt }) => {
+        let executed: { text: string };
+        try {
+          executed = await this.execText({
+            userId,
+            connectionId,
+            model,
+            prompt: `${system}\n\n${prompt}`,
+          });
+        } catch (error) {
+          if (error instanceof AIBusinessError) {
+            throw new DomainError(error.code, error.message);
+          }
+          throw error;
+        }
+        const text =
+          typeof executed.text === "string" ? executed.text.trim() : "";
+        if (!text) {
+          throw new DomainError(
+            "GENERATION_FAILED",
+            "Interview model returned empty output",
+          );
+        }
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          // Never propagate the raw parse error — its message can embed a
+          // snippet of model output, which must not reach diagnostics.
+          throw new DomainError(
+            "GENERATION_FAILED",
+            "Interview model returned non-JSON output",
+          );
+        }
+      },
+    };
   }
 }

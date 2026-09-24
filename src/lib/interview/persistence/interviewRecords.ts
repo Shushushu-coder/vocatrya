@@ -29,6 +29,12 @@ export interface SessionRecord {
   jobOpportunityId: string | null;
   jobDescriptionVersionId: string | null;
   createdVia: string | null;
+  // Vocatrya extension (assignment migration): AI lock captured once at
+  // creation. Account sessions hold connectionId + model; legacy-locked
+  // sessions keep connectionId null and carry an encoded provider/model
+  // envelope in resolvedModel; historical sessions stay null/null.
+  resolvedConnectionId?: string | null;
+  resolvedModel?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }

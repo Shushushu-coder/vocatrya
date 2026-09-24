@@ -58,6 +58,7 @@ import { BundledKnowledgeProvider, type KnowledgeProvider } from "./knowledge";
 import { SystemClock, type Clock } from "./clock";
 import { VocatryaInterviewQueries } from "./hostQueries";
 import { ensureCanonicalPreset } from "../presets/install";
+import { resolveInterviewAiRuntime } from "../interviewRuntimePlan";
 
 export interface InterviewRuntimeDeps {
   db: PrismaClient;
@@ -109,7 +110,8 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     deps.ownershipPort ?? new VocatryaUserOwnershipAdapter(deps.db);
   const questionPort = deps.questionPort ?? new VocatryaQuestionAdapter(deps.db);
   const jobContextPort = deps.jobContextPort ?? new VocatryaJobContextAdapter(deps.db);
-  const modelPort = deps.modelPort ?? new VocatryaInterviewModelAdapter();
+  const modelPort =
+    deps.modelPort ?? new VocatryaInterviewModelAdapter(deps.db);
   const knowledge = deps.knowledge ?? new BundledKnowledgeProvider();
   const clock = deps.clock ?? new SystemClock();
 
@@ -148,6 +150,20 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
         referenceAnswerSnapshot: referenceAnswer,
       });
     }
+    // Resolve the INTERVIEW AI config exactly once. The lock travels into
+    // createSession's transaction so the session and its bound config are
+    // one atomic write; a broken explicit assignment fails here and never
+    // falls back to legacy/global.
+    const { plan, lock } = await resolveInterviewAiRuntime(
+      input.userId,
+      deps.db,
+    );
+    if (plan.kind === "invalid") {
+      throw new DomainError(
+        plan.code,
+        "The assigned interview AI connection is not usable",
+      );
+    }
     return persistence.createSession({
       actorUserId: input.userId,
       coachingMode: input.coachingMode,
@@ -156,6 +172,8 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       jobOpportunityId: jobContext.jobOpportunityId,
       jobDescriptionVersionId: jobContext.jobDescriptionVersionId,
       createdVia: "USER",
+      resolvedConnectionId: lock.resolvedConnectionId ?? null,
+      resolvedModel: lock.resolvedModel ?? null,
       questions: prepared,
     });
   }
@@ -291,6 +309,7 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     );
     const model = await modelPort.resolveInterviewModel({
       requestingUserId: input.userId,
+      sessionId: attempt.sessionId,
     });
     const revisionId = input.inputRevisionId ?? attempt.activeRevisionId;
     if (!revisionId) {
@@ -429,6 +448,7 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     );
     const model = await modelPort.resolveInterviewModel({
       requestingUserId: input.userId,
+      sessionId: session.id,
     });
     const inputHash = canonicalSummaryInputHash(session.id, evidence);
     const generation = await persistence.createPendingSummaryForUser({
@@ -511,6 +531,7 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     });
     const model = await modelPort.resolveInterviewModel({
       requestingUserId: input.userId,
+      sessionId: input.sessionId,
     });
     const raw = await model.generateJson({
       system: `Return JSON {reply}. Prompt ${COACHING_PROMPT_VERSION}. Use only provenance identifiers. Never mention credentials, API keys, or internal UUIDs as secrets.`,

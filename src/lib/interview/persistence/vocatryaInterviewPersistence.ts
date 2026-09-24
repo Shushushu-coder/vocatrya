@@ -139,6 +139,11 @@ export interface CreateSessionInput {
   jobOpportunityId?: string | null;
   jobDescriptionVersionId?: string | null;
   createdVia?: string | null;
+  // AI lock captured at creation (see sessionAiLock.ts). Written inside
+  // the same $transaction as the session row so the lock and the session
+  // share one atomic boundary.
+  resolvedConnectionId?: string | null;
+  resolvedModel?: string | null;
   questions: SessionQuestionInput[];
 }
 
@@ -326,6 +331,8 @@ export class VocatryaInterviewPersistence {
             jobOpportunityId: jobPair.jobOpportunityId,
             jobDescriptionVersionId: jobPair.jobDescriptionVersionId,
             createdVia: input.createdVia ?? "USER",
+            resolvedConnectionId: input.resolvedConnectionId ?? null,
+            resolvedModel: input.resolvedModel ?? null,
           },
         });
         const instances: QuestionInstanceRecord[] = [];

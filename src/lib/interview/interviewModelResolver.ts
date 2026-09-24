@@ -3,6 +3,7 @@ import "server-only";
 import type { LanguageModel } from "ai";
 import {
   getInterviewModel,
+  getInterviewModelForConfig,
   type InterviewModelHandle,
 } from "./getInterviewModel";
 
@@ -31,9 +32,52 @@ export interface InterviewModelResolver {
   resolve(userId: string): Promise<ResolvedInterviewModel>;
 }
 
+/**
+ * Session-aware extension: the Vocatrya model adapter also needs a
+ * legacy pair pinned at session-creation time (provider/model from the
+ * persisted lock, not a live settings read).
+ */
+export interface InterviewSessionModelResolver extends InterviewModelResolver {
+  resolveForConfig(
+    userId: string,
+    config: { provider: string; model: string },
+  ): Promise<ResolvedInterviewModel>;
+}
+
 export type ResolveInterviewHandle = (
   userId: string,
 ) => Promise<InterviewModelHandle>;
+
+export type ResolveInterviewConfigHandle = (
+  userId: string,
+  config: { provider: string; model: string },
+) => Promise<InterviewModelHandle>;
+
+function toResolvedModel(handle: InterviewModelHandle): ResolvedInterviewModel {
+  const model = handle.model as LanguageModel;
+  const provider = handle.provider;
+  const modelName = handle.modelName;
+  return {
+    provider,
+    model: modelName,
+    async generateJson({ system, prompt }: { system: string; prompt: string }) {
+      const { generateText } = await import("ai");
+      const result = await generateText({ model, system, prompt });
+      const text = typeof result.text === "string" ? result.text.trim() : "";
+      if (!text) {
+        throw new Error("Interview model returned empty output");
+      }
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        // Never propagate the raw parse error — its message can embed a
+        // snippet of model output, which must not reach diagnostics or
+        // persisted failure records.
+        throw new Error("Interview model returned non-JSON output");
+      }
+    },
+  };
+}
 
 /**
  * Vocatrya adapter resolver. Delegates credential/model work to
@@ -41,29 +85,26 @@ export type ResolveInterviewHandle = (
  * AI SDK model. Raw text is parsed as JSON strictly: parse failures
  * propagate and must never relax the Phase 1 validator.
  */
-export class VocatryaInterviewModelResolver implements InterviewModelResolver {
+export class VocatryaInterviewModelResolver
+  implements InterviewSessionModelResolver
+{
   constructor(
     private readonly resolveHandle: ResolveInterviewHandle = (userId) =>
       getInterviewModel(userId),
+    private readonly resolveConfigHandle: ResolveInterviewConfigHandle = (
+      userId,
+      config,
+    ) => getInterviewModelForConfig(userId, config),
   ) {}
 
   async resolve(userId: string): Promise<ResolvedInterviewModel> {
-    const handle = await this.resolveHandle(userId);
-    const model = handle.model as LanguageModel;
-    const provider = handle.provider;
-    const modelName = handle.modelName;
-    return {
-      provider,
-      model: modelName,
-      async generateJson({ system, prompt }: { system: string; prompt: string }) {
-        const { generateText } = await import("ai");
-        const result = await generateText({ model, system, prompt });
-        const text = typeof result.text === "string" ? result.text.trim() : "";
-        if (!text) {
-          throw new Error("Interview model returned empty output");
-        }
-        return JSON.parse(text) as unknown;
-      },
-    };
+    return toResolvedModel(await this.resolveHandle(userId));
+  }
+
+  async resolveForConfig(
+    userId: string,
+    config: { provider: string; model: string },
+  ): Promise<ResolvedInterviewModel> {
+    return toResolvedModel(await this.resolveConfigHandle(userId, config));
   }
 }

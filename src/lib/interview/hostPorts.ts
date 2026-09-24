@@ -168,6 +168,12 @@ export type InterviewModelErrorCode =
 export interface InterviewModelPort {
   resolveInterviewModel(input: {
     requestingUserId: string;
+    /**
+     * Vocatrya extension (assignment migration): the session the model is
+     * resolved for. When the session carries a persisted AI lock the
+     * adapter must honour it; absent means legacy live resolution.
+     */
+    sessionId?: string;
   }): Promise<ResolvedInterviewModel>;
 }
 

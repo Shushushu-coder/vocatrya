@@ -118,3 +118,45 @@ export async function getInterviewModel(
     provenance: toInterviewProvenance(config.provider, config.model),
   };
 }
+
+/**
+ * Resolve the interview model for an explicit provider/model pair — the
+ * session-locked legacy path. Identical validation and credential path
+ * as getInterviewModel(), but the pair comes from the persisted session
+ * lock instead of a live `settings.ai.interview` read, so later settings
+ * edits cannot retarget an existing session.
+ */
+export async function getInterviewModelForConfig(
+  userId: string,
+  config: { provider: string; model: string },
+  deps: Pick<GetInterviewModelDeps, "getModelFn"> = {},
+): Promise<InterviewModelHandle> {
+  if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
+    throw notConfigured("Interview model is not configured for this user.");
+  }
+  const provider = typeof config.provider === "string" ? config.provider.trim() : "";
+  const modelName = typeof config.model === "string" ? config.model.trim() : "";
+  if (!provider || !modelName) {
+    throw notConfigured("Interview model is not configured for this user.");
+  }
+  if (!PROVIDER_REGISTRY[provider]) {
+    throw notConfigured(
+      `Interview provider "${provider}" is not a known AI provider.`,
+    );
+  }
+  const getModelFn =
+    deps.getModelFn ??
+    ((p: string, m: string, id?: string) =>
+      getModel(
+        p as Parameters<typeof getModel>[0],
+        m,
+        id,
+      ) as Promise<LanguageModel>);
+  const model = await getModelFn(provider, modelName, userId);
+  return {
+    model,
+    provider,
+    modelName,
+    provenance: toInterviewProvenance(provider, modelName),
+  };
+}

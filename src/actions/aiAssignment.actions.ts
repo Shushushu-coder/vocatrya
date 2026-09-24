@@ -40,9 +40,10 @@ export async function listBusinessAiAssignments(): Promise<{
  * validated server-side; a non-CONNECTED connection may still be assigned
  * (the resolver reports its state at execution time).
  *
- * INTERVIEW is accepted here deliberately — the data layer supports an
- * INTERVIEW assignment even though this phase's Settings UI does not offer
- * an editor for it (the interview runtime itself is not migrated).
+ * INTERVIEW is accepted here like any other purpose — interview sessions
+ * created afterwards lock onto the assigned connection/model and run on
+ * the account runtime (TEXT_ONLY one-shot); existing sessions keep
+ * whatever they were locked to at creation.
  */
 export async function setBusinessAiAssignment(input: {
   purpose: string;

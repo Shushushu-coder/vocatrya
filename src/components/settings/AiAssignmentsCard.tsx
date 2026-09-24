@@ -32,16 +32,17 @@ import {
   type AccountRuntimeCapabilities,
 } from "@/lib/ai/runtime/capabilities";
 
-// Purposes editable this phase. INTERVIEW stays a read-only legacy row —
-// the resolver supports an INTERVIEW assignment, but actual interview
-// execution is not migrated to account runtimes yet, so no editor is
-// offered for it here.
+// Purposes editable this phase. INTERVIEW is editable now that interview
+// execution runs through the locked account runtime (TEXT_ONLY one-shot);
+// a legacy `settings.ai.interview` config still outranks GLOBAL_DEFAULT
+// for users who have not saved an INTERVIEW assignment.
 const EDITABLE_PURPOSES = [
   "GLOBAL_DEFAULT",
   "RESUME",
   "MATCH_ANALYSIS",
   "CAREER_REFLECTION",
   "CAREER_DIALOGUE",
+  "INTERVIEW",
 ] as const;
 
 const PURPOSE_LABEL_KEY: Record<string, string> = {
@@ -65,8 +66,13 @@ const ERROR_KEY: Record<string, string> = {
 // Purposes whose execution path is structured output. Connections whose
 // runtime has not passed managed structured verification are marked (and
 // rejected on save) for these purposes only — they remain fully usable for
-// TEXT_ONLY purposes like MATCH_ANALYSIS. Interview is not migrated yet.
+// TEXT_ONLY purposes like MATCH_ANALYSIS.
 const STRUCTURED_PURPOSES = new Set<string>(["RESUME"]);
+
+// Purposes whose execution path is a TEXT_ONLY one-shot on the account
+// runtime. Connections on runtimes without local one-shot execution are
+// marked (and rejected on save) for these purposes.
+const TEXT_ONLY_PURPOSES = new Set<string>(["INTERVIEW"]);
 
 type Draft = { connectionId: string; model: string };
 
@@ -219,6 +225,14 @@ function AiAssignmentsCard() {
     );
   };
 
+  // TEXT_ONLY interview execution needs the runtime's local one-shot
+  // invocation. null = unknown (no desktop bridge) — marking is skipped.
+  const textOnlyReady = (connection: ConnectionSummary): boolean | null => {
+    const caps = runtimeCaps[connection.backendKind];
+    if (!caps) return null;
+    return caps.implemented === true && caps.execution?.localOneShot === true;
+  };
+
   const save = async (purpose: string) => {
     const draft = drafts[purpose];
     if (!draft?.connectionId || !draft.model.trim()) {
@@ -232,6 +246,13 @@ function AiAssignmentsCard() {
       const connection = connections.find((c) => c.id === draft.connectionId);
       if (connection && structuredReady(connection) === false) {
         toastError(t("settings.aiAssignStructuredNotVerified"));
+        return;
+      }
+    }
+    if (TEXT_ONLY_PURPOSES.has(purpose)) {
+      const connection = connections.find((c) => c.id === draft.connectionId);
+      if (connection && textOnlyReady(connection) === false) {
+        toastError(t("settings.aiAssignTextOnlyNotReady"));
         return;
       }
     }
@@ -300,6 +321,7 @@ function AiAssignmentsCard() {
       (saved?.connectionId !== draft.connectionId ||
         saved?.model !== draft.model.trim());
     const isStructuredPurpose = STRUCTURED_PURPOSES.has(purpose);
+    const isTextOnlyPurpose = TEXT_ONLY_PURPOSES.has(purpose);
 
     return (
       <section key={purpose} className="rounded-md border p-3 space-y-3">
@@ -307,6 +329,27 @@ function AiAssignmentsCard() {
         {isStructuredPurpose && (
           <p className="text-xs text-muted-foreground">
             {t("settings.aiAssignStructuredHint")}
+          </p>
+        )}
+        {/* INTERVIEW coexistence note: what a new session would resolve to
+            today, and the locked-session guarantee for existing ones. */}
+        {purpose === "INTERVIEW" && (
+          <p className="text-xs text-muted-foreground">
+            {interview?.status === "LEGACY_INTERVIEW_CONFIG"
+              ? t("settings.aiAssignInterviewLegacy", {
+                  provider: interview.provider ?? "",
+                  model: interview.model ?? "",
+                })
+              : interview?.status === "RESOLVED" &&
+                  interview.source === "GLOBAL_DEFAULT"
+                ? t("settings.aiAssignInterviewGlobalDefault")
+                : interview?.status === "RESOLVED"
+                  ? t("settings.aiAssignInterviewConfigured")
+                  : interview?.status === "INVALID_ASSIGNMENT"
+                  ? t("settings.aiAssignInterviewInvalid", {
+                      code: interview.code ?? "",
+                    })
+                  : t("settings.aiAssignInterviewDeferred")}
           </p>
         )}
         <div className="flex flex-wrap items-end gap-3">
@@ -330,7 +373,12 @@ function AiAssignmentsCard() {
                   {connections.map((connection) => {
                     const eligible = isStructuredPurpose
                       ? structuredReady(connection)
-                      : null;
+                      : isTextOnlyPurpose
+                        ? textOnlyReady(connection)
+                        : null;
+                    const ineligibleKey = isStructuredPurpose
+                      ? "settings.aiAssignStructuredNotVerified"
+                      : "settings.aiAssignTextOnlyNotReady";
                     return (
                       <SelectItem
                         key={connection.id}
@@ -338,9 +386,7 @@ function AiAssignmentsCard() {
                         disabled={eligible === false}
                       >
                         {connectionLabel(connection)}
-                        {eligible === false
-                          ? ` — ${t("settings.aiAssignStructuredNotVerified")}`
-                          : ""}
+                        {eligible === false ? ` — ${t(ineligibleKey)}` : ""}
                       </SelectItem>
                     );
                   })}
@@ -446,23 +492,6 @@ function AiAssignmentsCard() {
       )}
 
       {EDITABLE_PURPOSES.map(renderPurposeRow)}
-
-      {/* INTERVIEW is deliberately read-only here: legacy
-          settings.ai.interview still drives interview execution this phase
-          (migration is deferred), so no assignment editor is offered. */}
-      <section className="rounded-md border border-dashed p-3 space-y-1">
-        <h4 className="font-medium">{t(PURPOSE_LABEL_KEY.INTERVIEW)}</h4>
-        <p className="text-sm text-muted-foreground">
-          {interview?.status === "LEGACY_INTERVIEW_CONFIG"
-            ? t("settings.aiAssignInterviewLegacy", {
-                provider: interview.provider ?? "",
-                model: interview.model ?? "",
-              })
-            : interview?.status === "RESOLVED"
-              ? t("settings.aiAssignInterviewConfigured")
-              : t("settings.aiAssignInterviewDeferred")}
-        </p>
-      </section>
     </div>
   );
 }

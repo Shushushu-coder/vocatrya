@@ -26,6 +26,22 @@ export const PRODUCT_ERROR_CODES = [
   "PRESET_DUPLICATE",
   "NO_ACTIVE_REVISION",
   "INVALID_INPUT_REVISION",
+  // AI assignment / account-runtime failures (stable business taxonomy).
+  "AI_NOT_CONFIGURED",
+  "ASSIGNED_CONNECTION_UNAVAILABLE",
+  "REAUTH_REQUIRED",
+  "CONNECTION_DISCONNECTED",
+  "CONNECTION_ERROR",
+  "RUNTIME_NOT_AVAILABLE",
+  "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+  "MODEL_UNAVAILABLE",
+  "RUNTIME_NOT_INSTALLED",
+  "RUNTIME_BROKEN",
+  "PERMISSION_BOUNDARY_NOT_READY",
+  "AI_EXECUTION_TIMEOUT",
+  "AI_EXECUTION_FAILED",
+  "AI_REQUEST_TOO_LARGE",
+  "BACKEND_UNAVAILABLE",
 ] as const;
 
 export type ProductErrorCode = (typeof PRODUCT_ERROR_CODES)[number];
@@ -56,6 +72,21 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   PRESET_DUPLICATE: "题库预设存在重复项。",
   NO_ACTIVE_REVISION: "当前回答没有可用的文本版本。",
   INVALID_INPUT_REVISION: "文本版本不属于该回答。",
+  AI_NOT_CONFIGURED: "需要先配置 Interview AI 提供商和模型。",
+  ASSIGNED_CONNECTION_UNAVAILABLE: "分配的 AI 连接不可用或已归档。",
+  REAUTH_REQUIRED: "分配的 AI 连接需要重新认证。",
+  CONNECTION_DISCONNECTED: "分配的 AI 连接已断开。",
+  CONNECTION_ERROR: "分配的 AI 连接处于错误状态。",
+  RUNTIME_NOT_AVAILABLE: "分配的 AI 连接没有可用的运行时。",
+  UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION: "该提供商不支持此运行时。",
+  MODEL_UNAVAILABLE: "模型不可用或未配置。",
+  RUNTIME_NOT_INSTALLED: "对应的运行时未安装。",
+  RUNTIME_BROKEN: "对应的运行时不可用。",
+  PERMISSION_BOUNDARY_NOT_READY: "运行时权限边界未就绪。",
+  AI_EXECUTION_TIMEOUT: "AI 执行超时，请重试。",
+  AI_EXECUTION_FAILED: "AI 执行失败，请重试。",
+  AI_REQUEST_TOO_LARGE: "请求内容过大。",
+  BACKEND_UNAVAILABLE: "桌面运行时通道不可达。",
 };
 
 function isSecretLike(value: string): boolean {
