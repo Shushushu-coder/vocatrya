@@ -452,8 +452,8 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     structuredOutput: Object.freeze({
       strategy: STRUCTURED_OUTPUT_STRATEGIES.PROMPT_AND_VALIDATE,
       mechanism: null,
-      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
-      verifiedRuntimeVersion: null,
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PASS,
+      verifiedRuntimeVersion: "3000.10.31",
     }),
   }),
 

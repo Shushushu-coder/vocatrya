@@ -285,6 +285,13 @@ describe("account runtime capability matrix", () => {
   it("keeps structured-output verification honest — nothing is PASS without a managed trial", () => {
     for (const kind of IMPLEMENTED) {
       const so = getAccountRuntimeCapabilities(kind).structuredOutput;
+      if (kind === "DEVIN_RUNTIME") {
+        // Managed 9-trial probe on devin 3000.10.31: 9/9 first-pass
+        // VALID under PROMPT_AND_VALIDATE.
+        expect(so.verification, kind).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.PASS);
+        expect(so.verifiedRuntimeVersion, kind).toBe("3000.10.31");
+        continue;
+      }
       expect(so.verification, kind).toBe(
         STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
       );
