@@ -76,6 +76,89 @@ export const RUNTIME_VERIFICATION_STATES = [
 export type RuntimeVerificationState =
   (typeof RUNTIME_VERIFICATION_STATES)[number];
 
+// ---------------------------------------------------------------------------
+// Structured-output capability — the cross-runtime validation contract.
+// ---------------------------------------------------------------------------
+
+/**
+ * How the runtime's ACCOUNT_LOGIN one-shot invocation can produce
+ * schema-shaped output. REST/SDK structured-output features of a provider
+ * are NEVER counted — only what the managed CLI invocation exposes.
+ */
+export const STRUCTURED_OUTPUT_STRATEGIES = [
+  "NATIVE_JSON_SCHEMA",
+  "PROMPT_AND_VALIDATE",
+  "UNSUPPORTED",
+] as const;
+export type StructuredOutputStrategy =
+  (typeof STRUCTURED_OUTPUT_STRATEGIES)[number];
+
+/**
+ * Engineering verification state for the strategy. FAIL means a real
+ * managed trial ran and the mechanism did not hold; PENDING means it has
+ * not been proven for the recorded runtime version.
+ */
+export const STRUCTURED_OUTPUT_VERIFICATIONS = [
+  "PASS",
+  "PENDING",
+  "FAIL",
+  "NOT_APPLICABLE",
+] as const;
+export type StructuredOutputVerification =
+  (typeof STRUCTURED_OUTPUT_VERIFICATIONS)[number];
+
+/**
+ * Future-consumer eligibility: which structured-output consumers (Resume,
+ * JobDescriptionParse) may bind to this runtime once migrated. Never a
+ * ranking — a mechanism verdict only.
+ */
+export const STRUCTURED_OUTPUT_ELIGIBILITIES = [
+  "ELIGIBLE_NATIVE",
+  "ELIGIBLE_PROMPT_RETRY",
+  "PENDING",
+  "NOT_ELIGIBLE",
+] as const;
+export type StructuredOutputEligibility =
+  (typeof STRUCTURED_OUTPUT_ELIGIBILITIES)[number];
+
+export interface StructuredOutputCapability {
+  strategy: StructuredOutputStrategy;
+  /**
+   * The concrete ACCOUNT_LOGIN CLI mechanism (e.g.
+   * `codex exec --output-schema <file>`), or null for prompt-only.
+   */
+  mechanism: string | null;
+  verification: StructuredOutputVerification;
+  /** The runtime binary version the verification ran against. */
+  verifiedRuntimeVersion: string | null;
+}
+
+/**
+ * Readiness gate for the future structured-output consumers
+ * (`consumerKind` is reserved — "RESUME" | "JOB_DESCRIPTION_PARSE" — and
+ * does not change the verdict today). Pure: takes the descriptor the
+ * caller was handed; never derives anything from backendKind itself.
+ */
+export function checkStructuredOutputReadiness({
+  capabilities,
+}: {
+  capabilities: AccountRuntimeCapabilities | null | undefined;
+  consumerKind?: "RESUME" | "JOB_DESCRIPTION_PARSE";
+}): StructuredOutputEligibility {
+  if (!capabilities || capabilities.implemented !== true) {
+    return "NOT_ELIGIBLE";
+  }
+  const structured = capabilities.structuredOutput;
+  if (!structured || structured.strategy === "UNSUPPORTED") {
+    return "NOT_ELIGIBLE";
+  }
+  if (structured.verification === "PENDING") return "PENDING";
+  if (structured.verification !== "PASS") return "NOT_ELIGIBLE";
+  return structured.strategy === "NATIVE_JSON_SCHEMA"
+    ? "ELIGIBLE_NATIVE"
+    : "ELIGIBLE_PROMPT_RETRY";
+}
+
 /** The consolidated descriptor emitted by runtime:list/getCapabilities. */
 export interface AccountRuntimeCapabilities {
   backendKind: string;
@@ -146,6 +229,7 @@ export interface AccountRuntimeCapabilities {
     realInferenceE2E: RuntimeVerificationState;
     adversarialPermissions: RuntimeVerificationState;
   };
+  structuredOutput: StructuredOutputCapability;
 }
 
 // ---------------------------------------------------------------------------

@@ -167,6 +167,7 @@ function buildCodexExecInvocation({
   baseEnv,
   workingDirectory,
   outputFile,
+  outputSchemaFile,
   model,
   prompt,
 }) {
@@ -183,6 +184,12 @@ function buildCodexExecInvocation({
     "-o",
     outputFile,
   ];
+  // `codex exec --output-schema <file>` (codex-cli 0.154.0) constrains the
+  // model's final response shape; the conforming JSON lands in -o
+  // outputFile like any other exec result.
+  if (typeof outputSchemaFile === "string" && outputSchemaFile.length > 0) {
+    args.push("--output-schema", outputSchemaFile);
+  }
   if (typeof model === "string" && model.length > 0) {
     args.push("-m", model);
   }
@@ -392,6 +399,35 @@ const codexAdapter = {
       baseEnv,
       workingDirectory,
       outputFile: path.join(workingDirectory, "last-message.txt"),
+      model,
+      prompt,
+    });
+  },
+
+  // NATIVE_JSON_SCHEMA: the schema object is serialized into a
+  // Vocatrya-owned file inside the fresh exec workDir — caller-supplied
+  // filesystem paths are never accepted — and carried via
+  // `--output-schema`. Everything else is the same locked-down exec.
+  buildStructuredInvocation({
+    executablePath,
+    profileDir,
+    baseEnv,
+    workingDirectory,
+    model,
+    prompt,
+    schema,
+    schemaName,
+  }) {
+    const safeName = `${String(schemaName || "output").replace(/[^A-Za-z0-9._-]/g, "_")}.schema.json`;
+    const schemaPath = path.join(workingDirectory, safeName);
+    fs.writeFileSync(schemaPath, `${JSON.stringify(schema)}\n`, "utf8");
+    return buildCodexExecInvocation({
+      executablePath,
+      profileDir,
+      baseEnv,
+      workingDirectory,
+      outputFile: path.join(workingDirectory, "last-message.txt"),
+      outputSchemaFile: schemaPath,
       model,
       prompt,
     });

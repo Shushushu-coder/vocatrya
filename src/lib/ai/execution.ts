@@ -31,6 +31,9 @@ type DbClient = Pick<PrismaClient, "aIConnection">;
 
 /** Prompts are business data, not commands — bounded like any request body. */
 export const AI_EXECUTION_MAX_PROMPT_BYTES = 256 * 1024;
+/** A structured-output schema is Vocatrya-owned metadata — bounded. */
+export const AI_EXECUTION_MAX_SCHEMA_BYTES = 64 * 1024;
+export const AI_EXECUTION_MAX_SCHEMA_NAME_CHARS = 128;
 export const AI_EXECUTION_DEFAULT_TIMEOUT_MS = 120_000;
 export const AI_EXECUTION_MAX_TIMEOUT_MS = 300_000;
 
@@ -43,6 +46,18 @@ export interface ExecuteAIConnectionTextInput {
   connectionId: string;
   model: string;
   prompt: string;
+  /**
+   * Structured-output validation contract. When present, the desktop
+   * applies the runtime's native schema mechanism if it has one (e.g.
+   * `codex exec --output-schema`) and reports which strategy actually
+   * ran; prompt-only runtimes ignore the payload because the caller has
+   * already embedded the schema in `prompt`. The schema object is
+   * Vocatrya-owned — never a user-supplied filesystem path.
+   */
+  structuredOutput?: {
+    schema: Record<string, unknown>;
+    schemaName: string;
+  };
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -58,6 +73,14 @@ export interface ExecuteAIConnectionTextDeps {
 export interface AIConnectionTextResult extends AIConnectionExecutionResult {
   connectionId: string;
   durationMs?: number;
+  /**
+   * Which structured-output mechanism the runtime applied for this call
+   * — present only when the request carried `structuredOutput`. The
+   * desktop reports the truth; callers never assume it from backendKind.
+   */
+  structuredStrategy?: string | null;
+  /** Runtime-reported stop reason when the CLI envelope exposes one. */
+  stopReason?: string | null;
 }
 
 function fail(code: AIBusinessErrorCode, message: string): never {
@@ -105,7 +128,7 @@ export async function executeAIConnectionText(
   deps: ExecuteAIConnectionTextDeps = {},
 ): Promise<AIConnectionTextResult> {
   const db = deps.dbClient ?? prisma;
-  const { userId, connectionId, model, prompt } = input;
+  const { userId, connectionId, model, prompt, structuredOutput } = input;
 
   if (typeof prompt !== "string" || prompt.length === 0) {
     fail(AI_BUSINESS_ERROR_CODES.AI_EXECUTION_FAILED, "Prompt is required");
@@ -115,6 +138,36 @@ export async function executeAIConnectionText(
   }
   if (typeof model !== "string" || model.trim().length === 0) {
     fail(AI_BUSINESS_ERROR_CODES.MODEL_UNAVAILABLE, "Model is required");
+  }
+  let structuredPayload:
+    | { schema: Record<string, unknown>; schemaName: string }
+    | undefined;
+  if (structuredOutput !== undefined) {
+    const schema = structuredOutput.schema;
+    const schemaName = structuredOutput.schemaName;
+    const schemaOk =
+      typeof schema === "object" &&
+      schema !== null &&
+      !Array.isArray(schema) &&
+      typeof schemaName === "string" &&
+      schemaName.length > 0 &&
+      schemaName.length <= AI_EXECUTION_MAX_SCHEMA_NAME_CHARS;
+    if (!schemaOk) {
+      fail(
+        AI_BUSINESS_ERROR_CODES.AI_EXECUTION_FAILED,
+        "structuredOutput requires a schema object and a schemaName",
+      );
+    }
+    if (
+      Buffer.byteLength(JSON.stringify(schema), "utf8") >
+      AI_EXECUTION_MAX_SCHEMA_BYTES
+    ) {
+      fail(
+        AI_BUSINESS_ERROR_CODES.AI_REQUEST_TOO_LARGE,
+        "structuredOutput schema is too large",
+      );
+    }
+    structuredPayload = { schema, schemaName };
   }
 
   // Ownership is part of the lookup — a connectionId alone never resolves.
@@ -200,6 +253,9 @@ export async function executeAIConnectionText(
         permissionScope: "TEXT_ONLY",
         requestId: `req_${randomUUID()}`,
         timeoutMs,
+        // Present only for structured-output probes — the desktop decides
+        // whether a native schema mechanism applies it.
+        ...(structuredPayload ? { structuredOutput: structuredPayload } : {}),
       }),
       signal: AbortSignal.any(signals),
     });
@@ -240,5 +296,11 @@ export async function executeAIConnectionText(
     connectionId,
     durationMs:
       typeof payload.durationMs === "number" ? payload.durationMs : undefined,
+    structuredStrategy:
+      typeof payload.structuredStrategy === "string"
+        ? payload.structuredStrategy
+        : null,
+    stopReason:
+      typeof payload.stopReason === "string" ? payload.stopReason : null,
   };
 }

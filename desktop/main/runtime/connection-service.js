@@ -95,6 +95,9 @@ const CONNECTION_OP_CODES = Object.freeze({
   CONNECTION_DISCONNECTED: "CONNECTION_DISCONNECTED",
   CONNECTION_ERROR: "CONNECTION_ERROR",
   AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
+  // The structuredOutput payload could not be carried by this runtime's
+  // invocation (e.g. inline schema exceeds the command-line budget).
+  STRUCTURED_OUTPUT_UNSUPPORTED: "STRUCTURED_OUTPUT_UNSUPPORTED",
 });
 
 function createConnectionService({
@@ -830,6 +833,7 @@ function createConnectionService({
     connectionId,
     model,
     prompt,
+    structuredOutput,
     timeoutMs,
     signal,
   } = {}) {
@@ -935,14 +939,53 @@ function createConnectionService({
       workDir = fs.mkdtempSync(
         path.join(execRoot, `${adapter.backendKind.toLowerCase()}-exec-`),
       );
-      const invocation = adapter.buildTextInvocation({
+      const invocationInput = {
         executablePath: runtime.executable,
         profileDir,
         baseEnv: deps.env,
         workingDirectory: workDir,
         model: execModel,
         prompt,
-      });
+      };
+      // Structured-output probe contract: when the request carries a
+      // Vocatrya-owned schema and the adapter exposes a native schema
+      // transport, the schema rides the invocation itself (e.g.
+      // codex --output-schema <file inside the fresh workDir>). Prompt-only
+      // runtimes ignore the payload — the schema is already inside the
+      // prompt — and the result reports which strategy actually ran. Any
+      // schema file the adapter materializes lives inside workDir and is
+      // removed with it in the finally below.
+      let structuredStrategy = null;
+      let invocation;
+      if (
+        structuredOutput &&
+        (!structuredOutput.schema ||
+          typeof structuredOutput.schema !== "object" ||
+          Array.isArray(structuredOutput.schema) ||
+          typeof structuredOutput.schemaName !== "string" ||
+          structuredOutput.schemaName.length === 0)
+      ) {
+        return fail(CONNECTION_OP_CODES.STRUCTURED_OUTPUT_UNSUPPORTED);
+      }
+      if (structuredOutput) {
+        if (typeof adapter.buildStructuredInvocation === "function") {
+          try {
+            invocation = adapter.buildStructuredInvocation({
+              ...invocationInput,
+              schema: structuredOutput.schema,
+              schemaName: structuredOutput.schemaName,
+            });
+          } catch {
+            return fail(CONNECTION_OP_CODES.STRUCTURED_OUTPUT_UNSUPPORTED);
+          }
+          structuredStrategy = "NATIVE_JSON_SCHEMA";
+        } else {
+          invocation = adapter.buildTextInvocation(invocationInput);
+          structuredStrategy = "PROMPT_AND_VALIDATE";
+        }
+      } else {
+        invocation = adapter.buildTextInvocation(invocationInput);
+      }
       const result = await runner({
         ...invocation,
         timeoutMs: Math.min(
@@ -964,7 +1007,7 @@ function createConnectionService({
         });
         return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
       }
-      const { text, reportedError } = adapter.extractText({
+      const { text, reportedError, stopReason } = adapter.extractText({
         result,
         workDir,
       });
@@ -980,6 +1023,8 @@ function createConnectionService({
         model: execModel,
         connectionId: connection.id,
         durationMs: Date.now() - startedAt,
+        structuredStrategy,
+        stopReason: typeof stopReason === "string" ? stopReason : null,
       };
     } finally {
       if (signal) signal.removeEventListener("abort", onExternalAbort);

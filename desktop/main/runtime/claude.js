@@ -8,6 +8,7 @@
 // read — auth state is parsed solely from `claude auth status --json`.
 const fs = require("node:fs");
 const path = require("node:path");
+const { serializeInlineSchema } = require("./structured-schema");
 const { getRuntimeDefinition } = require("./registry");
 const {
   buildRuntimeInvocationArgs,
@@ -209,6 +210,22 @@ function buildClaudePrintInvocation({
   };
 }
 
+// NATIVE_JSON_SCHEMA (claude 2.1.203): `claude -p --output-format json
+// --json-schema <schema>` runs the same locked-down print invocation plus
+// an inline JSON Schema. The CLI validates the final object via its
+// StructuredOutput mechanism and reports it in the envelope's
+// `structured_output` field (`result` stays empty). --tools "" is already
+// required for this feature to work — which the print invocation always
+// passes.
+function buildClaudeStructuredInvocation(args) {
+  const serialized = serializeInlineSchema(args.schema);
+  const invocation = buildClaudePrintInvocation(args);
+  const nextArgs = invocation.args.slice();
+  // Insert before the trailing positional prompt element.
+  nextArgs.splice(nextArgs.length - 1, 0, "--json-schema", serialized);
+  return { ...invocation, args: nextArgs };
+}
+
 // Anthropic managed-settings locations (read-only check — spec §9). A
 // device policy like {"forceLoginMethod":"console"} must never be
 // circumvented; it is reported so the service can fail with
@@ -355,6 +372,10 @@ function parseClaudeAuthStatus({ exitCode, stdout, stderr }) {
 // {type:"result", result:"…", is_error:bool, …}; is_error:true means the
 // CLI completed but reported an error. Falls back to the last non-empty
 // stdout line for text output.
+// `--output-format json` envelope: {type:"result", subtype, is_error,
+// result, ...}. With `--json-schema` the validated object lands in
+// `structured_output` and `result` is empty — the schema-enforced payload
+// wins when present; both remain model output, validated again locally.
 function parseClaudePrintResult({ stdout, stderr }) {
   let parsed = null;
   try {
@@ -363,19 +384,35 @@ function parseClaudePrintResult({ stdout, stderr }) {
     parsed = null;
   }
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const reportedError =
+      parsed.is_error === true ||
+      (typeof parsed.subtype === "string" && /^error/.test(parsed.subtype));
+    const stopReason =
+      typeof parsed.stop_reason === "string"
+        ? parsed.stop_reason
+        : typeof parsed.subtype === "string" && parsed.subtype !== "success"
+          ? parsed.subtype
+          : null;
+    if (parsed.structured_output !== undefined && parsed.structured_output !== null) {
+      return {
+        text: JSON.stringify(parsed.structured_output),
+        reportedError,
+        stopReason,
+      };
+    }
     const text =
       typeof parsed.result === "string"
         ? parsed.result
         : typeof parsed.error === "string"
           ? parsed.error
           : "";
-    return { text: text.trim(), reportedError: parsed.is_error === true };
+    return { text: text.trim(), reportedError, stopReason };
   }
   const lines = `${stdout || ""}\n${stderr || ""}`
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  return { text: lines[lines.length - 1] || "", reportedError: false };
+  return { text: lines[lines.length - 1] || "", reportedError: false, stopReason: null };
 }
 
 // Provider adapter contract consumed by connection-service.js. Same shape
@@ -462,6 +499,12 @@ const claudeAdapter = {
     });
   },
 
+  // NATIVE_JSON_SCHEMA — `claude -p --json-schema <schema>`; the schema is
+  // an inline argv element, never a caller-supplied path.
+  buildStructuredInvocation(args) {
+    return buildClaudeStructuredInvocation(args);
+  },
+
   extractText({ result }) {
     return parseClaudePrintResult(result);
   },
@@ -480,6 +523,7 @@ module.exports = {
   buildClaudeLoginInvocation,
   buildClaudeLogoutInvocation,
   buildClaudePrintInvocation,
+  buildClaudeStructuredInvocation,
   buildClaudeStatusInvocation,
   claudeAdapter,
   detectManagedLoginPolicy,

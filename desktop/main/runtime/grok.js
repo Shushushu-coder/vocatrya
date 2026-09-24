@@ -31,6 +31,7 @@ const {
   buildRuntimeProcessEnvironment,
 } = require("./environment");
 const { terminateChildTree } = require("../runtime");
+const { serializeInlineSchema } = require("./structured-schema");
 
 const GROK_BACKEND_KIND = "GROK_RUNTIME";
 const GROK_ACCOUNT_PROVIDER = "XAI";
@@ -628,6 +629,20 @@ function buildGrokPrintInvocation({
   };
 }
 
+// NATIVE_JSON_SCHEMA (grok 1.0.41): `grok -p --json-schema <schema>`
+// constrains the model to produce JSON matching the schema and implies
+// --output-format json — the {text,...} envelope's text carries the
+// constrained object. The schema is an inline argv element; the xAI REST
+// structured-output API is a different layer and is never used here.
+function buildGrokStructuredInvocation(args) {
+  const serialized = serializeInlineSchema(args.schema);
+  const invocation = buildGrokPrintInvocation(args);
+  return {
+    ...invocation,
+    args: [...invocation.args, "--json-schema", serialized],
+  };
+}
+
 // `--output-format json` emits one object after the run completes:
 //   { text, stopReason, sessionId, requestId, num_turns, usage, ... }
 // Only the assistant text is returned — usage/session fields never cross
@@ -650,13 +665,18 @@ function parseGrokPrintResult({ stdout, stderr }) {
       parsed.is_error === true ||
       (typeof parsed.error === "string" && parsed.error.length > 0) ||
       /error|fail/i.test(String(parsed.stopReason || ""));
-    return { text: text.trim(), reportedError };
+    return {
+      text: text.trim(),
+      reportedError,
+      stopReason:
+        typeof parsed.stopReason === "string" ? parsed.stopReason : null,
+    };
   }
   const lines = `${stdout || ""}\n${stderr || ""}`
     .split(/\r?\n/)
     .map((line) => line.replace(ANSI_PATTERN, "").trim())
     .filter(Boolean);
-  return { text: lines[lines.length - 1] || "", reportedError: false };
+  return { text: lines[lines.length - 1] || "", reportedError: false, stopReason: null };
 }
 
 // Provider adapter contract consumed by connection-service.js (same shape
@@ -744,6 +764,11 @@ const grokAdapter = {
     });
   },
 
+  // NATIVE_JSON_SCHEMA — `grok -p --json-schema <schema>` inline.
+  buildStructuredInvocation(args) {
+    return buildGrokStructuredInvocation(args);
+  },
+
   extractText({ result }) {
     return parseGrokPrintResult(result);
   },
@@ -764,6 +789,7 @@ module.exports = {
   buildGrokLoginInvocation,
   buildGrokLogoutInvocation,
   buildGrokPrintInvocation,
+  buildGrokStructuredInvocation,
   classifyGrokAuthError,
   classifyGrokAuthMode,
   extractGrokLoginUrl,

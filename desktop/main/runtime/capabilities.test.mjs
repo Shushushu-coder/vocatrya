@@ -12,6 +12,8 @@ const {
   LOGIN_INTERACTIONS,
   MODEL_STRATEGIES,
   PERMISSION_LEVELS,
+  STRUCTURED_OUTPUT_STRATEGIES,
+  STRUCTURED_OUTPUT_VERIFICATIONS,
   VERIFICATION_STATES,
   getAccountRuntimeCapabilities,
   listAccountRuntimeCapabilities,
@@ -247,5 +249,50 @@ describe("account runtime capability matrix", () => {
         ).not.toContain(key);
       }
     }
+  });
+
+  it("classifies structured-output strategy per runtime — CLI mechanism only", () => {
+    const so = (kind) => getAccountRuntimeCapabilities(kind).structuredOutput;
+    // Native schema transports verified in `--help` on the installed
+    // versions (codex-cli 0.154.0, claude 2.1.203, grok 1.0.41).
+    for (const kind of [
+      "CODEX_RUNTIME",
+      "CLAUDE_RUNTIME",
+      "GROK_RUNTIME",
+    ]) {
+      expect(so(kind).strategy, kind).toBe(
+        STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
+      );
+      expect(so(kind).mechanism, kind).toBeTruthy();
+    }
+    // --output-format json / --format json envelopes are transport JSON,
+    // not schema enforcement — these runtimes are prompt+validate only.
+    for (const kind of [
+      "OPENCODE_RUNTIME",
+      "CURSOR_RUNTIME",
+      "DEVIN_RUNTIME",
+    ]) {
+      expect(so(kind).strategy, kind).toBe(
+        STRUCTURED_OUTPUT_STRATEGIES.PROMPT_AND_VALIDATE,
+      );
+      expect(so(kind).mechanism, kind).toBeNull();
+    }
+    expect(so("COPILOT_RUNTIME").strategy).toBe(
+      STRUCTURED_OUTPUT_STRATEGIES.UNSUPPORTED,
+    );
+  });
+
+  it("keeps structured-output verification honest — nothing is PASS without a managed trial", () => {
+    for (const kind of IMPLEMENTED) {
+      const so = getAccountRuntimeCapabilities(kind).structuredOutput;
+      expect(so.verification, kind).toBe(
+        STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      );
+      expect(so.verifiedRuntimeVersion, kind).toBeNull();
+    }
+    expect(
+      getAccountRuntimeCapabilities("COPILOT_RUNTIME").structuredOutput
+        .verification,
+    ).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.NOT_APPLICABLE);
   });
 });

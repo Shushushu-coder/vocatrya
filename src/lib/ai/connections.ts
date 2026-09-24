@@ -232,6 +232,9 @@ export const AI_CONNECTION_OP_ERROR_CODES = {
   CONNECTION_DISCONNECTED: "CONNECTION_DISCONNECTED",
   CONNECTION_ERROR: "CONNECTION_ERROR",
   AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
+  // A structuredOutput probe payload could not be carried by the runtime's
+  // invocation (e.g. an inline schema over the command-line budget).
+  STRUCTURED_OUTPUT_UNSUPPORTED: "STRUCTURED_OUTPUT_UNSUPPORTED",
 } as const;
 export type AIConnectionOpErrorCode =
   (typeof AI_CONNECTION_OP_ERROR_CODES)[keyof typeof AI_CONNECTION_OP_ERROR_CODES];

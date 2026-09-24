@@ -19,6 +19,8 @@ const { timingSafeEqual } = require("node:crypto");
 const EXECUTE_PATH = "/internal/ai-connections/execute";
 const DEFAULT_MAX_BODY_BYTES = 512 * 1024;
 const MAX_PROMPT_CHARS = 256 * 1024;
+const MAX_SCHEMA_BYTES = 64 * 1024;
+const MAX_SCHEMA_NAME_CHARS = 128;
 
 function bearerMatches(header, token) {
   if (typeof header !== "string" || typeof token !== "string") return false;
@@ -130,6 +132,37 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
         sendJson(res, 400, { ok: false, code: "INVALID_PAYLOAD" });
         return;
       }
+
+      // Optional structured-output probe contract. The schema is an
+      // inline JSON Schema object owned by Vocatrya — never a filesystem
+      // path, never caller-supplied args. Strict shape: {schema, schemaName}
+      // only, schema <= 64KB serialized.
+      let structuredOutput;
+      if (payload.structuredOutput !== undefined) {
+        const so = payload.structuredOutput;
+        const keys =
+          so && typeof so === "object" && !Array.isArray(so)
+            ? Object.keys(so)
+            : [];
+        const schemaOk =
+          so &&
+          typeof so === "object" &&
+          !Array.isArray(so) &&
+          keys.every((k) => k === "schema" || k === "schemaName") &&
+          so.schema &&
+          typeof so.schema === "object" &&
+          !Array.isArray(so.schema) &&
+          typeof so.schemaName === "string" &&
+          so.schemaName.length > 0 &&
+          so.schemaName.length <= MAX_SCHEMA_NAME_CHARS &&
+          Buffer.byteLength(JSON.stringify(so.schema), "utf8") <=
+            MAX_SCHEMA_BYTES;
+        if (!schemaOk) {
+          sendJson(res, 400, { ok: false, code: "INVALID_PAYLOAD" });
+          return;
+        }
+        structuredOutput = { schema: so.schema, schemaName: so.schemaName };
+      }
       if (payload.permissionScope !== "TEXT_ONLY") {
         sendJson(res, 403, {
           ok: false,
@@ -149,6 +182,7 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
         connectionId,
         model,
         prompt,
+        structuredOutput,
         timeoutMs,
         signal: controller.signal,
       });

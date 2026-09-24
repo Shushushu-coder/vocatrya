@@ -87,6 +87,31 @@ const VERIFICATION_STATES = Object.freeze({
   NOT_APPLICABLE: "NOT_APPLICABLE",
 });
 
+// Structured-output mechanism classification — what the ACCOUNT_LOGIN
+// one-shot CLI invocation itself can carry (audited against the installed
+// versions). A provider's REST/SDK structured-output feature never counts.
+const STRUCTURED_OUTPUT_STRATEGIES = Object.freeze({
+  // The invocation transports a JSON Schema to the runtime and the
+  // runtime claims enforcement (codex --output-schema, claude/grok
+  // --json-schema).
+  NATIVE_JSON_SCHEMA: "NATIVE_JSON_SCHEMA",
+  // No schema transport — the schema rides inside the prompt and local
+  // parse+validate (with at most one retry) decides conformance.
+  PROMPT_AND_VALIDATE: "PROMPT_AND_VALIDATE",
+  // No usable structured assistant-text path.
+  UNSUPPORTED: "UNSUPPORTED",
+});
+
+// Structured-output verification — PASS/FAIL/PENDING bound to the
+// verifiedRuntimeVersion actually trialled; NOT_APPLICABLE when the
+// runtime is not implemented at all.
+const STRUCTURED_OUTPUT_VERIFICATIONS = Object.freeze({
+  PASS: "PASS",
+  PENDING: "PENDING",
+  FAIL: "FAIL",
+  NOT_APPLICABLE: "NOT_APPLICABLE",
+});
+
 // ---------------------------------------------------------------------------
 // The matrix. One entry per implemented ACCOUNT_LOGIN runtime plus the
 // registered-but-unimplemented Copilot runtime (implemented: false — the
@@ -133,6 +158,15 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
     }),
+    // `codex exec --output-schema <file>` verified in `codex exec --help`
+    // on codex-cli 0.154.0 — the schema file is written into the fresh
+    // Vocatrya-owned exec cwd; the final message lands in -o output.
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
+      mechanism: "codex exec --output-schema <schema-file>",
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      verifiedRuntimeVersion: null,
+    }),
   }),
 
   CLAUDE_RUNTIME: Object.freeze({
@@ -174,6 +208,17 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realModelCatalog: VERIFICATION_STATES.NOT_APPLICABLE,
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
+    }),
+    // `claude -p --output-format json --json-schema <schema>` verified in
+    // `claude --help` on 2.1.203 — the envelope's `structured_output`
+    // field carries the validated object (result stays empty). The
+    // StructuredOutput tool mechanism requires tools disabled, which the
+    // managed print invocation already enforces (--tools "").
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
+      mechanism: "claude -p --output-format json --json-schema <schema>",
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      verifiedRuntimeVersion: null,
     }),
   }),
 
@@ -219,6 +264,15 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realModelCatalog: VERIFICATION_STATES.PASS,
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
+    }),
+    // `opencode run --format json` is a JSONL event stream — transport,
+    // not schema enforcement. `opencode run --help` on 1.18.31 exposes no
+    // schema flag, so structured output is prompt + local validation only.
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.PROMPT_AND_VALIDATE,
+      mechanism: null,
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      verifiedRuntimeVersion: null,
     }),
   }),
 
@@ -271,6 +325,17 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
     }),
+    // `grok -p --json-schema <schema>` verified in `grok --help` on
+    // 1.0.41 — "the model is constrained to produce JSON matching this
+    // schema"; implies --output-format json so the {text,...} envelope
+    // carries the constrained object. xAI REST structured outputs are a
+    // different layer and are never counted.
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
+      mechanism: "grok -p --json-schema <schema>",
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      verifiedRuntimeVersion: null,
+    }),
   }),
 
   CURSOR_RUNTIME: Object.freeze({
@@ -322,6 +387,15 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
     }),
+    // `agent -p --output-format json` on 2026.09.18-9a7762b is a
+    // {type:"result", result:"..."} envelope — transport only. `agent -p
+    // --help` exposes no schema flag: prompt + local validation only.
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.PROMPT_AND_VALIDATE,
+      mechanism: null,
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      verifiedRuntimeVersion: null,
+    }),
   }),
 
   DEVIN_RUNTIME: Object.freeze({
@@ -372,6 +446,15 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realInferenceE2E: VERIFICATION_STATES.PASS,
       adversarialPermissions: VERIFICATION_STATES.PASS,
     }),
+    // `devin -p` on 3000.10.31 has no schema flag — plain stdout text.
+    // Devin Cloud/API session-level structured output is a different
+    // layer and never counts toward the local CLI contract.
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.PROMPT_AND_VALIDATE,
+      mechanism: null,
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      verifiedRuntimeVersion: null,
+    }),
   }),
 
   // Registered in the runtime registry but intentionally without a
@@ -407,6 +490,13 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realModelCatalog: VERIFICATION_STATES.PENDING,
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
+    }),
+    // Lifecycle not implemented — no one-shot structured path exists.
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.UNSUPPORTED,
+      mechanism: null,
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.NOT_APPLICABLE,
+      verifiedRuntimeVersion: null,
     }),
   }),
 });
@@ -475,6 +565,7 @@ function getAccountRuntimeCapabilities(backendKind) {
       ).slice(),
     },
     verification: matrix.verification,
+    structuredOutput: matrix.structuredOutput,
   };
 }
 
@@ -491,6 +582,8 @@ module.exports = {
   LOGIN_INTERACTIONS,
   MODEL_STRATEGIES,
   PERMISSION_LEVELS,
+  STRUCTURED_OUTPUT_STRATEGIES,
+  STRUCTURED_OUTPUT_VERIFICATIONS,
   VERIFICATION_STATES,
   getAccountRuntimeCapabilities,
   listAccountRuntimeCapabilities,

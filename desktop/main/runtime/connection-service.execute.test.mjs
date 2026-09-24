@@ -257,3 +257,82 @@ describe("executeText", () => {
     expect(head).not.toContain("update");
   });
 });
+
+describe("executeText structuredOutput contract", () => {
+  const SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    properties: { name: { type: "string" } },
+    required: ["name"],
+  };
+
+  it("native runtime (codex): schema rides --output-schema inside the fresh workDir", async () => {
+    runnerScript = happyExec();
+    const result = await exec({
+      structuredOutput: { schema: SCHEMA, schemaName: "VocatryaProbe" },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.structuredStrategy).toBe("NATIVE_JSON_SCHEMA");
+
+    const inv = invocations.find((i) => i.args.includes("exec"));
+    const idx = inv.args.indexOf("--output-schema");
+    expect(idx).toBeGreaterThan(-1);
+    const schemaPath = inv.args[idx + 1];
+    // Vocatrya-owned path inside the (now cleaned) fresh exec cwd.
+    expect(schemaPath.startsWith(execWorkRoot)).toBe(true);
+    expect(schemaPath.endsWith("VocatryaProbe.schema.json")).toBe(true);
+    // The text invocation still ends with the prompt as the last arg.
+    expect(inv.args[inv.args.length - 1]).toBe("Summarize this job");
+  });
+
+  it("prompt-only runtime (opencode): same payload, plain text invocation, PROMPT_AND_VALIDATE", async () => {
+    const svc = createConnectionService({
+      profilesRoot,
+      smokeWorkRoot,
+      execWorkRoot,
+      backend,
+      deps: {
+        ...makeDeps(),
+        spawnSyncImpl: (cmd) =>
+          cmd === "where.exe"
+            ? { status: 0, stdout: `${FAKE_EXE}\r\n` }
+            : { status: 0, stdout: "1.18.31\n", stderr: "" },
+      },
+    });
+    backend.resolveTicket.mockResolvedValue(
+      resolveOk({
+        backendKind: "OPENCODE_RUNTIME",
+        connection: connectionRow({ backendKind: "OPENCODE_RUNTIME" }),
+      }),
+    );
+    runnerScript = [
+      {
+        match: (h) => h.startsWith("run "),
+        respond: respond({
+          stdout:
+            '{"type":"text","part":{"text":"{\\"name\\":\\"x\\",\\"score\\":1,\\"status\\":\\"PASS\\"}"}}',
+        }),
+      },
+    ];
+    const result = await svc.executeText({
+      ticket: "t",
+      connectionId: "conn-1",
+      model: "openai/gpt-5.5",
+      prompt: "task",
+      structuredOutput: { schema: SCHEMA, schemaName: "VocatryaProbe" },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.structuredStrategy).toBe("PROMPT_AND_VALIDATE");
+    expect(result.text).toBe('{"name":"x","score":1,"status":"PASS"}');
+    const inv = invocations.find((i) => i.args[0] === "run");
+    expect(inv.args.join(" ")).not.toContain("--output-schema");
+    expect(inv.args.join(" ")).not.toContain("--json-schema");
+  });
+
+  it("plain TEXT_ONLY requests carry no structuredStrategy", async () => {
+    runnerScript = happyExec();
+    const result = await exec();
+    expect(result.ok).toBe(true);
+    expect(result.structuredStrategy).toBeNull();
+  });
+});
