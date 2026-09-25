@@ -33,6 +33,7 @@ import {
   saveChatConversation,
 } from "@/actions/agentChat.actions";
 import { getUserSettings } from "@/actions/userSettings.actions";
+import { getAgentChatPreflight } from "@/actions/agentChat.actions";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 import { AiProvider } from "@/models/ai.model";
 import {
@@ -229,6 +230,40 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
   }, [chat, releaseRail, t]);
 
   const runPreflight = useCallback(async () => {
+    // The conversation's creation-time lock (or the CAREER_DIALOGUE
+    // assignment it would resolve to) decides which runtime the next turn
+    // uses — check that first so a locked/managed conversation never falls
+    // through to a legacy settings probe.
+    try {
+      const account = await getAgentChatPreflight();
+      const state = account?.data;
+      if (state?.kind === "account") {
+        setPreflight({
+          checked: true,
+          ok: true,
+          provider: state.displayName,
+          model: state.model,
+        });
+        return;
+      }
+      if (state?.kind === "blocked") {
+        setPreflight({
+          checked: true,
+          ok: false,
+          error:
+            state.code === "REAUTH_REQUIRED"
+              ? "The AI connection for this conversation needs you to sign in again — open Settings → AI Connections."
+              : state.code === "CONNECTION_DISCONNECTED"
+                ? "The AI connection for this conversation is disconnected — reconnect it in Settings → AI Connections."
+                : "The AI connection for this conversation is not usable — check Settings → AI Connections.",
+        });
+        return;
+      }
+    } catch {
+      // Preflight is advisory — fall through to the legacy probe rather
+      // than disabling send on a read failure.
+    }
+
     const settings = await getUserSettings();
     const ai = settings?.data?.settings?.ai;
     const provider = ai?.provider ?? AiProvider.OLLAMA;
@@ -297,9 +332,12 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
     setComposerNonce((n) => n + 1);
     setToolStreams({});
     setQueued(undefined);
+    // The lock died with the row — the next send resolves the CURRENT
+    // assignment, so the header must reflect that preview again.
+    void runPreflight();
     // Clearing an idle conversation aborted nothing worth reporting.
     if (wasStreaming) toastInfo(t("agent.conversationClearedStopped"));
-  }, [chat, t]);
+  }, [chat, t, runPreflight]);
 
   const approvalPending = useMemo(
     () => hasPendingApproval(chat.messages),

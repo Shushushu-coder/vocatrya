@@ -5,6 +5,7 @@ import {
   ToolCallNotFoundForApprovalError,
 } from "ai";
 import { AIUnavailableError } from "@/lib/ai";
+import { AIBusinessError } from "@/lib/ai/connections";
 import { log } from "@/lib/telemetry";
 
 type ErrorContext = { provider?: string; model?: string };
@@ -42,6 +43,48 @@ export function mapAgentError(
   });
 
   if (error instanceof AIUnavailableError) return error.message;
+
+  // Managed account-runtime failures — stable codes only, never the raw
+  // message (runtime stderr and model output must not reach the client).
+  if (error instanceof AIBusinessError) {
+    switch (error.code) {
+      case "AI_NOT_CONFIGURED":
+        return "No AI connection is assigned for Career Dialogue. Pick one in Settings → AI Connections.";
+      case "ASSIGNED_CONNECTION_UNAVAILABLE":
+        return "The AI connection this conversation is bound to is no longer available. Clear the conversation to pick another, or fix the assignment in Settings.";
+      case "REAUTH_REQUIRED":
+        return "The AI connection this conversation uses needs you to sign in again. Open Settings → AI Connections.";
+      case "CONNECTION_DISCONNECTED":
+        return "The AI connection this conversation uses is disconnected. Reconnect it in Settings → AI Connections.";
+      case "CONNECTION_ERROR":
+        return "The AI connection this conversation uses is in an error state. Check it in Settings → AI Connections.";
+      case "RUNTIME_NOT_AVAILABLE":
+      case "RUNTIME_NOT_INSTALLED":
+      case "RUNTIME_BROKEN":
+        return "The managed AI runtime is not available right now. Check the connection in Settings → AI Connections.";
+      case "MODEL_UNAVAILABLE":
+        return "The AI assignment for this conversation has no usable model. Fix it in Settings → AI Connections.";
+      case "STREAMING_NOT_SUPPORTED":
+        return "The assigned AI runtime cannot stream responses, so it cannot run Career Dialogue.";
+      case "STREAMING_NOT_VERIFIED":
+        return "The assigned AI runtime's streaming has not been verified for the installed version. Verify or update it in Settings → AI Connections.";
+      case "STRUCTURED_OUTPUT_NOT_VERIFIED":
+      case "STRUCTURED_OUTPUT_UNSUPPORTED":
+        return "The assigned AI runtime is not verified for the structured decisions Career Dialogue needs.";
+      case "AI_EXECUTION_TIMEOUT":
+        return "That response took too long. Ask again to retry.";
+      case "AI_REQUEST_TOO_LARGE":
+        return "That request was too large for the AI runtime. Shorten the pasted content and try again.";
+      case "AGENT_TOOL_NOT_ALLOWED":
+      case "AGENT_TOOL_ARGUMENT_INVALID":
+      case "AGENT_TOOL_PROTOCOL_FAILED":
+        return "The assistant produced something it could not act on. Try rephrasing, or Clear the conversation and ask again.";
+      case "AGENT_STEP_LIMIT_REACHED":
+        return "The assistant stopped after reaching its step limit for this turn.";
+      default:
+        return GENERIC;
+    }
+  }
 
   if (
     name === "AbortError" ||

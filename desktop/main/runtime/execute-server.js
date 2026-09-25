@@ -17,6 +17,8 @@ const http = require("node:http");
 const { timingSafeEqual } = require("node:crypto");
 
 const EXECUTE_PATH = "/internal/ai-connections/execute";
+const EXECUTE_STREAM_PATH = "/internal/ai-connections/execute-stream";
+const RUNTIME_STATE_PATH = "/internal/ai-connections/runtime-state";
 const DEFAULT_MAX_BODY_BYTES = 512 * 1024;
 const MAX_PROMPT_CHARS = 256 * 1024;
 const MAX_SCHEMA_BYTES = 64 * 1024;
@@ -86,16 +88,32 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
 
   return http.createServer(async (req, res) => {
     try {
-      if (
-        req.method !== "POST" ||
-        !req.url ||
-        req.url.split("?")[0] !== EXECUTE_PATH
-      ) {
+      const pathname = req.url ? req.url.split("?")[0] : "";
+      const routeOk =
+        (req.method === "POST" &&
+          (pathname === EXECUTE_PATH || pathname === EXECUTE_STREAM_PATH)) ||
+        (req.method === "GET" && pathname === RUNTIME_STATE_PATH);
+      if (!routeOk) {
         sendJson(res, 404, { ok: false, code: "NOT_FOUND" });
         return;
       }
       if (!bearerMatches(req.headers.authorization, token)) {
         sendJson(res, 401, { ok: false, code: "UNAUTHORIZED" });
+        return;
+      }
+
+      // Capability/readiness pre-flight for the backend: the static
+      // descriptor plus the version probed on the installed binary. The
+      // backend gates streaming surfaces on this before minting a ticket.
+      if (req.method === "GET") {
+        const url = new URL(req.url, "http://127.0.0.1");
+        const backendKind = url.searchParams.get("backendKind") || "";
+        const accountProvider = url.searchParams.get("provider") || undefined;
+        sendJson(
+          res,
+          200,
+          service.runtimeState({ backendKind, accountProvider }),
+        );
         return;
       }
 
@@ -176,6 +194,59 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
       res.on("close", () => {
         if (!res.writableEnded) controller.abort();
       });
+
+      if (pathname === EXECUTE_STREAM_PATH) {
+        // Streaming variant of /execute: normalized RuntimeStreamEvent
+        // objects as NDJSON — one {"type":"text-delta","delta":...} line per
+        // delta as it arrives (never buffered), then a terminal
+        // {"type":"completed",text} or {"type":"error",code}. The same
+        // ticket, permission and verification gates apply — this is the
+        // provider-neutral streaming seam Career Dialogue consumes.
+        if (structuredOutput) {
+          // Decision steps go through the buffered /execute path — mixing
+          // schema output into the delta stream is not part of the
+          // streaming contract.
+          sendJson(res, 400, { ok: false, code: "INVALID_PAYLOAD" });
+          return;
+        }
+        res.writeHead(200, {
+          "content-type": "application/x-ndjson; charset=utf-8",
+          "cache-control": "no-store",
+        });
+        const writeEvent = (event) => {
+          try {
+            if (!res.destroyed) res.write(JSON.stringify(event) + "\n");
+          } catch {
+            // Client is gone — the close handler already aborted the run.
+          }
+        };
+        const result = await service.executeTextStream({
+          ticket,
+          connectionId,
+          model,
+          prompt,
+          timeoutMs,
+          signal: controller.signal,
+          // Deltas and vendor errors stream through; the parser's own
+          // terminal "completed" is superseded by the canonical result
+          // event written below — the client stops at the first terminal.
+          onEvent: (event) => {
+            if (event.type !== "completed") writeEvent(event);
+          },
+        });
+        writeEvent(
+          result.ok
+            ? {
+                type: "completed",
+                text: result.text,
+                model: result.model,
+                durationMs: result.durationMs,
+              }
+            : { type: "error", code: result.code },
+        );
+        if (!res.destroyed) res.end();
+        return;
+      }
 
       const result = await service.executeText({
         ticket,

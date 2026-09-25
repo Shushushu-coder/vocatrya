@@ -47,6 +47,15 @@ import {
   SURFACES,
 } from "@/lib/telemetry";
 import { addJobSettled, AGENT_CHAT_TERMINAL_TOOLS } from "@/models/agent.model";
+import prisma from "@/lib/db";
+import {
+  persistChatMessages,
+  type ChatConversationRow,
+} from "@/lib/agent/chatConversationStore";
+import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
+import { checkStreamingTurnReadiness } from "@/lib/ai/streaming-execution";
+import { runAccountAgentTurn } from "@/lib/agent/accountTurn";
+import { AIBusinessError } from "@/lib/ai/connections";
 
 // The one terminal tool whose stop condition is not "was it called" — see
 // addJobSettled.
@@ -90,6 +99,158 @@ function outcomeOf(message: UIMessage | undefined): {
   return { tool: null, state: null, outcome: "none" };
 }
 
+/**
+ * The ACCOUNT lock path: the conversation's pinned AIConnection + model run
+ * every step of the turn on the managed runtime — Vocatrya owns the tool
+ * orchestration, the runtime only produces text and decisions.
+ */
+async function accountChatResponse({
+  req,
+  userId,
+  messages,
+  windowed,
+  pastedText,
+  pageContext,
+  lock,
+}: {
+  req: NextRequest;
+  userId: string;
+  messages: UIMessage[];
+  windowed: UIMessage[];
+  pastedText: string | undefined;
+  pageContext: Parameters<typeof buildPageContextMessage>[0];
+  lock: { connectionId: string; model: string | null };
+}) {
+  // The lock is a provenance pointer — the connection's CURRENT state is
+  // re-checked every turn (disconnect/reauth/archive degrade it), and it is
+  // ownership-scoped, so a lock can never name another user's connection.
+  const connection = await prisma.aIConnection.findFirst({
+    where: { id: lock.connectionId, userId },
+    select: {
+      id: true,
+      status: true,
+      backendKind: true,
+      provider: true,
+      archivedAt: true,
+    },
+  });
+  const errorContext = {
+    provider: connection?.provider ?? "account runtime",
+    model: lock.model ?? undefined,
+  };
+  const deny = (error: unknown) =>
+    NextResponse.json(
+      { error: mapAgentError(error, errorContext) },
+      { status: 503 },
+    );
+  if (!connection || connection.archivedAt) {
+    return deny(
+      new AIBusinessError(
+        "ASSIGNED_CONNECTION_UNAVAILABLE",
+        "The locked AI connection is not available",
+      ),
+    );
+  }
+  try {
+    await checkStreamingTurnReadiness({
+      connection,
+      model: lock.model,
+    });
+  } catch (error) {
+    return deny(error);
+  }
+
+  const rawLocale = req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value;
+  const locale = normalizeLocale(rawLocale);
+  const systemPrompt = buildAgentChatSystemPrompt(locale);
+
+  // Same abort contract as the legacy path: client disconnect / stop()
+  // aborts the runtime child through the execute-stream socket.
+  const turnSignal = AbortSignal.any([
+    req.signal,
+    AbortSignal.timeout(APP_CONSTANTS.AGENT_CHAT_TIMEOUT_MS),
+  ]);
+
+  const turnSpan = startSpan("agent.chat.turn", {
+    ...genAiRequestAttrs({
+      provider: connection.provider,
+      model: lock.model ?? "",
+      temperature: TEMPERATURES.ANALYSIS,
+      numCtx: APP_CONSTANTS.AGENT_CHAT_NUM_CTX,
+      surface: SURFACES.AGENT_CHAT,
+      system: systemPrompt,
+      prompt: [],
+    }),
+    "jobsync.user_id": userId,
+    "jobsync.backend_kind": connection.backendKind,
+    "jobsync.connection_id": connection.id,
+  });
+
+  const alreadyMapped = new Set<string>();
+  const mapTurnError = (error: unknown): string =>
+    runInSpan(turnSpan, () => {
+      const message = error instanceof Error ? error.message : "";
+      if (alreadyMapped.has(message)) return message;
+      const mapped = mapAgentError(error, errorContext);
+      alreadyMapped.add(mapped);
+      return mapped;
+    });
+
+  const stream = createUIMessageStream({
+    originalMessages: messages,
+    execute: async ({ writer }) => {
+      await runInSpan(turnSpan, () =>
+        runAccountAgentTurn({
+          userId,
+          connectionId: connection.id,
+          provider: connection.provider,
+          backendKind: connection.backendKind,
+          modelName: lock.model ?? "",
+          systemPrompt,
+          messages: windowed,
+          pastedText,
+          pageContext,
+          writer,
+          signal: turnSignal,
+        }),
+      );
+    },
+    onFinish: async ({ messages: finalMessages, responseMessage, isAborted }) => {
+      const { tool, state, outcome } = outcomeOf(responseMessage);
+      runInSpan(turnSpan, () =>
+        logTurn({
+          provider: `account:${connection.provider}`,
+          model: lock.model,
+          backendKind: connection.backendKind,
+          tool,
+          toolState: state,
+          outcome,
+          aborted: isAborted,
+          pasteChars: pastedText?.length ?? 0,
+          messageCount: finalMessages.length,
+          historyDropped: messages.length - windowed.length,
+        }),
+      );
+      turnSpan.end({
+        "jobsync.tool": tool,
+        "jobsync.tool_state": state,
+        "jobsync.outcome": outcome,
+        "jobsync.aborted": isAborted,
+        "jobsync.paste_chars": pastedText?.length ?? 0,
+        "jobsync.message_count": finalMessages.length,
+        "jobsync.history_dropped": messages.length - windowed.length,
+      });
+      // Same write-on-finish contract as the legacy path: a cancelled turn
+      // never writes back (Clear would otherwise resurrect).
+      if (isAborted) return;
+      await saveChatConversation(stubConsumedPastes(finalMessages));
+    },
+    onError: mapTurnError,
+  });
+
+  return createUIMessageStreamResponse({ stream });
+}
+
 export const POST = async (req: NextRequest) => {
   const session = await auth();
   const userId = session?.user?.id;
@@ -113,11 +274,32 @@ export const POST = async (req: NextRequest) => {
   const messages = parsed.data.messages as UIMessage[];
   const { pageContext } = parsed.data;
 
-  // Write-on-receipt. The user's message and the posting they pasted are the
-  // expensive half to reproduce, so they are durable before the model is
-  // called — a reload, an error or a stop() mid-stream cannot lose them.
-  await saveChatConversation(messages);
+  const pastedText = resolvePastedText(messages);
+  const windowed = windowMessages(messages);
 
+  // Write-on-receipt, now with the creation-time AI lock inside the same
+  // write: the conversation row is created with its resolved pair, and an
+  // existing row's lock is returned with it. The lock decides which
+  // execution path the turn takes — account runtime vs legacy provider —
+  // and never changes afterwards.
+  const conversation = await persistChatMessages(userId, messages);
+  const lock = chatLockFromRow(conversation as ChatConversationRow);
+
+  if (lock.kind === "account") {
+    return accountChatResponse({
+      req,
+      userId,
+      messages,
+      windowed,
+      pastedText,
+      pageContext,
+      lock,
+    });
+  }
+
+  // Legacy path — historical null-lock conversations and conversations
+  // created while no CAREER_DIALOGUE/GLOBAL_DEFAULT assignment exists keep
+  // the settings.ai provider/model semantics exactly as before.
   const settings = await getUserSettings();
   const ai = settings?.data?.settings?.ai;
   // provider is always present — defaultUserSettings supplies it. model is
@@ -141,13 +323,9 @@ export const POST = async (req: NextRequest) => {
     return NextResponse.json({ error: mapAgentError(error, errorContext) }, { status: 503 });
   }
 
-  const pastedText = resolvePastedText(messages);
-
   // Async in ai@6 (correction #5), and the messages array is client-supplied
   // — a shape z.array(z.any()) let through can reject the conversion, and
   // that is a bad request, not a server crash.
-  const windowed = windowMessages(messages);
-
   let modelMessages;
   try {
     modelMessages = await convertToModelMessages(windowed);

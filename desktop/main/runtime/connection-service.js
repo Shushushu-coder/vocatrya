@@ -1472,6 +1472,37 @@ function createConnectionService({
     return { ok: true, cancelled };
   }
 
+  // Non-ticketed capability probe for the backend's readiness pre-flight:
+  // reports the static capability descriptor plus the version actually
+  // probed on the installed binary. No credential, profile path, or
+  // connection state crosses this boundary — the internal bearer is the
+  // same one guarding the execution endpoint, and the result is exactly
+  // what the local gates would consult anyway.
+  function runtimeState({ backendKind, accountProvider } = {}) {
+    const adapter = bindAdapter(backendKind, accountProvider);
+    if (!adapter) {
+      return { ok: false, code: CONNECTION_OP_CODES.UNSUPPORTED_BACKEND };
+    }
+    const capabilities =
+      getAccountRuntimeCapabilities(adapter.backendKind) || null;
+    const runtime = resolveRuntime(adapter);
+    if (runtime.error) {
+      return {
+        ok: true,
+        capabilities,
+        runtimeVersion: null,
+        runtimeReady: false,
+        runtimeCode: runtime.error.code,
+      };
+    }
+    return {
+      ok: true,
+      capabilities,
+      runtimeVersion: runtime.version,
+      runtimeReady: true,
+    };
+  }
+
   return {
     profileManager,
     startLogin,
@@ -1483,6 +1514,7 @@ function createConnectionService({
     runSmoke,
     executeText,
     executeTextStream,
+    runtimeState,
   };
 }
 

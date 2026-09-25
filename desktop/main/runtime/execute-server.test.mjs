@@ -155,3 +155,124 @@ describe("internal execution endpoint", () => {
     });
   });
 });
+
+describe("internal runtime-state endpoint", () => {
+  it("returns the capability descriptor and probed version", async () => {
+    const runtimeState = vi.fn(() => ({
+      ok: true,
+      capabilities: { backendKind: "DEVIN_RUNTIME", execution: { streaming: true } },
+      runtimeVersion: "300.10.31",
+      runtimeReady: true,
+    }));
+    const base = await start({ runtimeState });
+    const res = await fetch(
+      `${base}/internal/ai-connections/runtime-state?backendKind=DEVIN_RUNTIME&provider=DEVIN`,
+      { headers: { authorization: `Bearer ${TOKEN}` } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      ok: true,
+      runtimeVersion: "300.10.31",
+      runtimeReady: true,
+    });
+    expect(runtimeState).toHaveBeenCalledWith({
+      backendKind: "DEVIN_RUNTIME",
+      accountProvider: "DEVIN",
+    });
+  });
+
+  it("requires the bearer token and rejects POST", async () => {
+    const runtimeState = vi.fn();
+    const base = await start({ runtimeState });
+    const noAuth = await fetch(
+      `${base}/internal/ai-connections/runtime-state?backendKind=X`,
+    );
+    expect(noAuth.status).toBe(401);
+    const postRes = await post(
+      base,
+      "/internal/ai-connections/runtime-state",
+      VALID_BODY,
+    );
+    expect(postRes.status).toBe(404);
+    expect(runtimeState).not.toHaveBeenCalled();
+  });
+});
+
+describe("internal execute-stream endpoint", () => {
+  async function collect(base, body) {
+    const res = await post(base, "/internal/ai-connections/execute-stream", body);
+    const text = await res.text();
+    return text
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line));
+  }
+
+  it("streams normalized deltas then a canonical completed event", async () => {
+    const executeTextStream = vi.fn(async ({ onEvent }) => {
+      onEvent({ type: "text-delta", delta: "Hel" });
+      onEvent({ type: "text-delta", delta: "lo" });
+      onEvent({ type: "completed", text: "Hello" }); // parser terminal — superseded
+      return { ok: true, text: "Hello", model: "m1", durationMs: 5 };
+    });
+    const base = await start({ executeTextStream });
+    const lines = await collect(base, VALID_BODY);
+    expect(lines).toEqual([
+      { type: "text-delta", delta: "Hel" },
+      { type: "text-delta", delta: "lo" },
+      { type: "completed", text: "Hello", model: "m1", durationMs: 5 },
+    ]);
+    expect(executeTextStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticket: "t1",
+        connectionId: "conn-1",
+        model: "m1",
+        prompt: "hello",
+      }),
+    );
+  });
+
+  it("emits a terminal error event when the service fails", async () => {
+    const executeTextStream = vi.fn(async () => ({
+      ok: false,
+      code: "CONNECTION_DISCONNECTED",
+    }));
+    const base = await start({ executeTextStream });
+    const lines = await collect(base, VALID_BODY);
+    expect(lines).toEqual([
+      { type: "error", code: "CONNECTION_DISCONNECTED" },
+    ]);
+  });
+
+  it("rejects structuredOutput on the streaming path", async () => {
+    const executeTextStream = vi.fn();
+    const base = await start({ executeTextStream });
+    const res = await post(base, "/internal/ai-connections/execute-stream", {
+      ...VALID_BODY,
+      structuredOutput: { schema: { type: "object" }, schemaName: "x" },
+    });
+    expect(res.status).toBe(400);
+    expect(executeTextStream).not.toHaveBeenCalled();
+  });
+
+  it("enforces the same auth and permission gates as /execute", async () => {
+    const executeTextStream = vi.fn();
+    const base = await start({ executeTextStream });
+    const noAuth = await fetch(
+      `${base}/internal/ai-connections/execute-stream`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(VALID_BODY),
+      },
+    );
+    expect(noAuth.status).toBe(401);
+    const denied = await post(base, "/internal/ai-connections/execute-stream", {
+      ...VALID_BODY,
+      permissionScope: "USER_SELECTED_FILES_READ",
+    });
+    expect(denied.status).toBe(403);
+    expect(executeTextStream).not.toHaveBeenCalled();
+  });
+});

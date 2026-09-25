@@ -290,6 +290,10 @@ export const AI_BUSINESS_ERROR_CODES = {
   // verified incremental output — explicit failure, never a buffered
   // one-shot masquerading as a stream.
   STREAMING_NOT_SUPPORTED: "STREAMING_NOT_SUPPORTED",
+  // The runtime exposes a streaming mechanism but it has not been verified
+  // against the installed runtime version (PENDING, or version drift after
+  // a runtime update). Explicit failure — never silently unverified.
+  STREAMING_NOT_VERIFIED: "STREAMING_NOT_VERIFIED",
   AI_REQUEST_TOO_LARGE: "AI_REQUEST_TOO_LARGE",
   // The desktop could not reach the backend to redeem the ticket — a
   // transport failure, distinct from runtime/connection failures.
@@ -305,6 +309,13 @@ export const AI_BUSINESS_ERROR_CODES = {
     "STRUCTURED_OUTPUT_NATIVE_SCHEMA_VIOLATION",
   STRUCTURED_OUTPUT_TRUNCATED: "STRUCTURED_OUTPUT_TRUNCATED",
   STRUCTURED_OUTPUT_RETRY_EXHAUSTED: "STRUCTURED_OUTPUT_RETRY_EXHAUSTED",
+  // Agent-orchestration outcomes (Career Dialogue account path): the model
+  // produced something the Vocatrya tool protocol cannot act on. Codes
+  // only — raw model output never reaches the client.
+  AGENT_TOOL_PROTOCOL_FAILED: "AGENT_TOOL_PROTOCOL_FAILED",
+  AGENT_TOOL_NOT_ALLOWED: "AGENT_TOOL_NOT_ALLOWED",
+  AGENT_TOOL_ARGUMENT_INVALID: "AGENT_TOOL_ARGUMENT_INVALID",
+  AGENT_STEP_LIMIT_REACHED: "AGENT_STEP_LIMIT_REACHED",
 } as const;
 export type AIBusinessErrorCode =
   (typeof AI_BUSINESS_ERROR_CODES)[keyof typeof AI_BUSINESS_ERROR_CODES];

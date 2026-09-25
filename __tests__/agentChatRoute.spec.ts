@@ -11,6 +11,20 @@ vi.mock("@/lib/ai/rate-limiter", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/ai/providers", () => ({ getModel: vi.fn() }));
 vi.mock("@/actions/userSettings.actions", () => ({ getUserSettings: vi.fn() }));
 vi.mock("@/actions/agentChat.actions", () => ({ saveChatConversation: vi.fn() }));
+// The route's write-on-receipt now goes through the store, which also owns
+// the creation-time lock. A null lock keeps these tests on the legacy path.
+vi.mock("@/lib/agent/chatConversationStore", () => ({
+  persistChatMessages: vi.fn(async (userId: string, messages: unknown[]) => ({
+    id: "conv-1",
+    userId,
+    messages: JSON.stringify(messages),
+    resolvedConnectionId: null,
+    resolvedModel: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })),
+  getChatConversationRow: vi.fn(async () => null),
+}));
 vi.mock("@/lib/agent/tools", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/agent/tools")>();
   return { ...actual, buildAgentTools: vi.fn(actual.buildAgentTools) };
@@ -49,6 +63,7 @@ import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { getModel } from "@/lib/ai/providers";
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { saveChatConversation } from "@/actions/agentChat.actions";
+import { persistChatMessages } from "@/lib/agent/chatConversationStore";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { buildPageContextMessage } from "@/lib/agent/prompt";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -117,8 +132,10 @@ describe("POST /api/ai/chat", () => {
   it("persists the incoming messages BEFORE calling the model", async () => {
     const messages = [pasteMessage("the 6kb posting")];
     await POST(req({ messages }));
-    expect(saveChatConversation).toHaveBeenCalled();
-    const saveOrder = (saveChatConversation as any).mock.invocationCallOrder[0];
+    // Write-on-receipt runs through the store's upsert — the same call that
+    // pins the creation-time AI lock on a new conversation.
+    expect(persistChatMessages).toHaveBeenCalledWith("user-1", messages);
+    const saveOrder = (persistChatMessages as any).mock.invocationCallOrder[0];
     const streamOrder = streamText.mock.invocationCallOrder[0];
     expect(saveOrder).toBeLessThan(streamOrder);
   });
