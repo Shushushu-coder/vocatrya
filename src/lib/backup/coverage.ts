@@ -23,7 +23,6 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "User",
   "ApiKey",
   "McpAccessToken",
-  "ChatConversation",
   "JobStatus",
   "DataMigrationRun",
 ] as const;

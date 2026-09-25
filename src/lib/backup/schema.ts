@@ -364,6 +364,18 @@ const AIBusinessAssignment = z.object({
   updatedAt: dt,
 });
 
+// The lock columns are optional as well as nullable: backups taken before
+// the lock migration have no such keys, and undefined leaves Prisma on the
+// column default (null — the historical-conversation semantics).
+const ChatConversation = z.object({
+  id,
+  messages: str,
+  resolvedConnectionId: optId.optional(),
+  resolvedModel: optStr.optional(),
+  createdAt: dt,
+  updatedAt: dt,
+});
+
 const UserSettings = z.object({
   id,
   settings: str,
@@ -1170,6 +1182,7 @@ export const BackupDataSchema = z.object({
   Question: group(Question),
   AIConnection: group(AIConnection),
   AIBusinessAssignment: group(AIBusinessAssignment),
+  ChatConversation: group(ChatConversation),
   AutomationRun: group(AutomationRun),
   UserSettings: group(UserSettings),
   AbMigrationState: group(AbMigrationState),

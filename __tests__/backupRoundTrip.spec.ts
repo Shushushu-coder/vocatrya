@@ -292,7 +292,14 @@ describe("backup round trip", () => {
     // The wipe set is honoured in both directions.
     expect(await prisma.apiKey.count({ where: { userId } })).toBe(1);
     expect(await prisma.mcpAccessToken.count({ where: { userId } })).toBe(1);
-    expect(await prisma.chatConversation.count({ where: { userId } })).toBe(0);
+    // ChatConversation is backed up now — the seeded null-lock row survives
+    // the restore with its lock columns still null (legacy semantics).
+    const conversation = await prisma.chatConversation.findFirstOrThrow({
+      where: { userId },
+    });
+    expect(conversation.messages).toBe("[]");
+    expect(conversation.resolvedConnectionId).toBeNull();
+    expect(conversation.resolvedModel).toBeNull();
 
     // filePath was recomputed and the bytes are actually there.
     const file = await prisma.file.findFirstOrThrow({

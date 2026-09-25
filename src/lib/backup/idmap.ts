@@ -60,6 +60,15 @@ const OPTIONAL_FKS = new Set<string>([
   "DialogueTurn.summaryGenerationId",
 ]);
 
+// Lock/provenance pointers that must SURVIVE dangling, not degrade: a
+// restored ChatConversation bound to a connection that was never exported
+// keeps the raw id so the runtime reports the pinned binding missing
+// (ASSIGNED_CONNECTION_UNAVAILABLE) instead of silently falling back to
+// legacy. Remapped normally when the connection IS in the backup.
+const PRESERVE_DANGLING_FKS = new Set<string>([
+  "ChatConversation.resolvedConnectionId",
+]);
+
 export class IdMap {
   private map = new Map<string, string>();
 
@@ -110,6 +119,9 @@ export function buildCreateData(
     const mapped = idMap.get(value as string);
     if (mapped) {
       data[field] = mapped;
+      continue;
+    }
+    if (PRESERVE_DANGLING_FKS.has(`${model}.${field}`)) {
       continue;
     }
     if (OPTIONAL_FKS.has(`${model}.${field}`)) {

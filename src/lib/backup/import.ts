@@ -331,9 +331,9 @@ async function wipe(
     data: { defaultResumeId: null },
   });
 
-  // Not restorable, but a conversation about deleted jobs is worse than a
-  // clean panel. ApiKey and McpAccessToken are deliberately absent.
-  await tx.chatConversation.deleteMany({ where: { userId } });
+  // ChatConversation is backed up and wiped through the standard model
+  // pipeline — its AI lock columns ride the same row. ApiKey and
+  // McpAccessToken remain deliberately absent from backup and wipe.
   // Operational telemetry is not in the ZIP; leftover RUNNING rows would lie.
   await tx.dataMigrationRun.deleteMany({ where: { userId } });
 

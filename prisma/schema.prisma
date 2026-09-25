@@ -688,12 +688,23 @@ model McpAccessToken {
 }
 
 model ChatConversation {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  messages  String // JSON-serialized UIMessage[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  messages             String // JSON-serialized UIMessage[]
+  // Career Dialogue creation-time AI lock. Captured once when the row is
+  // created, never rewritten afterwards:
+  // - resolvedConnectionId set -> the conversation runs the locked
+  //   AIConnection + model on the account runtime.
+  // - both null -> legacy settings.ai provider/model semantics (historical
+  //   rows and conversations created while nothing is configured).
+  // Deliberately NOT a relation: a restored backup may reference a
+  // connection that does not exist locally, and that orphaned lock must
+  // surface as an explicit error rather than be silently nulled.
+  resolvedConnectionId String?
+  resolvedModel        String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ---------------------------------------------------------------------------

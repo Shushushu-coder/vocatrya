@@ -79,6 +79,7 @@ export type BackupModel =
   | "Question"
   | "AIConnection"
   | "AIBusinessAssignment"
+  | "ChatConversation"
   | "AutomationRun"
   | "UserSettings"
   | "AbMigrationState"
@@ -344,6 +345,17 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     delegate: "aIBusinessAssignment",
     owner: "userId",
     fks: { connectionId: "AIConnection" },
+    scope: byUser,
+  },
+  // resolvedConnectionId is a provenance pointer, not a hard FK: a restore
+  // where the connection was never exported keeps the raw id so the
+  // conversation reports ASSIGNED_CONNECTION_UNAVAILABLE at run time
+  // rather than silently falling back to legacy (PRESERVE_DANGLING_FKS in
+  // idmap.ts is what differs from OPTIONAL_FKS here).
+  ChatConversation: {
+    delegate: "chatConversation",
+    owner: "userId",
+    fks: { resolvedConnectionId: "AIConnection" },
     scope: byUser,
   },
   AutomationRun: {
@@ -762,9 +774,11 @@ export const INSERT_ORDER: BackupModel[] = [
   "Question",
   // AIConnection must precede every model that can lock onto it:
   // AIBusinessAssignment, AutomationRun, JobDescriptionParse,
-  // ResumeVariantVersion, MatchAnalysis, InterviewSession.
+  // ResumeVariantVersion, MatchAnalysis, InterviewSession,
+  // ChatConversation.
   "AIConnection",
   "AIBusinessAssignment",
+  "ChatConversation",
   "AutomationRun",
   "UserSettings",
   "AbMigrationState",

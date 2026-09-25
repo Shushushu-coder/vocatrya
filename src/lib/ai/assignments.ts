@@ -61,6 +61,8 @@ export type BusinessAIResolution =
       source: BusinessAISource;
       assignmentId: string;
       connectionId: string;
+      /** The model the broken assignment pinned — may be empty. */
+      model?: string;
     }
   | {
       status: "LEGACY_INTERVIEW_CONFIG";
@@ -110,6 +112,10 @@ function classifyAssignment(
     source,
     assignmentId: row.id,
     connectionId: row.connectionId,
+    // The assigned pair is reported even when unusable: creation-time
+    // locks (ChatConversation) persist it so later turns fail against the
+    // pinned binding explicitly instead of silently re-resolving.
+    model: row.model,
   });
 
   const connection = row.connection;
