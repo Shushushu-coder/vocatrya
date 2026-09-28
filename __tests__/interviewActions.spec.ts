@@ -3,6 +3,7 @@ import { DomainError } from "@/lib/interview/persistence/interviewErrors";
 
 const getCurrentUser = vi.fn();
 const listInterviewSessions = vi.fn();
+const listInterviewSessionCards = vi.fn();
 const loadSessionHistory = vi.fn();
 
 vi.mock("@/utils/user.utils", () => ({
@@ -12,6 +13,7 @@ vi.mock("@/utils/user.utils", () => ({
 vi.mock("@/lib/interview/runtime", () => ({
   getInterviewRuntime: () => ({
     listInterviewSessions,
+    listInterviewSessionCards,
     loadSessionHistory,
     ensurePreset: vi.fn(),
     listPresets: vi.fn(async () => []),
@@ -38,15 +40,16 @@ describe("interview server actions", () => {
   beforeEach(() => {
     getCurrentUser.mockReset();
     listInterviewSessions.mockReset();
+    listInterviewSessionCards.mockReset();
     loadSessionHistory.mockReset();
   });
 
   it("uses the authenticated user and never trusts a client userId", async () => {
     getCurrentUser.mockResolvedValue({ id: "user-a" });
-    listInterviewSessions.mockResolvedValue([]);
+    listInterviewSessionCards.mockResolvedValue([]);
     const result = await listInterviewSessionsAction();
     expect(result.success).toBe(true);
-    expect(listInterviewSessions).toHaveBeenCalledWith("user-a");
+    expect(listInterviewSessionCards).toHaveBeenCalledWith("user-a");
   });
 
   it("maps cross-user session access to a safe product error", async () => {

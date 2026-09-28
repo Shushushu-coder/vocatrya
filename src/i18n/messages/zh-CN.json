@@ -2067,6 +2067,27 @@
     "model": "Interview 模型",
     "saveInterviewAi": "保存 Interview AI",
     "interviewAiDescription": "面试练习使用独立的 AI 配置，不会自动复制全局模型。",
-    "selectQuestionHint": "至少选择一道题。"
+    "selectQuestionHint": "至少选择一道题。",
+    "startInterview": "开始模拟面试",
+    "genericSession": "通用模拟面试",
+    "questionsProgress": "{done} / {total} 题已完成",
+    "questionsTotal": "共 {total} 道题",
+    "statusDraft": "准备中",
+    "statusInProgress": "进行中",
+    "statusCompleted": "已完成",
+    "statusArchived": "已归档",
+    "needsAiSetup": "需要先为面试配置 AI 服务",
+    "jobBindingHint": "绑定岗位后，系统会结合岗位要求和你的职业经历准备面试问题。",
+    "startInterviewCta": "开始面试",
+    "creating": "正在准备面试问题…",
+    "questionProgress": "第 {current} / {total} 题",
+    "nextQuestion": "下一题",
+    "finishInterview": "完成面试并生成总结",
+    "feedbackTitle": "本次反馈",
+    "askAboutItem": "继续追问",
+    "you": "你",
+    "coach": "教练",
+    "aiUnavailable": "面试 AI 暂不可用，请检查设置后重试。",
+    "jobNeedsJd": "该岗位还没有职位描述（JD）版本，请先在岗位页添加。"
   }
 }

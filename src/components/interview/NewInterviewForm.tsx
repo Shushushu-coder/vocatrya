@@ -9,13 +9,6 @@ import { createInterviewSessionAction } from "@/actions/interview.actions";
 import { toastError } from "@/lib/toast";
 
 type Props = {
-  presets: Array<{
-    questionId: string;
-    promptText: string;
-    title: string;
-    displayOrder: number;
-  }>;
-  questions: Array<{ id: string; promptText: string }>;
   jobs: Array<{
     id: string;
     title: string;
@@ -23,12 +16,11 @@ type Props = {
   }>;
 };
 
-export default function NewInterviewForm({ presets, questions, jobs }: Props) {
+export default function NewInterviewForm({ jobs }: Props) {
   const { t } = useI18n();
   const router = useRouter();
   const [jobId, setJobId] = useState("");
   const [jdId, setJdId] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const jds = useMemo(
@@ -36,27 +28,26 @@ export default function NewInterviewForm({ presets, questions, jobs }: Props) {
     [jobs, jobId],
   );
 
-  const toggle = (id: string) => {
-    setSelected((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
-  };
-
   const onCreate = async () => {
-    if (!selected.length) {
-      toastError(t("interview.selectQuestionHint"));
-      return;
-    }
-    if ((jobId && !jdId) || (!jobId && jdId)) {
-      toastError(t("interview.optionalJob"));
-      return;
+    // A job with exactly one JD version binds it implicitly; several
+    // versions require a choice (job+JD stay a frozen pair).
+    let resolvedJdId = jdId;
+    if (jobId && !resolvedJdId) {
+      if (jds.length === 1) {
+        resolvedJdId = jds[0].id;
+      } else if (jds.length > 1) {
+        toastError(t("interview.selectJd"));
+        return;
+      } else {
+        toastError(t("interview.jobNeedsJd"));
+        return;
+      }
     }
     setSaving(true);
     try {
       const result = await createInterviewSessionAction({
-        questionIds: selected,
         jobOpportunityId: jobId || null,
-        jobDescriptionVersionId: jdId || null,
+        jobDescriptionVersionId: resolvedJdId || null,
       });
       if (!result.success || !("data" in result)) {
         toastError(result.message);
@@ -69,10 +60,11 @@ export default function NewInterviewForm({ presets, questions, jobs }: Props) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-xl space-y-6">
       <div className="space-y-2">
-        <Label>{t("interview.optionalJob")}</Label>
+        <Label htmlFor="interview-job">{t("interview.optionalJob")}</Label>
         <select
+          id="interview-job"
           className="w-full rounded-md border bg-background px-3 py-2 text-sm"
           value={jobId}
           onChange={(event) => {
@@ -87,8 +79,9 @@ export default function NewInterviewForm({ presets, questions, jobs }: Props) {
             </option>
           ))}
         </select>
-        {jobId ? (
+        {jobId && jds.length > 1 ? (
           <select
+            aria-label={t("interview.selectJd")}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
             value={jdId}
             onChange={(event) => setJdId(event.target.value)}
@@ -101,43 +94,12 @@ export default function NewInterviewForm({ presets, questions, jobs }: Props) {
             ))}
           </select>
         ) : null}
-      </div>
-      <div className="space-y-2">
-        <Label>{t("interview.presets")}</Label>
-        <ul className="space-y-2">
-          {presets.map((item) => (
-            <li key={item.questionId}>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(item.questionId)}
-                  onChange={() => toggle(item.questionId)}
-                />
-                <span>{item.promptText}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="space-y-2">
-        <Label>{t("interview.myQuestions")}</Label>
-        <ul className="space-y-2">
-          {questions.map((item) => (
-            <li key={item.id}>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(item.id)}
-                  onChange={() => toggle(item.id)}
-                />
-                <span>{item.promptText}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
+        <p className="text-sm text-muted-foreground">
+          {t("interview.jobBindingHint")}
+        </p>
       </div>
       <Button onClick={() => void onCreate()} disabled={saving}>
-        {t("interview.createSession")}
+        {saving ? t("interview.creating") : t("interview.startInterviewCta")}
       </Button>
     </div>
   );

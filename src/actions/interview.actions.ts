@@ -3,11 +3,10 @@
 import { requireUser } from "./shared";
 import { getInterviewRuntime } from "@/lib/interview/runtime";
 import { mapInterviewError } from "@/lib/interview/productErrors";
-import { getInterviewConfig } from "@/lib/interview/interviewSettings";
+import { getInterviewReadiness } from "@/lib/interview/readiness";
 import {
   updateInterviewAiSettings,
   clearInterviewAiSettings,
-  getUserSettings,
 } from "./userSettings.actions";
 import type { InterviewAiSettings } from "@/models/userSettings.model";
 import type { CoachingMode } from "@/lib/interview/persistence/interviewEnums";
@@ -16,18 +15,19 @@ function runtime() {
   return getInterviewRuntime();
 }
 
-export async function getInterviewConfigAction() {
+/**
+ * Effective Interview readiness — same resolver semantics as session
+ * creation (INTERVIEW assignment → legacy settings.ai.interview →
+ * GLOBAL_DEFAULT → NOT_CONFIGURED; a broken explicit assignment reports
+ * invalid_assignment, never a fallback).
+ */
+export async function getInterviewReadinessAction() {
   try {
-    await requireUser();
-    const settings = await getUserSettings();
-    const config = getInterviewConfig(settings?.data?.settings);
+    const user = await requireUser();
+    const readiness = await getInterviewReadiness(user.id);
     return {
       success: true as const,
-      data: {
-        configured: Boolean(config),
-        provider: config?.provider ?? null,
-        model: config?.model ?? null,
-      },
+      data: readiness,
     };
   } catch (error) {
     return mapInterviewError(error);
@@ -52,57 +52,33 @@ export async function clearInterviewConfigAction() {
   }
 }
 
-export async function listInterviewPresetsAction() {
+/** Jobs (+ JD versions) offered on the New Interview page. */
+export async function listInterviewJobsAction() {
   try {
     const user = await requireUser();
-    const app = runtime();
-    await app.ensurePreset(user.id);
-    const presets = await app.listPresets();
-    const questions = await app.listUserQuestions(user.id);
-    const jobs = await app.listUserJobs(user.id);
-    return { success: true as const, data: { presets, questions, jobs } };
+    const jobs = await runtime().listUserJobs(user.id);
+    return { success: true as const, data: jobs };
   } catch (error) {
     return mapInterviewError(error);
   }
 }
 
+/**
+ * Create a product interview session. Question ids are gone — the
+ * service plans 3 questions through the creation-time resolved AI
+ * runtime (same lock the session persists). A planning failure aborts
+ * creation; no empty session is left behind.
+ */
 export async function createInterviewSessionAction(input: {
   coachingMode?: CoachingMode;
-  questionIds: string[];
   jobOpportunityId?: string | null;
   jobDescriptionVersionId?: string | null;
 }) {
   try {
     const user = await requireUser();
-    const app = runtime();
-    const [ownedQuestions, presets] = await Promise.all([
-      app.listUserQuestions(user.id),
-      app.listPresets(),
-    ]);
-    const questions = [];
-    for (const questionId of input.questionIds) {
-      const owned = ownedQuestions.find((row) => row.id === questionId);
-      const preset = presets.find((row) => row.questionId === questionId);
-      const prompt = owned?.promptText ?? preset?.promptText;
-      if (!prompt) {
-        return {
-          success: false as const,
-          code: "QUESTION_NOT_FOUND",
-          message: "题目不存在。",
-        };
-      }
-      questions.push({
-        displayedText: prompt,
-        sourceKind: preset ? ("QUESTION_BANK" as const) : ("USER_PROVIDED" as const),
-        sourceQuestionId: questionId,
-        category: owned?.category ?? preset?.category ?? null,
-        referenceAnswerSnapshot: owned?.referenceAnswer ?? preset?.referenceAnswer ?? null,
-      });
-    }
-    const created = await app.createInterviewSession({
+    const created = await runtime().createInterviewSession({
       userId: user.id,
       coachingMode: input.coachingMode ?? "PRACTICE",
-      questions,
       jobOpportunityId: input.jobOpportunityId ?? null,
       jobDescriptionVersionId: input.jobDescriptionVersionId ?? null,
     });
@@ -122,10 +98,11 @@ export async function getInterviewSessionAction(sessionId: string) {
   }
 }
 
+/** Session cards for the landing history (derived readable fields). */
 export async function listInterviewSessionsAction() {
   try {
     const user = await requireUser();
-    const sessions = await runtime().listInterviewSessions(user.id);
+    const sessions = await runtime().listInterviewSessionCards(user.id);
     return { success: true as const, data: sessions };
   } catch (error) {
     return mapInterviewError(error);
@@ -172,10 +149,29 @@ export async function getInterviewFeedbackAction(answerAttemptId: string) {
   }
 }
 
+/**
+ * Server-side "next question". Validates the current question was
+ * answered with succeeded feedback before advancing
+ * currentQuestionInstanceId — clients never write it directly.
+ */
+export async function advanceInterviewQuestionAction(sessionId: string) {
+  try {
+    const user = await requireUser();
+    const data = await runtime().advanceToNextQuestion({
+      userId: user.id,
+      sessionId,
+    });
+    return { success: true as const, data };
+  } catch (error) {
+    return mapInterviewError(error);
+  }
+}
+
 export async function sendInterviewFollowUpAction(input: {
   sessionId: string;
   userText: string;
   targetType?: string;
+  questionInstanceId?: string | null;
   commercialFeedbackItemId?: string | null;
 }) {
   try {
@@ -185,6 +181,7 @@ export async function sendInterviewFollowUpAction(input: {
       sessionId: input.sessionId,
       userText: input.userText,
       targetType: input.targetType ?? "SESSION",
+      questionInstanceId: input.questionInstanceId ?? null,
       commercialFeedbackItemId: input.commercialFeedbackItemId ?? null,
     });
     return { success: true as const, data };
@@ -193,10 +190,15 @@ export async function sendInterviewFollowUpAction(input: {
   }
 }
 
+/**
+ * Finish the interview: validate readiness → assemble real interview
+ * content → generate → publish → mark COMPLETED inside the same short
+ * transaction. A generation failure leaves the session IN_PROGRESS so
+ * the user can retry.
+ */
 export async function generateInterviewSummaryAction(sessionId: string) {
   try {
     const user = await requireUser();
-    await runtime().completeSession(user.id, sessionId);
     const data = await runtime().generateInterviewSummary({
       userId: user.id,
       sessionId,

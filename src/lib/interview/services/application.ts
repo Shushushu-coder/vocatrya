@@ -24,7 +24,16 @@ import {
   canonicalSummaryInputHash,
   canonicalTranscriptContentHash,
 } from "../persistence/hash";
-import { stringifyJson } from "../persistence/json";
+import { parseJson } from "../persistence/json";
+import {
+  boundJdExcerpt,
+  buildCoachingPrompt,
+  selectDialogueHistory,
+} from "./dialogueContext";
+import {
+  buildSummaryPrompt,
+  type SummaryQuestionInput,
+} from "./summaryPrompt";
 import { VocatryaInterviewPersistence } from "../persistence/vocatryaInterviewPersistence";
 import type {
   AnswerAttemptRecord,
@@ -52,6 +61,8 @@ import {
   VocatryaUserOwnershipAdapter,
 } from "../vocatryaHostPorts";
 import { validateFeedbackItem } from "../validation/feedback";
+import { guardFeedbackItem } from "../validation/feedbackGuards";
+import { buildFeedbackPrompt, FEEDBACK_MAX_ITEMS } from "./feedbackPrompt";
 import { groundFeedbackItem } from "./evidence";
 import { loadOwnershipView, loadWritableOwnership } from "./ownership";
 import { BundledKnowledgeProvider, type KnowledgeProvider } from "./knowledge";
@@ -59,6 +70,12 @@ import { SystemClock, type Clock } from "./clock";
 import { VocatryaInterviewQueries } from "./hostQueries";
 import { ensureCanonicalPreset } from "../presets/install";
 import { resolveInterviewAiRuntime } from "../interviewRuntimePlan";
+import {
+  assembleInterviewPlanningContext,
+  generateInterviewQuestionPlan,
+  QUESTION_PLANNING_PROMPT_VERSION,
+  truncateUtf8,
+} from "./questionPlanning";
 
 export interface InterviewRuntimeDeps {
   db: PrismaClient;
@@ -122,7 +139,13 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
   async function createInterviewSession(input: {
     userId: string;
     coachingMode: CoachingMode;
-    questions: CommercialQuestionSpec[];
+    /**
+     * When absent/empty the session's questions are produced by AI
+     * question planning against the bounded job/JD + career-material
+     * context. Explicit questions remain supported for preset/historical
+     * call sites.
+     */
+    questions?: CommercialQuestionSpec[];
     feedbackReleasePolicy?: string | null;
     jobOpportunityId?: string | null;
     jobDescriptionVersionId?: string | null;
@@ -132,8 +155,54 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       jobOpportunityId: input.jobOpportunityId ?? null,
       jobDescriptionVersionId: input.jobDescriptionVersionId ?? null,
     });
+    // Resolve the INTERVIEW AI config exactly once. The lock travels into
+    // createSession's transaction so the session and its bound config are
+    // one atomic write; a broken explicit assignment fails here and never
+    // falls back to legacy/global. Question planning runs on this same
+    // resolved runtime — no second resolve, no mid-create failover.
+    const { plan, lock } = await resolveInterviewAiRuntime(
+      input.userId,
+      deps.db,
+    );
+    if (plan.kind === "invalid") {
+      throw new DomainError(
+        plan.code,
+        "The assigned interview AI connection is not usable",
+      );
+    }
+    let specs: CommercialQuestionSpec[];
+    if (input.questions && input.questions.length > 0) {
+      specs = input.questions;
+    } else {
+      const planningModel = modelPort.resolveInterviewModelForPlan
+        ? await modelPort.resolveInterviewModelForPlan({
+            requestingUserId: input.userId,
+            plan,
+          })
+        : await modelPort.resolveInterviewModel({
+            requestingUserId: input.userId,
+          });
+      const context = await assembleInterviewPlanningContext(queries, {
+        userId: input.userId,
+        jobOpportunityId: jobContext.jobOpportunityId,
+        jobDescriptionVersionId: jobContext.jobDescriptionVersionId,
+      });
+      const questionPlan = await generateInterviewQuestionPlan({
+        model: planningModel,
+        context,
+      });
+      specs = questionPlan.questions.map((question) => ({
+        displayedText: question.text,
+        sourceKind: "AI_GENERATED" as const,
+        category: question.category,
+        sourceMetadata: {
+          rationale: question.rationale,
+          promptVersion: QUESTION_PLANNING_PROMPT_VERSION,
+        },
+      }));
+    }
     const prepared: CommercialQuestionSpec[] = [];
-    for (const spec of input.questions) {
+    for (const spec of specs) {
       let referenceAnswer = spec.referenceAnswerSnapshot ?? null;
       let sourceQuestionId = spec.sourceQuestionId ?? null;
       if (spec.sourceQuestionId) {
@@ -149,20 +218,6 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
         sourceQuestionId,
         referenceAnswerSnapshot: referenceAnswer,
       });
-    }
-    // Resolve the INTERVIEW AI config exactly once. The lock travels into
-    // createSession's transaction so the session and its bound config are
-    // one atomic write; a broken explicit assignment fails here and never
-    // falls back to legacy/global.
-    const { plan, lock } = await resolveInterviewAiRuntime(
-      input.userId,
-      deps.db,
-    );
-    if (plan.kind === "invalid") {
-      throw new DomainError(
-        plan.code,
-        "The assigned interview AI connection is not usable",
-      );
     }
     return persistence.createSession({
       actorUserId: input.userId,
@@ -183,6 +238,12 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     return queries.listSessions(userId);
   }
 
+  /** Product-facing history rows: session + derived readable metadata. */
+  async function listInterviewSessionCards(userId: string) {
+    await persistence.ensureUserExists(userId);
+    return queries.listSessionCards(userId);
+  }
+
   async function getInterviewSession(userId: string, sessionId: string) {
     const session = await persistence.getSessionForUser(sessionId, userId);
     const instances = await persistence.listInstancesForUser(sessionId, userId);
@@ -200,14 +261,67 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     });
   }
 
-  async function advanceQuestion(
-    userId: string,
-    sessionId: string,
-    questionInstanceId: string,
-  ) {
-    return persistence.updateSessionForUser(sessionId, userId, {
-      currentQuestionInstanceId: questionInstanceId,
+  /**
+   * Server-side advance for the one-question-at-a-time flow. Clients
+   * never write currentQuestionInstanceId directly — this validates that
+   * the current question was answered and has a succeeded feedback before
+   * moving to the next instance by displayOrder.
+   */
+  async function advanceToNextQuestion(input: {
+    userId: string;
+    sessionId: string;
+  }): Promise<
+    | { advanced: true; session: SessionRecord; nextInstanceId: string }
+    | { advanced: false; session: SessionRecord; reason: "last_question" }
+  > {
+    await loadWritableOwnership(ownershipPort, input.userId, input.sessionId);
+    const session = await persistence.getSessionForUser(
+      input.sessionId,
+      input.userId,
+    );
+    const instances = await persistence.listInstancesForUser(
+      input.sessionId,
+      input.userId,
+    );
+    if (!instances.length) {
+      throw new DomainError("INVALID_QUESTIONS", "Session has no questions");
+    }
+    const current =
+      instances.find((row) => row.id === session.currentQuestionInstanceId) ??
+      instances[0];
+    const attempt = await queries.findLatestCompletedAttempt(current.id);
+    if (!attempt) {
+      throw new DomainError(
+        "QUESTION_NOT_READY",
+        "Current question has no completed answer",
+      );
+    }
+    const feedback = await queries.findCurrentSucceededFeedback(attempt.id);
+    if (!feedback) {
+      throw new DomainError(
+        "QUESTION_NOT_READY",
+        "Current question has no succeeded feedback",
+      );
+    }
+    const next = instances.find(
+      (row) => row.displayOrder > current.displayOrder && row.status !== "SKIPPED",
+    );
+    if (!next) {
+      return { advanced: false, session, reason: "last_question" };
+    }
+    await persistence.updateInstanceForUser(next.id, input.userId, {
+      status: "IN_PROGRESS",
     });
+    const updated = await persistence.updateSessionForUser(
+      input.sessionId,
+      input.userId,
+      {
+        currentQuestionInstanceId: next.id,
+        status: session.status === "DRAFT" ? "IN_PROGRESS" : session.status,
+        startedAt: session.startedAt ?? clock.now(),
+      },
+    );
+    return { advanced: true, session: updated, nextInstanceId: next.id };
   }
 
   async function submitInterviewAnswer(input: {
@@ -264,6 +378,17 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       completedAt: now,
       durationMs: input.durationMs ?? null,
     });
+    // First submitted answer flips a DRAFT session into IN_PROGRESS.
+    const session = await persistence.getSessionForUser(
+      attempt.sessionId,
+      input.userId,
+    );
+    if (session.status === "DRAFT") {
+      await persistence.updateSessionForUser(attempt.sessionId, input.userId, {
+        status: "IN_PROGRESS",
+        startedAt: session.startedAt ?? now,
+      });
+    }
     return { attempt: finished, transcript, revision };
   }
 
@@ -335,31 +460,73 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
           "Transcript revision does not belong to this answer attempt",
         );
       }
-      const built = {
-        system: `You are an interview coach. Return JSON {feedbackItems:[...]}. Prompt ${FEEDBACK_PROMPT_VERSION}. KB ${knowledge.version}. ${knowledge.promptExcerpt()}`,
-        prompt: [
-          "FEEDBACK_GENERATION",
-          `question: ${instance.displayedText}`,
-          `transcript_revision: ${revisionRow.fullText}`,
-          `knowledge_base_version: ${session.knowledgeBaseVersion}`,
-          `knowledge_content_hash: ${knowledge.contentHash}`,
-        ].join("\n"),
-      };
-      const raw = await model.generateJson(built);
-      const payload = raw as { feedbackItems?: unknown[] };
-      const sourceItems = payload.feedbackItems ?? [];
-      const validated = sourceItems.map((item) =>
-        groundFeedbackItem(revisionRow.fullText, validateFeedbackItem(item)),
-      );
-      if (!validated.length) {
-        const failed = await persistence.failFeedbackForUser({
-          actorUserId: input.userId,
-          generationId: generation.id,
-          code: ErrorCodes.EMPTY_ITEMS,
-          message: "Commercial feedback generation produced no items",
+      // Optional bounded JD context: when the session targets a role the
+      // prompt may reference it, but transcript evidence stays the
+      // authority for every excerpt.
+      let jdContext: string | null = null;
+      if (session.jobOpportunityId && session.jobDescriptionVersionId) {
+        const job = await queries.getJobPlanningContext({
+          jobOpportunityId: session.jobOpportunityId,
+          jobDescriptionVersionId: session.jobDescriptionVersionId,
         });
-        return { generation: failed, items: [] };
+        if (job) {
+          jdContext = truncateUtf8(
+            `role: ${job.jobTitle}${job.companyName ? ` @ ${job.companyName}` : ""}\n${job.jdRawContent}`,
+            2_000,
+          );
+        }
       }
+      const built = buildFeedbackPrompt({
+        questionText: instance.displayedText,
+        transcriptText: revisionRow.fullText,
+        taxonomyLabels: knowledge.taxonomyLabels?.() ?? [],
+        jdContext,
+      });
+
+      // One full-regeneration repair: any contract/guard/grounding
+      // failure discards the whole candidate output and regenerates once.
+      // Rejected payloads are never persisted.
+      const MAX_REGENERATIONS = 1;
+      let lastError: unknown = null;
+      let validated: ReturnType<typeof validateAndGround> | null = null;
+
+      function validateAndGround(raw: unknown) {
+        const payload = raw as { feedbackItems?: unknown[] };
+        const sourceItems = Array.isArray(payload.feedbackItems)
+          ? payload.feedbackItems
+          : [];
+        const items = sourceItems.slice(0, FEEDBACK_MAX_ITEMS).map((item) => {
+          const structural = validateFeedbackItem(item);
+          guardFeedbackItem(structural);
+          return groundFeedbackItem(revisionRow.fullText, structural);
+        });
+        return items;
+      }
+
+      for (let cycle = 0; cycle <= MAX_REGENERATIONS; cycle += 1) {
+        try {
+          const raw = await model.generateJson(built);
+          const items = validateAndGround(raw);
+          if (!items.length) {
+            throw new DomainError(
+              ErrorCodes.EMPTY_ITEMS,
+              "Commercial feedback generation produced no items",
+            );
+          }
+          validated = items;
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (validated == null) {
+        throw lastError instanceof Error
+          ? lastError
+          : new DomainError(ErrorCodes.GENERATION_FAILED, "Feedback generation failed");
+      }
+
       return persistence.publishFeedbackForUser({
         actorUserId: input.userId,
         generationId: generation.id,
@@ -461,10 +628,65 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       knowledgeBaseVersion: session.knowledgeBaseVersion,
     });
     try {
-      const raw = await model.generateJson({
-        system: `Return JSON {bodyText, structuredPayload:{keyPatterns,strengths,developmentAreas}}. Prompt ${SUMMARY_PROMPT_VERSION}. KB ${knowledge.version}.`,
-        prompt: `SESSION_SUMMARY\nsession:${session.id}\ninputs:${evidence.length}\nhash:${inputHash}\nknowledge:${knowledge.contentHash}`,
-      });
+      // Assemble the real per-question content — question text, the
+      // transcript revision that feedback ran on, and the published
+      // feedback items — instead of ids/hashes.
+      const questions: SummaryQuestionInput[] = [];
+      for (const entry of evidence) {
+        const instance = await persistence.getInstanceForUser(
+          entry.questionInstanceId,
+          input.userId,
+        );
+        const revision = await persistence.getRevisionForUser(
+          entry.inputRevisionId,
+          input.userId,
+        );
+        const items = await queries.listFeedbackItemsForGeneration(
+          entry.feedbackGenerationId,
+        );
+        questions.push({
+          questionText: instance.displayedText,
+          transcriptText: revision.fullText,
+          feedbackItems: items.map((item) => {
+            const itemEvidence = parseJson<{
+              transcriptExcerpt?: string;
+              problemStatement?: string;
+            }>(item.evidence, {});
+            const itemExplanation = parseJson<{ underlyingCause?: string }>(
+              item.explanation,
+              {},
+            );
+            return {
+              problemLabel: item.problemLabel,
+              problemStatement: itemEvidence.problemStatement ?? null,
+              evidenceExcerpt: itemEvidence.transcriptExcerpt ?? null,
+              underlyingCause: itemExplanation.underlyingCause ?? null,
+              suggestion: item.suggestion,
+            };
+          }),
+        });
+      }
+      let jobContext: {
+        jobTitle: string;
+        companyName: string | null;
+        jdExcerpt: string;
+      } | null = null;
+      if (session.jobOpportunityId && session.jobDescriptionVersionId) {
+        const job = await queries.getJobPlanningContext({
+          jobOpportunityId: session.jobOpportunityId,
+          jobDescriptionVersionId: session.jobDescriptionVersionId,
+        });
+        if (job) {
+          jobContext = {
+            jobTitle: job.jobTitle,
+            companyName: job.companyName,
+            jdExcerpt: job.jdRawContent,
+          };
+        }
+      }
+      const raw = await model.generateJson(
+        buildSummaryPrompt({ job: jobContext, questions }),
+      );
       const payload = raw as {
         bodyText?: string;
         structuredPayload?: unknown;
@@ -473,12 +695,21 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       if (!bodyText) {
         throw new DomainError(ErrorCodes.INVALID_SUMMARY_OUTPUT, "body_text is required");
       }
+      // Publish + session completion in one short transaction: a failed
+      // or rejected generation can never leave a COMPLETED session
+      // without a summary, and the model call stays outside the tx.
+      const now = clock.now();
       return persistence.publishSummaryForUser({
         actorUserId: input.userId,
         generationId: generation.id,
         evidence,
         bodyText,
         structuredPayload: payload.structuredPayload ?? null,
+        sessionCompletion: {
+          status: session.coachingMode === "MOCK" ? "COACHING" : "COMPLETED",
+          completedAt: now,
+          feedbackReleasedAt: session.feedbackReleasedAt ?? now,
+        },
       });
     } catch (error) {
       if (error instanceof SummaryNotReadyError) {
@@ -533,14 +764,24 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       requestingUserId: input.userId,
       sessionId: input.sessionId,
     });
-    const raw = await model.generateJson({
-      system: `Return JSON {reply}. Prompt ${COACHING_PROMPT_VERSION}. Use only provenance identifiers. Never mention credentials, API keys, or internal UUIDs as secrets.`,
-      prompt: [
-        "COACHING_TURN",
-        `user_text: ${input.userText}`,
-        `target: ${stringifyJson(target.contextSnapshot)}`,
-      ].join("\n"),
+    // Real interview content + bounded history — never ids alone. The
+    // persisted contextSnapshot keeps provenance identifiers only; the
+    // untrusted content lives in the prompt, not in the DB snapshot.
+    const context = await assembleDialogueContext(input.userId, input.sessionId, target);
+    const turns = await persistence.listTurnsForUser(input.sessionId, input.userId);
+    const history = selectDialogueHistory(turns);
+    const built = buildCoachingPrompt({
+      targetType: target.targetType,
+      job: context.job,
+      questionText: context.questionText,
+      answerTranscript: context.answerTranscript,
+      feedbackItem: context.feedbackItem,
+      relatedFeedback: context.relatedFeedback,
+      summaryText: context.summaryText,
+      history,
+      userText: input.userText,
     });
+    const raw = await model.generateJson(built);
     const reply = String((raw as { reply?: string }).reply ?? "").trim();
     if (!reply) {
       throw new DomainError(ErrorCodes.GENERATION_FAILED, "Coaching reply was empty");
@@ -688,6 +929,177 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     };
   }
 
+  /**
+   * Resolve a validated dialogue target into real interview content for
+   * the coaching prompt. Only provenance ids persist on the turn; the
+   * transcript/question/feedback text goes to the model only.
+   */
+  async function assembleDialogueContext(
+    userId: string,
+    sessionId: string,
+    target: {
+      targetType: DialogueTargetType;
+      questionInstanceId: string | null;
+      answerAttemptId: string | null;
+      commercialFeedbackItemId: string | null;
+      summaryGenerationId: string | null;
+    },
+  ): Promise<{
+    job: { jobTitle: string; companyName: string | null; jdExcerpt: string } | null;
+    questionText: string | null;
+    answerTranscript: string | null;
+    feedbackItem: {
+      problemLabel: string;
+      problemStatement: string | null;
+      evidenceExcerpt: string | null;
+      underlyingCause: string | null;
+      performanceImpact: string | null;
+      suggestion: string;
+    } | null;
+    relatedFeedback: Array<{ problemLabel: string; suggestion: string }> | null;
+    summaryText: string | null;
+  }> {
+    const session = await persistence.getSessionForUser(sessionId, userId);
+    const context = {
+      job: null as {
+        jobTitle: string;
+        companyName: string | null;
+        jdExcerpt: string;
+      } | null,
+      questionText: null as string | null,
+      answerTranscript: null as string | null,
+      feedbackItem: null as {
+        problemLabel: string;
+        problemStatement: string | null;
+        evidenceExcerpt: string | null;
+        underlyingCause: string | null;
+        performanceImpact: string | null;
+        suggestion: string;
+      } | null,
+      relatedFeedback: null as Array<{
+        problemLabel: string;
+        suggestion: string;
+      }> | null,
+      summaryText: null as string | null,
+    };
+
+    if (session.jobOpportunityId && session.jobDescriptionVersionId) {
+      const job = await queries.getJobPlanningContext({
+        jobOpportunityId: session.jobOpportunityId,
+        jobDescriptionVersionId: session.jobDescriptionVersionId,
+      });
+      if (job) {
+        context.job = {
+          jobTitle: job.jobTitle,
+          companyName: job.companyName,
+          jdExcerpt: boundJdExcerpt(job.jdRawContent),
+        };
+      }
+    }
+
+    const loadAnswerBundle = async (instanceId: string) => {
+      const instance = await persistence.getInstanceForUser(instanceId, userId);
+      const attempt = await queries.findLatestCompletedAttempt(instance.id);
+      const transcript = attempt
+        ? await queries.getActiveRevisionText(attempt.id)
+        : null;
+      const generation = attempt
+        ? await queries.findCurrentSucceededFeedback(attempt.id)
+        : null;
+      const items = generation
+        ? await queries.listFeedbackItemsForGeneration(generation.id)
+        : [];
+      return { instance, attempt, transcript, generation, items };
+    };
+
+    if (target.targetType === "FEEDBACK_ITEM" && target.commercialFeedbackItemId) {
+      const item = await queries.getFeedbackItem(target.commercialFeedbackItemId);
+      if (!item) return context;
+      const generation = await queries.getFeedbackGeneration(item.generationId);
+      if (!generation) return context;
+      const bundle = await loadAnswerBundle(generation.questionInstanceId);
+      context.questionText = bundle.instance.displayedText;
+      context.answerTranscript = bundle.transcript;
+      const evidence = parseJson<{
+        transcriptExcerpt?: string;
+        problemStatement?: string;
+      }>(item.evidence, {});
+      const explanation = parseJson<{
+        underlyingCause?: string;
+        performanceImpact?: string;
+      }>(item.explanation, {});
+      context.feedbackItem = {
+        problemLabel: item.problemLabel,
+        problemStatement: evidence.problemStatement ?? null,
+        evidenceExcerpt: evidence.transcriptExcerpt ?? null,
+        underlyingCause: explanation.underlyingCause ?? null,
+        performanceImpact: explanation.performanceImpact ?? null,
+        suggestion: item.suggestion,
+      };
+      const related = bundle.items
+        .filter((row) => row.id !== item.id)
+        .map((row) => ({ problemLabel: row.problemLabel, suggestion: row.suggestion }));
+      context.relatedFeedback = related.length ? related : null;
+      return context;
+    }
+
+    if (target.targetType === "QUESTION_INSTANCE" && target.questionInstanceId) {
+      const bundle = await loadAnswerBundle(target.questionInstanceId);
+      context.questionText = bundle.instance.displayedText;
+      context.answerTranscript = bundle.transcript;
+      const related = bundle.items.map((row) => ({
+        problemLabel: row.problemLabel,
+        suggestion: row.suggestion,
+      }));
+      context.relatedFeedback = related.length ? related : null;
+      return context;
+    }
+
+    if (target.targetType === "ANSWER_ATTEMPT" && target.answerAttemptId) {
+      const attempt = await persistence.getAttemptForUser(
+        target.answerAttemptId,
+        userId,
+      );
+      const bundle = await loadAnswerBundle(attempt.questionInstanceId);
+      context.questionText = bundle.instance.displayedText;
+      context.answerTranscript = bundle.transcript;
+      const related = bundle.items.map((row) => ({
+        problemLabel: row.problemLabel,
+        suggestion: row.suggestion,
+      }));
+      context.relatedFeedback = related.length ? related : null;
+      return context;
+    }
+
+    if (target.targetType === "SESSION_SUMMARY" && target.summaryGenerationId) {
+      const generation = await queries.getSummaryGeneration(
+        target.summaryGenerationId,
+      );
+      context.summaryText = generation?.bodyText ?? null;
+      return context;
+    }
+
+    // SESSION: current question context + bounded job/JD + current summary.
+    if (session.currentQuestionInstanceId) {
+      try {
+        const bundle = await loadAnswerBundle(session.currentQuestionInstanceId);
+        context.questionText = bundle.instance.displayedText;
+        context.answerTranscript = bundle.transcript;
+        const related = bundle.items.map((row) => ({
+          problemLabel: row.problemLabel,
+          suggestion: row.suggestion,
+        }));
+        context.relatedFeedback = related.length ? related : null;
+      } catch {
+        // Current question may be absent on historical sessions — the
+        // session-level context alone is still a valid dialogue target.
+      }
+    }
+    const summary = await queries.getCurrentSummaryGeneration(sessionId);
+    context.summaryText = summary?.bodyText ?? null;
+    return context;
+  }
+
   async function listDialogue(userId: string, sessionId: string) {
     return persistence.listTurnsForUser(sessionId, userId);
   }
@@ -734,9 +1146,10 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     ensurePreset,
     createInterviewSession,
     listInterviewSessions,
+    listInterviewSessionCards,
     getInterviewSession,
     completeSession,
-    advanceQuestion,
+    advanceToNextQuestion,
     submitInterviewAnswer,
     saveTranscriptRevision,
     activateRevision,

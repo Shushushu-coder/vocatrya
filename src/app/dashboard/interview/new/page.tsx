@@ -1,27 +1,27 @@
 import { getServerI18n } from "@/i18n/server";
-import { getInterviewConfigAction, listInterviewPresetsAction } from "@/actions/interview.actions";
+import {
+  getInterviewReadinessAction,
+  listInterviewJobsAction,
+} from "@/actions/interview.actions";
 import { redirect } from "next/navigation";
 import NewInterviewForm from "@/components/interview/NewInterviewForm";
 
 export default async function NewInterviewPage() {
-  const config = await getInterviewConfigAction();
-  if (!config.success || !("data" in config) || !config.data.configured) {
+  // Gate on the effective INTERVIEW resolver — the same semantics session
+  // creation uses — never the legacy-only settings check.
+  const readiness = await getInterviewReadinessAction();
+  const ready =
+    readiness.success && "data" in readiness && readiness.data.status === "ready";
+  if (!ready) {
     redirect("/dashboard/interview");
   }
   const { t } = await getServerI18n();
-  const listed = await listInterviewPresetsAction();
-  const data =
-    listed.success && "data" in listed
-      ? listed.data
-      : { presets: [], questions: [], jobs: [] };
+  const listed = await listInterviewJobsAction();
+  const jobs = listed.success && "data" in listed ? listed.data : [];
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">{t("interview.newSession")}</h1>
-      <NewInterviewForm
-        presets={data.presets}
-        questions={data.questions}
-        jobs={data.jobs}
-      />
+      <NewInterviewForm jobs={jobs} />
     </div>
   );
 }

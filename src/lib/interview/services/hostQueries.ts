@@ -191,7 +191,7 @@ export class VocatryaInterviewQueries {
     }>
   > {
     const rows = await this.db.jobOpportunity.findMany({
-      where: { userId },
+      where: { userId, archivedAt: null },
       orderBy: { updatedAt: "desc" },
       include: {
         descriptionVersions: {
@@ -204,6 +204,212 @@ export class VocatryaInterviewQueries {
       id: row.id,
       title: row.title,
       jdVersions: row.descriptionVersions,
+    }));
+  }
+
+  /**
+   * Bounded job/JD payload for interview question planning and session
+   * context. Only the owning user's rows are reachable here — callers have
+   * already resolved the pair through the frozen job-context port.
+   */
+  async getJobPlanningContext(input: {
+    jobOpportunityId: string;
+    jobDescriptionVersionId: string;
+  }): Promise<{
+    jobTitle: string;
+    companyName: string | null;
+    jdVersionNumber: number;
+    jdRawContent: string;
+  } | null> {
+    const jd = await this.db.jobDescriptionVersion.findUnique({
+      where: { id: input.jobDescriptionVersionId },
+      select: {
+        id: true,
+        jobOpportunityId: true,
+        versionNumber: true,
+        rawContent: true,
+      },
+    });
+    if (!jd || jd.jobOpportunityId !== input.jobOpportunityId) return null;
+    const job = await this.db.jobOpportunity.findUnique({
+      where: { id: input.jobOpportunityId },
+      select: { id: true, title: true, company: { select: { label: true } } },
+    });
+    if (!job) return null;
+    return {
+      jobTitle: job.title,
+      companyName: job.company?.label ?? null,
+      jdVersionNumber: jd.versionNumber,
+      jdRawContent: jd.rawContent,
+    };
+  }
+
+  /**
+   * Career Material facts for question planning. Facts only: item
+   * provenance (type/title/dates) plus owned evidence rows. No internal
+   * ids, no credentials — output feeds an LLM prompt.
+   */
+  async listCareerMaterialFacts(userId: string): Promise<
+    Array<{
+      type: string;
+      title: string;
+      startDate: Date | null;
+      endDate: Date | null;
+      isCurrent: boolean;
+      notes: string | null;
+      orgOrVenue: string | null;
+      evidence: Array<{
+        kind: string;
+        content: string;
+        metricText: string | null;
+      }>;
+    }>
+  > {
+    const rows = await this.db.careerMaterialItem.findMany({
+      where: { userId, archivedAt: null },
+      orderBy: [{ isCurrent: "desc" }, { updatedAt: "desc" }],
+      take: 24,
+      select: {
+        type: true,
+        title: true,
+        startDate: true,
+        endDate: true,
+        isCurrent: true,
+        notes: true,
+        evidence: {
+          where: { archivedAt: null },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          take: 6,
+          select: { kind: true, content: true, metricText: true },
+        },
+        internshipDetail: {
+          select: { organizationName: true, roleTitle: true },
+        },
+        employmentDetail: {
+          select: { organizationName: true, roleTitle: true },
+        },
+        projectDetail: {
+          select: { organizationName: true, roleTitle: true },
+        },
+        researchDetail: {
+          select: { institution: true, roleTitle: true, field: true },
+        },
+        campusActivityDetail: {
+          select: { organizationName: true, roleTitle: true },
+        },
+        educationDetail: {
+          select: { institution: true, degree: true, fieldOfStudy: true },
+        },
+        awardDetail: { select: { issuer: true } },
+        skillDetail: { select: { skillName: true, proficiency: true } },
+        certificationDetail: { select: { organization: true } },
+        competitionDetail: {
+          select: { organizer: true, awardLevel: true },
+        },
+        publicationDetail: { select: { venue: true } },
+      },
+    });
+    return rows.map((row) => {
+      const orgOrVenue =
+        row.internshipDetail?.organizationName ??
+        row.employmentDetail?.organizationName ??
+        row.projectDetail?.organizationName ??
+        row.researchDetail?.institution ??
+        row.campusActivityDetail?.organizationName ??
+        row.educationDetail?.institution ??
+        row.awardDetail?.issuer ??
+        row.certificationDetail?.organization ??
+        row.competitionDetail?.organizer ??
+        row.publicationDetail?.venue ??
+        null;
+      const roleTitle =
+        row.internshipDetail?.roleTitle ??
+        row.employmentDetail?.roleTitle ??
+        row.projectDetail?.roleTitle ??
+        row.researchDetail?.roleTitle ??
+        row.campusActivityDetail?.roleTitle ??
+        null;
+      let detailExtra: string | null = row.researchDetail?.field ?? null;
+      if (!detailExtra && row.educationDetail) {
+        detailExtra =
+          [row.educationDetail.degree, row.educationDetail.fieldOfStudy]
+            .filter(Boolean)
+            .join(" ") || null;
+      }
+      if (!detailExtra && row.skillDetail) {
+        detailExtra =
+          [row.skillDetail.skillName, row.skillDetail.proficiency]
+            .filter(Boolean)
+            .join(" ") || null;
+      }
+      if (!detailExtra) {
+        detailExtra = row.competitionDetail?.awardLevel ?? null;
+      }
+      const orgPlus = [orgOrVenue, roleTitle, detailExtra]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        type: row.type,
+        title: row.title,
+        startDate: row.startDate,
+        endDate: row.endDate,
+        isCurrent: row.isCurrent,
+        notes: row.notes,
+        orgOrVenue: orgPlus || null,
+        evidence: row.evidence.map((item) => ({
+          kind: item.kind,
+          content: item.content,
+          metricText: item.metricText,
+        })),
+      };
+    });
+  }
+
+  async listFeedbackItemsForGeneration(
+    generationId: string,
+  ): Promise<FeedbackItemRecord[]> {
+    const rows = await this.db.feedbackItem.findMany({
+      where: { generationId },
+      orderBy: { itemOrder: "asc" },
+    });
+    return rows as unknown as FeedbackItemRecord[];
+  }
+
+  /**
+   * Product-facing session cards for the interview landing history.
+   * Derives readable metadata (job/company, progress) — internal enums and
+   * AI lock columns stay server-side.
+   */
+  async listSessionCards(userId: string): Promise<
+    Array<{
+      session: SessionRecord;
+      jobTitle: string | null;
+      companyName: string | null;
+      jdVersionNumber: number | null;
+      totalQuestions: number;
+      answeredQuestions: number;
+    }>
+  > {
+    const sessions = await this.db.interviewSession.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        jobOpportunity: {
+          select: { title: true, company: { select: { label: true } } },
+        },
+        jobDescriptionVersion: { select: { versionNumber: true } },
+        questionInstances: { select: { status: true } },
+      },
+    });
+    return sessions.map((row) => ({
+      session: row as unknown as SessionRecord,
+      jobTitle: row.jobOpportunity?.title ?? null,
+      companyName: row.jobOpportunity?.company?.label ?? null,
+      jdVersionNumber: row.jobDescriptionVersion?.versionNumber ?? null,
+      totalQuestions: row.questionInstances.length,
+      answeredQuestions: row.questionInstances.filter(
+        (instance) => instance.status === "ANSWERED",
+      ).length,
     }));
   }
 }

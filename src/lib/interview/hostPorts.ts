@@ -165,6 +165,18 @@ export const INTERVIEW_MODEL_ERRORS = {
 export type InterviewModelErrorCode =
   (typeof INTERVIEW_MODEL_ERRORS)[keyof typeof INTERVIEW_MODEL_ERRORS];
 
+/**
+ * Creation-time runtime plan, as resolved once by
+ * resolveInterviewAiRuntime(). Declared structurally so the frozen port
+ * surface does not import the assignment module.
+ */
+export interface InterviewCreationPlanRef {
+  kind: "account" | "legacy" | "invalid" | "unconfigured";
+  connectionId?: string;
+  model?: string;
+  provider?: string;
+}
+
 export interface InterviewModelPort {
   resolveInterviewModel(input: {
     requestingUserId: string;
@@ -174,6 +186,17 @@ export interface InterviewModelPort {
      * adapter must honour it; absent means legacy live resolution.
      */
     sessionId?: string;
+  }): Promise<ResolvedInterviewModel>;
+  /**
+   * Vocatrya extension (product flow): resolve a model bound to the
+   * creation-time plan — before the session row exists. The returned
+   * model executes on exactly the connection/model pair the session lock
+   * will persist. Optional: injected test doubles may rely on the
+   * resolveInterviewModel fallback.
+   */
+  resolveInterviewModelForPlan?(input: {
+    requestingUserId: string;
+    plan: InterviewCreationPlanRef;
   }): Promise<ResolvedInterviewModel>;
 }
 

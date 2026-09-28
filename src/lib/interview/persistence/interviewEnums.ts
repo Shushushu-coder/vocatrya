@@ -87,7 +87,9 @@ export type DialogueTargetType = (typeof DIALOGUE_TARGET_TYPES)[number];
 export const CONVERSATION_STATUSES = ["OPEN", "CLOSED"] as const;
 export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
 
-export const FEEDBACK_PROMPT_VERSION = "commercial_feedback_v1";
-export const SUMMARY_PROMPT_VERSION = "commercial_summary_v1";
-export const COACHING_PROMPT_VERSION = "commercial_coaching_v1";
+// Prompt versions: bumped when the semantic contract changes. Historical
+// generations keep their recorded promptVersion — never rewritten.
+export const FEEDBACK_PROMPT_VERSION = "commercial_feedback_v2";
+export const SUMMARY_PROMPT_VERSION = "commercial_summary_v2";
+export const COACHING_PROMPT_VERSION = "commercial_coaching_v2";
 export const DEFAULT_KNOWLEDGE_VERSION = "v1.0";

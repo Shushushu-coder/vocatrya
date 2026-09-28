@@ -22,6 +22,7 @@ import {
   OwnershipError,
 } from "./persistence/interviewErrors";
 import type {
+  InterviewCreationPlanRef,
   InterviewModelPort,
   JobContextPort,
   QuestionPort,
@@ -299,6 +300,55 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
         model: resolved.model,
         generateJson: resolved.generateJson,
       };
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === INTERVIEW_ADAPTER_ERROR_CODES.INTERVIEW_MODEL_NOT_CONFIGURED) {
+        throw new DomainError(
+          "INTERVIEW_MODEL_NOT_CONFIGURED",
+          error instanceof Error ? error.message : "Interview model is not configured",
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Resolve a model bound to a creation-time runtime plan, before the
+   * session row exists. Question planning executes on exactly the pair the
+   * persisted session lock will carry — one resolution, no mid-create
+   * failover:
+   * - account → the plan's connectionId + model through the TEXT_ONLY seam
+   *   (the same state gates as locked-session execution apply)
+   * - legacy → the plan's pinned provider/model pair
+   * - unconfigured → live legacy resolution, which fails closed with
+   *   INTERVIEW_MODEL_NOT_CONFIGURED when nothing exists
+   * - invalid → unreachable (creation aborts on the plan), fails closed
+   */
+  async resolveInterviewModelForPlan(input: {
+    requestingUserId: string;
+    plan: InterviewCreationPlanRef;
+  }): Promise<ResolvedInterviewModel> {
+    const { plan } = input;
+    try {
+      if (plan.kind === "account" && plan.connectionId && plan.model) {
+        return await this.resolveAccountModel(input.requestingUserId, {
+          connectionId: plan.connectionId,
+          model: plan.model,
+        });
+      }
+      if (plan.kind === "legacy" && plan.provider && plan.model) {
+        return await this.resolver.resolveForConfig(input.requestingUserId, {
+          provider: plan.provider,
+          model: plan.model,
+        });
+      }
+      if (plan.kind === "invalid") {
+        throw new DomainError(
+          "ASSIGNED_CONNECTION_UNAVAILABLE",
+          "The assigned interview AI connection is not usable",
+        );
+      }
+      return await this.resolver.resolve(input.requestingUserId);
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === INTERVIEW_ADAPTER_ERROR_CODES.INTERVIEW_MODEL_NOT_CONFIGURED) {

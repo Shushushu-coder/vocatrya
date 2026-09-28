@@ -1080,6 +1080,16 @@ export class VocatryaInterviewPersistence {
     evidence: SummaryEvidenceInput[];
     bodyText: string;
     structuredPayload?: unknown;
+    /**
+     * Product flow: when set, the session is marked completed inside the
+     * same transaction that publishes the summary — a failed or rejected
+     * generation can never leave a COMPLETED session without a summary.
+     */
+    sessionCompletion?: {
+      status: string;
+      completedAt: Date;
+      feedbackReleasedAt: Date | null;
+    };
   }): Promise<{
     generation: SessionSummaryGenerationRecord;
     inputs: SessionSummaryInputRecord[];
@@ -1168,6 +1178,16 @@ export class VocatryaInterviewPersistence {
             failureMessage: null,
           },
         });
+        if (input.sessionCompletion) {
+          await delegated.interviewSession.update({
+            where: { id: session.id },
+            data: {
+              status: input.sessionCompletion.status,
+              completedAt: input.sessionCompletion.completedAt,
+              feedbackReleasedAt: input.sessionCompletion.feedbackReleasedAt,
+            },
+          });
+        }
         return {
           generation: updated as unknown as SessionSummaryGenerationRecord,
           inputs: persisted,

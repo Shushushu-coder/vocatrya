@@ -2067,6 +2067,27 @@
     "model": "Interview model",
     "saveInterviewAi": "Save Interview AI",
     "interviewAiDescription": "Interview practice uses its own AI config and never copies the global model automatically.",
-    "selectQuestionHint": "Select at least one question."
+    "selectQuestionHint": "Select at least one question.",
+    "startInterview": "Start a mock interview",
+    "genericSession": "General mock interview",
+    "questionsProgress": "{done} / {total} questions done",
+    "questionsTotal": "{total} questions",
+    "statusDraft": "Preparing",
+    "statusInProgress": "In progress",
+    "statusCompleted": "Completed",
+    "statusArchived": "Archived",
+    "needsAiSetup": "Set up an AI service for interviews first",
+    "jobBindingHint": "Bind a job and the questions will be prepared around its requirements and your career history.",
+    "startInterviewCta": "Start interview",
+    "creating": "Preparing questions…",
+    "questionProgress": "Question {current} of {total}",
+    "nextQuestion": "Next question",
+    "finishInterview": "Finish interview & summary",
+    "feedbackTitle": "Feedback",
+    "askAboutItem": "Ask about this",
+    "you": "You",
+    "coach": "Coach",
+    "aiUnavailable": "The interview AI is unavailable — check settings and retry.",
+    "jobNeedsJd": "This job has no saved JD version. Add one on the job page first."
   }
 }

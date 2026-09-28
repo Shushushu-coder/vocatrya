@@ -12,6 +12,8 @@ export interface KnowledgeProvider {
   readonly version: string;
   readonly contentHash: string;
   promptExcerpt(): string;
+  /** Canonical taxonomy labels for feedback prompts. Optional for tests. */
+  taxonomyLabels?(): string[];
 }
 
 export class StaticKnowledgeProvider implements KnowledgeProvider {
@@ -46,5 +48,12 @@ export class BundledKnowledgeProvider implements KnowledgeProvider {
 
   promptExcerpt(): string {
     return knowledgePromptExcerpt();
+  }
+
+  taxonomyLabels(): string[] {
+    const kb = loadInterviewKnowledgeBase();
+    return kb.taxonomy.entries
+      .map((entry) => String((entry as { problem_type?: unknown }).problem_type ?? ""))
+      .filter(Boolean);
   }
 }
