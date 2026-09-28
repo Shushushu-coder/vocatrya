@@ -309,13 +309,13 @@ function createConnectionService({
     return adapter.parseAuthStatus(result);
   }
 
-  // Spawns the provider login command and waits. The CLI owns the browser
-  // flow entirely. When the runtime cannot open a browser itself (e.g.
-  // OpenCode spawned non-interactively), the adapter's extractLoginUrl
-  // pulls the vendor's authorize URL out of the raw output stream and it
-  // is forwarded to the renderer via deps.notifyOAuthUrl — the URL is the
-  // official authorization entry point, not credential material, and it
-  // is never written to diag/logs.
+  // Spawns the provider login command and waits. The CLI owns the auth
+  // flow entirely (browser, console TUI, or device flow). When the
+  // runtime cannot open a browser itself (e.g. grok login), the adapter's
+  // extractLoginUrl pulls the vendor's authorize URL out of the raw
+  // output stream and it is forwarded to the renderer via
+  // deps.notifyOAuthUrl — the URL is the official authorization entry
+  // point, not credential material, and it is never written to diag/logs.
   async function runLoginProcess(adapter, executable, profileDir, signal) {
     const invocation = adapter.buildLoginInvocation({
       executablePath: executable,
@@ -324,8 +324,8 @@ function createConnectionService({
     });
     let loginOutputBuffer = "";
     let urlSent = false;
-    // Some CLIs print the authorize URL on stdout (OpenCode), others on
-    // stderr (`grok login`); both streams feed the same bounded buffer.
+    // Some CLIs print the authorize URL on stdout, others on stderr
+    // (`grok login`); both streams feed the same bounded buffer.
     const observeChunk =
       typeof adapter.extractLoginUrl === "function" &&
       typeof deps.notifyOAuthUrl === "function"
@@ -454,7 +454,7 @@ function createConnectionService({
 
       const complete = await backend.completeOperation(resolved.resolved.operationId, {
         outcome: "authenticated",
-        // The adapter-verified provider — only a successful OAuth
+        // The adapter-verified provider — only a successful account-auth
         // classification reached this point, so this is proven, not
         // asserted. The backend re-validates it against the matrix.
         verifiedProvider: adapter.accountProvider,
@@ -474,8 +474,22 @@ function createConnectionService({
     } finally {
       release(guardKeys);
       if (pendingProfile) {
-        // Failed/cancelled login leaves no zombie profile behind.
-        profileManager.deleteProfile(pendingProfile.runtimeProfileRef);
+        // Failed/cancelled login leaves no zombie profile behind. A
+        // just-terminated console login (`start /wait` detaches the TUI)
+        // may still hold files inside the directory on Windows — deletion
+        // is best-effort with short async retries rather than propagating
+        // EPERM back to the renderer.
+        const ref = pendingProfile.runtimeProfileRef;
+        void (async () => {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              profileManager.deleteProfile(ref);
+              return;
+            } catch {
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          }
+        })();
       }
     }
   }

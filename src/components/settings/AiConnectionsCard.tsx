@@ -13,47 +13,62 @@ import type { ConnectionSummary } from "@/lib/ai/connection-service";
 import type { AccountRuntimeCapabilities } from "@/lib/ai/runtime/capabilities";
 
 // Implemented account-login backends. Each entry pins the account provider
-// it requests — the server re-validates the provider/runtime pairing when
-// minting the ticket, and the runtime adapter verifies the real auth
-// outcome. Everything else (runtime name, login interaction, capability
-// hints) comes from the unified runtime capability descriptor fetched via
-// the vocatryaRuntime bridge — never hardcoded per provider here.
+// options it offers — the server re-validates the provider/runtime pairing
+// when minting the ticket, and the runtime adapter verifies the real auth
+// outcome. OpenCode is its own account ecosystem (Zen pay-as-you-go / Go
+// subscription), so its card offers both products. Everything else
+// (runtime name, login interaction, capability hints) comes from the
+// unified runtime capability descriptor fetched via the vocatryaRuntime
+// bridge — never hardcoded per provider here.
 const ACCOUNT_LOGIN_BACKENDS = [
   {
     backendKind: "CODEX_RUNTIME",
     providerLabel: "ChatGPT",
-    connectLabelKey: "settings.connectChatGPT",
-    accountProvider: "OPENAI",
+    accountOptions: [
+      { accountProvider: "OPENAI", connectLabelKey: "settings.connectChatGPT" },
+    ],
   },
   {
     backendKind: "CLAUDE_RUNTIME",
     providerLabel: "Claude",
-    connectLabelKey: "settings.connectClaude",
-    accountProvider: "ANTHROPIC",
+    accountOptions: [
+      { accountProvider: "ANTHROPIC", connectLabelKey: "settings.connectClaude" },
+    ],
   },
   {
     backendKind: "OPENCODE_RUNTIME",
-    providerLabel: "ChatGPT",
-    connectLabelKey: "settings.connectChatGPTViaOpenCode",
-    accountProvider: "OPENAI",
+    providerLabel: "OpenCode",
+    accountOptions: [
+      {
+        accountProvider: "OPENCODE_GO",
+        connectLabelKey: "settings.connectOpenCodeGo",
+      },
+      {
+        accountProvider: "OPENCODE_ZEN",
+        connectLabelKey: "settings.connectOpenCodeZen",
+      },
+    ],
   },
   {
     backendKind: "GROK_RUNTIME",
     providerLabel: "Grok",
-    connectLabelKey: "settings.connectGrok",
-    accountProvider: "XAI",
+    accountOptions: [
+      { accountProvider: "XAI", connectLabelKey: "settings.connectGrok" },
+    ],
   },
   {
     backendKind: "CURSOR_RUNTIME",
     providerLabel: "Cursor",
-    connectLabelKey: "settings.connectCursor",
-    accountProvider: "CURSOR",
+    accountOptions: [
+      { accountProvider: "CURSOR", connectLabelKey: "settings.connectCursor" },
+    ],
   },
   {
     backendKind: "DEVIN_RUNTIME",
     providerLabel: "Devin",
-    connectLabelKey: "settings.connectDevin",
-    accountProvider: "DEVIN",
+    accountOptions: [
+      { accountProvider: "DEVIN", connectLabelKey: "settings.connectDevin" },
+    ],
   },
 ] as const;
 
@@ -272,14 +287,17 @@ function AiConnectionsCard() {
   );
 
   const connect = useCallback(
-    async (backend: (typeof ACCOUNT_LOGIN_BACKENDS)[number]) => {
+    async (
+      backend: (typeof ACCOUNT_LOGIN_BACKENDS)[number],
+      accountProvider: string,
+    ) => {
       const ai = window.vocatryaAi;
       if (!ai) return;
       const ticket = await mintTicket(
         "login",
         backend.backendKind,
         undefined,
-        backend.accountProvider,
+        accountProvider,
       );
       if (!ticket) return;
       setPendingTicket(ticket);
@@ -403,9 +421,9 @@ function AiConnectionsCard() {
             key={backend.backendKind}
             className="space-y-3 rounded-md border p-3"
           >
-            {/* Provider + runtime are both always visible — two account
-                providers can share a provider name (ChatGPT via Codex vs
-                ChatGPT via OpenCode) so the runtime label disambiguates. */}
+            {/* Product + runtime are both always visible — a runtime can
+                host several account products (OpenCode Go / Zen) so the
+                runtime label disambiguates what executes the session. */}
             <div className="flex items-center justify-between">
               <h4 className="font-medium">
                 {backend.providerLabel}{" "}
@@ -479,7 +497,7 @@ function AiConnectionsCard() {
               </div>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {isConnecting ? (
                 <>
                   <Button variant="outline" onClick={cancelLogin}>
@@ -491,12 +509,15 @@ function AiConnectionsCard() {
                   </span>
                 </>
               ) : (
-                <Button
-                  onClick={() => connect(backend)}
-                  disabled={busy !== null || runtimeState?.state !== "READY"}
-                >
-                  {t(backend.connectLabelKey)}
-                </Button>
+                backend.accountOptions.map((option) => (
+                  <Button
+                    key={option.accountProvider}
+                    onClick={() => connect(backend, option.accountProvider)}
+                    disabled={busy !== null || runtimeState?.state !== "READY"}
+                  >
+                    {t(option.connectLabelKey)}
+                  </Button>
+                ))
               )}
             </div>
 

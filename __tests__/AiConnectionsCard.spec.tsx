@@ -66,12 +66,12 @@ const CAPABILITY_STUB = (backendKind: string) => ({
   },
   login: {
     interaction:
-      backendKind === "DEVIN_RUNTIME"
+      backendKind === "DEVIN_RUNTIME" || backendKind === "OPENCODE_RUNTIME"
         ? "VISIBLE_CONSOLE"
         : backendKind === "CODEX_RUNTIME" || backendKind === "CLAUDE_RUNTIME"
           ? "RUNTIME_MANAGED_BROWSER"
           : "BROWSER",
-    surfacesAuthorizationUrl: ["OPENCODE_RUNTIME", "GROK_RUNTIME", "CURSOR_RUNTIME"].includes(
+    surfacesAuthorizationUrl: ["GROK_RUNTIME", "CURSOR_RUNTIME"].includes(
       backendKind,
     ),
   },
@@ -196,19 +196,23 @@ describe("AiConnectionsCard", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders all six runtimes with provider+runtime labels", async () => {
+  it("renders all six runtimes with product+runtime labels", async () => {
     installBridges();
     render(<AiConnectionsCard />);
     await waitFor(() =>
       expect(screen.getByText("Connect Devin")).toBeInTheDocument(),
     );
-    // Two ChatGPT paths are disambiguated by their runtime names.
     expect(screen.getByText("via OpenAI Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("via OpenCode CLI")).toBeInTheDocument();
     expect(screen.getByText("Connect ChatGPT")).toBeInTheDocument();
+    // OpenCode is its own account ecosystem: the card offers Go/Zen and
+    // never presents a ChatGPT login.
+    expect(screen.getByText("OpenCode")).toBeInTheDocument();
+    expect(screen.getByText("Connect OpenCode Go")).toBeInTheDocument();
+    expect(screen.getByText("Connect OpenCode Zen")).toBeInTheDocument();
     expect(
-      screen.getByText("Connect ChatGPT via OpenCode"),
-    ).toBeInTheDocument();
+      screen.queryByText(/ChatGPT via OpenCode/),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Connect Claude")).toBeInTheDocument();
     expect(screen.getByText("Connect Grok")).toBeInTheDocument();
     expect(screen.getByText("Connect Cursor")).toBeInTheDocument();
@@ -227,6 +231,8 @@ describe("AiConnectionsCard", () => {
     for (const label of [
       "Connect ChatGPT",
       "Connect Claude",
+      "Connect OpenCode Go",
+      "Connect OpenCode Zen",
       "Connect Grok",
       "Connect Cursor",
       "Connect Devin",
@@ -257,6 +263,32 @@ describe("AiConnectionsCard", () => {
       backendKind: "CLAUDE_RUNTIME",
       ticket: "ticket-1",
     });
+  });
+
+  it("pins the chosen OpenCode product on the login ticket", async () => {
+    installBridges();
+    const user = userEvent.setup();
+    render(<AiConnectionsCard />);
+    await user.click(
+      await screen.findByRole("button", { name: "Connect OpenCode Go" }),
+    );
+    expect(actionMocks.mintAiConnectionTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "login",
+        backendKind: "OPENCODE_RUNTIME",
+        accountProvider: "OPENCODE_GO",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Connect OpenCode Zen" }),
+    );
+    expect(actionMocks.mintAiConnectionTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "login",
+        backendKind: "OPENCODE_RUNTIME",
+        accountProvider: "OPENCODE_ZEN",
+      }),
+    );
   });
 
   it("renders connection rows with runtime label and lifecycle actions", async () => {

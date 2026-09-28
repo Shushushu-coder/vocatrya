@@ -17,6 +17,10 @@ export const AI_CONNECTION_PROVIDERS = [
   "ANTHROPIC",
   "XAI",
   "OPENCODE",
+  // OpenCode's own account products — distinct credentials under the
+  // opencode / opencode-go auth.json entries.
+  "OPENCODE_ZEN",
+  "OPENCODE_GO",
   "CURSOR",
   "GITHUB_COPILOT",
   "DEVIN",
@@ -149,7 +153,11 @@ export const AI_BACKEND_SUPPORTED_ACCOUNT_PROVIDERS: Record<
   CODEX_RUNTIME: ["OPENAI"],
   CLAUDE_RUNTIME: ["ANTHROPIC"],
   GROK_RUNTIME: ["XAI"],
-  OPENCODE_RUNTIME: ["OPENAI", "GITHUB_COPILOT"],
+  // OpenCode is its own account ecosystem — Zen (pay-as-you-go gateway)
+  // and Go (flat-rate subscription), each a distinct vendor credential.
+  // GITHUB_COPILOT stays a declared-but-unimplemented matrix entry
+  // (registry intent); the desktop adapter refuses it until its phase.
+  OPENCODE_RUNTIME: ["OPENCODE_ZEN", "OPENCODE_GO", "GITHUB_COPILOT"],
   CURSOR_RUNTIME: ["CURSOR"],
   COPILOT_RUNTIME: ["GITHUB_COPILOT"],
   DEVIN_RUNTIME: ["DEVIN"],

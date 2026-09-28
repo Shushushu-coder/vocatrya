@@ -11,8 +11,8 @@ const {
 
 // Runtime vendor ≠ account provider: the vendor labels the runtime, the
 // supported list bounds which account providers may authenticate through
-// it. OpenCode intentionally lists two — vendor semantics never collapse
-// to a single provider.
+// it. OpenCode intentionally lists its two own products — vendor
+// semantics never collapse to a single provider.
 const EXPECTED_VENDOR_BY_BACKEND = {
   CODEX_RUNTIME: "OPENAI",
   CLAUDE_RUNTIME: "ANTHROPIC",
@@ -27,7 +27,7 @@ const EXPECTED_ACCOUNT_PROVIDERS_BY_BACKEND = {
   CODEX_RUNTIME: ["OPENAI"],
   CLAUDE_RUNTIME: ["ANTHROPIC"],
   GROK_RUNTIME: ["XAI"],
-  OPENCODE_RUNTIME: ["OPENAI", "GITHUB_COPILOT"],
+  OPENCODE_RUNTIME: ["OPENCODE_ZEN", "OPENCODE_GO", "GITHUB_COPILOT"],
   CURSOR_RUNTIME: ["CURSOR"],
   COPILOT_RUNTIME: ["GITHUB_COPILOT"],
   DEVIN_RUNTIME: ["DEVIN"],
@@ -58,11 +58,17 @@ describe("runtime definition registry", () => {
       expect(getRuntimeDefinition(backendKind).supportedAccountProviders)
         .toEqual(providers);
     }
-    // OpenCode is the multi-provider runtime — the vendor is never an
-    // account provider for ACCOUNT_LOGIN.
+    // OpenCode hosts its own two account products — the vendor is never
+    // an account provider itself, and ChatGPT is never an OpenCode
+    // account login.
     const opencode = getRuntimeDefinition("OPENCODE_RUNTIME");
-    expect(opencode.supportedAccountProviders).toContain("OPENAI");
+    expect(opencode.supportedAccountProviders).toEqual([
+      "OPENCODE_ZEN",
+      "OPENCODE_GO",
+      "GITHUB_COPILOT",
+    ]);
     expect(opencode.supportedAccountProviders).not.toContain("OPENCODE");
+    expect(opencode.supportedAccountProviders).not.toContain("OPENAI");
   });
 
   it("gives every runtime the required definition fields", () => {

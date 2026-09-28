@@ -1,19 +1,25 @@
-// Phase F1 OpenCode adapter for the OPENCODE_RUNTIME backend.
+// OpenCode adapter for the OPENCODE_RUNTIME backend.
 //
-// OpenCode is a multi-provider runtime: it hosts account logins for other
-// vendors' subscriptions. This adapter is therefore parameterized by the
-// account provider being authenticated — forAccountProvider("OPENAI") binds
-// the ChatGPT OAuth path; GITHUB_COPILOT is a later phase and binds to
-// null (UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION upstream).
+// OpenCode is its own account ecosystem: the account providers are the
+// vendor's own products — OpenCode Zen (pay-as-you-go gateway, provider id
+// "opencode", auth.json "opencode" entry) and OpenCode Go (flat-rate
+// subscription, provider id "opencode-go", auth.json "opencode-go" entry).
+// This adapter is parameterized by the account provider being
+// authenticated — forAccountProvider("OPENCODE_ZEN" | "OPENCODE_GO")
+// binds that product's credential contract; anything else binds to null
+// (UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION upstream).
 //
 // Boundaries (verified against opencode 1.18.31):
 // - Credential isolation is the four XDG roots in the profile env —
 //   OPENCODE_CONFIG_DIR is a config/plugin override, never the auth
 //   boundary. auth.json lives at $XDG_DATA_HOME\opencode\auth.json.
-// - `auth login -p <provider> -m "<method label>"` selects the OAuth method
-//   non-interactively: it starts a localhost callback server and prints the
-//   authorize URL on stdout. It never auto-opens a browser when spawned —
-//   the URL is surfaced to the renderer via extractLoginUrl.
+// - Zen/Go authenticate with the vendor's API-key credential. `auth login
+//   -p <provider>` renders the official interactive credential TUI; it
+//   reads console input, so the login runs inside a real console window
+//   via `cmd /d /c start /wait` (same mechanism as the Devin login) and
+//   the user pastes the opencode.ai key there. Vocatrya never sees the
+//   key, and `start /wait` does not propagate the exit code — the
+//   `auth list` probe is the only verdict.
 // - `auth list` is ANSI text only ("•  <name> <api|oauth>"); auth.json is
 //   never read. Only the provider name and auth-type label are parsed.
 // - `models <provider>` / `models` print provider/model ids, one per line.
@@ -33,13 +39,16 @@ const OPENCODE_BACKEND_KIND = "OPENCODE_RUNTIME";
 const OPENCODE_SMOKE_PROMPT = "Reply with exactly: VOCATRYA_OPENCODE_OK";
 const OPENCODE_SMOKE_EXPECTED = "VOCATRYA_OPENCODE_OK";
 
-// `auth list` auth-type classification (spec §21). Only the OAuth kind of
-// the bound provider can ever complete an ACCOUNT_LOGIN connection.
+// `auth list` auth-type classification. Only the vendor API-key kind of
+// the bound provider can ever complete an ACCOUNT_LOGIN connection;
+// foreign entries (OpenAI OAuth, Copilot, arbitrary api keys) are labeled
+// for diagnostics/rejection only.
 const OPENCODE_AUTH_KINDS = Object.freeze([
+  "OPENCODE_ZEN_API_KEY",
+  "OPENCODE_GO_API_KEY",
   "OPENAI_CHATGPT_OAUTH",
   "OPENAI_API_KEY",
   "GITHUB_COPILOT_OAUTH",
-  "ZEN_API_KEY",
   "OTHER_API_KEY",
   "UNKNOWN",
 ]);
@@ -48,19 +57,25 @@ const OPENCODE_AUTH_KINDS = Object.freeze([
 // AIConnectionProvider values; each entry carries everything the adapter
 // needs so no renderer input ever picks a method, executable, or env.
 const OPENCODE_ACCOUNT_PROVIDERS = Object.freeze({
-  OPENAI: Object.freeze({
-    accountProvider: "OPENAI",
-    providerId: "openai",
-    // Verified `auth login -m` label — the subscription OAuth flow. The
-    // sibling "Manually enter API Key" method is never selected.
-    loginMethodLabel: "ChatGPT Pro/Plus (browser)",
-    // auth-list display names, normalized (lowercase, no [ _-]).
-    authListNames: ["openai"],
-    oauthAuthKind: "OPENAI_CHATGPT_OAUTH",
-    apiKeyAuthKind: "OPENAI_API_KEY",
-    modelPrefix: "openai/",
-    // Only authorize URLs on this origin may surface to the renderer.
-    authorizeUrlOrigin: "https://auth.openai.com/",
+  OPENCODE_ZEN: Object.freeze({
+    accountProvider: "OPENCODE_ZEN",
+    // `auth login -p opencode` → "OpenCode Zen" API-key prompt.
+    providerId: "opencode",
+    productName: "OpenCode Zen",
+    // auth-list display names, normalized (lowercase, no [ _-]). The
+    // models.dev name is "OpenCode Zen"; older builds printed "opencode".
+    authListNames: ["opencodezen", "opencode"],
+    acceptedAuthKind: "OPENCODE_ZEN_API_KEY",
+    modelPrefix: "opencode/",
+  }),
+  OPENCODE_GO: Object.freeze({
+    accountProvider: "OPENCODE_GO",
+    // `auth login -p opencode-go` → "OpenCode Go" API-key prompt.
+    providerId: "opencode-go",
+    productName: "OpenCode Go",
+    authListNames: ["opencodego"],
+    acceptedAuthKind: "OPENCODE_GO_API_KEY",
+    modelPrefix: "opencode-go/",
   }),
 });
 
@@ -220,11 +235,17 @@ function parseOpencodeAuthList(text) {
   return { entries };
 }
 
-// Classifies one credential entry into the spec §21 taxonomy. Only the
-// bound provider's oauth entry counts as the target classification —
-// everything else is labeled for diagnostics/rejection.
+// Classifies one credential entry into the auth-kind taxonomy. Only the
+// bound provider's vendor API-key entry counts as the target
+// classification — everything else is labeled for diagnostics/rejection.
 function classifyAuthListEntry(entry) {
   const name = entry.normalizedName;
+  if (name === "opencodezen" || name === "opencode") {
+    return entry.type === "api" ? "OPENCODE_ZEN_API_KEY" : "UNKNOWN";
+  }
+  if (name === "opencodego") {
+    return entry.type === "api" ? "OPENCODE_GO_API_KEY" : "UNKNOWN";
+  }
   if (name === "openai") {
     return entry.type === "oauth" ? "OPENAI_CHATGPT_OAUTH" : "OPENAI_API_KEY";
   }
@@ -232,9 +253,6 @@ function classifyAuthListEntry(entry) {
     return entry.type === "oauth"
       ? "GITHUB_COPILOT_OAUTH"
       : "OTHER_API_KEY";
-  }
-  if (name === "opencodezen" || name === "opencodego" || name === "opencode") {
-    return "ZEN_API_KEY";
   }
   if (entry.type === "api") return "OTHER_API_KEY";
   return "UNKNOWN";
@@ -270,43 +288,29 @@ function parseOpencodeAuthStatus(providerConfig, { exitCode, stdout, stderr }) {
   if (!target) {
     return notAuthed;
   }
-  if (target.type === "oauth") {
+  if (target.type === "api") {
     return {
       authState: "AUTHENTICATED",
-      authKind: providerConfig.oauthAuthKind,
-      authMethod: "oauth",
+      authKind: providerConfig.acceptedAuthKind,
+      authMethod: "api",
       // auth list prints no identity — accountIdentity stays null rather
       // than being inferred from credential files.
       accountIdentity: null,
       providerMetadata: {
-        authType: "oauth",
-        loginMethod: providerConfig.loginMethodLabel,
+        authType: "api",
+        product: providerConfig.productName,
       },
     };
   }
   return {
     authState: "AUTHENTICATED",
-    // "api" is the recognized wrong method; any other type label is
-    // unclassifiable and can never satisfy the OAuth requirement.
-    authKind:
-      target.type === "api" ? providerConfig.apiKeyAuthKind : "UNKNOWN",
+    // A non-API-key credential for the bound provider is unclassifiable —
+    // only the vendor API-key entry satisfies the requirement.
+    authKind: classifyAuthListEntry(target),
     authMethod: target.type,
     accountIdentity: null,
     providerMetadata: { authType: target.type },
   };
-}
-
-// Extracts the OAuth authorize URL the login process prints ("Go to:
-// <url>"). Only the provider's declared authorize origin is surfaced —
-// anything else on stdout stays internal.
-function extractOpencodeLoginUrl(providerConfig, text) {
-  const clean = stripAnsi(text);
-  const escaped = providerConfig.authorizeUrlOrigin.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&",
-  );
-  const match = clean.match(new RegExp(`${escaped}[^\\s"'<>\\x1b]+`));
-  return match ? match[0] : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -347,22 +351,32 @@ function createOpencodeAdapter(providerConfig) {
   const definition = () => opencodeDefinition();
 
   function buildLoginInvocation({ executablePath, profileDir, baseEnv }) {
-    // -p/-m pin provider + OAuth method non-interactively (verified on
-    // 1.18.31 — an unknown -m errors with the method list, never a TUI
-    // fallback). --pure keeps external plugins out of the login process.
+    // `opencode auth login` renders a clack TUI that reads console input
+    // (method selection + API-key entry) — it cannot be driven over
+    // pipes. The login therefore launches inside a real console window
+    // created by `start /wait`, which blocks until the vendor CLI exits.
+    // The exit code is not meaningful (start does not propagate it), so
+    // completion is always judged by the `auth list` probe that follows.
+    // `-p` pins the account provider (opencode | opencode-go); the method
+    // picker stays vendor-owned. cmd.exe is a fixed terminal launcher —
+    // argv is static, the spawn boundary stays shell:false, and the
+    // renderer never influences any of it. On cancel/timeout the managed
+    // cmd.exe is killed; the detached console window may linger for the
+    // user to close (the TUI supports Esc-cancel itself).
     return {
-      executable: executablePath,
-      args: opencodeArgs({
-        profileDir,
-        commandArgs: [
-          ...definition().commands.login,
-          "--pure",
-          "-p",
-          providerConfig.providerId,
-          "-m",
-          providerConfig.loginMethodLabel,
-        ],
-      }),
+      executable: "cmd.exe",
+      args: [
+        "/d",
+        "/c",
+        "start",
+        "",
+        "/wait",
+        executablePath,
+        ...definition().commands.login,
+        "--pure",
+        "-p",
+        providerConfig.providerId,
+      ],
       cwd: profileDir,
       env: opencodeEnv({ profileDir, baseEnv }),
     };
@@ -587,29 +601,25 @@ function createOpencodeAdapter(providerConfig) {
       parseOpencodeAuthStatus(providerConfig, result),
     checkLoginPolicy: null,
 
-    // Streams the OAuth authorize URL out of the running login process so
-    // the user can open it — opencode does not auto-open a browser when
-    // spawned non-interactively.
-    extractLoginUrl: (text) =>
-      extractOpencodeLoginUrl(providerConfig, text),
-
-    // Only the provider's OAuth credential completes the connection. An
-    // API-key entry is a recognized wrong method; an unclassifiable entry
-    // is AUTH_METHOD_UNVERIFIED — never silently accepted.
+    // Only the bound provider's vendor API-key credential completes the
+    // connection. A foreign credential kind is UNSUPPORTED_AUTH_METHOD;
+    // an unclassifiable entry is AUTH_METHOD_UNVERIFIED — never silently
+    // accepted.
     loginFailureCode(status) {
       if (status.authState !== "AUTHENTICATED") return "AUTH_NOT_CONFIRMED";
-      if (status.authKind === providerConfig.oauthAuthKind) return null;
+      if (status.authKind === providerConfig.acceptedAuthKind) return null;
       return status.authKind && status.authKind !== "UNKNOWN"
         ? "UNSUPPORTED_AUTH_METHOD"
         : "AUTH_METHOD_UNVERIFIED";
     },
 
-    // A verified non-OAuth session must never flip an ACCOUNT_LOGIN
-    // connection to CONNECTED — reported as UNKNOWN, which maps to ERROR.
+    // A session that is not the bound vendor key must never flip an
+    // ACCOUNT_LOGIN connection to CONNECTED — reported as UNKNOWN, which
+    // maps to ERROR.
     reportableAuthState(status) {
       if (
         status.authState === "AUTHENTICATED" &&
-        status.authKind !== providerConfig.oauthAuthKind
+        status.authKind !== providerConfig.acceptedAuthKind
       ) {
         return "UNKNOWN";
       }
@@ -632,8 +642,8 @@ function createOpencodeAdapter(providerConfig) {
 }
 
 // Base adapter registered in PROVIDER_ADAPTERS. forAccountProvider binds the
-// provider parameterization; an unimplemented provider binds to null so the
-// service rejects the combination instead of guessing.
+// Zen/Go parameterization; any other provider binds to null so the service
+// rejects the combination instead of guessing.
 const opencodeAdapter = {
   backendKind: OPENCODE_BACKEND_KIND,
   loginGuardKey: "opencode:login",
@@ -651,7 +661,6 @@ module.exports = {
   OPENCODE_SMOKE_EXPECTED,
   OPENCODE_SMOKE_PROMPT,
   classifyAuthListEntry,
-  extractOpencodeLoginUrl,
   opencodeAdapter,
   parseOpencodeAuthList,
   parseOpencodeAuthStatus,

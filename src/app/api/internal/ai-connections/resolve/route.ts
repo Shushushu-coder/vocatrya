@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       operation: record.operation,
       backendKind: record.backendKind,
       // Server-validated at mint time: the account provider the runtime
-      // must authenticate for (e.g. OPENAI on OPENCODE_RUNTIME).
+      // must authenticate for (e.g. OPENCODE_GO on OPENCODE_RUNTIME).
       accountProvider: record.accountProvider,
     });
   }

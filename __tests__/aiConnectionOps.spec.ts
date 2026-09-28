@@ -69,6 +69,45 @@ beforeEach(() => {
 });
 
 describe("connection tickets", () => {
+  it("a freshly minted ticket resolves immediately — never pre-expired", () => {
+    // Regression for the "session expired" bug: a minted ticket must be
+    // resolvable on the very next call.
+    const record = mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "CODEX_RUNTIME",
+    });
+    const resolved = resolveConnectionTicket(record.ticket);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.ticket).toBe(record.ticket);
+  });
+
+  it("shares one store across module instances (standalone-bundle parity)", async () => {
+    // In the Next standalone server each route/page is a self-contained
+    // webpack bundle — the ticket module exists once per bundle. The
+    // store must therefore live on globalThis, or a ticket minted by the
+    // settings page's server action is invisible to the /resolve route.
+    // vi.resetModules() + a fresh dynamic import produces exactly that
+    // second module instance inside this test process.
+    const mintSide = await import("@/lib/ai/connection-tickets");
+    const record = mintSide.mintConnectionTicket({
+      userId: "user-1",
+      operation: "login",
+      backendKind: "OPENCODE_RUNTIME",
+      accountProvider: "OPENCODE_GO",
+    });
+    vi.resetModules();
+    const routeSide = await import("@/lib/ai/connection-tickets");
+    const resolved = routeSide.resolveConnectionTicket(record.ticket);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.operationId).toBe(record.operationId);
+    expect(resolved?.accountProvider).toBe("OPENCODE_GO");
+    // Complete also crosses instances — the full lifecycle works
+    // independent of which bundle each caller lives in.
+    const completed = routeSide.completeConnectionOperation(record.operationId);
+    expect(completed?.ticket).toBe(record.ticket);
+  });
+
   it("mint → resolve → complete is single-use at each step", () => {
     const record = mintConnectionTicket({
       userId: "user-1",
@@ -88,7 +127,7 @@ describe("connection tickets", () => {
     expect(completeConnectionOperation(record.operationId)).toBeNull();
   });
 
-  it("expires tickets after the TTL", () => {
+  it("expires tickets only at the TTL boundary", () => {
     const now = 1_000_000;
     const record = mintConnectionTicket({
       userId: "user-1",
@@ -97,6 +136,13 @@ describe("connection tickets", () => {
       connectionId: "c1",
       now,
     });
+    // Still valid one ms before the TTL — expiry is time-based, never
+    // a lookup artifact.
+    expect(
+      resolveConnectionTicket(record.ticket, {
+        now: now + CONNECTION_TICKET_TTL_MS - 1,
+      }),
+    ).not.toBeNull();
     expect(
       resolveConnectionTicket(record.ticket, {
         now: now + CONNECTION_TICKET_TTL_MS + 1,
@@ -138,42 +184,46 @@ describe("connection service", () => {
     expect(JSON.stringify(row)).not.toMatch(/model|token|AppData|CODEX_HOME/i);
   });
 
-  it("persists provider=OPENAI + backendKind=OPENCODE_RUNTIME for OpenCode login", async () => {
+  it("persists OPENCODE_GO/ZEN + backendKind=OPENCODE_RUNTIME for OpenCode login", async () => {
     store.count.mockResolvedValue(0);
     store.create.mockImplementation(async ({ data }) => data);
 
-    const row = await createVerifiedAccountConnection(
-      {
-        userId: "user-1",
+    for (const [provider, displayName] of [
+      ["OPENCODE_GO", "OpenCode Go"],
+      ["OPENCODE_ZEN", "OpenCode Zen"],
+    ] as const) {
+      const row = await createVerifiedAccountConnection(
+        {
+          userId: "user-1",
+          backendKind: "OPENCODE_RUNTIME",
+          verifiedProvider: provider,
+          runtimeProfileRef: RP,
+          accountIdentity: null,
+        },
+        fakeDb(),
+      );
+      // The verified product wins — never "OPENCODE" (the runtime
+      // vendor) and never "OPENAI" (removed ChatGPT semantics).
+      expect(row).toMatchObject({
+        provider,
+        authType: "ACCOUNT_LOGIN",
         backendKind: "OPENCODE_RUNTIME",
-        verifiedProvider: "OPENAI",
+        displayName,
+        status: "CONNECTED",
+        credentialRef: null,
         runtimeProfileRef: RP,
-        accountIdentity: null,
-      },
-      fakeDb(),
-    );
-    // The verified provider wins — never "OPENCODE" (the runtime vendor).
-    expect(row).toMatchObject({
-      provider: "OPENAI",
-      authType: "ACCOUNT_LOGIN",
-      backendKind: "OPENCODE_RUNTIME",
-      displayName: "ChatGPT via OpenCode",
-      status: "CONNECTED",
-      credentialRef: null,
-      runtimeProfileRef: RP,
-    });
+      });
+    }
   });
 
-  it("numbers ChatGPT-via-OpenCode accounts independently from Codex", async () => {
-    // Two Codex ChatGPT connections exist; the first OpenCode one still
-    // gets the unnumbered "ChatGPT via OpenCode" name.
+  it("numbers OpenCode Go accounts independently from other pairings", async () => {
     store.count.mockResolvedValue(0);
     store.create.mockImplementation(async ({ data }) => data);
     const first = await createVerifiedAccountConnection(
       {
         userId: "user-1",
         backendKind: "OPENCODE_RUNTIME",
-        verifiedProvider: "OPENAI",
+        verifiedProvider: "OPENCODE_GO",
         runtimeProfileRef: RP,
         accountIdentity: null,
       },
@@ -182,25 +232,25 @@ describe("connection service", () => {
     expect(store.count).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          provider: "OPENAI",
+          provider: "OPENCODE_GO",
           backendKind: "OPENCODE_RUNTIME",
         }),
       }),
     );
-    expect(first.displayName).toBe("ChatGPT via OpenCode");
+    expect(first.displayName).toBe("OpenCode Go");
 
     store.count.mockResolvedValue(1);
     const second = await createVerifiedAccountConnection(
       {
         userId: "user-1",
         backendKind: "OPENCODE_RUNTIME",
-        verifiedProvider: "OPENAI",
+        verifiedProvider: "OPENCODE_GO",
         runtimeProfileRef: RP,
         accountIdentity: null,
       },
       fakeDb(),
     );
-    expect(second.displayName).toBe("ChatGPT via OpenCode 2");
+    expect(second.displayName).toBe("OpenCode Go 2");
   });
 
   it("rejects provider/runtime combinations outside the matrix", async () => {
@@ -209,6 +259,9 @@ describe("connection service", () => {
       ["OPENCODE_RUNTIME", "OPENCODE"],
       // Anthropic through OpenCode is not a supported account-login path.
       ["OPENCODE_RUNTIME", "ANTHROPIC"],
+      // ChatGPT-via-OpenCode was removed — OpenAI never authenticates
+      // through the OpenCode runtime.
+      ["OPENCODE_RUNTIME", "OPENAI"],
       // OpenAI cannot authenticate through Claude Code.
       ["CLAUDE_RUNTIME", "OPENAI"],
       // Codex only authenticates OpenAI.
@@ -476,15 +529,28 @@ describe("mintAiConnectionTicket", () => {
     expect(result.data?.ticket).toBeTruthy();
   });
 
-  it("mints an OpenAI login ticket for OpenCode when requested", async () => {
+  it("mints an OpenCode Go/Zen login ticket for OpenCode when requested", async () => {
+    mockedGetCurrentUser.mockResolvedValue(USER as any);
+    for (const accountProvider of ["OPENCODE_GO", "OPENCODE_ZEN"] as const) {
+      const result = await mintAiConnectionTicket({
+        operation: "login",
+        backendKind: "OPENCODE_RUNTIME",
+        accountProvider,
+      });
+      expect(result.success).toBe(true);
+      expect(result.data?.ticket).toBeTruthy();
+    }
+  });
+
+  it("rejects a ChatGPT login ticket for OpenCode", async () => {
     mockedGetCurrentUser.mockResolvedValue(USER as any);
     const result = await mintAiConnectionTicket({
       operation: "login",
       backendKind: "OPENCODE_RUNTIME",
       accountProvider: "OPENAI",
     });
-    expect(result.success).toBe(true);
-    expect(result.data?.ticket).toBeTruthy();
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
   });
 
   it("requires an explicit provider on a multi-provider runtime", async () => {

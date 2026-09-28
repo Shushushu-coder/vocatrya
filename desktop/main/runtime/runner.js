@@ -178,6 +178,14 @@ function runRuntimeCommand({
     child.once("error", (error) => {
       finish({ exitCode: null, error: error.message });
     });
+    child.once("exit", (code, sig) => {
+      // 'close' also requires stdio EOF — a detached console child
+      // (`start /wait` visible-console logins) can inherit the pipes and
+      // hold them open after the managed process is terminated, leaving
+      // the run hanging indefinitely. Once termination was requested the
+      // run is over regardless of stragglers holding the pipes.
+      if (aborted || timedOut) finish({ exitCode: code, signal: sig });
+    });
     child.once("close", (code, sig) => {
       finish({ exitCode: code, signal: sig });
     });

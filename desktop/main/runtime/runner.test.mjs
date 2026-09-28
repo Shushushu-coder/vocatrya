@@ -58,6 +58,28 @@ describe("runtime command runner", () => {
     expect(result.aborted).toBe(true);
   }, 15_000);
 
+  // Visible-console logins (`cmd start /wait`) detach a grandchild that
+  // inherits the pipes — killing the parent never produces stdio EOF, so
+  // 'close' never fires. After a requested termination the run resolves
+  // on 'exit' alone.
+  it("resolves on exit after abort when a detached child holds stdio", async () => {
+    const controller = new AbortController();
+    const promise = runRuntimeCommand({
+      executable: NODE,
+      args: [
+        "-e",
+        `const {spawn}=require("child_process");
+         const c=spawn(process.execPath,["-e","setTimeout(()=>{},5000)"],{detached:true,stdio:"inherit"});
+         c.unref();setTimeout(()=>{},60000)`,
+      ],
+      signal: controller.signal,
+    });
+    await new Promise((r) => setTimeout(r, 750));
+    controller.abort();
+    const result = await promise;
+    expect(result.aborted).toBe(true);
+  }, 15_000);
+
   it("reports spawn failure without throwing", async () => {
     const result = await runRuntimeCommand({
       executable: "definitely-not-a-real-binary-9f3a2.exe",

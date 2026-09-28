@@ -1,8 +1,9 @@
-// Phase F1 OpenCode lifecycle tests — same coverage shape as the Codex and
-// Claude suites, driven through the OPENCODE_RUNTIME adapter bound to the
-// OPENAI account provider. Proves: ticket-pinned provider binding, XDG
-// isolation, OAuth-vs-API-key classification, disconnect isolation, model
-// discovery, and the deny-by-default smoke invocation.
+// OpenCode lifecycle tests — same coverage shape as the Codex and Claude
+// suites, driven through the OPENCODE_RUNTIME adapter bound to the
+// OPENCODE_GO / OPENCODE_ZEN account providers. Proves: ticket-pinned
+// provider binding, XDG isolation, vendor API-key classification, the
+// visible-console login launch, disconnect isolation, model discovery,
+// and the deny-by-default smoke invocation.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,8 +27,13 @@ function authList(entries, profileDir) {
   lines.push(`—  ${entries.length} credentials`, "");
   return lines.join("\n");
 }
-const OPENAI_OAUTH = (dir) => authList([{ name: "OpenAI", type: "oauth" }], dir);
-const OPENAI_API = (dir) => authList([{ name: "OpenAI", type: "api" }], dir);
+const GO_API = (dir) => authList([{ name: "OpenCode Go", type: "api" }], dir);
+const GO_OAUTH = (dir) =>
+  authList([{ name: "OpenCode Go", type: "oauth" }], dir);
+const ZEN_API = (dir) =>
+  authList([{ name: "OpenCode Zen", type: "api" }], dir);
+const OPENAI_OAUTH = (dir) =>
+  authList([{ name: "OpenAI", type: "oauth" }], dir);
 const EMPTY_LIST = (dir) => authList([], dir);
 
 let profilesRoot;
@@ -86,10 +92,10 @@ function connectionRow(overrides = {}) {
   return {
     id: "conn-1",
     userId: "user-1",
-    provider: "OPENAI",
+    provider: "OPENCODE_GO",
     authType: "ACCOUNT_LOGIN",
     backendKind: "OPENCODE_RUNTIME",
-    displayName: "ChatGPT via OpenCode",
+    displayName: "OpenCode Go",
     accountIdentity: null,
     status: "CONNECTED",
     runtimeProfileRef: RP_A,
@@ -99,7 +105,7 @@ function connectionRow(overrides = {}) {
   };
 }
 
-function loginResolve(accountProvider = "OPENAI") {
+function loginResolve(accountProvider = "OPENCODE_GO") {
   return {
     ok: true,
     operationId: "op_1",
@@ -177,20 +183,15 @@ function assertManagedEnv(inv, expectedProfileDir) {
   }
 }
 
-// Runner script for the login flow: `auth login --pure -p openai -m <label>`
-// emits the authorize URL; `auth list` reports the credential state.
+// Runner script for the login flow: the console-launched
+// `auth login --pure -p <provider>`; `auth list` reports the credential
+// state afterwards. `start /wait` does not propagate the exit code — the
+// probe is the only verdict.
 function loginScript(loginBehavior, listStdout = null) {
   runnerScript = [
     {
-      match: (h) => h.startsWith("auth login"),
-      respond: (inv) => {
-        // Simulate the URL arriving on stdout mid-run — the runner's
-        // onStdout hook is what surfaces it to the renderer.
-        inv.onStdout?.(
-          "Add credential\n\nGo to: https://auth.openai.com/oauth/authorize?originator=opencode\n",
-        );
-        return loginBehavior(inv);
-      },
+      match: (h) => h.includes("auth login"),
+      respond: (inv) => loginBehavior(inv),
     },
     {
       match: (h) => h === "auth list",
@@ -200,15 +201,15 @@ function loginScript(loginBehavior, listStdout = null) {
           stdout:
             typeof listStdout === "function"
               ? listStdout(inv)
-              : (listStdout ?? OPENAI_OAUTH(inv.env.XDG_DATA_HOME.replace(/\\data$/, ""))),
+              : (listStdout ?? GO_API(inv.env.XDG_DATA_HOME.replace(/\\data$/, ""))),
           stderr: "",
         }),
     },
   ];
 }
 
-describe("startLogin (OpenCode)", () => {
-  it("pins the OpenAI OAuth method, isolates XDG roots, persists OPENAI", async () => {
+describe("startLogin (OpenCode Go)", () => {
+  it("launches the vendor TUI in a console window, isolates XDG roots, persists OPENCODE_GO", async () => {
     loginScript(respond({}));
     const result = await service.startLogin({
       backendKind: "OPENCODE_RUNTIME",
@@ -224,61 +225,104 @@ describe("startLogin (OpenCode)", () => {
     expect(fs.statSync(profileDir).isDirectory()).toBe(true);
 
     const loginInv = invocations.find((i) =>
-      i.args.join(" ").startsWith("auth login"),
+      i.args.join(" ").includes("auth login"),
     );
     const listInv = invocations.find((i) => i.args.join(" ") === "auth list");
-    expect(loginInv.args).toEqual(
-      expect.arrayContaining([
-        "auth",
-        "login",
-        "--pure",
-        "-p",
-        "openai",
-        "-m",
-        "ChatGPT Pro/Plus (browser)",
-      ]),
+    // The interactive credential TUI needs a real console window — it is
+    // launched through cmd start /wait, never piped.
+    expect(loginInv.executable).toBe("cmd.exe");
+    expect(loginInv.args.slice(0, 5)).toEqual([
+      "/d",
+      "/c",
+      "start",
+      "",
+      "/wait",
+    ]);
+    expect(loginInv.args.slice(6).join(" ")).toBe(
+      "auth login --pure -p opencode-go",
     );
     assertManagedEnv(loginInv, profileDir);
     assertManagedEnv(listInv, profileDir);
 
-    // The backend persists the adapter-verified provider — OPENAI on
-    // OPENCODE_RUNTIME, never the runtime vendor.
+    // The backend persists the adapter-verified provider — the product
+    // account, never the runtime vendor and never OPENAI.
     expect(backend.completeOperation).toHaveBeenCalledWith("op_1", {
       outcome: "authenticated",
-      verifiedProvider: "OPENAI",
+      verifiedProvider: "OPENCODE_GO",
       runtimeProfileRef: profileRef,
       accountIdentity: null,
       providerMetadata: {
-        authType: "oauth",
-        loginMethod: "ChatGPT Pro/Plus (browser)",
+        authType: "api",
+        product: "OpenCode Go",
       },
     });
 
-    // The authorize URL was surfaced for the renderer (opencode cannot
-    // open a browser when spawned non-interactively).
-    expect(oauthEvents).toEqual([
-      {
-        backendKind: "OPENCODE_RUNTIME",
-        accountProvider: "OPENAI",
-        url: "https://auth.openai.com/oauth/authorize?originator=opencode",
-      },
-    ]);
+    // There is no vendor OAuth URL to surface — no auth events fire.
+    expect(oauthEvents).toEqual([]);
   });
 
-  it("rejects an OpenAI API-key credential — account login requires OAuth", async () => {
+  it("a Zen login ticket pins -p opencode", async () => {
+    backend.resolveTicket.mockResolvedValue(loginResolve("OPENCODE_ZEN"));
     loginScript(respond({}), (inv) =>
-      OPENAI_API(inv.env.XDG_DATA_HOME.replace(/\\data$/, "")),
+      ZEN_API(inv.env.XDG_DATA_HOME.replace(/\\data$/, "")),
     );
     const result = await service.startLogin({
       backendKind: "OPENCODE_RUNTIME",
       ticket: "t",
     });
-    expect(result.code).toBe("UNSUPPORTED_AUTH_METHOD");
+    expect(result.ok).toBe(true);
+    const loginInv = invocations.find((i) =>
+      i.args.join(" ").includes("auth login"),
+    );
+    expect(loginInv.args.slice(6).join(" ")).toBe(
+      "auth login --pure -p opencode",
+    );
+    expect(backend.completeOperation).toHaveBeenCalledWith(
+      "op_1",
+      expect.objectContaining({ verifiedProvider: "OPENCODE_ZEN" }),
+    );
+  });
+
+  it("rejects a foreign credential for the bound product", async () => {
+    // A Zen key does not satisfy a Go connection — the account products
+    // are distinct identities.
+    loginScript(respond({}), (inv) =>
+      ZEN_API(inv.env.XDG_DATA_HOME.replace(/\\data$/, "")),
+    );
+    const result = await service.startLogin({
+      backendKind: "OPENCODE_RUNTIME",
+      ticket: "t",
+    });
+    expect(result.code).toBe("AUTH_NOT_CONFIRMED");
     expect(fs.readdirSync(profilesRoot)).toHaveLength(0);
     expect(backend.completeOperation).not.toHaveBeenCalled();
   });
 
-  it("rejects an unclassifiable auth list — exit 0 never proves OAuth", async () => {
+  it("rejects a non-api credential for the bound provider", async () => {
+    loginScript(respond({}), (inv) =>
+      GO_OAUTH(inv.env.XDG_DATA_HOME.replace(/\\data$/, "")),
+    );
+    const result = await service.startLogin({
+      backendKind: "OPENCODE_RUNTIME",
+      ticket: "t",
+    });
+    expect(result.code).toBe("AUTH_METHOD_UNVERIFIED");
+    expect(fs.readdirSync(profilesRoot)).toHaveLength(0);
+  });
+
+  it("rejects a ChatGPT credential entirely — it is not an OpenCode account", async () => {
+    loginScript(respond({}), (inv) =>
+      OPENAI_OAUTH(inv.env.XDG_DATA_HOME.replace(/\\data$/, "")),
+    );
+    const result = await service.startLogin({
+      backendKind: "OPENCODE_RUNTIME",
+      ticket: "t",
+    });
+    expect(result.code).toBe("AUTH_NOT_CONFIRMED");
+    expect(fs.readdirSync(profilesRoot)).toHaveLength(0);
+  });
+
+  it("rejects an unclassifiable auth list — exit 0 never proves auth", async () => {
     loginScript(respond({}), "unexpected output");
     const result = await service.startLogin({
       backendKind: "OPENCODE_RUNTIME",
@@ -290,6 +334,16 @@ describe("startLogin (OpenCode)", () => {
 
   it("rejects providers the adapter does not implement (Copilot)", async () => {
     backend.resolveTicket.mockResolvedValue(loginResolve("GITHUB_COPILOT"));
+    const result = await service.startLogin({
+      backendKind: "OPENCODE_RUNTIME",
+      ticket: "t",
+    });
+    expect(result.code).toBe("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
+    expect(fs.readdirSync(profilesRoot)).toHaveLength(0);
+  });
+
+  it("rejects a ChatGPT ticket — OpenAI is never an OpenCode account", async () => {
+    backend.resolveTicket.mockResolvedValue(loginResolve("OPENAI"));
     const result = await service.startLogin({
       backendKind: "OPENCODE_RUNTIME",
       ticket: "t",
@@ -360,15 +414,15 @@ describe("reconnect (OpenCode)", () => {
     expect(result.ok).toBe(true);
     expect(result.connection.id).toBe("conn-1");
     const loginInv = invocations.find((i) =>
-      i.args.join(" ").startsWith("auth login"),
+      i.args.join(" ").includes("auth login"),
     );
     assertManagedEnv(loginInv, PROFILE_A());
     expect(backend.completeOperation).toHaveBeenCalledWith("op_rec", {
       outcome: "authenticated",
       accountIdentity: null,
       providerMetadata: {
-        authType: "oauth",
-        loginMethod: "ChatGPT Pro/Plus (browser)",
+        authType: "api",
+        product: "OpenCode Go",
       },
     });
   });
@@ -386,7 +440,10 @@ describe("disconnect (OpenCode)", () => {
       connection: connectionRow(),
     });
     runnerScript = [
-      { match: (h) => h === "auth logout openai", respond: respond({}) },
+      {
+        match: (h) => h === "auth logout opencode-go",
+        respond: respond({}),
+      },
     ];
     const result = await service.disconnect({
       connectionId: "conn-1",
@@ -395,8 +452,8 @@ describe("disconnect (OpenCode)", () => {
     expect(result.ok).toBe(true);
     expect(result.connection.status).toBe("DISCONNECTED");
 
-    const logoutInv = invocations.find((i) =>
-      i.args.join(" ") === "auth logout openai",
+    const logoutInv = invocations.find(
+      (i) => i.args.join(" ") === "auth logout opencode-go",
     );
     expect(logoutInv).toBeTruthy();
     assertManagedEnv(logoutInv, PROFILE_A());
@@ -424,11 +481,11 @@ describe("verify (OpenCode)", () => {
     });
   });
 
-  it("reports CONNECTED for an OpenAI OAuth credential", async () => {
+  it("reports CONNECTED for the bound vendor API-key credential", async () => {
     runnerScript = [
       {
         match: (h) => h === "auth list",
-        respond: respond({ stdout: OPENAI_OAUTH(PROFILE_A()) }),
+        respond: respond({ stdout: GO_API(PROFILE_A()) }),
       },
     ];
     const result = await service.verify({ connectionId: "conn-1", ticket: "t" });
@@ -438,11 +495,11 @@ describe("verify (OpenCode)", () => {
     assertManagedEnv(inv, PROFILE_A());
   });
 
-  it("reports an API-key session as UNKNOWN → ERROR, never CONNECTED", async () => {
+  it("reports a foreign credential as UNKNOWN → ERROR, never CONNECTED", async () => {
     runnerScript = [
       {
         match: (h) => h === "auth list",
-        respond: respond({ stdout: OPENAI_API(PROFILE_A()) }),
+        respond: respond({ stdout: GO_OAUTH(PROFILE_A()) }),
       },
     ];
     const result = await service.verify({ connectionId: "conn-1", ticket: "t" });
@@ -467,12 +524,12 @@ describe("listModels (OpenCode)", () => {
     });
   });
 
-  it("discovers OpenAI-route models and excludes other providers", async () => {
+  it("discovers opencode-go route models and excludes other providers", async () => {
     runnerScript = [
       {
-        match: (h) => h === "models openai",
+        match: (h) => h === "models opencode-go",
         respond: respond({
-          stdout: "openai/gpt-5.5\nopenai/gpt-5\nopenai/codex-mini-latest\n",
+          stdout: "opencode-go/kimi-k2.5\nopencode-go/glm-5\nopenai/gpt-5.5\n",
         }),
       },
     ];
@@ -483,29 +540,28 @@ describe("listModels (OpenCode)", () => {
     expect(result.ok).toBe(true);
     expect(result.dynamicDiscoverySupported).toBe(true);
     expect(result.models.map((m) => m.id)).toEqual([
-      "openai/gpt-5.5",
-      "openai/gpt-5",
-      "openai/codex-mini-latest",
+      "opencode-go/kimi-k2.5",
+      "opencode-go/glm-5",
     ]);
     for (const m of result.models) {
-      expect(m.id.startsWith("openai/")).toBe(true);
+      expect(m.id.startsWith("opencode-go/")).toBe(true);
       expect(m.source).toBe("RUNTIME");
     }
-    const inv = invocations.find((i) => i.args.join(" ") === "models openai");
+    const inv = invocations.find((i) => i.args.join(" ") === "models opencode-go");
     assertManagedEnv(inv, PROFILE_A());
   });
 
   it("falls back to a filtered full listing when scoped discovery fails", async () => {
     runnerScript = [
       {
-        match: (h) => h === "models openai",
+        match: (h) => h === "models opencode-go",
         respond: respond({ exitCode: 1, stderr: "Provider not found" }),
       },
       {
         match: (h) => h === "models",
         respond: respond({
           stdout:
-            "opencode/big-pickle\nopenai/gpt-5.5\nanthropic/claude-sonnet\n",
+            "opencode/minimax-m2.5\nopencode-go/kimi-k2.5\nanthropic/claude-sonnet\n",
         }),
       },
     ];
@@ -514,7 +570,7 @@ describe("listModels (OpenCode)", () => {
       ticket: "t",
     });
     expect(result.ok).toBe(true);
-    expect(result.models.map((m) => m.id)).toEqual(["openai/gpt-5.5"]);
+    expect(result.models.map((m) => m.id)).toEqual(["opencode-go/kimi-k2.5"]);
   });
 
   it("returns MODEL_DISCOVERY_UNAVAILABLE when the runtime cannot list", async () => {
@@ -558,7 +614,7 @@ describe("runSmoke (OpenCode)", () => {
     const result = await service.runSmoke({
       connectionId: "conn-1",
       ticket: "t",
-      model: "openai/gpt-5.5",
+      model: "opencode-go/kimi-k2.5",
     });
     expect(result.ok).toBe(true);
     expect(result.matched).toBe(true);
@@ -568,7 +624,7 @@ describe("runSmoke (OpenCode)", () => {
     expect(smokeInv.args).toContain("--format");
     expect(smokeInv.args).not.toContain("--auto");
     expect(smokeInv.args).toEqual(
-      expect.arrayContaining(["-m", "openai/gpt-5.5"]),
+      expect.arrayContaining(["-m", "opencode-go/kimi-k2.5"]),
     );
     // cwd is a fresh Vocatrya-owned temp dir, not the repo or a user dir.
     expect(smokeInv.cwd.startsWith(smokeWorkRoot)).toBe(true);
@@ -592,8 +648,8 @@ describe("runSmoke (OpenCode)", () => {
   it("discovers a smoke model when none is supplied", async () => {
     runnerScript = [
       {
-        match: (h) => h === "models openai",
-        respond: respond({ stdout: "openai/gpt-5.5\n" }),
+        match: (h) => h === "models opencode-go",
+        respond: respond({ stdout: "opencode-go/kimi-k2.5\n" }),
       },
       {
         match: (h) => h.startsWith("run "),
@@ -607,7 +663,7 @@ describe("runSmoke (OpenCode)", () => {
     expect(result.ok).toBe(true);
     const smokeInv = invocations.find((i) => i.args[0] === "run");
     expect(smokeInv.args).toEqual(
-      expect.arrayContaining(["-m", "openai/gpt-5.5"]),
+      expect.arrayContaining(["-m", "opencode-go/kimi-k2.5"]),
     );
   });
 
@@ -615,7 +671,7 @@ describe("runSmoke (OpenCode)", () => {
     const result = await service.runSmoke({
       connectionId: "conn-1",
       ticket: "t",
-      model: "opencode/big-pickle",
+      model: "openai/gpt-5.5",
     });
     expect(result.ok).toBe(false);
     expect(result.code).toBe("MODEL_UNAVAILABLE");

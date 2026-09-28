@@ -64,16 +64,16 @@ const CONNECTION_SUMMARY_SELECT = {
 
 // Default display names per account-login provider + runtime pairing; a
 // second connection of the same pairing is numbered ("Claude 2", ...).
-// The runtime is part of the name so e.g. "ChatGPT" (Codex) and
-// "ChatGPT via OpenCode" stay visually distinct.
+// The runtime is part of the name so e.g. two products on the same
+// runtime stay visually distinct.
 const ACCOUNT_LOGIN_DISPLAY_NAMES: Record<string, string> = {
   "OPENAI:CODEX_RUNTIME": "ChatGPT via Codex",
-  "OPENAI:OPENCODE_RUNTIME": "ChatGPT via OpenCode",
   "ANTHROPIC:CLAUDE_RUNTIME": "Claude",
   "XAI:GROK_RUNTIME": "Grok",
+  "OPENCODE_ZEN:OPENCODE_RUNTIME": "OpenCode Zen",
+  "OPENCODE_GO:OPENCODE_RUNTIME": "OpenCode Go",
   "CURSOR:CURSOR_RUNTIME": "Cursor",
   "GITHUB_COPILOT:COPILOT_RUNTIME": "Copilot",
-  "GITHUB_COPILOT:OPENCODE_RUNTIME": "Copilot via OpenCode",
   "DEVIN:DEVIN_RUNTIME": "Devin",
 };
 

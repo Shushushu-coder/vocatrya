@@ -27,7 +27,8 @@ const SIX = [
 const VALID_COMBINATIONS = [
   ["CODEX_RUNTIME", "OPENAI"],
   ["CLAUDE_RUNTIME", "ANTHROPIC"],
-  ["OPENCODE_RUNTIME", "OPENAI"],
+  ["OPENCODE_RUNTIME", "OPENCODE_ZEN"],
+  ["OPENCODE_RUNTIME", "OPENCODE_GO"],
   ["GROK_RUNTIME", "XAI"],
   ["CURSOR_RUNTIME", "CURSOR"],
   ["DEVIN_RUNTIME", "DEVIN"],
@@ -45,6 +46,9 @@ const INVALID_COMBINATIONS = [
   ["OPENCODE_RUNTIME", "CURSOR"],
   ["OPENCODE_RUNTIME", "DEVIN"],
   ["OPENCODE_RUNTIME", "OPENCODE"],
+  // ChatGPT-via-OpenCode was removed product semantics — OpenCode hosts
+  // only its own Zen/Go accounts.
+  ["OPENCODE_RUNTIME", "OPENAI"],
   // Supported in the registry matrix but intentionally not implemented —
   // the lifecycle adapter refuses it rather than half-running a login.
   ["OPENCODE_RUNTIME", "GITHUB_COPILOT"],
@@ -94,7 +98,7 @@ const STATUS_FIXTURES = {
     unverifiableMethod: { authState: "AUTHENTICATED", authKind: "UNKNOWN" },
     valid: {
       authState: "AUTHENTICATED",
-      authKind: "OPENAI_CHATGPT_OAUTH",
+      authKind: "OPENCODE_GO_API_KEY",
     },
   },
   GROK_RUNTIME: {

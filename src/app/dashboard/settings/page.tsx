@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import AiSettings from "@/components/settings/AiSettings";
 import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import InterviewAiSettings from "@/components/settings/InterviewAiSettings";
-import ApiKeySettings from "@/components/settings/ApiKeySettings";
 import DataSettings from "@/components/settings/DataSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import McpAccessSettings from "@/components/settings/McpAccessSettings";
@@ -29,13 +27,11 @@ function Settings() {
         <div className="flex-1 min-w-0">
           {activeSection === "ai-provider" && (
             <div className="space-y-6">
-              <AiSettings />
               <AiConnectionsCard />
               <AiAssignmentsCard />
               <InterviewAiSettings />
             </div>
           )}
-          {activeSection === "api-keys" && <ApiKeySettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "mcp-access" && <McpAccessSettings />}
           {activeSection === "data" && <DataSettings />}

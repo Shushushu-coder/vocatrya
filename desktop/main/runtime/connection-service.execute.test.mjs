@@ -451,7 +451,11 @@ describe("executeText structuredOutput contract", () => {
     backend.resolveTicket.mockResolvedValue(
       resolveOk({
         backendKind: "OPENCODE_RUNTIME",
-        connection: connectionRow({ backendKind: "OPENCODE_RUNTIME" }),
+        connection: connectionRow({
+          backendKind: "OPENCODE_RUNTIME",
+          provider: "OPENCODE_GO",
+          displayName: "OpenCode Go",
+        }),
       }),
     );
     runnerScript = [
@@ -466,7 +470,7 @@ describe("executeText structuredOutput contract", () => {
     const result = await svc.executeText({
       ticket: "t",
       connectionId: "conn-1",
-      model: "openai/gpt-5.5",
+      model: "opencode-go/kimi-k2.5",
       prompt: "task",
       structuredOutput: { schema: SCHEMA, schemaName: "VocatryaProbe" },
       verificationProbe: true,

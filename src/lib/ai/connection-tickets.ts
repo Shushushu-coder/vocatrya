@@ -9,9 +9,14 @@
  * the outcome (`complete`, keyed by operationId). Tickets expire quickly
  * and are consumed at most once at each step.
  *
- * Storage is a module-level Map: the desktop backend is a single-process
- * local server, so in-memory state is sufficient and nothing needs a
- * schema change.
+ * Storage lives on globalThis, not module scope: the Next.js standalone
+ * server compiles each route/page entry into its own webpack bundle, and a
+ * module-level Map would be duplicated per bundle — a ticket minted by the
+ * settings page's server action would be invisible to the /resolve route.
+ * A process-wide singleton keyed on globalThis survives that bundling
+ * (same technique as the Prisma client singleton in src/lib/db.ts). The
+ * desktop backend is a single-process local server, so in-memory state is
+ * sufficient and nothing needs a schema change.
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import type { AIConnectionOperation } from "@/lib/ai/connections";
@@ -38,14 +43,37 @@ export interface ConnectionTicketRecord {
   resolved: boolean;
 }
 
-const tickets = new Map<string, ConnectionTicketRecord>();
-const ticketByOperationId = new Map<string, string>();
+interface ConnectionTicketStore {
+  tickets: Map<string, ConnectionTicketRecord>;
+  ticketByOperationId: Map<string, string>;
+}
 
-function sweepExpired(now: number): void {
-  for (const [ticket, record] of tickets) {
+// Symbol.for pins one store per process across every webpack bundle that
+// loads this module — bundle-private module state was the root cause of
+// the "session expired" failure on every ACCOUNT_LOGIN connect.
+const TICKET_STORE_KEY = Symbol.for("vocatrya.aiConnectionTickets.v1");
+
+function ticketStore(): ConnectionTicketStore {
+  const globalScope = globalThis as unknown as Record<
+    symbol,
+    ConnectionTicketStore | undefined
+  >;
+  let store = globalScope[TICKET_STORE_KEY];
+  if (!store) {
+    store = {
+      tickets: new Map<string, ConnectionTicketRecord>(),
+      ticketByOperationId: new Map<string, string>(),
+    };
+    globalScope[TICKET_STORE_KEY] = store;
+  }
+  return store;
+}
+
+function sweepExpired(store: ConnectionTicketStore, now: number): void {
+  for (const [ticket, record] of store.tickets) {
     if (record.expiresAt <= now) {
-      tickets.delete(ticket);
-      ticketByOperationId.delete(record.operationId);
+      store.tickets.delete(ticket);
+      store.ticketByOperationId.delete(record.operationId);
     }
   }
 }
@@ -59,7 +87,8 @@ export function mintConnectionTicket(input: {
   now?: number;
 }): ConnectionTicketRecord {
   const now = input.now ?? Date.now();
-  sweepExpired(now);
+  const store = ticketStore();
+  sweepExpired(store, now);
   const record: ConnectionTicketRecord = {
     ticket: randomBytes(24).toString("base64url"),
     operationId: `op_${randomUUID()}`,
@@ -71,8 +100,8 @@ export function mintConnectionTicket(input: {
     expiresAt: now + CONNECTION_TICKET_TTL_MS,
     resolved: false,
   };
-  tickets.set(record.ticket, record);
-  ticketByOperationId.set(record.operationId, record.ticket);
+  store.tickets.set(record.ticket, record);
+  store.ticketByOperationId.set(record.operationId, record.ticket);
   return record;
 }
 
@@ -85,8 +114,9 @@ export function resolveConnectionTicket(
   { now }: { now?: number } = {},
 ): ConnectionTicketRecord | null {
   const at = now ?? Date.now();
-  sweepExpired(at);
-  const record = tickets.get(ticket);
+  const store = ticketStore();
+  sweepExpired(store, at);
+  const record = store.tickets.get(ticket);
   if (!record || record.resolved || record.expiresAt <= at) return null;
   record.resolved = true;
   return record;
@@ -101,17 +131,19 @@ export function completeConnectionOperation(
   { now }: { now?: number } = {},
 ): ConnectionTicketRecord | null {
   const at = now ?? Date.now();
-  sweepExpired(at);
-  const ticket = ticketByOperationId.get(operationId);
+  const store = ticketStore();
+  sweepExpired(store, at);
+  const ticket = store.ticketByOperationId.get(operationId);
   if (!ticket) return null;
-  const record = tickets.get(ticket);
-  tickets.delete(ticket);
-  ticketByOperationId.delete(operationId);
+  const record = store.tickets.get(ticket);
+  store.tickets.delete(ticket);
+  store.ticketByOperationId.delete(operationId);
   return record ?? null;
 }
 
 /** Test hook — clears all outstanding tickets. */
 export function resetConnectionTickets(): void {
-  tickets.clear();
-  ticketByOperationId.clear();
+  const store = ticketStore();
+  store.tickets.clear();
+  store.ticketByOperationId.clear();
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { Bot, Database, Key, Palette, Plug } from "lucide-react";
+import { Bot, Database, Palette, Plug } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 
-export type SettingsSection = "ai-provider" | "api-keys" | "appearance" | "mcp-access" | "data";
+export type SettingsSection = "ai-provider" | "appearance" | "mcp-access" | "data";
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
@@ -13,7 +13,6 @@ const SETTINGS_SECTIONS: {
   icon: typeof Bot;
 }[] = [
   { id: "ai-provider", labelKey: "settings.aiProvider", icon: Bot },
-  { id: "api-keys", labelKey: "settings.apiKeys", icon: Key },
   { id: "appearance", labelKey: "settings.appearance", icon: Palette },
   { id: "mcp-access", labelKey: "settings.mcpAccess", icon: Plug },
   { id: "data", labelKey: "settings.dataSection", icon: Database },

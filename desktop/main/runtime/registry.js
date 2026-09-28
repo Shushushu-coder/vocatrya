@@ -458,17 +458,23 @@ const RUNTIME_DEFINITIONS = Object.freeze([
   {
     backendKind: "OPENCODE_RUNTIME",
     runtimeVendor: "OPENCODE",
-    // OpenCode is a multi-provider runtime: it hosts account logins for
-    // OpenAI (ChatGPT OAuth) and GitHub Copilot. OpenCode itself (Zen/Go)
-    // is API-key only and is never an ACCOUNT_LOGIN provider.
-    supportedAccountProviders: ["OPENAI", "GITHUB_COPILOT"],
+    // OpenCode is its own account ecosystem: OpenCode Zen (pay-as-you-go
+    // gateway, auth.json "opencode" entry) and OpenCode Go (flat-rate
+    // subscription, auth.json "opencode-go" entry). Both authenticate via
+    // the vendor's own `auth login` API-key credential — never via
+    // ChatGPT/OAuth hosting semantics. GITHUB_COPILOT stays a declared-
+    // but-unimplemented entry (the adapter refuses it this phase).
+    supportedAccountProviders: ["OPENCODE_ZEN", "OPENCODE_GO", "GITHUB_COPILOT"],
     displayName: "OpenCode",
     binaries: [
       {
         commands: ["opencode.exe", "opencode.cmd", "opencode"],
         knownLocations: [
-          "{APPDATA}\\npm\\opencode.cmd",
+          // npm global install: the PATH shims (opencode / opencode.cmd)
+          // are not spawnable with shell:false — prefer the real vendored
+          // binary inside the platform package.
           "{APPDATA}\\npm\\node_modules\\opencode-ai\\bin\\opencode.exe",
+          "{APPDATA}\\npm\\opencode.cmd",
         ],
       },
     ],
@@ -558,11 +564,13 @@ const RUNTIME_DEFINITIONS = Object.freeze([
     },
     // Verified against opencode 1.18.31 (`opencode <cmd> --help`). The
     // registry holds vendor-neutral command heads; the adapter appends the
-    // account-provider (-p) and method (-m) selectors.
+    // account-provider (-p) selector.
     commands: {
-      // `auth login -p <provider> -m "<method label>"` selects the OAuth
-      // method non-interactively; it starts a localhost callback and
-      // prints the authorize URL. Long-running; cancelled via AbortSignal.
+      // `auth login -p <opencode|opencode-go>` opens the vendor's
+      // interactive credential TUI (API-key entry for Zen/Go). It reads
+      // console input — the adapter launches it inside a real console
+      // window like the Devin login. Long-running; cancelled via
+      // AbortSignal.
       login: ["auth", "login"],
       logout: ["auth", "logout"],
       models: ["models"],

@@ -114,7 +114,12 @@ describe("account runtime capability matrix", () => {
     expect(interaction("CLAUDE_RUNTIME")).toBe(
       LOGIN_INTERACTIONS.RUNTIME_MANAGED_BROWSER,
     );
-    expect(interaction("OPENCODE_RUNTIME")).toBe(LOGIN_INTERACTIONS.BROWSER);
+    // OpenCode's `auth login` is a console-input TUI (API-key entry for
+    // Zen/Go) — the adapter launches it in a real console window like
+    // Devin's login; there is no vendor authorize URL to surface.
+    expect(interaction("OPENCODE_RUNTIME")).toBe(
+      LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
+    );
     expect(interaction("GROK_RUNTIME")).toBe(LOGIN_INTERACTIONS.BROWSER);
     expect(interaction("CURSOR_RUNTIME")).toBe(LOGIN_INTERACTIONS.BROWSER);
     expect(interaction("DEVIN_RUNTIME")).toBe(
@@ -123,10 +128,15 @@ describe("account runtime capability matrix", () => {
     // Only runtimes whose CLI cannot open a browser surface an auth URL.
     const surfaces = (kind) =>
       getAccountRuntimeCapabilities(kind).login.surfacesAuthorizationUrl;
-    for (const kind of ["OPENCODE_RUNTIME", "GROK_RUNTIME", "CURSOR_RUNTIME"]) {
+    for (const kind of ["GROK_RUNTIME", "CURSOR_RUNTIME"]) {
       expect(surfaces(kind), kind).toBe(true);
     }
-    for (const kind of ["CODEX_RUNTIME", "CLAUDE_RUNTIME", "DEVIN_RUNTIME"]) {
+    for (const kind of [
+      "CODEX_RUNTIME",
+      "CLAUDE_RUNTIME",
+      "OPENCODE_RUNTIME",
+      "DEVIN_RUNTIME",
+    ]) {
       expect(surfaces(kind), kind).toBe(false);
     }
   });

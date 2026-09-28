@@ -100,8 +100,8 @@ type InterviewResolution = {
 };
 
 function connectionLabel(connection: ConnectionSummary): string {
-  // displayName already carries the runtime (e.g. "ChatGPT via Codex",
-  // "ChatGPT via OpenCode") so two accounts on the same provider stay
+  // displayName already carries the product + runtime (e.g. "ChatGPT via
+  // Codex", "OpenCode Go") so two accounts on the same runtime stay
   // visually distinct.
   const identity = connection.accountIdentity
     ? ` · ${connection.accountIdentity}`

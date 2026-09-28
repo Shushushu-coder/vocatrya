@@ -96,14 +96,15 @@ describe("unified error taxonomy", () => {
 describe("provider/runtime matrix", () => {
   const VALID: [AIBackendKind, AIConnectionProvider][] = [
     ["CODEX_RUNTIME", "OPENAI"],
-    ["OPENCODE_RUNTIME", "OPENAI"],
+    ["OPENCODE_RUNTIME", "OPENCODE_ZEN"],
+    ["OPENCODE_RUNTIME", "OPENCODE_GO"],
     ["CLAUDE_RUNTIME", "ANTHROPIC"],
     ["GROK_RUNTIME", "XAI"],
     ["CURSOR_RUNTIME", "CURSOR"],
     ["DEVIN_RUNTIME", "DEVIN"],
   ];
 
-  it("accepts exactly the six implemented ACCOUNT_LOGIN pairs", () => {
+  it("accepts the implemented ACCOUNT_LOGIN pairs", () => {
     for (const [backendKind, provider] of VALID) {
       expect(
         isSupportedAccountProviderForBackend(backendKind, provider),
@@ -112,13 +113,16 @@ describe("provider/runtime matrix", () => {
     }
   });
 
-  it("rejects invalid pairings including vendor-as-provider", () => {
+  it("rejects invalid pairings including ChatGPT-via-OpenCode", () => {
     for (const [backendKind, provider] of [
       ["CLAUDE_RUNTIME", "OPENAI"],
       ["CODEX_RUNTIME", "ANTHROPIC"],
       ["DEVIN_RUNTIME", "CURSOR"],
-      ["OPENCODE_RUNTIME", "DEVIN"],
+      // OpenCode never hosts a ChatGPT account — removed product
+      // semantics, not just a UI label.
+      ["OPENCODE_RUNTIME", "OPENAI"],
       ["OPENCODE_RUNTIME", "OPENCODE"],
+      ["OPENCODE_RUNTIME", "DEVIN"],
       ["GROK_RUNTIME", "OPENAI"],
       ["CURSOR_RUNTIME", "XAI"],
     ] as [AIBackendKind, AIConnectionProvider][]) {

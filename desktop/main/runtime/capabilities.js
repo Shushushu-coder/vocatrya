@@ -241,14 +241,20 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
   OPENCODE_RUNTIME: Object.freeze({
     implemented: true,
     login: Object.freeze({
-      interaction: LOGIN_INTERACTIONS.BROWSER,
-      surfacesAuthorizationUrl: true,
+      // `opencode auth login` renders a clack TUI that reads console
+      // input (provider/method selection, API-key entry) — it cannot be
+      // driven over pipes. The adapter launches it inside a real console
+      // window and the CLI owns the credential entry entirely.
+      interaction: LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
+      surfacesAuthorizationUrl: false,
     }),
     auth: Object.freeze({
       verification: AUTH_VERIFICATION.STATUS_COMMAND,
       // `auth list` carries provider+auth-type only, never an identity.
       accountIdentity: false,
-      requiredMethod: "oauth",
+      // Zen/Go complete with the vendor API-key credential inside the
+      // managed profile — an OAuth entry is never the expected method.
+      requiredMethod: "api",
     }),
     models: Object.freeze({
       // `opencode models <provider>` — provider-filtered runtime catalog.
