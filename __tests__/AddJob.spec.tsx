@@ -10,6 +10,7 @@ import { addJob, updateJob } from "@/actions/job.actions";
 import { toastActionResult } from "@/lib/toast";
 import type { JobResponse } from "@/models/job.model";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { I18nProvider } from "@/i18n/context";
 vi.mock("@/utils/user.utils", () => ({
   getCurrentUser: vi.fn(),
 }));
@@ -104,7 +105,7 @@ describe("AddJob Component", () => {
     expect(dialogTitle).toBeInTheDocument();
     expect(dialogTitle).toHaveTextContent("Add Job");
   });
-  it("should reflect on status and date applied when applied switch toggles", async () => {
+  it("should set Applied status and date applied when applied switch toggles on", async () => {
     const appliedSwitch = screen.getByRole("switch");
     expect(appliedSwitch).not.toBeChecked();
     const dateApplied = screen.getByLabelText("Date Applied");
@@ -115,10 +116,81 @@ describe("AddJob Component", () => {
     expect(dateApplied).toHaveTextContent(format(new Date(), "PP")); // to have today's date
     const status = screen.getByLabelText("Status");
     expect(status).toHaveTextContent("Applied");
+    // applied is an irreversible historical fact — the control locks on
+    expect(appliedSwitch).toBeDisabled();
+  });
+
+  it("should default the status to New", async () => {
+    const status = screen.getByLabelText("Status");
+    expect(status).toHaveTextContent("New");
+  });
+
+  it("should default to New regardless of the status list order", async () => {
+    // Regression guard for relying on jobStatuses[0]: render with a list
+    // whose physical order does not start with "new".
+    const scrambled = [...JOB_STATUSES].reverse();
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={scrambled}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={JOB_SOURCES}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+        initialOpen={true}
+      />,
+    );
+    const statuses = screen.getAllByLabelText("Status");
+    expect(statuses[statuses.length - 1]).toHaveTextContent("New");
+  });
+
+  it("should keep a later-stage status when marking applied on an un-applied job", async () => {
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    const interviewStatus = JOB_STATUSES.find((s) => s.value === "interview")!;
+    const interviewJob = {
+      id: "job-interview-1",
+      userId: "user-id",
+      JobTitle: { id: "1xx", label: "Full Stack Developer", value: "full stack developer" },
+      Company: { id: "2zz", label: "Amazon", value: "amazon", logoUrl: "" },
+      Location: { id: "1yy", label: "Remote", value: "remote" },
+      JobSource: { id: "1359dac4-a397-4461-b747-382706dcbe79", label: "Indeed", value: "indeed" },
+      Status: { id: interviewStatus.id, label: "Interview", value: "interview" },
+      jobType: "FT",
+      createdAt: new Date("2024-06-01"),
+      appliedDate: null,
+      dueDate: null,
+      salaryRange: null,
+      description: "<p>Existing job description</p>",
+      jobUrl: "",
+      applied: false,
+    } as unknown as JobResponse;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={interviewJob}
+        resetEditJob={mockResetEditJob}
+      />,
+    );
+
+    const appliedSwitch = screen.getAllByRole("switch").at(-1)!;
+    expect(appliedSwitch).not.toBeChecked();
     await user.click(appliedSwitch);
-    expect(status).toHaveTextContent("Draft");
-    expect(dateApplied).toBeDisabled();
-    expect(dateApplied).toHaveTextContent("Pick a date");
+
+    const statuses = screen.getAllByLabelText("Status");
+    expect(statuses[statuses.length - 1]).toHaveTextContent("Interview");
+    expect(appliedSwitch).toBeChecked();
   });
   it("should open the dialog when clicked on add job button with title 'Edit Job'", async () => {
     // TODO: To be tested with job container and jobs table component
@@ -213,7 +285,7 @@ describe("AddJob Component", () => {
     await user.click(statusSelect);
     const options = screen.getAllByRole("option");
     expect(options.length).toBeGreaterThan(0);
-    expect(options[0].textContent).toBe("Draft");
+    expect(options[0].textContent).toBe("New");
   });
   it("should closes the dialog and submit to save job when clicked on save button", async () => {
     const jobTitleInput = screen.getByRole("combobox", {
@@ -270,7 +342,7 @@ describe("AddJob Component", () => {
         type: "FT",
         workplaceType: "ONSITE",
         source: "1359dac4-a397-4461-b747-382706dcbe79",
-        status: "d7ba200a-6dc1-4ea8-acff-29ebb0d4676a",
+        status: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
         dueDate: expect.any(Date),
         dateApplied: undefined,
         salaryRange: "",
@@ -448,6 +520,8 @@ describe("AddJob Component - Edit Mode", () => {
 
     const appliedSwitch = screen.getByRole("switch");
     expect(appliedSwitch).toBeChecked();
+    // Already-applied history cannot be un-applied from the edit form.
+    expect(appliedSwitch).toBeDisabled();
   });
 
   it("pre-fills a free-text salary that matches no suggestion", async () => {
@@ -657,4 +731,53 @@ describe("AddJob Component - Error Handling", () => {
       );
     });
   }, 10000);
+});
+
+describe("AddJob Component - Localized validation (zh-CN)", () => {
+  const mockJobStatuses = JOB_STATUSES;
+  const mockJobSources = JOB_SOURCES;
+  const mockResetEditJob = vi.fn();
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+
+  it("shows Chinese required-field messages under the zh-CN locale", async () => {
+    // Earlier tests may leave a last-used location/source in localStorage,
+    // which pre-fills those fields and skips their required validation.
+    localStorage.clear();
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    const user = userEvent.setup({ skipHover: true });
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <AddJob
+          jobStatuses={mockJobStatuses}
+          companies={mockCompanies}
+          jobTitles={mockJobTitles}
+          locations={mockLocations}
+          jobSources={mockJobSources}
+          tags={[]}
+          editJob={null}
+          resetEditJob={mockResetEditJob}
+          initialOpen={true}
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByTestId("save-job-btn"));
+
+    // Required-field errors must be localized, never raw English zod strings.
+    await waitFor(() => {
+      expect(screen.getByText("职位名称为必填项。")).toBeInTheDocument();
+    });
+    expect(screen.getByText("公司名称为必填项。")).toBeInTheDocument();
+    expect(screen.getByText("工作地点为必填项。")).toBeInTheDocument();
+    expect(screen.getByText("职位来源为必填项。")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Job title is required."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Company name is required."),
+    ).not.toBeInTheDocument();
+  });
 });

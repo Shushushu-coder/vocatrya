@@ -74,6 +74,8 @@ function JobsContainer({
     clearTitleFilter,
     clearLocationFilter,
     clearSourceFilter,
+    clearAppliedFilter,
+    clearAllFilters,
   } = useJobFilters({ companies, titles, locations, sources });
 
   const {
@@ -139,6 +141,16 @@ function JobsContainer({
     setNoteDialogOpen(true);
   };
 
+  const hasActiveFilters = !!(
+    companyFilter ||
+    titleFilter ||
+    locationFilter ||
+    sourceFilter ||
+    appliedFilter ||
+    searchTerm ||
+    filterKey !== "none"
+  );
+
   return (
     <>
       <Card x-chunk="dashboard-06-chunk-0">
@@ -156,7 +168,9 @@ function JobsContainer({
           onClearLocationFilter={clearLocationFilter}
           sourceLabel={sourceLabel}
           onClearSourceFilter={clearSourceFilter}
-          onReload={() => loadJobs(1, filterKey, searchTerm || undefined)}
+          appliedLabel={appliedFilter ? t("jobs.statuses.applied") : null}
+          onClearAppliedFilter={clearAppliedFilter}
+          onReload={() => loadJobs(1)}
           searchTerm={searchTerm}
           onSearchTermChange={setSearchTerm}
           filterKey={filterKey}
@@ -179,6 +193,34 @@ function JobsContainer({
         />
         <CardContent>
           {initialLoading && <Loading />}
+          {!initialLoading && jobs.length === 0 && (
+            <div
+              className="flex flex-col items-center gap-2 py-10 text-center"
+              data-testid="jobs-empty-state"
+            >
+              {hasActiveFilters ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {t("jobs.noJobsMatchFilters")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    {t("jobs.clearFilters")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium">{t("jobs.noJobsFound")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t("jobs.noJobsDescription")}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
           {jobs.length > 0 &&
             (viewMode === "cards" ? (
               <MyJobsGrid

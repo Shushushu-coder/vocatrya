@@ -40,6 +40,9 @@ const Tiptap = ({ field }: { field: ControllerRenderProps<any, any> }) => {
           "min-h-[140px] border rounded-md px-3 py-2 placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:outline-hidden",
       },
     },
+    // The editor cannot render its content during SSR; deferring initial
+    // render is the documented Next.js pattern and silences the SSR warning.
+    immediatelyRender: false,
     content: field.value,
     onCreate: ({ editor }) => {
       setIsEmpty(editor.isEmpty);

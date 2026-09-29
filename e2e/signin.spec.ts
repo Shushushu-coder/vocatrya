@@ -2,9 +2,10 @@
 // from a logged-out state, so they must NOT use the auto-login `page` fixture.
 // They create no records, so there is nothing to clean up.
 import { test, expect } from "@playwright/test";
-import { login } from "./fixtures";
+import { login, useEnglishLocale } from "./fixtures";
 
-test("Signin page has title", async ({ page }) => {
+test("Signin page has title", async ({ page, baseURL }) => {
+  await useEnglishLocale(page.context(), baseURL);
   await page.goto("/");
 
   await expect(page).toHaveTitle("Sign In | Vocatrya");
@@ -17,6 +18,7 @@ test("Signin page has title", async ({ page }) => {
 });
 
 test("Signin and out from app", async ({ page, baseURL }) => {
+  await useEnglishLocale(page.context(), baseURL);
   await page.goto("/");
   await login(page);
 

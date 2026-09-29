@@ -1,10 +1,21 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Company, JobLocation, JobSource, JobTitle } from "@/models/job.model";
 
-// Owns the URL-synced job list filters (company/title/location/source/applied),
-// their display labels, and the clear handlers.
+const FILTER_PARAMS = [
+  "company",
+  "title",
+  "location",
+  "source",
+  "applied",
+  "filter",
+  "search",
+] as const;
+
+// The URL is the single source of truth for the job list filters. Values are
+// derived from useSearchParams on every render, so refresh/back/forward can
+// never desync the UI, and each clear handler only deletes its own param.
 export function useJobFilters({
   companies,
   titles,
@@ -19,21 +30,12 @@ export function useJobFilters({
   const router = useRouter();
   const pathname = usePathname();
   const queryParams = useSearchParams();
-  const [companyFilter, setCompanyFilter] = useState<string | null>(
-    queryParams.get("company"),
-  );
-  const [titleFilter, setTitleFilter] = useState<string | null>(
-    queryParams.get("title"),
-  );
-  const [locationFilter, setLocationFilter] = useState<string | null>(
-    queryParams.get("location"),
-  );
-  const [sourceFilter, setSourceFilter] = useState<string | null>(
-    queryParams.get("source"),
-  );
-  const [appliedFilter, setAppliedFilter] = useState(
-    queryParams.get("applied") === "true",
-  );
+
+  const companyFilter = queryParams.get("company");
+  const titleFilter = queryParams.get("title");
+  const locationFilter = queryParams.get("location");
+  const sourceFilter = queryParams.get("source");
+  const appliedFilter = queryParams.get("applied") === "true";
 
   const companyLabel = companyFilter
     ? companies.find((c) => c.value === companyFilter)?.label
@@ -51,42 +53,35 @@ export function useJobFilters({
     ? sources.find((s) => s.value === sourceFilter)?.label
     : null;
 
-  const clearCompanyFilter = () => {
-    setCompanyFilter(null);
-    setAppliedFilter(false);
-    router.push(pathname);
+  // Chip clears must merge into the latest URL state — a debounced search
+  // write landing between render and click must not be dropped.
+  const latestParams = useRef(queryParams);
+  latestParams.current = queryParams;
+
+  const pushParams = (mutate: (params: URLSearchParams) => void) => {
+    const params = new URLSearchParams(latestParams.current.toString());
+    mutate(params);
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
-  const clearTitleFilter = () => {
-    setTitleFilter(null);
-    setAppliedFilter(false);
-    router.push(pathname);
-  };
+  const clearCompanyFilter = () =>
+    pushParams((params) => params.delete("company"));
 
-  const clearLocationFilter = () => {
-    setLocationFilter(null);
-    setAppliedFilter(false);
-    router.push(pathname);
-  };
+  const clearTitleFilter = () => pushParams((params) => params.delete("title"));
 
-  const clearSourceFilter = () => {
-    setSourceFilter(null);
-    setAppliedFilter(false);
-    router.push(pathname);
-  };
+  const clearLocationFilter = () =>
+    pushParams((params) => params.delete("location"));
 
-  useEffect(() => {
-    const cp = queryParams.get("company");
-    const tp = queryParams.get("title");
-    const lp = queryParams.get("location");
-    const sp = queryParams.get("source");
-    const ap = queryParams.get("applied") === "true";
-    setCompanyFilter(cp);
-    setTitleFilter(tp);
-    setLocationFilter(lp);
-    setSourceFilter(sp);
-    setAppliedFilter(ap);
-  }, [queryParams]);
+  const clearSourceFilter = () => pushParams((params) => params.delete("source"));
+
+  const clearAppliedFilter = () =>
+    pushParams((params) => params.delete("applied"));
+
+  const clearAllFilters = () =>
+    pushParams((params) => {
+      for (const key of FILTER_PARAMS) params.delete(key);
+    });
 
   return {
     queryParams,
@@ -103,5 +98,7 @@ export function useJobFilters({
     clearTitleFilter,
     clearLocationFilter,
     clearSourceFilter,
+    clearAppliedFilter,
+    clearAllFilters,
   };
 }

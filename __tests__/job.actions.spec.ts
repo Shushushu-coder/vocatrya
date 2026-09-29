@@ -118,6 +118,40 @@ describe("jobActions", () => {
       expect(result).toEqual(mockStatuses);
     });
 
+    it("returns canonical order regardless of the database row order", async () => {
+      // Regression guard: business semantics must not depend on the physical
+      // order of the JobStatus reference table (row order is an accident of
+      // seed history, e.g. offer-accepted rows landed first).
+      const scrambled = [
+        { id: "9", label: "Offer Declined", value: "offer-declined" },
+        { id: "1", label: "New", value: "new" },
+        { id: "8", label: "Archived", value: "archived" },
+        { id: "3", label: "Applied", value: "applied" },
+        { id: "4", label: "Interview", value: "interview" },
+        { id: "2", label: "Draft", value: "draft" },
+        { id: "5", label: "Offer", value: "offer" },
+        { id: "6", label: "Offer Accepted", value: "offer-accepted" },
+        { id: "7", label: "Rejected", value: "rejected" },
+        { id: "10", label: "Expired", value: "expired" },
+      ];
+      (prisma.jobStatus.findMany as any).mockResolvedValue(scrambled);
+
+      const result = await getStatusList();
+
+      expect(result.map((s: any) => s.value)).toEqual([
+        "new",
+        "draft",
+        "applied",
+        "interview",
+        "offer",
+        "offer-accepted",
+        "offer-declined",
+        "rejected",
+        "expired",
+        "archived",
+      ]);
+    });
+
     it("should throw error on failure", async () => {
       const mockErrorResponse = {
         success: false,
@@ -353,19 +387,20 @@ describe("jobActions", () => {
         });
       });
 
-      it("should combine search with filter", async () => {
+      it("should treat the applied filter as ever-applied (flag), not the applied stage", async () => {
         (getCurrentUser as any).mockResolvedValue(mockUser);
         (prisma.job.findMany as any).mockResolvedValue([]);
         (prisma.job.count as any).mockResolvedValue(0);
 
         await getJobsList(1, 10, "applied", "Developer");
 
+        // "Applied" is a history filter: an interview/rejected/offer job that
+        // was applied must still match, so the where clause uses the flag, not
+        // Status.value === "applied".
         const findManyCall = (prisma.job.findMany as any).mock.calls[0][0];
-        expect(findManyCall.where).toMatchObject({
-          userId: mockUser.id,
-          Status: { value: "applied" },
-          OR: expect.any(Array),
-        });
+        expect(findManyCall.where.applied).toBe(true);
+        expect(findManyCall.where.Status).toBeUndefined();
+        expect(findManyCall.where.OR).toEqual(expect.any(Array));
       });
 
       it("should not include OR clause when search is undefined", async () => {
@@ -489,7 +524,7 @@ describe("jobActions", () => {
         });
       });
 
-      it("should combine company filter with status filter", async () => {
+      it("should combine company filter with the ever-applied filter", async () => {
         (getCurrentUser as any).mockResolvedValue(mockUser);
         (prisma.job.findMany as any).mockResolvedValue([]);
         (prisma.job.count as any).mockResolvedValue(0);
@@ -499,10 +534,11 @@ describe("jobActions", () => {
         const findManyCall = (prisma.job.findMany as any).mock.calls[0][0];
         expect(findManyCall.where).toMatchObject({
           userId: mockUser.id,
-          Status: { value: "applied" },
           Company: { value: "google" },
           applied: true,
         });
+        // "applied" filter means ever-applied — not a Status.value match.
+        expect(findManyCall.where.Status).toBeUndefined();
       });
 
       it("should not add Company or applied when params are undefined", async () => {
@@ -1032,6 +1068,9 @@ describe("jobActions", () => {
           salaryRange: jobData.salaryRange,
           createdAt: jobData.createdAt,
           dueDate: jobData.dueDate,
+          // applied=true without an explicit date stamps the first
+          // application timestamp at save time.
+          appliedDate: expect.any(Date),
           description: jobData.jobDescription,
           jobType: jobData.type,
           userId: mockUser.id,
@@ -1137,6 +1176,8 @@ describe("jobActions", () => {
       jobSourceId: "source-id",
       resumeId: null,
       coverLetterId: null,
+      applied: false,
+      appliedDate: null as Date | null,
       tags: [{ id: "tag-1" }],
     };
     beforeEach(() => {
@@ -1243,6 +1284,92 @@ describe("jobActions", () => {
         message: "Job id is required",
       });
     });
+
+    it("never writes createdAt on update", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      await updateJob(jobData);
+
+      const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+      expect(updateData.createdAt).toBeUndefined();
+    });
+
+    it("keeps applied=true even when the edit payload sends applied=false", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const firstAppliedAt = new Date("2024-01-15T10:00:00.000Z");
+      (prisma.job.findFirst as any).mockResolvedValue({
+        ...currentRefs,
+        applied: true,
+        appliedDate: firstAppliedAt,
+      });
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      // `applied` is an irreversible historical fact: an ordinary edit cannot
+      // turn it back to false.
+      await updateJob({ ...jobData, applied: false, dateApplied: undefined });
+
+      const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+      expect(updateData.applied).toBe(true);
+      expect(updateData.appliedDate).toBe(firstAppliedAt);
+    });
+
+    it("preserves the first appliedDate instead of rewriting it on later edits", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const firstAppliedAt = new Date("2024-01-15T10:00:00.000Z");
+      (prisma.job.findFirst as any).mockResolvedValue({
+        ...currentRefs,
+        applied: true,
+        appliedDate: firstAppliedAt,
+      });
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      // The form sends a new dateApplied (e.g. today) — the stored first
+      // application timestamp must win.
+      await updateJob({ ...jobData, applied: true, dateApplied: new Date() });
+
+      const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+      expect(updateData.appliedDate).toBe(firstAppliedAt);
+    });
+
+    it("backfills appliedDate when an already-applied job has none", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.findFirst as any).mockResolvedValue({
+        ...currentRefs,
+        applied: true,
+        appliedDate: null,
+      });
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      const formDate = new Date("2024-02-01");
+      await updateJob({ ...jobData, applied: true, dateApplied: formDate });
+
+      const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+      expect(updateData.applied).toBe(true);
+      expect(updateData.appliedDate).toBe(formDate);
+    });
+
+    it("sets appliedDate once when a not-applied job is first marked applied", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      await updateJob({ ...jobData, applied: true, dateApplied: undefined });
+
+      const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+      expect(updateData.applied).toBe(true);
+      expect(updateData.appliedDate).toEqual(expect.any(Date));
+    });
+
+    it("clears appliedDate only while the job was never applied", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      await updateJob({ ...jobData, applied: false, dateApplied: undefined });
+
+      const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+      expect(updateData.applied).toBe(false);
+      expect(updateData.appliedDate).toBeNull();
+    });
   });
   describe("updateJobStatus", () => {
     const jobData = {
@@ -1333,6 +1460,54 @@ describe("jobActions", () => {
         },
       });
     });
+    it("preserves the first appliedDate when re-selecting the applied stage", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const firstAppliedAt = new Date("2024-01-15T10:00:00.000Z");
+      (prisma.job.findFirst as any).mockResolvedValue({
+        appliedDate: firstAppliedAt,
+      });
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      await updateJobStatus(jobData.id, jobData.status); // status.value = "applied"
+
+      expect(prisma.job.update).toHaveBeenCalledWith({
+        where: {
+          id: jobData.id,
+          userId: mockUser.id,
+        },
+        data: {
+          statusId: jobData.status.id,
+          applied: true,
+          appliedDate: firstAppliedAt,
+        },
+      });
+    });
+    it("only stamps appliedDate when none exists yet", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.findFirst as any).mockResolvedValue({ appliedDate: null });
+      (prisma.job.update as any).mockResolvedValue(jobData);
+
+      await updateJobStatus(jobData.id, jobData.status);
+
+      const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+      expect(updateData.applied).toBe(true);
+      expect(updateData.appliedDate).toEqual(expect.any(Date));
+    });
+    it.each(["rejected", "offer", "offer-accepted", "offer-declined"])(
+      "does not clear applied or appliedDate when moving to %s",
+      async (statusValue) => {
+        (getCurrentUser as any).mockResolvedValue(mockUser);
+        (prisma.job.update as any).mockResolvedValue(jobData);
+        const target = { id: "target-id", label: statusValue, value: statusValue };
+
+        await updateJobStatus(jobData.id, target);
+
+        // Moving between pipeline stages only changes the stage; the
+        // application history flag and its first timestamp are untouched.
+        const updateData = (prisma.job.update as any).mock.calls[0][0].data;
+        expect(updateData).toStrictEqual({ statusId: target.id });
+      },
+    );
   });
   describe("deleteJobById", () => {
     it("should return error when user is not authenticated", async () => {

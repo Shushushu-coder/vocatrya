@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PowerIcon, Settings, Info, ArrowUpCircle } from "lucide-react";
 import {
@@ -34,8 +34,43 @@ export function ProfileDropdown({
   const version = useAppVersion();
   const label = user?.email ?? t("nav.userMenu");
 
+  // Radix emits a useId-derived id on the trigger that can drift between the
+  // SSR pass and hydration when a lazy module suspends mid-render
+  // (radix-ui/primitives#3700). Render a static button until mounted — the
+  // server HTML and the first client render are then byte-identical.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const triggerContent = (
+    <>
+      <span className="relative flex h-full w-14 shrink-0 items-center justify-center">
+        <UserAvatar user={user} />
+        {version?.updateAvailable && (
+          <>
+            <span
+              aria-hidden
+              className="absolute right-3 top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
+            />
+            <span className="sr-only">{t("nav.updateAvailable")}</span>
+          </>
+        )}
+      </span>
+      <span
+        className={cn(
+          "truncate text-sm transition-opacity duration-200",
+          expanded ? "opacity-100 delay-100" : "opacity-0"
+        )}
+      >
+        {label}
+      </span>
+    </>
+  );
+
   return (
     <>
+      {mounted ? (
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -45,26 +80,7 @@ export function ProfileDropdown({
                 aria-label={t("nav.userMenu")}
                 className="navlink h-10 w-full text-muted-foreground hover:text-foreground"
               >
-                <span className="relative flex h-full w-14 shrink-0 items-center justify-center">
-                  <UserAvatar user={user} />
-                  {version?.updateAvailable && (
-                    <>
-                      <span
-                        aria-hidden
-                        className="absolute right-3 top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
-                      />
-                      <span className="sr-only">{t("nav.updateAvailable")}</span>
-                    </>
-                  )}
-                </span>
-                <span
-                  className={cn(
-                    "truncate text-sm transition-opacity duration-200",
-                    expanded ? "opacity-100 delay-100" : "opacity-0"
-                  )}
-                >
-                  {label}
-                </span>
+                {triggerContent}
               </button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
@@ -106,6 +122,15 @@ export function ProfileDropdown({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      ) : (
+        <button
+          type="button"
+          aria-label={t("nav.userMenu")}
+          className="navlink h-10 w-full text-muted-foreground hover:text-foreground"
+        >
+          {triggerContent}
+        </button>
+      )}
 
       <SupportDialog
         open={supportDialogOpen}

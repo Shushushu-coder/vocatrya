@@ -2,14 +2,29 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
+import { JOB_STATUS_VALUES } from "@/lib/constants";
 import { requireUser } from "../shared";
+
+// The JobStatus table has no explicit ordering column, and its physical row
+// order is an accident of seed/upsert history — not a business contract. Sort
+// in canonical JOB_STATUSES order (unknown values keep their relative order at
+// the end) so callers can rely on a deterministic list.
+const STATUS_ORDER = new Map(
+  JOB_STATUS_VALUES.map((value, index) => [value, index] as const),
+);
 
 // JobStatus is global reference data with no createdBy column, so unlike every
 // other list here it is not scoped to the current user.
 export const getStatusList = async (): Promise<any | undefined> => {
   try {
     const statuses = await prisma.jobStatus.findMany();
-    return statuses;
+    return statuses
+      .slice()
+      .sort(
+        (a, b) =>
+          (STATUS_ORDER.get(a.value) ?? STATUS_ORDER.size) -
+          (STATUS_ORDER.get(b.value) ?? STATUS_ORDER.size),
+      );
   } catch (error) {
     const msg = "Failed to fetch status list. ";
     return handleError(error, msg);

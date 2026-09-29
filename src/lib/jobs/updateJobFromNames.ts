@@ -64,7 +64,12 @@ export async function updateJobFromNames(
   // caller learns "not found" before any entity is created as a side effect.
   const existing = await prisma.job.findFirst({
     where: { id: jobId, userId, createdVia: { not: null } },
-    select: { id: true, descriptionCompleteness: true },
+    select: {
+      id: true,
+      descriptionCompleteness: true,
+      applied: true,
+      appliedDate: true,
+    },
   });
   if (!existing) {
     return {
@@ -123,10 +128,16 @@ export async function updateJobFromNames(
   if (input.salaryRange !== undefined) data.salaryRange = input.salaryRange;
   if (input.dueDate !== undefined) data.dueDate = input.dueDate;
   if (input.jobUrl !== undefined) data.jobUrl = normalizeJobUrl(input.jobUrl);
-  if (input.applied !== undefined) data.applied = input.applied;
-  if (input.appliedDate !== undefined) data.appliedDate = input.appliedDate;
-  if (input.applied === true && input.appliedDate === undefined) {
-    data.appliedDate = new Date();
+  // applied is an irreversible historical fact and appliedDate is the
+  // first-application timestamp: once set they cannot be unset or rewritten.
+  if (input.applied !== undefined) {
+    data.applied = existing.applied || input.applied;
+  }
+  if (
+    input.appliedDate !== undefined ||
+    (input.applied === true && !existing.appliedDate)
+  ) {
+    data.appliedDate = existing.appliedDate ?? input.appliedDate ?? new Date();
   }
   if (resolvedTagsResult) {
     data.tags = { set: resolvedTagsResult.resolved.map((t) => ({ id: t.id })) };

@@ -46,6 +46,8 @@ export function JobsToolbar({
   onClearLocationFilter,
   sourceLabel,
   onClearSourceFilter,
+  appliedLabel,
+  onClearAppliedFilter,
   onReload,
   searchTerm,
   onSearchTermChange,
@@ -78,6 +80,8 @@ export function JobsToolbar({
   onClearLocationFilter: () => void;
   sourceLabel?: string | null;
   onClearSourceFilter: () => void;
+  appliedLabel?: string | null;
+  onClearAppliedFilter: () => void;
   onReload: () => void;
   searchTerm: string;
   onSearchTermChange: (value: string) => void;
@@ -149,6 +153,16 @@ export function JobsToolbar({
             <X className="h-3.5 w-3.5" />
           </button>
         )}
+        {appliedLabel && (
+          <button
+            onClick={onClearAppliedFilter}
+            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
+            data-testid="applied-filter-badge"
+          >
+            {appliedLabel}
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -184,6 +198,7 @@ export function JobsToolbar({
                   ? t("jobs.allJobs")
                   : t("jobs.allExceptDismissed")}
               </SelectItem>
+              <SelectItem value="new">{t("jobs.statuses.new")}</SelectItem>
               <SelectItem value="applied">{t("jobs.statuses.applied")}</SelectItem>
               <SelectItem value="interview">{t("jobs.statuses.interview")}</SelectItem>
               <SelectItem value="draft">{t("jobs.statuses.draft")}</SelectItem>

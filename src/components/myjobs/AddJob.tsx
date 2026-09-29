@@ -12,8 +12,11 @@ import { addJob, updateJob } from "@/actions/job.actions";
 import { Loader, PlusCircle } from "lucide-react";
 import { Button } from "../ui/button";
 import { useForm } from "react-hook-form";
-import { useCallback, useEffect, useState, useTransition } from "react";
-import { AddJobFormSchema } from "@/models/addJobForm.schema";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  AddJobFormValues,
+  createAddJobFormSchema,
+} from "@/models/addJobForm.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Company,
@@ -27,7 +30,6 @@ import {
   WORKPLACE_TYPES,
 } from "@/models/job.model";
 import { addDays } from "date-fns";
-import { z } from "zod";
 import { toastActionResult } from "@/lib/toast";
 import {
   Form,
@@ -122,6 +124,13 @@ export function AddJob({
       router.replace(newPath);
     }
   }, [dialogOpen, router, searchParams]);
+  // Status semantics are keyed by `value`, never by array position: the list
+  // order is whatever the database happens to return.
+  const statusIdByValue = useMemo(
+    () => new Map(jobStatuses.map((s) => [s.value, s.id])),
+    [jobStatuses],
+  );
+
   // Pre-fill with the last-used location/source, but only if that entity
   // still exists (handles deletion and cross-user localStorage collisions,
   // since `locations`/`jobSources` are already scoped to the current user).
@@ -137,7 +146,7 @@ export function AddJob({
     type: Object.keys(JOB_TYPES)[0],
     workplaceType: "ONSITE",
     dueDate: hideUnsupportedAbFields ? null : addDays(new Date(), 3),
-    status: jobStatuses[0]?.id,
+    status: statusIdByValue.get("new"),
     salaryRange: "",
     jobUrl: "",
     jobDescription: "N/A",
@@ -148,12 +157,13 @@ export function AddJob({
       : {}),
   };
 
-  const form = useForm<z.infer<typeof AddJobFormSchema>>({
-    resolver: zodResolver(AddJobFormSchema) as any,
+  const formSchema = useMemo(() => createAddJobFormSchema(t), [t]);
+  const form = useForm<AddJobFormValues>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: newJobDefaultValues,
   });
 
-  const { setValue, reset, watch, resetField } = form;
+  const { setValue, reset, watch, getValues } = form;
 
   const appliedValue = watch("applied");
 
@@ -227,7 +237,7 @@ export function AddJob({
     }, 500);
   };
 
-  function onSubmit(data: z.infer<typeof AddJobFormSchema>) {
+  function onSubmit(data: AddJobFormValues) {
     startTransition(async () => {
       const payload = hideUnsupportedAbFields
         ? { ...data, resume: undefined, coverLetter: undefined, tags: [] }
@@ -264,13 +274,25 @@ export function AddJob({
   };
 
   const jobAppliedChange = (applied: boolean) => {
-    if (applied) {
-      form.getValues("status") === jobStatuses[0]?.id &&
-        setValue("status", jobStatuses[1]?.id);
+    // Applied is a one-way historical fact: the switch is disabled once it is
+    // on, so a false edge should never arrive — guard anyway.
+    if (!applied) return;
+    // A job in a pre-application stage advances to `applied`; a job already
+    // in a later stage (interview/offer/rejected/…) keeps its status.
+    const currentStatusValue = jobStatuses.find(
+      (s) => s.id === getValues("status"),
+    )?.value;
+    if (
+      currentStatusValue === "new" ||
+      currentStatusValue === "draft" ||
+      currentStatusValue === undefined
+    ) {
+      const appliedStatusId = statusIdByValue.get("applied");
+      if (appliedStatusId) setValue("status", appliedStatusId);
+    }
+    // appliedDate records the FIRST application only.
+    if (!getValues("dateApplied")) {
       setValue("dateApplied", new Date());
-    } else {
-      resetField("dateApplied");
-      setValue("status", jobStatuses[0]?.id);
     }
   };
 
@@ -490,6 +512,9 @@ export function AddJob({
                         <Switch
                           id="applied-switch"
                           checked={field.value ?? false}
+                          // Applied is a recorded fact, not a toggle — once a
+                          // job is applied the control locks in the on state.
+                          disabled={field.value === true}
                           onCheckedChange={(a) => {
                             field.onChange(a);
                             jobAppliedChange(a);

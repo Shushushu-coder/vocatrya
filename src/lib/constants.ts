@@ -144,7 +144,7 @@ export const APP_CONSTANTS = {
   MCP_RATE_LIMIT_MAX: 60,
   MCP_RATE_LIMIT_WINDOW_MS: 60 * 60 * 1000,
   MCP_DEFAULT_JOB_TYPE: "Full-time",
-  MCP_DEFAULT_STATUS: "draft",
+  MCP_DEFAULT_STATUS: "new",
   // Word-count thresholds for job-description completeness. A real posting
   // runs 300+ words; under 40 is a title/salary stub, not something a fit
   // score can honestly be computed from.

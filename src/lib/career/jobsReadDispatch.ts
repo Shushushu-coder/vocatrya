@@ -224,22 +224,29 @@ export async function listJobs(
       message: `Career runtime is blocked (${reason})`,
     };
   }
+  // The "applied" list filter means *ever applied* (the applied flag), not the
+  // applied pipeline stage — an interview/offer/rejected job still belongs in
+  // it. Normalizing here keeps legacy and AB reads consistent.
+  const appliedSelected = options.filter === "applied";
+  const normalized = appliedSelected
+    ? { ...options, filter: undefined, appliedOnly: true }
+    : options;
   if (family === "ab") {
     const { data, total } = await listOpportunitiesAsJobs(db, userId, {
-      skip: options.skip,
-      take: options.take,
-      search: options.search,
-      appliedOnly: options.appliedOnly,
-      filter: options.filter,
-      companyValue: options.companyValue,
-      titleValue: options.titleValue,
-      locationValue: options.locationValue,
-      sourceValue: options.sourceValue,
+      skip: normalized.skip,
+      take: normalized.take,
+      search: normalized.search,
+      appliedOnly: normalized.appliedOnly,
+      filter: normalized.filter,
+      companyValue: normalized.companyValue,
+      titleValue: normalized.titleValue,
+      locationValue: normalized.locationValue,
+      sourceValue: normalized.sourceValue,
     });
     return { blocked: false as const, data, total };
   }
 
-  const whereClause = buildLegacyJobsWhere(userId, options);
+  const whereClause = buildLegacyJobsWhere(userId, normalized);
   const [data, total] = await Promise.all([
     db.job.findMany({
       where: whereClause,

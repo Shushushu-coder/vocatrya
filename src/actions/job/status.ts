@@ -17,13 +17,17 @@ export const updateJobStatus = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
-    const dataToUpdate = () => {
+
+    // appliedDate is the first-ever application timestamp: setting the
+    // "applied" stage must not rewrite a date that already exists, and later
+    // stages never touch it.
+    const dataToUpdate = (currentAppliedDate: Date | null | undefined) => {
       switch (status.value) {
         case "applied":
           return {
             statusId: status.id,
             applied: true,
-            appliedDate: new Date(),
+            appliedDate: currentAppliedDate ?? new Date(),
           };
         case "interview":
           return {
@@ -60,12 +64,16 @@ export const updateJobStatus = async (
     }
 
     await assertLegacyCareerWriteAllowed(prisma);
+    const current = await prisma.job.findFirst({
+      where: { id: jobId, userId: user.id },
+      select: { appliedDate: true },
+    });
     const job = await prisma.job.update({
       where: {
         id: jobId,
         userId: user.id,
       },
-      data: dataToUpdate(),
+      data: dataToUpdate(current?.appliedDate),
     });
     revalidatePath("/dashboard");
     return { job, success: true };

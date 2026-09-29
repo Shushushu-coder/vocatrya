@@ -1,4 +1,12 @@
+// Test fixture only — mirrors the canonical JOB_STATUSES in
+// src/lib/constants.ts (the same rows signup() seeds). Production code must
+// never read this file; status lookups in real code resolve by `value`.
 export const JOB_STATUSES = [
+  {
+    id: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    label: "New",
+    value: "new",
+  },
   {
     id: "d7ba200a-6dc1-4ea8-acff-29ebb0d4676a",
     label: "Draft",

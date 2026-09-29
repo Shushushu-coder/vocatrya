@@ -15,15 +15,15 @@ describe("resolveJobStatus", () => {
     vi.clearAllMocks();
   });
 
-  it("defaults to draft when no value is given", async () => {
-    (prisma.jobStatus.findUnique as any).mockResolvedValue({ id: "status-draft" });
+  it("defaults to new when no value is given", async () => {
+    (prisma.jobStatus.findUnique as any).mockResolvedValue({ id: "status-new" });
 
     const result = await resolveJobStatus(undefined);
 
     expect(prisma.jobStatus.findUnique).toHaveBeenCalledWith({
-      where: { value: "draft" },
+      where: { value: "new" },
     });
-    expect(result).toBe("status-draft");
+    expect(result).toBe("status-new");
   });
 
   it("resolves a known status case-insensitively", async () => {

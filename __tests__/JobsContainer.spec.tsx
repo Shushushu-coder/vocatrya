@@ -97,16 +97,24 @@ document.createRange = () => {
 };
 
 describe("JobsContainer Search Functionality", () => {
+  // Simulate real navigation: push/replace rewrite the params the
+  // useSearchParams mock hands out, so a rerender() re-reads the new URL —
+  // the same round trip a browser performs after router.push.
+  let currentParams = new URLSearchParams();
+  const setUrl = (url: string) => {
+    const qIndex = url.indexOf("?");
+    currentParams = new URLSearchParams(
+      qIndex >= 0 ? url.slice(qIndex + 1) : "",
+    );
+  };
   const mockRouter = {
-    push: vi.fn(),
+    push: vi.fn((url: string) => setUrl(url)),
     back: vi.fn(),
     forward: vi.fn(),
     refresh: vi.fn(),
-    replace: vi.fn(),
+    replace: vi.fn((url: string) => setUrl(url)),
     prefetch: vi.fn(),
   };
-
-  const mockSearchParams = new URLSearchParams();
 
   const mockStatuses = [
     { id: "1", label: "Applied", value: "applied" },
@@ -216,27 +224,28 @@ describe("JobsContainer Search Functionality", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    currentParams = new URLSearchParams();
     (useRouter as any).mockReturnValue(mockRouter);
     (usePathname as any).mockReturnValue("/dashboard/myjobs");
-    (useSearchParams as any).mockReturnValue(mockSearchParams);
+    (useSearchParams as any).mockImplementation(() => currentParams);
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  const renderComponent = () => {
-    return render(
-      <JobsContainer
-        statuses={mockStatuses}
-        companies={mockCompanies}
-        titles={mockTitles}
-        locations={mockLocations}
-        sources={mockSources}
-        tags={[]}
-      />,
-    );
-  };
+  const jsx = () => (
+    <JobsContainer
+      statuses={mockStatuses}
+      companies={mockCompanies}
+      titles={mockTitles}
+      locations={mockLocations}
+      sources={mockSources}
+      tags={[]}
+    />
+  );
+
+  const renderComponent = () => render(jsx());
 
   describe("Search Input", () => {
     it("should render search input with placeholder", async () => {
@@ -286,7 +295,7 @@ describe("JobsContainer Search Functionality", () => {
         total: 2,
       });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledTimes(1);
@@ -301,12 +310,17 @@ describe("JobsContainer Search Functionality", () => {
       // Should not have called getJobsList yet (debounce not elapsed)
       expect(getJobsList).toHaveBeenCalledTimes(1);
 
-      // Advance timer by 300ms to trigger debounce
+      // Advance timer by 300ms to trigger debounce → URL is updated via
+      // replace (no history spam), then the list refetches from the new URL.
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      expect(mockRouter.replace).toHaveBeenCalledWith(
+        "/dashboard/myjobs?search=A",
+        { scroll: false },
+      );
+      rerender(jsx());
 
-      // Now search should have been triggered
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledTimes(2);
       });
@@ -319,7 +333,7 @@ describe("JobsContainer Search Functionality", () => {
         total: 2,
       });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledTimes(1);
@@ -334,6 +348,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Amazon", undefined, undefined, undefined, undefined, undefined);
@@ -364,7 +379,7 @@ describe("JobsContainer Search Functionality", () => {
         total: 2,
       });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledTimes(1);
@@ -380,12 +395,13 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Test", undefined, undefined, undefined, undefined, undefined);
       });
 
-      // Clear the search input
+      // Clear the search input → the search param is removed from the URL
       await act(async () => {
         await user.clear(searchInput);
       });
@@ -393,6 +409,10 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      expect(mockRouter.replace).toHaveBeenLastCalledWith("/dashboard/myjobs", {
+        scroll: false,
+      });
+      rerender(jsx());
 
       // Should call with undefined when cleared after having searched
       await waitFor(() => {
@@ -409,7 +429,7 @@ describe("JobsContainer Search Functionality", () => {
         total: 2,
       });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(
@@ -426,12 +446,13 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined);
       });
 
-      // Now change filter
+      // Now change filter — the status selection lands in the URL
       const filterTrigger = screen.getByRole("combobox");
       await act(async () => {
         await user.click(filterTrigger);
@@ -441,6 +462,12 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         await user.click(appliedOption);
       });
+
+      expect(mockRouter.push).toHaveBeenCalledWith(
+        "/dashboard/myjobs?search=Developer&filter=applied",
+        { scroll: false },
+      );
+      rerender(jsx());
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", "Developer", undefined, undefined, undefined, undefined, undefined);
@@ -454,7 +481,7 @@ describe("JobsContainer Search Functionality", () => {
         total: 2,
       });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledTimes(1);
@@ -469,6 +496,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Amazon", undefined, undefined, undefined, undefined, undefined);
@@ -484,6 +512,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         await user.click(interviewOption);
       });
+      rerender(jsx());
 
       // Search term should still be present
       await waitFor(() => {
@@ -498,7 +527,7 @@ describe("JobsContainer Search Functionality", () => {
         total: 2,
       });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledTimes(1);
@@ -513,6 +542,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       // Set a filter
       const filterTrigger = screen.getByRole("combobox");
@@ -524,6 +554,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         await user.click(appliedOption);
       });
+      rerender(jsx());
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", "Developer", undefined, undefined, undefined, undefined, undefined);
@@ -540,6 +571,11 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         await user.click(noneOption);
       });
+      expect(mockRouter.push).toHaveBeenLastCalledWith(
+        "/dashboard/myjobs?search=Developer",
+        { scroll: false },
+      );
+      rerender(jsx());
 
       // Filter should be cleared but search preserved
       await waitFor(() => {
@@ -564,7 +600,7 @@ describe("JobsContainer Search Functionality", () => {
           total: 1,
         });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(screen.getByText("Amazon")).toBeInTheDocument();
@@ -579,6 +615,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       await waitFor(() => {
         expect(screen.getByText("Amazon")).toBeInTheDocument();
@@ -599,7 +636,7 @@ describe("JobsContainer Search Functionality", () => {
         })
         .mockReturnValueOnce(searchPromise);
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(screen.getByText("Amazon")).toBeInTheDocument();
@@ -613,6 +650,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       // Should show loading indicator
       await waitFor(() => {
@@ -678,7 +716,7 @@ describe("JobsContainer Search Functionality", () => {
           total: 50,
         });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(screen.getByText("Amazon")).toBeInTheDocument();
@@ -693,21 +731,25 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
+      // Wait for the search fetch to fully resolve before scrolling — the
+      // infinite-scroll guard ignores intersections while a load is running.
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined);
       });
+      await waitFor(() => {
+        expect(screen.getByText(/of 50\s+jobs/)).toBeInTheDocument();
+      });
 
-      // Simulate sentinel becoming visible
-      await act(async () => {
+      // Simulate sentinel becoming visible. The observer's closure is rebuilt
+      // after each load; fire inside waitFor so a stale callback is retried
+      // rather than relying on a single shot landing after React flushes.
+      await waitFor(() => {
         intersectionCallback(
           [{ isIntersecting: true }] as IntersectionObserverEntry[],
           {} as IntersectionObserver,
         );
-      });
-
-      // Should include search term in infinite scroll call
-      await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(2, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined);
       });
     });
@@ -726,7 +768,7 @@ describe("JobsContainer Search Functionality", () => {
           message: "Search failed",
         });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(screen.getByText("Amazon")).toBeInTheDocument();
@@ -740,6 +782,7 @@ describe("JobsContainer Search Functionality", () => {
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
+      rerender(jsx());
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "test", undefined, undefined, undefined, undefined, undefined);
@@ -749,8 +792,7 @@ describe("JobsContainer Search Functionality", () => {
 
   describe("Company Filter from URL", () => {
     it("should pass company filter to getJobsList when URL has company param", async () => {
-      const companySearchParams = new URLSearchParams("company=google&applied=true");
-      (useSearchParams as any).mockReturnValue(companySearchParams);
+      setUrl("/dashboard/myjobs?company=google&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -765,8 +807,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should show company badge when company param is present", async () => {
-      const companySearchParams = new URLSearchParams("company=google&applied=true");
-      (useSearchParams as any).mockReturnValue(companySearchParams);
+      setUrl("/dashboard/myjobs?company=google&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -781,8 +822,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should clear company filter when badge is clicked", async () => {
-      const companySearchParams = new URLSearchParams("company=google&applied=true");
-      (useSearchParams as any).mockReturnValue(companySearchParams);
+      setUrl("/dashboard/myjobs?company=google&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -801,7 +841,10 @@ describe("JobsContainer Search Functionality", () => {
         await user.click(badge);
       });
 
-      expect(mockRouter.push).toHaveBeenCalledWith("/dashboard/myjobs");
+      expect(mockRouter.push).toHaveBeenCalledWith(
+        "/dashboard/myjobs?applied=true",
+        { scroll: false },
+      );
     });
 
     it("should not show company badge when no company param", async () => {
@@ -824,15 +867,14 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should combine company filter with status filter", async () => {
-      const companySearchParams = new URLSearchParams("company=google&applied=true");
-      (useSearchParams as any).mockReturnValue(companySearchParams);
+      setUrl("/dashboard/myjobs?company=google&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
         total: 2,
       });
 
-      renderComponent();
+      const { rerender } = renderComponent();
 
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, "google", true, undefined, undefined, undefined);
@@ -848,6 +890,14 @@ describe("JobsContainer Search Functionality", () => {
         await user.click(appliedOption);
       });
 
+      // Selecting the option writes `filter=applied` into the URL while the
+      // other params are preserved.
+      expect(mockRouter.push).toHaveBeenLastCalledWith(
+        "/dashboard/myjobs?company=google&applied=true&filter=applied",
+        { scroll: false },
+      );
+      rerender(jsx());
+
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", undefined, "google", true, undefined, undefined, undefined);
       });
@@ -856,8 +906,7 @@ describe("JobsContainer Search Functionality", () => {
 
   describe("Title Filter from URL", () => {
     it("should pass title filter to getJobsList when URL has title param", async () => {
-      const titleSearchParams = new URLSearchParams("title=full+stack+developer&applied=true");
-      (useSearchParams as any).mockReturnValue(titleSearchParams);
+      setUrl("/dashboard/myjobs?title=full+stack+developer&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -872,8 +921,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should show title badge when title param is present", async () => {
-      const titleSearchParams = new URLSearchParams("title=full+stack+developer&applied=true");
-      (useSearchParams as any).mockReturnValue(titleSearchParams);
+      setUrl("/dashboard/myjobs?title=full+stack+developer&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -888,8 +936,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should clear title filter when badge is clicked", async () => {
-      const titleSearchParams = new URLSearchParams("title=full+stack+developer&applied=true");
-      (useSearchParams as any).mockReturnValue(titleSearchParams);
+      setUrl("/dashboard/myjobs?title=full+stack+developer&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -908,14 +955,16 @@ describe("JobsContainer Search Functionality", () => {
         await user.click(badge);
       });
 
-      expect(mockRouter.push).toHaveBeenCalledWith("/dashboard/myjobs");
+      expect(mockRouter.push).toHaveBeenCalledWith(
+        "/dashboard/myjobs?applied=true",
+        { scroll: false },
+      );
     });
   });
 
   describe("Location Filter from URL", () => {
     it("should pass location filter to getJobsList when URL has location param", async () => {
-      const locationSearchParams = new URLSearchParams("location=remote&applied=true");
-      (useSearchParams as any).mockReturnValue(locationSearchParams);
+      setUrl("/dashboard/myjobs?location=remote&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -930,8 +979,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should show location badge when location param is present", async () => {
-      const locationSearchParams = new URLSearchParams("location=remote&applied=true");
-      (useSearchParams as any).mockReturnValue(locationSearchParams);
+      setUrl("/dashboard/myjobs?location=remote&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -946,8 +994,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should clear location filter when badge is clicked", async () => {
-      const locationSearchParams = new URLSearchParams("location=remote&applied=true");
-      (useSearchParams as any).mockReturnValue(locationSearchParams);
+      setUrl("/dashboard/myjobs?location=remote&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -966,14 +1013,16 @@ describe("JobsContainer Search Functionality", () => {
         await user.click(badge);
       });
 
-      expect(mockRouter.push).toHaveBeenCalledWith("/dashboard/myjobs");
+      expect(mockRouter.push).toHaveBeenCalledWith(
+        "/dashboard/myjobs?applied=true",
+        { scroll: false },
+      );
     });
   });
 
   describe("Source Filter from URL", () => {
     it("should pass source filter to getJobsList when URL has source param", async () => {
-      const sourceSearchParams = new URLSearchParams("source=indeed&applied=true");
-      (useSearchParams as any).mockReturnValue(sourceSearchParams);
+      setUrl("/dashboard/myjobs?source=indeed&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -988,8 +1037,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should show source badge when source param is present", async () => {
-      const sourceSearchParams = new URLSearchParams("source=indeed&applied=true");
-      (useSearchParams as any).mockReturnValue(sourceSearchParams);
+      setUrl("/dashboard/myjobs?source=indeed&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -1004,8 +1052,7 @@ describe("JobsContainer Search Functionality", () => {
     });
 
     it("should clear source filter when badge is clicked", async () => {
-      const sourceSearchParams = new URLSearchParams("source=indeed&applied=true");
-      (useSearchParams as any).mockReturnValue(sourceSearchParams);
+      setUrl("/dashboard/myjobs?source=indeed&applied=true");
       (getJobsList as any).mockResolvedValue({
         success: true,
         data: mockJobs,
@@ -1024,7 +1071,10 @@ describe("JobsContainer Search Functionality", () => {
         await user.click(badge);
       });
 
-      expect(mockRouter.push).toHaveBeenCalledWith("/dashboard/myjobs");
+      expect(mockRouter.push).toHaveBeenCalledWith(
+        "/dashboard/myjobs?applied=true",
+        { scroll: false },
+      );
     });
   });
 
@@ -1035,8 +1085,7 @@ describe("JobsContainer Search Functionality", () => {
         data: [],
         total: 0,
       });
-      const params = new URLSearchParams("add-job=true");
-      (useSearchParams as any).mockReturnValue(params);
+      setUrl("/dashboard/myjobs?add-job=true");
 
       render(
         <JobsContainer
@@ -1065,6 +1114,123 @@ describe("JobsContainer Search Functionality", () => {
 
       await waitFor(() => {
         expect(screen.queryByTestId("add-job-dialog-title")).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("URL as source of truth", () => {
+    it("restores status filter and search term from the URL on mount", async () => {
+      setUrl("/dashboard/myjobs?filter=interview&search=Amazon");
+      (getJobsList as any).mockResolvedValue({
+        success: true,
+        data: mockJobs,
+        total: 2,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(getJobsList).toHaveBeenCalledWith(
+          1, 25, "interview", "Amazon",
+          undefined, undefined, undefined, undefined, undefined,
+        );
+      });
+      // The search input mirrors the URL.
+      expect(screen.getByPlaceholderText("Search jobs...")).toHaveValue(
+        "Amazon",
+      );
+    });
+
+    it("shows the Applied chip for an applied=true deep link and clears only itself", async () => {
+      setUrl("/dashboard/myjobs?applied=true&company=google");
+      (getJobsList as any).mockResolvedValue({
+        success: true,
+        data: mockJobs,
+        total: 2,
+      });
+
+      const { rerender } = renderComponent();
+
+      const appliedBadge = await screen.findByTestId("applied-filter-badge");
+      await act(async () => {
+        await user.click(appliedBadge);
+      });
+
+      // Only the applied param is removed — company stays.
+      expect(mockRouter.push).toHaveBeenCalledWith(
+        "/dashboard/myjobs?company=google",
+        { scroll: false },
+      );
+      rerender(jsx());
+
+      await waitFor(() => {
+        expect(getJobsList).toHaveBeenCalledWith(
+          1, 25, undefined, undefined, "google",
+          undefined, undefined, undefined, undefined,
+        );
+      });
+    });
+  });
+
+  describe("Empty states", () => {
+    it("shows the true empty state when the user has no jobs at all", async () => {
+      (getJobsList as any).mockResolvedValue({
+        success: true,
+        data: [],
+        total: 0,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText("No jobs yet")).toBeInTheDocument();
+      });
+      expect(
+        screen.getByText(
+          "Add jobs manually or let the Vocatrya assistant extract postings for you.",
+        ),
+      ).toBeInTheDocument();
+      // The add-job affordance stays available.
+      expect(screen.getByTestId("add-job-btn")).toBeInTheDocument();
+    });
+
+    it("shows the no-results state when filters produce zero rows", async () => {
+      setUrl("/dashboard/myjobs?search=nonexistent");
+      (getJobsList as any).mockResolvedValue({
+        success: true,
+        data: [],
+        total: 0,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("No jobs match the current filters."),
+        ).toBeInTheDocument();
+      });
+      expect(screen.queryByText("No jobs yet")).not.toBeInTheDocument();
+    });
+
+    it("clears all filters when clicking Clear filters in the no-results state", async () => {
+      setUrl("/dashboard/myjobs?search=nonexistent&filter=applied");
+      (getJobsList as any).mockResolvedValue({
+        success: true,
+        data: [],
+        total: 0,
+      });
+
+      renderComponent();
+
+      const clearBtn = await screen.findByRole("button", {
+        name: "Clear filters",
+      });
+      await act(async () => {
+        await user.click(clearBtn);
+      });
+
+      expect(mockRouter.push).toHaveBeenCalledWith("/dashboard/myjobs", {
+        scroll: false,
       });
     });
   });

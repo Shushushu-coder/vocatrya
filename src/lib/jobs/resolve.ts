@@ -183,7 +183,8 @@ export function resolveWorkplaceType(input?: string): string | null {
 }
 
 export async function resolveJobStatus(value?: string): Promise<string> {
-  const target = (value ?? "draft").toLowerCase();
+  // A job with no explicit status starts at "new" — never by array position.
+  const target = (value ?? "new").toLowerCase();
   const status = await prisma.jobStatus.findUnique({ where: { value: target } });
   if (!status) {
     const all = await prisma.jobStatus.findMany({ select: { value: true } });

@@ -67,7 +67,12 @@ describe("updateJobFromNames", () => {
 
     expect(prisma.job.findFirst).toHaveBeenCalledWith({
       where: { id: "job-1", userId, createdVia: { not: null } },
-      select: { id: true, descriptionCompleteness: true },
+      select: {
+        id: true,
+        descriptionCompleteness: true,
+        applied: true,
+        appliedDate: true,
+      },
     });
   });
 
@@ -146,6 +151,26 @@ describe("updateJobFromNames", () => {
     const data = (prisma.job.update as any).mock.calls[0][0].data;
     expect(data.applied).toBe(true);
     expect(data.appliedDate).toBeInstanceOf(Date);
+  });
+
+  it("keeps applied=true and the first appliedDate on an already-applied job", async () => {
+    const firstAppliedAt = new Date("2024-01-15T10:00:00.000Z");
+    (prisma.job.findFirst as any).mockResolvedValue({
+      id: "job-1",
+      descriptionCompleteness: null,
+      applied: true,
+      appliedDate: firstAppliedAt,
+    });
+
+    // applied is irreversible; appliedDate is the first-stamp.
+    await updateJobFromNames(
+      { jobId: "job-1", applied: false, appliedDate: new Date() },
+      userId,
+    );
+
+    const data = (prisma.job.update as any).mock.calls[0][0].data;
+    expect(data.applied).toBe(true);
+    expect(data.appliedDate).toBe(firstAppliedAt);
   });
 
   it("returns updated:false with a not-found message on P2025", async () => {

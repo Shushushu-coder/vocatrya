@@ -1,5 +1,21 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import { randomUUID } from "crypto";
+
+// The app's product default locale is zh-CN, but this suite is written with
+// English locators. Pin the locale cookie deterministically instead of
+// inheriting whatever locale a developer machine last stored in the browser.
+// Call this before the first page.goto on any context that needs English.
+export async function useEnglishLocale(context: BrowserContext, baseURL = "") {
+  const url = baseURL || process.env.BASE_URL || "http://localhost:3737";
+  await context.addCookies([
+    { name: "vocatrya_locale", value: "en", url },
+  ]);
+}
 
 // Unique per invocation so each test's job/company/location/title rows never
 // collide with another run's leftovers — the basis for test isolation.
@@ -161,6 +177,7 @@ type Fixtures = {
 export const test = base.extend<Fixtures>({
   // Auto-login every test and land on the dashboard.
   page: async ({ page, baseURL }, use) => {
+    await useEnglishLocale(page.context(), baseURL);
     await page.goto("/");
     await login(page);
     await expect(page).toHaveURL(baseURL + "/dashboard");

@@ -30,7 +30,7 @@ test.describe("Add New Job", () => {
       `location ${jobText.replace(/\s+/g, "-")}`,
     );
     await expect(page.getByLabel("Job Source")).toContainText("Indeed");
-    await expect(page.getByLabel("Select Job Status")).toContainText("Draft");
+    await expect(page.getByLabel("Select Job Status")).toContainText("New");
     await expect(
       page.getByLabel("Job Description").getByRole("paragraph"),
     ).toContainText("test description");
@@ -98,6 +98,8 @@ test.describe("Add New Job", () => {
       .click();
     await page.getByRole("menuitem", { name: "Edit Job" }).click();
     await expect(page.getByRole("switch")).toBeChecked();
+    // Applied is an irreversible historical fact — the control locks on.
+    await expect(page.getByRole("switch")).toBeDisabled();
     await expect(page.getByLabel("Select Job Status")).toContainText("Applied");
     await expect(page.getByLabel("Date Applied")).toContainText(
       format(new Date(), "PP"),
@@ -302,8 +304,101 @@ test.describe("Add New Job", () => {
     await expect(page.getByRole("row", { name: jobText })).not.toBeVisible();
 
     await page.getByTestId("job-filter-select").click();
-    await page.getByRole("option", { name: "Draft", exact: true }).click();
+    await page.getByRole("option", { name: "New", exact: true }).click();
     await expect(page.getByRole("row", { name: jobText }).first()).toBeVisible();
+  });
+
+  test("keeps the applied history when an applied job moves to interview", async ({
+    page,
+    cleanup,
+  }) => {
+    const jobText = uniqueName("developer test title statusmove");
+    await createNewJob(page, jobText, cleanup, {
+      beforeSave: async (page) => {
+        await page.getByRole("switch").click();
+      },
+    });
+    const row = page.getByRole("row", { name: jobText });
+    await expect(row.first()).toBeVisible();
+
+    await row.getByTestId("job-actions-menu-btn").first().click();
+    await page.getByRole("menuitem", { name: "Change status" }).hover();
+    const interviewItem = page.getByRole("menuitem", { name: "Interview" });
+    await expect(interviewItem).toBeVisible();
+    await interviewItem.click();
+    await expect(
+      row.getByText("Interview", { exact: true }),
+    ).toBeVisible();
+
+    // The status moved forward, but the job remains "ever applied" and the
+    // first application date is preserved.
+    await row.getByTestId("job-actions-menu-btn").first().click();
+    await page.getByRole("menuitem", { name: "Edit Job" }).click();
+    await expect(page.getByRole("switch")).toBeChecked();
+    await expect(page.getByRole("switch")).toBeDisabled();
+    await expect(page.getByLabel("Select Job Status")).toContainText(
+      "Interview",
+    );
+    await expect(page.getByLabel("Date Applied")).toContainText(
+      format(new Date(), "PP"),
+    );
+  });
+
+  test("syncs the status filter with the URL across reload and back", async ({
+    page,
+    cleanup,
+  }) => {
+    const jobText = uniqueName("developer test title url filter");
+    await createNewJob(page, jobText, cleanup);
+    const row = page.getByRole("row", { name: jobText });
+    await expect(row.first()).toBeVisible();
+
+    // Selecting a status filter writes it into the URL.
+    await page.getByTestId("job-filter-select").click();
+    await page.getByRole("option", { name: "Rejected", exact: true }).click();
+    await expect(page).toHaveURL(/[?&]filter=rejected/);
+    await expect(row).not.toBeVisible();
+
+    // Refresh restores the same filtered view from the URL.
+    await page.reload();
+    await expect(row).not.toBeVisible();
+    await expect(page.getByTestId("job-filter-select")).toContainText(
+      "Rejected",
+    );
+
+    // Back returns to the unfiltered URL and the list.
+    await page.goBack();
+    await expect(page).not.toHaveURL(/[?&]filter=/);
+    await expect(row.first()).toBeVisible();
+
+    // Forward re-applies the filter.
+    await page.goForward();
+    await expect(page).toHaveURL(/[?&]filter=rejected/);
+    await expect(row).not.toBeVisible();
+  });
+
+  test("shows a no-results state when filters match nothing", async ({
+    page,
+    cleanup,
+  }) => {
+    const jobText = uniqueName("developer test title no results");
+    await createNewJob(page, jobText, cleanup);
+    await expect(
+      page.getByRole("row", { name: jobText }).first(),
+    ).toBeVisible();
+
+    const searchInput = page.getByPlaceholder("Search jobs...");
+    await searchInput.fill(uniqueName("no-match"));
+    await expect(page).toHaveURL(/[?&]search=/);
+    await expect(
+      page.getByText("No jobs match the current filters."),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect(page).not.toHaveURL(/[?&]search=/);
+    await expect(
+      page.getByRole("row", { name: jobText }).first(),
+    ).toBeVisible();
   });
 
   test("should navigate to job details from the actions menu", async ({

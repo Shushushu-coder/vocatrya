@@ -12,9 +12,8 @@ import {
   updateOpportunityFromJobForm,
 } from "@/lib/career/jobOpportunityAdapter";
 import { CareerRuntimeError } from "@/lib/career/errors";
-import { AddJobFormSchema } from "@/models/addJobForm.schema";
+import { AddJobFormValues } from "@/models/addJobForm.schema";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireUser } from "../shared";
 
 function assertJobMutationsAllowed(mode: string): void {
@@ -82,7 +81,7 @@ const assertJobRefsOwned = async (userId: string, refs: JobRefs) => {
 };
 
 export const addJob = async (
-  data: z.infer<typeof AddJobFormSchema>,
+  data: AddJobFormValues,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -168,7 +167,7 @@ export const addJob = async (
       jobSourceId: source,
       salaryRange: salaryRange || null,
       dueDate,
-      appliedDate: dateApplied,
+      appliedDate: applied ? (dateApplied ?? new Date()) : null,
       description: jobDescription,
       jobType: type,
       workplaceType,
@@ -188,7 +187,7 @@ export const addJob = async (
 };
 
 export const updateJob = async (
-  data: z.infer<typeof AddJobFormSchema>,
+  data: AddJobFormValues,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -274,6 +273,8 @@ export const updateJob = async (
         jobSourceId: true,
         resumeId: true,
         coverLetterId: true,
+        applied: true,
+        appliedDate: true,
         tags: { select: { id: true } },
       },
     });
@@ -309,14 +310,21 @@ export const updateJob = async (
         statusId: status,
         jobSourceId: source,
         salaryRange: salaryRange || null,
-        createdAt: new Date(),
         dueDate: dueDate,
-        appliedDate: dateApplied,
+        // applied is an irreversible historical fact, and appliedDate records
+        // the first application only — a plain edit can set the flag once or
+        // correct a missing date on an already-applied job, but can never
+        // unset the flag or rewrite the original timestamp.
+        applied: current.applied || applied,
+        appliedDate: current.applied
+          ? (current.appliedDate ?? dateApplied ?? null)
+          : applied
+            ? (dateApplied ?? new Date())
+            : null,
         description: jobDescription,
         jobType: type,
         workplaceType,
         jobUrl,
-        applied,
         resumeId: resume,
         coverLetterId: coverLetter,
         tags: { set: tagIds.map((id) => ({ id })) },
