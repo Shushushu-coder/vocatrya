@@ -20,13 +20,23 @@ import "server-only";
 import prisma from "@/lib/db";
 import {
   AI_BUSINESS_ERROR_CODES,
+  AIBusinessError,
   isAIBackendKind,
   isAIAssignmentPurpose,
+  isStreamingPurpose,
   isSupportedAccountProviderForBackend,
   type AIAssignmentPurpose,
   type AIBusinessErrorCode,
 } from "@/lib/ai/connections";
 import { isRuntimeProfileRef } from "@/lib/ai/runtime/contract";
+import {
+  checkStreamingExecutionReadiness,
+  type AccountRuntimeCapabilities,
+} from "@/lib/ai/runtime/capabilities";
+import {
+  fetchAccountRuntimeState,
+  type StreamExecutionDeps,
+} from "@/lib/ai/streaming-execution";
 import {
   getInterviewConfig,
   type InterviewContainer,
@@ -308,6 +318,13 @@ export class AssignmentWriteError extends Error {
  * provider/backend pairing must be a supported ACCOUNT_LOGIN combination.
  * The connection does NOT need to be CONNECTED — users may assign first and
  * re-authenticate later; the resolver surfaces the state at run time.
+ *
+ * Streaming purposes (CAREER_DIALOGUE) additionally enforce the same
+ * readiness the turn gate checks — verified incremental output bound to
+ * the installed runtime version, probed live through the desktop's
+ * runtime-state channel. The check is fail-closed: when the channel is
+ * unreachable the assignment is refused rather than saved as silently
+ * compatible.
  */
 export async function setBusinessAssignment(
   {
@@ -322,6 +339,7 @@ export async function setBusinessAssignment(
     model: string;
   },
   dbClient: DbClient = prisma,
+  deps: StreamExecutionDeps = {},
 ): Promise<BusinessAssignmentSummary> {
   if (!isAIAssignmentPurpose(purpose)) {
     throw new AssignmentWriteError("INVALID_PURPOSE", "Unknown assignment purpose");
@@ -365,6 +383,9 @@ export async function setBusinessAssignment(
       "Provider is not supported on this runtime",
     );
   }
+  if (isStreamingPurpose(purpose)) {
+    await assertStreamingAssignmentReady(connection, deps);
+  }
   return dbClient.aIBusinessAssignment.upsert({
     where: { userId_purpose: { userId, purpose } },
     create: { userId, purpose, connectionId, model: trimmedModel },
@@ -385,6 +406,86 @@ export async function setBusinessAssignment(
       },
     },
   });
+}
+
+/**
+ * Gate parity with checkStreamingTurnReadiness (streaming-execution.ts):
+ * implemented runtime + TEXT_ONLY boundary + verified streaming bound to
+ * the probed runtime version. Anything less is refused with the stable
+ * code the turn would have failed with — a saved-but-unrunnable
+ * assignment is the failure this exists to prevent.
+ */
+async function assertStreamingAssignmentReady(
+  connection: { backendKind: string; provider: string; status: string },
+  deps: StreamExecutionDeps,
+): Promise<void> {
+  let state;
+  try {
+    state = await fetchAccountRuntimeState(
+      {
+        backendKind: connection.backendKind,
+        accountProvider: connection.provider,
+      },
+      deps,
+    );
+  } catch (error) {
+    // Fail closed: a runtime capability channel that cannot be reached
+    // proves nothing — the assignment is refused, not assumed compatible.
+    throw new AssignmentWriteError(
+      error instanceof AIBusinessError
+        ? error.code
+        : AI_BUSINESS_ERROR_CODES.RUNTIME_NOT_AVAILABLE,
+      error instanceof Error
+        ? error.message
+        : "Runtime capabilities cannot be verified",
+    );
+  }
+  const capabilities =
+    state.capabilities as AccountRuntimeCapabilities | null;
+  if (!capabilities?.implemented || capabilities.execution?.localOneShot !== true) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.PERMISSION_BOUNDARY_NOT_READY,
+      "The runtime does not expose the TEXT_ONLY execution boundary",
+    );
+  }
+  if (state.runtimeReady !== true) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.RUNTIME_NOT_AVAILABLE,
+      "The assigned runtime is not usable on this machine",
+    );
+  }
+  const verdict = checkStreamingExecutionReadiness({
+    capabilities,
+    // Runtime capability is what this gate proves — connection auth
+    // state stays "assign first, authenticate later" like every other
+    // purpose; the resolver and the turn gate surface it at run time.
+    connectionStatus: "CONNECTED",
+    permissionScope: "TEXT_ONLY",
+    runtimeVersion: state.runtimeVersion,
+  });
+  if (!verdict.ready) {
+    throw new AssignmentWriteError(
+      verdict.code,
+      "The assigned runtime cannot stream responses, so it cannot run Career Dialogue",
+    );
+  }
+  // Career Dialogue's decision step is a structured-output one-shot —
+  // a runtime that streams but cannot emit a verified decision schema
+  // still cannot serve a turn. Same PASS + version binding the desktop
+  // executeText gate enforces.
+  const structured = capabilities.structuredOutput;
+  if (
+    !structured ||
+    structured.strategy === "UNSUPPORTED" ||
+    structured.verification !== "PASS" ||
+    !structured.verifiedRuntimeVersion ||
+    state.runtimeVersion !== structured.verifiedRuntimeVersion
+  ) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.STRUCTURED_OUTPUT_NOT_VERIFIED,
+      "The assigned runtime is not verified for the structured decisions Career Dialogue needs",
+    );
+  }
 }
 
 export async function clearBusinessAssignment(

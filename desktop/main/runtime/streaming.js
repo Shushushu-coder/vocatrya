@@ -18,10 +18,12 @@
 //   multi-byte sequence split across chunks is never corrupted.
 // - Malformed or unknown vendor lines are counted and ignored — they never
 //   emit content and never leak raw prompt/output into events.
-// - Cumulative-snapshot transports (opencode part.text, codex item text)
-//   are diffed only while each snapshot is a strict prefix-extension of
-//   the previous one; a rewrite is STREAM_COMPLETION_INCONSISTENT, never a
-//   guessed diff.
+// - Cumulative-snapshot transports (opencode part.text) are diffed only
+//   while each snapshot is a strict prefix-extension of the previous one;
+//   a rewrite is STREAM_COMPLETION_INCONSISTENT, never a guessed diff.
+// - Protocol drivers (codex app-server JSON-RPC) reconcile the delta
+//   channel against each completed item's canonical text; any mismatch is
+//   STREAM_COMPLETION_INCONSISTENT.
 const { StringDecoder } = require("node:string_decoder");
 
 const STREAM_FAILURE_CODES = Object.freeze({
@@ -407,73 +409,289 @@ function createAcpEventMapper() {
   };
 }
 
-// Codex `exec --json`: run events carry item snapshots ({type:
-// "item.completed"|"item.updated", item:{id, type:"agent_message", text}}).
-// text is cumulative per item — prefix-diffed into deltas. A single
-// item.completed with the full text is NOT streaming evidence; the verdict
-// layer decides via delta/chunk counts.
-function createCodexEventMapper() {
-  const differs = new Map();
+// ---------------------------------------------------------------------------
+// codex app-server (stdio JSON-RPC) — the verified incremental mechanism
+// on codex-cli 0.154.0. `codex exec --json` was probed and is NOT a real
+// stream (one terminal item.completed snapshot); `codex app-server
+// --listen stdio://` emits real `item/agentMessage/delta` notifications —
+// model deltas on separate stdout deliveries — before `turn/completed`.
+//
+// This parser is a stateful protocol driver, not just a line mapper:
+// attachStdin() hands it the child's stdin so it can issue the handshake
+// (initialize → initialized → thread/start → turn/start) and advance it
+// as each response arrives. Closing stdin after the terminal notification
+// shuts the server down cleanly.
+//
+// Reconciliation is per-item: concat(deltas[itemId]) must equal that
+// agentMessage item's completed text or the run fails
+// STREAM_COMPLETION_INCONSISTENT — never ship mismatched text. A stream
+// that ends without turn/completed is a protocol failure, never a
+// truncated answer passed off as complete.
+// ---------------------------------------------------------------------------
+function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
+  const decoder = new StringDecoder("utf8");
+  let lineBuf = "";
+  let malformedLineCount = 0;
+  let ignoredLineCount = 0;
+
+  // Events produced by mid-push state transitions (handshake steps,
+  // terminal events) queue here and drain through the push()/finish()
+  // return value — the driver never calls out asynchronously.
+  const pendingEvents = [];
+  const queueEvent = (event) => pendingEvents.push(event);
+  const drain = () => pendingEvents.splice(0, pendingEvents.length);
+
+  let stdin = null;
+  let nextRequestId = 1;
+  // In-flight requests by id — only the handshake methods are ever issued;
+  // anything else on the wire carrying an id is a server→client request
+  // and is declined (TEXT_ONLY never grants a channel back into the host).
+  const pendingRequests = new Map();
+  let terminalEmitted = false;
+  let vendorFailure = false;
+  let driverFailed = false;
+
+  // itemId → concatenated delta text / completed text — the strict
+  // per-item reconciliation pair.
+  const deltasByItem = new Map();
+  const completedByItem = new Map();
+  // First-delta arrival order — canonical ordering if a turn ever yields
+  // more than one agentMessage item.
   const itemOrder = [];
-  let deltaText = "";
-  let sawDeltaChannel = false;
-  let inconsistent = false;
-  let sawCompleted = false;
-  let sawError = false;
 
-  function canonicalText() {
-    if (sawDeltaChannel) return deltaText;
-    return itemOrder.map((id) => differs.get(id).snapshot()).join("");
-  }
+  const endStdin = () => {
+    try {
+      stdin?.end();
+    } catch {
+      /* pipe already gone */
+    }
+  };
 
-  return {
-    mapEvent(event) {
-      if (!event || typeof event !== "object") return null;
-      if (event.type === "error" || event.type === "turn.failed") {
-        sawError = true;
-        return errorEvent(STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR);
+  const sendMessage = (message) => {
+    if (!stdin || terminalEmitted) return;
+    try {
+      stdin.write(JSON.stringify(message) + "\n");
+    } catch {
+      driverFailed = true;
+      endStdin();
+    }
+  };
+
+  const sendRequest = (method, params) => {
+    const id = nextRequestId++;
+    pendingRequests.set(id, method);
+    sendMessage({ method, id, params });
+  };
+
+  const emitTerminalError = (code) => {
+    if (terminalEmitted) return;
+    terminalEmitted = true;
+    endStdin();
+    queueEvent({ type: "error", code });
+  };
+
+  const emitCompleted = () => {
+    if (terminalEmitted) return;
+    terminalEmitted = true;
+    endStdin();
+    // Per-item reconciliation: every completed agentMessage must equal
+    // its own delta channel exactly — a partial match means the wire was
+    // not faithful and nothing may ship as the answer.
+    let canonical = "";
+    for (const itemId of itemOrder) {
+      const completedText = completedByItem.get(itemId);
+      if (completedText === undefined) {
+        canonical += deltasByItem.get(itemId) ?? "";
+        continue;
       }
-      // Delta-shaped events, if the installed version emits them.
-      if (
-        /delta/i.test(String(event.type || "")) &&
-        /message/i.test(String(event.type || "")) &&
-        typeof event.delta === "string"
-      ) {
-        sawDeltaChannel = true;
-        deltaText += event.delta;
-        return event.delta ? [textDelta(event.delta)] : [];
+      if ((deltasByItem.get(itemId) ?? "") !== completedText) {
+        queueEvent({
+          type: "error",
+          code: STREAM_FAILURE_CODES.STREAM_COMPLETION_INCONSISTENT,
+        });
+        return;
       }
-      const item = event.item;
-      if (
-        item &&
-        item.type === "agent_message" &&
-        typeof item.text === "string"
-      ) {
-        if (sawDeltaChannel) return null; // delta channel covered it
-        const id = typeof item.id === "string" ? item.id : "";
-        if (!differs.has(id)) {
-          differs.set(id, createCumulativeDiffer());
-          itemOrder.push(id);
+      canonical += completedText;
+    }
+    // An agentMessage item that completed without a single delta carries
+    // no incremental prefix — it still belongs to the answer.
+    for (const [itemId, text] of completedByItem) {
+      if (!itemOrder.includes(itemId)) canonical += text;
+    }
+    queueEvent(completed(canonical));
+  };
+
+  const handleResponse = (msg) => {
+    const method = pendingRequests.get(msg.id);
+    pendingRequests.delete(msg.id);
+    if (msg.error !== undefined) {
+      vendorFailure = true;
+      emitTerminalError(STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR);
+      return;
+    }
+    switch (method) {
+      case "initialize":
+        sendMessage({ method: "initialized" });
+        sendRequest("thread/start", {
+          cwd: workingDirectory,
+          model: model ?? null,
+          // Never let the provider silently substitute a model — the
+          // business layer pinned this exact model id.
+          allowProviderModelFallback: false,
+          approvalPolicy: "never",
+          sandbox: "read-only",
+          ephemeral: true,
+        });
+        break;
+      case "thread/start": {
+        const threadId = msg.result?.thread?.id;
+        if (typeof threadId !== "string" || !threadId) {
+          emitTerminalError(STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED);
+          return;
         }
-        const diff = differs.get(id).push(item.text);
-        if (diff.inconsistent) {
-          inconsistent = true;
-          return errorEvent(
-            STREAM_FAILURE_CODES.STREAM_COMPLETION_INCONSISTENT,
+        sendRequest("turn/start", {
+          threadId,
+          input: [{ type: "text", text: prompt, text_elements: [] }],
+          model: model ?? null,
+        });
+        break;
+      }
+      default:
+        // turn/start — live; deltas arrive as notifications from here.
+        break;
+    }
+  };
+
+  const handleNotification = (msg) => {
+    const params = msg.params ?? {};
+    switch (msg.method) {
+      case "item/agentMessage/delta": {
+        const { itemId, delta } = params;
+        if (typeof itemId !== "string" || typeof delta !== "string") {
+          malformedLineCount += 1;
+          return;
+        }
+        if (!deltasByItem.has(itemId)) itemOrder.push(itemId);
+        deltasByItem.set(itemId, (deltasByItem.get(itemId) ?? "") + delta);
+        if (delta) queueEvent(textDelta(delta));
+        return;
+      }
+      case "item/completed": {
+        const item = params.item;
+        if (item && item.type === "agentMessage") {
+          completedByItem.set(
+            item.id,
+            typeof item.text === "string" ? item.text : "",
           );
         }
-        return diff.delta ? [textDelta(diff.delta)] : [];
+        return;
       }
-      if (event.type === "turn.completed") {
-        sawCompleted = true;
-        return completed(canonicalText());
+      case "turn/started":
+        return;
+      case "turn/completed": {
+        const status = params.turn?.status;
+        if (status === "completed") {
+          emitCompleted();
+        } else {
+          // Vocatrya aborts by terminating the child — an interrupted or
+          // failed turn we did not ask for is a vendor-side failure.
+          vendorFailure = true;
+          emitTerminalError(STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR);
+        }
+        return;
       }
-      return null;
+      case "error":
+        // willRetry:true marks transport-layer reconnects (the ChatGPT
+        // backend falls back from WebSocket to HTTPS across retried
+        // requests) — diagnostics, not terminal failures. Non-retry
+        // errors are recorded; turn/completed stays the terminal driver.
+        if (params.willRetry === true) return;
+        vendorFailure = true;
+        return;
+      default:
+        // Diagnostics (thread/status, reasoning deltas, rawResponseItem,
+        // warnings, …) never become content.
+        ignoredLineCount += 1;
+        return;
+    }
+  };
+
+  const handleLine = (rawLine) => {
+    const line = rawLine.trim();
+    if (!line) return;
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      // A non-JSON line is noise, not content — counted, never emitted.
+      malformedLineCount += 1;
+      return;
+    }
+    if (!msg || typeof msg !== "object") {
+      malformedLineCount += 1;
+      return;
+    }
+    if (
+      msg.id !== undefined &&
+      (msg.result !== undefined || msg.error !== undefined)
+    ) {
+      handleResponse(msg);
+      return;
+    }
+    if (msg.id !== undefined && typeof msg.method === "string") {
+      sendMessage({
+        id: msg.id,
+        error: { code: -32601, message: "unsupported" },
+      });
+      return;
+    }
+    if (typeof msg.method === "string") {
+      handleNotification(msg);
+      return;
+    }
+    ignoredLineCount += 1;
+  };
+
+  return {
+    // Hands the driver the child's stdin; the handshake starts here.
+    attachStdin(stream) {
+      stdin = stream;
+      sendRequest("initialize", {
+        clientInfo: { name: "vocatrya", title: null, version: "0.0.0" },
+        capabilities: { experimentalApi: false, requestAttestation: false },
+      });
     },
-    finishEvent() {
-      if (inconsistent || sawError) return null;
-      if (sawCompleted) return null;
-      return completed(canonicalText());
+    push(chunk) {
+      lineBuf +=
+        typeof chunk === "string" ? chunk : decoder.write(chunk);
+      let nl;
+      while ((nl = lineBuf.indexOf("\n")) >= 0) {
+        const line = lineBuf.slice(0, nl);
+        lineBuf = lineBuf.slice(nl + 1);
+        handleLine(line);
+      }
+      return drain();
+    },
+    finish() {
+      lineBuf += decoder.end();
+      if (lineBuf.trim()) handleLine(lineBuf);
+      lineBuf = "";
+      if (!terminalEmitted) {
+        // Ended before turn/completed — a driver write failure, a vendor
+        // error with no terminal, or a server that went silent mid-turn.
+        // Partial deltas are never shipped as a completed answer.
+        terminalEmitted = true;
+        queueEvent({
+          type: "error",
+          code: vendorFailure || driverFailed
+            ? STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR
+            : STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED,
+        });
+      }
+      return drain();
+    },
+    stats() {
+      return { malformedLineCount, ignoredLineCount };
     },
   };
 }
@@ -539,13 +757,9 @@ function createAcpStreamParser() {
     finishEvent: mapper.finishEvent,
   });
 }
-function createCodexStreamParser() {
-  const mapper = createCodexEventMapper();
-  return createNdjsonStreamParser({
-    mapEvent: mapper.mapEvent,
-    finishEvent: mapper.finishEvent,
-  });
-}
+// createCodexStreamParser is defined with the app-server driver above —
+// its signature ({prompt, model, workingDirectory}) carries the turn the
+// JSON-RPC handshake must start.
 function createCursorStreamParser() {
   const mapper = createCursorEventMapper();
   return createNdjsonStreamParser({

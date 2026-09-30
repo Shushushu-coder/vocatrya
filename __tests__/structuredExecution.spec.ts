@@ -248,8 +248,9 @@ describe("executeStructuredForAssignment", () => {
   });
 
   it("surfaces the desktop structured-verification gate as STRUCTURED_OUTPUT_NOT_VERIFIED", async () => {
-    // A PENDING runtime (e.g. Codex) refuses structured requests at the
-    // trusted boundary — simulated here by the desktop response.
+    // An unverified runtime (PENDING or version-drifted) refuses
+    // structured requests at the trusted boundary — simulated here by
+    // the desktop response.
     const connection = await makeConnection({
       provider: "OPENAI",
       backendKind: "CODEX_RUNTIME",

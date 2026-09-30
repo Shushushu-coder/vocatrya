@@ -302,6 +302,13 @@ describe("account runtime capability matrix", () => {
         expect(so.verifiedRuntimeVersion, kind).toBe("3000.10.31");
         continue;
       }
+      if (kind === "CODEX_RUNTIME") {
+        // Managed 9-trial probe on codex-cli 0.154.0 through
+        // `codex exec --output-schema`: 9/9 first-pass VALID.
+        expect(so.verification, kind).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.PASS);
+        expect(so.verifiedRuntimeVersion, kind).toBe("0.154.0");
+        continue;
+      }
       expect(so.verification, kind).toBe(
         STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
       );
@@ -313,20 +320,28 @@ describe("account runtime capability matrix", () => {
     ).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.NOT_APPLICABLE);
   });
 
-  it("reports streaming honestly — only the managed-verified runtime passes", () => {
+  it("reports streaming honestly — only managed-verified runtimes pass", () => {
     // DEVIN_RUNTIME earned PASS through a real managed E2E (devin -p
-    // incremental stdout on 3000.10.31); the other five remain PENDING —
-    // a documented stream mode without a managed delta run never flips
-    // streaming to true.
+    // incremental stdout on 3000.10.31); CODEX_RUNTIME earned it through
+    // the app-server delta channel on 0.154.0. The other four remain
+    // PENDING — a documented stream mode without a managed delta run
+    // never flips streaming to true.
+    const VERIFIED_STREAMING = {
+      DEVIN_RUNTIME: "3000.10.31",
+      CODEX_RUNTIME: "0.154.0",
+    };
     for (const kind of IMPLEMENTED) {
       const execution = getAccountRuntimeCapabilities(kind).execution;
       expect(execution.localOneShot, kind).toBe(true);
       expect(typeof execution.streamingMechanism, kind).toBe("string");
       expect(execution.streamingMechanism.length, kind).toBeGreaterThan(0);
-      if (kind === "DEVIN_RUNTIME") {
-        expect(execution.streaming).toBe(true);
-        expect(execution.streamingVerification).toBe(VERIFICATION_STATES.PASS);
-        expect(execution.streamingVerifiedRuntimeVersion).toBe("3000.10.31");
+      const bound = VERIFIED_STREAMING[kind];
+      if (bound) {
+        expect(execution.streaming, kind).toBe(true);
+        expect(execution.streamingVerification, kind).toBe(
+          VERIFICATION_STATES.PASS,
+        );
+        expect(execution.streamingVerifiedRuntimeVersion, kind).toBe(bound);
       } else {
         expect(execution.streaming, kind).toBe(false);
         expect(execution.streamingVerification, kind).toBe(

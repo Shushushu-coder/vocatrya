@@ -28,9 +28,11 @@ import {
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
 import type { BusinessAssignmentSummary } from "@/lib/ai/assignments";
 import {
+  checkStreamingExecutionReadiness,
   checkStructuredOutputReadiness,
   type AccountRuntimeCapabilities,
 } from "@/lib/ai/runtime/capabilities";
+import { AI_STREAMING_PURPOSES } from "@/lib/ai/connections";
 
 // Purposes editable this phase. INTERVIEW is editable now that interview
 // execution runs through the locked account runtime (TEXT_ONLY one-shot);
@@ -77,9 +79,10 @@ const TEXT_ONLY_PURPOSES = new Set<string>(["INTERVIEW"]);
 // Purposes whose execution path streams assistant output to the user
 // (Career Dialogue renders tokens as they arrive — a buffered one-shot
 // would be fake streaming). Connections on runtimes without verified
-// incremental output are marked and rejected on save; today no runtime
-// has completed streaming verification, so none can be assigned here yet.
-const STREAMING_PURPOSES = new Set<string>(["CAREER_DIALOGUE"]);
+// incremental output are marked and rejected on save; unlike the other
+// gates this one is fail-closed — when the capability bridge is absent
+// the runtime counts as unverifiable rather than silently compatible.
+const STREAMING_PURPOSES = new Set<string>(AI_STREAMING_PURPOSES);
 
 type Draft = { connectionId: string; model: string };
 
@@ -128,9 +131,16 @@ function AiAssignmentsCard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [interview, setInterview] = useState<InterviewResolution | null>(null);
   // backendKind → structured-output readiness. Empty map = bridge absent
-  // (plain web/dev) — marking is skipped; execution still fails closed.
+  // (plain web/dev) — marking is skipped for advisory gates; streaming
+  // purposes treat absence as unverifiable instead.
   const [runtimeCaps, setRuntimeCaps] = useState<
     Record<string, AccountRuntimeCapabilities>
+  >({});
+  // backendKind → probed installed version. Streaming verification is
+  // bound to an exact runtime version, so the readiness check needs the
+  // live probe, not just the static descriptor.
+  const [runtimeVersions, setRuntimeVersions] = useState<
+    Record<string, string | null>
   >({});
 
   const load = useCallback(async () => {
@@ -146,10 +156,25 @@ function AiAssignmentsCard() {
         try {
           const runtimes = await runtime.list();
           const next: Record<string, AccountRuntimeCapabilities> = {};
+          const versions: Record<string, string | null> = {};
           for (const entry of runtimes) {
             if (entry.capabilities) next[entry.backendKind] = entry.capabilities;
+            versions[entry.backendKind] = null;
           }
+          // Version probes run `runtime --version` — cheap and bounded —
+          // and the streaming gate is meaningless without them.
+          await Promise.all(
+            Object.keys(versions).map(async (backendKind) => {
+              try {
+                const probe = await runtime.getVersion(backendKind);
+                versions[backendKind] = probe?.version ?? null;
+              } catch {
+                versions[backendKind] = null;
+              }
+            }),
+          );
           setRuntimeCaps(next);
+          setRuntimeVersions(versions);
         } catch {
           // Capability lookup is advisory — never block the card on it.
         }
@@ -240,12 +265,39 @@ function AiAssignmentsCard() {
     return caps.implemented === true && caps.execution?.localOneShot === true;
   };
 
-  // Streaming consumers need verified incremental output — the same
-  // unknown-bridge convention as above: null skips marking entirely.
-  const streamingReady = (connection: ConnectionSummary): boolean | null => {
+  // Streaming consumers need verified incremental output AND a verified
+  // structured-decision step (Career Dialogue runs both), both bound to
+  // the probed runtime version. null = capability bridge absent — callers
+  // treat that as unverifiable (fail-closed), not as compatible.
+  // Returns the stable block code, "UNVERIFIABLE" when the bridge is
+  // missing, or null when ready.
+  const streamingBlockReason = (
+    connection: ConnectionSummary,
+  ): string | null => {
     const caps = runtimeCaps[connection.backendKind];
-    if (!caps) return null;
-    return caps.implemented === true && caps.execution?.streaming === true;
+    if (!caps) return "UNVERIFIABLE";
+    const runtimeVersion = runtimeVersions[connection.backendKind];
+    const verdict = checkStreamingExecutionReadiness({
+      capabilities: caps,
+      // Capability question only — a re-auth-pending connection on a
+      // verified runtime stays assignable; the label already shows the
+      // status and the turn gate re-checks it at run time.
+      connectionStatus: "CONNECTED",
+      permissionScope: "TEXT_ONLY",
+      runtimeVersion,
+    });
+    if (!verdict.ready) return verdict.code;
+    const structured = caps.structuredOutput;
+    if (
+      !structured ||
+      structured.strategy === "UNSUPPORTED" ||
+      structured.verification !== "PASS" ||
+      !structured.verifiedRuntimeVersion ||
+      runtimeVersion !== structured.verifiedRuntimeVersion
+    ) {
+      return "STRUCTURED_OUTPUT_NOT_VERIFIED";
+    }
+    return null;
   };
 
   const save = async (purpose: string) => {
@@ -273,8 +325,17 @@ function AiAssignmentsCard() {
     }
     if (STREAMING_PURPOSES.has(purpose)) {
       const connection = connections.find((c) => c.id === draft.connectionId);
-      if (connection && streamingReady(connection) === false) {
-        toastError(t("settings.aiAssignStreamingNotReady"));
+      const block = connection ? streamingBlockReason(connection) : null;
+      if (connection && block !== null) {
+        toastError(
+          t(
+            block === "UNVERIFIABLE"
+              ? "settings.aiAssignStreamingUnverifiable"
+              : block === "STRUCTURED_OUTPUT_NOT_VERIFIED"
+                ? "settings.aiAssignStructuredNotVerified"
+                : "settings.aiAssignStreamingNotReady",
+          ),
+        );
         return;
       }
     }
@@ -403,22 +464,33 @@ function AiAssignmentsCard() {
                       ? structuredReady(connection)
                       : isTextOnlyPurpose
                         ? textOnlyReady(connection)
-                        : isStreamingPurpose
-                          ? streamingReady(connection)
-                          : null;
+                        : null;
+                    const streamBlock = isStreamingPurpose
+                      ? streamingBlockReason(connection)
+                      : null;
                     const ineligibleKey = isStructuredPurpose
                       ? "settings.aiAssignStructuredNotVerified"
                       : isTextOnlyPurpose
                         ? "settings.aiAssignTextOnlyNotReady"
-                        : "settings.aiAssignStreamingNotReady";
+                        : streamBlock === "UNVERIFIABLE"
+                          ? "settings.aiAssignStreamingUnverifiable"
+                          : streamBlock === "STRUCTURED_OUTPUT_NOT_VERIFIED"
+                            ? "settings.aiAssignStructuredNotVerified"
+                            : "settings.aiAssignStreamingNotReady";
+                    // Streaming purposes fail closed: an unverifiable
+                    // runtime (bridge absent) is just as unassignable as
+                    // a verified-incompatible one.
+                    const blocked = isStreamingPurpose
+                      ? streamBlock !== null
+                      : eligible === false;
                     return (
                       <SelectItem
                         key={connection.id}
                         value={connection.id}
-                        disabled={eligible === false}
+                        disabled={blocked}
                       >
                         {connectionLabel(connection)}
-                        {eligible === false ? ` — ${t(ineligibleKey)}` : ""}
+                        {blocked ? ` — ${t(ineligibleKey)}` : ""}
                       </SelectItem>
                     );
                   })}

@@ -141,13 +141,20 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       // `codex exec --ephemeral -s read-only` in a Vocatrya temp cwd.
       localOneShot: true,
-      // `codex exec --json` emits a JSONL run-event stream; whether the
-      // managed invocation yields consumable assistant-text deltas (vs
-      // item-completed snapshots only) is unverified on codex-cli 0.154.0.
-      streaming: false,
-      streamingVerification: VERIFICATION_STATES.PENDING,
-      streamingMechanism: "codex exec --json",
-      streamingVerifiedRuntimeVersion: null,
+      // VERIFIED_DELTA_STREAMING (managed E2E, codex-cli 0.154.0,
+      // scripts/runtime-streaming-probe.mts): `codex app-server --listen
+      // stdio://` emits item/agentMessage/delta notifications as the
+      // assistant text is generated — P2 produced 1017 deltas across 903
+      // deliveries over ~50s with deltas arriving ~49s before
+      // turn/completed; concat(deltas) reconstructs the completed item
+      // exactly; turn/interrupt aborts with zero late deltas. `codex
+      // exec --json` is NOT the streaming path — it only emits
+      // item.completed snapshots (verified non-incremental).
+      streaming: true,
+      streamingVerification: VERIFICATION_STATES.PASS,
+      streamingMechanism:
+        "codex app-server (item/agentMessage/delta over stdio JSON-RPC)",
+      streamingVerifiedRuntimeVersion: "0.154.0",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.STRONG_SANDBOX,
@@ -168,11 +175,14 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     // `codex exec --output-schema <file>` verified in `codex exec --help`
     // on codex-cli 0.154.0 — the schema file is written into the fresh
     // Vocatrya-owned exec cwd; the final message lands in -o output.
+    // VERIFIED (managed 9-trial corpus, scripts/structured-output-probe.mts,
+    // codex-cli 0.154.0, connection 1e427f2f): 9/9 VALID first-pass on the
+    // native schema path, zero retries, zero native violations.
     structuredOutput: Object.freeze({
       strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
       mechanism: "codex exec --output-schema <schema-file>",
-      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
-      verifiedRuntimeVersion: null,
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PASS,
+      verifiedRuntimeVersion: "0.154.0",
     }),
   }),
 

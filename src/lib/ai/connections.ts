@@ -64,6 +64,24 @@ export const AI_ASSIGNMENT_PURPOSES = [
 ] as const;
 export type AIAssignmentPurpose = (typeof AI_ASSIGNMENT_PURPOSES)[number];
 
+/**
+ * Purposes whose execution path streams assistant text token-by-token to
+ * the user (Career Dialogue renders deltas as they arrive — a buffered
+ * one-shot would be fake streaming). Assignments for these purposes gate
+ * on verified incremental output, at save time and at turn time alike.
+ * GLOBAL_DEFAULT is deliberately absent — it also serves non-streaming
+ * purposes, so it stays assignable to any runtime; a CAREER_DIALOGUE
+ * resolution that lands on a non-streaming GLOBAL_DEFAULT fails at
+ * preflight/turn time instead.
+ */
+export const AI_STREAMING_PURPOSES = ["CAREER_DIALOGUE"] as const;
+
+export function isStreamingPurpose(
+  value: string,
+): value is (typeof AI_STREAMING_PURPOSES)[number] {
+  return (AI_STREAMING_PURPOSES as readonly string[]).includes(value);
+}
+
 export function isAIConnectionProvider(
   value: string,
 ): value is AIConnectionProvider {

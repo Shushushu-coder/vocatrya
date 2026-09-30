@@ -1,13 +1,25 @@
 import {
+  getAgentChatPreflight,
   getChatConversation,
   saveChatConversation,
   clearChatConversation,
 } from "@/actions/agentChat.actions";
 import { getCurrentUser } from "@/utils/user.utils";
+import { fetchAccountRuntimeState } from "@/lib/ai/streaming-execution";
+import { AIBusinessError } from "@/lib/ai/connections";
 import { PrismaClient } from "@prisma/client";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 const prisma = new PrismaClient();
+
+// The runtime-state channel is the only network seam in the preflight —
+// everything else stays real (resolver, lock, connection lookups).
+vi.mock("@/lib/ai/streaming-execution", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/ai/streaming-execution")>();
+  return { ...actual, fetchAccountRuntimeState: vi.fn() };
+});
+const runtimeState = vi.mocked(fetchAccountRuntimeState);
 
 vi.mock("@prisma/client", () => {
   const mPrismaClient = {
@@ -150,5 +162,217 @@ describe("agentChat actions", () => {
     expect(prisma.chatConversation.create).not.toHaveBeenCalled();
     expect(prisma.chatConversation.update).not.toHaveBeenCalled();
     expect(prisma.chatConversation.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("getAgentChatPreflight", () => {
+  beforeEach(() => {
+    (getCurrentUser as any).mockResolvedValue(mockUser);
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
+    (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([]);
+  });
+
+  const VERIFIED_STREAMING_CAPS = {
+    implemented: true,
+    execution: {
+      localOneShot: true,
+      streaming: true,
+      streamingVerification: "PASS",
+      streamingVerifiedRuntimeVersion: "0.154.0",
+    },
+    // Career Dialogue also needs the verified structured-decision step.
+    structuredOutput: {
+      strategy: "NATIVE_JSON_SCHEMA",
+      mechanism: "codex exec --output-schema <schema-file>",
+      verification: "PASS",
+      verifiedRuntimeVersion: "0.154.0",
+    },
+  };
+  const verifiedState = {
+    capabilities: VERIFIED_STREAMING_CAPS,
+    runtimeVersion: "0.154.0",
+    runtimeReady: true,
+  };
+
+  const lockedConnection = (overrides: Record<string, unknown> = {}) => ({
+    id: "conn-1",
+    provider: "OPENAI",
+    backendKind: "CODEX_RUNTIME",
+    displayName: "ChatGPT via Codex",
+    status: "CONNECTED",
+    archivedAt: null,
+    ...overrides,
+  });
+
+  const lockedConversation = (overrides: Record<string, unknown> = {}) => ({
+    id: "row-1",
+    userId: "user-1",
+    messages: "[]",
+    resolvedConnectionId: "conn-1",
+    resolvedModel: "gpt-5.6-sol",
+    ...overrides,
+  });
+
+  it("reports a locked account turn ready when streaming is verified", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+      lockedConversation(),
+    );
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue(verifiedState);
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "account",
+      connectionId: "conn-1",
+      model: "gpt-5.6-sol",
+      locked: true,
+    });
+  });
+
+  it("blocks a locked turn when the runtime cannot stream", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+      lockedConversation(),
+    );
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue({
+      ...verifiedState,
+      capabilities: {
+        ...VERIFIED_STREAMING_CAPS,
+        execution: {
+          ...VERIFIED_STREAMING_CAPS.execution,
+          streaming: false,
+          streamingVerification: "PENDING",
+          streamingVerifiedRuntimeVersion: null,
+        },
+      },
+    });
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      code: "STREAMING_NOT_SUPPORTED",
+      connectionId: "conn-1",
+    });
+  });
+
+  it("blocks on runtime version drift from the verified build", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+      lockedConversation(),
+    );
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue({
+      ...verifiedState,
+      runtimeVersion: "9.9.9",
+    });
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      code: "STREAMING_NOT_VERIFIED",
+    });
+  });
+
+  it("blocks when the runtime streams but its structured decisions are unverified", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+      lockedConversation(),
+    );
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue({
+      ...verifiedState,
+      capabilities: {
+        ...VERIFIED_STREAMING_CAPS,
+        structuredOutput: {
+          strategy: "NATIVE_JSON_SCHEMA",
+          mechanism: "codex exec --output-schema <schema-file>",
+          verification: "PENDING",
+          verifiedRuntimeVersion: null,
+        },
+      },
+    });
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
+    });
+  });
+
+  it("fails closed when the runtime channel is unreachable", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+      lockedConversation(),
+    );
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockRejectedValue(
+      new AIBusinessError("BACKEND_UNAVAILABLE", "down"),
+    );
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      code: "BACKEND_UNAVAILABLE",
+    });
+  });
+
+  // Resolver rows carry the nested connection relation — the preflight
+  // then queries the connection itself for the display fields.
+  const assignmentRow = () => ({
+    id: "assign-1",
+    purpose: "GLOBAL_DEFAULT",
+    connectionId: "conn-1",
+    model: "gpt-5.6-sol",
+    connection: {
+      ...lockedConnection(),
+      userId: "user-1",
+      runtimeProfileRef: "rp_11111111-2222-4333-8444-555555555555",
+    },
+  });
+
+  it("preflight-checks the GLOBAL_DEFAULT a new conversation would lock to", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
+    // GLOBAL_DEFAULT row → RESOLVED → then streaming readiness decides.
+    (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([
+      assignmentRow(),
+    ]);
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue({
+      ...verifiedState,
+      capabilities: {
+        ...VERIFIED_STREAMING_CAPS,
+        execution: {
+          ...VERIFIED_STREAMING_CAPS.execution,
+          streamingVerification: "PENDING",
+        },
+      },
+    });
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      code: "STREAMING_NOT_VERIFIED",
+    });
+  });
+
+  it("shows a ready GLOBAL_DEFAULT resolution with its model", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
+    (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([
+      assignmentRow(),
+    ]);
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue(verifiedState);
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "account",
+      connectionId: "conn-1",
+      model: "gpt-5.6-sol",
+      locked: false,
+    });
   });
 });

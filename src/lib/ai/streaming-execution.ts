@@ -471,10 +471,15 @@ export async function checkStreamingTurnReadiness(input: {
     );
   }
   const verifiedVersion = capabilities.execution.streamingVerifiedRuntimeVersion;
-  if (verifiedVersion && state.runtimeVersion !== verifiedVersion) {
+  // A PASS without a bound version is as unverifiable as a drift — the
+  // helper (checkStreamingExecutionReadiness) enforces the same: !bound
+  // || mismatch → NOT_VERIFIED. Keep the two paths identical.
+  if (!verifiedVersion || state.runtimeVersion !== verifiedVersion) {
     fail(
       AI_BUSINESS_ERROR_CODES.STREAMING_NOT_VERIFIED,
-      `Runtime version changed since verification (${state.runtimeVersion} != ${verifiedVersion})`,
+      verifiedVersion
+        ? `Runtime version changed since verification (${state.runtimeVersion} != ${verifiedVersion})`
+        : "The runtime's streaming PASS is not bound to a version",
     );
   }
 }

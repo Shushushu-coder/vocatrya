@@ -258,61 +258,250 @@ describe("anthropic/claude stream parser", () => {
   });
 });
 
-describe("codex stream parser — item snapshots", () => {
+describe("codex app-server parser — stdio JSON-RPC driver", () => {
   const line = (obj) => JSON.stringify(obj) + "\n";
+  const resp = (id, result) => line({ id, result });
+  const notif = (method, params) => line({ method, params });
 
-  it("diffs agent_message item snapshots", () => {
-    const parser = createCodexStreamParser();
-    const events = feedChunked(
-      parser,
-      line({ type: "thread.started" }) +
-        line({ type: "turn.started" }) +
-        line({
-          type: "item.updated",
-          item: { id: "i1", type: "agent_message", text: "Hel" },
-        }) +
-        line({
-          type: "item.completed",
-          item: { id: "i1", type: "agent_message", text: "Hello" },
-        }) +
-        line({ type: "turn.completed", usage: { tokens: 3 } }),
+  // A fake child stdin — records every frame the driver writes and
+  // whether the run ended it (clean shutdown after turn/completed).
+  function fakeStdin() {
+    return {
+      writes: [],
+      ended: false,
+      write(s) {
+        this.writes.push(s);
+      },
+      end() {
+        this.ended = true;
+      },
+      // Parsed JSON-RPC messages the driver sent.
+      sent() {
+        return this.writes
+          .join("")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l));
+      },
+    };
+  }
+
+  function drive(overrides = {}) {
+    const stdin = fakeStdin();
+    const parser = createCodexStreamParser({
+      prompt: "Say hi",
+      model: "gpt-5.5",
+      workingDirectory: "C:\\wd",
+      ...overrides,
+    });
+    parser.attachStdin(stdin);
+    return { parser, stdin };
+  }
+
+  // Feeds the responses that open a thread + turn; the driver must have
+  // written initialize before this is meaningful.
+  function openTurn(parser, extra = "") {
+    return (
+      resp(1, {}) +
+      resp(2, { thread: { id: "thr_1" } }) +
+      resp(3, { turn: { id: "turn_1", status: "inProgress" } }) +
+      extra
     );
+  }
+
+  it("runs the initialize → thread/start → turn/start handshake", () => {
+    const { parser, stdin } = drive();
+    expect(stdin.sent()).toEqual([
+      {
+        method: "initialize",
+        id: 1,
+        params: {
+          clientInfo: { name: "vocatrya", title: null, version: "0.0.0" },
+          capabilities: {
+            experimentalApi: false,
+            requestAttestation: false,
+          },
+        },
+      },
+    ]);
+    parser.push(Buffer.from(resp(1, {}) + resp(2, { thread: { id: "t" } })));
+    const sent = stdin.sent();
+    expect(sent[1]).toEqual({ method: "initialized" });
+    expect(sent[2].method).toBe("thread/start");
+    expect(sent[2].params).toMatchObject({
+      cwd: "C:\\wd",
+      model: "gpt-5.5",
+      approvalPolicy: "never",
+      sandbox: "read-only",
+      ephemeral: true,
+      allowProviderModelFallback: false,
+    });
+    expect(sent[3].method).toBe("turn/start");
+    expect(sent[3].params).toMatchObject({
+      threadId: "t",
+      model: "gpt-5.5",
+    });
+    expect(sent[3].params.input).toEqual([
+      { type: "text", text: "Say hi", text_elements: [] },
+    ]);
+  });
+
+  it("emits real deltas and reconciles against item/completed", () => {
+    const { parser, stdin } = drive();
+    const events = [
+      ...parser.push(Buffer.from(openTurn(parser))),
+      ...parser.push(
+        Buffer.from(
+          notif("turn/started", { turn: { id: "turn_1" } }) +
+            notif("item/agentMessage/delta", {
+              itemId: "i1",
+              delta: "Hel",
+            }) +
+            notif("item/agentMessage/delta", {
+              itemId: "i1",
+              delta: "lo",
+            }),
+        ),
+      ),
+      ...parser.push(
+        Buffer.from(
+          notif("item/completed", {
+            item: { id: "i1", type: "agentMessage", text: "Hello" },
+          }) +
+            notif("turn/completed", {
+              turn: { id: "turn_1", status: "completed" },
+            }),
+        ),
+      ),
+    ];
     expect(deltas(events)).toEqual(["Hel", "lo"]);
     expect(completedEvent(events)?.text).toBe("Hello");
+    // The terminal notification ends stdin — the server exits on EOF.
+    expect(stdin.ended).toBe(true);
+    expect(parser.finish()).toEqual([]);
   });
 
-  it("a single final item.completed yields exactly one delta (not streaming)", () => {
-    const parser = createCodexStreamParser();
-    const events = feedChunked(
-      parser,
-      line({ type: "turn.started" }) +
-        line({
-          type: "item.completed",
-          item: { id: "i1", type: "agent_message", text: "whole answer" },
-        }) +
-        line({ type: "turn.completed" }),
-    );
-    // One delta from one snapshot — the verdict layer must not call this
-    // multi-increment streaming.
-    expect(deltas(events)).toEqual(["whole answer"]);
-  });
-
-  it("rejects non-monotonic item text", () => {
-    const parser = createCodexStreamParser();
-    const events = feedChunked(
-      parser,
-      line({
-        type: "item.updated",
-        item: { id: "i1", type: "agent_message", text: "Hello" },
+  it("survives multi-byte UTF-8 split across stdout chunks", () => {
+    const { parser } = drive();
+    const wire =
+      openTurn(parser) +
+      notif("item/agentMessage/delta", { itemId: "i1", delta: "中" }) +
+      notif("item/agentMessage/delta", { itemId: "i1", delta: "文" }) +
+      notif("item/completed", {
+        item: { id: "i1", type: "agentMessage", text: "中文" },
       }) +
-        line({
-          type: "item.updated",
-          item: { id: "i1", type: "agent_message", text: "different" },
-        }),
-    );
+      notif("turn/completed", { turn: { id: "t", status: "completed" } });
+    const events = feedChunked(parser, wire, 5);
+    expect(deltas(events)).toEqual(["中", "文"]);
+    expect(completedEvent(events)?.text).toBe("中文");
+  });
+
+  it("fails when deltas disagree with the completed item text", () => {
+    const { parser } = drive();
+    const events = [
+      ...parser.push(Buffer.from(openTurn(parser))),
+      ...parser.push(
+        Buffer.from(
+          notif("item/agentMessage/delta", { itemId: "i1", delta: "Hel" }) +
+            notif("item/completed", {
+              item: { id: "i1", type: "agentMessage", text: "DIFFERENT" },
+            }) +
+            notif("turn/completed", {
+              turn: { id: "t", status: "completed" },
+            }),
+        ),
+      ),
+    ];
     expect(events.find((e) => e.type === "error")?.code).toBe(
       STREAM_FAILURE_CODES.STREAM_COMPLETION_INCONSISTENT,
     );
+    expect(completedEvent(events)).toBeUndefined();
+  });
+
+  it("ends stdin-EOF without turn/completed — never ships partial text", () => {
+    const { parser } = drive();
+    const events = [
+      ...parser.push(Buffer.from(openTurn(parser))),
+      ...parser.push(
+        Buffer.from(
+          notif("item/agentMessage/delta", { itemId: "i1", delta: "part" }),
+        ),
+      ),
+      ...parser.finish(),
+    ];
+    const error = events.find((e) => e.type === "error");
+    expect(error?.code).toBe(
+      STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED,
+    );
+    expect(completedEvent(events)).toBeUndefined();
+  });
+
+  it("maps turn/completed failed to a vendor error", () => {
+    const { parser, stdin } = drive();
+    const events = [
+      ...parser.push(Buffer.from(openTurn(parser))),
+      ...parser.push(
+        Buffer.from(
+          notif("turn/completed", {
+            turn: { id: "t", status: "failed" },
+          }),
+        ),
+      ),
+    ];
+    expect(events.find((e) => e.type === "error")?.code).toBe(
+      STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR,
+    );
+    expect(stdin.ended).toBe(true);
+  });
+
+  it("ignores retried transport errors; a non-retry error + EOF is VENDOR", () => {
+    const { parser } = drive();
+    const events = [
+      ...parser.push(Buffer.from(openTurn(parser))),
+      ...parser.push(
+        Buffer.from(
+          // The ChatGPT backend retries the response stream several times
+          // before the HTTPS fallback — these are diagnostics.
+          notif("error", { willRetry: true, error: { message: "ws" } }) +
+            notif("error", { willRetry: false, error: { message: "x" } }),
+        ),
+      ),
+      ...parser.finish(),
+    ];
+    expect(events.find((e) => e.type === "error")?.code).toBe(
+      STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR,
+    );
+  });
+
+  it("declines server→client requests and never leaks content", () => {
+    const { parser, stdin } = drive();
+    parser.push(Buffer.from(openTurn(parser)));
+    // A command-approval or dynamic-tool request must never reach the
+    // host — declined with a JSON-RPC error, and it emits nothing.
+    const events = parser.push(
+      Buffer.from(
+        line({ id: 99, method: "commandExecution/requestApproval" }) +
+          "not json at all\n",
+      ),
+    );
+    expect(events).toEqual([]);
+    const decline = stdin.sent().find((m) => m.id === 99);
+    expect(decline).toEqual({
+      id: 99,
+      error: { code: -32601, message: "unsupported" },
+    });
+    expect(parser.stats().malformedLineCount).toBe(1);
+  });
+
+  it("an initialize failure is a terminal vendor error", () => {
+    const { parser, stdin } = drive();
+    const events = parser.push(
+      Buffer.from(line({ id: 1, error: { code: -32000, message: "x" } })),
+    );
+    expect(events).toEqual([
+      { type: "error", code: STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR },
+    ]);
+    expect(stdin.ended).toBe(true);
   });
 });
 

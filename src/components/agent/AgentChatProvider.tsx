@@ -12,7 +12,6 @@ import {
 import { useRouter, usePathname } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import {
-  DefaultChatTransport,
   generateId,
   getToolName,
   isToolUIPart,
@@ -20,6 +19,7 @@ import {
   type ToolUIPart,
   type UIMessage,
 } from "ai";
+import { VocatryaChatTransport } from "@/lib/agent/chatTransport";
 import { hasPendingApproval, stubConsumedPastes } from "@/lib/agent/paste";
 import { pageContextFor } from "@/lib/agent/pageContext";
 import { useRightRail } from "@/context/RightRailContext";
@@ -140,7 +140,7 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
 
   const chat = useChat({
     messages: initialMessages,
-    transport: new DefaultChatTransport({
+    transport: new VocatryaChatTransport({
       api: "/api/ai/chat",
       prepareSendMessagesRequest: ({ messages }) => ({
         body: { messages, pageContext: pageContextRef.current },
@@ -255,7 +255,13 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
               ? "The AI connection for this conversation needs you to sign in again — open Settings → AI Connections."
               : state.code === "CONNECTION_DISCONNECTED"
                 ? "The AI connection for this conversation is disconnected — reconnect it in Settings → AI Connections."
-                : "The AI connection for this conversation is not usable — check Settings → AI Connections.",
+                : state.code === "STREAMING_NOT_SUPPORTED" ||
+                    state.code === "STREAMING_NOT_VERIFIED"
+                  ? "The assigned AI runtime cannot stream responses, so it cannot run the assistant — pick a streaming-verified runtime in Settings → AI Connections."
+                  : state.code === "RUNTIME_NOT_AVAILABLE" ||
+                      state.code === "PERMISSION_BOUNDARY_NOT_READY"
+                    ? "The assigned AI runtime is not available on this machine — check Settings → AI Connections."
+                    : "The AI connection for this conversation is not usable — check Settings → AI Connections.",
         });
         return;
       }

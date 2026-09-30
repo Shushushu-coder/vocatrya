@@ -61,7 +61,8 @@ function createCappedAccumulator(limit) {
 }
 
 // runRuntimeCommand({ executable, args, cwd, env, timeoutMs, signal,
-//   sanitize, onStdout, onStderr, maxCaptureBytes, binaryStdout })
+//   sanitize, onStdout, onStderr, maxCaptureBytes, binaryStdout,
+//   stdinPipe, onStdinReady })
 //   → { exitCode, signal, timedOut, aborted, stdout, stderr, error? }
 // Never throws for process failure; throws only for invalid input.
 // onStdout/onStderr (optional) observe raw chunks as they arrive — used by
@@ -74,6 +75,11 @@ function createCappedAccumulator(limit) {
 // maxCaptureBytes overrides the 256KB per-stream cap for commands whose
 // contract legitimately emits larger payloads (e.g. `devin models list
 // --format json` catalogs).
+// stdinPipe:true opens a writable stdin for protocols that need
+// bidirectional stdio (e.g. `codex app-server` JSON-RPC); the caller
+// receives the child's stdin once via onStdinReady right after spawn and
+// owns its lifecycle (ending stdin is how these runtimes shut down
+// cleanly). Without it stdin stays /dev-null — the historical default.
 function runRuntimeCommand({
   executable,
   args,
@@ -86,6 +92,8 @@ function runRuntimeCommand({
   onStderr,
   maxCaptureBytes = MAX_CAPTURE_BYTES,
   binaryStdout = false,
+  stdinPipe = false,
+  onStdinReady,
   spawnImpl = spawn,
 } = {}) {
   if (typeof executable !== "string" || executable.length === 0) {
@@ -129,11 +137,23 @@ function runRuntimeCommand({
         env,
         shell: false,
         windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
       });
     } catch (error) {
       finish({ exitCode: null, error: error.message });
       return;
+    }
+
+    // Hand stdin to the protocol driver immediately — a JSON-RPC harness
+    // must see the request channel before the server's first response can
+    // arrive. Observer errors are swallowed like the output observers;
+    // a null stdin (spawn failure paths) is never passed through.
+    if (stdinPipe && child.stdin && typeof onStdinReady === "function") {
+      try {
+        onStdinReady(child.stdin);
+      } catch {
+        // The driver's write failures surface as protocol error events.
+      }
     }
 
     const timer = setTimeout(() => {
@@ -179,6 +199,9 @@ function runRuntimeCommand({
       finish({ exitCode: null, error: error.message });
     });
     child.once("exit", (code, sig) => {
+      // A dead child cannot read stdin; if a piped stdin is still open
+      // it would hold 'close' back forever, so release it now.
+      if (child.stdin && !child.stdin.destroyed) child.stdin.destroy();
       // 'close' also requires stdio EOF — a detached console child
       // (`start /wait` visible-console logins) can inherit the pipes and
       // hold them open after the managed process is terminated, leaving

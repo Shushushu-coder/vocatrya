@@ -53,14 +53,23 @@ import { createAccountRuntimeLanguageModel } from "./accountLanguageModel";
 // Decision protocol
 // ---------------------------------------------------------------------------
 
+// Strict-schema compliant: native-schema transports (codex
+// `--output-schema` → OpenAI strict response_format) require every
+// property in `required` and forbid free-form objects — `arguments`
+// therefore travels as a JSON-encoded string, null for plain answers.
+// PROMPT_AND_VALIDATE runtimes follow the same wire contract.
 const AGENT_DECISION_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["type"],
+  required: ["type", "tool", "arguments"],
   properties: {
     type: { type: "string", enum: ["assistant_response", "tool_call"] },
-    tool: { type: "string" },
-    arguments: { type: "object" },
+    tool: { type: ["string", "null"] },
+    arguments: {
+      type: ["string", "null"],
+      description:
+        "JSON-encoded arguments object for the tool call, or null",
+    },
   },
 } as const;
 
@@ -197,7 +206,7 @@ function buildDecisionPrompt({
       "Do not answer the user. Do not explain. Do not run any tool, command, or file operation yourself.",
       "No prose, no markdown fences, no reasoning — a single JSON object and nothing else.",
     ].join("\n"),
-    `If the next step needs a Vocatrya tool, output exactly:\n{"type":"tool_call","tool":"<tool name>","arguments":{<that tool's arguments>}}\nIf the next step is a natural-language reply to the user, output exactly:\n{"type":"assistant_response"}`,
+    `If the next step needs a Vocatrya tool, output exactly:\n{"type":"tool_call","tool":"<tool name>","arguments":"<JSON-encoded arguments object>"}\nIf the next step is a natural-language reply to the user, output exactly:\n{"type":"assistant_response","tool":null,"arguments":null}`,
     `Available tools (only these may appear in "tool"):\n${toolsBlock}`,
     `Application system context:\n${systemPrompt}`,
     `Conversation so far:\n${transcript}`,
@@ -249,10 +258,22 @@ export function parseAgentDecision(
       reason: `unknown tool ${JSON.stringify(decision.tool)}`,
     };
   }
+  // Wire shape is a JSON-encoded string (strict schemas cannot express a
+  // free-form object); tolerate a plain object for runtimes that emit one.
+  let input: unknown = {};
+  if (typeof decision.arguments === "string" && decision.arguments.trim()) {
+    try {
+      input = JSON.parse(decision.arguments);
+    } catch {
+      return { kind: "invalid", reason: "arguments is not valid JSON" };
+    }
+  } else if (decision.arguments && typeof decision.arguments === "object") {
+    input = decision.arguments;
+  }
   return {
     kind: "tool_call",
     toolName: decision.tool,
-    input: decision.arguments ?? {},
+    input,
   };
 }
 

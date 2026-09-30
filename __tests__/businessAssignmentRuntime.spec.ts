@@ -193,12 +193,10 @@ describe("resolveBusinessAIConfig", () => {
     ).toMatchObject({ status: "INVALID_ASSIGNMENT", code: "CONNECTION_ERROR" });
 
     const noProfile = await makeConnection({ runtimeProfileRef: null });
-    await setBusinessAssignment({
-      userId,
-      purpose: "CAREER_DIALOGUE",
-      connectionId: noProfile.id,
-      model: "gpt-5.5",
-    });
+    // The row goes in directly — the write gate now refuses unrunnable
+    // CAREER_DIALOGUE assignments, but a pre-gate or externally-mutated
+    // row must still surface INVALID_ASSIGNMENT at resolve time.
+    await assign("CAREER_DIALOGUE", noProfile.id, "gpt-5.5");
     expect(
       await resolveBusinessAIConfig({ userId, purpose: "CAREER_DIALOGUE" }),
     ).toMatchObject({
@@ -694,5 +692,181 @@ describe("AutomationRun lock-on-create", () => {
     });
     expect(reloaded.resolvedConnectionId).toBeNull();
     expect(reloaded.resolvedModel).toBeNull();
+  });
+});
+
+describe("setBusinessAssignment — streaming readiness gate", () => {
+  // The write path enforces the same readiness the turn gate checks —
+  // verified incremental output bound to the probed runtime version —
+  // through the injected runtime-state channel (real env config is what
+  // production uses; the seam exists so the boundary is testable).
+  const VERIFIED_EXECUTION = {
+    localOneShot: true,
+    streaming: true,
+    streamingVerification: "PASS",
+    streamingVerifiedRuntimeVersion: "0.154.0",
+  };
+
+  const stateResponse = (
+    overrides: Record<string, unknown> = {},
+    structuredOverrides: Record<string, unknown> = {},
+  ) =>
+    new Response(
+      JSON.stringify({
+        ok: true,
+        capabilities: {
+          implemented: true,
+          execution: { ...VERIFIED_EXECUTION, ...overrides },
+          structuredOutput: {
+            strategy: "NATIVE_JSON_SCHEMA",
+            mechanism: "codex exec --output-schema <schema-file>",
+            verification: "PASS",
+            verifiedRuntimeVersion: "0.154.0",
+            ...structuredOverrides,
+          },
+        },
+        runtimeVersion: "0.154.0",
+        runtimeReady: true,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+
+  const deps = (fetchImpl: typeof fetch) => ({
+    execUrl: "http://127.0.0.1:9999",
+    internalToken: "t",
+    fetchImpl,
+  });
+
+  const assignDialogue = (connectionId: string, fetchImpl: typeof fetch) =>
+    setBusinessAssignment(
+      {
+        userId,
+        purpose: "CAREER_DIALOGUE",
+        connectionId,
+        model: "gpt-5.6-sol",
+      },
+      prisma,
+      deps(fetchImpl),
+    );
+
+  it("accepts a streaming-verified runtime at the bound version", async () => {
+    const connection = await makeConnection();
+    const fetchImpl = vi.fn(async () => stateResponse());
+    const saved = await assignDialogue(connection.id, fetchImpl as never);
+    expect(saved.connectionId).toBe(connection.id);
+    expect(saved.model).toBe("gpt-5.6-sol");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a runtime without streaming support", async () => {
+    const connection = await makeConnection();
+    await expect(
+      assignDialogue(connection.id, async () =>
+        stateResponse({ streaming: false }),
+      ),
+    ).rejects.toMatchObject({ code: "STREAMING_NOT_SUPPORTED" });
+    // The refusal is real — nothing was written.
+    expect(await listBusinessAssignmentsForUser(userId)).toHaveLength(0);
+  });
+
+  it("rejects a runtime whose streaming verification is PENDING", async () => {
+    const connection = await makeConnection();
+    await expect(
+      assignDialogue(connection.id, async () =>
+        stateResponse({ streamingVerification: "PENDING" }),
+      ),
+    ).rejects.toMatchObject({ code: "STREAMING_NOT_VERIFIED" });
+  });
+
+  it("rejects version drift from the verified runtime", async () => {
+    const connection = await makeConnection();
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          capabilities: {
+            implemented: true,
+            execution: { ...VERIFIED_EXECUTION },
+          },
+          runtimeVersion: "9.9.9", // the installed build moved past verification
+          runtimeReady: true,
+        }),
+      );
+    await expect(assignDialogue(connection.id, fetchImpl)).rejects.toMatchObject(
+      { code: "STREAMING_NOT_VERIFIED" },
+    );
+  });
+
+  it("rejects when the TEXT_ONLY boundary is missing", async () => {
+    const connection = await makeConnection();
+    await expect(
+      assignDialogue(connection.id, async () =>
+        stateResponse({ localOneShot: false }),
+      ),
+    ).rejects.toMatchObject({ code: "PERMISSION_BOUNDARY_NOT_READY" });
+  });
+
+  it("rejects a streaming-verified runtime whose decision step is unverified", async () => {
+    const connection = await makeConnection();
+    // Streaming PASS alone is not enough: Career Dialogue runs a
+    // structured decision before the answer stream.
+    await expect(
+      assignDialogue(connection.id, async () =>
+        stateResponse({}, { verification: "PENDING" }),
+      ),
+    ).rejects.toMatchObject({ code: "STRUCTURED_OUTPUT_NOT_VERIFIED" });
+    expect(await listBusinessAssignmentsForUser(userId)).toHaveLength(0);
+  });
+
+  it("fails closed when the capability channel is unreachable", async () => {
+    const connection = await makeConnection();
+    await expect(
+      assignDialogue(connection.id, async () => {
+        throw new Error("ECONNREFUSED");
+      }),
+    ).rejects.toMatchObject({ code: "BACKEND_UNAVAILABLE" });
+    expect(await listBusinessAssignmentsForUser(userId)).toHaveLength(0);
+  });
+
+  it("fails closed when the desktop channel is not configured at all", async () => {
+    const connection = await makeConnection();
+    await expect(
+      // No deps → env unset in tests → the channel cannot exist.
+      setBusinessAssignment({
+        userId,
+        purpose: "CAREER_DIALOGUE",
+        connectionId: connection.id,
+        model: "m",
+      }),
+    ).rejects.toMatchObject({ code: "RUNTIME_NOT_AVAILABLE" });
+  });
+
+  it("does not gate GLOBAL_DEFAULT or non-streaming purposes", async () => {
+    const connection = await makeConnection();
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("must never be called for non-streaming purposes");
+    });
+    await setBusinessAssignment(
+      {
+        userId,
+        purpose: "GLOBAL_DEFAULT",
+        connectionId: connection.id,
+        model: "gpt-5.6-sol",
+      },
+      prisma,
+      deps(fetchImpl as never),
+    );
+    await setBusinessAssignment(
+      {
+        userId,
+        purpose: "MATCH_ANALYSIS",
+        connectionId: connection.id,
+        model: "gpt-5.5",
+      },
+      prisma,
+      deps(fetchImpl as never),
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(await listBusinessAssignmentsForUser(userId)).toHaveLength(2);
   });
 });

@@ -162,8 +162,6 @@ function buildCodexModelsInvocation({
 // a Vocatrya-owned working directory, no session persistence, no git
 // requirement. The last agent message is written to outputFile inside that
 // directory so callers never scrape the human-readable log.
-// jsonEvents adds `--json` — the JSONL run-event stream on stdout that the
-// streaming parser consumes; -o still carries the canonical final message.
 function buildCodexExecInvocation({
   executablePath,
   profileDir,
@@ -171,7 +169,6 @@ function buildCodexExecInvocation({
   workingDirectory,
   outputFile,
   outputSchemaFile,
-  jsonEvents = false,
   model,
   prompt,
 }) {
@@ -188,9 +185,6 @@ function buildCodexExecInvocation({
     "-o",
     outputFile,
   ];
-  if (jsonEvents) {
-    args.push("--json");
-  }
   // `codex exec --output-schema <file>` (codex-cli 0.154.0) constrains the
   // model's final response shape; the conforming JSON lands in -o
   // outputFile like any other exec result.
@@ -411,30 +405,39 @@ const codexAdapter = {
     });
   },
 
-  // Streaming TEXT_ONLY — the same locked-down exec plus `--json`: stdout
-  // becomes the JSONL run-event stream while -o still carries the
-  // canonical final message for reconstruction checks.
+  // Streaming TEXT_ONLY — `codex app-server --listen stdio://`, a managed
+  // JSON-RPC child. `exec --json` was probed on 0.154.0 and is NOT a real
+  // stream (the answer arrives in a single terminal item.completed
+  // snapshot after tens of silent seconds); the app-server emits genuine
+  // item/agentMessage/delta notifications ahead of turn/completed. The
+  // parser drives the initialize → thread/start → turn/start handshake
+  // over the piped stdin and ends stdin when the turn terminates — the
+  // server exits cleanly on stdin EOF. The thread pins the same
+  // locked-down boundary as `exec`: read-only sandbox, approval never,
+  // ephemeral thread, Vocatrya-owned cwd, the assigned model with
+  // provider fallback disabled.
   buildStreamingInvocation({
     executablePath,
     profileDir,
     baseEnv,
     workingDirectory,
-    model,
-    prompt,
   }) {
-    return buildCodexExecInvocation({
-      executablePath,
-      profileDir,
-      baseEnv,
-      workingDirectory,
-      outputFile: path.join(workingDirectory, "last-message.txt"),
-      jsonEvents: true,
-      model,
-      prompt,
-    });
+    return {
+      executable: executablePath,
+      args: codexArgs({
+        profileDir,
+        commandArgs: ["app-server", "--listen", "stdio://"],
+      }),
+      cwd: workingDirectory,
+      env: codexEnv({ profileDir, baseEnv }),
+      stdinPipe: true,
+    };
   },
-  createStreamParser: createCodexStreamParser,
-  streamMechanism: "codex exec --json",
+  // The app-server driver is stateful — it needs the turn payload to
+  // issue turn/start once the handshake opens the thread.
+  createStreamParser: ({ prompt, model, workingDirectory } = {}) =>
+    createCodexStreamParser({ prompt, model, workingDirectory }),
+  streamMechanism: "codex app-server",
 
   // NATIVE_JSON_SCHEMA: the schema object is serialized into a
   // Vocatrya-owned file inside the fresh exec workDir — caller-supplied
@@ -467,6 +470,15 @@ const codexAdapter = {
 
   extractText({ result, workDir }) {
     return extractCodexExecText({ result, workDir });
+  },
+
+  // Streaming runs carry their canonical answer on the wire
+  // (item/completed agentMessage text, reconciled per-item against its
+  // deltas). There is no -o file and stdout is framed JSON-RPC — generic
+  // scraping could only produce a framed line, so the extractor refuses
+  // to guess; canonical stays null and the delta channel wins.
+  extractStreamText() {
+    return { text: "", reportedError: false };
   },
 
   // The last agent message is written to last-message.txt inside the work

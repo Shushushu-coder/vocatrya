@@ -242,11 +242,10 @@ describe("execution seam contract", () => {
   });
 
   it("gates streaming on real verification — PENDING is not permission", () => {
-    // The desktop matrix is the source of truth: the five runtimes that
+    // The desktop matrix is the source of truth: the four runtimes that
     // never completed a managed streaming run fail closed, while Devin's
-    // verified PASS is bound to the probed runtime version.
+    // and Codex's verified PASSes are bound to the probed versions.
     for (const backendKind of [
-      "CODEX_RUNTIME",
       "CLAUDE_RUNTIME",
       "OPENCODE_RUNTIME",
       "GROK_RUNTIME",
@@ -261,6 +260,31 @@ describe("execution seam contract", () => {
         backendKind,
       ).toEqual({ ready: false, code: "STREAMING_NOT_SUPPORTED" });
     }
+    // Codex passed managed delta verification via `codex app-server`
+    // item/agentMessage/delta on 0.154.0 — same version-bound contract.
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("CODEX_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+        runtimeVersion: "0.154.0",
+      }),
+    ).toEqual({ ready: true });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("CODEX_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+        runtimeVersion: "0.155.0",
+      }),
+    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("CODEX_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+      }),
+    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
     // Devin passed managed delta verification on 3000.10.31: ready only
     // when the installed binary matches the verified version.
     expect(

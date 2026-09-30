@@ -1,8 +1,8 @@
-// Provider-neutral agent orchestration â€” the Career Dialogue ACCOUNT_LOGIN
+// Provider-neutral agent orchestration â€?the Career Dialogue ACCOUNT_LOGIN
 // turn. The runtime is mocked at the Vocatrya seam boundary
 // (executeAIConnectionText / executeAIConnectionTextStream): these tests
-// pin the PROTOCOL â€” decision steps, allowlist, argument validation,
-// approval gating, terminal tools, streaming emission, abort â€” not any
+// pin the PROTOCOL â€?decision steps, allowlist, argument validation,
+// approval gating, terminal tools, streaming emission, abort â€?not any
 // vendor runtime.
 import { runAccountAgentTurn } from "@/lib/agent/accountTurn";
 import { executeAIConnectionText } from "@/lib/ai/execution";
@@ -31,7 +31,7 @@ const userMsg = (text: string): UIMessage =>
     parts: [{ type: "text", text }],
   }) as UIMessage;
 
-// Collects every chunk the turn writes â€” the UI message stream contract.
+// Collects every chunk the turn writes â€?the UI message stream contract.
 function captureWriter() {
   const chunks: { type: string; [k: string]: unknown }[] = [];
   return {
@@ -88,7 +88,7 @@ describe("runAccountAgentTurn", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (executeAIConnectionText as any).mockResolvedValue({
-      text: '{"type":"assistant_response"}',
+      text: '{"type":"assistant_response","tool":null,"arguments":null}',
     });
     (executeAIConnectionTextStream as any).mockReturnValue(
       streamEvents([
@@ -102,7 +102,7 @@ describe("runAccountAgentTurn", () => {
     } satisfies Partial<ToolSet>);
   });
 
-  it("assistant_response decision â†’ real streamed deltas to the UI stream", async () => {
+  it("assistant_response decision â†?real streamed deltas to the UI stream", async () => {
     const { writer, chunks } = captureWriter();
     const result = await runAccountAgentTurn({
       ...baseInput,
@@ -119,7 +119,7 @@ describe("runAccountAgentTurn", () => {
     ]);
     expect(types.at(-1)).toBe("finish");
     // The decision ran through the verified structured contract on the
-    // locked pair â€” never a different connection or model.
+    // locked pair â€?never a different connection or model.
     const execCall = (executeAIConnectionText as any).mock.calls[0][0];
     expect(execCall).toMatchObject({
       userId: "user-1",
@@ -131,7 +131,7 @@ describe("runAccountAgentTurn", () => {
     );
   });
 
-  it("tool_call decision â†’ validated args â†’ executes â†’ result â†’ next decision", async () => {
+  it("tool_call decision â†?validated args â†?executes â†?result â†?next decision", async () => {
     const executed: unknown[] = [];
     (buildAgentTools as any).mockReturnValue({
       get_resume: fakeTool({
@@ -145,9 +145,9 @@ describe("runAccountAgentTurn", () => {
     });
     (executeAIConnectionText as any)
       .mockResolvedValueOnce({
-        text: '{"type":"tool_call","tool":"get_resume","arguments":{"resumeTitle":"Main"}}',
+        text: '{"type":"tool_call","tool":"get_resume","arguments":"{\\\"resumeTitle\\\":\\\"Main\\\"}"}',
       })
-      .mockResolvedValueOnce({ text: '{"type":"assistant_response"}' });
+      .mockResolvedValueOnce({ text: '{"type":"assistant_response","tool":null,"arguments":null}' });
     const { writer, chunks } = captureWriter();
     const result = await runAccountAgentTurn({
       ...baseInput,
@@ -168,7 +168,7 @@ describe("runAccountAgentTurn", () => {
 
   it("rejects a tool that is not in the registry", async () => {
     (executeAIConnectionText as any).mockResolvedValue({
-      text: '{"type":"tool_call","tool":"drop_table","arguments":{}}',
+      text: '{"type":"tool_call","tool":"drop_table","arguments":"{}"}',
     });
     const { writer } = captureWriter();
     await expect(
@@ -192,8 +192,8 @@ describe("runAccountAgentTurn", () => {
         signal: new AbortController().signal,
       }),
     ).rejects.toBeInstanceOf(AIBusinessError);
-    // parse â†’ validate â†’ â‰¤1 retry inside runStructuredValidation + one
-    // semantic correction attempt â€” bounded, never an open loop.
+    // parse â†?validate â†?â‰? retry inside runStructuredValidation + one
+    // semantic correction attempt â€?bounded, never an open loop.
     const calls = (executeAIConnectionText as any).mock.calls.length;
     expect(calls).toBeGreaterThanOrEqual(2);
     expect(calls).toBeLessThanOrEqual(6);
@@ -207,7 +207,7 @@ describe("runAccountAgentTurn", () => {
       }),
     });
     (executeAIConnectionText as any).mockResolvedValue({
-      text: '{"type":"tool_call","tool":"get_resume","arguments":{"resumeTitle":42}}',
+      text: '{"type":"tool_call","tool":"get_resume","arguments":"{\\\"resumeTitle\\\":42}"}',
     });
     const { writer } = captureWriter();
     await expect(
@@ -229,7 +229,7 @@ describe("runAccountAgentTurn", () => {
       }),
     });
     (executeAIConnectionText as any).mockResolvedValue({
-      text: '{"type":"tool_call","tool":"add_job","arguments":{"company":"Acme"}}',
+      text: '{"type":"tool_call","tool":"add_job","arguments":"{\\\"company\\\":\\\"Acme\\\"}"}',
     });
     const { writer, chunks } = captureWriter();
     const result = await runAccountAgentTurn({
@@ -242,7 +242,7 @@ describe("runAccountAgentTurn", () => {
     const types = chunks.map((c) => c.type);
     expect(types).toContain("tool-input-available");
     expect(types).toContain("tool-approval-request");
-    // Nothing executed, no output part â€” the write waits for the user.
+    // Nothing executed, no output part â€?the write waits for the user.
     expect(types).not.toContain("tool-output-available");
     expect(chunks.find((c) => c.type === "tool-approval-request")).toMatchObject(
       { approvalId: expect.any(String) },
@@ -283,7 +283,7 @@ describe("runAccountAgentTurn", () => {
       signal: new AbortController().signal,
     });
     expect(executed).toEqual([{ company: "Acme" }]);
-    // add_job is terminal once settled â€” the turn ends on the write.
+    // add_job is terminal once settled â€?the turn ends on the write.
     expect(chunks.at(-1)?.type).toBe("finish");
     const types = chunks.map((c) => c.type);
     expect(types).toContain("tool-output-available");
@@ -316,7 +316,7 @@ describe("runAccountAgentTurn", () => {
       ],
     } as unknown as UIMessage;
     (executeAIConnectionText as any).mockResolvedValue({
-      text: '{"type":"assistant_response"}',
+      text: '{"type":"assistant_response","tool":null,"arguments":null}',
     });
     const { writer, chunks } = captureWriter();
     const result = await runAccountAgentTurn({
@@ -338,7 +338,7 @@ describe("runAccountAgentTurn", () => {
       }),
     });
     (executeAIConnectionText as any).mockResolvedValue({
-      text: '{"type":"tool_call","tool":"review_resume","arguments":{}}',
+      text: '{"type":"tool_call","tool":"review_resume","arguments":"{}"}',
     });
     const { writer, chunks } = captureWriter();
     const result = await runAccountAgentTurn({
@@ -348,7 +348,7 @@ describe("runAccountAgentTurn", () => {
       signal: new AbortController().signal,
     });
     expect(result.paused).toBe(false);
-    // No decision after the terminal result â€” the turn ends.
+    // No decision after the terminal result â€?the turn ends.
     expect(executeAIConnectionText).toHaveBeenCalledTimes(1);
     expect(executeAIConnectionTextStream).not.toHaveBeenCalled();
     expect(chunks.at(-1)?.type).toBe("finish");
@@ -375,7 +375,7 @@ describe("runAccountAgentTurn", () => {
   });
 
   it("ends the turn on the step budget instead of looping forever", async () => {
-    // A non-terminal tool keeps being requested â€” the step cap must stop it.
+    // A non-terminal tool keeps being requested â€?the step cap must stop it.
     (buildAgentTools as any).mockReturnValue({
       get_resume: fakeTool({
         name: "get_resume",
@@ -384,7 +384,7 @@ describe("runAccountAgentTurn", () => {
       }),
     });
     (executeAIConnectionText as any).mockResolvedValue({
-      text: '{"type":"tool_call","tool":"get_resume","arguments":{}}',
+      text: '{"type":"tool_call","tool":"get_resume","arguments":"{}"}',
     });
     const { writer } = captureWriter();
     await expect(

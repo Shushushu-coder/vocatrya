@@ -11,6 +11,12 @@ import {
 import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
 import { CHAT_LOCK_PURPOSE } from "@/lib/agent/chatConversationLock";
+import { AIBusinessError } from "@/lib/ai/connections";
+import {
+  checkStreamingExecutionReadiness,
+  type AccountRuntimeCapabilities,
+} from "@/lib/ai/runtime/capabilities";
+import { fetchAccountRuntimeState } from "@/lib/ai/streaming-execution";
 
 export const getChatConversation = async (): Promise<{
   success: boolean;
@@ -83,6 +89,61 @@ export type AgentChatPreflight =
   | { kind: "legacy" };
 
 /**
+ * Streaming-readiness verdict for an account-bound chat turn — gate
+ * parity with the route's checkStreamingTurnReadiness. Returns the stable
+ * blocked code, or null when the turn would stream. Fail-closed: when the
+ * desktop runtime channel is unreachable the composer shows the same
+ * unavailability the route would hit, instead of promising a connection
+ * that fails on Send.
+ */
+async function accountStreamingBlockCode(connection: {
+  backendKind: string;
+  provider: string;
+  status: string;
+}): Promise<string | null> {
+  let state;
+  try {
+    state = await fetchAccountRuntimeState({
+      backendKind: connection.backendKind,
+      accountProvider: connection.provider,
+    });
+  } catch (error) {
+    return error instanceof AIBusinessError
+      ? error.code
+      : "RUNTIME_NOT_AVAILABLE";
+  }
+  const capabilities = state.capabilities as AccountRuntimeCapabilities | null;
+  if (
+    !capabilities?.implemented ||
+    capabilities.execution?.localOneShot !== true
+  ) {
+    return "PERMISSION_BOUNDARY_NOT_READY";
+  }
+  if (state.runtimeReady !== true) return "RUNTIME_NOT_AVAILABLE";
+  const verdict = checkStreamingExecutionReadiness({
+    capabilities,
+    connectionStatus: connection.status,
+    permissionScope: "TEXT_ONLY",
+    runtimeVersion: state.runtimeVersion,
+  });
+  if (!verdict.ready) return verdict.code;
+  // Career Dialogue turns need the verified structured-decision step too
+  // (accountTurn's executeAIConnectionText with AGENT_DECISION_SCHEMA) —
+  // streaming alone is not enough to call the path runnable.
+  const structured = capabilities.structuredOutput;
+  if (
+    !structured ||
+    structured.strategy === "UNSUPPORTED" ||
+    structured.verification !== "PASS" ||
+    !structured.verifiedRuntimeVersion ||
+    state.runtimeVersion !== structured.verifiedRuntimeVersion
+  ) {
+    return "STRUCTURED_OUTPUT_NOT_VERIFIED";
+  }
+  return null;
+}
+
+/**
  * Read-only view of what the NEXT chat turn would run on. The composer uses
  * it instead of probing legacy settings when an account lock or a
  * CAREER_DIALOGUE assignment governs the conversation. Never executes
@@ -142,6 +203,17 @@ export const getAgentChatPreflight = async (): Promise<{
           data: { kind: "blocked", code: "MODEL_UNAVAILABLE" },
         };
       }
+      const streamBlock = await accountStreamingBlockCode(connection);
+      if (streamBlock) {
+        return {
+          success: true,
+          data: {
+            kind: "blocked",
+            code: streamBlock,
+            connectionId: connection.id,
+          },
+        };
+      }
       return {
         success: true,
         data: {
@@ -170,8 +242,26 @@ export const getAgentChatPreflight = async (): Promise<{
     if (resolution.status === "RESOLVED") {
       const connection = await prisma.aIConnection.findFirst({
         where: { id: resolution.connectionId, userId: user.id },
-        select: { displayName: true },
+        select: { displayName: true, status: true },
       });
+      // This covers the GLOBAL_DEFAULT fallback too — whatever the
+      // resolution landed on must be streaming-capable before the
+      // composer claims readiness.
+      const streamBlock = await accountStreamingBlockCode({
+        backendKind: resolution.backendKind,
+        provider: resolution.provider,
+        status: connection?.status ?? "CONNECTED",
+      });
+      if (streamBlock) {
+        return {
+          success: true,
+          data: {
+            kind: "blocked",
+            code: streamBlock,
+            connectionId: resolution.connectionId,
+          },
+        };
+      }
       return {
         success: true,
         data: {

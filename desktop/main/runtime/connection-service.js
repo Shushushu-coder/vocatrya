@@ -1299,7 +1299,13 @@ function createConnectionService({
         model: execModel,
         prompt,
       });
-      const parser = adapter.createStreamParser();
+      // Protocol drivers (codex app-server) need the turn params to write
+      // their JSON-RPC handshake; plain mappers ignore the context.
+      const parser = adapter.createStreamParser({
+        prompt,
+        model: execModel,
+        workingDirectory: workDir,
+      });
       const result = await runner({
         ...invocation,
         timeoutMs: Math.min(
@@ -1308,6 +1314,11 @@ function createConnectionService({
         ),
         signal: controller.signal,
         binaryStdout: true,
+        // stdio-protocol adapters get the child's stdin the moment it
+        // exists — the handshake cannot wait for first output.
+        ...(typeof parser.attachStdin === "function"
+          ? { onStdinReady: (stdin) => parser.attachStdin(stdin) }
+          : {}),
         onStdout: (chunk) => {
           // Once aborted, late chunks are drained but never parsed into
           // delivered events.
@@ -1405,7 +1416,15 @@ function createConnectionService({
       let canonical =
         typeof completedEvent?.text === "string" ? completedEvent.text : null;
       if (canonical === null) {
-        const extracted = adapter.extractText({ result, workDir });
+        // extractStreamText (when the adapter defines it) is the
+        // streaming-run extractor — protocol channels like JSON-RPC must
+        // never let generic output scraping pick up a framed line as the
+        // canonical answer.
+        const extractor =
+          typeof adapter.extractStreamText === "function"
+            ? adapter.extractStreamText
+            : adapter.extractText;
+        const extracted = extractor({ result, workDir });
         if (
           !extracted?.reportedError &&
           typeof extracted?.text === "string" &&

@@ -263,20 +263,51 @@ describe("executeTextStream", () => {
   // harness-only bypass the structured-output probe uses.
   const PROBE = { verificationProbe: true };
 
-  // The codex adapter's streaming invocation is `exec --json`; the fake
-  // runner emits NDJSON item snapshots through the binary stdout observer.
-  function streamScript(chunks, tail = {}) {
+  // The codex adapter's streaming invocation is `app-server` stdio
+  // JSON-RPC: the fake runner hands the driver a writable stdin stub and
+  // answers the handshake — initialize → thread/start → turn/start —
+  // pushing scripted server notifications through the stdout observer.
+  // `onTurn` runs once turn/start resolves, so notification streams can
+  // be scripted per-test.
+  function appServerScript({ onTurn, tail = {} }) {
     return [
       {
-        match: (h) => h.includes("exec") && h.includes("--json"),
+        match: (h) => h.includes("app-server"),
         respond: (inv) => {
-          for (const chunk of chunks) {
-            inv.onStdout(Buffer.from(chunk, "utf8"));
-          }
-          fs.writeFileSync(
-            path.join(inv.cwd, "last-message.txt"),
-            tail.fileText ?? "",
-          );
+          let buf = "";
+          const stdin = {
+            ended: false,
+            write(chunk) {
+              buf += chunk;
+              let nl;
+              while ((nl = buf.indexOf("\n")) >= 0) {
+                const line = buf.slice(0, nl);
+                buf = buf.slice(nl + 1);
+                const msg = JSON.parse(line);
+                if (msg.id === undefined) continue; // `initialized`
+                const resultFor = {
+                  initialize: {},
+                  "thread/start": {
+                    thread: { id: "thr_1" },
+                    model: "gpt-5.5",
+                    sandbox: { type: "readOnly", networkAccess: false },
+                    approvalPolicy: "never",
+                  },
+                  "turn/start": {
+                    turn: { id: "turn_1", status: "inProgress" },
+                  },
+                }[msg.method];
+                inv.onStdout(
+                  Buffer.from(JSON.stringify({ id: msg.id, result: resultFor }) + "\n"),
+                );
+                if (msg.method === "turn/start") onTurn?.(inv, stdin);
+              }
+            },
+            end() {
+              this.ended = true;
+            },
+          };
+          inv.onStdinReady(stdin);
           return Promise.resolve({
             exitCode: 0,
             stdout: "",
@@ -288,6 +319,8 @@ describe("executeTextStream", () => {
     ];
   }
 
+  const line = (obj) => JSON.stringify(obj) + "\n";
+
   function streamExec(overrides = {}) {
     return service.executeTextStream({
       ticket: "t_exec",
@@ -298,21 +331,73 @@ describe("executeTextStream", () => {
     });
   }
 
-  it("refuses business streaming on an unverified runtime (PENDING ≠ PASS)", async () => {
+  it("refuses business streaming when the installed version drifted from the verified one", async () => {
+    // Codex streaming PASS is bound to the verified build (0.154.0) — an
+    // upgraded runtime reports a different version and must fail closed.
     runnerScript = [];
-    const result = await streamExec();
+    const drifted = createConnectionService({
+      profilesRoot,
+      smokeWorkRoot,
+      execWorkRoot,
+      backend,
+      deps: {
+        ...makeDeps(),
+        spawnSyncImpl: (cmd, args) => {
+          if (cmd === "where.exe")
+            return { status: 0, stdout: `${FAKE_EXE}\r\n` };
+          return { status: 0, stdout: "codex-cli 9.9.9\n", stderr: "" };
+        },
+      },
+    });
+    const result = await drifted.executeTextStream({
+      ticket: "t_exec",
+      connectionId: "conn-1",
+      model: "gpt-5.5",
+      prompt: "Summarize this job",
+    });
     expect(result).toEqual({ ok: false, code: "STREAMING_NOT_VERIFIED" });
-    expect(invocations.find((i) => i.args.includes("--json"))).toBeUndefined();
+    expect(
+      invocations.find((i) => i.args.includes("app-server")),
+    ).toBeUndefined();
   });
 
-  it("streams ordered deltas and reconciles against the canonical file", async () => {
-    runnerScript = streamScript(
-      [
-        '{"type":"turn.started"}\n{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"Hel"}}\n',
-        '{"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"Hello"}}\n{"type":"turn.completed"}\n',
-      ],
-      { fileText: "Hello" },
-    );
+  it("drives the JSON-RPC handshake, streams deltas, reconciles on the wire", async () => {
+    let seenStdin;
+    runnerScript = appServerScript({
+      onTurn: (inv, stdin) => {
+        seenStdin = stdin;
+        // Protocol diagnostics and retried transport errors ride the same
+        // stream — they never become content.
+        inv.onStdout(
+          Buffer.from(
+            line({ method: "thread/status/changed", params: {} }) +
+              line({ method: "error", params: { willRetry: true, error: {} } }) +
+              line({
+                method: "item/agentMessage/delta",
+                params: { itemId: "i1", delta: "Hel" },
+              }),
+          ),
+        );
+        inv.onStdout(
+          Buffer.from(
+            line({
+              method: "item/agentMessage/delta",
+              params: { itemId: "i1", delta: "lo" },
+            }) +
+              line({
+                method: "item/completed",
+                params: {
+                  item: { id: "i1", type: "agentMessage", text: "Hello" },
+                },
+              }) +
+              line({
+                method: "turn/completed",
+                params: { turn: { id: "turn_1", status: "completed" } },
+              }),
+          ),
+        );
+      },
+    });
     const seen = [];
     const result = await streamExec({
       ...PROBE,
@@ -323,33 +408,82 @@ describe("executeTextStream", () => {
     expect(result.stream.deltaCount).toBe(2);
     expect(result.stream.deltaChunkCount).toBe(2);
     expect(result.stream.reconstruction).toBe("MATCH");
-    expect(result.stream.mechanism).toBe("codex exec --json");
+    expect(result.stream.mechanism).toBe("codex app-server");
     expect(
       seen.filter((e) => e.type === "text-delta").map((e) => e.delta),
     ).toEqual(["Hel", "lo"]);
     expect(seen.at(-1).type).toBe("completed");
-    // Non-content events are ignored — never presented as deltas.
-    expect(seen.filter((e) => e.type === "text-delta")).toHaveLength(2);
+    // turn/completed ended stdin — the managed server exits on EOF.
+    expect(seenStdin.ended).toBe(true);
+    // The invocation is app-server stdio, not exec --json.
+    const inv = invocations.find((i) => i.args.includes("app-server"));
+    expect(inv.args.join(" ")).toContain("--listen stdio://");
+    expect(inv.args.join(" ")).not.toContain("--json");
+    expect(inv.cwd.startsWith(execWorkRoot)).toBe(true);
   });
 
   it("aborts on signal — terminal ABORTED, no late deltas delivered", async () => {
     runnerScript = [
       {
-        match: (h) => h.includes("exec"),
+        match: (h) => h.includes("app-server"),
         respond: (inv) => {
-          // First chunk produces a delta; the abort fires synchronously
-          // inside the observer, so the second chunk is suppressed.
-          inv.onStdout(
-            Buffer.from(
-              '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"Hel"}}\n',
-            ),
-          );
-          expect(inv.signal.aborted).toBe(true);
-          inv.onStdout(
-            Buffer.from(
-              '{"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"Hello"}}\n',
-            ),
-          );
+          let buf = "";
+          const stdin = {
+            ended: false,
+            write(chunk) {
+              buf += chunk;
+              for (const line of buf.split("\n").filter(Boolean)) {
+                const msg = JSON.parse(line);
+                if (msg.id === undefined) continue;
+                if (msg.method === "turn/start") {
+                  inv.onStdout(
+                    Buffer.from(
+                      JSON.stringify({
+                        id: msg.id,
+                        result: { turn: { id: "t" } },
+                      }) + "\n",
+                    ),
+                  );
+                  // First delta delivers; the abort fires synchronously
+                  // inside the observer — the second chunk is suppressed.
+                  inv.onStdout(
+                    Buffer.from(
+                      JSON.stringify({
+                        method: "item/agentMessage/delta",
+                        params: { itemId: "i1", delta: "Hel" },
+                      }) + "\n",
+                    ),
+                  );
+                  expect(inv.signal.aborted).toBe(true);
+                  inv.onStdout(
+                    Buffer.from(
+                      JSON.stringify({
+                        method: "item/agentMessage/delta",
+                        params: { itemId: "i1", delta: "lo!" },
+                      }) + "\n",
+                    ),
+                  );
+                  continue;
+                }
+                inv.onStdout(
+                  Buffer.from(
+                    JSON.stringify({
+                      id: msg.id,
+                      result:
+                        msg.method === "thread/start"
+                          ? { thread: { id: "thr_1" } }
+                          : {},
+                    }) + "\n",
+                  ),
+                );
+              }
+              buf = "";
+            },
+            end() {
+              this.ended = true;
+            },
+          };
+          inv.onStdinReady(stdin);
           return Promise.resolve({
             exitCode: null,
             stdout: "",
@@ -377,28 +511,52 @@ describe("executeTextStream", () => {
     expect(seen.at(-1)).toMatchObject({ type: "error", code: "ABORTED" });
   });
 
-  it("fails closed on non-monotonic cumulative snapshots", async () => {
-    runnerScript = streamScript([
-      '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"Hello"}}\n' +
-        '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"rewritten"}}\n',
-    ]);
+  it("fails closed when the delta channel disagrees with item/completed", async () => {
+    runnerScript = appServerScript({
+      onTurn: (inv) => {
+        inv.onStdout(
+          Buffer.from(
+            line({
+              method: "item/agentMessage/delta",
+              params: { itemId: "i1", delta: "Hello" },
+            }) +
+              line({
+                method: "item/completed",
+                params: {
+                  item: { id: "i1", type: "agentMessage", text: "rewritten" },
+                },
+              }) +
+              line({
+                method: "turn/completed",
+                params: { turn: { id: "t", status: "completed" } },
+              }),
+          ),
+        );
+      },
+    });
     const result = await streamExec(PROBE);
     expect(result.ok).toBe(false);
     expect(result.code).toBe("STREAM_COMPLETION_INCONSISTENT");
   });
 
-  it("reports DELTA_ONLY when the protocol carries no final envelope", async () => {
-    runnerScript = streamScript([
-      '{"type":"item.updated","item":{"id":"i1","type":"agent_message","text":"partial"}}\n',
-    ]);
-    // No turn.completed and no -o content: the parser still emits a
-    // terminal completed with the snapshot text — that is the canonical.
+  it("a server that exits mid-turn without turn/completed fails the run", async () => {
+    runnerScript = appServerScript({
+      onTurn: (inv) => {
+        // Partial deltas then silence: stdin EOF / crash ends the process.
+        inv.onStdout(
+          Buffer.from(
+            line({
+              method: "item/agentMessage/delta",
+              params: { itemId: "i1", delta: "partial" },
+            }),
+          ),
+        );
+      },
+    });
     const result = await streamExec(PROBE);
-    expect(result.ok).toBe(true);
-    expect(result.text).toBe("partial");
-    expect(result.stream.reconstruction).toBe("MATCH");
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("INFERENCE_FAILED");
   });
-
 });
 
 describe("executeText structuredOutput contract", () => {
@@ -539,15 +697,44 @@ describe("executeText structured verification gate", () => {
     });
   }
 
-  it("refuses structured execution on a PENDING runtime (no bypass flag)", async () => {
-    runnerScript = happyExec();
-    const result = await exec({ structuredOutput: STRUCTURED });
+  it("refuses structured execution on a version-drifted runtime (no bypass flag)", async () => {
+    // Codex structured output is verified on 0.154.0 — a binary reporting
+    // a different version is back to unverified and fails closed.
+    const drifted = createConnectionService({
+      profilesRoot,
+      smokeWorkRoot,
+      execWorkRoot,
+      backend,
+      deps: {
+        ...makeDeps(),
+        spawnSyncImpl: (cmd, args) => {
+          if (cmd === "where.exe") {
+            return { status: 0, stdout: `${FAKE_EXE}\r\n` };
+          }
+          return { status: 0, stdout: "codex-cli 0.155.0\n", stderr: "" };
+        },
+      },
+    });
+    const result = await drifted.executeText({
+      ticket: "t_exec",
+      connectionId: "conn-1",
+      model: "gpt-5.5",
+      prompt: "Summarize this job",
+      structuredOutput: STRUCTURED,
+    });
     expect(result).toEqual({
       ok: false,
       code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
     });
     // The gate fires before any exec invocation — the model is never run.
     expect(invocations.find((i) => i.args.includes("exec"))).toBeUndefined();
+  });
+
+  it("runs structured execution on the verified Codex version", async () => {
+    runnerScript = happyExec();
+    const result = await exec({ structuredOutput: STRUCTURED });
+    expect(result.ok).toBe(true);
+    expect(result.structuredStrategy).toBe("NATIVE_JSON_SCHEMA");
   });
 
   it("verified Devin runtime + matching version runs PROMPT_AND_VALIDATE", async () => {

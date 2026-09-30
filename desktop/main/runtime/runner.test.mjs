@@ -80,6 +80,55 @@ describe("runtime command runner", () => {
     expect(result.aborted).toBe(true);
   }, 15_000);
 
+  it("stdinPipe exposes a writable stdin via onStdinReady and EOF-driven exit resolves", async () => {
+    // The JSON-RPC harness contract: the caller gets the child's stdin
+    // once, writes its handshake, and ends it — a server that exits on
+    // stdin EOF resolves normally (codex app-server semantics).
+    let stdinRef = null;
+    const result = await runRuntimeCommand({
+      executable: NODE,
+      args: [
+        "-e",
+        `let buf="";process.stdin.on("data",(c)=>buf+=c);process.stdin.on("end",()=>{process.stdout.write("echo:"+buf);process.exit(0)});`,
+      ],
+      stdinPipe: true,
+      onStdinReady: (stdin) => {
+        stdinRef = stdin;
+        stdin.write("payload");
+        stdin.end();
+      },
+    });
+    expect(stdinRef).toBeTruthy();
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("echo:payload");
+  });
+
+  it("stdin stays closed without stdinPipe (the historical default)", async () => {
+    // Without the flag the child reads /dev-null — a consumer that waits
+    // for input ends immediately on EOF, proving stdin was never piped.
+    const result = await runRuntimeCommand({
+      executable: NODE,
+      args: [
+        "-e",
+        `process.stdin.on("data",()=>{});process.stdin.on("end",()=>{process.stdout.write("eof");process.exit(0)});`,
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("eof");
+  });
+
+  it("an exiting child with stdin still open still resolves (stdin released)", async () => {
+    // 'close' needs every stdio stream closed; a child that exits while
+    // the caller never ended stdin must not hang the run.
+    const result = await runRuntimeCommand({
+      executable: NODE,
+      args: ["-e", "process.exit(7)"],
+      stdinPipe: true,
+      onStdinReady: () => {},
+    });
+    expect(result.exitCode).toBe(7);
+  }, 15_000);
+
   it("reports spawn failure without throwing", async () => {
     const result = await runRuntimeCommand({
       executable: "definitely-not-a-real-binary-9f3a2.exe",
