@@ -4,8 +4,12 @@ import { McpAddJobInputShape } from "@/models/mcp.schema";
 export const AgentChatRequestSchema = z.object({
   // Validated by the SDK downstream, not here. The whole array is
   // client-supplied; nothing in it widens what the request can touch,
-  // because userId always comes from the session.
+  // because userId always comes from the session and the conversation
+  // id is re-checked against that user before any write.
+  conversationId: z.string().min(1),
   messages: z.array(z.any()),
+  // Ignored for execution. Persisted conversation context is the source
+  // of truth once the row exists. Kept so older clients do not 400.
   pageContext: z
     .object({
       route: z.string().optional(),

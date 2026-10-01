@@ -11,20 +11,33 @@ vi.mock("@/lib/ai/rate-limiter", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/ai/providers", () => ({ getModel: vi.fn() }));
 vi.mock("@/actions/userSettings.actions", () => ({ getUserSettings: vi.fn() }));
 vi.mock("@/actions/agentChat.actions", () => ({ saveChatConversation: vi.fn() }));
-// The route's write-on-receipt now goes through the store, which also owns
-// the creation-time lock. A null lock keeps these tests on the legacy path.
-vi.mock("@/lib/agent/chatConversationStore", () => ({
-  persistChatMessages: vi.fn(async (userId: string, messages: unknown[]) => ({
+const conversationStore = vi.hoisted(() => ({
+  row: {
     id: "conv-1",
-    userId,
-    messages: JSON.stringify(messages),
-    resolvedConnectionId: null,
-    resolvedModel: null,
+    userId: "user-1",
+    title: null as string | null,
+    context: null as string | null,
+    messages: "[]",
+    resolvedConnectionId: null as string | null,
+    resolvedModel: null as string | null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  })),
-  getChatConversationRow: vi.fn(async () => null),
+  },
 }));
+vi.mock("@/lib/agent/chatConversationStore", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/agent/chatConversationStore")>();
+  return {
+    ...actual,
+    getOwnedChatConversation: vi.fn(async () => conversationStore.row),
+    updateChatConversationMessages: vi.fn(
+      async (_userId: string, _id: string, messages: unknown[]) => ({
+        ...conversationStore.row,
+        messages: JSON.stringify(messages),
+      }),
+    ),
+  };
+});
 vi.mock("@/lib/agent/tools", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/agent/tools")>();
   return { ...actual, buildAgentTools: vi.fn(actual.buildAgentTools) };
@@ -63,7 +76,7 @@ import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { getModel } from "@/lib/ai/providers";
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { saveChatConversation } from "@/actions/agentChat.actions";
-import { persistChatMessages } from "@/lib/agent/chatConversationStore";
+import { updateChatConversationMessages } from "@/lib/agent/chatConversationStore";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { buildPageContextMessage } from "@/lib/agent/prompt";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -75,8 +88,11 @@ import { AGENT_PASTE_ONLY_USER_MESSAGE } from "@/lib/agent/prompt";
 
 // signal is not optional on a real Request — the route composes the turn's
 // abort signal from it so a client disconnect stops generation.
-const req = (body: unknown) =>
-  ({ json: async () => body, signal: new AbortController().signal }) as any;
+const req = (body: Record<string, unknown>) =>
+  ({
+    json: async () => ({ conversationId: "conv-1", ...body }),
+    signal: new AbortController().signal,
+  }) as any;
 
 const pasteMessage = (text: string) => ({
   id: "m1",
@@ -98,6 +114,9 @@ describe("POST /api/ai/chat", () => {
     });
     (getModel as any).mockResolvedValue({ id: "fake-model" });
     (saveChatConversation as any).mockResolvedValue({ success: true });
+    conversationStore.row.context = null;
+    conversationStore.row.resolvedConnectionId = null;
+    conversationStore.row.resolvedModel = null;
   });
 
   it("returns 401 without a session", async () => {
@@ -134,8 +153,13 @@ describe("POST /api/ai/chat", () => {
     await POST(req({ messages }));
     // Write-on-receipt runs through the store's upsert — the same call that
     // pins the creation-time AI lock on a new conversation.
-    expect(persistChatMessages).toHaveBeenCalledWith("user-1", messages);
-    const saveOrder = (persistChatMessages as any).mock.invocationCallOrder[0];
+    expect(updateChatConversationMessages).toHaveBeenCalledWith(
+      "user-1",
+      "conv-1",
+      messages,
+    );
+    const saveOrder = (updateChatConversationMessages as any).mock
+      .invocationCallOrder[0];
     const streamOrder = streamText.mock.invocationCallOrder[0];
     expect(saveOrder).toBeLessThan(streamOrder);
   });
@@ -317,7 +341,10 @@ describe("POST /api/ai/chat", () => {
   it("aborts the generation when the client disconnects", async () => {
     const controller = new AbortController();
     await POST({
-      json: async () => ({ messages: [pasteMessage("posting")] }),
+      json: async () => ({
+        conversationId: "conv-1",
+        messages: [pasteMessage("posting")],
+      }),
       signal: controller.signal,
     } as any);
     const { abortSignal } = streamArgs();
@@ -373,20 +400,36 @@ describe("POST /api/ai/chat", () => {
 
   // Defect A: the model replayed turn 1's no_job on turns 2 and 3 because
   // nothing in the later requests said the page had changed.
-  it("tells the model which page the user is on, and sends no ids", async () => {
+  it("tells the model which persisted context the user is on, and sends no ids", async () => {
+    conversationStore.row.context = JSON.stringify({
+      version: 1,
+      items: [
+        {
+          kind: "job",
+          entityId: "job-9",
+          labelSnapshot: "AI Product Analyst",
+          source: "AUTO",
+        },
+      ],
+    });
     await POST(
       req({
         messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "match this" }] }],
-        pageContext: { route: "/dashboard/myjobs/job-9", jobId: "job-9" },
+        pageContext: { route: "/dashboard/profile", resumeId: "should-not-apply" },
       }),
     );
     const sent = streamArgs().messages;
     expect(sent.at(-1).role).toBe("user");
     expect(sent.at(-1).content).toBe(
-      buildPageContextMessage({ route: "/dashboard/myjobs/job-9", jobId: "job-9" }),
+      buildPageContextMessage({ jobId: "job-9" }),
     );
-    // The whole point of the fixed table: no client-supplied value travels.
     expect(JSON.stringify(sent)).not.toContain("job-9");
+    expect(JSON.stringify(sent)).not.toContain("should-not-apply");
+    expect(buildAgentTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageContext: expect.objectContaining({ jobId: "job-9" }),
+      }),
+    );
   });
 
   it("keeps the pasted posting after the page line", async () => {

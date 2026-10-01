@@ -34,9 +34,13 @@ import {
 import { truncateForModel } from "@/lib/agent/paste.server";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { measureTurnPrefix, type TurnPrefixMetrics } from "@/lib/agent/turnMetrics";
-import { mapAgentError } from "@/lib/agent/errors";
+import {
+  agentErrorEnvelope,
+  formatAgentStreamError,
+} from "@/lib/agent/errors";
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { saveChatConversation } from "@/actions/agentChat.actions";
+import { pageContextFromConversation } from "@/lib/agent/conversationContext";
 import { AiProvider } from "@/models/ai.model";
 import {
   genAiRequestAttrs,
@@ -49,7 +53,10 @@ import {
 import { addJobSettled, AGENT_CHAT_TERMINAL_TOOLS } from "@/models/agent.model";
 import prisma from "@/lib/db";
 import {
-  persistChatMessages,
+  ChatConversationNotFoundError,
+  contextOfRow,
+  getOwnedChatConversation,
+  updateChatConversationMessages,
   type ChatConversationRow,
 } from "@/lib/agent/chatConversationStore";
 import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
@@ -107,6 +114,7 @@ function outcomeOf(message: UIMessage | undefined): {
 async function accountChatResponse({
   req,
   userId,
+  conversationId,
   messages,
   windowed,
   pastedText,
@@ -115,6 +123,7 @@ async function accountChatResponse({
 }: {
   req: NextRequest;
   userId: string;
+  conversationId: string;
   messages: UIMessage[];
   windowed: UIMessage[];
   pastedText: string | undefined;
@@ -139,10 +148,7 @@ async function accountChatResponse({
     model: lock.model ?? undefined,
   };
   const deny = (error: unknown) =>
-    NextResponse.json(
-      { error: mapAgentError(error, errorContext) },
-      { status: 503 },
-    );
+    NextResponse.json(agentErrorEnvelope(error, errorContext), { status: 503 });
   if (!connection || connection.archivedAt) {
     return deny(
       new AIBusinessError(
@@ -191,7 +197,7 @@ async function accountChatResponse({
     runInSpan(turnSpan, () => {
       const message = error instanceof Error ? error.message : "";
       if (alreadyMapped.has(message)) return message;
-      const mapped = mapAgentError(error, errorContext);
+      const mapped = formatAgentStreamError(error, errorContext);
       alreadyMapped.add(mapped);
       return mapped;
     });
@@ -243,7 +249,10 @@ async function accountChatResponse({
       // Same write-on-finish contract as the legacy path: a cancelled turn
       // never writes back (Clear would otherwise resurrect).
       if (isAborted) return;
-      await saveChatConversation(stubConsumedPastes(finalMessages));
+      await saveChatConversation(
+        conversationId,
+        stubConsumedPastes(finalMessages),
+      );
     },
     onError: mapTurnError,
   });
@@ -255,40 +264,71 @@ export const POST = async (req: NextRequest) => {
   const session = await auth();
   const userId = session?.user?.id;
   if (!session || !userId) {
-    return NextResponse.json({ error: "Not Authenticated" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Not Authenticated", code: "NOT_AUTHENTICATED" },
+      { status: 401 },
+    );
   }
 
   const rateLimit = checkRateLimit(userId, "chat");
   if (!rateLimit.allowed) {
     return NextResponse.json(
-      { error: `Rate limit exceeded. Try again in ${Math.ceil(rateLimit.resetIn / 1000)} seconds.` },
+      {
+        error: `Rate limit exceeded. Try again in ${Math.ceil(rateLimit.resetIn / 1000)} seconds.`,
+        code: "RATE_LIMITED",
+      },
       { status: 429 },
     );
   }
 
   const parsed = AgentChatRequestSchema.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid chat request." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid chat request.", code: "INVALID_REQUEST" },
+      { status: 400 },
+    );
   }
 
   const messages = parsed.data.messages as UIMessage[];
-  const { pageContext } = parsed.data;
+  const { conversationId } = parsed.data;
 
   const pastedText = resolvePastedText(messages);
   const windowed = windowMessages(messages);
 
-  // Write-on-receipt, now with the creation-time AI lock inside the same
-  // write: the conversation row is created with its resolved pair, and an
-  // existing row's lock is returned with it. The lock decides which
-  // execution path the turn takes — account runtime vs legacy provider —
-  // and never changes afterwards.
-  const conversation = await persistChatMessages(userId, messages);
-  const lock = chatLockFromRow(conversation as ChatConversationRow);
+  // The row already exists — creation (and its immutable lock) happened
+  // before the first turn. This write only stores the transcript of that
+  // exact conversation, and only when the caller owns it.
+  let conversation: ChatConversationRow | null;
+  try {
+    conversation = await getOwnedChatConversation(userId, conversationId);
+    if (!conversation) {
+      return NextResponse.json(
+        { error: "Conversation not found", code: "CONVERSATION_NOT_FOUND" },
+        { status: 404 },
+      );
+    }
+    conversation = await updateChatConversationMessages(
+      userId,
+      conversationId,
+      messages,
+    );
+  } catch (error) {
+    if (error instanceof ChatConversationNotFoundError) {
+      return NextResponse.json(
+        { error: "Conversation not found", code: "CONVERSATION_NOT_FOUND" },
+        { status: 404 },
+      );
+    }
+    throw error;
+  }
+  const lock = chatLockFromRow(conversation);
+  const pageContext = pageContextFromConversation(contextOfRow(conversation));
 
   if (lock.kind === "account") {
     return accountChatResponse({
       req,
       userId,
+      conversationId,
       messages,
       windowed,
       pastedText,
@@ -310,7 +350,10 @@ export const POST = async (req: NextRequest) => {
   const modelName = ai?.model;
   if (!modelName) {
     return NextResponse.json(
-      { error: "No AI model is configured. Pick one in Settings to use the assistant." },
+      {
+        error: "No AI model is configured. Pick one in Settings to use the assistant.",
+        code: "AI_NOT_CONFIGURED",
+      },
       { status: 503 },
     );
   }
@@ -320,7 +363,9 @@ export const POST = async (req: NextRequest) => {
   try {
     model = await getModel(provider, modelName, userId);
   } catch (error) {
-    return NextResponse.json({ error: mapAgentError(error, errorContext) }, { status: 503 });
+    return NextResponse.json(agentErrorEnvelope(error, errorContext), {
+      status: 503,
+    });
   }
 
   // Async in ai@6 (correction #5), and the messages array is client-supplied
@@ -330,7 +375,10 @@ export const POST = async (req: NextRequest) => {
   try {
     modelMessages = await convertToModelMessages(windowed);
   } catch {
-    return NextResponse.json({ error: "Invalid chat request." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid chat request.", code: "INVALID_REQUEST" },
+      { status: 400 },
+    );
   }
 
   // A chip-only send — paste, then Send without typing — has no text part,
@@ -413,7 +461,7 @@ export const POST = async (req: NextRequest) => {
     runInSpan(turnSpan, () => {
       const message = error instanceof Error ? error.message : "";
       if (alreadyMapped.has(message)) return message;
-      const mapped = mapAgentError(error, errorContext);
+      const mapped = formatAgentStreamError(error, errorContext);
       alreadyMapped.add(mapped);
       return mapped;
     });
@@ -433,6 +481,7 @@ export const POST = async (req: NextRequest) => {
         });
         prefixMetrics = measureTurnPrefix({
           userId,
+          conversationId,
           system: systemPrompt,
           tools,
           modelMessages,
@@ -530,7 +579,10 @@ export const POST = async (req: NextRequest) => {
       // worth persisting.
       if (isAborted) return;
       // Stubbing happens here so it lives in exactly one place.
-      await saveChatConversation(stubConsumedPastes(finalMessages));
+      await saveChatConversation(
+        conversationId,
+        stubConsumedPastes(finalMessages),
+      );
     },
     // NOTE: this signature takes the error directly, unlike streamText's
     // onError which takes { error }.

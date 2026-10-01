@@ -131,3 +131,85 @@ export function mapAgentError(
 
   return GENERIC;
 }
+
+const STREAM_ERROR_PREFIX = "agent-code:";
+
+/**
+ * Stable wire code. Reuses AIBusinessError codes. Request-level codes
+ * (NOT_AUTHENTICATED, RATE_LIMITED, INVALID_REQUEST, GENERIC) are not a
+ * second runtime taxonomy — they only label failures that are not
+ * AIBusinessError.
+ */
+export function agentErrorCode(error: unknown): string {
+  if (error instanceof AIBusinessError) return error.code;
+  const name = nameOf(error);
+  const message = messageOf(error);
+  if (name === "ChatConversationNotFoundError") return "CONVERSATION_NOT_FOUND";
+  if (
+    name === "AbortError" ||
+    name === "TimeoutError" ||
+    /aborted|abort signal/i.test(message)
+  ) {
+    return "AI_EXECUTION_TIMEOUT";
+  }
+  if (/rate limit/i.test(message)) return "RATE_LIMITED";
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND|ECONNRESET/i.test(message)) {
+    return "BACKEND_UNAVAILABLE";
+  }
+  if (
+    /does not support tools|tool (use|calling) (is )?not supported|no tools support/i.test(
+      message,
+    )
+  ) {
+    return "AGENT_TOOL_NOT_ALLOWED";
+  }
+  if (
+    InvalidToolApprovalError.isInstance?.(error) ||
+    ToolCallNotFoundForApprovalError.isInstance?.(error) ||
+    /ToolCallNotFoundForApproval|InvalidToolApproval/i.test(name) ||
+    NoSuchToolError.isInstance?.(error) ||
+    /NoSuchTool/i.test(name) ||
+    InvalidToolInputError.isInstance?.(error) ||
+    /InvalidToolInput/i.test(name)
+  ) {
+    return "AGENT_TOOL_ARGUMENT_INVALID";
+  }
+  if (/maximum number of steps|step limit|stopWhen/i.test(message)) {
+    return "AGENT_STEP_LIMIT_REACHED";
+  }
+  if (/not authenticated/i.test(message)) return "NOT_AUTHENTICATED";
+  if (/no ai model is configured/i.test(message)) return "AI_NOT_CONFIGURED";
+  if (/invalid chat request/i.test(message)) return "INVALID_REQUEST";
+  return "GENERIC";
+}
+
+export function agentErrorEnvelope(
+  error: unknown,
+  context: ErrorContext = {},
+): { error: string; code: string } {
+  return {
+    error: mapAgentError(error, context),
+    code: agentErrorCode(error),
+  };
+}
+
+export function formatAgentStreamError(
+  error: unknown,
+  context: ErrorContext = {},
+): string {
+  const body = agentErrorEnvelope(error, context);
+  return `${STREAM_ERROR_PREFIX}${body.code}\n${body.error}`;
+}
+
+export function parseAgentStreamError(message: string): {
+  code: string;
+  message: string;
+} | null {
+  if (!message.startsWith(STREAM_ERROR_PREFIX)) return null;
+  const newline = message.indexOf("\n");
+  if (newline <= STREAM_ERROR_PREFIX.length) return null;
+  return {
+    code: message.slice(STREAM_ERROR_PREFIX.length, newline),
+    message: message.slice(newline + 1),
+  };
+}

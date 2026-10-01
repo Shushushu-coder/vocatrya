@@ -370,6 +370,10 @@ const AIBusinessAssignment = z.object({
 const ChatConversation = z.object({
   id,
   messages: str,
+  // Optional so backups taken before multi-conversation still parse.
+  // Undefined leaves Prisma on the column default (null).
+  title: optStr.optional(),
+  context: optStr.optional(),
   resolvedConnectionId: optId.optional(),
   resolvedModel: optStr.optional(),
   createdAt: dt,

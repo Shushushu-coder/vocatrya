@@ -2,15 +2,21 @@
 //   - resolve-once at row creation, never re-resolved on update
 //   - INVALID_ASSIGNMENT persists the broken pair (fail-closed, no fallback)
 //   - NOT_CONFIGURED creates a null-lock (legacy) row
-//   - concurrent first turns converge on ONE lock (P2002 → canonical row)
+//   - an explicit selection is validated and never falls back
+//   - a later message write cannot change the stored lock
 //   - historical null/null rows decode as legacy, never get guessed
 import {
   chatLockFromRow,
   resolveChatCreationLock,
+  resolveExplicitChatSelection,
 } from "@/lib/agent/chatConversationLock";
-import { persistChatMessages } from "@/lib/agent/chatConversationStore";
+import {
+  createChatConversationRecord,
+  updateChatConversationMessages,
+} from "@/lib/agent/chatConversationStore";
+import { AIBusinessError } from "@/lib/ai/connections";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -18,8 +24,13 @@ vi.mock("@prisma/client", () => {
   const mPrismaClient = {
     chatConversation: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    aIConnection: {
+      findFirst: vi.fn(),
     },
   };
   class PrismaClientKnownRequestError extends Error {
@@ -123,15 +134,13 @@ describe("resolveChatCreationLock", () => {
   });
 });
 
-describe("persistChatMessages", () => {
-  // The fake "database row" — create writes it, update merges onto it, and
-  // the race test can set it mid-flight to model a concurrent winner.
+describe("conversation message writes", () => {
   let dbRow: Record<string, unknown> | null;
 
   beforeEach(() => {
     vi.clearAllMocks();
     dbRow = null;
-    (prisma.chatConversation.findUnique as any).mockImplementation(
+    (prisma.chatConversation.findFirst as any).mockImplementation(
       async () => dbRow,
     );
     (resolveBusinessAIConfig as any).mockResolvedValue({
@@ -139,61 +148,126 @@ describe("persistChatMessages", () => {
     });
     (prisma.chatConversation.create as any).mockImplementation(
       async ({ data }: any) => {
-        dbRow = { id: "new", createdAt: new Date(), updatedAt: new Date(), ...data };
+        dbRow = {
+          id: "new",
+          title: data.title ?? null,
+          context: data.context ?? null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...data,
+        };
         return dbRow;
       },
     );
-    (prisma.chatConversation.update as any).mockImplementation(
-      async ({ data }: any) => {
+    (prisma.chatConversation.updateMany as any).mockImplementation(
+      async ({ where, data }: any) => {
+        if (!dbRow || dbRow.id !== where.id || dbRow.userId !== where.userId) {
+          return { count: 0 };
+        }
         dbRow = { ...dbRow, ...data };
-        return dbRow;
+        return { count: 1 };
       },
     );
   });
 
   it("existing row: updates messages only, lock columns untouched", async () => {
-    dbRow = row({ resolvedConnectionId: "conn-a", resolvedModel: "m-a" });
-    const result = await persistChatMessages("user-1", [msg("x")]);
-    const update = (prisma.chatConversation.update as any).mock.calls[0][0];
+    dbRow = row({
+      resolvedConnectionId: "conn-a",
+      resolvedModel: "m-a",
+      title: null,
+      context: null,
+    });
+    const result = await updateChatConversationMessages("user-1", "conv-1", [
+      msg("x"),
+    ]);
+    const update = (prisma.chatConversation.updateMany as any).mock.calls[0][0];
+    expect(update.where).toEqual({ id: "conv-1", userId: "user-1" });
     expect(Object.keys(update.data)).toEqual(["messages"]);
     expect(resolveBusinessAIConfig).not.toHaveBeenCalled();
     expect(result.resolvedConnectionId).toBe("conn-a");
+    expect(result.resolvedModel).toBe("m-a");
   });
 
-  it("new row: resolves the lock inside the create", async () => {
+  it("refuses to update another user's conversation", async () => {
+    dbRow = row({ userId: "user-2" });
+    await expect(
+      updateChatConversationMessages("user-1", "conv-1", [msg("x")]),
+    ).rejects.toThrow(/not found/i);
+    expect(prisma.chatConversation.create).not.toHaveBeenCalled();
+  });
+
+  it("new row: resolves the lock inside the create and does not rewrite it later", async () => {
     (resolveBusinessAIConfig as any).mockResolvedValue({
       status: "RESOLVED",
       connectionId: "conn-a",
       model: "m-a",
     });
-    const result = await persistChatMessages("user-1", [msg("x")]);
+    const created = await createChatConversationRecord({
+      userId: "user-1",
+      messages: [msg("x")],
+      context: { version: 1, items: [] },
+    });
     const create = (prisma.chatConversation.create as any).mock.calls[0][0];
     expect(create.data).toMatchObject({
       userId: "user-1",
       resolvedConnectionId: "conn-a",
       resolvedModel: "m-a",
     });
-    expect(result.resolvedConnectionId).toBe("conn-a");
+    (resolveBusinessAIConfig as any).mockResolvedValue({
+      status: "RESOLVED",
+      connectionId: "conn-later",
+      model: "m-later",
+    });
+    const updated = await updateChatConversationMessages("user-1", created.id, [
+      msg("x"),
+      msg("y"),
+    ]);
+    expect(updated.resolvedConnectionId).toBe("conn-a");
+    expect(updated.resolvedModel).toBe("m-a");
+  });
+});
+
+describe("resolveExplicitChatSelection", () => {
+  const eligible = {
+    id: "conn-explicit",
+    provider: "OPENAI",
+    backendKind: "CODEX_RUNTIME",
+    status: "CONNECTED",
+    runtimeProfileRef: "rp_11111111-2222-4333-8444-555555555555",
+    archivedAt: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(eligible);
   });
 
-  it("create race: adopts the winner's row and lock", async () => {
-    // Two first turns race: the loser hits P2002 and must take the
-    // canonical row's lock, not its own resolution.
-    (prisma.chatConversation.create as any).mockImplementation(async () => {
-      // The winner lands first — by the time this create rejects, the
-      // canonical row is visible.
-      dbRow = row({
-        resolvedConnectionId: "conn-winner",
-        resolvedModel: "m-winner",
-      });
-      throw new Prisma.PrismaClientKnownRequestError("P2002", {
-        code: "P2002",
-        clientVersion: "test",
-      } as never);
+  it("locks a new conversation to a validated explicit pair", async () => {
+    await expect(
+      resolveExplicitChatSelection("user-1", {
+        connectionId: "conn-explicit",
+        model: "gpt-5.6-luna",
+      }),
+    ).resolves.toEqual({
+      resolvedConnectionId: "conn-explicit",
+      resolvedModel: "gpt-5.6-luna",
     });
-    const result = await persistChatMessages("user-1", [msg("x")]);
-    expect(result.resolvedConnectionId).toBe("conn-winner");
-    // The loser's messages still land — write-on-receipt is preserved.
-    expect(prisma.chatConversation.update).toHaveBeenCalled();
+    expect(resolveBusinessAIConfig).not.toHaveBeenCalled();
+    expect(prisma.aIConnection.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "conn-explicit", userId: "user-1" },
+      }),
+    );
+  });
+
+  it("does not fall back when the explicit connection is not owned", async () => {
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(null);
+    await expect(
+      resolveChatCreationLock("user-1", {
+        connectionId: "foreign",
+        model: "gpt-5.6-luna",
+      }),
+    ).rejects.toBeInstanceOf(AIBusinessError);
+    expect(resolveBusinessAIConfig).not.toHaveBeenCalled();
   });
 });

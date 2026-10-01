@@ -13,11 +13,11 @@ datasource db {
 }
 
 model User {
-  id               String            @id @default(uuid())
+  id               String             @id @default(uuid())
   name             String
-  email            String            @unique
+  email            String             @unique
   password         String
-  createdAt        DateTime          @default(now())
+  createdAt        DateTime           @default(now())
   jobsApplied      Job[]
   JobTitle         JobTitle[]
   Location         Location[]
@@ -36,9 +36,9 @@ model User {
   Tag              Tag[]
   Question         Question[]
   McpAccessToken   McpAccessToken[]
-  ChatConversation ChatConversation?
+  ChatConversation ChatConversation[]
   defaultResumeId  String?
-  defaultResume    Resume?           @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
+  defaultResume    Resume?            @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
 
   // Vocatrya A+B foundation (additive). Cross-user relation equality is a
   // service-layer invariant and cannot be fully guaranteed by Prisma FKs alone.
@@ -689,7 +689,13 @@ model McpAccessToken {
 
 model ChatConversation {
   id                   String   @id @default(uuid())
-  userId               String   @unique
+  userId               String
+  // Deterministic display title. Null on rows migrated from the single
+  // conversation model — History derives a fallback and does not backfill.
+  title                String?
+  // JSON AgentConversationContextV1. Null on historical rows means "no
+  // stored context", not "guess the page the user was on".
+  context              String?
   messages             String // JSON-serialized UIMessage[]
   // Career Dialogue creation-time AI lock. Captured once when the row is
   // created, never rewritten afterwards:
@@ -705,6 +711,8 @@ model ChatConversation {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
 }
 
 // ---------------------------------------------------------------------------

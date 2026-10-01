@@ -9,11 +9,15 @@ import {
 } from "@/lib/agent/chatTransport";
 
 describe("humanizeChatTransportError", () => {
-  it("unwraps the {error} envelope into the human message", () => {
-    const error = new Error('{"error":"The model is unavailable"}');
+  it("unwraps the {error, code} envelope into a typed client error", () => {
+    const error = new Error(
+      '{"error":"The model is unavailable","code":"MODEL_UNAVAILABLE"}',
+    );
     const normalized = humanizeChatTransportError(error);
     expect(normalized).toBeInstanceOf(Error);
     expect((normalized as Error).message).toBe("The model is unavailable");
+    expect((normalized as { code?: string }).code).toBe("MODEL_UNAVAILABLE");
+    expect((normalized as Error).message).not.toContain("{");
   });
 
   it("passes through a plain-text error untouched", () => {

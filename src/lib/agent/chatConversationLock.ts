@@ -1,6 +1,14 @@
 import "server-only";
 
+import prisma from "@/lib/db";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
+import {
+  AIBusinessError,
+  isAIBackendKind,
+  isSupportedAccountProviderForBackend,
+} from "@/lib/ai/connections";
+import { isRuntimeProfileRef } from "@/lib/ai/runtime/contract";
+import type { ExplicitModelSelection } from "./chatTypes";
 
 /**
  * ChatConversation AI lock — Career Dialogue's creation-time binding.
@@ -58,9 +66,102 @@ export type ChatCreationLock = {
  * the stable error (CONNECTION_DISCONNECTED, REAUTH_REQUIRED, ...) instead
  * of silently degrading to another path.
  */
+const MODEL_MAX = 200;
+
+function explicitModelIsEligible(model: string): boolean {
+  if (!model || model.length > MODEL_MAX) return false;
+  if (/[\u0000-\u001f\u007f]/.test(model)) return false;
+  if (model.includes("\\") || model.includes("..")) return false;
+  if (/^[a-zA-Z]:/.test(model) || model.startsWith("/")) return false;
+  if (/\.(exe|dll|bat|cmd|sh)$/i.test(model)) return false;
+  return true;
+}
+
+/**
+ * Explicit new-conversation selection. Invalid pairs throw. Callers must
+ * not catch this and substitute GLOBAL_DEFAULT or the legacy provider.
+ */
+export async function resolveExplicitChatSelection(
+  userId: string,
+  selection: ExplicitModelSelection,
+): Promise<ChatCreationLock> {
+  const connectionId = selection.connectionId?.trim() ?? "";
+  const model = selection.model?.trim() ?? "";
+  if (!connectionId || !explicitModelIsEligible(model)) {
+    throw new AIBusinessError(
+      "MODEL_UNAVAILABLE",
+      "The selected model is not eligible",
+    );
+  }
+  const connection = await prisma.aIConnection.findFirst({
+    where: { id: connectionId, userId },
+    select: {
+      id: true,
+      provider: true,
+      backendKind: true,
+      status: true,
+      runtimeProfileRef: true,
+      archivedAt: true,
+    },
+  });
+  if (!connection || connection.archivedAt) {
+    throw new AIBusinessError(
+      "ASSIGNED_CONNECTION_UNAVAILABLE",
+      "The selected AI connection is not available",
+    );
+  }
+  switch (connection.status) {
+    case "CONNECTED":
+      break;
+    case "REAUTH_REQUIRED":
+      throw new AIBusinessError(
+        "REAUTH_REQUIRED",
+        "The selected AI connection needs you to sign in again",
+      );
+    case "DISCONNECTED":
+      throw new AIBusinessError(
+        "CONNECTION_DISCONNECTED",
+        "The selected AI connection is disconnected",
+      );
+    default:
+      throw new AIBusinessError(
+        "CONNECTION_ERROR",
+        "The selected AI connection is not usable",
+      );
+  }
+  if (
+    !isAIBackendKind(connection.backendKind) ||
+    !isRuntimeProfileRef(connection.runtimeProfileRef)
+  ) {
+    throw new AIBusinessError(
+      "RUNTIME_NOT_AVAILABLE",
+      "The selected AI connection has no usable runtime",
+    );
+  }
+  if (
+    !isSupportedAccountProviderForBackend(
+      connection.backendKind,
+      connection.provider,
+    )
+  ) {
+    throw new AIBusinessError(
+      "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+      "The selected AI connection cannot run that provider",
+    );
+  }
+  return {
+    resolvedConnectionId: connection.id,
+    resolvedModel: model,
+  };
+}
+
 export async function resolveChatCreationLock(
   userId: string,
+  explicit?: ExplicitModelSelection | null,
 ): Promise<ChatCreationLock> {
+  if (explicit) {
+    return resolveExplicitChatSelection(userId, explicit);
+  }
   const resolution = await resolveBusinessAIConfig({
     userId,
     purpose: CHAT_LOCK_PURPOSE,

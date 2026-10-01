@@ -10,9 +10,9 @@ export type TurnPrefixMetrics = {
 
 // Ollama reuses the KV cache only while the leading bytes match the previous
 // request, so a prefix that changes mid-conversation costs a full recompute.
-// Keyed by user because that IS the conversation — ChatConversation.userId is
-// unique. Process-local on purpose: a restart mislabels one turn, which is
-// cheaper than persisting a diagnostic.
+// Keyed by conversation when one is supplied, otherwise by user. Process-local
+// on purpose: a restart mislabels one turn, which is cheaper than persisting
+// a diagnostic.
 const lastPrefixHash = new Map<string, string>();
 
 // The tool material as the provider will send it: every offered tool's name,
@@ -33,6 +33,7 @@ function toolMaterial(tools: ToolSet): string {
 // cacheable as tools are scoped or deferred.
 export function measureTurnPrefix(args: {
   userId: string;
+  conversationId?: string;
   system: string;
   tools: ToolSet;
   modelMessages: ModelMessage[];
@@ -43,8 +44,11 @@ export function measureTurnPrefix(args: {
     .update("\n")
     .update(material)
     .digest("hex");
-  const previous = lastPrefixHash.get(args.userId);
-  lastPrefixHash.set(args.userId, hash);
+  const key = args.conversationId
+    ? `${args.userId}:${args.conversationId}`
+    : args.userId;
+  const previous = lastPrefixHash.get(key);
+  lastPrefixHash.set(key, hash);
 
   return {
     systemChars: args.system.length,

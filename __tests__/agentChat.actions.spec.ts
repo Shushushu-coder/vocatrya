@@ -1,8 +1,11 @@
 import {
+  createChatConversation,
+  deleteChatConversation,
   getAgentChatPreflight,
   getChatConversation,
+  listChatConversations,
+  resolveDraftPageContext,
   saveChatConversation,
-  clearChatConversation,
 } from "@/actions/agentChat.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 import { fetchAccountRuntimeState } from "@/lib/ai/streaming-execution";
@@ -21,12 +24,22 @@ vi.mock("@/lib/ai/streaming-execution", async (importOriginal) => {
 });
 const runtimeState = vi.mocked(fetchAccountRuntimeState);
 
+vi.mock("@/actions/userSettings.actions", () => ({
+  getUserSettings: vi.fn(async () => ({
+    success: true,
+    data: { settings: { ai: { provider: "ollama", model: "legacy-model" } } },
+  })),
+}));
+
 vi.mock("@prisma/client", () => {
   const mPrismaClient = {
     chatConversation: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
     aIBusinessAssignment: {
@@ -39,6 +52,8 @@ vi.mock("@prisma/client", () => {
     userSettings: {
       findUnique: vi.fn(),
     },
+    job: { findFirst: vi.fn(), findMany: vi.fn() },
+    resume: { findFirst: vi.fn(), findMany: vi.fn() },
   };
   return {
     PrismaClient: vi.fn(function () {
@@ -71,96 +86,163 @@ describe("agentChat actions", () => {
     (getCurrentUser as any).mockResolvedValue(mockUser);
     // No conversation row, no assignments: the create path resolves to
     // NOT_CONFIGURED → a null-lock (legacy) row.
-    (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(null);
+    (prisma.chatConversation.findMany as any).mockResolvedValue([]);
     (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([]);
     (prisma.chatConversation.create as any).mockImplementation(
-      async ({ data }: any) => data,
+      async ({ data }: any) => ({
+        id: "created-1",
+        createdAt: new Date("2026-10-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-10-01T00:00:00.000Z"),
+        title: data.title ?? null,
+        context: data.context ?? null,
+        ...data,
+      }),
     );
-    (prisma.chatConversation.update as any).mockImplementation(
-      async ({ data }: any) => data,
-    );
+    (prisma.chatConversation.updateMany as any).mockResolvedValue({ count: 1 });
+    (prisma.chatConversation.deleteMany as any).mockResolvedValue({ count: 1 });
   });
 
-  it("getChatConversation scopes the read by userId", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue({
-      messages: JSON.stringify([msg("a")]),
-    });
-    const result = await getChatConversation();
-    expect(prisma.chatConversation.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: "user-1" } }),
-    );
-    expect(result.data).toEqual([msg("a")]);
+  const ownedRow = (overrides: Record<string, unknown> = {}) => ({
+    id: "row-1",
+    userId: "user-1",
+    title: "Saved title",
+    context: null,
+    messages: JSON.stringify([msg("a")]),
+    resolvedConnectionId: "conn-a",
+    resolvedModel: "m-1",
+    createdAt: new Date("2026-10-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-10-01T00:00:00.000Z"),
+    ...overrides,
   });
 
-  it("getChatConversation returns an empty transcript when there is no row", async () => {
-    const result = await getChatConversation();
-    expect(result.success).toBe(true);
-    expect(result.data).toEqual([]);
+  it("getChatConversation scopes the read by conversationId and userId", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow());
+    const result = await getChatConversation("row-1");
+    expect(prisma.chatConversation.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "row-1", userId: "user-1" } }),
+    );
+    expect(result.data?.messages).toEqual([msg("a")]);
+  });
+
+  it("getChatConversation rejects a conversation the caller does not own", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(null);
+    const result = await getChatConversation("foreign");
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("CONVERSATION_NOT_FOUND");
   });
 
   it("getChatConversation returns an empty transcript when the JSON is corrupt", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue({
-      messages: "{ not json",
-    });
-    const result = await getChatConversation();
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(
+      ownedRow({ messages: "{ not json" }),
+    );
+    const result = await getChatConversation("row-1");
     expect(result.success).toBe(true);
-    expect(result.data).toEqual([]);
+    expect(result.data?.messages).toEqual([]);
   });
 
-  it("saveChatConversation creates the row on userId and never accepts one as an argument", async () => {
-    await saveChatConversation([msg("a")] as any);
+  it("createChatConversation persists a null lock when nothing is configured", async () => {
+    const result = await createChatConversation({
+      messages: [msg("a")] as any,
+      firstUserText: "分析字节跳动产品岗位",
+    });
     const call = (prisma.chatConversation.create as any).mock.calls[0][0];
     expect(call.data.userId).toBe("user-1");
-    // Created while nothing is configured: the lock columns are null.
     expect(call.data.resolvedConnectionId).toBeNull();
     expect(call.data.resolvedModel).toBeNull();
-    expect(saveChatConversation.length).toBe(1);
+    expect(call.data.title).toBe("分析字节跳动产品岗位");
+    expect(result.success).toBe(true);
+    expect(saveChatConversation.length).toBe(2);
   });
 
-  it("saveChatConversation updates messages only when the row exists", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue({
-      id: "row-1",
-      userId: "user-1",
-      messages: "[]",
-      resolvedConnectionId: "conn-a",
-      resolvedModel: "m-1",
-    });
-    await saveChatConversation([msg("a")] as any);
-    const call = (prisma.chatConversation.update as any).mock.calls[0][0];
-    expect(call.where).toEqual({ userId: "user-1" });
-    // The update touches only the transcript — a saved conversation never
-    // re-resolves or rewrites its creation-time lock.
+  it("saveChatConversation updates messages only when the caller owns the row", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow());
+    await saveChatConversation("row-1", [msg("a")] as any);
+    const call = (prisma.chatConversation.updateMany as any).mock.calls[0][0];
+    expect(call.where).toEqual({ id: "row-1", userId: "user-1" });
     expect(Object.keys(call.data)).toEqual(["messages"]);
     expect(prisma.chatConversation.create).not.toHaveBeenCalled();
     expect(prisma.aIBusinessAssignment.findMany).not.toHaveBeenCalled();
   });
 
+  it("saveChatConversation does not create a row when the conversation is missing", async () => {
+    (prisma.chatConversation.updateMany as any).mockResolvedValue({ count: 0 });
+    const result = await saveChatConversation("missing", [msg("a")] as any);
+    expect(result.success).toBe(false);
+    expect(prisma.chatConversation.create).not.toHaveBeenCalled();
+  });
+
   it("saveChatConversation trims to the newest AGENT_CHAT_MAX_STORED_MESSAGES", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow());
     const many = Array.from(
       { length: APP_CONSTANTS.AGENT_CHAT_MAX_STORED_MESSAGES + 5 },
       (_, i) => msg(`m${i}`),
     );
-    await saveChatConversation(many as any);
-    const call = (prisma.chatConversation.create as any).mock.calls[0][0];
+    await saveChatConversation("row-1", many as any);
+    const call = (prisma.chatConversation.updateMany as any).mock.calls[0][0];
     const stored = JSON.parse(call.data.messages);
     expect(stored).toHaveLength(APP_CONSTANTS.AGENT_CHAT_MAX_STORED_MESSAGES);
     expect(stored[stored.length - 1].id).toBe(`m${many.length - 1}`);
   });
 
-  it("clearChatConversation deletes only the caller's row", async () => {
-    await clearChatConversation();
+  it("deleteChatConversation deletes only the caller's named row", async () => {
+    await deleteChatConversation("row-1");
     expect(prisma.chatConversation.deleteMany).toHaveBeenCalledWith({
-      where: { userId: "user-1" },
+      where: { id: "row-1", userId: "user-1" },
     });
+  });
+
+  it("listChatConversations returns only the caller's rows and no transcript", async () => {
+    (prisma.chatConversation.findMany as any).mockResolvedValue([
+      {
+        id: "row-1",
+        title: null,
+        messages: JSON.stringify([msg("hello there")]),
+        createdAt: new Date("2026-10-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-10-01T00:00:00.000Z"),
+      },
+    ]);
+    const result = await listChatConversations();
+    expect(prisma.chatConversation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: "user-1" } }),
+    );
+    expect(result.data?.[0]).toMatchObject({
+      id: "row-1",
+      title: null,
+      titleFallback: "hello there",
+    });
+    expect(result.data?.[0]).not.toHaveProperty("messages");
+  });
+
+  it("rejects a context entity the caller does not own", async () => {
+    (prisma.job.findFirst as any).mockResolvedValue(null);
+    const result = await createChatConversation({
+      context: [{ kind: "job", entityId: "opportunity-1", source: "MANUAL" }],
+    });
+    expect(result.success).toBe(false);
+    expect(prisma.chatConversation.create).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an unknown page id as a legacy job", async () => {
+    (prisma.job.findFirst as any).mockResolvedValue(null);
+    const result = await resolveDraftPageContext({ jobId: "opportunity-1" });
+    expect(result.success).toBe(true);
+    expect(result.data?.items).toEqual([]);
+    expect(prisma.job.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "opportunity-1", userId: "user-1" },
+      }),
+    );
   });
 
   it("every action fails closed without a session", async () => {
     (getCurrentUser as any).mockResolvedValue(null);
-    expect((await getChatConversation()).success).toBe(false);
-    expect((await saveChatConversation([])).success).toBe(false);
-    expect((await clearChatConversation()).success).toBe(false);
+    expect((await getChatConversation("row-1")).success).toBe(false);
+    expect((await saveChatConversation("row-1", [])).success).toBe(false);
+    expect((await deleteChatConversation("row-1")).success).toBe(false);
+    expect((await createChatConversation()).success).toBe(false);
     expect(prisma.chatConversation.create).not.toHaveBeenCalled();
-    expect(prisma.chatConversation.update).not.toHaveBeenCalled();
+    expect(prisma.chatConversation.updateMany).not.toHaveBeenCalled();
     expect(prisma.chatConversation.deleteMany).not.toHaveBeenCalled();
   });
 });
@@ -168,7 +250,7 @@ describe("agentChat actions", () => {
 describe("getAgentChatPreflight", () => {
   beforeEach(() => {
     (getCurrentUser as any).mockResolvedValue(mockUser);
-    (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(null);
     (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([]);
   });
 
@@ -214,14 +296,14 @@ describe("getAgentChatPreflight", () => {
   });
 
   it("reports a locked account turn ready when streaming is verified", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(
       lockedConversation(),
     );
     (prisma.aIConnection.findFirst as any).mockResolvedValue(
       lockedConnection(),
     );
     runtimeState.mockResolvedValue(verifiedState);
-    const result = await getAgentChatPreflight();
+    const result = await getAgentChatPreflight({ conversationId: "row-1" });
     expect(result.data).toMatchObject({
       kind: "account",
       connectionId: "conn-1",
@@ -231,7 +313,7 @@ describe("getAgentChatPreflight", () => {
   });
 
   it("blocks a locked turn when the runtime cannot stream", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(
       lockedConversation(),
     );
     (prisma.aIConnection.findFirst as any).mockResolvedValue(
@@ -249,7 +331,7 @@ describe("getAgentChatPreflight", () => {
         },
       },
     });
-    const result = await getAgentChatPreflight();
+    const result = await getAgentChatPreflight({ conversationId: "row-1" });
     expect(result.data).toMatchObject({
       kind: "blocked",
       code: "STREAMING_NOT_SUPPORTED",
@@ -258,7 +340,7 @@ describe("getAgentChatPreflight", () => {
   });
 
   it("blocks on runtime version drift from the verified build", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(
       lockedConversation(),
     );
     (prisma.aIConnection.findFirst as any).mockResolvedValue(
@@ -268,7 +350,7 @@ describe("getAgentChatPreflight", () => {
       ...verifiedState,
       runtimeVersion: "9.9.9",
     });
-    const result = await getAgentChatPreflight();
+    const result = await getAgentChatPreflight({ conversationId: "row-1" });
     expect(result.data).toMatchObject({
       kind: "blocked",
       code: "STREAMING_NOT_VERIFIED",
@@ -276,7 +358,7 @@ describe("getAgentChatPreflight", () => {
   });
 
   it("blocks when the runtime streams but its structured decisions are unverified", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(
       lockedConversation(),
     );
     (prisma.aIConnection.findFirst as any).mockResolvedValue(
@@ -294,7 +376,7 @@ describe("getAgentChatPreflight", () => {
         },
       },
     });
-    const result = await getAgentChatPreflight();
+    const result = await getAgentChatPreflight({ conversationId: "row-1" });
     expect(result.data).toMatchObject({
       kind: "blocked",
       code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
@@ -302,7 +384,7 @@ describe("getAgentChatPreflight", () => {
   });
 
   it("fails closed when the runtime channel is unreachable", async () => {
-    (prisma.chatConversation.findUnique as any).mockResolvedValue(
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(
       lockedConversation(),
     );
     (prisma.aIConnection.findFirst as any).mockResolvedValue(
@@ -311,7 +393,7 @@ describe("getAgentChatPreflight", () => {
     runtimeState.mockRejectedValue(
       new AIBusinessError("BACKEND_UNAVAILABLE", "down"),
     );
-    const result = await getAgentChatPreflight();
+    const result = await getAgentChatPreflight({ conversationId: "row-1" });
     expect(result.data).toMatchObject({
       kind: "blocked",
       code: "BACKEND_UNAVAILABLE",
@@ -374,5 +456,37 @@ describe("getAgentChatPreflight", () => {
       model: "gpt-5.6-sol",
       locked: false,
     });
+  });
+
+  it("reports a null-lock conversation as legacy and does not invent a lock", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue({
+      id: "row-old",
+      userId: "user-1",
+      resolvedConnectionId: null,
+      resolvedModel: null,
+    });
+    const result = await getAgentChatPreflight({ conversationId: "row-old" });
+    expect(result.data).toMatchObject({
+      kind: "legacy",
+      model: "legacy-model",
+      persisted: true,
+    });
+    expect(result.data).not.toMatchObject({ locked: true });
+  });
+
+  it("does not fall back when an explicit draft selection is ineligible", async () => {
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(null);
+    const before = (prisma.aIBusinessAssignment.findMany as any).mock.calls
+      .length;
+    const result = await getAgentChatPreflight({
+      explicit: { connectionId: "missing", model: "gpt-5.6-luna" },
+    });
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      code: "ASSIGNED_CONNECTION_UNAVAILABLE",
+    });
+    expect((prisma.aIBusinessAssignment.findMany as any).mock.calls.length).toBe(
+      before,
+    );
   });
 });

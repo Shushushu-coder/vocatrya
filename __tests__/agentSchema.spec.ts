@@ -84,17 +84,28 @@ describe("AgentAddJobSchema", () => {
 });
 
 describe("AgentChatRequestSchema", () => {
-  it("accepts messages with an optional page context", () => {
+  it("requires a conversation id and still accepts an optional page context", () => {
     expect(
       AgentChatRequestSchema.safeParse({
+        conversationId: "conv-1",
         messages: [{ id: "1", role: "user", parts: [] }],
         pageContext: { route: "/dashboard/myjobs" },
       }).success,
     ).toBe(true);
   });
 
+  it("rejects a body that omits the conversation id", () => {
+    expect(
+      AgentChatRequestSchema.safeParse({
+        messages: [{ id: "1", role: "user", parts: [] }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects a body with no messages array", () => {
-    expect(AgentChatRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      AgentChatRequestSchema.safeParse({ conversationId: "conv-1" }).success,
+    ).toBe(false);
   });
 });
 

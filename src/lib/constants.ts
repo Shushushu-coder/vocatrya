@@ -208,6 +208,9 @@ export const APP_CONSTANTS = {
   // the user never chose.
   // Must not be "ai-panel-width" — that key belongs to the three AI sheets.
   AGENT_CHAT_PANEL_WIDTH_KEY: "agent-chat-width",
+  AGENT_CHAT_PANEL_MIN_WIDTH: 340,
+  AGENT_CHAT_ACTIVE_CONVERSATION_KEY: "agent-chat-active-id",
+  AGENT_CHAT_HISTORY_PAGE: 30,
 
   // Telemetry (OTLP export)
   // Flush cadence. A batch is never serialized in the enqueueing caller's

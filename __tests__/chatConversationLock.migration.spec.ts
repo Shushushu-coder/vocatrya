@@ -39,9 +39,11 @@ describe("ChatConversation AI lock migration", () => {
 
   it("existing conversations migrate with messages intact and null lock fields", async () => {
     const ctx = makeAbTestDbUrl();
-    // Old-schema DB: every migration except the lock one.
+    // Pre-lock schema. Also hold back the later multi-conversation rebuild:
+    // that migration copies resolvedConnectionId, so it cannot run before
+    // this one. It has its own disposable round-trip.
     const schemaPath = preparePrismaProject(ctx.dir, {
-      excludeSuffix: MIGRATION_SUFFIX,
+      excludeSuffix: [MIGRATION_SUFFIX, "chat_conversation_multi"],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
     try {
