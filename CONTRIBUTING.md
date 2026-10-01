@@ -270,7 +270,37 @@ Tests live in `__tests__/` and should be co-located where possible. Mock externa
 npm run test:e2e
 ```
 
-E2E tests live in `e2e/`. These require a running dev server.
+E2E tests live in `e2e/`. Both `npm run test:e2e` and direct
+`npx --no-install playwright test ...` run the same idempotent global setup
+before browser tests. To establish prerequisites separately, run
+`npm run test:e2e:setup`. Use an existing **migrated local SQLite database**
+configured by `DATABASE_URL` (shell or Next's development env files).
+Relative `file:` paths resolve against this checkout's `prisma/` directory;
+an absolute path is recommended when sharing dependencies across worktrees.
+Setup logs the resolved path and fails before browser tests if setup fails.
+
+The dedicated local identity is defined in `e2e/support/testUser.ts`. Do not
+manually create it or substitute your personal account. Setup uses bcrypt and
+Prisma to create/repair only that fixture's identity, job sources (including
+Indeed), and contact roles; global job statuses are inserted if missing.
+It also selects Ollama `llama3.2` in the fixture's user settings so Assistant
+preflight has a model. Assistant specs stub reachability and chat responses;
+they do not require a live Ollama model. Other fixture preferences are preserved.
+Reruns preserve existing rows and create no duplicates. The fixture remains
+after runs; clean up test-created business records through the existing
+cleanup infrastructure. Normal app startup does not seed users.
+
+Playwright starts a dev server with the same absolute database URL by default.
+To reuse a server on port 3737, set `E2E_REUSE_EXISTING_SERVER=1` and
+`E2E_SERVER_DATABASE_URL` to **that server's actual DATABASE_URL** (use its
+absolute SQLite path). The declaration must resolve to the setup database;
+a mismatch fails before setup. This is an explicit developer assertion, since
+the app does not expose its database path. Do not reuse a server with an
+unknown database. Logging in separately in each fixture is test isolation;
+valid product sessions persist across reload/navigation/reopening saved storage.
+
+Setup integration tests in `__tests__/e2e-setup.spec.ts` apply existing
+migrations to disposable databases under the OS temp directory, never `prisma/dev.db`.
 
 ---
 

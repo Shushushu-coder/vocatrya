@@ -1,4 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
+import { configureE2EDatabase, resolveE2EDatabase } from "./e2e/support/database";
+
+const database = configureE2EDatabase();
+const reuseExistingServer = process.env.E2E_REUSE_EXISTING_SERVER === "1";
+if (reuseExistingServer) {
+  const serverUrl = process.env.E2E_SERVER_DATABASE_URL;
+  if (!serverUrl || resolveE2EDatabase(serverUrl).url !== database.url) {
+    throw new Error("Server DB must match E2E DB: set E2E_SERVER_DATABASE_URL to the running server's DATABASE_URL.");
+  }
+}
 
 /**
  * Read environment variables from file.
@@ -12,6 +22,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
+  globalSetup: "./e2e/global-setup.ts",
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -79,7 +90,8 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: "http://localhost:3737",
-    reuseExistingServer: true,
+    reuseExistingServer,
+    env: { DATABASE_URL: database.url },
     timeout: 120 * 1000,
   },
 });

@@ -5,6 +5,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { randomUUID } from "crypto";
+import { E2E_TEST_USER } from "./support/testUser";
 
 // The app's product default locale is zh-CN, but this suite is written with
 // English locators. Pin the locale cookie deterministically instead of
@@ -25,9 +26,9 @@ export function uniqueName(base: string): string {
 
 export async function login(page: Page) {
   await page.getByPlaceholder("id@example.com").click();
-  await page.getByPlaceholder("id@example.com").fill("admin@example.com");
+  await page.getByPlaceholder("id@example.com").fill(E2E_TEST_USER.email);
   await page.getByRole("textbox", { name: "Password" }).click();
-  await page.getByRole("textbox", { name: "Password" }).fill("password123");
+  await page.getByRole("textbox", { name: "Password" }).fill(E2E_TEST_USER.password);
   await page.getByRole("button", { name: "Login" }).click();
 }
 

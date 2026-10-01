@@ -30,4 +30,7 @@ test("Signin and out from app", async ({ page, baseURL }) => {
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/signin(?:\?|$)/);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });

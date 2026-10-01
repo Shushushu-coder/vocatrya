@@ -1,5 +1,6 @@
 import { type Page } from "@playwright/test";
-import { test, expect } from "./fixtures";
+import { test, expect, uniqueName } from "./fixtures";
+import { E2E_TEST_USER } from "./support/testUser";
 
 // The chat writes nothing of its own to the DB — /api/ai/chat is stubbed, so
 // the route's persistence and the model never run. No cleanup registration.
@@ -32,8 +33,8 @@ function textTurn(text: string): Record<string, unknown>[] {
 }
 
 const ADD_JOB_INPUT = {
-  company: "Northwind Trading",
-  jobTitle: "Staff Platform Engineer",
+  company: uniqueName("Northwind Trading"),
+  jobTitle: uniqueName("Staff Platform Engineer"),
   location: "Remote",
   source: "Company website",
   jobUrl: "https://northwind.example/careers/42",
@@ -98,7 +99,7 @@ test.describe("agent chat", () => {
     { width: 1440, height: 1000 },
     { width: 390, height: 844 },
   ]) {
-    test(`keeps the assistant inside the viewport at ${viewport.width}×${viewport.height}`, async ({ page }) => {
+    test(`keeps the assistant inside the viewport at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
       await page.setViewportSize(viewport);
       await openChat(page);
 
@@ -112,9 +113,15 @@ test.describe("agent chat", () => {
           box.y + box.height <= viewport.height + 1 &&
           Math.abs(box.x + box.width - viewport.width) <= 1 &&
           (viewport.width >= 1024
-            ? box.x > viewport.width / 2
+            ? box.x > viewport.width / 2 && Math.abs(box.width - 450) <= 1
             : Math.abs(box.x) <= 1 && Math.abs(box.width - viewport.width) <= 1);
       }).toBe(true);
+      const box = await panel.boundingBox();
+      console.log(`[Assistant layout ${viewport.width}x${viewport.height}] ${JSON.stringify(box)}`);
+      await testInfo.attach("assistant-layout", {
+        body: JSON.stringify({ viewport, position: await panel.evaluate(el => getComputedStyle(el).position), box }),
+        contentType: "application/json",
+      });
       await expect(page.getByRole("textbox", { name: /paste a job posting/i })).toBeInViewport();
     });
   }
@@ -192,6 +199,7 @@ test.describe("agent chat", () => {
   test("renders the approval card and creates nothing when it is cancelled", async ({
     page,
   }) => {
+    const jobsBefore = await readProposedJobIds();
     let call = 0;
     await page.route("**/api/ai/chat", async (route) => {
       call += 1;
@@ -213,8 +221,8 @@ test.describe("agent chat", () => {
     await send(page, "add the Northwind role");
 
     await expect(page.getByText("Needs approval")).toBeVisible();
-    await expect(page.getByText("Northwind Trading")).toBeVisible();
-    await expect(page.getByText("Staff Platform Engineer")).toBeVisible();
+    await expect(page.getByText(ADD_JOB_INPUT.company)).toBeVisible();
+    await expect(page.getByText(ADD_JOB_INPUT.jobTitle)).toBeVisible();
     await expect(page.getByText("$190k – $220k")).toBeVisible();
     await expect(page.getByRole("button", { name: "Confirm" })).toBeVisible();
 
@@ -226,7 +234,8 @@ test.describe("agent chat", () => {
 
     // Nothing reached the jobs list.
     await page.goto("/dashboard/myjobs");
-    await expect(page.getByText("Staff Platform Engineer")).toBeHidden();
+    await expect(page.getByText(ADD_JOB_INPUT.jobTitle)).toBeHidden();
+    expect(await readProposedJobIds()).toEqual(jobsBefore);
   });
 
   // The chat route is stubbed, so it never reaches the route's onFinish save.
@@ -235,6 +244,12 @@ test.describe("agent chat", () => {
   test("restores the selected conversation after a second one is created", async ({
     page,
   }) => {
+    // The fixture identity is retained across runs; history markers must not
+    // match earlier conversations (including leftovers from a failed run).
+    const alphaMarker = uniqueName("Alpha marker");
+    const betaMarker = uniqueName("Beta marker");
+    const alphaHistory = page.getByRole("button", { name: new RegExp(alphaMarker) });
+    const betaHistory = page.getByRole("button", { name: new RegExp(betaMarker) });
     const replies = ["Reply for conversation A.", "Reply for conversation B."];
     let call = 0;
     await page.route("**/api/ai/chat", async (route) => {
@@ -261,34 +276,34 @@ test.describe("agent chat", () => {
     });
 
     await openChat(page);
-    await send(page, "Alpha marker");
+    await send(page, alphaMarker);
     await expect(page.getByText("Reply for conversation A.")).toBeVisible();
 
     await page.getByRole("button", { name: "New conversation" }).click();
     await expect(page.getByText("Start a Career AI conversation")).toBeVisible();
     await page.getByRole("button", { name: "History", exact: true }).click();
-    await expect(page.getByRole("button", { name: /Alpha marker/ })).toBeVisible();
+    await expect(alphaHistory).toBeVisible();
     await page.getByRole("button", { name: "Close", exact: true }).click();
 
-    await send(page, "Beta marker");
+    await send(page, betaMarker);
     await expect(page.getByText("Reply for conversation B.")).toBeVisible();
 
     await page.getByRole("button", { name: "History", exact: true }).click();
-    await expect(page.getByRole("button", { name: /Alpha marker/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Beta marker/ })).toBeVisible();
-    await page.getByRole("button", { name: /Alpha marker/ }).click();
+    await expect(alphaHistory).toBeVisible();
+    await expect(betaHistory).toBeVisible();
+    await alphaHistory.click();
 
-    await expect(page.getByText("Alpha marker")).toBeVisible();
+    await expect(page.getByText(alphaMarker)).toBeVisible();
     await expect(page.getByText("Reply for conversation A.")).toBeVisible();
     await expect(page.getByText("Reply for conversation B.")).toBeHidden();
-    await expect(page.getByText("Beta marker")).toBeHidden();
+    await expect(page.getByText(betaMarker)).toBeHidden();
 
     await page.getByRole("button", { name: "History", exact: true }).click();
-    await page.getByRole("button", { name: /Beta marker/ }).click();
-    await expect(page.getByText("Beta marker")).toBeVisible();
+    await betaHistory.click();
+    await expect(page.getByText(betaMarker)).toBeVisible();
     await expect(page.getByText("Reply for conversation B.")).toBeVisible();
     await expect(page.getByText("Reply for conversation A.")).toBeHidden();
-    await expect(page.getByText("Alpha marker")).toBeHidden();
+    await expect(page.getByText(alphaMarker)).toBeHidden();
   });
 });
 
@@ -302,6 +317,24 @@ async function persistStubbedTranscript(
     await prisma.chatConversation.update({
       where: { id: conversationId },
       data: { messages: JSON.stringify(messages) },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function readProposedJobIds() {
+  const { PrismaClient } = await import("@prisma/client");
+  const prisma = new PrismaClient();
+  try {
+    return await prisma.job.findMany({
+      where: {
+        User: { email: E2E_TEST_USER.email },
+        JobTitle: { label: ADD_JOB_INPUT.jobTitle },
+        Company: { label: ADD_JOB_INPUT.company },
+      },
+      select: { id: true },
+      orderBy: { id: "asc" },
     });
   } finally {
     await prisma.$disconnect();

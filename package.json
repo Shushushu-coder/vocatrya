@@ -29,6 +29,7 @@
     "test:desktop": "vitest run --config desktop/vitest.config.mjs desktop/main",
     "test": "vitest run",
     "test:e2e": "npx playwright test --project=chromium",
+    "test:e2e:setup": "ts-node --transpile-only --project e2e/tsconfig.setup.json e2e/setup.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "audit:legacy-migration": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-sqlite --experimental-strip-types scripts/legacy-migration-dry-run.mts",
