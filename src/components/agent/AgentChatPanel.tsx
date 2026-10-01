@@ -39,7 +39,7 @@ export function AgentChatPanel() {
         overlay={false}
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
-        className="relative flex flex-col overflow-hidden p-0 [&>button:last-child]:hidden w-full max-w-full sm:max-w-full lg:w-(--agent-chat-w) lg:max-w-(--agent-chat-max)"
+        className="flex flex-col overflow-hidden p-0 [&>button:last-child]:hidden w-full max-w-full sm:max-w-full lg:w-(--agent-chat-w) lg:max-w-(--agent-chat-max)"
         style={
           {
             "--agent-chat-w": `${width}px`,

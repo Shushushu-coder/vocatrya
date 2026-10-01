@@ -94,6 +94,31 @@ async function send(page: Page, text: string) {
 }
 
 test.describe("agent chat", () => {
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`keeps the assistant inside the viewport at ${viewport.width}×${viewport.height}`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await openChat(page);
+
+      const panel = page.getByRole("dialog");
+      await expect(panel).toHaveCSS("position", "fixed");
+      // Poll through the Sheet's entrance animation without scrolling it into view.
+      await expect.poll(async () => {
+        const box = await panel.boundingBox();
+        if (!box) return false;
+        return box.y >= 0 && box.y <= 1 &&
+          box.y + box.height <= viewport.height + 1 &&
+          Math.abs(box.x + box.width - viewport.width) <= 1 &&
+          (viewport.width >= 1024
+            ? box.x > viewport.width / 2
+            : Math.abs(box.x) <= 1 && Math.abs(box.width - viewport.width) <= 1);
+      }).toBe(true);
+      await expect(page.getByRole("textbox", { name: /paste a job posting/i })).toBeInViewport();
+    });
+  }
+
   test("opens from the header, leaves the page usable, and closes", async ({
     page,
   }) => {
