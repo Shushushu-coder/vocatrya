@@ -88,7 +88,7 @@ async function openChat(page: Page) {
 }
 
 async function send(page: Page, text: string) {
-  const box = page.getByRole("textbox", { name: /ask or paste/i });
+  const box = page.getByRole("textbox", { name: /paste a job posting/i });
   await box.fill(text);
   await page.getByRole("button", { name: "Send" }).click();
 }
@@ -144,7 +144,7 @@ test.describe("agent chat", () => {
     const posting = `Staff Platform Engineer at Northwind. ${"Responsibilities include running the payments platform. ".repeat(
       40,
     )}`;
-    const box = page.getByRole("textbox", { name: /ask or paste/i });
+    const box = page.getByRole("textbox", { name: /paste a job posting/i });
     await box.click();
     await box.evaluate((el, text) => {
       const data = new DataTransfer();
@@ -203,4 +203,82 @@ test.describe("agent chat", () => {
     await page.goto("/dashboard/myjobs");
     await expect(page.getByText("Staff Platform Engineer")).toBeHidden();
   });
+
+  // The chat route is stubbed, so it never reaches the route's onFinish save.
+  // Write the same final transcript that save would store, then prove History
+  // reloads that row instead of dropping it when a new conversation starts.
+  test("restores the selected conversation after a second one is created", async ({
+    page,
+  }) => {
+    const replies = ["Reply for conversation A.", "Reply for conversation B."];
+    let call = 0;
+    await page.route("**/api/ai/chat", async (route) => {
+      const body = route.request().postDataJSON() as {
+        conversationId?: string;
+        messages?: { id: string; role: string; parts: { type: string; text?: string }[] }[];
+      };
+      const reply = replies[Math.min(call, replies.length - 1)];
+      call += 1;
+      if (body.conversationId) {
+        await persistStubbedTranscript(body.conversationId, [
+          ...(body.messages ?? []),
+          {
+            id: `asst-${call}`,
+            role: "assistant",
+            parts: [{ type: "text", text: reply }],
+          },
+        ]);
+      }
+      await route.fulfill({
+        headers: SSE_HEADERS,
+        body: sse(textTurn(reply)),
+      });
+    });
+
+    await openChat(page);
+    await send(page, "Alpha marker");
+    await expect(page.getByText("Reply for conversation A.")).toBeVisible();
+
+    await page.getByRole("button", { name: "New conversation" }).click();
+    await expect(page.getByText("Start a Career AI conversation")).toBeVisible();
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await expect(page.getByRole("button", { name: /Alpha marker/ })).toBeVisible();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+
+    await send(page, "Beta marker");
+    await expect(page.getByText("Reply for conversation B.")).toBeVisible();
+
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await expect(page.getByRole("button", { name: /Alpha marker/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Beta marker/ })).toBeVisible();
+    await page.getByRole("button", { name: /Alpha marker/ }).click();
+
+    await expect(page.getByText("Alpha marker")).toBeVisible();
+    await expect(page.getByText("Reply for conversation A.")).toBeVisible();
+    await expect(page.getByText("Reply for conversation B.")).toBeHidden();
+    await expect(page.getByText("Beta marker")).toBeHidden();
+
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await page.getByRole("button", { name: /Beta marker/ }).click();
+    await expect(page.getByText("Beta marker")).toBeVisible();
+    await expect(page.getByText("Reply for conversation B.")).toBeVisible();
+    await expect(page.getByText("Reply for conversation A.")).toBeHidden();
+    await expect(page.getByText("Alpha marker")).toBeHidden();
+  });
 });
+
+async function persistStubbedTranscript(
+  conversationId: string,
+  messages: unknown[],
+) {
+  const { PrismaClient } = await import("@prisma/client");
+  const prisma = new PrismaClient();
+  try {
+    await prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: { messages: JSON.stringify(messages) },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
