@@ -120,3 +120,33 @@ export function getLocalizedJobType(
   const key = map[val];
   return key ? t(key) : type;
 }
+
+const JOB_SOURCE_I18N_KEYS: Record<string, string> = {
+  indeed: "jobs.sources.indeed",
+  linkedin: "jobs.sources.linkedin",
+  monster: "jobs.sources.monster",
+  glassdoor: "jobs.sources.glassdoor",
+  careerpage: "jobs.sources.officialWebsite",
+  google: "jobs.sources.google",
+  ziprecruiter: "jobs.sources.zipRecruiter",
+  jobstreet: "jobs.sources.jobStreet",
+  other: "jobs.sources.other",
+  shixiseng: "jobs.sources.shixiseng",
+  "boss zhipin": "jobs.sources.bossZhipin",
+  "referral group": "jobs.sources.referralGroup",
+  xiaohongshu: "jobs.sources.xiaohongshu",
+};
+
+export function getLocalizedJobSource(
+  source: { label?: string; value?: string } | string | null | undefined,
+  t: TranslateFn
+): string {
+  if (!source) return "";
+  const value =
+    typeof source === "string"
+      ? source
+      : (source.value || source.label || "");
+  const key = JOB_SOURCE_I18N_KEYS[value.toLowerCase().trim()];
+  if (key) return t(key);
+  return typeof source === "string" ? source : (source.label || source.value || "");
+}

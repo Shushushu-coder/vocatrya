@@ -6,7 +6,35 @@ import {
   getLast7Days,
   getTimestampedFileName,
   capitalize,
+  handleError,
 } from "@/lib/utils";
+
+describe("handleError", () => {
+  it("maps a user foreign-key failure to a session message", () => {
+    const error = Object.assign(new Error("Foreign key constraint failed"), {
+      code: "P2003",
+      meta: { field_name: "Job_userId_fkey" },
+    });
+    expect(handleError(error)).toEqual({
+      success: false,
+      message:
+        "Your session appears invalid. Please sign out and sign back in.",
+    });
+  });
+
+  it("does not call a non-user foreign-key failure an invalid session", () => {
+    const error = Object.assign(new Error("Foreign key constraint failed"), {
+      code: "P2003",
+      meta: { field_name: "Job_statusId_fkey" },
+    });
+    const result = handleError(error);
+    expect(result.success).toBe(false);
+    expect(result.message).toBe(
+      "Could not save because a related record is missing.",
+    );
+    expect(result.message).not.toMatch(/session/i);
+  });
+});
 
 describe("capitalize", () => {
   it("uppercases the first character", () => {

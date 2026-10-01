@@ -25,7 +25,7 @@ import { useJobFilters } from "./jobs-container/useJobFilters";
 import { useJobsList } from "./jobs-container/useJobsList";
 import { downloadJobsList } from "./jobs-container/downloadJobsCsv";
 import { JobsToolbar } from "./jobs-container/JobsToolbar";
-import { useI18n } from "@/i18n";
+import { getLocalizedJobSource, useI18n } from "@/i18n";
 import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
@@ -166,7 +166,15 @@ function JobsContainer({
           onClearTitleFilter={clearTitleFilter}
           locationLabel={locationLabel}
           onClearLocationFilter={clearLocationFilter}
-          sourceLabel={sourceLabel}
+          sourceLabel={
+            sourceFilter
+              ? getLocalizedJobSource(
+                  sources.find((source) => source.value === sourceFilter) ??
+                    sourceLabel,
+                  t,
+                ) || null
+              : null
+          }
           onClearSourceFilter={clearSourceFilter}
           appliedLabel={appliedFilter ? t("jobs.statuses.applied") : null}
           onClearAppliedFilter={clearAppliedFilter}

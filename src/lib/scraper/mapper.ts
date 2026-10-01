@@ -18,8 +18,8 @@ const JOB_TYPE_ALIASES: Record<string, string> = {
   contractor: "C",
   contract: "C",
   temporary: "C",
-  intern: "C",
-  internship: "C",
+  intern: "INTERNSHIP",
+  internship: "INTERNSHIP",
 };
 
 function normalizeJobType(employmentType?: string): string {

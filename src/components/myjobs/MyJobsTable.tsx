@@ -9,7 +9,6 @@ import {
 } from "../ui/table";
 import { StickyNote } from "lucide-react";
 import { Badge } from "../ui/badge";
-import { format } from "date-fns";
 import { useState } from "react";
 import { JobResponse, JobStatus } from "@/models/job.model";
 import Link from "next/link";
@@ -19,7 +18,6 @@ import { JobStatusBadgeMenu } from "./JobStatusBadgeMenu";
 import { TooltipProvider } from "../ui/tooltip";
 import { JobActionsMenu } from "./JobActionsMenu";
 import { MatchJobButton } from "./MatchJobButton";
-import { CompanyLogo } from "./CompanyLogo";
 
 type MyJobsTableProps = {
   jobs: JobResponse[];
@@ -31,7 +29,7 @@ type MyJobsTableProps = {
   deleteIsArchive?: boolean;
 };
 
-import { useI18n } from "@/i18n";
+import { getLocalizedJobSource, useI18n } from "@/i18n";
 
 function MyJobsTable({
   jobs,
@@ -56,8 +54,8 @@ function MyJobsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="hidden w-[100px] sm:table-cell">
-              <span className="sr-only">{t("jobs.company")}</span>
+            <TableHead className="w-[56px] text-center">
+              {t("jobs.rowNumber")}
             </TableHead>
             <TableHead className="hidden md:table-cell">{t("jobs.dateApplied")}</TableHead>
             <TableHead>{t("jobs.jobTitle")}</TableHead>
@@ -72,14 +70,14 @@ function MyJobsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {jobs.map((job: JobResponse) => {
+          {jobs.map((job: JobResponse, index: number) => {
             return (
               <TableRow key={job.id}>
-                <TableCell className="hidden sm:table-cell">
-                  <CompanyLogo
-                    logoUrl={job.Company?.logoUrl}
-                    className="h-8 w-8 min-w-8"
-                  />
+                <TableCell
+                  className="text-center tabular-nums text-muted-foreground"
+                  data-testid="job-row-number"
+                >
+                  {index + 1}
                 </TableCell>
                 <TableCell className="hidden md:table-cell w-[120px] whitespace-nowrap">
                   {job.appliedDate ? formatDate(job.appliedDate) : t("common.notAvailable")}
@@ -126,7 +124,7 @@ function MyJobsTable({
                   )}
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                  {job.JobSource?.label}
+                  {getLocalizedJobSource(job.JobSource, t)}
                 </TableCell>
                 <TableCell>
                   <JobActionsMenu

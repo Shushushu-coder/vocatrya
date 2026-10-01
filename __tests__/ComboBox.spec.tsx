@@ -7,6 +7,8 @@ import { createJobTitle } from "@/actions/jobtitle.actions";
 import { createActivityType } from "@/actions/activity.actions";
 import { createContactRole } from "@/actions/contactRole.actions";
 import { toastError } from "@/lib/toast";
+import { getLocalizedJobSource } from "@/i18n/helpers";
+import { translate } from "@/i18n/translate";
 import { useForm } from "react-hook-form";
 import { Form, FormField, FormItem } from "@/components/ui/form";
 import {
@@ -118,6 +120,28 @@ beforeEach(() => {
 });
 
 describe("Combobox Enter key", () => {
+  it("preserves a created custom source through rerenders and locale changes", async () => {
+    const options = [{ id: "system", value: "careerpage", label: "Company Career page" }];
+    const custom = { id: "custom", value: "学校就业群", label: "学校就业群" };
+    vi.mocked(createJobSource).mockResolvedValue({ success: true, data: custom } as never);
+    function SourceHarness({ locale }: { locale: "en" | "zh-CN" }) {
+      const form = useForm({ defaultValues: { source: "" } });
+      return <Form {...form}><FormField control={form.control} name="source" render={({ field }) => (
+        <FormItem><Combobox options={options} field={field} creatable
+          getOptionLabel={(option) => getLocalizedJobSource(option, (key) => translate(locale, key))} /></FormItem>
+      )} /></Form>;
+    }
+    const user = userEvent.setup();
+    const { rerender } = render(<SourceHarness locale="zh-CN" />);
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Create or Search source"), "学校就业群{Enter}");
+    await waitFor(() => expect(screen.getByRole("combobox")).toHaveTextContent(custom.label));
+    rerender(<SourceHarness locale="en" />);
+    expect(screen.getByRole("combobox")).toHaveTextContent(custom.label);
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByRole("option", { name: custom.label })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Official Website" })).toBeInTheDocument();
+  });
   describe("creating", () => {
     it("creates a new option when nothing matches the search", async () => {
       const { user, input } = await openCombobox();

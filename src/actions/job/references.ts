@@ -2,7 +2,15 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
-import { JOB_STATUS_VALUES } from "@/lib/constants";
+import {
+  APP_CONSTANTS,
+  JOB_STATUSES,
+  JOB_STATUS_VALUES,
+} from "@/lib/constants";
+import {
+  missingDefaultJobSources,
+  resolveJobSourceIdentity,
+} from "@/lib/jobs/jobSources";
 import { requireUser } from "../shared";
 
 // The JobStatus table has no explicit ordering column, and its physical row
@@ -17,7 +25,17 @@ const STATUS_ORDER = new Map(
 // other list here it is not scoped to the current user.
 export const getStatusList = async (): Promise<any | undefined> => {
   try {
-    const statuses = await prisma.jobStatus.findMany();
+    let statuses = await prisma.jobStatus.findMany();
+    if (statuses.length === 0) {
+      for (const status of JOB_STATUSES) {
+        await prisma.jobStatus.upsert({
+          where: { value: status.value },
+          update: {},
+          create: { label: status.label, value: status.value },
+        });
+      }
+      statuses = await prisma.jobStatus.findMany();
+    }
     return statuses
       .slice()
       .sort(
@@ -31,9 +49,26 @@ export const getStatusList = async (): Promise<any | undefined> => {
   }
 };
 
+async function ensureDefaultJobSources(userId: string) {
+  const existing = await prisma.jobSource.findMany({
+    where: { createdBy: userId },
+    select: { value: true },
+  });
+  const missing = missingDefaultJobSources(existing.map((row) => row.value));
+  if (missing.length === 0) return;
+  for (const source of missing) {
+    await prisma.jobSource.upsert({
+      where: { value_createdBy: { value: source.value, createdBy: userId } },
+      update: {},
+      create: { ...source, createdBy: userId },
+    });
+  }
+}
+
 export const getJobSourceList = async (): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+    await ensureDefaultJobSources(user.id);
     const list = await prisma.jobSource.findMany({
       where: {
         createdBy: user.id,
@@ -82,21 +117,31 @@ export const createJobSource = async (
   try {
     const user = await requireUser();
 
-    const value = canonicalizeEntityValue(label.trim());
-
-    if (!value) {
-      throw new Error("Please provide job source name");
+    const identity = resolveJobSourceIdentity(
+      label,
+      APP_CONSTANTS.MAX_JOB_SOURCE_LABEL_LENGTH,
+    );
+    if ("error" in identity) {
+      throw new Error(
+        identity.error === "too-long"
+          ? "Job source name is too long"
+          : "Please provide job source name",
+      );
     }
 
     const existing = await prisma.jobSource.findFirst({
-      where: { value, createdBy: user.id },
+      where: { value: identity.value, createdBy: user.id },
     });
     if (existing) {
       return { data: existing, success: true };
     }
 
     const jobSource = await prisma.jobSource.create({
-      data: { label, value, createdBy: user.id },
+      data: {
+        label: identity.label,
+        value: identity.value,
+        createdBy: user.id,
+      },
     });
 
     return { data: jobSource, success: true };

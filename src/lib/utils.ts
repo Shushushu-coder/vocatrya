@@ -40,6 +40,26 @@ export function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function prismaErrorCode(error: unknown): string | undefined {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
+function prismaFkField(error: unknown): string {
+  if (!error || typeof error !== "object" || !("meta" in error)) return "";
+  const meta = (error as { meta?: { field_name?: unknown; fieldName?: unknown } })
+    .meta;
+  const field = meta?.field_name ?? meta?.fieldName;
+  return typeof field === "string" ? field : "";
+}
+
+function isUserForeignKey(error: unknown): boolean {
+  return /user(_?id)?/i.test(prismaFkField(error));
+}
+
 export function handleError(error: unknown, msg = "Server Error.") {
   console.error(error, msg);
   if (error instanceof Error) {
@@ -47,11 +67,19 @@ export function handleError(error: unknown, msg = "Server Error.") {
       error.message =
         "Fetch failed, please make sure selected AI service is running.";
     }
-    if ("code" in error && (error as any).code === "P2003") {
+    // P2003 is any FK failure. Mapping every one to "session invalid" made a
+    // missing JobStatus/resume/source row look like a signed-out user.
+    if (prismaErrorCode(error) === "P2003") {
+      if (isUserForeignKey(error)) {
+        return {
+          success: false,
+          message:
+            "Your session appears invalid. Please sign out and sign back in.",
+        };
+      }
       return {
         success: false,
-        message:
-          "Your session appears invalid. Please sign out and sign back in.",
+        message: "Could not save because a related record is missing.",
       };
     }
     return { success: false, message: error.message || msg };

@@ -18,6 +18,8 @@ export const APP_CONSTANTS = {
   ATS_COMPANY_PAGE_SIZE: 50,
   MAX_AUTOMATIONS_PER_USER: 10,
   MAX_JOB_TAGS: 10,
+  MAX_SALARY_RANGE_LENGTH: 500,
+  MAX_JOB_SOURCE_LABEL_LENGTH: 80,
   MIN_QUESTION_LENGTH: 5,
   MAX_QUESTION_LENGTH: 500,
   MIN_QUESTION_ANSWER_LENGTH: 10,
@@ -283,6 +285,10 @@ export const JOB_SOURCES = [
   { label: "ZipRecruiter", value: "ziprecruiter" },
   { label: "Job Street", value: "jobstreet" },
   { label: "Other", value: "other" },
+  { label: "Shixiseng", value: "shixiseng" },
+  { label: "BOSS Zhipin", value: "boss zhipin" },
+  { label: "Referral Group", value: "referral group" },
+  { label: "Xiaohongshu", value: "xiaohongshu" },
 ] as const;
 
 // Seeded per user at signup and backfilled by the contacts migration. `value`

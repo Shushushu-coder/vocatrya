@@ -27,7 +27,7 @@ export const McpAddJobInputShape = {
     .describe("The complete job posting text, copied in full — do not summarize, shorten, or paraphrase it. Markdown-formatted is supported; plain text also works. Use 'N/A' only if no description is available at all."),
   location: z.string().optional().describe("City, province/state, country, or 'Remote' — e.g. 'Calgary, AB'. Do not include a street address."),
   source: z.string().optional().describe("Job board or site the listing came from, e.g. 'LinkedIn', 'Indeed', 'company website'. If not stated explicitly, infer it from the job posting's URL/domain when possible instead of leaving it blank."),
-  jobType: z.string().optional().describe("Employment type: 'Full-time', 'Part-time', or 'Contract'"),
+  jobType: z.string().optional().describe("Employment type: 'Full-time', 'Part-time', 'Contract', or 'Internship'"),
   workplaceType: workplaceTypeField,
   // Lowercased before the enum check so a caller sending "Applied"/"Draft"
   // (capitalized, like the old free-text field silently tolerated via
@@ -168,7 +168,7 @@ export const McpUpdateJobInputShape = {
     ),
   location: z.string().optional(),
   source: z.string().optional(),
-  jobType: z.string().optional().describe("Employment type: 'Full-time', 'Part-time', or 'Contract'"),
+  jobType: z.string().optional().describe("Employment type: 'Full-time', 'Part-time', 'Contract', or 'Internship'"),
   workplaceType: workplaceTypeField,
   // Same lowercase-preprocess treatment as add_job's status (Task 1) — the
   // SDK validates against this exact shape, so the case-insensitivity has to

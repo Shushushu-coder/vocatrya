@@ -258,6 +258,9 @@ describe("AddJob Component", () => {
     const options = screen.getAllByRole("option");
     expect(options.length).toBeGreaterThan(0);
     expect(options[0].textContent).toBe("Indeed");
+    for (const name of ["Official Website", "Shixiseng", "BOSS Zhipin", "Referral Group", "Xiaohongshu"]) {
+      expect(screen.getByRole("option", { name })).toBeInTheDocument();
+    }
   });
   it("should load and show the salary range suggestions", async () => {
     const salaryRangeCombobox = screen.getByLabelText("Salary Range");
@@ -280,6 +283,10 @@ describe("AddJob Component", () => {
       ),
     );
   });
+  it("offers internship as a job type", () => {
+    expect(screen.getByRole("radio", { name: "Internship" })).toBeInTheDocument();
+  });
+
   it("should load and show the status select list", async () => {
     const statusSelect = screen.getByLabelText("Status");
     await user.click(statusSelect);
@@ -530,6 +537,11 @@ describe("AddJob Component - Edit Mode", () => {
     expect(screen.getByLabelText("Salary Range")).toHaveTextContent(
       "$190k – $220k",
     );
+  });
+
+  it("restores internship when editing", async () => {
+    await renderEditMode({ jobType: "INTERNSHIP" } as Partial<JobResponse>);
+    expect(screen.getByRole("radio", { name: "Internship" })).toBeChecked();
   });
 
   it("leaves workplace type unselected when editing a job with no workplaceType", async () => {

@@ -266,6 +266,7 @@
       "statusRequired": "状态为必填项。",
       "statusMin": "状态至少需要 2 个字符。",
       "descriptionRequired": "职位描述为必填项。",
+      "salaryMax": "薪资范围最多 500 个字符。",
       "descriptionMin": "职位描述至少需要 10 个字符。"
     },
     "company": "公司",
@@ -329,6 +330,21 @@
       "internship": "实习",
       "temporary": "临时"
     },
+    "sources": {
+      "indeed": "Indeed",
+      "linkedin": "LinkedIn",
+      "monster": "Monster",
+      "glassdoor": "Glassdoor",
+      "officialWebsite": "官网",
+      "google": "Google",
+      "zipRecruiter": "ZipRecruiter",
+      "jobStreet": "Job Street",
+      "other": "其他",
+      "shixiseng": "实习僧",
+      "bossZhipin": "BOSS直聘",
+      "referralGroup": "内推群",
+      "xiaohongshu": "小红书"
+    },
     "allExceptDismissed": "全部（不含已忽略）",
     "reloadJobs": "刷新职位列表",
     "cardView": "卡片视图",
@@ -353,6 +369,7 @@
     "recruitmentBatch": "招聘批次",
     "recruitmentCohortPlaceholder": "例如：2027届",
     "recruitmentBatchPlaceholder": "例如：秋招",
+    "rowNumber": "序号",
     "salaryRange": "薪资范围",
     "resume": "简历",
     "addNew": "新建",
@@ -1798,6 +1815,7 @@
     "notFound": "未找到请求的资源",
     "networkError": "网络连接异常",
     "rateLimitExceeded": "操作过于频繁，请稍后再试",
+    "relatedRecordMissing": "无法保存，因为缺少关联记录。",
     "validationFailed": "数据校验失败，请检查输入项"
   },
   "library": {
@@ -2102,6 +2120,7 @@
     "backToDashboard": "返回概览"
   },
   "session": {
+    "invalid": "当前会话无效，请退出后重新登录。",
     "invalidSigningOut": "当前会话已失效，正在退出登录…"
   },
   "interview": {

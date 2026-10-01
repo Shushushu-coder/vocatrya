@@ -55,7 +55,12 @@ export function createAddJobFormSchema(t: (key: string) => string) {
      */
     //
     dateApplied: z.date().optional(),
-    salaryRange: z.string().optional(),
+    salaryRange: z
+      .string()
+      .max(APP_CONSTANTS.MAX_SALARY_RANGE_LENGTH, {
+        message: t("jobs.validation.salaryMax"),
+      })
+      .optional(),
     jobDescription: z
       .string({
         error: t("jobs.validation.descriptionRequired"),

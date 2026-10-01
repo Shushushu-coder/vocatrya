@@ -142,6 +142,7 @@ export enum JOB_TYPES {
   FT = "Full-time",
   PT = "Part-time",
   C = "Contract",
+  INTERNSHIP = "Internship",
 }
 
 export enum WORKPLACE_TYPES {

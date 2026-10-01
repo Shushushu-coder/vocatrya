@@ -59,6 +59,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import {
   useI18n,
   getLocalizedJobStatus,
+  getLocalizedJobSource,
   getLocalizedJobType,
   getLocalizedWorkplaceType,
 } from "@/i18n";
@@ -423,8 +424,8 @@ export function AddJob({
                         <RadioGroup
                           name="type"
                           onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          className="flex space-y-1"
+                          value={field.value}
+                          className="flex flex-wrap gap-x-4 gap-y-1"
                         >
                           {Object.entries(JOB_TYPES).map(([key, value]) => (
                             <FormItem
@@ -456,8 +457,8 @@ export function AddJob({
                         <RadioGroup
                           name="workplaceType"
                           onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          className="flex space-y-1"
+                          value={field.value}
+                          className="flex flex-wrap gap-x-4 gap-y-1"
                         >
                           {Object.entries(WORKPLACE_TYPES).map(
                             ([key, value]) => (
@@ -490,6 +491,7 @@ export function AddJob({
                         <FormLabel>{t("jobs.jobSourceLabel")}</FormLabel>
                         <Combobox
                           options={jobSources}
+                          getOptionLabel={(source) => getLocalizedJobSource(source, t)}
                           field={field}
                           creatable
                         />

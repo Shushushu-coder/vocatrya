@@ -22,13 +22,16 @@ vi.mock("@prisma/client", () => {
   const mPrismaClient = {
     jobStatus: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      upsert: vi.fn(),
     },
     jobSource: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
       create: vi.fn(),
+      upsert: vi.fn(),
       count: vi.fn(),
     },
     job: {
@@ -103,6 +106,12 @@ describe("jobActions", () => {
     for (const model of refModels) {
       (prisma as any)[model].count.mockResolvedValue(1);
     }
+    (prisma.jobStatus.findUnique as any).mockResolvedValue({
+      id: "status-id",
+      value: "new",
+      label: "New",
+    });
+    (prisma.jobSource.upsert as any).mockResolvedValue({ count: 0 });
   });
   describe("getStatusList", () => {
     it("should return status list on successful query", async () => {
@@ -152,6 +161,15 @@ describe("jobActions", () => {
       ]);
     });
 
+    it("initializes default statuses when the table is empty", async () => {
+      vi.mocked(prisma.jobStatus.findMany).mockResolvedValueOnce([]).mockResolvedValueOnce([
+        { id: "new", value: "new", label: "New" } as never,
+      ]);
+      const result = await getStatusList();
+      expect(prisma.jobStatus.upsert).toHaveBeenCalledWith({ where: { value: "new" }, update: {}, create: { label: "New", value: "new" } });
+      expect(result[0].value).toBe("new");
+    });
+
     it("should throw error on failure", async () => {
       const mockErrorResponse = {
         success: false,
@@ -166,6 +184,7 @@ describe("jobActions", () => {
   });
   describe("getJobSourceList", () => {
     it("should return job source list on successful query", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
       const mockData = [
         { id: "1", label: "Source 1", value: "source1" },
         { id: "2", label: "Source 2", value: "source2" },
@@ -175,10 +194,12 @@ describe("jobActions", () => {
       const result = await getJobSourceList();
 
       expect(result).toEqual(mockData);
-      expect(prisma.jobSource.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.jobSource.findMany).toHaveBeenCalled();
+      expect(prisma.jobSource.upsert).toHaveBeenCalled();
     });
 
     it("should returns failure response on error", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
       (prisma.jobSource.findMany as any).mockRejectedValue(
         new Error("Failed to fetch job source list."),
       );
@@ -190,7 +211,7 @@ describe("jobActions", () => {
         message: "Failed to fetch job source list.",
       });
 
-      expect(prisma.jobSource.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.jobSource.findMany).toHaveBeenCalled();
     });
   });
 
@@ -1005,6 +1026,50 @@ describe("jobActions", () => {
       expect(prisma.jobSource.create).not.toHaveBeenCalled();
       expect(result).toStrictEqual({ data: existing, success: true });
     });
+    it("maps a Chinese default channel name onto the seeded source value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const existing = {
+        label: "Shixiseng",
+        value: "shixiseng",
+        createdBy: mockUser.id,
+      };
+      (prisma.jobSource.findFirst as any).mockResolvedValue(existing);
+
+      const result = await createJobSource("实习僧");
+
+      expect(prisma.jobSource.findFirst).toHaveBeenCalledWith({
+        where: { value: "shixiseng", createdBy: mockUser.id },
+      });
+      expect(prisma.jobSource.create).not.toHaveBeenCalled();
+      expect(result).toStrictEqual({ data: existing, success: true });
+    });
+    it("creates a custom source with the trimmed user label", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobSource.findFirst as any).mockResolvedValue(null);
+      (prisma.jobSource.create as any).mockImplementation(({ data }: any) =>
+        Promise.resolve(data),
+      );
+
+      const result = await createJobSource("  学校就业群  ");
+
+      expect(prisma.jobSource.create).toHaveBeenCalledWith({
+        data: {
+          label: "学校就业群",
+          value: "学校就业群",
+          createdBy: mockUser.id,
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+    it("rejects a job source name that is too long", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const result = await createJobSource("x".repeat(81));
+      expect(result).toStrictEqual({
+        success: false,
+        message: "Job source name is too long",
+      });
+      expect(prisma.jobSource.create).not.toHaveBeenCalled();
+    });
     it("should handle unexpected errors", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
       (prisma.jobSource.findFirst as any).mockResolvedValue(null);
@@ -1043,7 +1108,7 @@ describe("jobActions", () => {
           userId: mockUser.id,
           jobUrl: jobData.jobUrl,
           applied: jobData.applied,
-          resumeId: jobData.resume,
+          resumeId: null,
         },
       });
     });
@@ -1075,7 +1140,7 @@ describe("jobActions", () => {
           jobType: jobData.type,
           userId: mockUser.id,
           applied: jobData.applied,
-          resumeId: jobData.resume,
+          resumeId: null,
         },
       });
       expect(result).toEqual({ data: jobData, success: true });
@@ -1167,6 +1232,79 @@ describe("jobActions", () => {
       expect((prisma as any).resume.count).not.toHaveBeenCalled();
       expect((prisma as any).tag.count).not.toHaveBeenCalled();
     });
+    it("normalizes empty optional foreign keys on create", async () => {
+      vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
+      vi.mocked(prisma.job.create).mockResolvedValue(jobData as never);
+      await addJob({ ...jobData, location: " ", source: "", resume: "", coverLetter: " " });
+      expect(prisma.job.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+        locationId: null, jobSourceId: null, resumeId: null, coverLetterId: null,
+      }) }));
+    });
+
+    it("persists an internship job type", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.create as any).mockResolvedValue(jobData);
+
+      await addJob({ ...jobData, type: "INTERNSHIP" });
+
+      expect(prisma.job.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ jobType: "INTERNSHIP" }),
+        }),
+      );
+    });
+    it("stores free-text salary exactly", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.job.create as any).mockResolvedValue(jobData);
+
+      await addJob({ ...jobData, salaryRange: "200-250元/天" });
+
+      expect(prisma.job.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ salaryRange: "200-250元/天" }),
+        }),
+      );
+    });
+    it("rejects a missing job status before create", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobStatus.findUnique as any).mockResolvedValue(null);
+
+      const result = await addJob(jobData);
+
+      expect(result).toStrictEqual({
+        success: false,
+        message: "Job status not found",
+      });
+      expect(prisma.job.create).not.toHaveBeenCalled();
+    });
+    it("does not treat a non-user foreign-key failure as an invalid session", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const fkError = Object.assign(new Error("Foreign key constraint failed"), {
+        code: "P2003",
+        meta: { field_name: "Job_statusId_fkey" },
+      });
+      (prisma.job.create as any).mockRejectedValue(fkError);
+
+      const result = await addJob(jobData);
+
+      expect(result.success).toBe(false);
+      expect(result.message).not.toMatch(/session appears invalid|当前会话无效/i);
+      expect(result.message).not.toMatch(/P2003|fkey|constraint/i);
+    });
+    it("keeps a user-row foreign-key failure as a session message", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const fkError = Object.assign(new Error("Foreign key constraint failed"), {
+        code: "P2003",
+        meta: { field_name: "Job_userId_fkey" },
+      });
+      (prisma.job.create as any).mockRejectedValue(fkError);
+
+      const result = await addJob(jobData);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/session|会话/i);
+      expect(result.message).not.toMatch(/P2003|fkey|constraint/i);
+    });
   });
   describe("updateJob", () => {
     const currentRefs = {
@@ -1183,6 +1321,15 @@ describe("jobActions", () => {
     beforeEach(() => {
       (prisma.job as any).findFirst.mockResolvedValue(currentRefs);
     });
+    it("clears optional foreign keys with empty values on update", async () => {
+      vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
+      vi.mocked(prisma.job.update).mockResolvedValue(jobData as never);
+      await updateJob({ ...jobData, location: " ", source: "", resume: "", coverLetter: " " });
+      expect(prisma.job.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+        locationId: null, jobSourceId: null, resumeId: null, coverLetterId: null,
+      }) }));
+    });
+
     it("does not re-check ids the job already holds", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
       (prisma as any).jobSource.count.mockResolvedValue(0);

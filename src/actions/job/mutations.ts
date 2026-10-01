@@ -15,6 +15,36 @@ import { CareerRuntimeError } from "@/lib/career/errors";
 import { AddJobFormValues } from "@/models/addJobForm.schema";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "../shared";
+import { getServerI18n } from "@/i18n/server";
+
+const SESSION_INVALID_MESSAGE =
+  "Your session appears invalid. Please sign out and sign back in.";
+const RELATED_RECORD_MISSING_MESSAGE =
+  "Could not save because a related record is missing.";
+
+async function localizedJobError(error: unknown, fallback: string) {
+  const result = handleError(error, fallback);
+  if (
+    result.message !== SESSION_INVALID_MESSAGE &&
+    result.message !== RELATED_RECORD_MISSING_MESSAGE
+  ) {
+    return result;
+  }
+  const { t } = await getServerI18n();
+  return {
+    success: false as const,
+    message:
+      result.message === SESSION_INVALID_MESSAGE
+        ? t("session.invalid")
+        : t("errors.relatedRecordMissing"),
+  };
+}
+
+function normalizeOptionalFk(value?: string | null): string | null | undefined {
+  if (value == null) return value;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
 
 function assertJobMutationsAllowed(mode: string): void {
   if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return;
@@ -107,6 +137,11 @@ export const addJob = async (
       recruitmentBatch,
     } = data;
 
+    const jobSourceId = normalizeOptionalFk(source);
+    const locationId = normalizeOptionalFk(location);
+    const resumeId = normalizeOptionalFk(resume);
+    const coverLetterId = normalizeOptionalFk(coverLetter);
+
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertJobMutationsAllowed(runtime.mode);
     if (isFullAbCapabilityEnabled(runtime.mode, resolveAbRolloutScope())) {
@@ -125,16 +160,16 @@ export const addJob = async (
       await assertJobRefsOwned(user.id, {
         jobTitleId: title,
         companyId: company,
-        locationId: location,
-        jobSourceId: source,
+        locationId,
+        jobSourceId,
       });
       const opportunity = await createOpportunityFromJobForm(prisma, user.id, {
         title,
         company,
-        location,
+        location: locationId ?? undefined,
         type,
         workplaceType,
-        source,
+        source: jobSourceId ?? undefined,
         status,
         dueDate,
         dateApplied,
@@ -144,7 +179,7 @@ export const addJob = async (
         jobDescription,
         jobUrl,
         applied,
-        resume,
+        resume: resumeId ?? undefined,
       });
       revalidatePath("/dashboard");
       return { success: true, data: opportunity };
@@ -153,18 +188,25 @@ export const addJob = async (
     await assertJobRefsOwned(user.id, {
       jobTitleId: title,
       companyId: company,
-      locationId: location,
-      jobSourceId: source,
-      resumeId: resume,
-      coverLetterId: coverLetter,
+      locationId,
+      jobSourceId,
+      resumeId,
+      coverLetterId,
       tagIds: tags,
     });
+    const statusRow = await prisma.jobStatus.findUnique({
+      where: { id: status },
+      select: { id: true },
+    });
+    if (!statusRow) {
+      throw new Error("Job status not found");
+    }
     const job = await createJobRecord({
       jobTitleId: title,
       companyId: company,
-      locationId: location,
+      locationId,
       statusId: status,
-      jobSourceId: source,
+      jobSourceId,
       salaryRange: salaryRange || null,
       dueDate,
       appliedDate: applied ? (dateApplied ?? new Date()) : null,
@@ -174,15 +216,14 @@ export const addJob = async (
       userId: user.id,
       jobUrl,
       applied,
-      resumeId: resume,
-      coverLetterId: coverLetter,
+      resumeId,
+      coverLetterId,
       tagIds: tags ?? [],
     });
     revalidatePath("/dashboard");
     return { success: true, data: job };
   } catch (error) {
-    const msg = "Failed to create job. ";
-    return handleError(error, msg);
+    return localizedJobError(error, "Failed to create job. ");
   }
 };
 
@@ -218,6 +259,10 @@ export const updateJob = async (
     } = data;
 
     const tagIds = tags ?? [];
+    const jobSourceId = normalizeOptionalFk(source);
+    const locationId = normalizeOptionalFk(location);
+    const resumeId = normalizeOptionalFk(resume);
+    const coverLetterId = normalizeOptionalFk(coverLetter);
 
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertJobMutationsAllowed(runtime.mode);
@@ -238,17 +283,17 @@ export const updateJob = async (
       await assertJobRefsOwned(user.id, {
         jobTitleId: title,
         companyId: company,
-        locationId: location,
-        jobSourceId: source,
+        locationId,
+        jobSourceId,
       });
       const opportunity = await updateOpportunityFromJobForm(prisma, user.id, {
         id,
         title,
         company,
-        location,
+        location: locationId ?? undefined,
         type,
         workplaceType,
-        source,
+        source: jobSourceId ?? undefined,
         status,
         dueDate,
         dateApplied,
@@ -258,7 +303,7 @@ export const updateJob = async (
         jobDescription,
         jobUrl,
         applied,
-        resume,
+        resume: resumeId ?? undefined,
       });
       revalidatePath("/dashboard");
       return { success: true, data: opportunity };
@@ -284,18 +329,25 @@ export const updateJob = async (
 
     // Only newly attached ids are checked: migration 20260212202940 gave every
     // JobSource to the first user, so other users' older jobs must stay editable.
-    const changed = (next?: string, prev?: string | null) =>
+    const changed = (next?: string | null, prev?: string | null) =>
       next !== prev ? next : undefined;
     const currentTagIds = new Set(current.tags.map((tag) => tag.id));
     await assertJobRefsOwned(user.id, {
       jobTitleId: changed(title, current.jobTitleId),
       companyId: changed(company, current.companyId),
-      locationId: changed(location, current.locationId),
-      jobSourceId: changed(source, current.jobSourceId),
-      resumeId: changed(resume, current.resumeId),
-      coverLetterId: changed(coverLetter, current.coverLetterId),
+      locationId: changed(locationId, current.locationId),
+      jobSourceId: changed(jobSourceId, current.jobSourceId),
+      resumeId: changed(resumeId, current.resumeId),
+      coverLetterId: changed(coverLetterId, current.coverLetterId),
       tagIds: tagIds.filter((tagId) => !currentTagIds.has(tagId)),
     });
+    const statusRow = await prisma.jobStatus.findUnique({
+      where: { id: status },
+      select: { id: true },
+    });
+    if (!statusRow) {
+      throw new Error("Job status not found");
+    }
 
     await assertLegacyCareerWriteAllowed(prisma);
     const job = await prisma.job.update({
@@ -306,9 +358,9 @@ export const updateJob = async (
       data: {
         jobTitleId: title,
         companyId: company,
-        locationId: location,
+        locationId,
         statusId: status,
-        jobSourceId: source,
+        jobSourceId,
         salaryRange: salaryRange || null,
         dueDate: dueDate,
         // applied is an irreversible historical fact, and appliedDate records
@@ -325,16 +377,15 @@ export const updateJob = async (
         jobType: type,
         workplaceType,
         jobUrl,
-        resumeId: resume,
-        coverLetterId: coverLetter,
+        resumeId,
+        coverLetterId,
         tags: { set: tagIds.map((id) => ({ id })) },
       },
     });
     revalidatePath("/dashboard");
     return { success: true, data: job };
   } catch (error) {
-    const msg = "Failed to update job. ";
-    return handleError(error, msg);
+    return localizedJobError(error, "Failed to update job. ");
   }
 };
 

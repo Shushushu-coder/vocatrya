@@ -24,4 +24,22 @@ test.describe("zh-CN locale", () => {
     await expect(page.getByText("Job title is required.")).not.toBeVisible();
     await expect(page.getByText("Company name is required.")).not.toBeVisible();
   });
+
+  test("job type and China default sources are localized", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.context().addCookies([
+      { name: "vocatrya_locale", value: "zh-CN", url: baseURL! },
+    ]);
+    await page.goto("/dashboard/myjobs?add-job=true");
+    await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+    await expect(page.getByRole("radio", { name: "实习" })).toBeVisible();
+    await page.getByLabel("求职渠道").click();
+    await expect(page.getByRole("option", { name: "官网" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "实习僧" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "BOSS直聘" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "内推群" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "小红书" })).toBeVisible();
+  });
 });

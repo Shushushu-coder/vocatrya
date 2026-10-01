@@ -1,5 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createAddJobFormSchema } from "@/models/addJobForm.schema";
+
+it.each(["zh-CN", "en"] as const)("validates free-text salary length in %s", (locale) => {
+  const t = (key: string) => translate(locale, key);
+  const salary = createAddJobFormSchema(t).shape.salaryRange;
+  expect(salary.parse("200-250元/天")).toBe("200-250元/天");
+  const result = salary.safeParse("x".repeat(501));
+  expect(result.success).toBe(false);
+  if (!result.success) expect(result.error.issues[0].message).toBe(t("jobs.validation.salaryMax"));
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -10,6 +20,8 @@ import {
   I18nProvider,
   LOCALE_COOKIE_NAME,
   LOCALE_STORAGE_KEY,
+  getLocalizedJobSource,
+  getLocalizedJobType,
   hasTranslation,
   isValidLocale,
   normalizeLocale,
@@ -164,6 +176,34 @@ describe("translation key resolution", () => {
     );
     expect(screen.getByTestId("locale")).toHaveTextContent("zh-CN");
     expect(screen.getByTestId("locale-nav")).toHaveTextContent("概览");
+  });
+});
+
+describe("job type and source localization", () => {
+  it("renders internship from the stored key in both locales", () => {
+    expect(getLocalizedJobType("INTERNSHIP", (key) => translate("zh-CN", key))).toBe(
+      "实习",
+    );
+    expect(getLocalizedJobType("INTERNSHIP", (key) => translate("en", key))).toBe(
+      "Internship",
+    );
+  });
+
+  it("localizes system sources and leaves custom labels unchanged", () => {
+    const zh = (key: string) => translate("zh-CN", key);
+    const en = (key: string) => translate("en", key);
+    expect(getLocalizedJobSource({ value: "shixiseng", label: "Shixiseng" }, zh)).toBe(
+      "实习僧",
+    );
+    expect(getLocalizedJobSource({ value: "careerpage", label: "Company Career page" }, zh)).toBe(
+      "官网",
+    );
+    expect(getLocalizedJobSource({ value: "careerpage", label: "Company Career page" }, en)).toBe(
+      "Official Website",
+    );
+    expect(getLocalizedJobSource({ value: "学校就业群", label: "学校就业群" }, en)).toBe(
+      "学校就业群",
+    );
   });
 });
 

@@ -53,4 +53,28 @@ export const JOB_SOURCES = [
     value: "other",
     createdBy: "",
   },
+  {
+    id: "7c1d0b4a-2e9f-4a11-9c3b-0f6e8a1d5c22",
+    label: "Shixiseng",
+    value: "shixiseng",
+    createdBy: "",
+  },
+  {
+    id: "b4e8c2d1-6a57-4f09-8d3e-91c0a7b5e4f3",
+    label: "BOSS Zhipin",
+    value: "boss zhipin",
+    createdBy: "",
+  },
+  {
+    id: "e9a1c6f4-3b28-4d70-a5c1-2f8e9d4b7a06",
+    label: "Referral Group",
+    value: "referral group",
+    createdBy: "",
+  },
+  {
+    id: "1f5a9d80-c3e4-4b27-9a16-8d2c7e0b5f41",
+    label: "Xiaohongshu",
+    value: "xiaohongshu",
+    createdBy: "",
+  },
 ];

@@ -38,6 +38,7 @@ interface ComboboxProps {
   freeText?: boolean;
   label?: string;
   onSearchChange?: (search: string) => void;
+  getOptionLabel?: (option: any) => string;
   // Opt out of the default fixed trigger width when the field sits in a grid
   fullWidth?: boolean;
 }
@@ -49,6 +50,7 @@ export function Combobox({
   freeText,
   label,
   onSearchChange,
+  getOptionLabel = (option) => option.label,
   fullWidth,
 }: ComboboxProps) {
   const { t } = useI18n();
@@ -58,6 +60,7 @@ export function Combobox({
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
 
   const [isPending, startTransition] = useTransition();
+  const selectedOption = options.find((option) => option.id === field.value);
   const handleEnterKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
 
@@ -152,8 +155,7 @@ export function Combobox({
           >
             <span className="min-w-0 truncate">
               {field.value
-                ? (options.find((option) => option.id === field.value)?.label ??
-                  (freeText ? field.value : null))
+                ? (selectedOption ? getOptionLabel(selectedOption) : (freeText ? field.value : null))
                 : `Select ${displayName}`}
             </span>
 
@@ -217,7 +219,7 @@ export function Combobox({
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
-                  value={option.value}
+                  value={`${getOptionLabel(option)} ${option.value}`}
                   key={option.id}
                   onSelect={() => {
                     if (field.onChange) {
@@ -232,7 +234,7 @@ export function Combobox({
                       option.id === field.value ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  {option.label}
+                  {getOptionLabel(option)}
                 </CommandItem>
               ))}
             </CommandGroup>

@@ -247,6 +247,28 @@ describe("JobsContainer Search Functionality", () => {
 
   const renderComponent = () => render(jsx());
 
+  it("continues row numbers when the next page is appended", async () => {
+    const firstPage = Array.from({ length: 25 }, (_, i) => ({ ...mockJobs[0], id: `job-${i}` }));
+    vi.mocked(getJobsList).mockResolvedValueOnce({ success: true, data: firstPage, total: 26 })
+      .mockResolvedValueOnce({ success: true, data: [{ ...mockJobs[1], id: "job-next" }], total: 26 });
+    renderComponent();
+    await waitFor(() => expect(screen.getAllByTestId("job-row-number")).toHaveLength(25));
+    await act(async () => intersectionCallback([{ isIntersecting: true }] as IntersectionObserverEntry[], {} as IntersectionObserver));
+    await waitFor(() => expect(screen.getAllByTestId("job-row-number")).toHaveLength(26));
+    expect(screen.getAllByTestId("job-row-number")[25]).toHaveTextContent("26");
+  });
+
+  it.each(["search=Amazon", "filter=interview"])("reindexes fetched results for %s", async (query) => {
+    vi.mocked(getJobsList).mockResolvedValueOnce({ success: true, data: mockJobs, total: 2 })
+      .mockResolvedValueOnce({ success: true, data: [mockJobs[1]], total: 1 });
+    const { rerender } = renderComponent();
+    await waitFor(() => expect(screen.getAllByTestId("job-row-number")).toHaveLength(2));
+    currentParams = new URLSearchParams(query);
+    rerender(jsx());
+    await waitFor(() => expect(screen.getAllByTestId("job-row-number")).toHaveLength(1));
+    expect(screen.getByTestId("job-row-number")).toHaveTextContent("1");
+  });
+
   describe("Search Input", () => {
     it("should render search input with placeholder", async () => {
       (getJobsList as any).mockResolvedValue({

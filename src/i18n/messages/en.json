@@ -266,6 +266,7 @@
       "statusRequired": "Status is required.",
       "statusMin": "Status must be at least 2 characters.",
       "descriptionRequired": "Job description is required.",
+      "salaryMax": "Salary range must be 500 characters or fewer.",
       "descriptionMin": "Job description must be at least 10 characters."
     },
     "company": "Company",
@@ -329,6 +330,21 @@
       "internship": "Internship",
       "temporary": "Temporary"
     },
+    "sources": {
+      "indeed": "Indeed",
+      "linkedin": "LinkedIn",
+      "monster": "Monster",
+      "glassdoor": "Glassdoor",
+      "officialWebsite": "Official Website",
+      "google": "Google",
+      "zipRecruiter": "ZipRecruiter",
+      "jobStreet": "Job Street",
+      "other": "Other",
+      "shixiseng": "Shixiseng",
+      "bossZhipin": "BOSS Zhipin",
+      "referralGroup": "Referral Group",
+      "xiaohongshu": "Xiaohongshu"
+    },
     "allExceptDismissed": "All (Except Dismissed)",
     "reloadJobs": "Reload jobs",
     "cardView": "Card view",
@@ -353,6 +369,7 @@
     "recruitmentBatch": "Recruitment batch",
     "recruitmentCohortPlaceholder": "e.g. Class of 2027",
     "recruitmentBatchPlaceholder": "e.g. Fall campus hiring",
+    "rowNumber": "#",
     "salaryRange": "Salary Range",
     "resume": "Resume",
     "addNew": "Add New",
@@ -1798,6 +1815,7 @@
     "notFound": "Requested resource not found.",
     "networkError": "Network connection error.",
     "rateLimitExceeded": "Rate limit exceeded. Please try again later.",
+    "relatedRecordMissing": "Could not save because a related record is missing.",
     "validationFailed": "Validation failed. Please check your inputs."
   },
   "library": {
@@ -2102,6 +2120,7 @@
     "backToDashboard": "Back to dashboard"
   },
   "session": {
+    "invalid": "Your session appears invalid. Please sign out and sign back in.",
     "invalidSigningOut": "Your session is no longer valid. Signing you out…"
   },
   "interview": {

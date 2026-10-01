@@ -72,6 +72,54 @@ describe("MyJobsTable", () => {
     expect(screen.getByText("Applied")).toBeInTheDocument();
   });
 
+  it("numbers rows by the current list order starting at 1", () => {
+    renderTable([
+      makeJob({ id: "job-1", JobTitle: { id: "1", label: "First", value: "first", createdBy: "" } }),
+      makeJob({ id: "job-2", JobTitle: { id: "2", label: "Second", value: "second", createdBy: "" } }),
+      makeJob({ id: "job-3", JobTitle: { id: "3", label: "Third", value: "third", createdBy: "" } }),
+    ]);
+
+    expect(screen.getAllByTestId("job-row-number").map((el) => el.textContent)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+  });
+
+  it("continues numbering for a later infinite-scroll page", () => {
+    const pageTwo = Array.from({ length: 3 }, (_, i) =>
+      makeJob({
+        id: `job-${i + 26}`,
+        JobTitle: { id: `${i + 26}`, label: `Job ${i + 26}`, value: `job ${i + 26}`, createdBy: "" },
+      }),
+    );
+    const jobs = [
+      ...Array.from({ length: 25 }, (_, i) =>
+        makeJob({
+          id: `job-${i + 1}`,
+          JobTitle: { id: `${i + 1}`, label: `Job ${i + 1}`, value: `job ${i + 1}`, createdBy: "" },
+        }),
+      ),
+      ...pageTwo,
+    ];
+    renderTable(jobs);
+    const numbers = screen.getAllByTestId("job-row-number").map((el) => el.textContent);
+    expect(numbers[0]).toBe("1");
+    expect(numbers[24]).toBe("25");
+    expect(numbers[25]).toBe("26");
+    expect(numbers[26]).toBe("27");
+    expect(numbers[27]).toBe("28");
+  });
+
+  it.each(["filter", "search", "sort"])("reindexes the current %s result order", () => {
+    const jobs = [makeJob({ id: "one" }), makeJob({ id: "two" }), makeJob({ id: "three" })];
+    const { rerender } = renderTable(jobs);
+    rerender(<MyJobsTable jobs={[jobs[2], jobs[0]]} jobStatuses={mockStatuses}
+      deleteJob={vi.fn()} editJob={vi.fn()} onChangeJobStatus={vi.fn()} onAddNote={vi.fn()} />);
+    expect(screen.getAllByTestId("job-row-number").map((el) => el.textContent)).toEqual(["1", "2"]);
+    expect(screen.getAllByRole("row")[1]).toHaveTextContent("1");
+  });
+
   it("shows a Dismissed badge for discovered jobs regardless of status", () => {
     renderTable([makeJob({ discoveryStatus: "dismissed", Status: { id: "1", label: "Applied", value: "applied" } })]);
 
