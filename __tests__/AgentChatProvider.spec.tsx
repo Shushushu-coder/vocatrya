@@ -1,4 +1,4 @@
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const chat = {
@@ -10,7 +10,14 @@ const chat = {
   regenerate: vi.fn(),
   clearError: vi.fn(),
   addToolApprovalResponse: vi.fn(),
-  setMessages: vi.fn(),
+  setMessages: vi.fn((update: unknown) => {
+    chat.messages =
+      typeof update === "function"
+        ? (update as (prev: typeof chat.messages) => typeof chat.messages)(
+            chat.messages,
+          )
+        : (update as typeof chat.messages);
+  }),
 };
 const useChatSpy = vi.fn((..._args: any[]) => chat);
 vi.mock("@ai-sdk/react", () => ({
@@ -56,6 +63,7 @@ import {
 import { RightRailProvider, useRightRail } from "@/context/RightRailContext";
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import {
+  createChatConversation,
   deleteChatConversation,
   saveChatConversation,
 } from "@/actions/agentChat.actions";
@@ -82,6 +90,37 @@ function Probe() {
       <button onClick={() => c.seedExchange("Add a job posting", "canned")}>
         seedExchange
       </button>
+      <button
+        onClick={() =>
+          c.setDraftModel({ connectionId: "conn-1", model: "model-x" })
+        }
+      >
+        setDraftModel
+      </button>
+      <button
+        onClick={() =>
+          c.addContextItem({
+            kind: "job",
+            entityId: "job-1",
+            labelSnapshot: "Acme Engineer",
+            source: "AUTO",
+          })
+        }
+      >
+        addContext
+      </button>
+      <span data-testid="conversation-id">{c.conversationId ?? ""}</span>
+      <span data-testid="action-error">{c.actionError?.code ?? ""}</span>
+      <span data-testid="message-roles">
+        {c.messages.map((message) => message.role).join(",")}
+      </span>
+      <span data-testid="context-items">
+        {c.context.items.map((item) => `${item.kind}:${item.entityId}`).join(",")}
+      </span>
+      <span data-testid="explicit-model">
+        {c.explicit ? `${c.explicit.connectionId}/${c.explicit.model}` : ""}
+      </span>
+      <span data-testid="history-version">{c.historyVersion}</span>
       <button onClick={c.clearQueued}>clearQueued</button>
       <span data-testid="queued">
         {c.queued ? (c.queued.parts[0] as any).text : ""}
@@ -121,7 +160,33 @@ const tree = (initialMessages: any[] = []) => (
   </SidebarProvider>
 );
 
+const draftTree = () => (
+  <SidebarProvider initialExpanded>
+    <RightRailProvider>
+      <AgentChatProvider>
+        <Probe />
+      </AgentChatProvider>
+    </RightRailProvider>
+  </SidebarProvider>
+);
+
 const setup = (initialMessages: any[] = []) => render(tree(initialMessages));
+
+const createdSnapshot = (id: string) => ({
+  success: true,
+  data: {
+    id,
+    title: null,
+    titleFallback: "Add a job posting",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+    messages: [],
+    context: { version: 1 as const, items: [] },
+    lockKind: "legacy" as const,
+    resolvedConnectionId: null,
+    resolvedModel: null,
+  },
+});
 
 const approvalMessage = {
   id: "a1",
@@ -586,5 +651,163 @@ describe("AgentChatProvider", () => {
     currentPathname = "/dashboard/jobs";
     rerender(tree());
     expect(screen.getByTestId("panel-expanded").textContent).toBe("false");
+  });
+
+  it("persists one conversation when a draft suggestion is seeded", async () => {
+    (createChatConversation as any).mockResolvedValueOnce(createdSnapshot("conv-new"));
+    render(draftTree());
+
+    await userEvent.click(screen.getByText("seedExchange"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-new");
+    });
+    expect(createChatConversation).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("message-roles").textContent).toBe("user,assistant");
+    expect(screen.getByTestId("history-version").textContent).toBe("1");
+    expect(screen.getByTestId("action-error").textContent).toBe("");
+    const persisted = (createChatConversation as any).mock.calls[0][0];
+    expect(persisted.messages).toHaveLength(2);
+    expect(persisted.messages[0].parts[0].text).toBe("Add a job posting");
+    expect(persisted.messages[1].parts[0].text).toBe("canned");
+  });
+
+  it("rolls a rejected draft seed back to the pre-seed draft", async () => {
+    (createChatConversation as any).mockRejectedValueOnce(
+      new Error('{"error":"database is locked"}'),
+    );
+    render(draftTree());
+    await userEvent.click(screen.getByText("addContext"));
+    await userEvent.click(screen.getByText("setDraftModel"));
+
+    await userEvent.click(screen.getByText("seedExchange"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
+    });
+    expect(screen.getByTestId("message-roles").textContent).toBe("");
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+    expect(screen.getByTestId("context-items").textContent).toBe("job:job-1");
+    expect(screen.getByTestId("explicit-model").textContent).toBe("conn-1/model-x");
+    expect(screen.getByTestId("history-version").textContent).toBe("0");
+    expect(screen.queryByText("database is locked")).toBeNull();
+    expect(screen.queryByText('{"error":"database is locked"}')).toBeNull();
+    expect(deleteChatConversation).not.toHaveBeenCalled();
+    expect(saveChatConversation).not.toHaveBeenCalled();
+  });
+
+  it("keeps the typed action code when creating the seeded conversation fails", async () => {
+    (createChatConversation as any).mockResolvedValueOnce({
+      success: false,
+      code: "AI_NOT_CONFIGURED",
+      message: '{"error":"provider down"}',
+    });
+    render(draftTree());
+    await userEvent.click(screen.getByText("addContext"));
+
+    await userEvent.click(screen.getByText("seedExchange"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("action-error").textContent).toBe(
+        "AI_NOT_CONFIGURED",
+      );
+    });
+    expect(screen.getByTestId("message-roles").textContent).toBe("");
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+    expect(screen.getByTestId("context-items").textContent).toBe("job:job-1");
+    expect(screen.getByTestId("history-version").textContent).toBe("0");
+    expect(screen.queryByText("provider down")).toBeNull();
+  });
+
+  it("creates exactly one conversation when a failed seed is retried", async () => {
+    (createChatConversation as any)
+      .mockRejectedValueOnce(new Error("first create failed"))
+      .mockResolvedValueOnce(createdSnapshot("conv-retry"));
+    render(draftTree());
+
+    await userEvent.click(screen.getByText("seedExchange"));
+    await waitFor(() => {
+      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
+    });
+    expect(screen.getByTestId("message-roles").textContent).toBe("");
+
+    await userEvent.click(screen.getByText("seedExchange"));
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-retry");
+    });
+    expect(createChatConversation).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("message-roles").textContent).toBe("user,assistant");
+    expect(screen.getByTestId("history-version").textContent).toBe("1");
+    expect(screen.getByTestId("action-error").textContent).toBe("");
+    const persisted = (createChatConversation as any).mock.calls[1][0];
+    expect(persisted.messages).toHaveLength(2);
+    expect(deleteChatConversation).not.toHaveBeenCalled();
+  });
+
+  it("leaves an existing conversation untouched when a new draft seed fails", async () => {
+    (createChatConversation as any).mockRejectedValueOnce(new Error("nope"));
+    setup();
+    await userEvent.click(screen.getByText("newConversation"));
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+
+    await userEvent.click(screen.getByText("seedExchange"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
+    });
+    expect(deleteChatConversation).not.toHaveBeenCalled();
+    expect(saveChatConversation).not.toHaveBeenCalled();
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+    expect(screen.getByTestId("message-roles").textContent).toBe("");
+    expect(screen.getByTestId("history-version").textContent).toBe("0");
+    expect(createChatConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends one create for a double-clicked draft suggestion", async () => {
+    let release: (value: unknown) => void = () => {};
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    (createChatConversation as any).mockImplementationOnce(() => pending);
+    render(draftTree());
+
+    await userEvent.click(screen.getByText("seedExchange"));
+    await userEvent.click(screen.getByText("seedExchange"));
+
+    expect(createChatConversation).toHaveBeenCalledTimes(1);
+    expect(chat.setMessages).toHaveBeenCalledTimes(1);
+    expect(chat.messages.map((message) => message.role).join(",")).toBe(
+      "user,assistant",
+    );
+
+    await act(async () => {
+      release({ success: false, code: "GENERIC" });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("message-roles").textContent).toBe("");
+    });
+  });
+
+  it("queues a send that races an in-flight draft seed instead of creating twice", async () => {
+    let release: (value: unknown) => void = () => {};
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    (createChatConversation as any).mockImplementationOnce(() => pending);
+    render(draftTree());
+
+    await userEvent.click(screen.getByText("seedExchange"));
+    await userEvent.click(screen.getByText("sendMessage"));
+
+    expect(createChatConversation).toHaveBeenCalledTimes(1);
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByTestId("queued").textContent).toBe("hello");
+
+    await act(async () => {
+      release({ success: false, code: "GENERIC" });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
+    });
   });
 });

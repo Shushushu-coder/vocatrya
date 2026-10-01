@@ -598,8 +598,16 @@ function useAgentChatValue(
 
   const seedExchange = useCallback(
     (userText: string, assistantText: string) => {
+      const id = conversationIdRef.current;
+      // The in-flight guard has to win before the optimistic exchange, or a
+      // second click paints messages the open create call never persists.
+      if (!id && creatingRef.current) return;
+
+      // setMessages publishes the seeded transcript on the chat object. The
+      // pre-seed copy is the only transcript a rejected create can restore.
+      const previousMessages = chat.messages.slice();
       const next: UIMessage[] = [
-        ...chat.messages,
+        ...previousMessages,
         {
           id: generateId(),
           role: "user",
@@ -612,19 +620,25 @@ function useAgentChatValue(
         },
       ];
       chat.setMessages(next);
-      const id = conversationIdRef.current;
       if (id) {
         void saveChatConversation(id, next);
         setHistoryVersion((n) => n + 1);
         return;
       }
-      if (creatingRef.current) return;
+
       creatingRef.current = true;
+      setActionError(null);
       void (async () => {
+        let committed = false;
         try {
-          const created = await createPersisted(userText, next);
-          if (!created) chat.setMessages(chat.messages);
+          committed = Boolean(await createPersisted(userText, next));
+        } catch {
+          // A thrown action does not go through createPersisted's typed code.
+          setActionError((current) => current ?? { code: "GENERIC" });
         } finally {
+          if (!committed && conversationIdRef.current === null) {
+            chat.setMessages(previousMessages);
+          }
           creatingRef.current = false;
         }
       })();
