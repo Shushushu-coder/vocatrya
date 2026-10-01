@@ -69,7 +69,7 @@ describe("AgentChatMessages", () => {
       ]),
     ];
     render(<AgentChatMessages />);
-    expect(screen.getByText(/added/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/added/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("Needs approval")).not.toBeInTheDocument();
   });
 
@@ -103,7 +103,7 @@ describe("AgentChatMessages", () => {
     expect(chat.regenerate).not.toHaveBeenCalled();
     expect(chat.resumeStream).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await userEvent.click(screen.getByRole("button", { name: /regenerate/i }));
     expect(chat.regenerate).toHaveBeenCalled();
     expect(chat.resumeStream).not.toHaveBeenCalled();
   });
@@ -119,7 +119,7 @@ describe("AgentChatMessages", () => {
   it("offers Continue when a seeded transcript ends with a user message", () => {
     chat.messages = [user([{ type: "text", text: "add a job" }])];
     render(<AgentChatMessages />);
-    expect(screen.getByRole("button", { name: /continue/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /regenerate/i })).toBeInTheDocument();
   });
 
   it("does not offer Continue while the reply is still in flight", () => {
@@ -127,7 +127,7 @@ describe("AgentChatMessages", () => {
     chat.messages = [user([{ type: "text", text: "add a job" }])];
     render(<AgentChatMessages />);
     expect(
-      screen.queryByRole("button", { name: /continue/i }),
+      screen.queryByRole("button", { name: /regenerate/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -138,7 +138,7 @@ describe("AgentChatMessages", () => {
     ];
     render(<AgentChatMessages />);
     expect(
-      screen.queryByRole("button", { name: /continue/i }),
+      screen.queryByRole("button", { name: /regenerate/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -146,7 +146,7 @@ describe("AgentChatMessages", () => {
     chat.status = "submitted";
     chat.messages = [user([{ type: "text", text: "add a job" }])];
     render(<AgentChatMessages />);
-    expect(screen.getByText(/thinking/i)).toBeInTheDocument();
+    expect(screen.getByText(/connecting/i)).toBeInTheDocument();
   });
 
   it("shows the thinking row after a tool result while the reply is composed", () => {

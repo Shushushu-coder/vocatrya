@@ -24,7 +24,7 @@ vi.mock("next/navigation", () => ({
 
 const chat = {
   open: vi.fn(),
-  clear: vi.fn().mockResolvedValue(undefined),
+  startNewConversation: vi.fn().mockResolvedValue(undefined),
   sendMessage: vi.fn(),
   approvalPending: false,
 };
@@ -303,7 +303,7 @@ describe("JobDetails – linked resume", () => {
 describe("JobDetails – match data display", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    chat.clear.mockResolvedValue(undefined);
+    chat.startNewConversation.mockResolvedValue(undefined);
     searchParams = new URLSearchParams();
   });
 
@@ -555,7 +555,7 @@ describe("JobDetails – tabs", () => {
 describe("JobDetails – Match with AI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    chat.clear.mockResolvedValue(undefined);
+    chat.startNewConversation.mockResolvedValue(undefined);
     searchParams = new URLSearchParams();
   });
 
@@ -565,16 +565,16 @@ describe("JobDetails – Match with AI", () => {
     await userEvent.click(screen.getByRole("button", { name: /match with ai/i }));
     await act(async () => {});
     expect(chat.open).toHaveBeenCalled();
-    expect(chat.clear).toHaveBeenCalled();
+    expect(chat.startNewConversation).toHaveBeenCalled();
     const sent = chat.sendMessage.mock.calls[0][0];
     expect(sent.parts[0].text).toMatch(/match/i);
   });
 
-  // The panel opens first so a failed clear cannot leave the button dead, and
-  // the match still goes out.
-  it("still asks for the match when clearing the conversation fails", async () => {
+  // The panel opens first so a failed draft cannot leave the button dead, and
+  // the match still goes out. History is not deleted.
+  it("still asks for the match when starting a new conversation fails", async () => {
     chat.approvalPending = false;
-    chat.clear.mockRejectedValueOnce(new Error("offline"));
+    chat.startNewConversation.mockRejectedValueOnce(new Error("offline"));
     render(<JobDetails job={makeJob()} {...baseProps} />);
     await userEvent.click(screen.getByRole("button", { name: /match with ai/i }));
     await act(async () => {});
@@ -582,13 +582,11 @@ describe("JobDetails – Match with AI", () => {
     expect(chat.sendMessage).toHaveBeenCalled();
   });
 
-  it("asks before clearing a conversation with a pending approval", async () => {
+  it("asks before starting a new conversation when an approval is pending", async () => {
     chat.approvalPending = true;
     render(<JobDetails job={makeJob()} {...baseProps} />);
     await userEvent.click(screen.getByRole("button", { name: /match with ai/i }));
-    expect(
-      screen.getByText(/clear the assistant conversation/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/stays in History/i)).toBeInTheDocument();
     expect(chat.sendMessage).not.toHaveBeenCalled();
   });
 });
@@ -638,15 +636,13 @@ describe("JobDetails cover letter action", () => {
     expect(sent.parts[0].text).toContain("Acme Corp");
   });
 
-  it("asks before clearing a conversation with a pending approval", async () => {
+  it("asks before starting a new conversation when an approval is pending", async () => {
     chat.approvalPending = true;
     render(
       <JobDetails {...baseProps} job={makeJob({ resumeId: "resume-1" })} />,
     );
     await userEvent.click(screen.getByTestId("generate-cover-letter-btn"));
-    expect(
-      screen.getByText(/clear the assistant conversation/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/stays in History/i)).toBeInTheDocument();
     expect(chat.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -669,7 +665,7 @@ describe("JobDetails – auto-match from the jobs list", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     chat.approvalPending = false;
-    chat.clear.mockResolvedValue(undefined);
+    chat.startNewConversation.mockResolvedValue(undefined);
     searchParams = new URLSearchParams();
   });
 
@@ -704,15 +700,13 @@ describe("JobDetails – auto-match from the jobs list", () => {
     expect(chat.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("asks before clearing a conversation with a pending approval", async () => {
+  it("asks before starting a new conversation when an approval is pending", async () => {
     chat.approvalPending = true;
     searchParams = new URLSearchParams("tab=match&match=1");
     render(<JobDetails {...baseProps} job={makeJob()} />);
     await act(async () => {});
 
-    expect(
-      screen.getByText(/clear the assistant conversation/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/stays in History/i)).toBeInTheDocument();
     expect(chat.sendMessage).not.toHaveBeenCalled();
   });
 });

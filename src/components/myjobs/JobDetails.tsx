@@ -103,7 +103,7 @@ function JobDetails({
   const jobDetailTabs = showTimeline ? AB_JOB_DETAIL_TABS : LEGACY_JOB_DETAIL_TABS;
   const {
     open: openChat,
-    clear: clearChat,
+    startNewConversation,
     sendMessage,
     approvalPending,
     busy: chatBusy,
@@ -146,9 +146,9 @@ function JobDetails({
   const startChat = async (text: string) => {
     openChat();
     try {
-      await clearChat();
+      await startNewConversation();
     } catch {
-      // Reported by the action itself; the message still goes out.
+      // The message still goes out if the draft could not be prepared.
     }
     void sendMessage({ parts: [{ type: "text", text }] });
   };

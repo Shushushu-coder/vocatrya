@@ -14,18 +14,40 @@ import type {
   AgentReviewResumeResult,
 } from "@/models/agent.model";
 import { useI18n } from "@/i18n";
+import { Button } from "@/components/ui/button";
+import { useAgentChat } from "@/components/agent/AgentChatProvider";
 
 export function AgentResultCard({ part }: { part: ToolUIPart }) {
   const { t } = useI18n();
+  const { regenerate } = useAgentChat();
+  const toolName = getToolName(part);
   if (part.state === "output-denied") {
     return (
       <div className="rounded-sm border p-3 text-sm text-muted-foreground">
-        {t("agent.cancelledNothingSaved")}
+        {toolName === "add_job"
+          ? t("agent.addJobCancelled")
+          : t("agent.cancelledNothingSaved")}
       </div>
     );
   }
 
   if (part.state === "output-error") {
+    if (toolName === "add_job") {
+      return (
+        <div className="rounded-sm border p-3 text-sm">
+          <p>{t("agent.addJobNotAdded")}</p>
+          <Button
+            className="mt-2 h-7 px-2 text-xs"
+            onClick={() => void regenerate?.()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("agent.retry")}
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="rounded-sm border p-3 text-sm">
         {t("agent.couldNotComplete")}
@@ -35,7 +57,6 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
 
   if (part.state !== "output-available") return null;
 
-  const toolName = getToolName(part);
   const body =
     toolName === "add_job" ? (
       <AddJobResult

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { classifyDescriptionCompleteness } from "@/lib/jobs/descriptionCompleteness";
 import { useI18n } from "@/i18n";
+import { agentToolLabelKey } from "@/lib/agent/toolLabels";
 
 type Respond = (r: { id: string; approved: boolean; reason?: string }) => void;
 
@@ -127,7 +128,9 @@ export function AgentApprovalCard({
     >
       <div className="flex items-center gap-2">
         <Badge variant="secondary">{t("agent.needsApproval")}</Badge>
-        <span className="text-sm font-semibold">{toolName}</span>
+        <span className="text-sm font-semibold">
+          {t(agentToolLabelKey(toolName) ?? "agent.tools.generic")}
+        </span>
       </div>
 
       {body}

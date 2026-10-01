@@ -26,6 +26,8 @@ describe("AgentApprovalCard", () => {
   it("renders the arguments as labelled rows under a Needs approval pill", () => {
     render(<AgentApprovalCard part={part()} onRespond={vi.fn()} />);
     expect(screen.getByText("Needs approval")).toBeInTheDocument();
+    expect(screen.getByText("Add job")).toBeInTheDocument();
+    expect(screen.queryByText("add_job")).not.toBeInTheDocument();
     expect(screen.getByText("Acme Corp")).toBeInTheDocument();
     expect(screen.getByText("Senior Platform Engineer")).toBeInTheDocument();
     expect(screen.getByText("Remote")).toBeInTheDocument();

@@ -10,7 +10,7 @@ export function AgentStatusRow({ label }: { label: string }) {
   const showSlowWarning = useSlowResponseWarning(true, false);
 
   return (
-    <div className="rounded-sm border bg-muted/20 px-3 py-2">
+    <div className="px-1 py-1">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         <span>{label}</span>

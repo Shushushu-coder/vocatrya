@@ -131,7 +131,8 @@ describe("AgentResultCard", () => {
         }
       />,
     );
-    expect(screen.getByText(/could not|failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/not added/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
 
   const getResumePart = (output: unknown) => ({

@@ -22,6 +22,7 @@ import {
 import { VocatryaChatTransport } from "@/lib/agent/chatTransport";
 import { hasPendingApproval, stubConsumedPastes } from "@/lib/agent/paste";
 import { pageContextFor } from "@/lib/agent/pageContext";
+import { writeActiveConversationId } from "@/lib/agent/activeConversation";
 import { useRightRail } from "@/context/RightRailContext";
 import { useSidebar } from "@/context/SidebarContext";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
@@ -29,11 +30,16 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { toastInfo } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 import {
-  clearChatConversation,
+  createChatConversation,
+  deleteChatConversation,
+  getAgentChatPreflight,
+  getChatConversation,
+  listChatConversations,
+  resolveDraftPageContext,
   saveChatConversation,
+  updateChatConversationContext,
 } from "@/actions/agentChat.actions";
 import { getUserSettings } from "@/actions/userSettings.actions";
-import { getAgentChatPreflight } from "@/actions/agentChat.actions";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 import { AiProvider } from "@/models/ai.model";
 import {
@@ -41,30 +47,58 @@ import {
   isNestedTool,
   type AgentAddJobResult,
   type AgentNestedStreamData,
-  type PageContext,
 } from "@/models/agent.model";
+import {
+  EMPTY_CONVERSATION_CONTEXT,
+  type AgentConversationContextItem,
+  type AgentConversationContextV1,
+} from "@/lib/agent/conversationContext";
+import type {
+  ChatConversationSummary,
+  ChatLockKind,
+  ExplicitModelSelection,
+} from "@/lib/agent/chatTypes";
 
 export const AGENT_CHAT_PANEL_ID = "chat";
 
-type Preflight = {
+export type AgentChatIdentity = {
   checked: boolean;
   ok: boolean;
-  error?: string;
-  provider?: string;
-  model?: string;
+  kind: "account" | "legacy" | "blocked" | "unknown";
+  locked: boolean;
+  model: string | null;
+  displayName: string | null;
+  persistedLegacy: boolean;
+  code?: string;
 };
 
-// Everything the five senders pass. Narrower than chat.sendMessage's union so
-// a held message can be re-dispatched and rendered without narrowing again.
+export type AgentChatInitialConversation = {
+  id: string;
+  messages: UIMessage[];
+  context: AgentConversationContextV1;
+  lockKind: ChatLockKind;
+  resolvedConnectionId: string | null;
+  resolvedModel: string | null;
+  title: string | null;
+  titleFallback: string | null;
+};
+
 type QueuedMessage = { parts: UIMessage["parts"] };
 
 type AgentChatValue = ReturnType<typeof useAgentChatValue>;
 
 const AgentChatContext = createContext<AgentChatValue | null>(null);
 
-// The completed add_job writes in a transcript, by tool call id. Name-checked
-// on purpose: created is add_job's field, and another tool reusing it is not a
-// job write.
+const UNKNOWN_IDENTITY: AgentChatIdentity = {
+  checked: false,
+  ok: true,
+  kind: "unknown",
+  locked: false,
+  model: null,
+  displayName: null,
+  persistedLegacy: false,
+};
+
 function createdJobToolCallIds(messages: UIMessage[]): string[] {
   const ids: string[] = [];
   for (const message of messages) {
@@ -78,7 +112,51 @@ function createdJobToolCallIds(messages: UIMessage[]): string[] {
   return ids;
 }
 
-function useAgentChatValue(initialMessages: UIMessage[]) {
+function firstText(parts: UIMessage["parts"]): string | null {
+  for (const part of parts) {
+    if (part.type === "text" && part.text.trim()) return part.text.trim();
+  }
+  return null;
+}
+
+function contextRequests(items: AgentConversationContextItem[]) {
+  return items.map((item) => ({
+    kind: item.kind,
+    entityId: item.entityId,
+    source: item.source,
+  }));
+}
+
+function identityFromInitial(
+  initial: AgentChatInitialConversation | null,
+): AgentChatIdentity {
+  if (!initial) return UNKNOWN_IDENTITY;
+  if (initial.lockKind === "account") {
+    return {
+      checked: false,
+      ok: true,
+      kind: "account",
+      locked: true,
+      model: initial.resolvedModel,
+      displayName: null,
+      persistedLegacy: false,
+    };
+  }
+  return {
+    checked: false,
+    ok: true,
+    kind: "legacy",
+    locked: false,
+    model: null,
+    displayName: null,
+    persistedLegacy: true,
+  };
+}
+
+function useAgentChatValue(
+  initial: AgentChatInitialConversation | null,
+  seedMessages: UIMessage[],
+) {
   const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
@@ -86,21 +164,17 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
   const { expanded: sidebarExpanded, collapse: collapseSidebar } = useSidebar();
 
   const [isOpen, setIsOpen] = useState(false);
-  // Lives here, not in the panel: SidebarInset offsets page content by this
-  // width so the panel docks beside the page instead of over it.
-  // Not "ai-panel-width": that key is shared by the three AI sheets, and
-  // dragging this panel would silently resize all of them.
   const {
     width: panelWidth,
     handleMouseDown: startResize,
     isDragging: isResizing,
     isExpanded: isPanelExpanded,
     toggleExpand: togglePanelExpand,
-  } = useResizablePanel(APP_CONSTANTS.AGENT_CHAT_PANEL_WIDTH_KEY);
+  } = useResizablePanel(
+    APP_CONSTANTS.AGENT_CHAT_PANEL_WIDTH_KEY,
+    APP_CONSTANTS.AGENT_CHAT_PANEL_MIN_WIDTH,
+  );
 
-  // The maximized width only makes sense on the page it was expanded on: if
-  // the sidebar re-expands it would overlap, and navigating away (sidebar nav
-  // links leave the sidebar collapsed) leaves it flush against a new page.
   const lastPathnameRef = useRef(pathname);
   useEffect(() => {
     const navigated = lastPathnameRef.current !== pathname;
@@ -109,45 +183,56 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
   }, [sidebarExpanded, isPanelExpanded, pathname, togglePanelExpand]);
 
   const [interruptedTurn, setInterruptedTurn] = useState(false);
-  const [preflight, setPreflight] = useState<Preflight>({
-    checked: false,
-    ok: true,
-  });
+  const [identity, setIdentity] = useState<AgentChatIdentity>(() =>
+    identityFromInitial(initial),
+  );
+  const [conversationId, setConversationId] = useState<string | null>(
+    initial?.id ?? null,
+  );
+  const [context, setContext] = useState<AgentConversationContextV1>(
+    initial?.context ?? EMPTY_CONVERSATION_CONTEXT,
+  );
+  const [explicit, setExplicit] = useState<ExplicitModelSelection | null>(null);
+  const [actionError, setActionError] = useState<{ code: string } | null>(null);
+  const [contextPickerNonce, setContextPickerNonce] = useState(0);
+  const [modelPickerNonce, setModelPickerNonce] = useState(0);
+  const [historyVersion, setHistoryVersion] = useState(0);
 
-  const pageContextRef = useRef<PageContext>(pageContextFor(pathname));
+  const conversationIdRef = useRef<string | null>(initial?.id ?? null);
+  const contextRef = useRef(context);
+  const explicitRef = useRef<ExplicitModelSelection | null>(null);
+  const lockKindRef = useRef<ChatLockKind | null>(initial?.lockKind ?? null);
+  const creatingRef = useRef(false);
+  const draftResolvedRef = useRef(initial !== null);
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+  contextRef.current = context;
+
+  const pageContextRef = useRef(pageContextFor(pathname));
   useEffect(() => {
     pageContextRef.current = pageContextFor(pathname);
   }, [pathname]);
 
-  // Transient data parts never land in message.parts — the SDK hands them to
-  // onData and drops them — so a nested tool's streaming text lives here,
-  // keyed by toolCallId so two nested calls cannot collide.
   const [toolStreams, setToolStreams] = useState<Record<string, string>>({});
-
-  // Job rows changed server-side. The jobs list is client state loaded by a
-  // server action, so router.refresh cannot reach it — pages that hold their
-  // own rows subscribe to this counter.
   const [jobWrites, setJobWrites] = useState(0);
-
-  // Which writes have already been announced. Seeded from the persisted
-  // transcript so a yesterday's add_job in initialMessages is not mistaken for
-  // one that just landed; lazily, because the effect below runs per token and
-  // the scan is not worth repeating.
   const announcedJobWritesRef = useRef<Set<string> | null>(null);
   if (announcedJobWritesRef.current === null) {
-    announcedJobWritesRef.current = new Set(createdJobToolCallIds(initialMessages));
+    announcedJobWritesRef.current = new Set(
+      createdJobToolCallIds(initial?.messages ?? seedMessages),
+    );
   }
 
   const chat = useChat({
-    messages: initialMessages,
+    messages: initial?.messages ?? seedMessages,
     transport: new VocatryaChatTransport({
       api: "/api/ai/chat",
       prepareSendMessagesRequest: ({ messages }) => ({
-        body: { messages, pageContext: pageContextRef.current },
+        body: {
+          messages,
+          conversationId: conversationIdRef.current,
+        },
       }),
     }),
-    // Without this the approval is resolved client-side and nothing ever
-    // POSTs back to execute the tool. It is the mechanism, not a nicety.
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onData: (part) => {
       if (part.type !== AGENT_NESTED_STREAM_PART_TYPE || !part.id) return;
@@ -156,7 +241,6 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
       setToolStreams((prev) => ({ ...prev, [id]: (prev[id] ?? "") + delta }));
     },
     onFinish: ({ message, isAbort, isError }) => {
-      // onFinish runs from a finally block, so it fires on abort too.
       if (isAbort || isError) return;
 
       const finishedParts = message?.parts ?? [];
@@ -164,41 +248,16 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
       const finishedTools = finishedParts
         .filter((part) => isToolUIPart(part) && part.state === "output-available")
         .map((part) => getToolName(part as ToolUIPart));
-      // Any nested tool that saves server-side leaves the page behind the
-      // panel stale — the saved review card, the job's match score, or the
-      // job's cover-letter button flipping to "Regenerate Letter".
       const generated = finishedTools.some(isNestedTool);
-      // The score it just saved sits in a JOB row, which a jobs list holding
-      // its own rows can only pick up from the counter. review_resume writes
-      // to the resume and the list renders no cover-letter state, so neither
-      // of the other two nested tools belongs here.
       const scored = finishedTools.includes("match_job");
 
-      // The route stubs the paste on its way into the DB, but that copy is
-      // not the one the client POSTs next turn — so without this the browser
-      // keeps a consumed posting marked unconsumed, resolvePastedText finds
-      // it one user message later, and the next thing the user types calls
-      // add_job again on the job they just saved. It self-corrected only on
-      // reload, when the stubbed row re-seeded the transcript.
-      // Stays here rather than in the effect below: its deadline is the next
-      // POST, and writing to useChat's store mid-stream risks being clobbered.
       if (wrote) chat.setMessages((prev) => stubConsumedPastes(prev));
-
-      // Only the nested tools. A job write refreshes the moment add_job
-      // returns — see the effect below. An RSC refresh on an irrelevant page
-      // is a wasted request, not a bug; a stale saved review or match score
-      // right after watching one land reads as one.
       if (generated) router.refresh();
       if (scored) setJobWrites((n) => n + 1);
+      setHistoryVersion((n) => n + 1);
     },
   });
 
-  // add_job is approval-gated, so the model calls it on one POST and the SDK
-  // executes it on the next — where stopWhen never matches (addJobSettled
-  // wants a tool CALL in the step and that step has only a result), and the
-  // model runs a whole extra generation narrating the write.
-  // Announcing in onFinish left the jobs list stale for the length of that
-  // generation; the output part is on the client the moment the tool returns.
   useEffect(() => {
     const announced = announcedJobWritesRef.current!;
     const landed = createdJobToolCallIds(chat.messages).filter(
@@ -214,15 +273,10 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
   streamingRef.current =
     chat.status === "streaming" || chat.status === "submitted";
 
-  // Every close path funnels through here — the X button, Escape, rail
-  // eviction, and the Header trigger toggling it shut. That is what
-  // guarantees nothing generates while the panel is closed.
   const close = useCallback(() => {
     if (streamingRef.current) {
       chat.stop();
       setInterruptedTurn(true);
-      // The one abort the user gets no on-screen signal for — the panel they
-      // would have read it in is the thing that just went away.
       toastInfo(t("agent.generationStoppedReopen"));
     }
     setIsOpen(false);
@@ -230,81 +284,98 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
   }, [chat, releaseRail, t]);
 
   const runPreflight = useCallback(async () => {
-    // The conversation's creation-time lock (or the CAREER_DIALOGUE
-    // assignment it would resolve to) decides which runtime the next turn
-    // uses — check that first so a locked/managed conversation never falls
-    // through to a legacy settings probe.
     try {
-      const account = await getAgentChatPreflight();
+      const account = await getAgentChatPreflight({
+        conversationId: conversationIdRef.current,
+        explicit: conversationIdRef.current ? null : explicitRef.current,
+      });
       const state = account?.data;
       if (state?.kind === "account") {
-        setPreflight({
+        setIdentity({
           checked: true,
           ok: true,
-          provider: state.displayName,
+          kind: "account",
+          locked: state.locked,
           model: state.model,
+          displayName: state.displayName,
+          persistedLegacy: false,
         });
         return;
       }
       if (state?.kind === "blocked") {
-        setPreflight({
+        setIdentity((prev) => ({
+          ...prev,
           checked: true,
           ok: false,
-          error:
-            state.code === "REAUTH_REQUIRED"
-              ? "The AI connection for this conversation needs you to sign in again — open Settings → AI Connections."
-              : state.code === "CONNECTION_DISCONNECTED"
-                ? "The AI connection for this conversation is disconnected — reconnect it in Settings → AI Connections."
-                : state.code === "STREAMING_NOT_SUPPORTED" ||
-                    state.code === "STREAMING_NOT_VERIFIED"
-                  ? "The assigned AI runtime cannot stream responses, so it cannot run the assistant — pick a streaming-verified runtime in Settings → AI Connections."
-                  : state.code === "RUNTIME_NOT_AVAILABLE" ||
-                      state.code === "PERMISSION_BOUNDARY_NOT_READY"
-                    ? "The assigned AI runtime is not available on this machine — check Settings → AI Connections."
-                    : "The AI connection for this conversation is not usable — check Settings → AI Connections.",
-        });
+          kind: "blocked",
+          locked: Boolean(conversationIdRef.current) && prev.locked,
+          code: state.code,
+          persistedLegacy: false,
+        }));
         return;
       }
+      if (state?.kind === "legacy") {
+        setIdentity({
+          checked: true,
+          ok: Boolean(state.model),
+          kind: "legacy",
+          locked: false,
+          model: state.model,
+          displayName: null,
+          persistedLegacy: state.persisted,
+          code: state.model ? undefined : "AI_NOT_CONFIGURED",
+        });
+        if (state.model || state.persisted) return;
+      }
     } catch {
-      // Preflight is advisory — fall through to the legacy probe rather
-      // than disabling send on a read failure.
+      // Preflight is advisory. A missing action falls through to settings.
     }
 
     const settings = await getUserSettings();
     const ai = settings?.data?.settings?.ai;
     const provider = ai?.provider ?? AiProvider.OLLAMA;
+    const persistedLegacy =
+      lockKindRef.current === "legacy" && Boolean(conversationIdRef.current);
 
-    // No model configured is a configuration error, not a guess. Caught here
-    // so the empty state says it and send is disabled — the user never
-    // spends a turn to learn it, and the route's 503 stays the backstop.
     if (!ai?.model) {
-      setPreflight({
+      setIdentity({
         checked: true,
         ok: false,
-        error:
-          "No AI model is configured. Pick one in Settings to use the assistant.",
-        provider,
+        kind: "legacy",
+        locked: false,
+        model: null,
+        displayName: provider,
+        persistedLegacy,
+        code: "AI_NOT_CONFIGURED",
       });
       return;
     }
 
     if (provider !== AiProvider.OLLAMA) {
-      setPreflight({ checked: true, ok: true, provider, model: ai.model });
+      setIdentity({
+        checked: true,
+        ok: true,
+        kind: "legacy",
+        locked: false,
+        model: ai.model,
+        displayName: provider,
+        persistedLegacy,
+      });
       return;
     }
     const result = await checkOllamaConnection(provider);
-    setPreflight({
+    setIdentity({
       checked: true,
       ok: result.isConnected,
-      error: result.isConnected
-        ? undefined
-        : (result.error ?? "Ollama is not reachable."),
-      provider,
+      kind: "legacy",
+      locked: false,
       model: ai.model,
+      displayName: provider,
+      persistedLegacy,
+      code: result.isConnected ? undefined : "BACKEND_UNAVAILABLE",
     });
   }, []);
 
-  // Collapsing the rail buys the docked panel ~140px of page width.
   const open = useCallback(() => {
     collapseSidebar();
     requestOpen(AGENT_CHAT_PANEL_ID);
@@ -312,65 +383,211 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
     void runPreflight();
   }, [collapseSidebar, requestOpen, runPreflight]);
 
-  // Losing the rail to another panel is a close, with the same abort.
   useEffect(() => {
     if (isOpen && holder !== AGENT_CHAT_PANEL_ID) close();
   }, [holder, isOpen, close]);
 
-  // A signal, not a value: the composer's textarea is uncontrolled, so
-  // remounting it on the nonce is the only thing that empties it.
-  const [composerNonce, setComposerNonce] = useState(0);
+  useEffect(() => {
+    writeActiveConversationId(initial?.id ?? null);
+    if (initial?.id || draftResolvedRef.current) return;
+    draftResolvedRef.current = true;
+    const page = pageContextFor(pathnameRef.current);
+    if (!page.jobId && !page.resumeId) return;
+    void resolveDraftPageContext({
+      jobId: page.jobId ?? null,
+      resumeId: page.resumeId ?? null,
+    }).then((result) => {
+      if (conversationIdRef.current || !result?.success || !result.data) return;
+      setContext(result.data);
+      contextRef.current = result.data;
+    });
+  }, [initial?.id]);
 
-  // At most one message waits here. A second send while one is already held
-  // replaces it, which is what the composer did before this moved up.
+  const [composerNonce, setComposerNonce] = useState(0);
   const [queued, setQueued] = useState<QueuedMessage | undefined>();
 
-  // stop() before the delete is load-bearing: the route skips its onFinish
-  // write when the turn was aborted, and that is what stops a late save from
-  // restoring the conversation this just deleted.
-  const clear = useCallback(async () => {
-    const wasStreaming = streamingRef.current;
-    chat.stop();
-    await clearChatConversation();
-    chat.setMessages([]);
+  const resetTransient = useCallback(() => {
     chat.clearError();
+    setActionError(null);
     setInterruptedTurn(false);
     setComposerNonce((n) => n + 1);
     setToolStreams({});
     setQueued(undefined);
-    // The lock died with the row — the next send resolves the CURRENT
-    // assignment, so the header must reflect that preview again.
-    void runPreflight();
-    // Clearing an idle conversation aborted nothing worth reporting.
-    if (wasStreaming) toastInfo(t("agent.conversationClearedStopped"));
-  }, [chat, t, runPreflight]);
+  }, [chat]);
+
+  const applyCreated = useCallback(
+    (data: {
+      id: string;
+      context: AgentConversationContextV1;
+      lockKind: ChatLockKind;
+      resolvedModel: string | null;
+    }) => {
+      conversationIdRef.current = data.id;
+      lockKindRef.current = data.lockKind;
+      setConversationId(data.id);
+      setContext(data.context);
+      contextRef.current = data.context;
+      explicitRef.current = null;
+      setExplicit(null);
+      writeActiveConversationId(data.id);
+      setHistoryVersion((n) => n + 1);
+      void runPreflight();
+    },
+    [runPreflight],
+  );
+
+  const createPersisted = useCallback(
+    async (firstUserText: string | null, messages: UIMessage[]) => {
+      const result = await createChatConversation({
+        messages,
+        context: contextRequests(contextRef.current.items),
+        explicit: explicitRef.current,
+        firstUserText,
+      });
+      if (!result.success || !result.data) {
+        setActionError({ code: result.code ?? "GENERIC" });
+        return null;
+      }
+      applyCreated(result.data);
+      return result.data.id;
+    },
+    [applyCreated],
+  );
+
+  const startNewConversation = useCallback(
+    async (options?: { explicit?: ExplicitModelSelection | null }) => {
+      const wasStreaming = streamingRef.current;
+      chat.stop();
+      conversationIdRef.current = null;
+      lockKindRef.current = null;
+      setConversationId(null);
+      const nextExplicit = options?.explicit ?? null;
+      explicitRef.current = nextExplicit;
+      setExplicit(nextExplicit);
+      chat.setMessages([]);
+      resetTransient();
+      const empty = EMPTY_CONVERSATION_CONTEXT;
+      setContext(empty);
+      contextRef.current = empty;
+      draftResolvedRef.current = true;
+      writeActiveConversationId(null);
+      setIdentity(UNKNOWN_IDENTITY);
+      if (wasStreaming) toastInfo(t("agent.conversationStartedStopped"));
+      void runPreflight();
+      const page = pageContextFor(pathnameRef.current);
+      if (!page.jobId && !page.resumeId) return;
+      const result = await resolveDraftPageContext({
+        jobId: page.jobId ?? null,
+        resumeId: page.resumeId ?? null,
+      });
+      if (conversationIdRef.current) return;
+      if (result?.success && result.data) {
+        setContext(result.data);
+        contextRef.current = result.data;
+      }
+    },
+    [chat, resetTransient, runPreflight, t],
+  );
+
+  const selectConversation = useCallback(
+    async (id: string) => {
+      if (streamingRef.current) chat.stop();
+      const result = await getChatConversation(id);
+      if (!result.success || !result.data) {
+        setActionError({ code: result.code ?? "CONVERSATION_NOT_FOUND" });
+        return false;
+      }
+      const data = result.data;
+      conversationIdRef.current = data.id;
+      lockKindRef.current = data.lockKind;
+      explicitRef.current = null;
+      setExplicit(null);
+      setConversationId(data.id);
+      setContext(data.context);
+      contextRef.current = data.context;
+      chat.setMessages(data.messages);
+      resetTransient();
+      writeActiveConversationId(data.id);
+      setIdentity(
+        data.lockKind === "account"
+          ? {
+              checked: false,
+              ok: true,
+              kind: "account",
+              locked: true,
+              model: data.resolvedModel,
+              displayName: null,
+              persistedLegacy: false,
+            }
+          : {
+              checked: false,
+              ok: true,
+              kind: "legacy",
+              locked: false,
+              model: null,
+              displayName: null,
+              persistedLegacy: true,
+            },
+      );
+      void runPreflight();
+      return true;
+    },
+    [chat, resetTransient, runPreflight],
+  );
+
+  const removeConversation = useCallback(
+    async (id: string) => {
+      const result = await deleteChatConversation(id);
+      if (!result.success) {
+        setActionError({ code: result.code ?? "GENERIC" });
+        return false;
+      }
+      setHistoryVersion((n) => n + 1);
+      if (id !== conversationIdRef.current) return true;
+      const listed = await listChatConversations();
+      const next = listed.data?.[0];
+      if (next) {
+        await selectConversation(next.id);
+        return true;
+      }
+      await startNewConversation();
+      return true;
+    },
+    [selectConversation, startNewConversation],
+  );
 
   const approvalPending = useMemo(
     () => hasPendingApproval(chat.messages),
     [chat.messages],
   );
 
-  // Resuming the turn is what ends the interruption — Continue, or simply
-  // typing the next message. Cleared here rather than on a status transition
-  // because close() flags the turn while stop() is still settling, and an
-  // effect watching status would race it back to false.
   const dispatch = useCallback(
     (message: QueuedMessage) => {
       setInterruptedTurn(false);
-      return chat.sendMessage(message);
+      setActionError(null);
+      if (conversationIdRef.current) return chat.sendMessage(message);
+      if (creatingRef.current) {
+        setQueued(message);
+        return;
+      }
+      creatingRef.current = true;
+      void (async () => {
+        try {
+          const id = await createPersisted(firstText(message.parts), []);
+          if (!id) return;
+          setInterruptedTurn(false);
+          await chat.sendMessage(message);
+        } finally {
+          creatingRef.current = false;
+        }
+      })();
     },
-    [chat],
+    [chat, createPersisted],
   );
 
-  // Sending while a turn is in flight starts a SECOND request: useChat does
-  // not abort the first, and the two live streams then take turns appending
-  // copies of each other's message into one transcript — the same message.id
-  // in two slots, which is the duplicate-key crash. Every sender funnels
-  // through here, so the hold lives here and not in the composer, which the
-  // resume page's Review button never touches.
   const sendMessage = useCallback(
     (message: QueuedMessage) => {
-      if (streamingRef.current || approvalPending) {
+      if (streamingRef.current || approvalPending || creatingRef.current) {
         setQueued(message);
         return;
       }
@@ -379,10 +596,6 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
     [approvalPending, dispatch],
   );
 
-  // A canned exchange, not a model turn: the caller supplies both halves and
-  // nothing is POSTed. Persisted here because the transcript only reaches the
-  // DB when the route runs, and a pair that vanishes on reload while every
-  // real turn survives reads as a bug.
   const seedExchange = useCallback(
     (userText: string, assistantText: string) => {
       const next: UIMessage[] = [
@@ -399,35 +612,117 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
         },
       ];
       chat.setMessages(next);
-      void saveChatConversation(next);
+      const id = conversationIdRef.current;
+      if (id) {
+        void saveChatConversation(id, next);
+        setHistoryVersion((n) => n + 1);
+        return;
+      }
+      if (creatingRef.current) return;
+      creatingRef.current = true;
+      void (async () => {
+        try {
+          const created = await createPersisted(userText, next);
+          if (!created) chat.setMessages(chat.messages);
+        } finally {
+          creatingRef.current = false;
+        }
+      })();
     },
-    [chat],
+    [chat, createPersisted],
   );
 
-  // Both conditions are load-bearing. approvalPending flips false at the same
-  // instant sendAutomaticallyWhen fires the POST that executes the approved
-  // tool, so releasing on that alone would race it and cut the tool off
-  // mid-execution; status is what proves the connection is actually free.
   useEffect(() => {
     if (!queued || approvalPending || chat.status !== "ready") return;
+    if (creatingRef.current) return;
     setQueued(undefined);
     void dispatch(queued);
   }, [queued, approvalPending, chat.status, dispatch]);
 
   const regenerate = useCallback(() => {
-    if (streamingRef.current) return;
+    if (streamingRef.current || !conversationIdRef.current) return;
     setInterruptedTurn(false);
     void chat.regenerate();
   }, [chat]);
 
   const clearQueued = useCallback(() => setQueued(undefined), []);
-
   const dismissInterrupted = useCallback(() => setInterruptedTurn(false), []);
+  const clearActionError = useCallback(() => setActionError(null), []);
+  const requestAddContext = useCallback(
+    () => setContextPickerNonce((n) => n + 1),
+    [],
+  );
+  const requestModelPicker = useCallback(
+    () => setModelPickerNonce((n) => n + 1),
+    [],
+  );
 
-  // A turn in flight, or one parked on an approval. Read by every surface
-  // that starts a chat from outside the panel, so a second one cannot clear
-  // the conversation the first is still streaming into.
+  const setDraftModel = useCallback(
+    (selection: ExplicitModelSelection | null) => {
+      if (conversationIdRef.current) return;
+      explicitRef.current = selection;
+      setExplicit(selection);
+      void runPreflight();
+    },
+    [runPreflight],
+  );
+
+  const persistContext = useCallback(async (items: AgentConversationContextItem[]) => {
+    const id = conversationIdRef.current;
+    const next = { version: 1 as const, items };
+    const previous = contextRef.current;
+    setContext(next);
+    contextRef.current = next;
+    if (!id) return;
+    const result = await updateChatConversationContext(id, contextRequests(items));
+    if (!result.success || !result.data) {
+      setContext(previous);
+      contextRef.current = previous;
+      setActionError({ code: result.code ?? "GENERIC" });
+      return;
+    }
+    setContext(result.data);
+    contextRef.current = result.data;
+  }, []);
+
+  const removeContextItem = useCallback(
+    (kind: AgentConversationContextItem["kind"], entityId: string) => {
+      void persistContext(
+        contextRef.current.items.filter(
+          (item) => item.kind !== kind || item.entityId !== entityId,
+        ),
+      );
+    },
+    [persistContext],
+  );
+
+  const addContextItem = useCallback(
+    (item: AgentConversationContextItem) => {
+      if (
+        contextRef.current.items.some(
+          (existing) =>
+            existing.kind === item.kind && existing.entityId === item.entityId,
+        )
+      ) {
+        return;
+      }
+      void persistContext([
+        ...contextRef.current.items,
+        { ...item, source: "MANUAL" },
+      ]);
+    },
+    [persistContext],
+  );
+
   const busy = streamingRef.current || approvalPending;
+
+  const preflight = {
+    checked: identity.checked,
+    ok: identity.ok,
+    model: identity.model ?? undefined,
+    provider: identity.displayName ?? undefined,
+    code: identity.code,
+  };
 
   return {
     isOpen,
@@ -439,7 +734,12 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
     jobWrites,
     status: chat.status,
     error: chat.error,
-    clearError: chat.clearError,
+    actionError,
+    clearError: () => {
+      chat.clearError();
+      setActionError(null);
+    },
+    clearActionError,
     sendMessage,
     seedExchange,
     stop: chat.stop,
@@ -450,7 +750,21 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
     clearQueued,
     interruptedTurn,
     dismissInterrupted,
-    clear,
+    startNewConversation,
+    selectConversation,
+    removeConversation,
+    historyVersion,
+    conversationId,
+    context,
+    explicit,
+    setDraftModel,
+    addContextItem,
+    removeContextItem,
+    requestAddContext,
+    contextPickerNonce,
+    requestModelPicker,
+    modelPickerNonce,
+    identity,
     preflight,
     refreshPreflight: runPreflight,
     composerNonce,
@@ -463,13 +777,18 @@ function useAgentChatValue(initialMessages: UIMessage[]) {
 }
 
 export function AgentChatProvider({
+  initialConversation = null,
   initialMessages,
   children,
 }: {
-  initialMessages: UIMessage[];
+  initialConversation?: AgentChatInitialConversation | null;
+  initialMessages?: UIMessage[];
   children: React.ReactNode;
 }) {
-  const value = useAgentChatValue(initialMessages);
+  const value = useAgentChatValue(
+    initialConversation?.id ? initialConversation : null,
+    initialConversation?.messages ?? initialMessages ?? [],
+  );
   return (
     <AgentChatContext.Provider value={value}>
       {children}
@@ -484,3 +803,5 @@ export function useAgentChat() {
   }
   return ctx;
 }
+
+export type { ChatConversationSummary };

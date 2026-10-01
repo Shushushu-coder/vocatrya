@@ -54,6 +54,7 @@ export function AddJobResult({
 
   return (
     <div className="text-sm">
+      <p>{t("agent.addedToMyJobs")}</p>
       <p>
         {company
           ? t("agent.addedJobAt", { title: jobTitle, company })

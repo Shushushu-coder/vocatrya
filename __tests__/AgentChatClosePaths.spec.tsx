@@ -23,6 +23,21 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/actions/agentChat.actions", () => ({
   clearChatConversation: vi.fn(async () => ({ success: true })),
+  deleteChatConversation: vi.fn(async () => ({ success: true })),
+  saveChatConversation: vi.fn(async () => ({ success: true })),
+  createChatConversation: vi.fn(async () => ({ success: false })),
+  getChatConversation: vi.fn(async () => ({ success: false })),
+  listChatConversations: vi.fn(async () => ({ success: true, data: [] })),
+  listAgentContextOptions: vi.fn(async () => ({
+    success: true,
+    data: { jobs: [], resumes: [] },
+  })),
+  listEligibleChatModels: vi.fn(async () => ({ success: true, data: [] })),
+  updateChatConversationContext: vi.fn(async () => ({ success: true })),
+  resolveDraftPageContext: vi.fn(async () => ({
+    success: true,
+    data: { version: 1, items: [] },
+  })),
 }));
 vi.mock("@/actions/userSettings.actions", () => ({
   getUserSettings: vi.fn(async () => ({
@@ -169,9 +184,9 @@ describe("agent chat close paths", () => {
     setup();
     await openPanel();
     await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+      await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
     });
-    expect(vi.mocked(toastInfo).mock.calls[0]![0]).toMatch(/cleared/i);
+    expect(vi.mocked(toastInfo).mock.calls[0]![0]).toMatch(/stopped/i);
   });
 
   // Both toasts are gated on an actual abort — closing or clearing an idle
@@ -181,7 +196,7 @@ describe("agent chat close paths", () => {
     setup();
     await openPanel();
     await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+      await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
       await userEvent.click(screen.getByRole("button", { name: "Close chat" }));
     });
     expect(toastInfo).not.toHaveBeenCalled();

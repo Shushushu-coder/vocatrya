@@ -4,9 +4,16 @@ import userEvent from "@testing-library/user-event";
 const sendMessage = vi.fn();
 const seedExchange = vi.fn();
 let preflight = { checked: true, ok: true };
+let context = { version: 1, items: [] as Array<Record<string, string>> };
 
 vi.mock("@/components/agent/AgentChatProvider", () => ({
-  useAgentChat: () => ({ sendMessage, seedExchange, preflight }),
+  useAgentChat: () => ({
+    sendMessage,
+    seedExchange,
+    preflight,
+    context,
+    requestAddContext: vi.fn(),
+  }),
 }));
 
 import { AgentChatEmptyState } from "@/components/agent/AgentChatEmptyState";
@@ -16,6 +23,7 @@ describe("AgentChatEmptyState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     preflight = { checked: true, ok: true };
+    context = { version: 1, items: [] };
   });
 
   // The click carries no company, title or posting, so add_job is
@@ -33,13 +41,25 @@ describe("AgentChatEmptyState", () => {
   });
 
   // The other three end in a tool call whose outcome depends on the page.
-  it("sends the tool-backed suggestions to the model", async () => {
+  it("sends the job-context suggestion to the model", async () => {
+    context = {
+      version: 1,
+      items: [
+        {
+          kind: "job",
+          entityId: "job-1",
+          labelSnapshot: "AI Product Analyst",
+          source: "AUTO",
+        },
+      ],
+    };
     render(<AgentChatEmptyState />);
-    await userEvent.click(screen.getByText("Match a job"));
+    expect(screen.getByText("AI Product Analyst")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Check my match"));
 
     expect(seedExchange).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledWith({
-      parts: [{ type: "text", text: "Match a job" }],
+      parts: [{ type: "text", text: "Check my match" }],
     });
   });
 

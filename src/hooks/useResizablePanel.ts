@@ -8,7 +8,7 @@ const {
   RESIZABLE_PANEL_MAX_WIDTH_RATIO: MAX_WIDTH_RATIO,
 } = APP_CONSTANTS;
 
-export function useResizablePanel(storageKey: string) {
+export function useResizablePanel(storageKey: string, minWidth: number = MIN_WIDTH) {
   const [width, setWidth] = useState<number>(() =>
     getFromLocalStorage(storageKey, DEFAULT_WIDTH)
   );
@@ -20,6 +20,8 @@ export function useResizablePanel(storageKey: string) {
   const startX = useRef(0);
   const startWidth = useRef(0);
   const widthRef = useRef(width);
+  const minWidthRef = useRef(minWidth);
+  minWidthRef.current = minWidth;
 
   useEffect(() => {
     widthRef.current = width;
@@ -56,7 +58,10 @@ export function useResizablePanel(storageKey: string) {
       if (!isDragging.current) return;
       const maxWidth = window.innerWidth * MAX_WIDTH_RATIO;
       const delta = startX.current - e.clientX;
-      const newWidth = Math.min(Math.max(startWidth.current + delta, MIN_WIDTH), maxWidth);
+      const newWidth = Math.min(
+        Math.max(startWidth.current + delta, minWidthRef.current),
+        maxWidth,
+      );
       widthRef.current = newWidth;
       setWidth(newWidth);
     };

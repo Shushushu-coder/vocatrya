@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { XIcon } from "lucide-react";
 import type { TextUIPart, UIMessage } from "ai";
 import {
@@ -20,6 +21,11 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { readAgentChatError } from "@/lib/agent/chatTransport";
+import {
+  agentErrorCopy,
+  categorizeAgentErrorCode,
+} from "@/lib/agent/chatErrorUx";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
   AGENT_PASTE_PART_TYPE,
@@ -90,7 +96,7 @@ export function AgentChatInput() {
     queued,
     clearQueued,
     error,
-    clearError,
+    actionError,
     preflight,
     composerNonce,
   } = useAgentChat();
@@ -158,22 +164,8 @@ export function AgentChatInput() {
 
   return (
     <div className="flex flex-col gap-2">
-      {error ? (
-        <Alert variant="destructive" className="flex items-start gap-2">
-          <AlertDescription className="flex-1">
-            {error.message}
-          </AlertDescription>
-          <Button
-            aria-label={t("common.dismissError")}
-            className="size-6 shrink-0"
-            onClick={clearError}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <XIcon className="size-3.5" />
-          </Button>
-        </Alert>
+      {error || actionError || (preflight.checked && !preflight.ok) ? (
+        <ChatErrorBanner />
       ) : null}
 
       {queued ? (
@@ -197,10 +189,6 @@ export function AgentChatInput() {
             <XIcon className="size-3.5" />
           </Button>
         </div>
-      ) : null}
-
-      {preflight.checked && !preflight.ok && preflight.error ? (
-        <p className="text-xs text-destructive">{preflight.error}</p>
       ) : null}
 
       {/* No PromptInputBody: it wraps these in a display:contents div, and
@@ -255,5 +243,80 @@ export function AgentChatInput() {
         </PromptInputFooter>
       </PromptInput>
     </div>
+  );
+}
+
+function ChatErrorBanner() {
+  const { t } = useI18n();
+  const {
+    error,
+    actionError,
+    clearError,
+    preflight,
+    messages,
+    regenerate,
+    startNewConversation,
+    requestModelPicker,
+  } = useAgentChat();
+  const parsed = error ? readAgentChatError(error) : null;
+  const code =
+    parsed?.code && parsed.code !== "GENERIC"
+      ? parsed.code
+      : (actionError?.code ?? preflight.code ?? parsed?.code ?? "GENERIC");
+  const copy = agentErrorCopy(categorizeAgentErrorCode(code));
+  const raw = parsed?.message ?? "";
+  const showRaw = raw.length > 0 && !raw.trim().startsWith("{") && code === "GENERIC";
+
+  return (
+    <Alert variant="destructive" className="flex items-start gap-2">
+      <AlertDescription className="flex-1 space-y-1">
+        <p className="font-medium">{t(copy.titleKey)}</p>
+        <p>{showRaw ? raw : t(copy.bodyKey)}</p>
+        {copy.action === "retry" ? (
+          <Button
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              clearError();
+              if (messages.length > 0) void regenerate();
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("agent.retry")}
+          </Button>
+        ) : null}
+        {copy.action === "settings" ? (
+          <Button asChild className="h-7 px-2 text-xs" size="sm" variant="outline">
+            <Link href="/dashboard/settings">{t("agent.goToAiSettings")}</Link>
+          </Button>
+        ) : null}
+        {copy.action === "new-model" ? (
+          <Button
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              clearError();
+              void startNewConversation();
+              requestModelPicker();
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("agent.useOtherModel")}
+          </Button>
+        ) : null}
+      </AlertDescription>
+      <Button
+        aria-label={t("common.dismissError")}
+        className="size-6 shrink-0"
+        onClick={clearError}
+        size="icon"
+        type="button"
+        variant="ghost"
+      >
+        <XIcon className="size-3.5" />
+      </Button>
+    </Alert>
   );
 }

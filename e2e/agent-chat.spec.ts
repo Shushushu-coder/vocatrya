@@ -80,22 +80,11 @@ async function openChat(page: Page) {
   );
   await page.goto("/dashboard/myjobs");
   await page.getByRole("button", { name: "Open assistant" }).click();
-  // A shared user can carry a transcript in from another run or a manual
-  // pass, so start from Clear. Then reload: clear() calls setMessages([])
-  // only after the server action resolves, and waiting on the HTTP response
-  // is not enough — it resolves on headers, while the action settles after
-  // the RSC body is parsed. A late wipe would swallow the first message the
-  // test sends. Remounting past it is deterministic; the row is already
-  // deleted by the time the response arrives.
-  await Promise.all([
-    page.waitForResponse(
-      (res) => res.request().method() === "POST" && res.url().includes("/dashboard"),
-    ),
-    page.getByRole("button", { name: "Clear" }).click(),
-  ]);
-  await page.reload();
-  await page.getByRole("button", { name: "Open assistant" }).click();
-  await expect(page.getByText(/I can add a job to your tracker/)).toBeVisible();
+  // A shared user can already have a transcript. New conversation is a client
+  // draft and does not delete that history. Do not reload here: an unsaved
+  // draft falls back to the newest saved conversation.
+  await page.getByRole("button", { name: "New conversation" }).click();
+  await expect(page.getByText("Start a Career AI conversation")).toBeVisible();
 }
 
 async function send(page: Page, text: string) {
@@ -114,10 +103,10 @@ test.describe("agent chat", () => {
     // panel survives the navigation because the provider is in the layout.
     await page.getByRole("link", { name: "Tasks" }).click();
     await expect(page).toHaveURL(/\/dashboard\/tasks/);
-    await expect(page.getByRole("button", { name: "Clear" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New conversation" })).toBeVisible();
 
     await page.getByRole("button", { name: "Close chat" }).click();
-    await expect(page.getByRole("button", { name: "Clear" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "New conversation" })).toBeHidden();
     await expect(
       page.getByRole("button", { name: "Open assistant" }),
     ).toBeVisible();
@@ -207,7 +196,7 @@ test.describe("agent chat", () => {
     await page.getByRole("button", { name: "Cancel" }).click();
     await page.getByRole("button", { name: "Skip" }).click();
 
-    await expect(page.getByText("Cancelled — nothing was saved.")).toBeVisible();
+    await expect(page.getByText("Add cancelled")).toBeVisible();
     await expect(page.getByRole("button", { name: "Confirm" })).toBeHidden();
 
     // Nothing reached the jobs list.

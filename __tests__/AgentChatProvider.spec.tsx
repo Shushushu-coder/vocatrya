@@ -28,7 +28,16 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/actions/agentChat.actions", () => ({
   clearChatConversation: vi.fn(async () => ({ success: true })),
+  deleteChatConversation: vi.fn(async () => ({ success: true })),
   saveChatConversation: vi.fn(async () => ({ success: true })),
+  createChatConversation: vi.fn(async () => ({ success: true, data: null })),
+  getChatConversation: vi.fn(async () => ({ success: false })),
+  listChatConversations: vi.fn(async () => ({ success: true, data: [] })),
+  resolveDraftPageContext: vi.fn(async () => ({
+    success: true,
+    data: { version: 1, items: [] },
+  })),
+  updateChatConversationContext: vi.fn(async () => ({ success: true })),
 }));
 vi.mock("@/actions/userSettings.actions", () => ({
   getUserSettings: vi.fn(async () => ({
@@ -47,7 +56,7 @@ import {
 import { RightRailProvider, useRightRail } from "@/context/RightRailContext";
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import {
-  clearChatConversation,
+  deleteChatConversation,
   saveChatConversation,
 } from "@/actions/agentChat.actions";
 import { getUserSettings } from "@/actions/userSettings.actions";
@@ -61,7 +70,7 @@ function Probe() {
     <div>
       <button onClick={c.open}>open</button>
       <button onClick={c.close}>close</button>
-      <button onClick={c.clear}>clear</button>
+      <button onClick={() => void c.startNewConversation()}>newConversation</button>
       <button onClick={() => void c.regenerate()}>regenerate</button>
       <button
         onClick={() =>
@@ -89,10 +98,23 @@ function Probe() {
   );
 }
 
+const conversation = (messages: any[] = []) => ({
+  id: "conv-1",
+  title: null,
+  titleFallback: null,
+  createdAt: "2026-10-01T00:00:00.000Z",
+  updatedAt: "2026-10-01T00:00:00.000Z",
+  messages,
+  context: { version: 1 as const, items: [] },
+  lockKind: "legacy" as const,
+  resolvedConnectionId: null,
+  resolvedModel: null,
+});
+
 const tree = (initialMessages: any[] = []) => (
   <SidebarProvider initialExpanded>
     <RightRailProvider>
-      <AgentChatProvider initialMessages={initialMessages}>
+      <AgentChatProvider initialConversation={conversation(initialMessages)}>
         <Probe />
       </AgentChatProvider>
     </RightRailProvider>
@@ -148,7 +170,7 @@ describe("AgentChatProvider", () => {
       parts: [{ type: "text", text: "canned" }],
     });
     expect(next[1].id).not.toBe(next[2].id);
-    expect(saveChatConversation).toHaveBeenCalledWith(next);
+    expect(saveChatConversation).toHaveBeenCalledWith("conv-1", next);
   });
 
   it("wires sendAutomaticallyWhen, without which an approved tool never executes", () => {
@@ -292,7 +314,7 @@ describe("AgentChatProvider", () => {
     chat.status = "streaming";
     const { rerender } = setup();
     await userEvent.click(screen.getByText("sendMessage"));
-    await userEvent.click(screen.getByText("clear"));
+    await userEvent.click(screen.getByText("newConversation"));
 
     chat.status = "ready";
     await act(async () => {
@@ -333,22 +355,20 @@ describe("AgentChatProvider", () => {
     expect(screen.getByTestId("state").textContent).toContain("|false|");
   });
 
-  it("clears in order: stop, delete, reset", async () => {
+  it("starts a new conversation without deleting history", async () => {
     chat.status = "streaming";
     setup();
-    await userEvent.click(screen.getByText("clear"));
+    await userEvent.click(screen.getByText("newConversation"));
     const stopOrder = chat.stop.mock.invocationCallOrder[0];
-    const deleteOrder = (clearChatConversation as any).mock
-      .invocationCallOrder[0];
     const resetOrder = chat.setMessages.mock.invocationCallOrder[0];
-    expect(stopOrder).toBeLessThan(deleteOrder);
-    expect(deleteOrder).toBeLessThan(resetOrder);
+    expect(stopOrder).toBeLessThan(resetOrder);
+    expect(deleteChatConversation).not.toHaveBeenCalled();
   });
 
   it("signals the composer to reset on clear", async () => {
     setup();
     expect(screen.getByTestId("composer-nonce").textContent).toBe("0");
-    await userEvent.click(screen.getByText("clear"));
+    await userEvent.click(screen.getByText("newConversation"));
     expect(screen.getByTestId("composer-nonce").textContent).toBe("1");
   });
 
@@ -381,7 +401,7 @@ describe("AgentChatProvider", () => {
     render(
       <SidebarProvider initialExpanded>
         <RightRailProvider>
-          <AgentChatProvider initialMessages={[]}>
+          <AgentChatProvider initialConversation={conversation()}>
             <Probe />
           </AgentChatProvider>
         </RightRailProvider>
@@ -393,7 +413,8 @@ describe("AgentChatProvider", () => {
     // to pageContextFor, which proves only the regex.
     const transport = chatInit().transport as any;
     const { body } = transport.prepareSendMessagesRequest({ messages: [] });
-    expect(body.pageContext).toEqual({ route: "/dashboard/myjobs" });
+    expect(body.conversationId).toBe("conv-1");
+    expect(body.pageContext).toBeUndefined();
   });
 
   const reviewToolMessage = {

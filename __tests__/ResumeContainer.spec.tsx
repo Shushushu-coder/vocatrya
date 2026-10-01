@@ -5,7 +5,7 @@ import type { Resume } from "@/models/profile.model";
 const chat = {
   open: vi.fn(),
   sendMessage: vi.fn(),
-  clear: vi.fn(async () => {}),
+  startNewConversation: vi.fn(async () => {}),
   approvalPending: false,
 };
 vi.mock("@/components/agent/AgentChatProvider", () => ({
@@ -48,28 +48,27 @@ describe("ResumeContainer — Review button", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     chat.approvalPending = false;
-    chat.clear.mockImplementation(async () => {});
+    chat.startNewConversation.mockImplementation(async () => {});
   });
 
-  it("opens the panel before clearing, then sends the review request", async () => {
+  it("opens the panel, starts a new conversation, then sends the review", async () => {
     render(<ResumeContainer resume={resume} defaultResumeId={null} />);
     await clickReview();
 
-    expect(chat.clear).toHaveBeenCalled();
+    expect(chat.startNewConversation).toHaveBeenCalled();
     expect(chat.sendMessage).toHaveBeenCalledWith({
       parts: [{ type: "text", text: "Review Senior Engineer Resume" }],
     });
 
-    // Opening first is what stops a failed clear from leaving a dead button.
     const openOrder = chat.open.mock.invocationCallOrder[0];
-    const clearOrder = chat.clear.mock.invocationCallOrder[0];
+    const draftOrder = chat.startNewConversation.mock.invocationCallOrder[0];
     const sendOrder = chat.sendMessage.mock.invocationCallOrder[0];
-    expect(openOrder).toBeLessThan(clearOrder);
-    expect(clearOrder).toBeLessThan(sendOrder);
+    expect(openOrder).toBeLessThan(draftOrder);
+    expect(draftOrder).toBeLessThan(sendOrder);
   });
 
-  it("still opens and sends when the clear fails", async () => {
-    chat.clear.mockRejectedValue(new Error("offline"));
+  it("still opens and sends when starting a new conversation fails", async () => {
+    chat.startNewConversation.mockRejectedValue(new Error("offline"));
     render(<ResumeContainer resume={resume} defaultResumeId={null} />);
     await clickReview();
 
@@ -77,21 +76,19 @@ describe("ResumeContainer — Review button", () => {
     expect(chat.sendMessage).toHaveBeenCalled();
   });
 
-  it("asks before wiping a conversation with a pending approval", async () => {
+  it("asks before starting a new conversation when an approval is pending", async () => {
     chat.approvalPending = true;
     render(<ResumeContainer resume={resume} defaultResumeId={null} />);
     await clickReview();
 
-    expect(
-      screen.getByText(/waiting for your approval/i),
-    ).toBeInTheDocument();
-    expect(chat.clear).not.toHaveBeenCalled();
+    expect(screen.getByText(/stays in History/i)).toBeInTheDocument();
+    expect(chat.startNewConversation).not.toHaveBeenCalled();
     expect(chat.sendMessage).not.toHaveBeenCalled();
 
     await userEvent.click(
-      screen.getByRole("button", { name: /clear and review/i }),
+      screen.getByRole("button", { name: /^new conversation$/i }),
     );
-    expect(chat.clear).toHaveBeenCalled();
+    expect(chat.startNewConversation).toHaveBeenCalled();
     expect(chat.sendMessage).toHaveBeenCalledWith({
       parts: [{ type: "text", text: "Review Senior Engineer Resume" }],
     });
@@ -103,7 +100,7 @@ describe("ResumeContainer — Review button", () => {
     await clickReview();
     await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
 
-    expect(chat.clear).not.toHaveBeenCalled();
+    expect(chat.startNewConversation).not.toHaveBeenCalled();
     expect(chat.sendMessage).not.toHaveBeenCalled();
     expect(chat.open).not.toHaveBeenCalled();
   });

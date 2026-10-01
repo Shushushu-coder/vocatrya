@@ -45,7 +45,7 @@ function ResumeContainer({
   const {
     open: openChat,
     sendMessage,
-    clear: clearChat,
+    startNewConversation,
     approvalPending,
   } = useAgentChat();
   const [showClearChatConfirm, setShowClearChatConfirm] = useState(false);
@@ -109,9 +109,9 @@ function ResumeContainer({
   const startReview = async () => {
     openChat();
     try {
-      await clearChat();
+      await startNewConversation();
     } catch {
-      // Reported by the action itself; the review still goes out.
+      // The review still goes out if the draft could not be prepared.
     }
     void sendMessage({ parts: [{ type: "text", text: `Review ${title}` }] });
   };

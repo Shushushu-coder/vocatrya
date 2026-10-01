@@ -190,17 +190,16 @@ export function AgentChatMessages() {
 
         {showContinue && (
           <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            <span className="flex-1">{t("agent.replyInterrupted")}</span>
-            {/* Offered, never automatic — the user closed the panel, and
-                silently restarting a 30–60s local generation on reopen undoes
-                their own action. */}
+            <span className="flex-1">{t("agent.stopped")}</span>
+            {/* Offered, never automatic — regenerate reruns the turn. It does
+                not resume the interrupted token stream. */}
             <Button
               onClick={() => void regenerate()}
               size="sm"
               type="button"
               variant="outline"
             >
-              {t("agent.continue")}
+              {t("agent.regenerate")}
             </Button>
             <Button
               aria-label={t("agent.dismissInterrupted")}
@@ -215,7 +214,15 @@ export function AgentChatMessages() {
           </div>
         )}
 
-        {thinking && <AgentStatusRow label={t("agent.thinkingLabel")} />}
+        {thinking && (
+          <AgentStatusRow
+            label={
+              status === "submitted"
+                ? t("agent.connecting")
+                : t("agent.thinkingTurn")
+            }
+          />
+        )}
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
