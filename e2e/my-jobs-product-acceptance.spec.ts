@@ -4,6 +4,11 @@ import Papa from "papaparse";
 import { test, expect, uniqueName } from "./fixtures";
 import { E2E_TEST_USER } from "./support/testUser";
 import { configureE2EDatabase } from "./support/database";
+import {
+  cleanupMyJobsAcceptanceFixture,
+  seedMyJobsAcceptanceFixture,
+  type SeededAcceptanceJobs,
+} from "./support/myJobsAcceptanceFixture";
 
 const database = configureE2EDatabase();
 const prisma = new PrismaClient({ datasourceUrl: database.url });
@@ -13,22 +18,11 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
   // coupling My Jobs acceptance to the unrelated Add Job dialog controls.
   const user = await prisma.user.findUniqueOrThrow({ where: { email: E2E_TEST_USER.email } });
   const marker = uniqueName("验收岗位");
-  const company = await prisma.company.create({ data: { label: `${marker}公司`, value: `${marker}company`, createdBy: user.id } });
-  const title = await prisma.jobTitle.create({ data: { label: `${marker}中文职位`, value: `${marker}title`, createdBy: user.id } });
-  const location = await prisma.location.create({ data: { label: "上海 Remote 自定义", value: marker, createdBy: user.id } });
-  const source = await prisma.jobSource.create({ data: { label: `${marker}学校就业群`, value: marker, createdBy: user.id } });
-  const status = await prisma.jobStatus.findUniqueOrThrow({ where: { value: "interview" } });
-  const newStatus = await prisma.jobStatus.findUniqueOrThrow({ where: { value: "new" } });
+  let seeded: SeededAcceptanceJobs | undefined;
   try {
-    for (let i = 0; i < 28; i++) {
-      await prisma.job.create({ data: {
-        userId: user.id, companyId: company.id, jobTitleId: title.id, createdAt: new Date(),
-        locationId: location.id, jobSourceId: source.id, statusId: i === 0 ? newStatus.id : status.id,
-        jobType: "INTERNSHIP", workplaceType: "REMOTE", applied: i !== 0,
-        appliedDate: i === 0 ? null : new Date("2026-09-01"),
-        description: "中文用户描述保留原样", salaryRange: "200-250元/天",
-      } });
-    }
+    seeded = await seedMyJobsAcceptanceFixture(prisma, { userId: user.id, marker });
+    console.log(`[my-jobs-acceptance] read family=${seeded.family}`);
+    const { company, title, location, source } = seeded.catalog;
     await page.context().addCookies([{ name: "vocatrya_locale", value: "zh-CN", url: baseURL! }]);
     await page.goto("/dashboard/myjobs");
     const numbers = page.getByTestId("job-row-number");
@@ -44,11 +38,11 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
     await expect(page).toHaveURL(/search=/);
     await expect(numbers.first()).toHaveText("1");
     await page.getByTestId("job-filter-select").click();
-    await page.getByRole("option", { name: "新建", exact: true }).click();
+    await page.getByRole("option", { name: seeded.singletonFilterLabel, exact: true }).click();
     await expect(numbers).toHaveCount(1);
     await expect(numbers).toHaveText("1");
     await page.getByTestId("job-filter-select").click();
-    await page.getByRole("option", { name: "全部（不含已忽略）", exact: true }).click();
+    await page.getByRole("option", { name: seeded.resetFilterLabel, exact: true }).click();
     await expect(numbers.nth(2)).toHaveText("3");
     await search.clear();
     await expect(page).not.toHaveURL(/search=/);
@@ -81,11 +75,10 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
       }
     }
   } finally {
-    await prisma.job.deleteMany({ where: { userId: user.id, companyId: company.id } });
-    await prisma.jobSource.delete({ where: { id: source.id } });
-    await prisma.location.delete({ where: { id: location.id } });
-    await prisma.jobTitle.delete({ where: { id: title.id } });
-    await prisma.company.delete({ where: { id: company.id } });
-    await prisma.$disconnect();
+    try {
+      if (seeded) await cleanupMyJobsAcceptanceFixture(prisma, seeded);
+    } finally {
+      await prisma.$disconnect();
+    }
   }
 });
