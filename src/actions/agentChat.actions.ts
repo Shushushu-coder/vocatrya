@@ -38,6 +38,9 @@ import {
   resolveOwnedContext,
   resolvePageContextItems,
 } from "@/lib/agent/conversationContext.server";
+// Keep these types in chatTypes.ts. A type re-export from this "use server"
+// module is erased at runtime, and Turbopack still tries to expose it as an
+// action export, which fails the dashboard client bundle.
 import type {
   AgentChatPreflight,
   ChatConversationSnapshot,
@@ -45,14 +48,6 @@ import type {
   EligibleChatModel,
   ExplicitModelSelection,
 } from "@/lib/agent/chatTypes";
-
-export type {
-  AgentChatPreflight,
-  ChatConversationSnapshot,
-  ChatConversationSummary,
-  EligibleChatModel,
-  ExplicitModelSelection,
-};
 
 function fail(error: unknown, fallback: string): {
   success: false;

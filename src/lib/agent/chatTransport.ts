@@ -5,7 +5,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
-import { parseAgentStreamError } from "./errors";
+import { parseAgentStreamError } from "./streamError";
 
 export class AgentChatClientError extends Error {
   readonly code: string;

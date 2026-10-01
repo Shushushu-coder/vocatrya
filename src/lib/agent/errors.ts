@@ -4,9 +4,12 @@ import {
   NoSuchToolError,
   ToolCallNotFoundForApprovalError,
 } from "ai";
-import { AIUnavailableError } from "@/lib/ai";
+import { AIUnavailableError } from "@/lib/ai/tools/errors";
 import { AIBusinessError } from "@/lib/ai/connections";
 import { log } from "@/lib/telemetry";
+import { STREAM_ERROR_PREFIX } from "./streamError";
+
+export { parseAgentStreamError } from "./streamError";
 
 type ErrorContext = { provider?: string; model?: string };
 
@@ -132,8 +135,6 @@ export function mapAgentError(
   return GENERIC;
 }
 
-const STREAM_ERROR_PREFIX = "agent-code:";
-
 /**
  * Stable wire code. Reuses AIBusinessError codes. Request-level codes
  * (NOT_AUTHENTICATED, RATE_LIMITED, INVALID_REQUEST, GENERIC) are not a
@@ -199,17 +200,4 @@ export function formatAgentStreamError(
 ): string {
   const body = agentErrorEnvelope(error, context);
   return `${STREAM_ERROR_PREFIX}${body.code}\n${body.error}`;
-}
-
-export function parseAgentStreamError(message: string): {
-  code: string;
-  message: string;
-} | null {
-  if (!message.startsWith(STREAM_ERROR_PREFIX)) return null;
-  const newline = message.indexOf("\n");
-  if (newline <= STREAM_ERROR_PREFIX.length) return null;
-  return {
-    code: message.slice(STREAM_ERROR_PREFIX.length, newline),
-    message: message.slice(newline + 1),
-  };
 }
