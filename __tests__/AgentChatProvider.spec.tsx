@@ -224,7 +224,7 @@ describe("AgentChatProvider", () => {
     await userEvent.click(screen.getByText("seedExchange"));
 
     expect(chat.sendMessage).not.toHaveBeenCalled();
-    const next = chat.setMessages.mock.calls[0][0];
+    const next = chat.setMessages.mock.calls[0][0] as typeof chat.messages;
     expect(next).toHaveLength(3);
     expect(next[1]).toMatchObject({
       role: "user",
