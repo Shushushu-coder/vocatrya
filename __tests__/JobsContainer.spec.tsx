@@ -6,6 +6,7 @@ import {
   getJobDetails,
   deleteJobById,
   updateJobStatus,
+  addJob,
 } from "@/actions/job.actions";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
@@ -44,12 +45,15 @@ vi.mock("@/actions/job.actions", () => ({
   getJobDetails: vi.fn(),
   deleteJobById: vi.fn(),
   updateJobStatus: vi.fn(),
+  addJob: vi.fn(),
+  updateJob: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
   usePathname: vi.fn(),
   useSearchParams: vi.fn(),
+  redirect: vi.fn(),
 }));
 
 // useAgentChat throws outside the provider, which this spec does not mount.
@@ -1300,4 +1304,87 @@ describe("JobsContainer Search Functionality", () => {
       expect(screen.queryByRole("table")).not.toBeInTheDocument();
     });
   });
+});
+
+describe("JobsContainer add-job refresh", () => {
+  const user = userEvent.setup({ skipHover: true });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    (useRouter as any).mockReturnValue({
+      push: vi.fn(),
+      replace: vi.fn(),
+      refresh: vi.fn(),
+      back: vi.fn(),
+      forward: vi.fn(),
+      prefetch: vi.fn(),
+    });
+    (usePathname as any).mockReturnValue("/dashboard/myjobs");
+    (useSearchParams as any).mockReturnValue(new URLSearchParams());
+  });
+
+  it("shows a successfully added row after one list reload", async () => {
+    const created = {
+      id: "job-new",
+      userId: "user-1",
+      JobTitle: {
+        id: "title-1",
+        label: "Refresh Visible Role",
+        value: "refresh visible role",
+        createdBy: "user-1",
+      },
+      Company: { id: "company-1", label: "Amazon", value: "amazon", createdBy: "user-1", logoUrl: "" },
+      Location: { id: "location-1", label: "Remote", value: "remote", createdBy: "user-1" },
+      Status: { id: "new-id", label: "New", value: "new" },
+      JobSource: { id: "source-1", label: "Indeed", value: "indeed" },
+      jobType: "FT",
+    };
+    vi.mocked(getJobsList)
+      .mockResolvedValueOnce({ success: true, data: [], total: 0 })
+      .mockResolvedValue({ success: true, data: [created], total: 1 });
+    vi.mocked(addJob).mockResolvedValue({ success: true, data: { id: "job-new" } } as any);
+
+    render(
+      <JobsContainer
+        statuses={[
+          { id: "new-id", label: "New", value: "new" },
+          { id: "1", label: "Applied", value: "applied" },
+        ]}
+        companies={[{ id: "company-1", label: "Amazon", value: "amazon", createdBy: "user-1" }]}
+        titles={[
+          {
+            id: "title-1",
+            label: "Refresh Visible Role",
+            value: "refresh visible role",
+            createdBy: "user-1",
+          },
+        ]}
+        locations={[{ id: "location-1", label: "Remote", value: "remote", createdBy: "user-1" }]}
+        sources={[{ id: "source-1", label: "Indeed", value: "indeed", createdBy: "user-1" }]}
+        tags={[]}
+      />,
+    );
+
+    await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Refresh Visible Role")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("add-job-btn"));
+    await user.click(screen.getByRole("combobox", { name: /job title/i }));
+    await user.click(screen.getByRole("option", { name: "Refresh Visible Role" }));
+    await user.click(screen.getByRole("combobox", { name: /company/i }));
+    await user.click(screen.getByRole("option", { name: "Amazon" }));
+    await user.click(screen.getByRole("combobox", { name: /job location/i }));
+    await user.click(screen.getByRole("option", { name: "Remote" }));
+    await user.click(screen.getByRole("combobox", { name: /job source/i }));
+    await user.click(screen.getByRole("option", { name: "Indeed" }));
+    const description = screen.getByLabelText("Job Description");
+    const paragraph = description.querySelector("div > p");
+    if (paragraph) paragraph.textContent = "Some description long enough";
+
+    await user.click(screen.getByTestId("save-job-btn"));
+
+    await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Refresh Visible Role")).toBeInTheDocument();
+  }, 15000);
 });

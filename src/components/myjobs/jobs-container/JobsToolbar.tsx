@@ -238,6 +238,7 @@ export function JobsToolbar({
             initialOpen={addJobInitialOpen}
             careerRuntimeMode={careerRuntimeMode}
             abRolloutScope={abRolloutScope}
+            onSaved={onReload}
           />
         )}
       </div>

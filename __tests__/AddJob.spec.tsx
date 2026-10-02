@@ -726,6 +726,7 @@ describe("AddJob Component - Error Handling", () => {
       success: false,
       message: "Failed to save job",
     });
+    const onSaved = vi.fn();
 
     render(
       <AddJob
@@ -737,6 +738,7 @@ describe("AddJob Component - Error Handling", () => {
         tags={[]}
         editJob={null}
         resetEditJob={mockResetEditJob}
+        onSaved={onSaved}
       />,
     );
     const user = userEvent.setup({ skipHover: true });
@@ -772,6 +774,47 @@ describe("AddJob Component - Error Handling", () => {
         expect.objectContaining({ success: "Job has been created successfully" }),
       );
     });
+    expect(onSaved).not.toHaveBeenCalled();
+  }, 10000);
+
+  it("asks the list to reload once after a successful add", async () => {
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    vi.clearAllMocks();
+    (addJob as any).mockResolvedValueOnce({ success: true, data: { id: "job-new" } });
+    const onSaved = vi.fn();
+
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+        onSaved={onSaved}
+      />,
+    );
+    const user = userEvent.setup({ skipHover: true });
+    await user.click(screen.getByTestId("add-job-btn"));
+    await user.click(screen.getByRole("combobox", { name: /job title/i }));
+    await user.click(screen.getByRole("option", { name: "Full Stack Developer" }));
+    await user.click(screen.getByRole("combobox", { name: /company/i }));
+    await user.click(screen.getByRole("option", { name: "Amazon" }));
+    await user.click(screen.getByRole("combobox", { name: /job location/i }));
+    await user.click(screen.getByRole("option", { name: "Remote" }));
+    await user.click(screen.getByRole("combobox", { name: /job source/i }));
+    await user.click(screen.getByRole("option", { name: "Indeed" }));
+    const editableDiv = screen.getByLabelText("Job Description");
+    const pTag = editableDiv.querySelector("div > p");
+    if (pTag) pTag.textContent = "Some description";
+
+    await user.click(screen.getByTestId("save-job-btn"));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
   }, 10000);
 });
 

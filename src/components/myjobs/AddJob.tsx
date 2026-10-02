@@ -83,6 +83,7 @@ type AddJobProps = {
   redirectPath?: string;
   careerRuntimeMode?: string;
   abRolloutScope?: AbRolloutScope;
+  onSaved?: () => void;
 };
 
 export function AddJob({
@@ -99,6 +100,7 @@ export function AddJob({
   redirectPath,
   careerRuntimeMode,
   abRolloutScope,
+  onSaved,
 }: AddJobProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -256,6 +258,9 @@ export function AddJob({
           );
           reset();
           setDialogOpen(false);
+          // Same list reload the toolbar button and note save already use.
+          // redirect() to the current My Jobs URL does not refetch client state.
+          onSaved?.();
           redirect(redirectPath ?? "/dashboard/myjobs");
         },
       });
