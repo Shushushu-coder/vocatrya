@@ -52,7 +52,7 @@ vi.mock("@prisma/client", () => {
     userSettings: {
       findUnique: vi.fn(),
     },
-    job: { findFirst: vi.fn(), findMany: vi.fn() },
+    job: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     resume: { findFirst: vi.fn(), findMany: vi.fn() },
   };
   return {
@@ -215,7 +215,7 @@ describe("agentChat actions", () => {
   });
 
   it("rejects a context entity the caller does not own", async () => {
-    (prisma.job.findFirst as any).mockResolvedValue(null);
+    (prisma.job.findUnique as any).mockResolvedValue(null);
     const result = await createChatConversation({
       context: [{ kind: "job", entityId: "opportunity-1", source: "MANUAL" }],
     });
@@ -223,16 +223,17 @@ describe("agentChat actions", () => {
     expect(prisma.chatConversation.create).not.toHaveBeenCalled();
   });
 
-  it("does not treat an unknown page id as a legacy job", async () => {
-    (prisma.job.findFirst as any).mockResolvedValue(null);
+  it("does not treat an unknown page id as a job in the active read family", async () => {
+    (prisma.job.findUnique as any).mockResolvedValue(null);
     const result = await resolveDraftPageContext({ jobId: "opportunity-1" });
     expect(result.success).toBe(true);
     expect(result.data?.items).toEqual([]);
-    expect(prisma.job.findFirst).toHaveBeenCalledWith(
+    expect(prisma.job.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "opportunity-1", userId: "user-1" },
       }),
     );
+    expect(prisma.job.findFirst).not.toHaveBeenCalled();
   });
 
   it("every action fails closed without a session", async () => {

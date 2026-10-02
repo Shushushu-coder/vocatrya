@@ -2,6 +2,7 @@ import "server-only";
 
 import prisma from "@/lib/db";
 import { AIBusinessError } from "@/lib/ai/connections";
+import { getJob, listJobs } from "@/lib/career/jobsReadDispatch";
 import {
   dedupeContextItems,
   type AgentConversationContextItem,
@@ -12,23 +13,21 @@ import {
 const MAX_CONTEXT_ITEMS = 8;
 
 function jobLabel(job: {
-  JobTitle: { label: string } | null;
-  Company: { label: string } | null;
+  id: string;
+  JobTitle?: { label?: string | null } | null;
+  Company?: { label?: string | null } | null;
 }): string {
-  return [job.JobTitle?.label, job.Company?.label].filter(Boolean).join(" · ");
+  const label = [job.JobTitle?.label, job.Company?.label]
+    .filter((part): part is string => Boolean(part && part.trim()))
+    .join(" · ");
+  return label || job.id;
 }
 
 async function loadOwnedJob(userId: string, entityId: string) {
-  const job = await prisma.job.findFirst({
-    where: { id: entityId, userId },
-    select: {
-      id: true,
-      JobTitle: { select: { label: true } },
-      Company: { select: { label: true } },
-    },
-  });
-  if (!job) return null;
-  return { id: job.id, label: jobLabel(job) || job.id };
+  // One active read family. getJob does not fall back to the other table.
+  const result = await getJob(prisma, userId, entityId);
+  if (result.blocked || !result.job) return null;
+  return { id: result.job.id, label: jobLabel(result.job) };
 }
 
 async function loadOwnedResume(userId: string, entityId: string) {
@@ -41,9 +40,9 @@ async function loadOwnedResume(userId: string, entityId: string) {
 }
 
 /**
- * Verifies every requested context entity belongs to the user and is a
- * legacy Job or Resume the agent can actually resolve. A JobOpportunity id
- * does not match `Job` and is rejected rather than forwarded.
+ * Verifies every requested context entity belongs to the user. A job id is
+ * resolved through the active jobs read family and stored as kind "job".
+ * An id the family cannot see is rejected rather than forwarded.
  */
 export async function resolveOwnedContext(
   userId: string,
@@ -96,8 +95,8 @@ export async function resolveOwnedContext(
 }
 
 /**
- * Page auto-attach. Missing ids are omitted: an A+B JobOpportunity id is
- * not a legacy Job, and the draft must not claim the assistant can see it.
+ * Page auto-attach. Missing ids are omitted so a draft never claims a job
+ * the active read family cannot see.
  */
 export async function resolvePageContextItems(
   userId: string,
@@ -139,17 +138,8 @@ export type AgentContextOption = {
 export async function listOwnedContextOptions(
   userId: string,
 ): Promise<{ jobs: AgentContextOption[]; resumes: AgentContextOption[] }> {
-  const [jobs, resumes] = await Promise.all([
-    prisma.job.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 40,
-      select: {
-        id: true,
-        JobTitle: { select: { label: true } },
-        Company: { select: { label: true } },
-      },
-    }),
+  const [listed, resumes] = await Promise.all([
+    listJobs(prisma, userId, { take: 40 }),
     prisma.resume.findMany({
       where: { profile: { userId } },
       orderBy: { updatedAt: "desc" },
@@ -157,6 +147,7 @@ export async function listOwnedContextOptions(
       select: { id: true, title: true, updatedAt: true },
     }),
   ]);
+  const jobs = listed.blocked ? [] : listed.data;
   return {
     jobs: jobs.map((job) => ({
       kind: "job" as const,
