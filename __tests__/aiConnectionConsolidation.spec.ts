@@ -261,23 +261,38 @@ describe("execution seam contract", () => {
       ).toEqual({ ready: false, code: "STREAMING_NOT_SUPPORTED" });
     }
     // Codex passed managed delta verification via `codex app-server`
-    // item/agentMessage/delta on 0.154.0 — same version-bound contract.
+    // item/agentMessage/delta on 0.160.0 — same version-bound contract.
+    const codexCaps = cap("CODEX_RUNTIME");
+    expect(codexCaps.execution.streamingVerifiedRuntimeVersion).toBe("0.160.0");
+    expect(codexCaps.structuredOutput.verifiedRuntimeVersion).toBe("0.160.0");
     expect(
       checkStreamingExecutionReadiness({
-        capabilities: cap("CODEX_RUNTIME"),
+        capabilities: codexCaps,
         connectionStatus: "CONNECTED",
         permissionScope: "TEXT_ONLY",
-        runtimeVersion: "0.154.0",
+        runtimeVersion: "0.160.0",
       }),
     ).toEqual({ ready: true });
     expect(
-      checkStreamingExecutionReadiness({
-        capabilities: cap("CODEX_RUNTIME"),
-        connectionStatus: "CONNECTED",
-        permissionScope: "TEXT_ONLY",
-        runtimeVersion: "0.155.0",
-      }),
-    ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
+      codexCaps.structuredOutput.verifiedRuntimeVersion === "0.160.0" &&
+        codexCaps.structuredOutput.verification === "PASS" &&
+        codexCaps.structuredOutput.strategy === "NATIVE_JSON_SCHEMA",
+    ).toBe(true);
+    for (const runtimeVersion of ["0.154.0", "0.155.0", "0.159.9", "0.161.0", "unknown", ""]) {
+      expect(
+        checkStreamingExecutionReadiness({
+          capabilities: codexCaps,
+          connectionStatus: "CONNECTED",
+          permissionScope: "TEXT_ONLY",
+          runtimeVersion,
+        }),
+        runtimeVersion,
+      ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
+      expect(
+        runtimeVersion === codexCaps.structuredOutput.verifiedRuntimeVersion,
+        runtimeVersion,
+      ).toBe(false);
+    }
     expect(
       checkStreamingExecutionReadiness({
         capabilities: cap("CODEX_RUNTIME"),

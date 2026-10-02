@@ -12,6 +12,12 @@ import { fetchAccountRuntimeState } from "@/lib/ai/streaming-execution";
 import { AIBusinessError } from "@/lib/ai/connections";
 import { PrismaClient } from "@prisma/client";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { getAccountRuntimeCapabilities } = require(
+  "../desktop/main/runtime/capabilities.js",
+);
 
 const prisma = new PrismaClient();
 
@@ -456,6 +462,52 @@ describe("getAgentChatPreflight", () => {
       connectionId: "conn-1",
       model: "gpt-5.6-sol",
       locked: false,
+    });
+  });
+
+  it("readies GLOBAL_DEFAULT gpt-5.6-sol when the installed Codex runtime is the certified 0.160.0", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
+    (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([
+      assignmentRow(),
+    ]);
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue({
+      capabilities: getAccountRuntimeCapabilities("CODEX_RUNTIME"),
+      runtimeVersion: "0.160.0",
+      runtimeReady: true,
+    });
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "account",
+      connectionId: "conn-1",
+      model: "gpt-5.6-sol",
+      locked: false,
+    });
+    expect(result.data).not.toMatchObject({ code: "STREAMING_NOT_VERIFIED" });
+    expect(result.data).not.toMatchObject({
+      code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
+    });
+  });
+
+  it("blocks GLOBAL_DEFAULT when the installed Codex runtime is 0.161.0", async () => {
+    (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
+    (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([
+      assignmentRow(),
+    ]);
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue({
+      capabilities: getAccountRuntimeCapabilities("CODEX_RUNTIME"),
+      runtimeVersion: "0.161.0",
+      runtimeReady: true,
+    });
+    const result = await getAgentChatPreflight();
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      code: "STREAMING_NOT_VERIFIED",
     });
   });
 

@@ -141,20 +141,19 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       // `codex exec --ephemeral -s read-only` in a Vocatrya temp cwd.
       localOneShot: true,
-      // VERIFIED_DELTA_STREAMING (managed E2E, codex-cli 0.154.0,
-      // scripts/runtime-streaming-probe.mts): `codex app-server --listen
-      // stdio://` emits item/agentMessage/delta notifications as the
-      // assistant text is generated — P2 produced 1017 deltas across 903
-      // deliveries over ~50s with deltas arriving ~49s before
-      // turn/completed; concat(deltas) reconstructs the completed item
-      // exactly; turn/interrupt aborts with zero late deltas. `codex
-      // exec --json` is NOT the streaming path — it only emits
-      // item.completed snapshots (verified non-incremental).
+      // VERIFIED_DELTA_STREAMING (re-verified on codex-cli 0.160.0 through
+      // the unchanged production executeTextStream app-server adapter):
+      // item/agentMessage/delta arrived incrementally (47 deltas across
+      // 30 deliveries) before turn/completed; concat(deltas) matched the
+      // completed item; malformed frames 0. Unknown notifications stay
+      // ignored by the existing adapter. `codex exec --json` is NOT the
+      // streaming path — on 0.154.0 it only emitted item.completed
+      // snapshots. Exact version equality stays fail-closed.
       streaming: true,
       streamingVerification: VERIFICATION_STATES.PASS,
       streamingMechanism:
         "codex app-server (item/agentMessage/delta over stdio JSON-RPC)",
-      streamingVerifiedRuntimeVersion: "0.154.0",
+      streamingVerifiedRuntimeVersion: "0.160.0",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.STRONG_SANDBOX,
@@ -172,17 +171,18 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
     }),
-    // `codex exec --output-schema <file>` verified in `codex exec --help`
-    // on codex-cli 0.154.0 — the schema file is written into the fresh
-    // Vocatrya-owned exec cwd; the final message lands in -o output.
-    // VERIFIED (managed 9-trial corpus, scripts/structured-output-probe.mts,
-    // codex-cli 0.154.0, connection 1e427f2f): 9/9 VALID first-pass on the
-    // native schema path, zero retries, zero native violations.
+    // `codex exec --output-schema <file>` — the schema file is written
+    // into the fresh Vocatrya-owned exec cwd; the final message lands
+    // in -o output. RE-VERIFIED on codex-cli 0.160.0 through production
+    // executeText: the minimal object schema and the Career Dialogue
+    // decision schema both returned first-pass VALID JSON under
+    // NATIVE_JSON_SCHEMA and were consumed by the production parser
+    // with no repair. Exact version equality stays fail-closed.
     structuredOutput: Object.freeze({
       strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
       mechanism: "codex exec --output-schema <schema-file>",
       verification: STRUCTURED_OUTPUT_VERIFICATIONS.PASS,
-      verifiedRuntimeVersion: "0.154.0",
+      verifiedRuntimeVersion: "0.160.0",
     }),
   }),
 

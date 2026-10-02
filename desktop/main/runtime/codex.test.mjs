@@ -259,6 +259,7 @@ describe("curated fallback catalog", () => {
   it("is derived from the codex-cli 0.154.0 bundled catalog, not legacy OpenAI models", () => {
     const ids = CODEX_CURATED_MODELS.map((m) => m.id);
     expect(ids).toContain("gpt-6-astra");
+    expect(ids).toContain("gpt-5.6-sol");
     expect(ids).toContain("gpt-5.5");
     expect(ids).not.toContain("gpt-4o");
     expect(ids).not.toContain("gpt-3.5-turbo");
