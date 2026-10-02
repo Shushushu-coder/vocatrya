@@ -103,6 +103,7 @@
     "showingRangeOf": "Showing {from} to {to} of {total}",
     "jobsLabel": "jobs",
     "createPrefix": "Create:",
+    "selectName": "Select {name}",
     "createOrSearch": "Create or Search {name}",
     "searchName": "Search {name}",
     "noSourceFound": "No source found!",

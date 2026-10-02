@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogOverlay,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
@@ -320,8 +319,10 @@ export function AddJob({
         </Button>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogOverlay>
-          <DialogContent className="h-full xl:h-[85vh] lg:h-[95vh] lg:max-w-screen-lg lg:max-h-screen overflow-y-scroll">
+          <DialogContent
+            overlayClassName="bg-black/30"
+            className="h-full xl:h-[85vh] lg:h-[95vh] lg:max-w-screen-lg lg:max-h-screen overflow-y-scroll"
+          >
             <DialogHeader>
               <DialogTitle data-testid="add-job-dialog-title">
                 {pageTitle}
@@ -346,6 +347,7 @@ export function AddJob({
                             options={jobTitles}
                             field={field}
                             creatable
+                            label={t("jobs.jobTitle")}
                           />
                         </FormControl>
                         <FormMessage />
@@ -386,6 +388,7 @@ export function AddJob({
                             options={companies}
                             field={field}
                             creatable
+                            label={t("jobs.company")}
                           />
                         </FormControl>
                         <FormMessage />
@@ -406,6 +409,7 @@ export function AddJob({
                             options={locations}
                             field={field}
                             creatable
+                            label={t("jobs.jobLocation")}
                           />
                         </FormControl>
                         <FormMessage />
@@ -494,6 +498,7 @@ export function AddJob({
                           getOptionLabel={(source) => getLocalizedJobSource(source, t)}
                           field={field}
                           creatable
+                          label={t("jobs.jobSourceLabel")}
                         />
                         <FormMessage />
                       </FormItem>
@@ -789,7 +794,6 @@ export function AddJob({
               </form>
             </Form>
           </DialogContent>
-        </DialogOverlay>
       </Dialog>
     </>
   );

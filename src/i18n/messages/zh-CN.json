@@ -103,6 +103,7 @@
     "showingRangeOf": "显示第 {from}–{to} 条，共 {total} 条",
     "jobsLabel": "个职位",
     "createPrefix": "创建：",
+    "selectName": "选择{name}",
     "createOrSearch": "创建或搜索{name}",
     "searchName": "搜索{name}",
     "noSourceFound": "未找到匹配项",

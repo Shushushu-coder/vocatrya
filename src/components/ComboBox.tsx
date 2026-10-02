@@ -54,8 +54,13 @@ export function Combobox({
   fullWidth,
 }: ComboboxProps) {
   const { t } = useI18n();
-  // Placeholder text only; the accessible name comes from FormLabel/FormControl
+  // Placeholder text only; the accessible name comes from FormLabel/FormControl.
+  // A provided label is a localized noun. Callers that omit it keep the
+  // historical English field-name placeholder so unrelated screens stay put.
   const displayName = label ?? field.name;
+  const closedPlaceholder = label
+    ? t("common.selectName", { name: label })
+    : `Select ${field.name}`;
   const [newOption, setNewOption] = useState<string>("");
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
 
@@ -156,7 +161,7 @@ export function Combobox({
             <span className="min-w-0 truncate">
               {field.value
                 ? (selectedOption ? getOptionLabel(selectedOption) : (freeText ? field.value : null))
-                : `Select ${displayName}`}
+                : closedPlaceholder}
             </span>
 
             {isPending ? (

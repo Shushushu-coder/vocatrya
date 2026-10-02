@@ -1,4 +1,5 @@
 import { Combobox } from "@/components/ComboBox";
+import { I18nProvider } from "@/i18n";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { addCompany } from "@/actions/company.actions";
@@ -41,6 +42,10 @@ vi.mock("@/actions/contactRole.actions", () => ({
 
 vi.mock("@/lib/toast", () => ({
   toastError: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
 }));
 
 // jsdom lacks scrollIntoView, which cmdk calls when selecting an item
@@ -551,6 +556,20 @@ describe("Combobox label", () => {
     expect(
       screen.getByPlaceholderText("Create or Search company")
     ).toBeInTheDocument();
+  });
+
+  it("localizes the closed and search placeholders when a label is provided", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <Harness onChange={vi.fn()} name="title" label="职位名称" />
+      </I18nProvider>,
+    );
+
+    const trigger = screen.getByRole("combobox");
+    expect(trigger).toHaveTextContent("选择职位名称");
+    await user.click(trigger);
+    expect(screen.getByPlaceholderText("创建或搜索职位名称")).toBeInTheDocument();
   });
 });
 

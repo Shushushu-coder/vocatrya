@@ -118,11 +118,11 @@ export async function createNewJob(
   // saves it via its own server action), so a failure before the job is saved
   // still tears the item down.
   const pick = options?.useEnterKey ? selectOrCreateWithEnter : selectOrCreate;
-  await pick(page, "Job Title", "Create or Search title", jobText);
+  await pick(page, "Job Title", "Create or Search Job Title", jobText);
   cleanup.title(jobText);
-  await pick(page, "Company", "Create or Search company", companyText);
+  await pick(page, "Company", "Create or Search Company", companyText);
   cleanup.company(companyText);
-  await pick(page, "Job Location", "Create or Search location", locationText);
+  await pick(page, "Job Location", "Create or Search Job Location", locationText);
   cleanup.location(locationText);
 
   await page.getByText("Part-time").click();

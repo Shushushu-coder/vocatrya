@@ -408,6 +408,36 @@ describe("AddJob Component - Last Used Location/Source", () => {
     expect(screen.getByLabelText("Job Source")).toHaveTextContent("Indeed");
   });
 
+  it("uses one restrained overlay and English placeholders", async () => {
+    await renderAddJob();
+
+    const overlays = document.querySelectorAll("div.fixed.inset-0");
+    expect(overlays).toHaveLength(1);
+    expect(overlays[0].className).toContain("bg-black/30");
+    expect(overlays[0].className).not.toContain("bg-black/80");
+
+    expect(screen.getByLabelText("Job Title")).toHaveTextContent("Select Job Title");
+    expect(screen.getByLabelText("Company")).toHaveTextContent("Select Company");
+    expect(screen.getByLabelText("Job Location")).toHaveTextContent(
+      "Select Job Location",
+    );
+    expect(screen.getByLabelText("Job Source")).toHaveTextContent(
+      "Select Job Source",
+    );
+    expect(screen.getByLabelText("Salary Range")).toHaveTextContent(
+      "Select Salary Range",
+    );
+    expect(screen.getByLabelText("Resume")).toHaveTextContent("Select Resume");
+    expect(screen.getByLabelText("Cover Letter")).toHaveTextContent(
+      "Select Cover Letter",
+    );
+
+    await user.click(screen.getByLabelText("Job Title"));
+    expect(
+      screen.getByPlaceholderText("Create or Search Job Title"),
+    ).toBeInTheDocument();
+  });
+
   it("ignores a last-used id that no longer exists, e.g. the entity was deleted", async () => {
     localStorage.setItem(
       APP_CONSTANTS.LAST_JOB_LOCATION_STORAGE_KEY,
@@ -420,10 +450,10 @@ describe("AddJob Component - Last Used Location/Source", () => {
     await renderAddJob();
 
     expect(screen.getByLabelText("Job Location")).toHaveTextContent(
-      "Select location",
+      "Select Job Location",
     );
     expect(screen.getByLabelText("Job Source")).toHaveTextContent(
-      "Select source",
+      "Select Job Source",
     );
   });
 
@@ -791,5 +821,45 @@ describe("AddJob Component - Localized validation (zh-CN)", () => {
     expect(
       screen.queryByText("Company name is required."),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows Chinese placeholders and a single overlay", async () => {
+    localStorage.clear();
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    const user = userEvent.setup({ skipHover: true });
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <AddJob
+          jobStatuses={mockJobStatuses}
+          companies={mockCompanies}
+          jobTitles={mockJobTitles}
+          locations={mockLocations}
+          jobSources={mockJobSources}
+          tags={[]}
+          editJob={null}
+          resetEditJob={mockResetEditJob}
+          initialOpen={true}
+        />
+      </I18nProvider>,
+    );
+
+    const overlays = document.querySelectorAll("div.fixed.inset-0");
+    expect(overlays).toHaveLength(1);
+    expect(overlays[0].className).toContain("bg-black/30");
+
+    expect(screen.getByLabelText("职位名称")).toHaveTextContent("选择职位名称");
+    expect(screen.getByLabelText("公司")).toHaveTextContent("选择公司");
+    expect(screen.getByLabelText("工作地点")).toHaveTextContent("选择工作地点");
+    expect(screen.getByLabelText("求职渠道")).toHaveTextContent("选择求职渠道");
+    expect(screen.getByLabelText("薪资范围")).toHaveTextContent("选择薪资范围");
+    expect(screen.getByLabelText("简历")).toHaveTextContent("选择简历");
+    expect(screen.getByLabelText("求职信")).toHaveTextContent("选择求职信");
+    expect(screen.queryByText("Select title")).not.toBeInTheDocument();
+    expect(screen.queryByText("创建或搜索title")).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("职位名称"));
+    expect(screen.getByPlaceholderText("创建或搜索职位名称")).toBeInTheDocument();
   });
 });

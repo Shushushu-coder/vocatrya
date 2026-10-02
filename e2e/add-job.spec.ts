@@ -477,8 +477,10 @@ test.describe("Add New Job", () => {
     await page.getByRole("button", { name: "Job", exact: true }).click();
     await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
 
+    await expect(page.locator("div.fixed.inset-0")).toHaveCount(1);
+    await expect(page.getByLabel("Job Title")).toContainText("Select Job Title");
     await page.getByLabel("Job Title").click();
-    const input = page.getByPlaceholder("Create or Search title");
+    const input = page.getByPlaceholder("Create or Search Job Title");
     await input.click();
     await input.press("Enter");
 
