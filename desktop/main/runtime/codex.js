@@ -13,6 +13,7 @@ const {
   buildRuntimeInvocationArgs,
   buildRuntimeProcessEnvironment,
 } = require("./environment");
+const { applyCodexProxyEnv } = require("./codex-proxy-env");
 const { classifyAuthProbeOutput } = require("./auth-probe");
 const { createCodexStreamParser } = require("./streaming");
 
@@ -90,12 +91,17 @@ function resolveCodexExecutable(
   return preferred && existsSyncImpl(preferred) ? preferred : null;
 }
 
-function codexEnv({ profileDir, baseEnv }) {
-  return buildRuntimeProcessEnvironment({
-    baseEnv: baseEnv || process.env,
-    definition: codexDefinition(),
-    profileDir,
-  });
+function codexEnv({ profileDir, baseEnv, proxyEnvOptions }) {
+  const source = baseEnv || process.env;
+  return applyCodexProxyEnv(
+    buildRuntimeProcessEnvironment({
+      baseEnv: source,
+      definition: codexDefinition(),
+      profileDir,
+    }),
+    source,
+    proxyEnvOptions,
+  );
 }
 
 function codexArgs({ profileDir, commandArgs }) {
