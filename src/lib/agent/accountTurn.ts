@@ -93,7 +93,7 @@ const DECISION_CORRECTION_ATTEMPTS = 1;
 // The decision prompt must stay inside the argv-bound prompt budget of the
 // locked-down one-shot invocation; the transcript is the elastic part.
 const DECISION_TRANSCRIPT_MAX_CHARS = 16_000;
-const ANSWER_TRANSCRIPT_MAX_CHARS = 20_000;
+export const ANSWER_TRANSCRIPT_MAX_CHARS = 20_000;
 
 // ---------------------------------------------------------------------------
 // Transcript serialization — UIMessage[] → the plain-text conversation the
@@ -155,7 +155,7 @@ export function serializeChatTranscript(messages: UIMessage[]): string[] {
   return lines;
 }
 
-function boundedTranscript(lines: string[], maxChars: number): string {
+export function boundedTranscript(lines: string[], maxChars: number): string {
   const kept: string[] = [];
   let total = 0;
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -215,15 +215,22 @@ function buildDecisionPrompt({
   ].join("\n\n");
 }
 
-function buildAnswerPrompt({
+const DIRECT_CHAT_CONSTRAINT =
+  "This reply has no Vocatrya tools available. Do not claim that a job was saved, a resume was read or reviewed, a match was scored, or a cover letter was generated.";
+
+export function buildAnswerPrompt({
   systemPrompt,
   transcript,
+  directChat = false,
 }: {
   systemPrompt: string;
   transcript: string;
+  /** Fast Chat only. The agent final answer keeps the historical prompt. */
+  directChat?: boolean;
 }): string {
   return [
     systemPrompt,
+    ...(directChat ? [DIRECT_CHAT_CONSTRAINT] : []),
     `Conversation:\n${transcript}`,
     "Write your reply to the user now — natural language only, in the conversation's language. Do not emit JSON, tool markup, or code fences.",
   ].join("\n\n");
@@ -302,6 +309,28 @@ export type AccountAgentTurnResult = {
   steps: number;
 };
 
+export function assembleCareerDialogueTranscript({
+  messages,
+  pageContext,
+  pastedText,
+}: {
+  messages: UIMessage[];
+  pageContext?: PageContext;
+  pastedText?: string;
+}): string[] {
+  const transcriptLines = serializeChatTranscript(messages);
+  const lastMessage = messages[messages.length - 1];
+  const lastIsUser = lastMessage?.role === "user";
+  if (lastIsUser) {
+    transcriptLines.push(buildPageContextMessage(pageContext));
+  }
+  if (pastedText && lastIsUser) {
+    const { block } = truncateForModel(pastedText);
+    transcriptLines.push(buildPasteContextMessage(block));
+  }
+  return transcriptLines;
+}
+
 export async function runAccountAgentTurn(
   input: AccountAgentTurnInput,
 ): Promise<AccountAgentTurnResult> {
@@ -340,17 +369,13 @@ export async function runAccountAgentTurn(
 
   // The transcript starts from the persisted window and grows as this turn
   // executes tools — the model's decision loop sees its own tool results.
-  const transcriptLines = serializeChatTranscript(messages);
+  const transcriptLines = assembleCareerDialogueTranscript({
+    messages,
+    pageContext,
+    pastedText,
+  });
 
   const lastMessage = messages[messages.length - 1];
-  const lastIsUser = lastMessage?.role === "user";
-  if (lastIsUser) {
-    transcriptLines.push(buildPageContextMessage(pageContext));
-  }
-  if (pastedText && lastIsUser) {
-    const { block } = truncateForModel(pastedText);
-    transcriptLines.push(buildPasteContextMessage(block));
-  }
 
   // --- Approval continuation -------------------------------------------
   // The POST body carries the assistant message whose tool part is
@@ -682,7 +707,7 @@ function findApprovalResponse(message: UIMessage | undefined) {
   return undefined;
 }
 
-async function streamFinalAnswer({
+export async function streamFinalAnswer({
   userId,
   connectionId,
   modelName,

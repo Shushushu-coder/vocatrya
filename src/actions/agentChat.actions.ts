@@ -350,16 +350,10 @@ async function accountStreamingBlockCode(connection: {
     runtimeVersion: state.runtimeVersion,
   });
   if (!verdict.ready) return verdict.code;
-  const structured = capabilities.structuredOutput;
-  if (
-    !structured ||
-    structured.strategy === "UNSUPPORTED" ||
-    structured.verification !== "PASS" ||
-    !structured.verifiedRuntimeVersion ||
-    state.runtimeVersion !== structured.verifiedRuntimeVersion
-  ) {
-    return "STRUCTURED_OUTPUT_NOT_VERIFIED";
-  }
+  // Structured output is an agent-turn requirement, checked after the
+  // local router (prepareCareerDialogueTurn). A streaming-ready runtime
+  // can still answer a direct chat when structured output is unverified.
+  // Assignment selection is not relaxed here.
   return null;
 }
 

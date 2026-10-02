@@ -364,7 +364,7 @@ describe("getAgentChatPreflight", () => {
     });
   });
 
-  it("blocks when the runtime streams but its structured decisions are unverified", async () => {
+  it("stays open for direct chat when streaming passes and structured decisions are unverified", async () => {
     (prisma.chatConversation.findFirst as any).mockResolvedValue(
       lockedConversation(),
     );
@@ -385,8 +385,10 @@ describe("getAgentChatPreflight", () => {
     });
     const result = await getAgentChatPreflight({ conversationId: "row-1" });
     expect(result.data).toMatchObject({
-      kind: "blocked",
-      code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
+      kind: "account",
+      connectionId: "conn-1",
+      model: "gpt-5.6-sol",
+      locked: true,
     });
   });
 

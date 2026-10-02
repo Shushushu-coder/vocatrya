@@ -61,7 +61,11 @@ import {
 } from "@/lib/agent/chatConversationStore";
 import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
 import { checkStreamingTurnReadiness } from "@/lib/ai/streaming-execution";
-import { runAccountAgentTurn } from "@/lib/agent/accountTurn";
+import { careerDialogueObservabilityFields } from "@/lib/agent/careerDialogueRoute";
+import {
+  prepareCareerDialogueTurn,
+  runCareerDialogueTurn,
+} from "@/lib/agent/careerDialogueTurn";
 import { AIBusinessError } from "@/lib/ai/connections";
 
 // The one terminal tool whose stop condition is not "was it called" — see
@@ -170,6 +174,35 @@ async function accountChatResponse({
   const locale = normalizeLocale(rawLocale);
   const systemPrompt = buildAgentChatSystemPrompt(locale);
 
+  // Local route first, then the mode-specific capability check. FAST_CHAT
+  // keeps the streaming gate above and does not require structured output.
+  // AGENT without verified structured output stops here — it is not
+  // rewritten as a direct chat, and no model call has started.
+  const prepared = await prepareCareerDialogueTurn({
+    messages: windowed,
+    pageContext,
+    connection: {
+      backendKind: connection.backendKind,
+      provider: connection.provider,
+    },
+  });
+  const routeFields = careerDialogueObservabilityFields({
+    decision: prepared.decision,
+    routerDurationMs: prepared.routerDurationMs,
+    conversationId,
+    connectionId: connection.id,
+    model: lock.model,
+  });
+  if (!prepared.ok) {
+    logTurn({
+      ...routeFields,
+      provider: `account:${connection.provider}`,
+      backendKind: connection.backendKind,
+      outcome: "capability_blocked",
+    });
+    return deny(prepared.error);
+  }
+
   // Same abort contract as the legacy path: client disconnect / stop()
   // aborts the runtime child through the execute-stream socket.
   const turnSignal = AbortSignal.any([
@@ -206,7 +239,7 @@ async function accountChatResponse({
     originalMessages: messages,
     execute: async ({ writer }) => {
       await runInSpan(turnSpan, () =>
-        runAccountAgentTurn({
+        runCareerDialogueTurn({
           userId,
           connectionId: connection.id,
           provider: connection.provider,
@@ -218,6 +251,8 @@ async function accountChatResponse({
           pageContext,
           writer,
           signal: turnSignal,
+          decision: prepared.decision,
+          routerDurationMs: prepared.routerDurationMs,
         }),
       );
     },
@@ -225,8 +260,8 @@ async function accountChatResponse({
       const { tool, state, outcome } = outcomeOf(responseMessage);
       runInSpan(turnSpan, () =>
         logTurn({
+          ...routeFields,
           provider: `account:${connection.provider}`,
-          model: lock.model,
           backendKind: connection.backendKind,
           tool,
           toolState: state,
@@ -238,6 +273,9 @@ async function accountChatResponse({
         }),
       );
       turnSpan.end({
+        "jobsync.route": prepared.decision.route,
+        "jobsync.reason_code": prepared.decision.reason,
+        "jobsync.router_ms": routeFields.routerDurationMs,
         "jobsync.tool": tool,
         "jobsync.tool_state": state,
         "jobsync.outcome": outcome,
