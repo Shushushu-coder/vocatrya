@@ -73,6 +73,18 @@ describe("Phase 4 backup contract", () => {
     }
   });
 
+  it("excludes derived conversation summaries while preserving transcripts", () => {
+    expect(backupCoverageStatus("ConversationSummary")).toBe(
+      BACKUP_COVERAGE_STATUS.INTENTIONALLY_EXCLUDED,
+    );
+    expect(backupCoverageStatus("ChatConversation")).toBe(
+      BACKUP_COVERAGE_STATUS.BACKED_UP,
+    );
+    expect(BackupDataSchema.shape).not.toHaveProperty("ConversationSummary");
+    expect(BackupDataSchema.shape).toHaveProperty("ChatConversation");
+    expect(INSERT_ORDER).not.toContain("ConversationSummary");
+  });
+
   it("keeps QuestionBank as covered reference data without a format bump", () => {
     // Spec v1 §14–§16, §20–§21, §30: QuestionBank stays in the payload as
     // REFERENCE_DATA_SNAPSHOT (present in export, used during restore, never

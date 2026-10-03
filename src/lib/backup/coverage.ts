@@ -25,6 +25,8 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "McpAccessToken",
   "JobStatus",
   "DataMigrationRun",
+  // Derived from ChatConversation messages and rebuilt on eligible turns.
+  "ConversationSummary",
 ] as const;
 
 export const BACKED_UP_PRISMA_MODELS: readonly BackupModel[] = INSERT_ORDER;
