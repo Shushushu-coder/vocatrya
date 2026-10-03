@@ -330,6 +330,94 @@ describe("Career Dialogue fast path", () => {
     expect(executeAIConnectionTextStream).toHaveBeenCalledTimes(1);
   });
 
+  it("bounds a long fast chat to one stream and no decision schema", async () => {
+    const messages: UIMessage[] = [];
+    for (let i = 0; i < 20; i++) {
+      messages.push(userMsg(`old-turn-${i}-请记住这句不会再出现`));
+      messages.push({
+        id: `a-${i}`,
+        role: "assistant",
+        parts: [{ type: "text", text: `reply-${i}` }],
+      } as UIMessage);
+    }
+    messages.push(userMsg("hi"));
+    const { writer } = captureWriter();
+    const result = await runCareerDialogueTurn({
+      ...baseInput,
+      messages,
+      writer,
+      signal: new AbortController().signal,
+      decision: { route: "FAST_CHAT", reason: "GREETING" },
+    });
+    expect(result.steps).toBe(0);
+    expect(executeAIConnectionText).not.toHaveBeenCalled();
+    expect(executeAIConnectionTextStream).toHaveBeenCalledTimes(1);
+    expect(buildAgentTools).not.toHaveBeenCalled();
+    const prompt = (executeAIConnectionTextStream as any).mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("hi");
+    expect(prompt).toContain("no Vocatrya tools available");
+    expect(prompt).not.toContain("old-turn-0-请记住这句不会再出现");
+    expect(prompt).not.toContain("Your ONLY output is one JSON object");
+    expect(prompt).not.toContain("arguments JSON schema");
+    expect(result.contextSize?.recentTurnCount).toBeLessThanOrEqual(6);
+    expect(result.contextSize?.droppedTurnCount).toBeGreaterThan(0);
+  });
+
+  it("gives the agent decision bounded history and the answer the current tool result", async () => {
+    const messages: UIMessage[] = [];
+    for (let i = 0; i < 12; i++) {
+      messages.push(userMsg(`stale-agent-${i}`));
+      messages.push({
+        id: `a-${i}`,
+        role: "assistant",
+        parts: [{ type: "text", text: `stale-reply-${i}` }],
+      } as UIMessage);
+    }
+    messages.push(userMsg("what does my resume say?"));
+    (buildAgentTools as any).mockReturnValue({
+      get_resume: tool({
+        description: "read resume",
+        inputSchema: z.object({ resumeTitle: z.string().optional() }),
+        execute: async () => ({
+          status: "ok",
+          resumeId: "secret-resume",
+          title: "Main",
+          resumeText: "CURRENT_RESUME_BODY",
+        }),
+      }),
+    } satisfies Partial<ToolSet>);
+    (executeAIConnectionText as any)
+      .mockResolvedValueOnce({
+        text: '{"type":"tool_call","tool":"get_resume","arguments":"{}"}',
+      })
+      .mockResolvedValueOnce({
+        text: '{"type":"assistant_response","tool":null,"arguments":null}',
+      });
+    const { writer } = captureWriter();
+    const result = await runCareerDialogueTurn({
+      ...baseInput,
+      messages,
+      writer,
+      signal: new AbortController().signal,
+      decision: { route: "AGENT", reason: "RESUME_DATA_INTENT" },
+    });
+    expect(result.paused).toBe(false);
+    expect(executeAIConnectionText).toHaveBeenCalledTimes(2);
+    expect(executeAIConnectionTextStream).toHaveBeenCalledTimes(1);
+    const decisionPrompt = (executeAIConnectionText as any).mock.calls[0][0].prompt as string;
+    const secondDecision = (executeAIConnectionText as any).mock.calls[1][0].prompt as string;
+    const answerPrompt = (executeAIConnectionTextStream as any).mock.calls[0][0].prompt as string;
+    expect(decisionPrompt).toContain("what does my resume say?");
+    expect(decisionPrompt).not.toContain("stale-agent-0");
+    expect(decisionPrompt).toContain("Available tools");
+    expect(secondDecision).not.toContain("CURRENT_RESUME_BODY");
+    expect(secondDecision).not.toContain("secret-resume");
+    expect(answerPrompt).toContain("CURRENT_RESUME_BODY");
+    expect(answerPrompt).not.toContain("secret-resume");
+    expect(answerPrompt).not.toContain("Your ONLY output is one JSON object");
+    expect(result.contextSize?.contextProfile).toBe("AGENT_RESPONSE");
+  });
+
   it("stops a fast chat before any model call when the signal is already aborted", async () => {
     const controller = new AbortController();
     controller.abort();

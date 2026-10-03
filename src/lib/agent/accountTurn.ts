@@ -28,6 +28,13 @@ import {
 import { truncateForModel } from "./paste.server";
 import { buildAgentTools } from "./tools";
 import { createAccountRuntimeLanguageModel } from "./accountLanguageModel";
+import {
+  buildCareerDialogueContext,
+  estimateContextTokens,
+  type CareerDialogueContextProfile,
+  type CareerDialogueContextSize,
+  type SessionToolFact,
+} from "./contextBudget";
 
 /**
  * Provider-neutral agent orchestration for ACCOUNT_LOGIN-locked
@@ -90,9 +97,8 @@ export const AGENT_PROTOCOL_ERROR_CODES = {
 // wrong but well-formed decisions.
 const DECISION_CORRECTION_ATTEMPTS = 1;
 
-// The decision prompt must stay inside the argv-bound prompt budget of the
-// locked-down one-shot invocation; the transcript is the elastic part.
-const DECISION_TRANSCRIPT_MAX_CHARS = 16_000;
+// Historical char cap kept for the line-level helper below. Career Dialogue
+// prompts no longer use it — `contextBudget.ts` drops whole turns instead.
 export const ANSWER_TRANSCRIPT_MAX_CHARS = 20_000;
 
 // ---------------------------------------------------------------------------
@@ -236,6 +242,72 @@ export function buildAnswerPrompt({
   ].join("\n\n");
 }
 
+export function renderCareerDialoguePrompt(input: {
+  profile: CareerDialogueContextProfile;
+  systemPrompt: string;
+  messages: UIMessage[];
+  pageContext?: PageContext;
+  pastedText?: string;
+  sessionFacts?: SessionToolFact[];
+  toolsBlock?: string;
+  directChat?: boolean;
+  correction?: string;
+}): { prompt: string; size: CareerDialogueContextSize } {
+  const lastIsUser = input.messages[input.messages.length - 1]?.role === "user";
+  const pasteBlock =
+    input.pastedText && lastIsUser
+      ? truncateForModel(input.pastedText).block
+      : undefined;
+  const fixedOverheadText =
+    input.profile === "AGENT_DECISION"
+      ? buildDecisionPrompt({
+          systemPrompt: input.systemPrompt,
+          toolsBlock: input.toolsBlock ?? "",
+          transcript: "",
+          correction: input.correction,
+        })
+      : buildAnswerPrompt({
+          systemPrompt: input.systemPrompt,
+          transcript: "",
+          directChat: input.directChat,
+        });
+  const budget = buildCareerDialogueContext({
+    profile: input.profile,
+    messages: input.messages,
+    pageContext: input.pageContext,
+    pasteBlock,
+    sessionFacts: input.sessionFacts,
+    systemText: input.systemPrompt,
+    fixedOverheadText,
+  });
+  if (!budget.ok) {
+    throw new AIBusinessError(
+      AI_BUSINESS_ERROR_CODES.AI_REQUEST_TOO_LARGE,
+      "Current user message exceeds the Career Dialogue input budget",
+    );
+  }
+  const prompt =
+    input.profile === "AGENT_DECISION"
+      ? buildDecisionPrompt({
+          systemPrompt: input.systemPrompt,
+          toolsBlock: input.toolsBlock ?? "",
+          transcript: budget.transcript,
+          correction: input.correction,
+        })
+      : buildAnswerPrompt({
+          systemPrompt: input.systemPrompt,
+          transcript: budget.transcript,
+          directChat: input.directChat,
+        });
+  return {
+    prompt,
+    size: {
+      ...budget.size,
+      estimatedInputTokens: estimateContextTokens(prompt),
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Decision parsing — the provider-neutral contract.
 // ---------------------------------------------------------------------------
@@ -307,6 +379,7 @@ export type AccountAgentTurnResult = {
   paused: boolean;
   answerChars: number;
   steps: number;
+  contextSize?: CareerDialogueContextSize;
 };
 
 export function assembleCareerDialogueTranscript({
@@ -367,13 +440,29 @@ export async function runAccountAgentTurn(
   });
   const toolsBlock = describeToolsForPrompt(tools);
 
-  // The transcript starts from the persisted window and grows as this turn
-  // executes tools — the model's decision loop sees its own tool results.
-  const transcriptLines = assembleCareerDialogueTranscript({
-    messages,
-    pageContext,
-    pastedText,
-  });
+  // Tool results produced inside this turn. Historical transcript comes from
+  // the budgeter on each call, so a regenerate rebuilds the same categories
+  // from the persisted messages instead of a previously trimmed array.
+  const sessionFacts: SessionToolFact[] = [];
+  let contextSize: CareerDialogueContextSize | undefined;
+  const promptFor = (
+    profile: CareerDialogueContextProfile,
+    extra?: { directChat?: boolean; correction?: string },
+  ) => {
+    const rendered = renderCareerDialoguePrompt({
+      profile,
+      systemPrompt,
+      messages,
+      pageContext,
+      pastedText,
+      sessionFacts,
+      toolsBlock,
+      directChat: extra?.directChat,
+      correction: extra?.correction,
+    });
+    contextSize = rendered.size;
+    return rendered.prompt;
+  };
 
   const lastMessage = messages[messages.length - 1];
 
@@ -404,11 +493,15 @@ export async function runAccountAgentTurn(
         type: "tool-output-denied",
         toolCallId: resumePart.toolCallId,
       });
-      transcriptLines.push(
-        `The user declined to run ${toolName}${approval?.reason ? `: ${approval.reason}` : "."}`,
-      );
+      sessionFacts.push({
+        name: toolName,
+        line: `The user declined to run ${toolName}${approval?.reason ? `: ${approval.reason}` : "."}`,
+      });
     } else if (!tool?.execute) {
-      transcriptLines.push(`Tool ${toolName} is not executable.`);
+      sessionFacts.push({
+        name: toolName,
+        line: `Tool ${toolName} is not executable.`,
+      });
       writer.write({
         type: "tool-output-error",
         toolCallId: resumePart.toolCallId,
@@ -451,9 +544,7 @@ export async function runAccountAgentTurn(
           output,
         });
       }
-      transcriptLines.push(
-        `Tool ${toolName} returned: ${JSON.stringify(output)}`,
-      );
+      sessionFacts.push({ name: toolName, output });
     }
     writer.write({ type: "finish-step" });
     stepsUsed += 1;
@@ -472,15 +563,7 @@ export async function runAccountAgentTurn(
     stepsUsed += 1;
 
     const decisionResult = await runStructuredValidation({
-      prompt: buildDecisionPrompt({
-        systemPrompt,
-        toolsBlock,
-        transcript: boundedTranscript(
-          transcriptLines,
-          DECISION_TRANSCRIPT_MAX_CHARS,
-        ),
-        correction,
-      }),
+      prompt: promptFor("AGENT_DECISION", { correction }),
       schema: AGENT_DECISION_SCHEMA,
       schemaName: AGENT_DECISION_SCHEMA_NAME,
       signal,
@@ -561,18 +644,12 @@ export async function runAccountAgentTurn(
         userId,
         connectionId,
         modelName,
-        prompt: buildAnswerPrompt({
-          systemPrompt,
-          transcript: boundedTranscript(
-            transcriptLines,
-            ANSWER_TRANSCRIPT_MAX_CHARS,
-          ),
-        }),
+        prompt: promptFor("AGENT_RESPONSE"),
         writer,
         signal,
       });
       writer.write({ type: "finish" });
-      return { paused: false, answerChars, steps: stepsUsed };
+      return { paused: false, answerChars, steps: stepsUsed, contextSize };
     }
 
     // tool_call — validate arguments against the tool's own schema.
@@ -629,7 +706,7 @@ export async function runAccountAgentTurn(
       // Same wire shape as the SDK's approval pause: a finished assistant
       // message whose tool part is still awaiting the response.
       writer.write({ type: "finish", finishReason: "tool-calls" });
-      return { paused: true, answerChars, steps: stepsUsed };
+      return { paused: true, answerChars, steps: stepsUsed, contextSize };
     }
 
     if (!tool.execute) {
@@ -664,9 +741,7 @@ export async function runAccountAgentTurn(
         output,
       });
     }
-    transcriptLines.push(
-      `Tool ${decision.toolName} returned: ${JSON.stringify(output)}`,
-    );
+    sessionFacts.push({ name: decision.toolName, output });
     writer.write({ type: "finish-step" });
 
     // Terminal tools end the turn once their outcome is settled — same
@@ -674,7 +749,7 @@ export async function runAccountAgentTurn(
     // settled-vs-called distinction.
     if (isTerminalOutcome(decision.toolName, output)) {
       writer.write({ type: "finish" });
-      return { paused: false, answerChars, steps: stepsUsed };
+      return { paused: false, answerChars, steps: stepsUsed, contextSize };
     }
   }
 

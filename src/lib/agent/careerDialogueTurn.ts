@@ -8,15 +8,13 @@ import {
   type AccountRuntimeCapabilities,
 } from "@/lib/ai/runtime/capabilities";
 import {
-  ANSWER_TRANSCRIPT_MAX_CHARS,
-  assembleCareerDialogueTranscript,
-  boundedTranscript,
-  buildAnswerPrompt,
+  renderCareerDialoguePrompt,
   runAccountAgentTurn,
   streamFinalAnswer,
   type AccountAgentTurnInput,
   type AccountAgentTurnResult,
 } from "./accountTurn";
+import type { CareerDialogueContextSize } from "./contextBudget";
 import {
   routeCareerDialogueTurn,
   type CareerDialogueRouteDecision,
@@ -107,6 +105,7 @@ export async function runCareerDialogueTurn(
   AccountAgentTurnResult & {
     decision: CareerDialogueRouteDecision;
     routerDurationMs: number;
+    contextSize?: CareerDialogueContextSize;
   }
 > {
   const decision = input.decision;
@@ -126,22 +125,19 @@ export async function runCareerDialogueTurn(
     lastMessage?.role === "assistant" ? lastMessage.id : generateId();
   writer.write({ type: "start", messageId });
 
+  const rendered = renderCareerDialoguePrompt({
+    profile: "FAST_CHAT",
+    systemPrompt,
+    messages,
+    pageContext: input.pageContext,
+    pastedText: input.pastedText,
+    directChat: true,
+  });
   const answerChars = await streamFinalAnswer({
     userId: input.userId,
     connectionId: input.connectionId,
     modelName: input.modelName,
-    prompt: buildAnswerPrompt({
-      systemPrompt,
-      transcript: boundedTranscript(
-        assembleCareerDialogueTranscript({
-          messages,
-          pageContext: input.pageContext,
-          pastedText: input.pastedText,
-        }),
-        ANSWER_TRANSCRIPT_MAX_CHARS,
-      ),
-      directChat: true,
-    }),
+    prompt: rendered.prompt,
     writer,
     signal,
   });
@@ -152,9 +148,6 @@ export async function runCareerDialogueTurn(
     steps: 0,
     decision,
     routerDurationMs,
+    contextSize: rendered.size,
   };
 }
-
-// Re-export the transcript budget the fast path shares with the agent
-// final answer. Kept named so a later phase does not silently shrink it.
-export { ANSWER_TRANSCRIPT_MAX_CHARS };

@@ -29,8 +29,13 @@ import { LOCALE_COOKIE_NAME, normalizeLocale } from "@/i18n";
 import {
   resolvePastedText,
   stubConsumedPastes,
-  windowMessages,
 } from "@/lib/agent/paste";
+import {
+  careerDialogueContextLogFields,
+  currentUserExceedsContextBudget,
+  selectCareerDialogueMessages,
+  type CareerDialogueContextSize,
+} from "@/lib/agent/contextBudget";
 import { truncateForModel } from "@/lib/agent/paste.server";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { measureTurnPrefix, type TurnPrefixMetrics } from "@/lib/agent/turnMetrics";
@@ -120,7 +125,6 @@ async function accountChatResponse({
   userId,
   conversationId,
   messages,
-  windowed,
   pastedText,
   pageContext,
   lock,
@@ -129,7 +133,6 @@ async function accountChatResponse({
   userId: string;
   conversationId: string;
   messages: UIMessage[];
-  windowed: UIMessage[];
   pastedText: string | undefined;
   pageContext: Parameters<typeof buildPageContextMessage>[0];
   lock: { connectionId: string; model: string | null };
@@ -174,12 +177,18 @@ async function accountChatResponse({
   const locale = normalizeLocale(rawLocale);
   const systemPrompt = buildAgentChatSystemPrompt(locale);
 
-  // Local route first, then the mode-specific capability check. FAST_CHAT
-  // keeps the streaming gate above and does not require structured output.
-  // AGENT without verified structured output stops here — it is not
-  // rewritten as a direct chat, and no model call has started.
+  // Route on the full request. Budgeting happens inside the turn, after
+  // the local router has seen the current utterance.
+  if (currentUserExceedsContextBudget(messages)) {
+    return deny(
+      new AIBusinessError(
+        "AI_REQUEST_TOO_LARGE",
+        "Current user message exceeds the Career Dialogue input budget",
+      ),
+    );
+  }
   const prepared = await prepareCareerDialogueTurn({
-    messages: windowed,
+    messages,
     pageContext,
     connection: {
       backendKind: connection.backendKind,
@@ -225,6 +234,7 @@ async function accountChatResponse({
     "jobsync.connection_id": connection.id,
   });
 
+  let contextSize: CareerDialogueContextSize | undefined;
   const alreadyMapped = new Set<string>();
   const mapTurnError = (error: unknown): string =>
     runInSpan(turnSpan, () => {
@@ -238,23 +248,24 @@ async function accountChatResponse({
   const stream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
-      await runInSpan(turnSpan, () =>
-        runCareerDialogueTurn({
+      await runInSpan(turnSpan, async () => {
+        const result = await runCareerDialogueTurn({
           userId,
           connectionId: connection.id,
           provider: connection.provider,
           backendKind: connection.backendKind,
           modelName: lock.model ?? "",
           systemPrompt,
-          messages: windowed,
+          messages,
           pastedText,
           pageContext,
           writer,
           signal: turnSignal,
           decision: prepared.decision,
           routerDurationMs: prepared.routerDurationMs,
-        }),
-      );
+        });
+        contextSize = result.contextSize;
+      });
     },
     onFinish: async ({ messages: finalMessages, responseMessage, isAborted }) => {
       const { tool, state, outcome } = outcomeOf(responseMessage);
@@ -269,7 +280,8 @@ async function accountChatResponse({
           aborted: isAborted,
           pasteChars: pastedText?.length ?? 0,
           messageCount: finalMessages.length,
-          historyDropped: messages.length - windowed.length,
+          historyDropped: contextSize?.droppedTurnCount ?? 0,
+          ...(contextSize ? careerDialogueContextLogFields(contextSize) : {}),
         }),
       );
       turnSpan.end({
@@ -282,7 +294,18 @@ async function accountChatResponse({
         "jobsync.aborted": isAborted,
         "jobsync.paste_chars": pastedText?.length ?? 0,
         "jobsync.message_count": finalMessages.length,
-        "jobsync.history_dropped": messages.length - windowed.length,
+        "jobsync.history_dropped": contextSize?.droppedTurnCount ?? 0,
+        ...(contextSize
+          ? {
+              "jobsync.context_profile": contextSize.contextProfile,
+              "jobsync.estimated_input_tokens": contextSize.estimatedInputTokens,
+              "jobsync.recent_turn_count": contextSize.recentTurnCount,
+              "jobsync.dropped_turn_count": contextSize.droppedTurnCount,
+              "jobsync.explicit_context_units": contextSize.explicitContextTokens,
+              "jobsync.tool_result_units": contextSize.toolResultTokens,
+              "jobsync.summary_units": contextSize.summaryTokens,
+            }
+          : {}),
       });
       // Same write-on-finish contract as the legacy path: a cancelled turn
       // never writes back (Clear would otherwise resurrect).
@@ -331,7 +354,6 @@ export const POST = async (req: NextRequest) => {
   const { conversationId } = parsed.data;
 
   const pastedText = resolvePastedText(messages);
-  const windowed = windowMessages(messages);
 
   // The row already exists — creation (and its immutable lock) happened
   // before the first turn. This write only stores the transcript of that
@@ -368,7 +390,6 @@ export const POST = async (req: NextRequest) => {
       userId,
       conversationId,
       messages,
-      windowed,
       pastedText,
       pageContext,
       lock,
@@ -409,9 +430,31 @@ export const POST = async (req: NextRequest) => {
   // Async in ai@6 (correction #5), and the messages array is client-supplied
   // — a shape z.array(z.any()) let through can reject the conversion, and
   // that is a bad request, not a server crash.
+  if (currentUserExceedsContextBudget(messages)) {
+    return NextResponse.json(
+      agentErrorEnvelope(
+        new AIBusinessError(
+          "AI_REQUEST_TOO_LARGE",
+          "Current user message exceeds the Career Dialogue input budget",
+        ),
+        errorContext,
+      ),
+      { status: 503 },
+    );
+  }
+
+  // Same budgeter as the account runtimes. windowMessages remains the older
+  // count-based helper; retained turns are what this path sends.
+  // An unknown role is a bad request. Budgeting only understands user and
+  // assistant turns, so the SDK still has to see the original array and
+  // reject it.
+  const convertible = messages.every(
+    (message) => message.role === "user" || message.role === "assistant",
+  );
+  const retained = convertible ? selectCareerDialogueMessages(messages) : messages;
   let modelMessages;
   try {
-    modelMessages = await convertToModelMessages(windowed);
+    modelMessages = await convertToModelMessages(retained);
   } catch {
     return NextResponse.json(
       { error: "Invalid chat request.", code: "INVALID_REQUEST" },
@@ -579,7 +622,7 @@ export const POST = async (req: NextRequest) => {
         messageCount: finalMessages.length,
         // Windowing is invisible to the user, so this is the only signal that
         // the model was given less history than the transcript holds.
-        historyDropped: messages.length - windowed.length,
+        historyDropped: messages.length - retained.length,
         // What was actually sent. prefixChanged is the cache signal: the
         // system prompt and tool material must stay byte-identical within a
         // conversation or Ollama recomputes the whole prefix.
