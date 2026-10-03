@@ -105,7 +105,11 @@ test("reduced motion keeps AI marks static while requests are pending", async ({
   await page.getByRole("button", { name: "Open assistant" }).click();
   await page.getByTestId("agent-new-conversation").click();
   const central = page.getByTestId("agent-empty-state").locator("svg");
-  await expect.poll(() => central.locator("path").evaluateAll(paths => paths.every(p => getComputedStyle(p).transform === "none" && !(p as SVGElement).style.fill))).toBe(true);
+  const fragments = central.locator("[data-fragment]");
+  await expect(fragments).toHaveCount(3);
+  await expect.poll(() => fragments.evaluateAll(paths => paths.every(p => new DOMMatrix(getComputedStyle(p).transform).isIdentity && !(p as SVGElement).style.fill))).toBe(true);
+  await expect(central.locator("polygon")).toHaveCount(3);
+  await expect.poll(() => central.locator("polygon").evaluateAll(bands => bands.map(band => getComputedStyle(band).opacity))).toEqual(["0", "0", "0"]);
   let release: (() => void) | undefined;
   await page.route("**/api/ai/chat", async route => {
     await new Promise<void>(resolve => { release = resolve; });

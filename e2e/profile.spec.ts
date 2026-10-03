@@ -32,7 +32,7 @@ test.describe("Profile page", () => {
     await deleteResume(page, resumeTitle);
     // Assert on the persistent outcome (row removed) rather than the toast,
     // which auto-dismisses after 5s and can vanish before the poll under load.
-    await expect(page.locator("tbody")).not.toContainText(resumeTitle, {
+    await expect(page.getByRole("row").filter({ hasText: resumeTitle })).toHaveCount(0, {
       timeout: 20000,
     });
   });
@@ -470,8 +470,8 @@ async function deleteResume(page: Page, title: string) {
   await row.waitFor({ state: "visible", timeout: 10000 });
   await row.getByTestId("document-actions-menu-btn").click({ force: true });
   await page.getByRole("menuitem", { name: "Delete" }).click({ force: true });
-  await expect(page.getByRole("alertdialog")).toContainText(
-    "Are you sure you want to delete this resume?",
-  );
+  await expect(
+    page.getByRole("alertdialog").getByRole("heading"),
+  ).toHaveText("Are you sure? (resume)");
   await page.getByRole("button", { name: "Delete" }).click({ force: true });
 }

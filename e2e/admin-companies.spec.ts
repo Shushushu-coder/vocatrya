@@ -200,9 +200,7 @@ test.describe("Admin Companies", () => {
     await openRowMenuItem(page, companyName, "Delete");
 
     const alert = page.getByRole("alertdialog");
-    await expect(alert).toContainText(
-      "Are you sure you want to delete this company?",
-    );
+    await expect(alert.getByRole("heading")).toHaveText("Are you sure? (company)");
     await alert.getByRole("button", { name: "Delete" }).click();
     await expect(alert).not.toBeVisible();
 

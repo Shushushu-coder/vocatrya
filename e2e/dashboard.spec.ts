@@ -153,7 +153,7 @@ test.describe("Dashboard page", () => {
     ).toBeVisible();
 
     await expect(
-      page.getByRole("heading", { name: "Recent Jobs", exact: true }),
+      page.getByRole("heading", { name: "Recent Applications", exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: jobText })).toBeVisible();
 
