@@ -24,6 +24,7 @@ const { prepareDatabase } = require("./database-migration");
 const { runStartupSequence } = require("./startup");
 const { createRuntimeStatusService } = require("./runtime/service");
 const { registerRuntimeIpcHandlers } = require("./runtime/ipc");
+const { registerResumePrintIpc } = require("./resume-print");
 const { createConnectionService } = require("./runtime/connection-service");
 const { registerConnectionIpcHandlers } = require("./runtime/connection-ipc");
 const { createBackendClient } = require("./runtime/backend-client");
@@ -347,6 +348,7 @@ if (!singleInstance) {
     }
     const origin = `http://127.0.0.1:${backendPort}`;
     configureNavigation(mainWindow, origin);
+    const unregisterResumePrint = registerResumePrintIpc({ ipcMain, BrowserWindow, window: mainWindow, origin });
     const unregisterTheme = registerWindowThemeIpc({
       ipcMain, nativeTheme, window: mainWindow, origin,
       assetsRoot: app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "assets"),
@@ -354,6 +356,7 @@ if (!singleInstance) {
     await mainWindow.loadURL(`${origin}/signin`);
     mainWindow.on("closed", () => {
       unregisterTheme();
+      unregisterResumePrint();
       mainWindow = undefined;
     });
   }

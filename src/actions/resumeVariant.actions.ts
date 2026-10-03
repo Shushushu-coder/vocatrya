@@ -12,6 +12,7 @@ import { CandidateProfileService } from "@/lib/career/candidateProfileService";
 import { CareerMaterialService } from "@/lib/career/careerMaterialService";
 import { ResumeProvenanceService } from "@/lib/career/resumeProvenanceService";
 import { ResumeVariantService } from "@/lib/career/resumeVariantService";
+import { ResumeArtifactService, resumeArtifactDTO } from "@/lib/career/resumeArtifactService";
 import { buildResumeHeaderSnapshot } from "@/lib/career/resumeHeaderSnapshot";
 import type { ActionResult } from "@/models/action.model";
 
@@ -246,6 +247,19 @@ export async function freezeResumeVersion(versionId: string): Promise<ActionResu
     return { success: true, data };
   } catch (error) {
     return handleError(error, "Failed to freeze resume version.");
+  }
+}
+
+export async function findReusableResumeExport(versionId: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertResumeV1Readable(prisma);
+    const artifact = await new ResumeArtifactService(prisma, user.id).findReusableExport(
+      requireId(versionId, "VERSION_NOT_FOUND"),
+    );
+    return { success: true, data: artifact ? resumeArtifactDTO(artifact) : null };
+  } catch (error) {
+    return handleError(error, "Failed to look up resume export.");
   }
 }
 

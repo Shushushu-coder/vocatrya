@@ -23,9 +23,10 @@ type Section = {
 type ResumePreviewProps = {
   headerSnapshot: string | null;
   sections: Section[];
+  print?: boolean;
 };
 
-export function ResumePreview({ headerSnapshot, sections }: ResumePreviewProps) {
+export function ResumePreview({ headerSnapshot, sections, print = false }: ResumePreviewProps) {
   const { t } = useI18n();
   const header = parseResumeHeaderSnapshot(headerSnapshot);
   const contact = [header.email, header.phone, header.address].filter(Boolean);
@@ -33,14 +34,14 @@ export function ResumePreview({ headerSnapshot, sections }: ResumePreviewProps) 
 
   return (
     <article
-      className="rounded-lg border bg-background p-6 shadow-xs"
-      data-testid="resume-browser-preview"
+      className={print ? "resume-print bg-white text-black" : "rounded-lg border bg-background p-6 shadow-xs"}
+      data-testid={print ? "resume-print-preview" : "resume-browser-preview"}
     >
-      <p className="mb-4 text-xs text-muted-foreground">
+      {!print && <p className="mb-4 text-xs text-muted-foreground">
         {t("resumeVariants.previewReadOnly")}
-      </p>
+      </p>}
       <header className="border-b pb-4">
-        <h2 className="text-2xl font-semibold">{header.fullName || t("applicationProfile.emptyValue")}</h2>
+        {(!print || header.fullName) && <h2 className="text-2xl font-semibold">{header.fullName || t("applicationProfile.emptyValue")}</h2>}
         {header.headline ? (
           <p className="mt-1 text-sm text-muted-foreground">{header.headline}</p>
         ) : null}
@@ -59,12 +60,12 @@ export function ResumePreview({ headerSnapshot, sections }: ResumePreviewProps) 
             </h3>
             <div className="mt-3 space-y-3">
               {section.items.map((item) => (
-                <div key={item.id}>
+                <div key={item.id} className={print ? "resume-print-item" : undefined}>
                   {item.careerMaterialItem?.title ? (
                     <p className="text-sm font-medium">{item.careerMaterialItem.title}</p>
                   ) : null}
                   <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                    {item.expressions.map((expression) => (
+                    {item.expressions.filter((expression) => !print || expression.content.trim()).map((expression) => (
                       <li key={expression.id} className="whitespace-pre-wrap">
                         {expression.content}
                       </li>

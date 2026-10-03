@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld("vocatryaWindow", {
   setTheme: (theme, preference) => ipcRenderer.invoke("window:setTheme", theme, preference),
 });
 
+contextBridge.exposeInMainWorld("vocatryaResume", {
+  printToPDF: (versionId) => ipcRenderer.invoke("resume:printToPDF", versionId),
+});
+
 const RUNTIME_CHANNELS = Object.freeze({
   list: "runtime:list",
   detect: "runtime:detect",

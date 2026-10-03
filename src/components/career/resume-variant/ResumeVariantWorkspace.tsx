@@ -38,6 +38,7 @@ import { CAREER_MATERIAL_TYPE, EVIDENCE_STATUS } from "@/lib/career/identities";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 import { ResumePreview } from "./ResumePreview";
+import { ResumeExportControl } from "./ResumeExportControl";
 
 const MATERIAL_TYPE_ORDER = [
   CAREER_MATERIAL_TYPE.EDUCATION,
@@ -353,6 +354,11 @@ export function ResumeVariantWorkspace({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <ResumeExportControl key={version.id} versionId={version.id} status={version.status}
+            archived={Boolean(version.resumeVariant.archivedAt)} onFrozen={(id) => {
+              setVersion((current) => current?.id === id ? { ...current, status: "FROZEN" } : current);
+              setVersions((current) => current.map((row) => row.id === id ? { ...row, status: "FROZEN" } : row));
+            }} />
           <Button
             variant={preview ? "default" : "outline"}
             onClick={() => setPreview((value) => !value)}

@@ -1,0 +1,11 @@
+@page { size: A4 portrait; margin: 15mm; }
+.resume-print { color: #000; background: #fff; color-scheme: light; }
+.resume-print .text-muted-foreground { color: #555; }
+.resume-print-item { break-inside: avoid; page-break-inside: avoid; }
+.resume-print h3 { break-after: avoid; }
+.resume-print { overflow-wrap: anywhere; }
+@media print {
+  html, body { background: #fff !important; color: #000 !important; min-height: 0 !important; }
+  body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  [data-sonner-toaster] { display: none !important; }
+}

@@ -148,6 +148,12 @@ interface VocatryaAiBridge {
 }
 
 interface Window {
+  vocatryaResume?: {
+    printToPDF(versionId: string): Promise<
+      { ok: true; bytes: Uint8Array } |
+      { ok: false; code: "timeout" | "load_failed" | "print_failed" | "invalid_version_id" | "untrusted_sender" }
+    >;
+  };
   vocatryaWindow?: { setTheme(theme: "light" | "dark", preference: "light" | "dark" | "system"): Promise<void> };
   vocatryaRuntime?: VocatryaRuntimeBridge;
   vocatryaAi?: VocatryaAiBridge;
