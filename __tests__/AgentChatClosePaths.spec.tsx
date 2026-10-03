@@ -1,5 +1,11 @@
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+vi.mock("@/components/brand/motion", () => ({
+  mountVocatryaMotion: () => ({ setState: vi.fn(), dispose: vi.fn() }),
+}));
+vi.mock("@/components/agent/empty-state-motion", () => ({
+  mountEmptyStateMotion: () => ({ setState: vi.fn(), dispose: vi.fn() }),
+}));
 
 const chat = {
   messages: [] as any[],
@@ -109,6 +115,26 @@ const reviewRunningMessage = {
 };
 
 describe("agent chat close paths", () => {
+  it("gives idle motion only to the central presence while the transcript is empty", async () => {
+    chat.status = "ready";
+    setup();
+    await openPanel();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.querySelector("svg[width='26']")).toHaveAttribute("data-animated", "false");
+    expect(dialog.querySelector("svg[width='26']")).toHaveAttribute("data-state", "idle");
+    expect(dialog.querySelector("svg[width='72']")).toHaveAttribute("data-state", "idle");
+  });
+
+  it("hides the central presence after a user message and gives thinking to the header", async () => {
+    const message = { id: "first", role: "user", parts: [{ type: "text", text: "Hello" }] };
+    chat.messages = [message];
+    setup([message]);
+    await openPanel();
+    const dialog = screen.getByRole("dialog");
+    expect(screen.queryByTestId("agent-empty-state")).not.toBeInTheDocument();
+    expect(dialog.querySelector("svg[width='26']")).toHaveAttribute("data-animated", "true");
+    expect(dialog.querySelector("svg[width='26']")).toHaveAttribute("data-state", "thinking");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     chat.messages = [];

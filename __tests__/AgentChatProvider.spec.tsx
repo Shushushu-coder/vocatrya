@@ -121,6 +121,7 @@ function Probe() {
         {c.explicit ? `${c.explicit.connectionId}/${c.explicit.model}` : ""}
       </span>
       <span data-testid="history-version">{c.historyVersion}</span>
+      <span data-testid="brand-completion">{c.brandCompletion}</span>
       <button onClick={c.clearQueued}>clearQueued</button>
       <span data-testid="queued">
         {c.queued ? (c.queued.parts[0] as any).text : ""}
@@ -203,6 +204,21 @@ const approvalMessage = {
 };
 
 describe("AgentChatProvider", () => {
+  it("signals brand completion only for successful finished turns and resets on a new conversation", async () => {
+    setup();
+    const finish = chatInit().onFinish;
+    for (const flags of [{ isAbort: true }, { isError: true }]) {
+      act(() => finish({ message: { parts: [] }, ...flags }));
+    }
+    act(() => finish({ message: approvalMessage, isAbort: false, isError: false }));
+    expect(screen.getByTestId("brand-completion")).toHaveTextContent("0");
+    act(() => finish({ message: { parts: [{ type: "text", text: "Done" }] }, isAbort: false, isError: false }));
+    expect(screen.getByTestId("brand-completion")).toHaveTextContent("1");
+    act(() => finish({ message: { parts: [] }, isAbort: false, isError: false }));
+    expect(screen.getByTestId("brand-completion")).toHaveTextContent("2");
+    await userEvent.click(screen.getByText("newConversation"));
+    expect(screen.getByTestId("brand-completion")).toHaveTextContent("0");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     chat.messages = [];

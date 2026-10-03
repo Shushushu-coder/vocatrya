@@ -148,16 +148,21 @@ describe("Sidebar", () => {
     ).not.toHaveAttribute("aria-current");
   });
 
-  it("does not render a collapse control inside the sidebar", () => {
+  it("uses the static logo to collapse and expand with mouse and keyboard", async () => {
+    const user = userEvent.setup();
     renderSidebar();
-
-    // The collapse toggle lives in the header, not the rail; the only
-    // button inside the sidebar is the account menu trigger.
     const sidebar = within(screen.getByRole("complementary"));
-    expect(
-      sidebar.queryByRole("button", { name: "Collapse sidebar" })
-    ).toBeNull();
-    expect(sidebar.getByRole("button", { name: "User menu" })).toBeInTheDocument();
+    const logo = sidebar.getByRole("button", { name: "Collapse sidebar" });
+    expect(logo.querySelector("svg")).toHaveAttribute("data-animated", "false");
+    await user.click(logo);
+    expect(logo).toHaveAttribute("aria-expanded", "false");
+    expect(logo).toHaveAccessibleName("Expand sidebar");
+    expect(document.cookie).toContain(`${APP_CONSTANTS.SIDEBAR_STORAGE_KEY}=false`);
+    logo.focus();
+    await user.keyboard("{Enter}");
+    expect(logo).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard(" ");
+    expect(logo).toHaveAttribute("aria-expanded", "false");
   });
 });
 
@@ -171,20 +176,18 @@ describe("SidebarToggle", () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+    const toggle = screen.getAllByRole("button", { name: "Collapse sidebar" })[1];
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     await user.click(toggle);
 
-    const expandToggle = screen.getByRole("button", {
-      name: "Expand sidebar",
-    });
+    const expandToggle = screen.getAllByRole("button", { name: "Expand sidebar" })[1];
     expect(expandToggle).toHaveAttribute("aria-expanded", "false");
 
     await user.click(expandToggle);
 
     expect(
-      screen.getByRole("button", { name: "Collapse sidebar" })
+      screen.getAllByRole("button", { name: "Collapse sidebar" })[1]
     ).toHaveAttribute("aria-expanded", "true");
   });
 
@@ -194,7 +197,7 @@ describe("SidebarToggle", () => {
 
     expect(screen.getByText("Jobs")).not.toHaveClass("opacity-0");
 
-    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    await user.click(screen.getAllByRole("button", { name: "Collapse sidebar" })[1]);
 
     expect(screen.getByText("Jobs")).toHaveClass("opacity-0");
   });
@@ -203,7 +206,7 @@ describe("SidebarToggle", () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    await user.click(screen.getAllByRole("button", { name: "Collapse sidebar" })[1]);
 
     expect(document.cookie).toContain(
       `${APP_CONSTANTS.SIDEBAR_STORAGE_KEY}=false`
@@ -213,7 +216,7 @@ describe("SidebarToggle", () => {
   it("points aria-controls at the sidebar element", () => {
     renderSidebar();
 
-    const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+    const toggle = screen.getAllByRole("button", { name: "Collapse sidebar" })[1];
     const target = toggle.getAttribute("aria-controls");
 
     expect(document.getElementById(target!)).toBe(

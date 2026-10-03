@@ -1,7 +1,8 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DESKTOP_APP_ID } = require("./installer-identity");
+const { registerWindowThemeIpc } = require("./window-theme");
 
 app.setAppUserModelId(DESKTOP_APP_ID);
 const {
@@ -335,8 +336,13 @@ if (!singleInstance) {
     });
     const origin = `http://127.0.0.1:${backendPort}`;
     configureNavigation(mainWindow, origin);
+    const unregisterTheme = registerWindowThemeIpc({
+      ipcMain, nativeTheme, window: mainWindow, origin,
+      assetsRoot: app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "assets"),
+    });
     await mainWindow.loadURL(`${origin}/signin`);
     mainWindow.on("closed", () => {
+      unregisterTheme();
       mainWindow = undefined;
     });
   }

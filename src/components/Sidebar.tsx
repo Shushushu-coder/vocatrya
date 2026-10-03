@@ -1,8 +1,7 @@
 "use client";
-import Link from "next/link";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Briefcase } from "lucide-react";
+import { VocatryaMark } from "@/components/brand/VocatryaMark";
 import { APP_CONSTANTS, SIDEBAR_LINKS } from "@/lib/constants";
 import NavLink from "./NavLink";
 import { ProfileDropdown } from "./ProfileDropdown";
@@ -21,8 +20,7 @@ interface SidebarProps {
 function Sidebar({ user, signOutAction }: SidebarProps) {
   const { t } = useI18n();
   const path = usePathname();
-  const { expanded } = useSidebar();
-  const isOnDashboard = path === "/dashboard";
+  const { expanded, toggle } = useSidebar();
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -37,17 +35,16 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
       >
         <div className="flex h-14 shrink-0 items-center overflow-hidden sm:mt-2">
           <div className="flex w-14 shrink-0 items-center justify-center">
-            <Link
-              href="/dashboard"
-              aria-current={isOnDashboard ? "page" : undefined}
-              onClick={(e) => {
-                if (isOnDashboard) e.preventDefault();
-              }}
-              className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground md:h-8 md:w-8"
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={t(expanded ? "common.collapseSidebar" : "common.expandSidebar")}
+              aria-expanded={expanded}
+              aria-controls={APP_CONSTANTS.SIDEBAR_DOM_ID}
+              className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-8 md:w-8"
             >
-              <Briefcase className="h-4 w-4 transition-transform group-hover:scale-110" />
-              <span className="sr-only">Vocatrya</span>
-            </Link>
+              <VocatryaMark size={24} />
+            </button>
           </div>
           <span
             className={cn(

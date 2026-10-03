@@ -8,6 +8,10 @@
 // env, profile path, or free-form command crosses the bridge.
 const { contextBridge, ipcRenderer } = require("electron");
 
+contextBridge.exposeInMainWorld("vocatryaWindow", {
+  setTheme: (theme, preference) => ipcRenderer.invoke("window:setTheme", theme, preference),
+});
+
 const RUNTIME_CHANNELS = Object.freeze({
   list: "runtime:list",
   detect: "runtime:detect",

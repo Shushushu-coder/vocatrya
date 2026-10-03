@@ -148,6 +148,7 @@ interface VocatryaAiBridge {
 }
 
 interface Window {
+  vocatryaWindow?: { setTheme(theme: "light" | "dark", preference: "light" | "dark" | "system"): Promise<void> };
   vocatryaRuntime?: VocatryaRuntimeBridge;
   vocatryaAi?: VocatryaAiBridge;
 }

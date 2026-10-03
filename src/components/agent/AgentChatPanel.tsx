@@ -12,6 +12,8 @@ import { AgentChatInput } from "@/components/agent/AgentChatInput";
 import { AgentChatMessages } from "@/components/agent/AgentChatMessages";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { useI18n } from "@/i18n";
+import { VocatryaMark } from "@/components/brand/VocatryaMark";
+import { useAgentBrandState } from "@/components/brand/useAgentBrandState";
 
 export function AgentChatPanel() {
   const { t } = useI18n();
@@ -20,12 +22,24 @@ export function AgentChatPanel() {
     close,
     startNewConversation,
     messages,
+    status,
+    brandCompletion,
+    conversationId,
+    error,
+    actionError,
+    interruptedTurn,
+    approvalPending,
     panelWidth: width,
     startResize,
     isPanelExpanded,
     togglePanelExpand,
   } = useAgentChat();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const hasTranscript = messages.some(message => message.role === "user" || message.role === "assistant");
+  const brandState = useAgentBrandState({
+    status, brandCompletion, isOpen, conversationId,
+    blocked: Boolean(error || actionError || interruptedTurn || approvalPending),
+  });
 
   return (
     <Sheet
@@ -55,6 +69,12 @@ export function AgentChatPanel() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 border-b bg-muted/20 px-3 py-2.5">
+          <VocatryaMark
+            key={conversationId ?? "draft"}
+            size={26}
+            animated={hasTranscript}
+            state={hasTranscript ? brandState : "idle"}
+          />
           <SheetTitle className="m-0 shrink-0 text-[11px] font-bold uppercase leading-none tracking-[0.15em] text-foreground">
             {t("agent.panelTitle")}
           </SheetTitle>
@@ -105,7 +125,7 @@ export function AgentChatPanel() {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-6xl">
-          {messages.length > 0 ? <AgentChatMessages /> : <AgentChatEmptyState />}
+          {hasTranscript ? <AgentChatMessages /> : <AgentChatEmptyState state={brandState} />}
         </div>
 
         <div className="shrink-0 border-t p-3">

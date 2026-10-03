@@ -1,0 +1,48 @@
+.container { container-type: inline-size; }
+.mark {
+  display: block;
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  color: hsl(var(--foreground));
+  cursor: default;
+}
+.mark path, .mark g, .mark polygon {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+.actions { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: .5rem; }
+.action {
+  min-width: 0;
+  height: auto;
+  min-height: 36px;
+  padding: .5rem .75rem;
+  border-radius: var(--radius);
+  border-color: color-mix(in oklab, hsl(var(--border)), hsl(var(--foreground)) 15%);
+  background: transparent;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  white-space: normal;
+  transition: transform 100ms ease;
+}
+.action svg { color: hsl(var(--muted-foreground)); }
+.action:hover {
+  background: hsl(var(--accent));
+  border-color: color-mix(in oklab, hsl(var(--border)), hsl(var(--foreground)) 30%);
+  color: hsl(var(--accent-foreground));
+}
+.action:hover svg { color: hsl(var(--accent-foreground)); }
+.action:active { transform: scale(.985); }
+.action:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  box-shadow: none;
+}
+@container (width < 420px) {
+  .mark { width: 64px; height: 64px; }
+  .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .action { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action { transition: none; }
+}

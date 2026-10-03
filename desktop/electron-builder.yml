@@ -35,6 +35,10 @@ electronLanguages:
 afterPack: desktop/scripts/after-pack.cjs
 
 extraResources:
+  - from: desktop/assets/native-window-dark-symbol.ico
+    to: native-window-dark-symbol.ico
+  - from: desktop/assets/native-window-light-symbol.ico
+    to: native-window-light-symbol.ico
   - from: .codex-tmp/windows-installer/stage/resources/backend
     to: backend
     filter:

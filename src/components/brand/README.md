@@ -1,0 +1,14 @@
+# A1.5 production identity
+
+Source: `E:/Projects/logo/final`, approved A1.5 geometry and coupled OUTER → CORE motion.
+
+- `geometry.ts` copies the three paths from `master/a1-5-master-currentColor.svg` and `optical/a1-5-optical-small-currentColor.svg` verbatim, including the frozen `translate(-9 -16)` wrapper in `VocatryaMark`.
+- `motion.js` preserves the approved demo's local axes, material palette, coupled events, timings, size scaling and interruption curves. The adapter replaces review-page controls with per-instance lifecycle, theme observation, visibility/reduced-motion handling and cleanup. It never updates React per frame and sleeps between events.
+- Sidebar uses static 24px Optical in a localized button that reuses the existing collapse action. AI Header uses 26px master, animated only with a user/assistant transcript. Welcome uses centered 64px master and occasional idle events, with 3–5 seconds of rest between events. SVGs are decorative; existing brand text and status UI remain accessible. Reduced motion disables both geometry and directional highlights.
+- `desktop/assets/icon.ico` contains approved PNG exports directly, without resampling: white Optical symbols at 16/24px and unmasked dark app icons at 32/48/64/128/256px. `src/app/favicon.ico` contains black symbol exports at 16/24/32px; 16/24 are Optical.
+- The Windows builder edits executable resources with signing disabled; static `icon.ico` supplies executable and NSIS installer/uninstaller identity. A physical `resources/icon.ico` also supplies Windows shell/relaunch metadata, outside the ASAR archive.
+- `next-themes` remains the theme authority. Its effective light/dark value (including forced themes) and current preference pass through a narrow preload IPC to the trusted main window. Electron native chrome follows explicit overrides; System preference keeps the OS media query live. `BrowserWindow.setIcon` selects `native-window-dark-symbol.ico` for light and `native-window-light-symbol.ico` for dark without recreating the window. These containers have explicit approved black/white Optical 16/24px PNG entries; all larger App Icon entries are byte-identical to static `icon.ico`, preserving Electron's separately loaded large taskbar icon. Generate them with `node desktop/scripts/build-native-window-icons.cjs <approved-png-directory>`. No system-theme listener or second persisted theme state is added.
+
+`useAgentBrandState` consumes successful `onFinish` events once. Thinking is exactly submitted/streaming, not approval waits, typing or model preflight. The 700ms timer expires only the approved 650ms completion visual; it never guesses request completion. Failed/aborted turns do not emit completion, and panel/conversation changes do not replay old success.
+
+There is no startup waiting surface. Startup motion is NOT_APPLICABLE.

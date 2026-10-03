@@ -183,6 +183,8 @@ function useAgentChatValue(
   }, [sidebarExpanded, isPanelExpanded, pathname, togglePanelExpand]);
 
   const [interruptedTurn, setInterruptedTurn] = useState(false);
+  // Presentation-only completion signal; errors, aborts and approval waits stay idle.
+  const [brandCompletion, setBrandCompletion] = useState(0);
   const [identity, setIdentity] = useState<AgentChatIdentity>(() =>
     identityFromInitial(initial),
   );
@@ -242,6 +244,9 @@ function useAgentChatValue(
     },
     onFinish: ({ message, isAbort, isError }) => {
       if (isAbort || isError) return;
+      if (!hasPendingApproval(message ? [message] : [])) {
+        setBrandCompletion((n) => n + 1);
+      }
 
       const finishedParts = message?.parts ?? [];
       const wrote = createdJobToolCallIds(message ? [message] : []).length > 0;
@@ -407,6 +412,7 @@ function useAgentChatValue(
   const [queued, setQueued] = useState<QueuedMessage | undefined>();
 
   const resetTransient = useCallback(() => {
+    setBrandCompletion(0);
     chat.clearError();
     setActionError(null);
     setInterruptedTurn(false);
@@ -747,6 +753,7 @@ function useAgentChatValue(
     toolStreams,
     jobWrites,
     status: chat.status,
+    brandCompletion,
     error: chat.error,
     actionError,
     clearError: () => {
