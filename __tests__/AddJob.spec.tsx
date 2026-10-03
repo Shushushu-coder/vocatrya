@@ -11,6 +11,7 @@ import { toastActionResult } from "@/lib/toast";
 import type { JobResponse } from "@/models/job.model";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { I18nProvider } from "@/i18n/context";
+import { redirect } from "next/navigation";
 vi.mock("@/utils/user.utils", () => ({
   getCurrentUser: vi.fn(),
 }));
@@ -777,7 +778,9 @@ describe("AddJob Component - Error Handling", () => {
     expect(onSaved).not.toHaveBeenCalled();
   }, 10000);
 
-  it("asks the list to reload once after a successful add", async () => {
+  it.each([undefined, "/dashboard/myjobs/job-new?tab=details"])(
+    "reloads after save and navigates only for an explicit destination (%s)",
+    async (redirectPath) => {
     const mockCompanies = (await getMockList(1, 10, "companies")).data;
     const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
     const mockLocations = (await getMockList(1, 10, "locations")).data;
@@ -796,6 +799,7 @@ describe("AddJob Component - Error Handling", () => {
         editJob={null}
         resetEditJob={mockResetEditJob}
         onSaved={onSaved}
+        redirectPath={redirectPath}
       />,
     );
     const user = userEvent.setup({ skipHover: true });
@@ -815,6 +819,13 @@ describe("AddJob Component - Error Handling", () => {
     await user.click(screen.getByTestId("save-job-btn"));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    if (redirectPath) {
+      expect(redirect).toHaveBeenCalledWith(redirectPath);
+    } else {
+      expect(redirect).not.toHaveBeenCalled();
+      await user.click(screen.getByTestId("add-job-btn"));
+      expect(screen.getByTestId("add-job-dialog-title")).toBeVisible();
+    }
   }, 10000);
 });
 

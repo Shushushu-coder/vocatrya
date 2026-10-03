@@ -261,7 +261,10 @@ export function AddJob({
           // Same list reload the toolbar button and note save already use.
           // redirect() to the current My Jobs URL does not refetch client state.
           onSaved?.();
-          redirect(redirectPath ?? "/dashboard/myjobs");
+          // A late same-page redirect can dismiss the next dialog the user opens.
+          if (redirectPath || !onSaved) {
+            redirect(redirectPath ?? "/dashboard/myjobs");
+          }
         },
       });
     });
