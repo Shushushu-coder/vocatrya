@@ -9,6 +9,10 @@ import { useI18n } from "@/i18n";
 // review, not the serialization, and the card would be a wall of text.
 export function GetResumeResult({ output }: { output: AgentGetResumeResult }) {
   const { t, formatNumber } = useI18n();
+  if (output.status === "unavailable") {
+    return <p className="text-sm">{t("agent.jobsUnavailable", { reason: output.reason })}</p>;
+  }
+
   if (output.status === "no_resumes") {
     return <NoResumesNotice />;
   }

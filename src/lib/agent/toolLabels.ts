@@ -1,5 +1,7 @@
 export const AGENT_TOOL_LABEL_KEYS = {
   add_job: "agent.tools.addJob",
+  list_jobs: "agent.tools.listJobs",
+  get_job: "agent.tools.getJob",
   get_resume: "agent.tools.getResume",
   review_resume: "agent.tools.reviewResume",
   match_job: "agent.tools.matchJob",

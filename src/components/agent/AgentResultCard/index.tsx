@@ -2,6 +2,7 @@
 
 import { getToolName, type ToolUIPart } from "ai";
 import { AddJobResult } from "./AddJobResult";
+import { GetJobResult, ListJobsResult } from "./JobReadResult";
 import { GetResumeResult } from "./GetResumeResult";
 import { ReviewResumeResult } from "./ReviewResumeResult";
 import { MatchJobResult } from "./MatchJobResult";
@@ -9,7 +10,9 @@ import { CoverLetterResult } from "./CoverLetterResult";
 import type {
   AgentAddJobResult,
   AgentCoverLetterResult,
+  AgentGetJobResult,
   AgentGetResumeResult,
+  AgentListJobsResult,
   AgentMatchJobResult,
   AgentReviewResumeResult,
 } from "@/models/agent.model";
@@ -63,6 +66,10 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
         output={part.output as AgentAddJobResult}
         input={(part.input ?? {}) as Record<string, unknown>}
       />
+    ) : toolName === "list_jobs" ? (
+      <ListJobsResult output={part.output as AgentListJobsResult} />
+    ) : toolName === "get_job" ? (
+      <GetJobResult output={part.output as AgentGetJobResult} />
     ) : toolName === "get_resume" ? (
       <GetResumeResult output={part.output as AgentGetResumeResult} />
     ) : toolName === "review_resume" ? (

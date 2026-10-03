@@ -82,3 +82,18 @@ export const AgentCoverLetterSchema = z.object({
 });
 
 export type AgentCoverLetterInput = z.infer<typeof AgentCoverLetterSchema>;
+
+export const AgentListJobsSchema = z.object({});
+
+export type AgentListJobsInput = z.infer<typeof AgentListJobsSchema>;
+
+// jobId is the id list_jobs already returned for this user, or omitted so the
+// server uses the page-context job. userId is never accepted from the model.
+export const AgentGetJobSchema = z.object({
+  jobId: z
+    .string()
+    .optional()
+    .describe("Id of the job to read, as returned by list_jobs. Omit this entirely when the user is asking about the job currently open on the page."),
+});
+
+export type AgentGetJobInput = z.infer<typeof AgentGetJobSchema>;

@@ -11,6 +11,10 @@ import { useI18n } from "@/i18n";
 // what was saved.
 export function ReviewResumeResult({ output }: { output: AgentReviewResumeResult }) {
   const { t } = useI18n();
+  if (output.status === "unavailable") {
+    return <p className="text-sm">{t("agent.jobsUnavailable", { reason: output.reason })}</p>;
+  }
+
   if (output.status === "no_resumes") {
     return <NoResumesNotice />;
   }

@@ -16,6 +16,16 @@ describe("pageContextFor", () => {
     });
   });
 
+  it("extracts a resume variant id from the variant workspace route", () => {
+    expect(pageContextFor("/dashboard/profile/resumes/variant-1")).toEqual({
+      route: "/dashboard/profile/resumes/variant-1",
+      resumeId: "variant-1",
+    });
+    expect(pageLocationOf(pageContextFor("/dashboard/profile/resumes/variant-1"))).toBe(
+      "resume",
+    );
+  });
+
   it("omits both ids everywhere else", () => {
     expect(pageContextFor("/dashboard/myjobs")).toEqual({
       route: "/dashboard/myjobs",

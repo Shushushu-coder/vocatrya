@@ -1,14 +1,18 @@
 import { buildGetResumeTool } from "@/lib/agent/tools/getResume";
 import { buildAgentTools } from "@/lib/agent/tools";
-import { resolveResumeForAgent } from "@/lib/agent/resumeLookup";
-import { preprocessResume } from "@/lib/ai/tools/preprocessing";
+import { resolveCanonicalResumeForAgent } from "@/lib/agent/resumeLookup";
+import { preprocessResume, preprocessText } from "@/lib/ai/tools/preprocessing";
 import { APP_CONSTANTS } from "@/lib/constants";
 
-vi.mock("@/lib/agent/resumeLookup", () => ({ resolveResumeForAgent: vi.fn() }));
-vi.mock("@/lib/ai/tools/preprocessing", () => ({ preprocessResume: vi.fn() }));
+vi.mock("@/lib/agent/resumeLookup", () => ({ resolveCanonicalResumeForAgent: vi.fn() }));
+vi.mock("@/lib/ai/tools/preprocessing", () => ({
+  preprocessResume: vi.fn(),
+  preprocessText: vi.fn(),
+}));
 
-const resolve = resolveResumeForAgent as unknown as ReturnType<typeof vi.fn>;
+const resolve = resolveCanonicalResumeForAgent as unknown as ReturnType<typeof vi.fn>;
 const preprocess = preprocessResume as unknown as ReturnType<typeof vi.fn>;
+const preprocessAb = preprocessText as unknown as ReturnType<typeof vi.fn>;
 
 const resume = { id: "r1", title: "Senior Engineer Resume" };
 const execute = (tool: any, input: any) =>
@@ -126,5 +130,32 @@ describe("get_resume agent tool", () => {
     resolve.mockRejectedValue(new Error("db down"));
     const result: any = await execute(buildGetResumeTool("user-1"), {});
     expect(result.status).toBe("unreadable");
+  });
+
+  it("reads an A+B resume projection through the text preprocessor", async () => {
+    resolve.mockResolvedValue({
+      status: "ok",
+      family: "ab",
+      id: "variant-1",
+      title: "Campus Resume",
+      versionId: "version-1",
+      text: "VARIANT_BODY",
+      source: "only",
+      ambiguousTitle: false,
+    });
+    preprocessAb.mockResolvedValue({
+      success: true,
+      data: { normalizedText: "VARIANT_BODY normalized", metadata: {}, isValid: true },
+    });
+    const result: any = await execute(buildGetResumeTool("user-1"), {});
+    expect(result).toMatchObject({
+      status: "ok",
+      resumeId: "variant-1",
+      title: "Campus Resume",
+      resumeText: "VARIANT_BODY normalized",
+      source: "only",
+    });
+    expect(preprocess).not.toHaveBeenCalled();
+    expect(preprocessAb).toHaveBeenCalledWith("VARIANT_BODY");
   });
 });

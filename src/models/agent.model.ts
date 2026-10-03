@@ -69,6 +69,36 @@ export type AgentResumeSource = "named" | "page" | "default" | "only";
 
 // What get_resume returns to the model AND to the result card. resumeText is
 // the only large field; the card must never render it.
+export type AgentJobSummary = {
+  id: string;
+  title: string | null;
+  company: string | null;
+  status: string | null;
+  location: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type AgentListJobsResult =
+  | { status: "ok"; jobs: AgentJobSummary[]; total: number; truncated: boolean }
+  | { status: "unavailable"; reason: string };
+
+export type AgentGetJobResult =
+  | {
+      status: "ok";
+      job: AgentJobSummary & {
+        source: string | null;
+        jobUrl: string | null;
+        appliedDate: string | null;
+        dueDate: string | null;
+        jobDescription: string;
+        descriptionChars: number;
+        descriptionTruncated: boolean;
+      };
+    }
+  | { status: "no_job" }
+  | { status: "unavailable"; reason: string };
+
 export type AgentGetResumeResult =
   | {
       status: "ok";
@@ -82,7 +112,8 @@ export type AgentGetResumeResult =
     }
   | { status: "needs_selection"; resumes: { id: string; title: string }[] }
   | { status: "no_resumes" }
-  | { status: "unreadable"; title: string; reason: string };
+  | { status: "unreadable"; title: string; reason: string }
+  | { status: "unavailable"; reason: string };
 
 // Transient stream part carrying a nested generation's tokens. It is never
 // persisted: the finished artifact lands in the tool result, and keeping both
@@ -108,7 +139,8 @@ export type AgentReviewResumeResult =
   | { status: "needs_selection"; resumes: { id: string; title: string }[] }
   | { status: "no_resumes" }
   | { status: "unreadable"; title: string; reason: string }
-  | { status: "generation_failed"; title: string; reason: string };
+  | { status: "generation_failed"; title: string; reason: string }
+  | { status: "unavailable"; reason: string };
 
 // What match_job returns to the model AND to the result card. Neither the
 // resume text nor the job description is here — follow-ups answer from `body`.

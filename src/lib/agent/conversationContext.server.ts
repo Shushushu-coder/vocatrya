@@ -4,6 +4,10 @@ import prisma from "@/lib/db";
 import { AIBusinessError } from "@/lib/ai/connections";
 import { getJob, listJobs } from "@/lib/career/jobsReadDispatch";
 import {
+  listAbResumeChoices,
+  resolveResumeReadFamily,
+} from "@/lib/career/resumeReadDispatch";
+import {
   dedupeContextItems,
   type AgentConversationContextItem,
   type AgentConversationContextV1,
@@ -31,6 +35,16 @@ async function loadOwnedJob(userId: string, entityId: string) {
 }
 
 async function loadOwnedResume(userId: string, entityId: string) {
+  const family = await resolveResumeReadFamily(prisma);
+  if (family.family === "blocked") return null;
+  if (family.family === "ab") {
+    const variant = await prisma.resumeVariant.findFirst({
+      where: { id: entityId, userId, archivedAt: null },
+      select: { id: true, name: true },
+    });
+    if (!variant) return null;
+    return { id: variant.id, label: variant.name };
+  }
   const resume = await prisma.resume.findFirst({
     where: { id: entityId, profile: { userId } },
     select: { id: true, title: true },
@@ -138,16 +152,24 @@ export type AgentContextOption = {
 export async function listOwnedContextOptions(
   userId: string,
 ): Promise<{ jobs: AgentContextOption[]; resumes: AgentContextOption[] }> {
+  const family = await resolveResumeReadFamily(prisma);
   const [listed, resumes] = await Promise.all([
     listJobs(prisma, userId, { take: 40 }),
-    prisma.resume.findMany({
-      where: { profile: { userId } },
-      orderBy: { updatedAt: "desc" },
-      take: 40,
-      select: { id: true, title: true, updatedAt: true },
-    }),
+    family.family === "ab"
+      ? listAbResumeChoices(prisma, userId)
+      : family.family === "legacy"
+        ? prisma.resume.findMany({
+            where: { profile: { userId } },
+            orderBy: { updatedAt: "desc" },
+            take: 40,
+            select: { id: true, title: true },
+          })
+        : Promise.resolve([]),
   ]);
   const jobs = listed.blocked ? [] : listed.data;
+  const visibleResumes = family.family === "ab"
+    ? resumes.slice(0, 40)
+    : resumes;
   return {
     jobs: jobs.map((job) => ({
       kind: "job" as const,
@@ -155,7 +177,7 @@ export async function listOwnedContextOptions(
       label: job.JobTitle?.label || "Job",
       secondary: job.Company?.label ?? null,
     })),
-    resumes: resumes.map((resume) => ({
+    resumes: visibleResumes.map((resume) => ({
       kind: "resume" as const,
       id: resume.id,
       label: resume.title,

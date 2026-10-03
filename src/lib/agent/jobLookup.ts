@@ -5,10 +5,11 @@ export type JobLookup =
   | { status: "ok"; job: JobResponse }
   | { status: "no_job" };
 
-// There is no lookup by name here on purpose: match_job scores the job the
-// user is looking at, so the id comes from page context and never from the
-// model. pageContext is client-supplied, which is why userId is in the where
-// clause rather than checked afterwards.
+// Write-oriented lookup for match_job and generate_cover_letter. It stays on
+// the legacy Job table so an A+B JobOpportunity id cannot be loaded and then
+// persisted through the legacy writers. list_jobs and get_job use
+// canonicalJobRead instead. pageContext is client-supplied, which is why
+// userId is in the where clause rather than checked afterwards.
 export async function resolveJobForAgent(
   userId: string,
   pageJobId?: string,

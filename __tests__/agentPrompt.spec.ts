@@ -126,14 +126,22 @@ describe("agent chat system prompt", () => {
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toMatch(/never ask them to open a job/i);
   });
 
-  it("describes all five tools", () => {
+  it("describes the read tools and does not claim unbuilt writes", () => {
     expect(Object.keys(AGENT_TOOL_DESCRIPTIONS)).toEqual([
       "add_job",
+      "list_jobs",
+      "get_job",
       "get_resume",
       "review_resume",
       "match_job",
       "generate_cover_letter",
     ]);
+    expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("list_jobs");
+    expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("get_job");
+    expect(AGENT_CHAT_PROMPT_SECTIONS.limitations).toMatch(/cannot update a saved job/i);
+    expect(AGENT_CHAT_PROMPT_SECTIONS.limitations).toMatch(/resume variant/i);
+    expect(AGENT_TOOL_DESCRIPTIONS.list_jobs).toMatch(/does not update jobs/i);
+    expect(AGENT_TOOL_DESCRIPTIONS.add_job).not.toMatch(/update_job/);
   });
 
   // Same lesson as match_job in eval-B74: a precondition the tool can check

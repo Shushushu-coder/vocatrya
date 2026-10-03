@@ -1,6 +1,6 @@
 import { buildReviewResumeTool } from "@/lib/agent/tools/reviewResume";
-import { resolveResumeForAgent } from "@/lib/agent/resumeLookup";
-import { preprocessResume } from "@/lib/ai/tools/preprocessing";
+import { resolveCanonicalResumeForAgent } from "@/lib/agent/resumeLookup";
+import { preprocessResume, preprocessText } from "@/lib/ai/tools/preprocessing";
 import { saveResumeReviewResult } from "@/actions/profile.actions";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { TEMPERATURES } from "@/lib/ai/config";
@@ -9,8 +9,11 @@ import {
   buildResumeReviewPrompt,
 } from "@/lib/ai/prompts/resume-review";
 
-vi.mock("@/lib/agent/resumeLookup", () => ({ resolveResumeForAgent: vi.fn() }));
-vi.mock("@/lib/ai/tools/preprocessing", () => ({ preprocessResume: vi.fn() }));
+vi.mock("@/lib/agent/resumeLookup", () => ({ resolveCanonicalResumeForAgent: vi.fn() }));
+vi.mock("@/lib/ai/tools/preprocessing", () => ({
+  preprocessResume: vi.fn(),
+  preprocessText: vi.fn(),
+}));
 vi.mock("@/actions/profile.actions", () => ({
   saveResumeReviewResult: vi.fn(),
 }));
@@ -21,8 +24,9 @@ vi.mock("ai", async (importOriginal) => {
   return { ...actual, streamText: (...args: unknown[]) => streamText(...(args as [])) };
 });
 
-const resolve = resolveResumeForAgent as unknown as ReturnType<typeof vi.fn>;
+const resolve = resolveCanonicalResumeForAgent as unknown as ReturnType<typeof vi.fn>;
 const preprocess = preprocessResume as unknown as ReturnType<typeof vi.fn>;
+const preprocessAb = preprocessText as unknown as ReturnType<typeof vi.fn>;
 const save = saveResumeReviewResult as unknown as ReturnType<typeof vi.fn>;
 
 const REVIEW =
@@ -260,5 +264,34 @@ describe("review_resume agent tool", () => {
     expect(result.status).toBe("unreadable");
     expect(result.title).toBe("Senior Engineer Resume");
     expect(streamText).not.toHaveBeenCalled();
+  });
+
+  it("reviews an A+B resume projection without saving it onto a resume record", async () => {
+    resolve.mockResolvedValue({
+      status: "ok",
+      family: "ab",
+      id: "variant-1",
+      title: "Campus Resume",
+      versionId: "version-1",
+      text: "VARIANT_BODY",
+      source: "only",
+      ambiguousTitle: false,
+    });
+    preprocessAb.mockResolvedValue({
+      success: true,
+      data: { normalizedText: "VARIANT_BODY normalized", metadata: {}, isValid: true },
+    });
+    const result = await execute(buildReviewResumeTool(ctx()), {});
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.resumeId).toBe("variant-1");
+      expect(result.saved).toBe(false);
+    }
+    expect(preprocess).not.toHaveBeenCalled();
+    expect(preprocessAb).toHaveBeenCalledWith("VARIANT_BODY");
+    expect(save).not.toHaveBeenCalled();
+    expect(streamText).toHaveBeenCalled();
+    const prompt = streamText.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("VARIANT_BODY normalized");
   });
 });

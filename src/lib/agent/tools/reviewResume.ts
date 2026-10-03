@@ -5,8 +5,8 @@ import { TEMPERATURES } from "@/lib/ai/config";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { AGENT_TOOL_DESCRIPTIONS } from "@/lib/agent/prompt";
 import { AgentReviewResumeSchema } from "@/models/agent.schema";
-import { resolveResumeForAgent } from "@/lib/agent/resumeLookup";
-import { preprocessResume } from "@/lib/ai/tools/preprocessing";
+import { resolveCanonicalResumeForAgent } from "@/lib/agent/resumeLookup";
+import { preprocessResume, preprocessText } from "@/lib/ai/tools/preprocessing";
 import {
   RESUME_REVIEW_SYSTEM_PROMPT,
   buildResumeReviewPrompt,
@@ -44,18 +44,22 @@ export function buildReviewResumeTool(ctx: ReviewResumeContext) {
     // No needsApproval: this writes only the caller's own reviewData, and
     // they watch the whole thing stream before it lands.
     execute: async (raw, { toolCallId, abortSignal }): Promise<AgentReviewResumeResult> => {
-      const lookup = await resolveResumeForAgent(ctx.userId, {
+      const lookup = await resolveCanonicalResumeForAgent(ctx.userId, {
         title: raw?.resumeTitle,
         pageResumeId: ctx.pageResumeId,
       });
 
+      if (lookup.status === "unavailable") return lookup;
       if (lookup.status === "no_resumes") return { status: "no_resumes" };
       if (lookup.status === "needs_selection") {
         return { status: "needs_selection", resumes: lookup.resumes };
       }
 
-      const title = lookup.resume.title;
-      const pre = await preprocessResume(lookup.resume);
+      const title = lookup.family === "ab" ? lookup.title : lookup.resume.title;
+      const resumeId = lookup.family === "ab" ? lookup.id : lookup.resume.id!;
+      const pre = lookup.family === "ab"
+        ? await preprocessText(lookup.text)
+        : await preprocessResume(lookup.resume);
       if (!pre.success) {
         return {
           status: "unreadable",
@@ -123,15 +127,16 @@ export function buildReviewResumeTool(ctx: ReviewResumeContext) {
         model: ctx.modelName,
         surface: APP_CONSTANTS.AGENT_CHAT_REVIEW_SURFACE,
       };
-      const saveResult = await saveResumeReviewResult(
-        lookup.resume.id!,
-        JSON.stringify(reviewData),
-      );
+      // Resume variants have no review column. Do not write a legacy Resume
+      // and do not mutate the variant version.
+      const saveResult = lookup.family === "ab"
+        ? { success: false, message: "Resume variant reviews are not saved in this version." }
+        : await saveResumeReviewResult(resumeId, JSON.stringify(reviewData));
       const saved = saveResult?.success === true;
 
       return {
         status: "ok",
-        resumeId: lookup.resume.id!,
+        resumeId,
         title,
         scores,
         body,

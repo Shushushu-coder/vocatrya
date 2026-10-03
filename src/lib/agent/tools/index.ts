@@ -2,6 +2,8 @@ import type { LanguageModel, ToolSet, UIMessageStreamWriter } from "ai";
 import type { PageContext } from "@/models/agent.model";
 import type { NestedGenerationGuard } from "@/lib/agent/nestedGeneration";
 import { buildAddJobTool } from "./addJob";
+import { buildListJobsTool } from "./listJobs";
+import { buildGetJobTool } from "./getJob";
 import { buildGetResumeTool } from "./getResume";
 import { buildReviewResumeTool } from "./reviewResume";
 import { buildMatchJobTool } from "./matchJob";
@@ -26,6 +28,8 @@ export function buildAgentTools(ctx: {
 
   return {
     add_job: buildAddJobTool(ctx.userId, ctx.pastedText),
+    list_jobs: buildListJobsTool(ctx.userId),
+    get_job: buildGetJobTool(ctx.userId, ctx.pageContext?.jobId),
     get_resume: buildGetResumeTool(ctx.userId, ctx.pageContext?.resumeId),
     review_resume: buildReviewResumeTool({
       userId: ctx.userId,
@@ -59,6 +63,8 @@ export function buildAgentTools(ctx: {
 
 export {
   buildAddJobTool,
+  buildListJobsTool,
+  buildGetJobTool,
   buildGetResumeTool,
   buildReviewResumeTool,
   buildMatchJobTool,

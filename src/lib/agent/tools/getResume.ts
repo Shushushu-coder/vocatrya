@@ -2,8 +2,8 @@ import { tool } from "ai";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { AGENT_TOOL_DESCRIPTIONS } from "@/lib/agent/prompt";
 import { AgentGetResumeSchema } from "@/models/agent.schema";
-import { resolveResumeForAgent } from "@/lib/agent/resumeLookup";
-import { preprocessResume } from "@/lib/ai/tools/preprocessing";
+import { resolveCanonicalResumeForAgent } from "@/lib/agent/resumeLookup";
+import { preprocessResume, preprocessText } from "@/lib/ai/tools/preprocessing";
 import { log } from "@/lib/telemetry";
 import type { AgentGetResumeResult } from "@/models/agent.model";
 
@@ -21,18 +21,21 @@ export function buildGetResumeTool(userId: string, pageResumeId?: string) {
     // to them. The gate exists to stop writes the user has not seen.
     execute: async (raw): Promise<AgentGetResumeResult> => {
       try {
-        const lookup = await resolveResumeForAgent(userId, {
+        const lookup = await resolveCanonicalResumeForAgent(userId, {
           title: raw?.resumeTitle,
           pageResumeId,
         });
 
+        if (lookup.status === "unavailable") return lookup;
         if (lookup.status === "no_resumes") return { status: "no_resumes" };
         if (lookup.status === "needs_selection") {
           return { status: "needs_selection", resumes: lookup.resumes };
         }
 
-        const title = lookup.resume.title;
-        const pre = await preprocessResume(lookup.resume);
+        const title = lookup.family === "ab" ? lookup.title : lookup.resume.title;
+        const pre = lookup.family === "ab"
+          ? await preprocessText(lookup.text)
+          : await preprocessResume(lookup.resume);
         if (!pre.success) {
           return {
             status: "unreadable",
@@ -45,7 +48,7 @@ export function buildGetResumeTool(userId: string, pageResumeId?: string) {
         const resumeText = full.slice(0, APP_CONSTANTS.AGENT_CHAT_RESUME_MAX_CHARS);
         return {
           status: "ok",
-          resumeId: lookup.resume.id!,
+          resumeId: lookup.family === "ab" ? lookup.id : lookup.resume.id!,
           title,
           resumeText,
           chars: resumeText.length,

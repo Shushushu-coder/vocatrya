@@ -12,7 +12,11 @@ export function AgentToolRunningCard({ part }: { part: ToolUIPart }) {
   const label =
     toolName === "add_job"
       ? t("agent.preparingAddJob")
-      : toolName === "get_resume"
+      : toolName === "list_jobs"
+        ? t("agent.listingJobs")
+        : toolName === "get_job"
+          ? t("agent.readingJob")
+          : toolName === "get_resume"
         ? t("agent.readingResume")
         : toolName === "review_resume"
           ? t("agent.reviewingResume")

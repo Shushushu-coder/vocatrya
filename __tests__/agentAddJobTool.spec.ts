@@ -193,6 +193,8 @@ describe("add_job agent tool", () => {
   it("registers exactly the tools the chat exposes", () => {
     expect(Object.keys(buildAgentTools(toolCtx))).toEqual([
       "add_job",
+      "list_jobs",
+      "get_job",
       "get_resume",
       "review_resume",
       "match_job",

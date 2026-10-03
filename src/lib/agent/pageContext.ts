@@ -4,13 +4,15 @@ import type { PageContext } from "@/models/agent.model";
 // client derives pageContext from these patterns and the chat route derives
 // the model's page line from the same ones. Two copies would drift.
 const RESUME_ROUTE = /^\/dashboard\/profile\/resume\/([^/]+)$/;
+const RESUME_VARIANT_ROUTE = /^\/dashboard\/profile\/resumes\/([^/]+)$/;
 const JOB_ROUTE = /^\/dashboard\/myjobs\/([^/]+)$/;
 const JOBS_LIST_ROUTE = /^\/dashboard\/myjobs\/?$/;
 
 export type PageLocation = "job" | "jobs-list" | "resume" | "elsewhere";
 
 export function pageContextFor(pathname: string): PageContext {
-  const resumeId = pathname.match(RESUME_ROUTE)?.[1];
+  const resumeId =
+    pathname.match(RESUME_ROUTE)?.[1] ?? pathname.match(RESUME_VARIANT_ROUTE)?.[1];
   const jobId = pathname.match(JOB_ROUTE)?.[1];
   return {
     route: pathname,

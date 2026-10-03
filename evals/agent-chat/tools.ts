@@ -3,7 +3,9 @@ import { AGENT_TOOL_DESCRIPTIONS } from '../../src/lib/agent/prompt';
 import {
   AgentAddJobSchema,
   AgentCoverLetterSchema,
+  AgentGetJobSchema,
   AgentGetResumeSchema,
+  AgentListJobsSchema,
   AgentMatchJobSchema,
   AgentReviewResumeSchema,
 } from '../../src/models/agent.schema';
@@ -18,6 +20,22 @@ export function getTools() {
         name: 'add_job',
         description: AGENT_TOOL_DESCRIPTIONS.add_job,
         parameters: z.toJSONSchema(AgentAddJobSchema, { io: 'input' }),
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'list_jobs',
+        description: AGENT_TOOL_DESCRIPTIONS.list_jobs,
+        parameters: z.toJSONSchema(AgentListJobsSchema, { io: 'input' }),
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'get_job',
+        description: AGENT_TOOL_DESCRIPTIONS.get_job,
+        parameters: z.toJSONSchema(AgentGetJobSchema, { io: 'input' }),
       },
     },
     {
