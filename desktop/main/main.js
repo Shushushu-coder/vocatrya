@@ -322,7 +322,11 @@ if (!singleInstance) {
   }
 
   async function createMainWindow() {
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, "icon.ico")
+      : path.join(__dirname, "..", "assets", "icon.ico");
     mainWindow = new BrowserWindow({
+      icon: iconPath,
       width: 1280,
       height: 820,
       minWidth: 960,
@@ -334,6 +338,12 @@ if (!singleInstance) {
         preload: path.join(__dirname, "preload.js"),
       },
     });
+    if (process.platform === "win32") {
+      mainWindow.setAppDetails({
+        appId: DESKTOP_APP_ID,
+        appIconPath: iconPath,
+      });
+    }
     const origin = `http://127.0.0.1:${backendPort}`;
     configureNavigation(mainWindow, origin);
     const unregisterTheme = registerWindowThemeIpc({

@@ -39,6 +39,8 @@ extraResources:
     to: native-window-dark-symbol.ico
   - from: desktop/assets/native-window-light-symbol.ico
     to: native-window-light-symbol.ico
+  - from: desktop/assets/icon.ico
+    to: icon.ico
   - from: .codex-tmp/windows-installer/stage/resources/backend
     to: backend
     filter:
@@ -59,6 +61,7 @@ extraResources:
     to: build-info.json
 
 win:
+  icon: desktop/assets/icon.ico
   target:
     - target: nsis
       arch:
@@ -66,11 +69,14 @@ win:
   artifactName: Vocatrya-Setup-${version}-x64.${ext}
   executableName: Vocatrya
   requestedExecutionLevel: asInvoker
-  signAndEditExecutable: false
+  # Keep icon/resource editing enabled while preserving unsigned local builds.
+  signExecutable: false
   forceCodeSigning: false
   legalTrademarks: Vocatrya contributors
 
 nsis:
+  installerIcon: desktop/assets/icon.ico
+  uninstallerIcon: desktop/assets/icon.ico
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

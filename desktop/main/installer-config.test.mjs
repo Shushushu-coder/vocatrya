@@ -41,6 +41,22 @@ describe("electron-builder configuration", () => {
   const nsh = read("desktop/installer.nsh");
   const pkg = JSON.parse(read("package.json"));
 
+  it("ships the static A1.5 Windows identity with executable editing and shell icon metadata", () => {
+    expect(yml).toMatch(/icon:\s*desktop\/assets\/icon\.ico/);
+    expect(yml).toMatch(/from:\s*desktop\/assets\/icon\.ico\s+to:\s*icon\.ico/);
+    expect(yml).toMatch(/installerIcon:\s*desktop\/assets\/icon\.ico/);
+    expect(yml).toMatch(/uninstallerIcon:\s*desktop\/assets\/icon\.ico/);
+    expect(yml).toMatch(/signExecutable:\s*false/);
+    expect(yml).not.toMatch(/signAndEditExecutable:\s*false/);
+    const main = read("desktop/main/main.js");
+    expect(main).toContain('path.join(process.resourcesPath, "icon.ico")');
+    expect(main).toContain("appIconPath: iconPath");
+    const icon = fs.readFileSync(path.join(repoRoot, "desktop/assets/icon.ico"));
+    expect(icon.readUInt16LE(2)).toBe(1);
+    expect(icon.readUInt16LE(4)).toBe(7);
+    expect(Array.from({ length: 7 }, (_, i) => icon[6 + i * 16] || 256)).toEqual([16,24,32,48,64,128,256]);
+  });
+
   it("configures a per-user NSIS installer with selectable directory", () => {
     expect(yml).toMatch(/appId:\s*com\.vocatrya\.desktop/);
     expect(yml).toMatch(/productName:\s*Vocatrya/);
