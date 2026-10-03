@@ -225,9 +225,9 @@ test.describe.serial("Activities Management", () => {
 
     await row.getByRole("button", { name: "Toggle menu" }).click();
     await page.getByRole("menuitem", { name: "Delete" }).click();
-    await expect(page.getByRole("alertdialog")).toContainText(
-      "Are you sure you want to delete this activity?",
-    );
+    await expect(
+      page.getByRole("alertdialog").getByRole("heading"),
+    ).toHaveText("Are you sure? (activity)");
     await page
       .getByRole("alertdialog")
       .getByRole("button", { name: "Delete" })
