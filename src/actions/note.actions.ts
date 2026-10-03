@@ -1,5 +1,6 @@
 "use server";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { handleError } from "@/lib/utils";
 import { NoteFormSchema } from "@/models/note.schema";
 import { NoteResponse } from "@/models/note.model";
@@ -112,6 +113,7 @@ export const addNote = async (
       throw new Error("Job not found");
     }
 
+    await assertLegacyCareerWriteAllowed(prisma);
     const note = await prisma.note.create({
       data: {
         jobId: validated.jobId,
@@ -154,6 +156,7 @@ export const updateNote = async (
       return { success: true, data: { ...note, jobId: note.jobOpportunityId } };
     }
 
+    await assertLegacyCareerWriteAllowed(prisma);
     const note = await prisma.note.update({
       where: { id: validated.id, userId: user.id },
       data: { content: validated.content },
@@ -187,6 +190,7 @@ export const deleteNote = async (
       return { success: true };
     }
 
+    await assertLegacyCareerWriteAllowed(prisma);
     await prisma.note.delete({
       where: { id: noteId, userId: user.id },
     });

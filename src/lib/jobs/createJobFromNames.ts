@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import prisma from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { normalizeJobUrl } from "@/lib/scraper/utils";
 import { findExistingJobByUrl } from "@/lib/jobs/jobDedupe";
@@ -77,6 +78,8 @@ export async function createJobFromNames(
   // invalid jobType/workplaceType can't orphan already-started promises.
   const jobTypeValue = resolveJobType(jobType);
   const workplaceTypeValue = resolveWorkplaceType(workplaceType);
+
+  await assertLegacyCareerWriteAllowed(prisma);
 
   // Resolve Bucket A and B in parallel where possible
   const [

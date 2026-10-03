@@ -1,6 +1,7 @@
 "use server";
 
 import db from "@/lib/db";
+import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { requireUser } from "../shared";
 import { generateText } from "ai";
 import {
@@ -38,6 +39,7 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
 }> {
   try {
     const user = await requireUser();
+    await assertLegacyCareerWriteAllowed(db);
 
     const job = await db.job.findFirst({
       where: { id: jobId, userId: user.id, automationId: { not: null } },

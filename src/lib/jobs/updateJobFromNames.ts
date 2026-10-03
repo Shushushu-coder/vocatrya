@@ -91,6 +91,8 @@ export async function updateJobFromNames(
       ? resolveWorkplaceType(input.workplaceType)
       : undefined;
 
+  await assertLegacyCareerWriteAllowed(prisma);
+
   const [
     resolvedCompany,
     resolvedTitle,
@@ -164,7 +166,6 @@ export async function updateJobFromNames(
   }
 
   try {
-    await assertLegacyCareerWriteAllowed(prisma);
     await prisma.job.update({
       where: { id: jobId, userId, createdVia: { not: null } },
       data,
