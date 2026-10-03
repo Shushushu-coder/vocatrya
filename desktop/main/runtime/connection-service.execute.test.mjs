@@ -58,6 +58,9 @@ function makeDeps() {
       return { status: 0, stdout: "codex-cli 0.160.0\n", stderr: "" };
     },
     runner: vi.fn(runnerImpl),
+    // Existing streaming cases cover the one-shot app-server path
+    // (busy-key fallback). Persistent reuse has its own suite.
+    persistentCodexRuntime: false,
   };
 }
 

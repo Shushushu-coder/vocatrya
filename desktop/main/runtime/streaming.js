@@ -419,8 +419,15 @@ function createAcpEventMapper() {
 // This parser is a stateful protocol driver, not just a line mapper:
 // attachStdin() hands it the child's stdin so it can issue the handshake
 // (initialize → initialized → thread/start → turn/start) and advance it
-// as each response arrives. Closing stdin after the terminal notification
-// shuts the server down cleanly.
+// as each response arrives. The one-shot driver closes stdin after the
+// terminal notification so the server exits on EOF.
+//
+// persistent:true keeps stdin open after initialize. Each Vocatrya turn
+// calls startTurn(), which opens a new Codex thread. The process/session
+// framing stays here; per-turn buffers are reset by startTurn() and
+// cleared when the turn terminates. A clean turn/completed failure is not
+// fatal. A missing thread id, a reconciliation mismatch, a write failure,
+// or EOF mid-turn marks the session fatal so the pool can retire it.
 //
 // Reconciliation is per-item: concat(deltas[itemId]) must equal that
 // agentMessage item's completed text or the run fails
@@ -428,7 +435,12 @@ function createAcpEventMapper() {
 // that ends without turn/completed is a protocol failure, never a
 // truncated answer passed off as complete.
 // ---------------------------------------------------------------------------
-function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
+function createCodexStreamParser({
+  prompt,
+  model,
+  workingDirectory,
+  persistent = false,
+} = {}) {
   const decoder = new StringDecoder("utf8");
   let lineBuf = "";
   let malformedLineCount = 0;
@@ -450,6 +462,23 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
   let terminalEmitted = false;
   let vendorFailure = false;
   let driverFailed = false;
+  let sessionReady = false;
+  let fatal = false;
+  let fatalReason = null;
+  let turnActive = !persistent;
+  let turnPrompt = prompt;
+  let turnModel = model;
+  let turnCwd = workingDirectory;
+  let lastThreadId = null;
+  let pendingTurn = false;
+  let resolveReady = () => {};
+  let rejectReady = () => {};
+  const readyPromise = persistent
+    ? new Promise((resolve, reject) => {
+        resolveReady = resolve;
+        rejectReady = reject;
+      })
+    : Promise.resolve();
 
   // itemId → concatenated delta text / completed text — the strict
   // per-item reconciliation pair.
@@ -460,6 +489,7 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
   const itemOrder = [];
 
   const endStdin = () => {
+    if (persistent) return;
     try {
       stdin?.end();
     } catch {
@@ -467,13 +497,53 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
     }
   };
 
+  const markFatal = (reason) => {
+    if (fatal) return;
+    fatal = true;
+    fatalReason = reason;
+    if (!sessionReady) {
+      try {
+        rejectReady(new Error(reason));
+      } catch {
+        /* ready waiter already settled */
+      }
+    }
+  };
+
+  const releaseTurn = () => {
+    turnActive = false;
+    pendingTurn = false;
+    turnPrompt = null;
+  };
+
+  const resetTurnBuffers = () => {
+    deltasByItem.clear();
+    completedByItem.clear();
+    itemOrder.length = 0;
+    terminalEmitted = false;
+    vendorFailure = false;
+    driverFailed = false;
+  };
+
   const sendMessage = (message) => {
-    if (!stdin || terminalEmitted) return;
+    if (!stdin || fatal) return;
+    if (!persistent && terminalEmitted) return;
     try {
       stdin.write(JSON.stringify(message) + "\n");
     } catch {
       driverFailed = true;
-      endStdin();
+      markFatal("write");
+      if (turnActive && !terminalEmitted) {
+        terminalEmitted = true;
+        releaseTurn();
+        endStdin();
+        queueEvent({
+          type: "error",
+          code: STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED,
+        });
+      } else {
+        endStdin();
+      }
     }
   };
 
@@ -483,9 +553,11 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
     sendMessage({ method, id, params });
   };
 
-  const emitTerminalError = (code) => {
+  const emitTerminalError = (code, { fatalReason } = {}) => {
     if (terminalEmitted) return;
     terminalEmitted = true;
+    if (fatalReason) markFatal(fatalReason);
+    releaseTurn();
     endStdin();
     queueEvent({ type: "error", code });
   };
@@ -493,6 +565,7 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
   const emitCompleted = () => {
     if (terminalEmitted) return;
     terminalEmitted = true;
+    releaseTurn();
     endStdin();
     // Per-item reconciliation: every completed agentMessage must equal
     // its own delta channel exactly — a partial match means the wire was
@@ -505,6 +578,7 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
         continue;
       }
       if ((deltasByItem.get(itemId) ?? "") !== completedText) {
+        markFatal("protocol");
         queueEvent({
           type: "error",
           code: STREAM_FAILURE_CODES.STREAM_COMPLETION_INCONSISTENT,
@@ -521,38 +595,64 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
     queueEvent(completed(canonical));
   };
 
+  const issueThreadStart = () => {
+    if (fatal) return;
+    turnActive = true;
+    resetTurnBuffers();
+    sendRequest("thread/start", {
+      cwd: turnCwd,
+      model: turnModel ?? null,
+      // Never let the provider silently substitute a model — the
+      // business layer pinned this exact model id. Every thread states
+      // the sandbox again so a reused process cannot inherit a looser
+      // policy from an earlier turn.
+      allowProviderModelFallback: false,
+      approvalPolicy: "never",
+      sandbox: "read-only",
+      ephemeral: true,
+    });
+  };
+
   const handleResponse = (msg) => {
     const method = pendingRequests.get(msg.id);
     pendingRequests.delete(msg.id);
     if (msg.error !== undefined) {
       vendorFailure = true;
-      emitTerminalError(STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR);
+      // initialize never opened a reusable session. A later thread/turn
+      // RPC error is a clean terminal turn failure: the framing stayed
+      // valid, so a persistent process may be reused.
+      emitTerminalError(STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR, {
+        fatalReason: method === "initialize" || !method ? "initialize" : null,
+      });
       return;
     }
     switch (method) {
       case "initialize":
         sendMessage({ method: "initialized" });
-        sendRequest("thread/start", {
-          cwd: workingDirectory,
-          model: model ?? null,
-          // Never let the provider silently substitute a model — the
-          // business layer pinned this exact model id.
-          allowProviderModelFallback: false,
-          approvalPolicy: "never",
-          sandbox: "read-only",
-          ephemeral: true,
-        });
+        if (persistent) {
+          sessionReady = true;
+          resolveReady();
+          if (pendingTurn) {
+            pendingTurn = false;
+            issueThreadStart();
+          }
+        } else {
+          issueThreadStart();
+        }
         break;
       case "thread/start": {
         const threadId = msg.result?.thread?.id;
         if (typeof threadId !== "string" || !threadId) {
-          emitTerminalError(STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED);
+          emitTerminalError(STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED, {
+            fatalReason: "protocol",
+          });
           return;
         }
+        lastThreadId = threadId;
         sendRequest("turn/start", {
           threadId,
-          input: [{ type: "text", text: prompt, text_elements: [] }],
-          model: model ?? null,
+          input: [{ type: "text", text: turnPrompt, text_elements: [] }],
+          model: turnModel ?? null,
         });
         break;
       }
@@ -563,6 +663,10 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
   };
 
   const handleNotification = (msg) => {
+    if (persistent && !turnActive) {
+      ignoredLineCount += 1;
+      return;
+    }
     const params = msg.params ?? {};
     switch (msg.method) {
       case "item/agentMessage/delta": {
@@ -676,22 +780,68 @@ function createCodexStreamParser({ prompt, model, workingDirectory } = {}) {
       lineBuf += decoder.end();
       if (lineBuf.trim()) handleLine(lineBuf);
       lineBuf = "";
-      if (!terminalEmitted) {
+      if (turnActive && !terminalEmitted) {
         // Ended before turn/completed — a driver write failure, a vendor
         // error with no terminal, or a server that went silent mid-turn.
         // Partial deltas are never shipped as a completed answer.
+        // EOF on a persistent session is fatal: the framing is gone.
+        if (persistent) markFatal("eof");
         terminalEmitted = true;
+        releaseTurn();
         queueEvent({
           type: "error",
-          code: vendorFailure || driverFailed
-            ? STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR
-            : STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED,
+          code:
+            persistent || !(vendorFailure || driverFailed)
+              ? STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED
+              : STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR,
         });
       }
       return drain();
     },
     stats() {
       return { malformedLineCount, ignoredLineCount };
+    },
+    // Persistent sessions initialize once, then open a fresh Codex thread
+    // per Vocatrya turn. One-shot parsers reject this.
+    startTurn({ prompt: nextPrompt, model: nextModel, workingDirectory: nextCwd } = {}) {
+      if (!persistent) {
+        throw new Error("startTurn requires a persistent Codex session");
+      }
+      if (fatal) {
+        throw new Error("Codex session is retired");
+      }
+      if (turnActive) {
+        throw new Error("Codex session already has an active turn");
+      }
+      turnPrompt = nextPrompt;
+      turnModel = nextModel;
+      turnCwd = nextCwd;
+      lastThreadId = null;
+      if (sessionReady) issueThreadStart();
+      else pendingTurn = true;
+    },
+    whenReady() {
+      return readyPromise;
+    },
+    isReady() {
+      return sessionReady;
+    },
+    isFatal() {
+      return fatal;
+    },
+    fatalReason() {
+      return fatalReason;
+    },
+    threadId() {
+      return lastThreadId;
+    },
+    clearTurnSecrets() {
+      turnPrompt = null;
+      lastThreadId = null;
+    },
+    // Process exit or a pool retire before initialize completes.
+    abandon(reason) {
+      markFatal(reason || "crash");
     },
   };
 }

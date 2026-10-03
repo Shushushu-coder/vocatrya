@@ -11,8 +11,11 @@
 //   profile env and never read credential files.
 // - AIConnection rows are mutated ONLY by the backend through the internal
 //   loopback client, after the runtime verified the outcome.
-// - Every spawned process goes through runRuntimeCommand: shell:false,
+// - One-shot processes go through runRuntimeCommand: shell:false,
 //   capped output, timeout/abort support, sanitized capture.
+// - Foreground Codex streaming may reuse a persistent app-server child.
+//   That child uses the same invocation builder and is still shell:false.
+//   Abort, timeout, and fatal protocol errors retire it.
 //
 // Phase E refactor: provider specifics live behind a small adapter
 // contract (codex.js / claude.js). This module coordinates tickets,
@@ -32,6 +35,9 @@ const { RuntimeProfileManager } = require("./profiles");
 const { AUTH_PROBE_TIMEOUT_MS } = require("./auth-probe");
 const { getAccountRuntimeCapabilities } = require("./capabilities");
 const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
+const {
+  createCodexPersistentRuntimeManager,
+} = require("./codex-persistent-runtime");
 const { CLAUDE_BACKEND_KIND, claudeAdapter } = require("./claude");
 const { CURSOR_BACKEND_KIND, cursorAdapter } = require("./cursor");
 const { GROK_BACKEND_KIND, grokAdapter } = require("./grok");
@@ -124,6 +130,21 @@ function createConnectionService({
   }
   const profileManager = new RuntimeProfileManager({ profilesRoot });
   const runner = deps.runner || runRuntimeCommand;
+  const persistentCwdRoot = execWorkRoot || smokeWorkRoot;
+  const codexPersistentRuntime =
+    deps.persistentCodexRuntime === false
+      ? null
+      : deps.persistentCodexRuntime ||
+        (persistentCwdRoot
+          ? createCodexPersistentRuntimeManager({
+              spawnImpl: deps.spawnImpl,
+              terminateImpl: deps.terminateImpl,
+              now: deps.now,
+              stableCwd: path.join(persistentCwdRoot, "codex-persistent"),
+              buildInvocation: (input) =>
+                codexAdapter.buildStreamingInvocation(input),
+            })
+          : null);
   const activeOps = new Map(); // guard key -> AbortController
   // In-flight TEXT_ONLY execs per connection. Execs may run concurrently
   // on the same connection, but lifecycle ops (disconnect/reconnect/
@@ -1135,6 +1156,7 @@ function createConnectionService({
       return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
     }
     let workDir = null;
+    let runtimeMeta = null;
     const startedAt = Date.now();
     let execRegistered = false;
     let completedOperationId = null;
@@ -1200,6 +1222,16 @@ function createConnectionService({
       ...(extra || {}),
     });
 
+    const withRuntime = (payload) => {
+      if (!runtimeMeta) return payload;
+      const safe = { ...runtimeMeta, threadReuseHit: false };
+      return {
+        ...payload,
+        runtime: safe,
+        stream: payload.stream ? { ...payload.stream, ...safe } : payload.stream,
+      };
+    };
+
     try {
       const resolved = await resolveOperation(
         ticket,
@@ -1210,6 +1242,13 @@ function createConnectionService({
       const { adapter, connection } = resolved;
       completedOperationId = resolved.resolved.operationId;
 
+      if (
+        codexPersistentRuntime &&
+        adapter.backendKind === CODEX_BACKEND_KIND &&
+        (connection.status !== "CONNECTED" || connection.archivedAt)
+      ) {
+        codexPersistentRuntime.retireConnection(connection.id, "status");
+      }
       if (connection.status === "REAUTH_REQUIRED") {
         return fail(CONNECTION_OP_CODES.REAUTH_REQUIRED);
       }
@@ -1252,6 +1291,17 @@ function createConnectionService({
         verificationProbe !== true &&
         runtime.version !== execCaps.execution.streamingVerifiedRuntimeVersion
       ) {
+        if (
+          codexPersistentRuntime &&
+          adapter.backendKind === CODEX_BACKEND_KIND &&
+          connection.userId
+        ) {
+          codexPersistentRuntime.retireVersionSkew({
+            userId: connection.userId,
+            connectionId: connection.id,
+            runtimeVersion: runtime.version,
+          });
+        }
         return fail("STREAMING_NOT_VERIFIED");
       }
       const profileDir = profileManager.ensureProfile(
@@ -1291,59 +1341,111 @@ function createConnectionService({
       workDir = fs.mkdtempSync(
         path.join(execRoot, `${adapter.backendKind.toLowerCase()}-stream-`),
       );
-      const invocation = adapter.buildStreamingInvocation({
-        executablePath: runtime.executable,
-        profileDir,
-        baseEnv: deps.env,
-        workingDirectory: workDir,
-        model: execModel,
-        prompt,
-      });
-      // Protocol drivers (codex app-server) need the turn params to write
-      // their JSON-RPC handshake; plain mappers ignore the context.
-      const parser = adapter.createStreamParser({
-        prompt,
-        model: execModel,
-        workingDirectory: workDir,
-      });
-      const result = await runner({
-        ...invocation,
-        timeoutMs: Math.min(
-          Math.max(timeoutMs ?? execTimeoutMs, 1_000),
-          EXEC_MAX_TIMEOUT_MS,
-        ),
-        signal: controller.signal,
-        binaryStdout: true,
-        // stdio-protocol adapters get the child's stdin the moment it
-        // exists — the handshake cannot wait for first output.
-        ...(typeof parser.attachStdin === "function"
-          ? { onStdinReady: (stdin) => parser.attachStdin(stdin) }
-          : {}),
-        onStdout: (chunk) => {
-          // Once aborted, late chunks are drained but never parsed into
-          // delivered events.
-          if (controller.signal.aborted) return;
-          let producedDelta = false;
-          for (const event of parser.push(chunk)) {
-            if (
-              event.type === "text-delta" &&
-              typeof event.delta === "string" &&
-              event.delta.length > 0
-            ) {
-              producedDelta = true;
-            }
-            emit(event);
+      const boundedTimeout = Math.min(
+        Math.max(timeoutMs ?? execTimeoutMs, 1_000),
+        EXEC_MAX_TIMEOUT_MS,
+      );
+      let result = null;
+      let parserStats = {};
+      const deliverStdoutEvents = (events) => {
+        if (controller.signal.aborted) return;
+        let producedDelta = false;
+        for (const event of events) {
+          if (
+            event.type === "text-delta" &&
+            typeof event.delta === "string" &&
+            event.delta.length > 0
+          ) {
+            producedDelta = true;
           }
-          if (producedDelta) deltaChunkCount += 1;
-        },
-      });
-      // Flush the parser only for a run that actually completed — abort and
-      // timeout leave the stream terminal without a completed event.
-      if (!result.aborted && !controller.signal.aborted) {
-        for (const event of parser.finish()) emit(event);
+          emit(event);
+        }
+        if (producedDelta) deltaChunkCount += 1;
+      };
+      // Foreground Codex streaming reuses one app-server per isolation
+      // key. A busy key gets an isolated one-shot child so a second
+      // conversation is not queued behind the first generation. Summary
+      // and structured exec never enter this branch.
+      const usePool =
+        codexPersistentRuntime &&
+        adapter.backendKind === CODEX_BACKEND_KIND &&
+        typeof connection.userId === "string" &&
+        connection.userId.length > 0;
+      if (usePool) {
+        const lease = await codexPersistentRuntime.acquire({
+          userId: connection.userId,
+          connectionId: connection.id,
+          resolvedModel: execModel,
+          runtimeVersion: runtime.version,
+          runtimeProfileRef: connection.runtimeProfileRef,
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          status: connection.status,
+          archived: Boolean(connection.archivedAt),
+          timeoutMs: boundedTimeout,
+          signal: controller.signal,
+        });
+        runtimeMeta = lease.meta || null;
+        if (lease.kind === "aborted") {
+          result = { aborted: true, timedOut: false, exitCode: null, error: null };
+        } else if (lease.kind === "failed") {
+          result = {
+            aborted: false,
+            timedOut: lease.timedOut === true,
+            exitCode: lease.timedOut ? null : 1,
+            error: lease.timedOut ? null : "persistent-runtime-failed",
+          };
+        } else if (lease.kind === "fresh" || lease.kind === "reuse") {
+          result = await codexPersistentRuntime.runTurn(lease.entry, {
+            prompt,
+            model: execModel,
+            workingDirectory: workDir,
+            timeoutMs: boundedTimeout,
+            signal: controller.signal,
+            onEvent: (event) => deliverStdoutEvents([event]),
+          });
+        }
       }
-      const parserStats =
-        typeof parser.stats === "function" ? parser.stats() : {};
+      if (!result) {
+        const invocation = adapter.buildStreamingInvocation({
+          executablePath: runtime.executable,
+          profileDir,
+          baseEnv: deps.env,
+          workingDirectory: workDir,
+          model: execModel,
+          prompt,
+        });
+        // Protocol drivers (codex app-server) need the turn params to write
+        // their JSON-RPC handshake; plain mappers ignore the context.
+        const parser = adapter.createStreamParser({
+          prompt,
+          model: execModel,
+          workingDirectory: workDir,
+        });
+        result = await runner({
+          ...invocation,
+          timeoutMs: boundedTimeout,
+          signal: controller.signal,
+          binaryStdout: true,
+          // stdio-protocol adapters get the child's stdin the moment it
+          // exists — the handshake cannot wait for first output.
+          ...(typeof parser.attachStdin === "function"
+            ? { onStdinReady: (stdin) => parser.attachStdin(stdin) }
+            : {}),
+          onStdout: (chunk) => {
+            if (controller.signal.aborted) return;
+            deliverStdoutEvents(parser.push(chunk));
+          },
+        });
+        // Flush the parser only for a run that actually completed — abort and
+        // timeout leave the stream terminal without a completed event.
+        if (!result.aborted && !controller.signal.aborted) {
+          for (const event of parser.finish()) emit(event);
+        }
+        parserStats =
+          typeof parser.stats === "function" ? parser.stats() : {};
+      }
       await completeResolved();
 
       if (result.aborted || controller.signal.aborted) {
@@ -1363,43 +1465,43 @@ function createConnectionService({
             // An observer failure must never break the run.
           }
         }
-        return {
+        return withRuntime({
           ok: false,
           code: "ABORTED",
           stream: streamStats({ ...parserStats, aborted: true }),
-        };
+        });
       }
       if (result.timedOut) {
-        return {
+        return withRuntime({
           ok: false,
           code: CONNECTION_OP_CODES.AI_EXECUTION_TIMEOUT,
           stream: streamStats(parserStats),
-        };
+        });
       }
       if (result.error || result.exitCode !== 0) {
         diag({
           operation: "executeTextStream",
           exitCode: result.exitCode,
         });
-        return {
+        return withRuntime({
           ok: false,
           code: CONNECTION_OP_CODES.INFERENCE_FAILED,
           stream: streamStats(parserStats),
-        };
+        });
       }
       if (terminalErrorCode) {
         diag({
           operation: "executeTextStream",
           code: terminalErrorCode,
         });
-        return {
+        return withRuntime({
           ok: false,
           code:
             terminalErrorCode === "STREAM_COMPLETION_INCONSISTENT"
               ? "STREAM_COMPLETION_INCONSISTENT"
               : CONNECTION_OP_CODES.INFERENCE_FAILED,
           stream: streamStats(parserStats),
-        };
+        });
       }
 
       // Deterministic reconstruction: the delta concatenation must equal
@@ -1447,21 +1549,21 @@ function createConnectionService({
       }
       if (reconstruction === "MISMATCH") {
         diag({ operation: "executeTextStream", code: "RECONSTRUCTION_MISMATCH" });
-        return {
+        return withRuntime({
           ok: false,
           code: "STREAM_COMPLETION_INCONSISTENT",
           stream: streamStats({ ...parserStats, reconstruction }),
-        };
+        });
       }
       const text = canonical !== null ? canonical : deltaText;
       if (!text) {
-        return {
+        return withRuntime({
           ok: false,
           code: CONNECTION_OP_CODES.INFERENCE_FAILED,
           stream: streamStats({ ...parserStats, reconstruction }),
-        };
+        });
       }
-      return {
+      return withRuntime({
         ok: true,
         text,
         provider: connection.provider,
@@ -1476,8 +1578,21 @@ function createConnectionService({
           mechanism: adapter.streamMechanism ?? null,
           aborted: false,
         }),
-      };
+      });
     } finally {
+      if (runtimeMeta) {
+        diag({
+          operation: "executeTextStream",
+          runtimeReuseHit: runtimeMeta.runtimeReuseHit === true,
+          runtimeProcessAgeMs: runtimeMeta.runtimeProcessAgeMs ?? null,
+          runtimeProcessId: runtimeMeta.runtimeProcessId ?? null,
+          runtimeIdleMs: runtimeMeta.runtimeIdleMs ?? null,
+          runtimeSpawnMs: runtimeMeta.runtimeSpawnMs ?? null,
+          runtimeInitMs: runtimeMeta.runtimeInitMs ?? null,
+          runtimeRestartReason: runtimeMeta.runtimeRestartReason ?? null,
+          threadReuseHit: false,
+        });
+      }
       if (signal) signal.removeEventListener("abort", onExternalAbort);
       if (execRegistered) execRelease(connectionId);
       release(guardKeys);
@@ -1548,6 +1663,13 @@ function createConnectionService({
     executeText,
     executeTextStream,
     runtimeState,
+    dispose() {
+      try {
+        codexPersistentRuntime?.disposeAll();
+      } catch {
+        // Process-tree cleanup on quit is best-effort.
+      }
+    },
   };
 }
 

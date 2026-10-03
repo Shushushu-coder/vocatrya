@@ -72,6 +72,7 @@ if (!singleInstance) {
   let backend;
   let backendPort;
   let execServer = null;
+  let connectionOps = null;
   let execServerUrl = null;
   let migrationChild = null;
   let shuttingDown = false;
@@ -385,7 +386,7 @@ if (!singleInstance) {
       // backend-minted tickets. backendPort is read lazily at call time, so
       // registering before the backend starts is safe. One shared service
       // instance also backs the internal execution endpoint below.
-      const connectionOps = createConnectionOpsService();
+      connectionOps = createConnectionOpsService();
       registerConnectionIpcHandlers(ipcMain, connectionOps);
       // Business TEXT_ONLY execution channel: loopback HTTP endpoint the
       // backend reaches with the shared internal bearer. Binds before the
@@ -432,6 +433,11 @@ if (!singleInstance) {
     backendExpectedExit = true;
     // Only owned startup children are terminated here; unrelated
     // Node/Prisma processes are never touched.
+    try {
+      connectionOps?.dispose?.();
+    } catch {
+      // Persistent Codex children are best-effort on shutdown.
+    }
     try {
       execServer?.close();
     } catch {

@@ -503,6 +503,130 @@ describe("codex app-server parser — stdio JSON-RPC driver", () => {
     ]);
     expect(stdin.ended).toBe(true);
   });
+
+  it("keeps stdin open and starts a new thread for each persistent turn", () => {
+    const stdin = fakeStdin();
+    const parser = createCodexStreamParser({ persistent: true });
+    parser.attachStdin(stdin);
+    const initEvents = parser.push(Buffer.from(resp(1, {})));
+    expect(initEvents).toEqual([]);
+    expect(parser.isReady()).toBe(true);
+    expect(stdin.ended).toBe(false);
+    expect(stdin.sent().map((message) => message.method)).toEqual([
+      "initialize",
+      "initialized",
+    ]);
+
+    parser.startTurn({
+      prompt: "marker-A",
+      model: "gpt-5.6-sol",
+      workingDirectory: "C:\\turn-a",
+    });
+    const first = parser.push(
+      Buffer.from(
+        resp(2, { thread: { id: "thr_a" } }) +
+          resp(3, { turn: { id: "turn_a" } }) +
+          notif("item/agentMessage/delta", { itemId: "i1", delta: "A" }) +
+          notif("item/completed", {
+            item: { id: "i1", type: "agentMessage", text: "A" },
+          }) +
+          notif("turn/completed", {
+            turn: { id: "turn_a", status: "completed" },
+          }),
+      ),
+    );
+    expect(completedEvent(first)?.text).toBe("A");
+    expect(parser.threadId()).toBe("thr_a");
+    expect(parser.isFatal()).toBe(false);
+    expect(stdin.ended).toBe(false);
+
+    parser.clearTurnSecrets();
+    parser.startTurn({
+      prompt: "marker-B",
+      model: "gpt-5.6-sol",
+      workingDirectory: "C:\\turn-b",
+    });
+    const sent = stdin.sent();
+    const threadStarts = sent.filter((message) => message.method === "thread/start");
+    expect(threadStarts).toHaveLength(2);
+    expect(threadStarts[0].params).toMatchObject({
+      cwd: "C:\\turn-a",
+      sandbox: "read-only",
+      approvalPolicy: "never",
+      ephemeral: true,
+    });
+    expect(threadStarts[1].params.cwd).toBe("C:\\turn-b");
+    expect(threadStarts[1].params.input).toBeUndefined();
+    const second = parser.push(
+      Buffer.from(
+        resp(4, { thread: { id: "thr_b" } }) +
+          resp(5, { turn: { id: "turn_b" } }) +
+          notif("item/agentMessage/delta", { itemId: "i2", delta: "B" }) +
+          notif("item/completed", {
+            item: { id: "i2", type: "agentMessage", text: "B" },
+          }) +
+          notif("turn/completed", {
+            turn: { id: "turn_b", status: "completed" },
+          }),
+      ),
+    );
+    expect(deltas(second)).toEqual(["B"]);
+    expect(
+      stdin
+        .sent()
+        .filter((message) => message.method === "turn/start")
+        .map((message) => message.params.input[0].text),
+    ).toEqual(["marker-A", "marker-B"]);
+    expect(parser.threadId()).toBe("thr_b");
+    expect(stdin.ended).toBe(false);
+    expect(parser.finish()).toEqual([]);
+  });
+
+  it("treats a clean failed turn as reusable and a missing thread id as fatal", () => {
+    const stdin = fakeStdin();
+    const parser = createCodexStreamParser({ persistent: true });
+    parser.attachStdin(stdin);
+    parser.push(Buffer.from(resp(1, {})));
+    parser.startTurn({
+      prompt: "x",
+      model: "gpt-5.6-sol",
+      workingDirectory: "C:\\wd",
+    });
+    const failed = parser.push(
+      Buffer.from(
+        resp(2, { thread: { id: "thr_ok" } }) +
+          resp(3, { turn: { id: "turn_ok" } }) +
+          notif("turn/completed", {
+            turn: { id: "turn_ok", status: "failed" },
+          }),
+      ),
+    );
+    expect(failed.find((event) => event.type === "error")?.code).toBe(
+      STREAM_FAILURE_CODES.STREAM_VENDOR_ERROR,
+    );
+    expect(parser.isFatal()).toBe(false);
+    expect(stdin.ended).toBe(false);
+
+    parser.startTurn({
+      prompt: "y",
+      model: "gpt-5.6-sol",
+      workingDirectory: "C:\\wd",
+    });
+    const broken = parser.push(
+      Buffer.from(resp(4, { thread: {} })),
+    );
+    expect(broken.find((event) => event.type === "error")?.code).toBe(
+      STREAM_FAILURE_CODES.STREAM_PROTOCOL_PARSE_FAILED,
+    );
+    expect(parser.isFatal()).toBe(true);
+    expect(() =>
+      parser.startTurn({
+        prompt: "z",
+        model: "gpt-5.6-sol",
+        workingDirectory: "C:\\wd",
+      }),
+    ).toThrow(/retired/);
+  });
 });
 
 describe("cursor stream parser — ACP session updates", () => {

@@ -241,6 +241,7 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
                 text: result.text,
                 model: result.model,
                 durationMs: result.durationMs,
+                ...(result.runtime ? { runtime: result.runtime } : {}),
               }
             : { type: "error", code: result.code },
         );

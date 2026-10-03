@@ -32,7 +32,22 @@ const RUNTIME_STATE_PATH = "/internal/ai-connections/runtime-state";
 
 export type AIStreamEvent =
   | { type: "text-delta"; delta: string }
-  | { type: "completed"; text?: string; model?: string; durationMs?: number }
+  | {
+      type: "completed";
+      text?: string;
+      model?: string;
+      durationMs?: number;
+      runtime?: {
+        runtimeReuseHit?: boolean;
+        runtimeProcessAgeMs?: number | null;
+        runtimeProcessId?: number | null;
+        runtimeIdleMs?: number | null;
+        runtimeSpawnMs?: number | null;
+        runtimeInitMs?: number | null;
+        runtimeRestartReason?: string | null;
+        threadReuseHit?: boolean;
+      };
+    }
   | { type: "error"; code: string };
 
 export interface StreamExecutionInput {
