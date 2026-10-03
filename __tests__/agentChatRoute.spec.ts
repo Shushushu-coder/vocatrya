@@ -42,6 +42,12 @@ vi.mock("@/lib/agent/tools", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/agent/tools")>();
   return { ...actual, buildAgentTools: vi.fn(actual.buildAgentTools) };
 });
+const summaryHooks = vi.hoisted(() => ({
+  scheduleCareerDialogueSummary: vi.fn(() => ({ opened: false, syncMs: 0 })),
+}));
+vi.mock("@/lib/agent/conversationSummaryScheduler", () => ({
+  scheduleCareerDialogueSummary: summaryHooks.scheduleCareerDialogueSummary,
+}));
 
 // The route merges this into createUIMessageStream now. An immediately
 // closed stream is enough — these tests assert on the streamText ARGS.
@@ -176,6 +182,35 @@ describe("POST /api/ai/chat", () => {
       isAborted: true,
     });
     expect((saveChatConversation as any).mock.calls.length).toBe(afterReceipt);
+    expect(summaryHooks.scheduleCareerDialogueSummary).not.toHaveBeenCalled();
+  });
+
+  it("schedules summary only after a successful save and does not await it", async () => {
+    summaryHooks.scheduleCareerDialogueSummary.mockImplementation(
+      () => new Promise(() => {}) as never,
+    );
+    await POST(req({ messages: [pasteMessage("posting")] }));
+    const finished = capturedOnFinish!({
+      messages: [pasteMessage("posting"), { id: "a1", role: "assistant", parts: [{ type: "text", text: "done" }] }],
+      responseMessage: { id: "a1", role: "assistant", parts: [{ type: "text", text: "done" }] },
+      isAborted: false,
+    });
+    const outcome = await Promise.race([
+      finished.then(() => "done"),
+      new Promise((resolve) => setTimeout(() => resolve("timeout"), 300)),
+    ]);
+    expect(outcome).toBe("done");
+    expect(summaryHooks.scheduleCareerDialogueSummary).toHaveBeenCalledTimes(1);
+    const saveOrder = (saveChatConversation as any).mock.invocationCallOrder.at(-1);
+    const scheduleOrder = summaryHooks.scheduleCareerDialogueSummary.mock.invocationCallOrder[0];
+    expect(saveOrder).toBeLessThan(scheduleOrder);
+    expect(summaryHooks.scheduleCareerDialogueSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resolvedConnectionId: null,
+        resolvedModel: null,
+        conversationId: "conv-1",
+      }),
+    );
   });
 
   it("still writes the turn back when it finished normally", async () => {

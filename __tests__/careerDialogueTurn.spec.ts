@@ -161,6 +161,50 @@ describe("Career Dialogue fast path", () => {
     );
   });
 
+  it("injects a fresh summary without adding a foreground model call", async () => {
+    const prepared = await prepareCareerDialogueTurn({
+      messages: [userMsg("hi")],
+      connection: { backendKind: "CODEX_RUNTIME", provider: "OPENAI" },
+    });
+    if (!prepared.ok) throw new Error("expected fast chat");
+    const { writer } = captureWriter();
+    await runCareerDialogueTurn({
+      ...baseInput,
+      messages: [userMsg("hi")],
+      summary: "用户希望用中文练习系统设计。",
+      writer,
+      signal: new AbortController().signal,
+      decision: prepared.decision,
+      routerDurationMs: prepared.routerDurationMs,
+    });
+    expect(executeAIConnectionText).not.toHaveBeenCalled();
+    expect(executeAIConnectionTextStream).toHaveBeenCalledTimes(1);
+    const prompt = (executeAIConnectionTextStream as any).mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("Earlier conversation summary:");
+    expect(prompt).toContain("用户希望用中文练习系统设计。");
+
+    (executeAIConnectionText as any).mockClear();
+    (executeAIConnectionTextStream as any).mockClear();
+    (executeAIConnectionTextStream as any).mockReturnValue(
+      streamEvents([
+        { type: "text-delta", delta: "Hello" },
+        { type: "completed", text: "Hello" },
+      ]),
+    );
+    const decision = routeCareerDialogueTurn({ messages: [userMsg("save this job")] });
+    await runCareerDialogueTurn({
+      ...baseInput,
+      messages: [userMsg("save this job")],
+      summary: "用户希望用中文练习系统设计。",
+      writer,
+      signal: new AbortController().signal,
+      decision,
+    });
+    expect(decision.route).toBe("AGENT");
+    expect(executeAIConnectionText).toHaveBeenCalledTimes(1);
+    expect(executeAIConnectionTextStream).toHaveBeenCalledTimes(1);
+  });
+
   it("does not fall back to fast chat when structured output is unverified", async () => {
     (fetchAccountRuntimeState as any).mockResolvedValue({
       ...verifiedState,

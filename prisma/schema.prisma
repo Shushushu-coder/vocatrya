@@ -688,7 +688,7 @@ model McpAccessToken {
 }
 
 model ChatConversation {
-  id                   String   @id @default(uuid())
+  id                   String               @id @default(uuid())
   userId               String
   // Deterministic display title. Null on rows migrated from the single
   // conversation model — History derives a fallback and does not backfill.
@@ -708,11 +708,36 @@ model ChatConversation {
   // surface as an explicit error rather than be silently nulled.
   resolvedConnectionId String?
   resolvedModel        String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Disposable transcript-compression cache. Deleting the row never
+  // removes career facts. Cascade follows the conversation.
+  conversationSummary  ConversationSummary?
 
   @@index([userId, updatedAt])
+}
+
+/// 1:1 transcript compression cache for Career Dialogue.
+/// Not a career-fact store. No backfill: a missing row means P2 behavior.
+model ConversationSummary {
+  conversationId   String    @id
+  userId           String
+  text             String?
+  throughMessageId String?
+  coverageHash     String?
+  coveredCount     Int?
+  promptVersion    String?
+  revision         Int       @default(0)
+  units            Int?
+  generationMs     Int?
+  generatedAt      DateTime?
+  failureCount     Int       @default(0)
+  lastFailureAt    DateTime?
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------------------

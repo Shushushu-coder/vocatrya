@@ -252,6 +252,7 @@ export function renderCareerDialoguePrompt(input: {
   toolsBlock?: string;
   directChat?: boolean;
   correction?: string;
+  summary?: string | null;
 }): { prompt: string; size: CareerDialogueContextSize } {
   const lastIsUser = input.messages[input.messages.length - 1]?.role === "user";
   const pasteBlock =
@@ -277,6 +278,7 @@ export function renderCareerDialoguePrompt(input: {
     pageContext: input.pageContext,
     pasteBlock,
     sessionFacts: input.sessionFacts,
+    summary: input.summary,
     systemText: input.systemPrompt,
     fixedOverheadText,
   });
@@ -371,6 +373,8 @@ export type AccountAgentTurnInput = {
   messages: UIMessage[];
   pastedText?: string;
   pageContext?: PageContext;
+  /** Fresh summary text. Missing, stale, and legacy conversations omit it. */
+  summary?: string | null;
   writer: UIMessageStreamWriter;
   signal: AbortSignal;
 };
@@ -456,6 +460,7 @@ export async function runAccountAgentTurn(
       pageContext,
       pastedText,
       sessionFacts,
+      summary: input.summary,
       toolsBlock,
       directChat: extra?.directChat,
       correction: extra?.correction,

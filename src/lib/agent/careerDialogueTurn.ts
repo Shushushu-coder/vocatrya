@@ -131,6 +131,7 @@ export async function runCareerDialogueTurn(
     messages,
     pageContext: input.pageContext,
     pastedText: input.pastedText,
+    summary: input.summary,
     directChat: true,
   });
   const answerChars = await streamFinalAnswer({

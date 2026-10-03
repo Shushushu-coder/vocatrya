@@ -72,6 +72,8 @@ import {
   runCareerDialogueTurn,
 } from "@/lib/agent/careerDialogueTurn";
 import { AIBusinessError } from "@/lib/ai/connections";
+import { loadFreshConversationSummary } from "@/lib/agent/conversationSummaryStore";
+import { scheduleCareerDialogueSummary } from "@/lib/agent/conversationSummaryScheduler";
 
 // The one terminal tool whose stop condition is not "was it called" — see
 // addJobSettled.
@@ -249,6 +251,11 @@ async function accountChatResponse({
     originalMessages: messages,
     execute: async ({ writer }) => {
       await runInSpan(turnSpan, async () => {
+        const summary = await loadFreshConversationSummary({
+          userId,
+          conversationId,
+          messages,
+        });
         const result = await runCareerDialogueTurn({
           userId,
           connectionId: connection.id,
@@ -259,6 +266,7 @@ async function accountChatResponse({
           messages,
           pastedText,
           pageContext,
+          summary,
           writer,
           signal: turnSignal,
           decision: prepared.decision,
@@ -310,10 +318,18 @@ async function accountChatResponse({
       // Same write-on-finish contract as the legacy path: a cancelled turn
       // never writes back (Clear would otherwise resurrect).
       if (isAborted) return;
-      await saveChatConversation(
+      const saved = await saveChatConversation(
         conversationId,
         stubConsumedPastes(finalMessages),
       );
+      if (!saved.success) return;
+      scheduleCareerDialogueSummary({
+        userId,
+        conversationId,
+        resolvedConnectionId: lock.connectionId,
+        resolvedModel: lock.model,
+        messages: finalMessages,
+      });
     },
     onError: mapTurnError,
   });
@@ -660,10 +676,18 @@ export const POST = async (req: NextRequest) => {
       // worth persisting.
       if (isAborted) return;
       // Stubbing happens here so it lives in exactly one place.
-      await saveChatConversation(
+      const saved = await saveChatConversation(
         conversationId,
         stubConsumedPastes(finalMessages),
       );
+      if (!saved.success) return;
+      scheduleCareerDialogueSummary({
+        userId,
+        conversationId,
+        resolvedConnectionId: null,
+        resolvedModel: null,
+        messages: finalMessages,
+      });
     },
     // NOTE: this signature takes the error directly, unlike streamText's
     // onError which takes { error }.

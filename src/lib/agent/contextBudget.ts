@@ -78,8 +78,8 @@ export type CareerDialogueContextInput = {
   /** Already head-truncated paste block. The budgeter does not fetch data. */
   pasteBlock?: string;
   /**
-   * Compact summary already stored by the product. P2 never creates one.
-   * There is no conversation-summary column today; callers omit this.
+   * Fresh transcript-compression cache, already validated by the caller.
+   * Omitted when missing, stale, legacy, or over the summary budget.
    */
   summary?: string | null;
   /** Tool results produced in this turn and not yet on `messages`. */
@@ -97,6 +97,25 @@ export type CareerDialogueContextSuccess = {
   explicitLines: string[];
   summary?: string;
   size: CareerDialogueContextSize;
+  /**
+   * Complete history turns after dynamic-budget drops, excluding the
+   * current turn. Oldest first. Summary coverage is derived from this.
+   */
+  historyBoundary: CareerDialogueHistoryBoundary;
+};
+
+export type CareerDialogueHistoryBoundary = {
+  droppedTurnCount: number;
+  droppedTurns: string[][];
+  retainedHistoryTurns: string[][];
+};
+
+export type CareerDialogueTurnIndexSpan = {
+  firstIndex: number;
+  lastIndex: number;
+  messageIds: string[];
+  complete: boolean;
+  inHistoryPool: boolean;
 };
 
 export type CareerDialogueContextResult =
@@ -317,6 +336,40 @@ function groupTurns(messages: UIMessage[]): DialogueTurn[] {
 
 function isComplete(turn: DialogueTurn): boolean {
   return Boolean(turn.user && turn.assistants.length > 0 && userText(turn.user));
+}
+
+function turnMessageIds(turn: DialogueTurn): string[] {
+  const ids: string[] = [];
+  if (turn.user) ids.push(turn.user.id);
+  for (const message of turn.assistants) ids.push(message.id);
+  return ids;
+}
+
+export function careerDialogueTurnIndexSpans(
+  messages: UIMessage[],
+): CareerDialogueTurnIndexSpan[] {
+  const turns = groupTurns(messages);
+  return turns.map((turn, turnIndex) => {
+    const messageIds = turnMessageIds(turn);
+    const firstId = messageIds[0];
+    const lastId = messageIds[messageIds.length - 1];
+    return {
+      firstIndex: firstId ? messages.findIndex((message) => message.id === firstId) : -1,
+      lastIndex: lastId ? messages.findIndex((message) => message.id === lastId) : -1,
+      messageIds,
+      complete: isComplete(turn),
+      inHistoryPool: turnIndex < turns.length - 1 && isComplete(turn),
+    };
+  });
+}
+
+export function latestCompleteTurnMessageCount(messages: UIMessage[]): number {
+  const spans = careerDialogueTurnIndexSpans(messages);
+  for (let i = spans.length - 1; i >= 0; i--) {
+    const span = spans[i];
+    if (span?.complete && span.messageIds.length > 0) return span.messageIds.length;
+  }
+  return 0;
 }
 
 function turnHasApproval(turn: DialogueTurn): boolean {
@@ -595,6 +648,15 @@ export function buildCareerDialogueContext(
     pushTurn(current);
   }
 
+  const retainedTurnSet = new Set(history.map((rendered) => rendered.turn));
+  const historyBoundary: CareerDialogueHistoryBoundary = {
+    droppedTurnCount: historyPool.length - history.length,
+    droppedTurns: historyPool
+      .filter((turn) => !retainedTurnSet.has(turn))
+      .map(turnMessageIds),
+    retainedHistoryTurns: history.map((rendered) => turnMessageIds(rendered.turn)),
+  };
+
   const size: CareerDialogueContextSize = {
     contextProfile: profile,
     systemChars: charsOf(systemText),
@@ -623,6 +685,7 @@ export function buildCareerDialogueContext(
     explicitLines: explicitKept,
     ...(summary ? { summary } : {}),
     size,
+    historyBoundary,
   };
 }
 
