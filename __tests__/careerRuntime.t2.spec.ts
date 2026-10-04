@@ -108,7 +108,7 @@ describe("effective config parser", () => {
   });
 
   it("treats blank and invalid tokens as explicit fail-closed values", () => {
-    for (const raw of ["", "   ", "banana"]) {
+    for (const raw of ["", "   ", "banana", "__VOCATRYA_AB_UNSET__", "__anything__"]) {
       const resolved = resolveEffectiveCareerRuntimeConfig(
         env({
           [AB_RUNTIME_FEATURE_ENV]: raw,
@@ -127,6 +127,31 @@ describe("effective config parser", () => {
 });
 
 describe("fresh-native runtime matrix", () => {
+  it.each([
+    [AB_RUNTIME_FEATURE_ENV, ""],
+    [AB_RUNTIME_FEATURE_ENV, "banana"],
+    [AB_RUNTIME_FEATURE_ENV, "__VOCATRYA_AB_UNSET__"],
+    [AB_ROLLOUT_SCOPE_ENV, ""],
+    [AB_ROLLOUT_SCOPE_ENV, "banana"],
+    [AB_ROLLOUT_SCOPE_ENV, "__VOCATRYA_AB_UNSET__"],
+  ])("fails closed on trusted FRESH_READY with explicit %s=%j", async (key, raw) => {
+    await activateFreshAbNative(prisma);
+    const resolved = await resolveCareerRuntimeMode(prisma, { env: env({ [key]: raw }) });
+    expect(resolved).toMatchObject({
+      migrationStatus: AB_MIGRATION_STATUS.FRESH_READY,
+      origin: "fresh",
+      mode: CAREER_RUNTIME_MODE.AB_READY_DISABLED,
+      writeFamily: CAREER_WRITE_FAMILY.blocked,
+    });
+    if (key === AB_RUNTIME_FEATURE_ENV) {
+      expect(resolved.featureEnabled).toBe(false);
+      expect(resolved.configSource).toEqual({ feature: "explicit-env", scope: "fresh-default" });
+    } else {
+      expect(resolved.rolloutScope).toBe("none");
+      expect(resolved.configSource).toEqual({ feature: "fresh-default", scope: "explicit-env" });
+    }
+  });
+
   it("enables full canonical runtime when both flags are absent", async () => {
     await activateFreshAbNative(prisma);
     const resolved = await resolveCareerRuntimeMode(prisma, { env: ABSENT });
@@ -430,30 +455,5 @@ describe("consumer and packaging guards", () => {
       const source = fs.readFileSync(path.join(REPO, file), "utf8");
       expect(source, file).not.toContain("resolveAbRolloutScope(");
     }
-  });
-
-  it("drops the compose unset sentinel and preserves explicit values", () => {
-    const compose = fs.readFileSync(path.join(REPO, "docker-compose.yml"), "utf8");
-    const entrypoint = fs.readFileSync(path.join(REPO, "docker-entrypoint.sh"), "utf8");
-    expect(compose).toContain("${VOCATRYA_AB_RUNTIME_ENABLED-__VOCATRYA_AB_UNSET__}");
-    expect(compose).toContain("${VOCATRYA_AB_ROLLOUT_SCOPE-__VOCATRYA_AB_UNSET__}");
-    expect(compose).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-");
-    expect(compose).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-");
-    expect(entrypoint.indexOf("unset VOCATRYA_AB_RUNTIME_ENABLED")).toBeLessThan(
-      entrypoint.indexOf("prisma@6.19.0 migrate deploy"),
-    );
-
-    const project = (host: string | undefined) => (host === undefined ? "__VOCATRYA_AB_UNSET__" : host);
-    const container = (host: string | undefined) => {
-      const projected = project(host);
-      return projected === "__VOCATRYA_AB_UNSET__" ? undefined : projected;
-    };
-    expect(container(undefined)).toBeUndefined();
-    expect(container("")).toBe("");
-    expect(container("false")).toBe("false");
-    expect(container("true")).toBe("true");
-    expect(container("none")).toBe("none");
-    expect(container("resume_v1")).toBe("resume_v1");
-    expect(container("full")).toBe("full");
   });
 });

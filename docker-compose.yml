@@ -7,11 +7,10 @@ services:
     environment:
       - NODE_ENV=production
       - MCP_ENABLED=${MCP_ENABLED:-true}
-      # ${VAR-sentinel} substitutes only when the host variable is unset.
-      # The entrypoint removes the sentinel so the container key is absent.
-      # An explicit empty value stays empty and fails closed. Do not use :-false/:-none.
-      - VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED-__VOCATRYA_AB_UNSET__}
-      - VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE-__VOCATRYA_AB_UNSET__}
+      # Bare keys forward exact host/.env values, including explicit empty strings.
+      # Unresolved keys are omitted; only the runtime parser interprets values.
+      - VOCATRYA_AB_RUNTIME_ENABLED
+      - VOCATRYA_AB_ROLLOUT_SCOPE
       - DATABASE_URL=file:/data/dev.db
       - AUTH_SECRET=${AUTH_SECRET:-your-auth-secret}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-you-encryption-key-here}

@@ -423,8 +423,8 @@ describe("fresh-native startup entrypoints", () => {
     expect(migrateAt).toBeGreaterThanOrEqual(0);
     expect(activateAt).toBeGreaterThan(migrateAt);
     expect(serverAt).toBeGreaterThan(activateAt);
-    expect(entrypoint).toContain('unset VOCATRYA_AB_RUNTIME_ENABLED');
-    expect(entrypoint).toContain('unset VOCATRYA_AB_ROLLOUT_SCOPE');
+    expect(entrypoint).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED");
+    expect(entrypoint).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE");
     expect(entrypoint).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED=(true|false)/);
     expect(entrypoint).not.toMatch(/VOCATRYA_AB_ROLLOUT_SCOPE=(none|full|resume_v1)/);
 
@@ -440,8 +440,7 @@ describe("fresh-native startup entrypoints", () => {
     const compose = fs.readFileSync(path.join(REPO_ROOT, "docker-compose.yml"), "utf8");
     expect(compose).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-false}");
     expect(compose).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-none}");
-    expect(compose).toContain("VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED-__VOCATRYA_AB_UNSET__}");
-    expect(compose).toContain("VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE-__VOCATRYA_AB_UNSET__}");
+    expect(compose).not.toContain("__VOCATRYA_AB_UNSET__");
 
     const example = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
     expect(example).not.toMatch(/^VOCATRYA_AB_ROLLOUT_SCOPE=none/m);

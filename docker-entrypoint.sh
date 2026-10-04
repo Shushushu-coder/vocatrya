@@ -1,16 +1,6 @@
 #!/bin/sh
 set -e
 
-# Compose cannot omit an unset key. The sentinel means the host variable was
-# unset, so drop it and let the backend apply state-aware defaults. Explicit
-# values, including empty strings, "false", and "none", stay in the environment.
-if [ "${VOCATRYA_AB_RUNTIME_ENABLED-}" = "__VOCATRYA_AB_UNSET__" ]; then
-  unset VOCATRYA_AB_RUNTIME_ENABLED
-fi
-if [ "${VOCATRYA_AB_ROLLOUT_SCOPE-}" = "__VOCATRYA_AB_UNSET__" ]; then
-  unset VOCATRYA_AB_ROLLOUT_SCOPE
-fi
-
 # Auto-generate AUTH_SECRET if not provided
 if [ -z "$AUTH_SECRET" ]; then
   export AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
