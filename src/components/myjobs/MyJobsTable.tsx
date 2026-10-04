@@ -18,6 +18,7 @@ import { JobStatusBadgeMenu } from "./JobStatusBadgeMenu";
 import { TooltipProvider } from "../ui/tooltip";
 import { JobActionsMenu } from "./JobActionsMenu";
 import { MatchJobButton } from "./MatchJobButton";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type MyJobsTableProps = {
   jobs: JobResponse[];
@@ -41,6 +42,7 @@ function MyJobsTable({
   deleteIsArchive = false,
 }: MyJobsTableProps) {
   const { t, formatDate } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
   const [alertOpen, setAlertOpen] = useState(false);
   const [jobIdToDelete, setJobIdToDelete] = useState("");
 
@@ -62,7 +64,9 @@ function MyJobsTable({
             <TableHead>{t("jobs.company")}</TableHead>
             <TableHead className="hidden md:table-cell">{t("jobs.location")}</TableHead>
             <TableHead>{t("jobs.jobStatus")}</TableHead>
-            <TableHead className="hidden md:table-cell text-center">{t("jobs.matchTab")}</TableHead>
+            {!freshNativeFull && (
+              <TableHead className="hidden md:table-cell text-center">{t("jobs.matchTab")}</TableHead>
+            )}
             <TableHead className="hidden md:table-cell">{t("jobs.jobSource")}</TableHead>
             <TableHead>
               <span className="sr-only">{t("common.actions")}</span>
@@ -111,18 +115,20 @@ function MyJobsTable({
                     className="w-[110px] whitespace-nowrap justify-center"
                   />
                 </TableCell>
-                <TableCell className="hidden md:table-cell text-center">
-                  {job.matchScore != null ? (
-                    <CircularScore
-                      score={job.matchScore}
-                      size="sm"
-                      animate={false}
-                      className="mx-auto"
-                    />
-                  ) : (
-                    <MatchJobButton jobId={job.id} />
-                  )}
-                </TableCell>
+                {!freshNativeFull && (
+                  <TableCell className="hidden md:table-cell text-center">
+                    {job.matchScore != null ? (
+                      <CircularScore
+                        score={job.matchScore}
+                        size="sm"
+                        animate={false}
+                        className="mx-auto"
+                      />
+                    ) : (
+                      <MatchJobButton jobId={job.id} />
+                    )}
+                  </TableCell>
+                )}
                 <TableCell className="hidden md:table-cell">
                   {getLocalizedJobSource(job.JobSource, t)}
                 </TableCell>

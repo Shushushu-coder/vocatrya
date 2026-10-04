@@ -133,6 +133,7 @@ export async function runCareerDialogueTurn(
     pastedText: input.pastedText,
     summary: input.summary,
     directChat: true,
+    freshNativeFull: input.freshNativeFull,
   });
   const answerChars = await streamFinalAnswer({
     userId: input.userId,

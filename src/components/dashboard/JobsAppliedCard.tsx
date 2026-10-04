@@ -10,10 +10,12 @@ import {
 import { PlusCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 export default function JobsAppliedCard() {
   const router = useRouter();
   const { t } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
   return (
     <Card className="sm:col-span-2 min-w-0 flex flex-col">
       <CardHeader className="pb-3">
@@ -31,16 +33,18 @@ export default function JobsAppliedCard() {
           <PlusCircle className="h-3.5 w-3.5 mr-1 shrink-0" />
           <span className="min-w-0 truncate">{t("dashboard.job")}</span>
         </Button>
-        <Button
-          variant="outline"
-          className="justify-start min-w-0"
-          onClick={() =>
-            router.push("/dashboard/automations?add-automation=true")
-          }
-        >
-          <PlusCircle className="h-3.5 w-3.5 mr-1 shrink-0" />
-          <span className="min-w-0 truncate">{t("dashboard.automation")}</span>
-        </Button>
+        {!freshNativeFull && (
+          <Button
+            variant="outline"
+            className="justify-start min-w-0"
+            onClick={() =>
+              router.push("/dashboard/automations?add-automation=true")
+            }
+          >
+            <PlusCircle className="h-3.5 w-3.5 mr-1 shrink-0" />
+            <span className="min-w-0 truncate">{t("dashboard.automation")}</span>
+          </Button>
+        )}
         <Button
           variant="outline"
           className="justify-start min-w-0"

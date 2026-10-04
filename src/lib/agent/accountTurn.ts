@@ -253,6 +253,7 @@ export function renderCareerDialoguePrompt(input: {
   directChat?: boolean;
   correction?: string;
   summary?: string | null;
+  freshNativeFull?: boolean;
 }): { prompt: string; size: CareerDialogueContextSize } {
   const lastIsUser = input.messages[input.messages.length - 1]?.role === "user";
   const pasteBlock =
@@ -281,6 +282,7 @@ export function renderCareerDialoguePrompt(input: {
     summary: input.summary,
     systemText: input.systemPrompt,
     fixedOverheadText,
+    freshNativeFull: input.freshNativeFull,
   });
   if (!budget.ok) {
     throw new AIBusinessError(
@@ -377,6 +379,8 @@ export type AccountAgentTurnInput = {
   summary?: string | null;
   writer: UIMessageStreamWriter;
   signal: AbortSignal;
+  /** Trusted fresh + full A+B: deferred write tools are unregistered. */
+  freshNativeFull?: boolean;
 };
 
 export type AccountAgentTurnResult = {
@@ -390,16 +394,20 @@ export function assembleCareerDialogueTranscript({
   messages,
   pageContext,
   pastedText,
+  freshNativeFull,
 }: {
   messages: UIMessage[];
   pageContext?: PageContext;
   pastedText?: string;
+  freshNativeFull?: boolean;
 }): string[] {
   const transcriptLines = serializeChatTranscript(messages);
   const lastMessage = messages[messages.length - 1];
   const lastIsUser = lastMessage?.role === "user";
   if (lastIsUser) {
-    transcriptLines.push(buildPageContextMessage(pageContext));
+    transcriptLines.push(
+      buildPageContextMessage(pageContext, { freshNativeFull }),
+    );
   }
   if (pastedText && lastIsUser) {
     const { block } = truncateForModel(pastedText);
@@ -441,6 +449,7 @@ export async function runAccountAgentTurn(
     provider,
     modelName,
     writer,
+    freshNativeFull: input.freshNativeFull,
   });
   const toolsBlock = describeToolsForPrompt(tools);
 
@@ -464,6 +473,7 @@ export async function runAccountAgentTurn(
       toolsBlock,
       directChat: extra?.directChat,
       correction: extra?.correction,
+      freshNativeFull: input.freshNativeFull,
     });
     contextSize = rendered.size;
     return rendered.prompt;

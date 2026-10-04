@@ -48,6 +48,7 @@ import {
   isFullAbCapabilityEnabled,
   isRestrictedResumeBindingSurfaceEnabled,
 } from "@/lib/career/capabilities";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { useI18n } from "@/i18n";
 
 const LEGACY_JOB_DETAIL_TABS = [
@@ -66,6 +67,11 @@ const AB_JOB_DETAIL_TABS = [
   "notes",
   "contacts",
 ] as const;
+
+// Match, cover letter and contacts have no canonical fresh-native
+// implementation yet — under fresh + full the tabs are simply absent, so a
+// retained ?tab=match link falls back to the description tab.
+const FRESH_FULL_JOB_DETAIL_TABS = ["description", "timeline", "notes"] as const;
 
 type JobDetailsProps = {
   job: JobResponse;
@@ -100,7 +106,12 @@ function JobDetails({
     careerRuntimeMode ?? "",
     abRolloutScope ?? "none",
   );
-  const jobDetailTabs = showTimeline ? AB_JOB_DETAIL_TABS : LEGACY_JOB_DETAIL_TABS;
+  const { freshNativeFull } = useCareerSurfaces();
+  const jobDetailTabs = freshNativeFull
+    ? FRESH_FULL_JOB_DETAIL_TABS
+    : showTimeline
+      ? AB_JOB_DETAIL_TABS
+      : LEGACY_JOB_DETAIL_TABS;
   const {
     open: openChat,
     startNewConversation,
@@ -166,7 +177,7 @@ function JobDetails({
   const onCoverLetter = () =>
     requestChat(`Write a cover letter for ${jobLabel}`);
 
-  useAutoMatch(onMatch);
+  useAutoMatch(onMatch, !freshNativeFull);
 
   // Doubles as the busy gate: the header button, the empty state and
   // Regenerate all key on this one reason.
@@ -220,6 +231,7 @@ function JobDetails({
           currentStatus={currentStatus}
           coverLetterBlockedReason={coverLetterBlockedReason}
           chatBusy={chatBusy}
+          showAiActions={!freshNativeFull}
           onBack={goBack}
           onMatch={onMatch}
           onCoverLetter={onCoverLetter}
@@ -234,6 +246,7 @@ function JobDetails({
           currentStatus={currentStatus}
           matchData={parsedMatchData}
           showCampusFields={showTimeline}
+          showMatchScore={!freshNativeFull}
         />
 
         {showRestrictedResumePanel && (
@@ -254,8 +267,12 @@ function JobDetails({
             {showTimeline && (
               <TabsTrigger value="timeline">{t("jobs.timelineTab")}</TabsTrigger>
             )}
-            <TabsTrigger value="match">{t("automations.aiMatch")}</TabsTrigger>
-            <TabsTrigger value="letter">{t("jobs.coverLetter")}</TabsTrigger>
+            {!freshNativeFull && (
+              <TabsTrigger value="match">{t("automations.aiMatch")}</TabsTrigger>
+            )}
+            {!freshNativeFull && (
+              <TabsTrigger value="letter">{t("jobs.coverLetter")}</TabsTrigger>
+            )}
             <TabsTrigger value="notes">
               {t("common.notes")}
               {notesCount > 0 && (
@@ -264,14 +281,16 @@ function JobDetails({
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="contacts">
-              {t("jobs.contactsTab")}
-              {(job.contactLinks?.length ?? 0) > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {job.contactLinks!.length}
-                </Badge>
-              )}
-            </TabsTrigger>
+            {!freshNativeFull && (
+              <TabsTrigger value="contacts">
+                {t("jobs.contactsTab")}
+                {(job.contactLinks?.length ?? 0) > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {job.contactLinks!.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
           <TabsContent value="description" className="mt-4">
             <Card className="p-6">
@@ -291,32 +310,36 @@ function JobDetails({
               </Card>
             </TabsContent>
           )}
-          <TabsContent value="match" className="mt-4">
-            <Card className="p-6">
-              {parsedMatchData && parsedMatchData.analyzed !== false ? (
-                <MatchDetails matchData={parsedMatchData} />
-              ) : (
-                <JobTabEmptyState
-                  icon={Sparkles}
-                  title={t("jobs.noMatchYet")}
-                  description={t("jobs.noMatchDescription")}
-                  actionLabel={t("jobs.matchWithAi")}
-                  onAction={onMatch}
-                  actionDisabled={chatBusy}
-                  actionTitle={chatBusy ? t("jobs.assistantBusy") : undefined}
+          {!freshNativeFull && (
+            <TabsContent value="match" className="mt-4">
+              <Card className="p-6">
+                {parsedMatchData && parsedMatchData.analyzed !== false ? (
+                  <MatchDetails matchData={parsedMatchData} />
+                ) : (
+                  <JobTabEmptyState
+                    icon={Sparkles}
+                    title={t("jobs.noMatchYet")}
+                    description={t("jobs.noMatchDescription")}
+                    actionLabel={t("jobs.matchWithAi")}
+                    onAction={onMatch}
+                    actionDisabled={chatBusy}
+                    actionTitle={chatBusy ? t("jobs.assistantBusy") : undefined}
+                  />
+                )}
+              </Card>
+            </TabsContent>
+          )}
+          {!freshNativeFull && (
+            <TabsContent value="letter" className="mt-4">
+              <Card className="p-6">
+                <CoverLetterTab
+                  letter={job.CoverLetter}
+                  blockedReason={coverLetterBlockedReason}
+                  onGenerate={onCoverLetter}
                 />
-              )}
-            </Card>
-          </TabsContent>
-          <TabsContent value="letter" className="mt-4">
-            <Card className="p-6">
-              <CoverLetterTab
-                letter={job.CoverLetter}
-                blockedReason={coverLetterBlockedReason}
-                onGenerate={onCoverLetter}
-              />
-            </Card>
-          </TabsContent>
+              </Card>
+            </TabsContent>
+          )}
           {/* forceMount keeps ⋮ → Add a Note and the count badge working off-tab. */}
           <TabsContent
             value="notes"
@@ -331,16 +354,18 @@ function JobDetails({
               />
             </Card>
           </TabsContent>
-          <TabsContent value="contacts" className="mt-4">
-            <Card className="p-6">
-              <JobContactsTab
-                jobId={job.id}
-                links={job.contactLinks ?? []}
-                companies={companies}
-                locations={locations}
-              />
-            </Card>
-          </TabsContent>
+          {!freshNativeFull && (
+            <TabsContent value="contacts" className="mt-4">
+              <Card className="p-6">
+                <JobContactsTab
+                  jobId={job.id}
+                  links={job.contactLinks ?? []}
+                  companies={companies}
+                  locations={locations}
+                />
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
       <AddJob

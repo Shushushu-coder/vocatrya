@@ -4,6 +4,7 @@ import { Bot, Database, Palette, Plug } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 export type SettingsSection = "ai-provider" | "appearance" | "mcp-access" | "data";
 
@@ -28,9 +29,12 @@ export default function SettingsSidebar({
   onSectionChange,
 }: SettingsSidebarProps) {
   const { t } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
   return (
     <nav className="flex flex-col gap-1 w-48 shrink-0">
       {SETTINGS_SECTIONS.map((section) => {
+        // MCP tokens only drive legacy writes — no fresh-native entry point.
+        if (freshNativeFull && section.id === "mcp-access") return null;
         const Icon = section.icon;
         const isActive = activeSection === section.id;
         return (

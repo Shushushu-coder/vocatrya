@@ -12,7 +12,7 @@ type CompanySummaryCardProps = {
   company: Company;
   jobsCount: number;
   appliedCount: number;
-  contactsCount: number;
+  contactsCount?: number;
 };
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -78,7 +78,9 @@ export function CompanySummaryCard({
           </Fact>
           <Fact label={t("common.jobs")}>{jobsCount}</Fact>
           <Fact label={t("companies.applied")}>{appliedCount}</Fact>
-          <Fact label={t("library.contacts")}>{contactsCount}</Fact>
+          {contactsCount !== undefined && (
+            <Fact label={t("library.contacts")}>{contactsCount}</Fact>
+          )}
         </div>
       </CardContent>
     </Card>

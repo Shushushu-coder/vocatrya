@@ -42,6 +42,8 @@ type JobDetailsHeaderProps = {
   currentStatus: JobStatus;
   coverLetterBlockedReason?: string;
   chatBusy: boolean;
+  /** Fresh + full hides deferred match/cover-letter affordances entirely. */
+  showAiActions?: boolean;
   onBack: () => void;
   onMatch: () => void;
   onCoverLetter: () => void;
@@ -57,6 +59,7 @@ export function JobDetailsHeader({
   currentStatus,
   coverLetterBlockedReason,
   chatBusy,
+  showAiActions = true,
   onBack,
   onMatch,
   onCoverLetter,
@@ -103,33 +106,37 @@ export function JobDetailsHeader({
         </div>
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          variant="outline"
-          className="cursor-pointer"
-          disabled={chatBusy}
-          title={chatBusy ? t("jobs.assistantBusy") : undefined}
-          onClick={onMatch}
-        >
-          <Sparkles className="h-4 w-4 sm:mr-2" />
-          <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            {t("jobs.matchWithAi")}
-          </span>
-        </Button>
-        <Button
-          variant="outline"
-          className="cursor-pointer"
-          data-testid="generate-cover-letter-btn"
-          disabled={!!coverLetterBlockedReason}
-          title={coverLetterBlockedReason}
-          onClick={onCoverLetter}
-        >
-          <FileText className="h-4 w-4 sm:mr-2" />
-          <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            {job.coverLetterId
-              ? t("jobs.regenerateLetter")
-              : t("jobs.coverLetter")}
-          </span>
-        </Button>
+        {showAiActions && (
+          <Button
+            variant="outline"
+            className="cursor-pointer"
+            disabled={chatBusy}
+            title={chatBusy ? t("jobs.assistantBusy") : undefined}
+            onClick={onMatch}
+          >
+            <Sparkles className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+              {t("jobs.matchWithAi")}
+            </span>
+          </Button>
+        )}
+        {showAiActions && (
+          <Button
+            variant="outline"
+            className="cursor-pointer"
+            data-testid="generate-cover-letter-btn"
+            disabled={!!coverLetterBlockedReason}
+            title={coverLetterBlockedReason}
+            onClick={onCoverLetter}
+          >
+            <FileText className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+              {job.coverLetterId
+                ? t("jobs.regenerateLetter")
+                : t("jobs.coverLetter")}
+            </span>
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={onEdit}

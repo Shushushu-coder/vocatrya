@@ -49,6 +49,17 @@ vi.mock("@/lib/agent/conversationSummaryScheduler", () => ({
   scheduleCareerDialogueSummary: summaryHooks.scheduleCareerDialogueSummary,
 }));
 
+const careerRuntime = vi.hoisted(() => ({
+  resolveCareerRuntimeMode: vi.fn(async () => ({
+    mode: "LEGACY_ONLY",
+    rolloutScope: "none",
+    origin: "legacy",
+  })),
+}));
+vi.mock("@/lib/career/runtimeMode", () => ({
+  resolveCareerRuntimeMode: careerRuntime.resolveCareerRuntimeMode,
+}));
+
 // The route merges this into createUIMessageStream now. An immediately
 // closed stream is enough — these tests assert on the streamText ARGS.
 const toUIMessageStream = vi.fn(
@@ -500,5 +511,29 @@ describe("POST /api/ai/chat", () => {
     );
     const sent = JSON.stringify(streamArgs().messages);
     expect(sent).not.toContain("<page-context>");
+  });
+
+  // Trusted fresh + full: add_job would hit the legacy-write guard, and
+  // match/cover-letter have no canonical implementation — so none of the
+  // three may be registered, advertised or selectable this turn.
+  it("withholds the deferred write tools on a fresh-native full runtime", async () => {
+    careerRuntime.resolveCareerRuntimeMode.mockResolvedValueOnce({
+      mode: "AB_ENABLED",
+      rolloutScope: "full",
+      origin: "fresh",
+    } as never);
+
+    await POST(req({ messages: [pasteMessage("posting")] }));
+
+    expect(Object.keys(streamArgs().tools)).toEqual([
+      "list_jobs",
+      "get_job",
+      "get_resume",
+      "review_resume",
+    ]);
+    expect(streamArgs().system).not.toContain("add_job");
+    expect(streamArgs().system).not.toContain("match_job");
+    expect(streamArgs().system).not.toContain("generate_cover_letter");
+    expect(JSON.stringify(streamArgs().messages)).not.toContain("match_job");
   });
 });

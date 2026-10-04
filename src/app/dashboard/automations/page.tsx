@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { getResumeList } from "@/actions/profile.actions";
+import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
+import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import { AutomationContainer } from "@/components/automations/AutomationContainer";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getServerI18n } from "@/i18n/server";
@@ -9,6 +12,12 @@ export async function generateMetadata() {
 }
 
 export default async function AutomationsPage() {
+  const runtime = await getCareerRuntimeSnapshot();
+  // ATS discovery is not part of the fresh-native beta: a pasted URL must
+  // not reopen the legacy workflow.
+  if (isFreshNativeFullSurface(runtime)) {
+    redirect("/dashboard");
+  }
   const resumeResult = await getResumeList(
     1,
     100,

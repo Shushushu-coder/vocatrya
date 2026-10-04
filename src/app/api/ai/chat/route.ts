@@ -57,6 +57,8 @@ import {
 } from "@/lib/telemetry";
 import { addJobSettled, AGENT_CHAT_TERMINAL_TOOLS } from "@/models/agent.model";
 import prisma from "@/lib/db";
+import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
+import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import {
   ChatConversationNotFoundError,
   contextOfRow,
@@ -130,6 +132,7 @@ async function accountChatResponse({
   pastedText,
   pageContext,
   lock,
+  freshNativeFull,
 }: {
   req: NextRequest;
   userId: string;
@@ -138,6 +141,7 @@ async function accountChatResponse({
   pastedText: string | undefined;
   pageContext: Parameters<typeof buildPageContextMessage>[0];
   lock: { connectionId: string; model: string | null };
+  freshNativeFull: boolean;
 }) {
   // The lock is a provenance pointer — the connection's CURRENT state is
   // re-checked every turn (disconnect/reauth/archive degrade it), and it is
@@ -177,7 +181,7 @@ async function accountChatResponse({
 
   const rawLocale = req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value;
   const locale = normalizeLocale(rawLocale);
-  const systemPrompt = buildAgentChatSystemPrompt(locale);
+  const systemPrompt = buildAgentChatSystemPrompt(locale, { freshNativeFull });
 
   // Route on the full request. Budgeting happens inside the turn, after
   // the local router has seen the current utterance.
@@ -271,6 +275,7 @@ async function accountChatResponse({
           signal: turnSignal,
           decision: prepared.decision,
           routerDurationMs: prepared.routerDurationMs,
+          freshNativeFull,
         });
         contextSize = result.contextSize;
       });
@@ -400,6 +405,11 @@ export const POST = async (req: NextRequest) => {
   const lock = chatLockFromRow(conversation);
   const pageContext = pageContextFromConversation(contextOfRow(conversation));
 
+  // One resolution per turn: fresh-native full withholds the deferred write
+  // tools from the registry, the system prompt and the page-context line.
+  const careerRuntime = await resolveCareerRuntimeMode(prisma);
+  const freshNativeFull = isFreshNativeFullSurface(careerRuntime);
+
   if (lock.kind === "account") {
     return accountChatResponse({
       req,
@@ -409,6 +419,7 @@ export const POST = async (req: NextRequest) => {
       pastedText,
       pageContext,
       lock,
+      freshNativeFull,
     });
   }
 
@@ -508,7 +519,10 @@ export const POST = async (req: NextRequest) => {
   // Recency is what has to beat it, so this rides at the end of the messages
   // rather than in the system prompt. A pasted posting still lands last.
   if (lastIsUser) {
-    modelMessages.push({ role: "user", content: buildPageContextMessage(pageContext) });
+    modelMessages.push({
+      role: "user",
+      content: buildPageContextMessage(pageContext, { freshNativeFull }),
+    });
   }
   if (pastedText && lastIsUser) {
     const { block } = truncateForModel(pastedText);
@@ -534,7 +548,7 @@ export const POST = async (req: NextRequest) => {
 
   const rawLocale = req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value;
   const locale = normalizeLocale(rawLocale);
-  const systemPrompt = buildAgentChatSystemPrompt(locale);
+  const systemPrompt = buildAgentChatSystemPrompt(locale, { freshNativeFull });
 
   const turnSpan = startSpan("agent.chat.turn", {
     ...genAiRequestAttrs({
@@ -575,6 +589,7 @@ export const POST = async (req: NextRequest) => {
           provider,
           modelName,
           writer,
+          freshNativeFull,
         });
         prefixMetrics = measureTurnPrefix({
           userId,

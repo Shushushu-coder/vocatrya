@@ -88,6 +88,11 @@ export type CareerDialogueContextInput = {
   /** Instructions + schemas that cannot be dropped. */
   fixedOverheadText?: string;
   budgets?: Partial<CareerDialogueContextBudgets>;
+  /**
+   * Trusted fresh + full A+B: the page line must not point the model at the
+   * deferred write tools (add_job / match_job / generate_cover_letter).
+   */
+  freshNativeFull?: boolean;
 };
 
 export type CareerDialogueContextSuccess = {
@@ -519,7 +524,11 @@ export function buildCareerDialogueContext(
     summary = undefined;
   }
 
-  let pageLine = lastIsUser ? buildPageContextMessage(input.pageContext) : undefined;
+  let pageLine = lastIsUser
+    ? buildPageContextMessage(input.pageContext, {
+        freshNativeFull: input.freshNativeFull,
+      })
+    : undefined;
   let pasteLine: string | undefined;
   if (lastIsUser && input.pasteBlock && !userLineText.includes(input.pasteBlock)) {
     pasteLine = buildPasteContextMessage(input.pasteBlock);

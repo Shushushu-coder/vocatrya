@@ -28,6 +28,8 @@ type JobSummaryCardProps = {
   currentStatus: JobStatus;
   matchData: JobMatchData | null;
   showCampusFields?: boolean;
+  /** Fresh + full removes the legacy match cell entirely. */
+  showMatchScore?: boolean;
 };
 
 export function JobSummaryCard({
@@ -35,6 +37,7 @@ export function JobSummaryCard({
   currentStatus,
   matchData,
   showCampusFields = false,
+  showMatchScore = true,
 }: JobSummaryCardProps) {
   const { t, formatDate } = useI18n();
   const expired =
@@ -107,21 +110,23 @@ export function JobSummaryCard({
                 : t("jobs.notApplied")}
             </p>
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground">{t("automations.aiMatch")}</p>
-            {job.matchScore != null && matchData?.analyzed !== false ? (
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <CircularScore score={job.matchScore} size="sm" />
-                {matchData?.recommendation && (
-                  <Badge variant="outline" className="capitalize">
-                    {matchData.recommendation}
-                  </Badge>
-                )}
-              </div>
-            ) : (
-              <p className="mt-1 font-medium">{t("jobs.notMatched")}</p>
-            )}
-          </div>
+          {showMatchScore && (
+            <div>
+              <p className="text-sm text-muted-foreground">{t("automations.aiMatch")}</p>
+              {job.matchScore != null && matchData?.analyzed !== false ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <CircularScore score={job.matchScore} size="sm" />
+                  {matchData?.recommendation && (
+                    <Badge variant="outline" className="capitalize">
+                      {matchData.recommendation}
+                    </Badge>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-1 font-medium">{t("jobs.notMatched")}</p>
+              )}
+            </div>
+          )}
           <div>
             <p className="text-sm text-muted-foreground">{t("jobs.resume")}</p>
             <div className="mt-1 font-medium">

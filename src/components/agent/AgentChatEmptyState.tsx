@@ -6,6 +6,7 @@ import { AGENT_ADD_JOB_INTRO } from "@/lib/agent/prompt";
 import { useI18n } from "@/i18n";
 import { BriefcaseBusiness, BriefcaseMedical, FileText, Plus, type LucideIcon } from "lucide-react";
 import { EmptyStateAgentPresence } from "./EmptyStateAgentPresence";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import type { VocatryaMotionState } from "@/components/brand/VocatryaMark";
 import styles from "./empty-state.module.css";
 
@@ -13,6 +14,7 @@ type SuggestionItem = { label: string; run: () => void; icon?: LucideIcon };
 
 export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotionState }) {
   const { t, locale } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
   const { sendMessage, seedExchange, preflight, context, requestAddContext } =
     useAgentChat();
   const items = context?.items ?? [];
@@ -30,13 +32,24 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
     });
 
   const addJob = t("agent.suggestions.addJob");
+  // Fresh + full never offers a deferred write path: no add_job seed, no
+  // match suggestion — the remaining prompts resolve to canonical reads or
+  // plain dialogue.
   const suggestions: SuggestionItem[] = job
-    ? prompts([
-        "agent.emptyJobAnalyze",
-        "agent.emptyJobMatch",
-        "agent.emptyJobReview",
-        "agent.emptyJobInterview",
-      ])
+    ? prompts(
+        freshNativeFull
+          ? [
+              "agent.emptyJobAnalyze",
+              "agent.emptyJobReview",
+              "agent.emptyJobInterview",
+            ]
+          : [
+              "agent.emptyJobAnalyze",
+              "agent.emptyJobMatch",
+              "agent.emptyJobReview",
+              "agent.emptyJobInterview",
+            ],
+      )
     : resume
       ? prompts([
           "agent.emptyResumeReview",
@@ -51,17 +64,23 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
             icon: FileText,
           },
           { label: t("agent.addContext"), run: () => requestAddContext?.(), icon: Plus },
-          {
-            label: addJob,
-            icon: BriefcaseMedical,
-            run: () => {
-              if (!preflight.ok) return;
-              seedExchange(
-                addJob,
-                locale === "zh-CN" ? t("agent.addJobIntro") : AGENT_ADD_JOB_INTRO,
-              );
-            },
-          },
+          ...(freshNativeFull
+            ? []
+            : [
+                {
+                  label: addJob,
+                  icon: BriefcaseMedical,
+                  run: () => {
+                    if (!preflight.ok) return;
+                    seedExchange(
+                      addJob,
+                      locale === "zh-CN"
+                        ? t("agent.addJobIntro")
+                        : AGENT_ADD_JOB_INTRO,
+                    );
+                  },
+                },
+              ]),
         ];
 
   return (

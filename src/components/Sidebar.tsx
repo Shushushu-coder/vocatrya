@@ -10,6 +10,8 @@ import { useSidebar } from "@/context/SidebarContext";
 import { cn } from "@/lib/utils";
 import { CurrentUser } from "@/models/user.model";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
+import { isFreshFullHiddenNavRoute } from "@/lib/career/freshSurfacePolicy";
 import { getSidebarNavLabel } from "./Header";
 
 interface SidebarProps {
@@ -21,6 +23,7 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
   const { t } = useI18n();
   const path = usePathname();
   const { expanded, toggle } = useSidebar();
+  const { freshNativeFull } = useCareerSurfaces();
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -60,6 +63,9 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
           {SIDEBAR_LINKS.map((item) => {
             // Only show dev-only items in development mode
             if (item.devOnly && process.env.NODE_ENV !== "development") {
+              return null;
+            }
+            if (freshNativeFull && isFreshFullHiddenNavRoute(item.route)) {
               return null;
             }
             const label = getSidebarNavLabel(item.route, item.label, t);

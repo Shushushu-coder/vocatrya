@@ -16,6 +16,8 @@ import SidebarToggle from "./SidebarToggle";
 import { AgentChatTrigger } from "./AgentChatTrigger";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
+import { isFreshFullHiddenNavRoute } from "@/lib/career/freshSurfacePolicy";
 
 export function getSidebarNavLabel(
   route: string,
@@ -37,6 +39,7 @@ export function getSidebarNavLabel(
 
 function Header() {
   const { t } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
@@ -61,6 +64,9 @@ function Header() {
             </SheetClose>
             {SIDEBAR_LINKS.map((item) => {
               if (item.devOnly && process.env.NODE_ENV !== "development") {
+                return null;
+              }
+              if (freshNativeFull && isFreshFullHiddenNavRoute(item.route)) {
                 return null;
               }
               const label = getSidebarNavLabel(item.route, item.label, t);

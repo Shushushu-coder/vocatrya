@@ -9,9 +9,11 @@ import DisplaySettings from "@/components/settings/DisplaySettings";
 import McpAccessSettings from "@/components/settings/McpAccessSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 function Settings() {
   const { t } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
   const [activeSection, setActiveSection] = useState<SettingsSection>("ai-provider");
 
   return (
@@ -33,7 +35,9 @@ function Settings() {
             </div>
           )}
           {activeSection === "appearance" && <DisplaySettings />}
-          {activeSection === "mcp-access" && <McpAccessSettings />}
+          {activeSection === "mcp-access" && !freshNativeFull && (
+            <McpAccessSettings />
+          )}
           {activeSection === "data" && <DataSettings />}
         </div>
       </div>

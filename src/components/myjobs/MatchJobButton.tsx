@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { useI18n } from "@/i18n";
 
 // Shown in place of the score when a job has none. The match flag is read by
@@ -10,6 +11,9 @@ import { useI18n } from "@/i18n";
 export function MatchJobButton({ jobId }: { jobId: string }) {
   const { busy } = useAgentChat();
   const { t } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
+
+  if (freshNativeFull) return null;
 
   // One shared conversation: a second match would clear the running one, so
   // the link is swapped for a dead button rather than left navigable.

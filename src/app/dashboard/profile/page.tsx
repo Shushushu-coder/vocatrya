@@ -8,6 +8,7 @@ import {
   isLegacyResumeEditorReadOnly,
   isResumeV1CapabilityEnabled,
 } from "@/lib/career/capabilities";
+import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -25,8 +26,13 @@ async function Profile() {
     runtime.mode,
     runtime.rolloutScope,
   );
+  // A fresh instance has no legacy Resume/CoverLetter rows to list, so the
+  // legacy document card is dead surface — the canonical entries above
+  // replace it. Fresh + full is the first mode where that card would
+  // otherwise render (read-only), so it is suppressed explicitly here.
   const hideLegacyProfile =
-    runtime.origin === "fresh" && !showApplicationEntry;
+    runtime.origin === "fresh" &&
+    (!showApplicationEntry || isFreshNativeFullSurface(runtime));
   return (
     <div className="col-span-3">
       <CareerRuntimeNotice mode={runtime.mode} />

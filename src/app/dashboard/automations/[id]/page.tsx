@@ -1,3 +1,6 @@
+import { redirect } from "next/navigation";
+import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
+import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import { AutomationDetailContainer } from "@/components/automations/AutomationDetailContainer";
 
 async function AutomationDetailPage({
@@ -6,6 +9,10 @@ async function AutomationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const runtime = await getCareerRuntimeSnapshot();
+  if (isFreshNativeFullSurface(runtime)) {
+    redirect("/dashboard");
+  }
 
   return (
     <div className="col-span-3">

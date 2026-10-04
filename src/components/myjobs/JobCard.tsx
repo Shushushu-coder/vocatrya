@@ -9,6 +9,7 @@ import { JobStatusBadge } from "./JobStatusBadge";
 import { JobActionsMenu } from "./JobActionsMenu";
 import { MatchJobButton } from "./MatchJobButton";
 import { CompanyLogo } from "./CompanyLogo";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type JobCardProps = {
   job: JobResponse;
@@ -30,6 +31,7 @@ export function JobCard({
   onDeleteJob,
 }: JobCardProps) {
   const { t, formatDate } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
   const notesCount = job._count?.Notes ?? 0;
 
   return (
@@ -61,11 +63,12 @@ export function JobCard({
             {job.Company?.label}
           </p>
         </div>
-        {job.matchScore != null ? (
-          <CircularScore score={job.matchScore} size="sm" animate={false} />
-        ) : (
-          <MatchJobButton jobId={job.id} />
-        )}
+        {!freshNativeFull &&
+          (job.matchScore != null ? (
+            <CircularScore score={job.matchScore} size="sm" animate={false} />
+          ) : (
+            <MatchJobButton jobId={job.id} />
+          ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">

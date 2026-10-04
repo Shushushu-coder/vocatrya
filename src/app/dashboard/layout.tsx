@@ -9,6 +9,9 @@ import { RightRailProvider } from "@/context/RightRailContext";
 import { AgentChatProvider } from "@/components/agent/AgentChatProvider";
 import { AgentChatPanel } from "@/components/agent/AgentChatPanel";
 import { loadActiveChatConversation } from "@/actions/agentChat.actions";
+import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
+import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
+import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
 import StaleSessionSignOut from "@/components/StaleSessionSignOut";
@@ -29,7 +32,11 @@ export default async function RootLayout({
     APP_CONSTANTS.AGENT_CHAT_ACTIVE_CONVERSATION_KEY,
   )?.value;
   const conversation = await loadActiveChatConversation(activeId);
-  const user = await getCurrentUser();
+  const [user, runtime] = await Promise.all([
+    getCurrentUser(),
+    getCareerRuntimeSnapshot(),
+  ]);
+  const freshNativeFull = isFreshNativeFullSurface(runtime);
 
   const signOutAction = async () => {
     "use server";
@@ -45,6 +52,7 @@ export default async function RootLayout({
 
   return (
     <ActivityProvider>
+      <CareerSurfacesProvider freshNativeFull={freshNativeFull}>
       <SidebarProvider initialExpanded={initialExpanded}>
         <RightRailProvider>
           <AgentChatProvider initialConversation={conversation.data ?? null}>
@@ -68,6 +76,7 @@ export default async function RootLayout({
           </AgentChatProvider>
         </RightRailProvider>
       </SidebarProvider>
+      </CareerSurfacesProvider>
     </ActivityProvider>
   );
 }
