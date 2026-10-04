@@ -278,10 +278,23 @@ describe("validateText", () => {
   });
 
   it("returns CORRUPTED for excessive consecutive special characters", () => {
-    const corrupted = "normal text " + "!@#$%^&*()".repeat(5) + " more text";
+    // The old fixture was "!@#$%^&*()".repeat(5). That encoded the
+    // ASCII-centric bug: any 21 non-alphanumeric characters, including
+    // punctuation and Han, were CORRUPTED. Punctuation is textual.
+    // Corruption is a run of controls, unassigned code points, or U+FFFD.
+    const corrupted = "normal text " + "\u0000".repeat(21) + " more text";
     const result = validateText(corrupted, 10, 50000);
     expect(result.isValid).toBe(false);
     expect(result.error?.code).toBe("CORRUPTED");
+    expect(result.error?.details).toEqual({
+      maxConsecutiveSpecialChars: 20,
+    });
+  });
+
+  it("allows a long ASCII punctuation run", () => {
+    const text = "normal text " + "!@#$%^&*()".repeat(5) + " more text";
+    const result = validateText(text, 10, 50000);
+    expect(result.isValid).toBe(true);
   });
 
   it("allows special characters under the threshold", () => {

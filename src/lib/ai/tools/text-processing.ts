@@ -160,19 +160,29 @@ export const validateText = (
     };
   }
 
-  // Check for corruption - consecutive special characters
-  const MAX_CONSECUTIVE_SPECIAL_CHARS = 20;
-  const specialCharPattern = new RegExp(
-    `[^a-zA-Z0-9\\s]{${MAX_CONSECUTIVE_SPECIAL_CHARS + 1},}`,
+  // Corruption is non-text noise, not "non-ASCII". Letters (including Han),
+  // numbers, punctuation, symbols, and ordinary whitespace are textual.
+  // Suspicious: controls other than tab/newline/CR, unassigned code points,
+  // U+FFFD, and isolated surrogates. A single U+FFFD stays valid; 21 in a
+  // row does not. The threshold matches the previous special-run limit.
+  //
+  // Unicode property escapes are built with RegExp because tsconfig target
+  // is ES2017, which rejects \p{} literals. Node 20 (app, desktop, tests)
+  // supports them.
+  const MAX_CONSECUTIVE_SUSPICIOUS_CHARS = 20;
+  const suspiciousRun = new RegExp(
+    `(?:(?![\\t\\n\\r])\\p{Cc}|\\p{Cn}|\\uFFFD){${MAX_CONSECUTIVE_SUSPICIOUS_CHARS + 1}}`,
+    "u",
   );
-  if (specialCharPattern.test(text)) {
+  const isolatedSurrogate = new RegExp("\\p{Cs}", "u");
+  if (isolatedSurrogate.test(text) || suspiciousRun.test(text)) {
     return {
       isValid: false,
       error: {
         code: "CORRUPTED",
         message: `${contextLabel} appears to be corrupted. Found excessive consecutive special characters.`,
         details: {
-          maxConsecutiveSpecialChars: MAX_CONSECUTIVE_SPECIAL_CHARS,
+          maxConsecutiveSpecialChars: MAX_CONSECUTIVE_SUSPICIOUS_CHARS,
         },
       },
     };
