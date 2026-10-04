@@ -10,6 +10,7 @@ import type {
 } from "@ai-sdk/provider";
 import { executeAIConnectionText } from "@/lib/ai/execution";
 import { executeAIConnectionTextStream } from "@/lib/ai/streaming-execution";
+import { log } from "@/lib/telemetry";
 
 /**
  * Provider-neutral LanguageModel adapter over a locked AIConnection.
@@ -104,10 +105,70 @@ export function createAccountRuntimeLanguageModel({
     async doStream(options: LanguageModelV3CallOptions) {
       const prompt = flattenPrompt(options.prompt);
       const textId = "account-text-1";
+      const startedAt = Date.now();
       const stream = new ReadableStream<LanguageModelV3StreamPart>({
         async start(controller) {
-          controller.enqueue({ type: "stream-start", warnings: [] });
+          // streamText settles textStream and finishReason only when this
+          // ReadableStream closes. runToolsTransformation holds the finish
+          // chunk until flush, and flush runs on close — enqueueing finish
+          // without close leaves the nested tool pending forever.
+          let terminal = false;
           let opened = false;
+          let deltaCount = 0;
+          const settleLog = (
+            outcome: "succeeded" | "aborted" | "timed_out" | "failed",
+            code?: string,
+          ) => {
+            log.info("[agent-chat] account stream settled", {
+              provider: "vocatrya.account",
+              model: modelName,
+              outcome,
+              // Account runtimes signal success with a completed event.
+              // They do not carry an optional provider finishReason.
+              finishReasonPresent: false,
+              deltaCount,
+              elapsedMs: Date.now() - startedAt,
+              aborted: outcome === "aborted",
+              timedOut: outcome === "timed_out",
+              ...(code ? { code } : {}),
+            });
+          };
+          const succeed = () => {
+            if (terminal) return;
+            terminal = true;
+            if (opened) controller.enqueue({ type: "text-end", id: textId });
+            controller.enqueue({
+              type: "finish",
+              finishReason: { unified: "stop", raw: undefined },
+              usage: EMPTY_USAGE,
+            });
+            controller.close();
+            settleLog("succeeded");
+          };
+          const failStream = (error: unknown) => {
+            if (terminal) return;
+            terminal = true;
+            const name = error instanceof Error ? error.name : "";
+            const code =
+              error && typeof error === "object" && "code" in error
+                ? String((error as { code?: unknown }).code ?? "")
+                : "";
+            const outcome =
+              options.abortSignal?.aborted || name === "AbortError"
+                ? "aborted"
+                : code === "AI_EXECUTION_TIMEOUT"
+                  ? "timed_out"
+                  : "failed";
+            settleLog(outcome, code || undefined);
+            try {
+              controller.error(error instanceof Error ? error : new Error(String(error)));
+            } catch {
+              // The consumer already cancelled the stream.
+            }
+          };
+
+          controller.enqueue({ type: "stream-start", warnings: [] });
+          let sawCompleted = false;
           try {
             for await (const event of executeAIConnectionTextStream({
               userId,
@@ -117,21 +178,27 @@ export function createAccountRuntimeLanguageModel({
               timeoutMs,
               signal: options.abortSignal,
             })) {
+              if (terminal) break;
               if (event.type === "text-delta") {
                 if (!opened) {
                   controller.enqueue({ type: "text-start", id: textId });
                   opened = true;
                 }
+                deltaCount += 1;
                 controller.enqueue({
                   type: "text-delta",
                   id: textId,
                   delta: event.delta,
                 });
               } else if (event.type === "completed") {
+                // Trusted terminal success. A missing finishReason on this
+                // event is normal; EOF without this event is not success.
+                sawCompleted = true;
                 if (!opened) {
                   controller.enqueue({ type: "text-start", id: textId });
                   opened = true;
                   if (event.text) {
+                    deltaCount += 1;
                     controller.enqueue({
                       type: "text-delta",
                       id: textId,
@@ -139,24 +206,29 @@ export function createAccountRuntimeLanguageModel({
                     });
                   }
                 }
+                break;
               } else if (event.type === "error") {
-                controller.enqueue({
-                  type: "error",
-                  error: Object.assign(new Error(event.code), {
+                failStream(
+                  Object.assign(new Error(event.code), {
                     name: "AIBusinessError",
+                    code: event.code,
                   }),
-                });
+                );
                 return;
               }
             }
-            if (opened) controller.enqueue({ type: "text-end", id: textId });
-            controller.enqueue({
-              type: "finish",
-              finishReason: { unified: "stop", raw: undefined },
-              usage: EMPTY_USAGE,
-            });
+            if (!sawCompleted) {
+              failStream(
+                Object.assign(new Error("stream ended without a terminal completion"), {
+                  name: "AIBusinessError",
+                  code: "AI_EXECUTION_FAILED",
+                }),
+              );
+              return;
+            }
+            succeed();
           } catch (error) {
-            controller.enqueue({ type: "error", error });
+            failStream(error);
           }
         },
       });
