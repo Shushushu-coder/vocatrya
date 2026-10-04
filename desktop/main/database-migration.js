@@ -5,7 +5,9 @@
 // databases, run the bundled offline `prisma migrate deploy`, verify the
 // migration state independently of the CLI exit code, and require SQLite
 // integrity before the backend is allowed to start. Any backup, migration,
-// verification, or integrity failure is fail-closed: no backend start.
+// verification, integrity, or fresh-native activation failure is fail-closed:
+// no backend start. Fresh activation runs only after migrate deploy has been
+// verified. An ineligible database is left unchanged and startup continues.
 //
 // The migration child uses the bundled Node runtime plus the bundled Prisma
 // CLI / Windows schema engine / schema / migrations assembled under
@@ -18,10 +20,28 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const { buildControlledEnv, runChild, runDbTool } = require("./db-runner");
 const { createBackup } = require("./database-backup");
 
 const MIGRATION_TIMEOUT_MS = 120000;
+const FRESH_NATIVE_TIMEOUT_MS = 120000;
+
+const FRESH_NATIVE_SUCCESS_LOGLINES = new Set([
+  "fresh-native activation: activated",
+  "fresh-native activation: already-ready",
+  "fresh-native activation: skipped-not-eligible",
+  "fresh-native activation: skipped-migrated",
+]);
+
+const FRESH_NATIVE_LOG_TO_RESULT = {
+  "fresh-native activation: activated": "ACTIVATED",
+  "fresh-native activation: already-ready": "ALREADY_FRESH_READY",
+  "fresh-native activation: skipped-not-eligible": "SKIPPED_NOT_ELIGIBLE",
+  "fresh-native activation: skipped-migrated": "SKIPPED_MIGRATED_INSTANCE",
+};
+
+const typeScriptSupportCache = new Map();
 
 // Prisma 6.19 documented override for the schema-engine binary. Verified
 // against node_modules/prisma/build/index.js (@prisma/fetch-engine env map:
@@ -231,6 +251,118 @@ async function checkPostMigrationIntegrity({ nodeExecutable, dbToolPath, databas
   return "ok";
 }
 
+function redactSensitiveBootstrapText(text) {
+  return String(text || "")
+    .replace(/file:[^\s)'"]+/gi, "file:[redacted]")
+    .replace(/[A-Za-z]:\\[^\s)'"]+/g, "[path]")
+    .replace(/\/(?:data|app|home|Users|tmp|var)\/[^\s)'"]+/g, "[path]")
+    .slice(0, 500);
+}
+
+function probeNodeTypeScriptSupport(nodeExecutable) {
+  if (!nodeExecutable) return false;
+  if (typeScriptSupportCache.has(nodeExecutable)) {
+    return typeScriptSupportCache.get(nodeExecutable);
+  }
+  const probe = spawnSync(nodeExecutable, ["--experimental-strip-types", "-e", "process.exit(0)"], {
+    windowsHide: true,
+    timeout: 15000,
+    stdio: "ignore",
+  });
+  const supported = probe.status === 0;
+  typeScriptSupportCache.set(nodeExecutable, supported);
+  return supported;
+}
+
+function resolveFreshNativeBootstrap({
+  backendRoot,
+  nodeExecutable,
+  probe = probeNodeTypeScriptSupport,
+  repoRoot = path.resolve(__dirname, "..", ".."),
+}) {
+  const packagedEntry = path.join(backendRoot || "", "fresh-native-runtime", "ensure-fresh-native.cjs");
+  if (backendRoot && fs.existsSync(packagedEntry)) {
+    return { kind: "packaged-cjs", cwd: backendRoot, args: [packagedEntry] };
+  }
+
+  const repoScript = path.join(repoRoot, "scripts", "ensure-fresh-native.mts");
+  if (fs.existsSync(repoScript) && probe(nodeExecutable)) {
+    return {
+      kind: "repo-mts",
+      cwd: repoRoot,
+      args: [
+        "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
+        "--experimental-strip-types",
+        "--experimental-transform-types",
+        repoScript,
+      ],
+    };
+  }
+
+  const compiledEntry = path.join(repoRoot, "fresh-native-runtime", "ensure-fresh-native.cjs");
+  if (fs.existsSync(compiledEntry)) {
+    return { kind: "repo-cjs", cwd: repoRoot, args: [compiledEntry] };
+  }
+
+  throw new Error("fresh-native activation bootstrap is unavailable");
+}
+
+function parseFreshNativeChildResult({ exitCode, stdout }) {
+  const known = String(stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => FRESH_NATIVE_SUCCESS_LOGLINES.has(line) || line === "fresh-native activation: failed");
+  if (exitCode !== 0 || known.length !== 1 || known[0] === "fresh-native activation: failed") {
+    return { ok: false, logLine: "fresh-native activation: failed", result: null };
+  }
+  return {
+    ok: true,
+    logLine: known[0],
+    result: FRESH_NATIVE_LOG_TO_RESULT[known[0]],
+  };
+}
+
+function buildFreshNativeChildEnv({ databaseUrl, tmpDir, baseEnv = process.env }) {
+  const osEnv = {};
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "SystemDrive", "COMSPEC", "PATHEXT", "OS"]) {
+    if (baseEnv[key]) osEnv[key] = baseEnv[key];
+    else if (process.env[key]) osEnv[key] = process.env[key];
+  }
+  return buildControlledEnv({ databaseUrl, tmpDir, baseEnv: osEnv });
+}
+
+// Runs the shared fresh-native bootstrap against the database URL this
+// process already resolved. The child receives no path argument.
+async function runFreshNativeBootstrap({
+  nodeExecutable,
+  databaseUrl,
+  backendRoot,
+  tmpDir,
+  baseEnv = process.env,
+  probe,
+}) {
+  if (!nodeExecutable) throw new Error("nodeExecutable is required");
+  if (!databaseUrl) throw new Error("databaseUrl is required");
+  if (!tmpDir) throw new Error("tmpDir is required");
+  const plan = resolveFreshNativeBootstrap({ backendRoot, nodeExecutable, probe });
+  const env = buildFreshNativeChildEnv({ databaseUrl, tmpDir, baseEnv });
+  const result = await runChild({
+    executable: nodeExecutable,
+    args: plan.args,
+    env,
+    cwd: plan.cwd,
+    timeoutMs: FRESH_NATIVE_TIMEOUT_MS,
+  });
+  const parsed = parseFreshNativeChildResult(result);
+  if (!parsed.ok) {
+    const detail = redactSensitiveBootstrapText(result.stderr || result.spawnError || "");
+    const error = new Error("fresh-native activation failed");
+    error.detail = detail;
+    throw error;
+  }
+  return { logLine: parsed.logLine, result: parsed.result };
+}
+
 async function checkPostMigrationForeignKeys({ nodeExecutable, dbToolPath, databaseUrl, tmpDir, baseEnv = process.env, cwd }) {
   const parsed = await runDbTool({ nodeExecutable, dbToolPath, databaseUrl, tmpDir, baseEnv, command: "fk-check", cwd });
   const rows = parsed.rows || [];
@@ -263,6 +395,7 @@ async function prepareDatabase({
   const queryStep = deps.queryAppliedMigrations || queryAppliedMigrations;
   const integrityStep = deps.checkPostMigrationIntegrity || checkPostMigrationIntegrity;
   const fkStep = deps.checkPostMigrationForeignKeys || checkPostMigrationForeignKeys;
+  const freshStep = deps.runFreshNativeBootstrap || runFreshNativeBootstrap;
 
   const runtime = resolveRuntime({ backendRoot });
   const classification = classifyDatabase(databasePath);
@@ -326,6 +459,42 @@ async function prepareDatabase({
   const integrity = await integrityStep({ nodeExecutable, dbToolPath: runtime.dbToolPath, databaseUrl, tmpDir, baseEnv, cwd });
   await fkStep({ nodeExecutable, dbToolPath: runtime.dbToolPath, databaseUrl, tmpDir, baseEnv, cwd });
 
+  let freshNative;
+  try {
+    freshNative = await freshStep({
+      nodeExecutable,
+      databaseUrl,
+      backendRoot,
+      tmpDir,
+      baseEnv,
+      cwd,
+      logDirectory,
+    });
+  } catch (error) {
+    const detail = redactSensitiveBootstrapText(error && error.detail ? error.detail : "");
+    appendMigrationLog({
+      logDirectory,
+      lines: [
+        `--- fresh-native ${new Date().toISOString()} ---`,
+        "fresh-native activation: failed",
+        detail ? `detail: ${detail}` : "detail: unavailable",
+      ],
+    });
+    throw new Error("fresh-native activation failed");
+  }
+  if (!freshNative || !FRESH_NATIVE_SUCCESS_LOGLINES.has(freshNative.logLine)) {
+    appendMigrationLog({
+      logDirectory,
+      lines: [`--- fresh-native ${new Date().toISOString()} ---`, "fresh-native activation: failed"],
+    });
+    throw new Error("fresh-native activation failed");
+  }
+  appendMigrationLog({
+    logDirectory,
+    lines: [`--- fresh-native ${new Date().toISOString()} ---`, freshNative.logLine],
+  });
+  console.log(freshNative.logLine);
+
   return {
     kind: classification.kind,
     backup,
@@ -335,6 +504,7 @@ async function prepareDatabase({
     missingMigrations: verification.missingMigrations,
     failedMigrations: verification.failedMigrations,
     integrity,
+    freshNative,
   };
 }
 
@@ -342,17 +512,24 @@ module.exports = {
   DB_KIND_EXISTING,
   DB_KIND_FRESH_ABSENT,
   DB_KIND_FRESH_ZERO_BYTE,
+  FRESH_NATIVE_SUCCESS_LOGLINES,
+  FRESH_NATIVE_TIMEOUT_MS,
   MIGRATION_TIMEOUT_MS,
   SCHEMA_ENGINE_ENV_VAR,
+  buildFreshNativeChildEnv,
   buildMigrationArgs,
   buildMigrationEnv,
   checkPostMigrationForeignKeys,
   checkPostMigrationIntegrity,
   classifyDatabase,
   listExpectedMigrations,
+  parseFreshNativeChildResult,
   prepareDatabase,
   queryAppliedMigrations,
+  redactSensitiveBootstrapText,
+  resolveFreshNativeBootstrap,
   resolveMigrationRuntime,
+  runFreshNativeBootstrap,
   runMigration,
   verifyMigrationsApplied,
 };

@@ -10,6 +10,11 @@ fi
 # Run migrations as root (before switching users)
 npx -y prisma@6.19.0 migrate deploy
 
+# Automatic fresh-native activation for this container's DATABASE_URL.
+# The bootstrap accepts no database-path argument. An ineligible database
+# is left unchanged; a failed activation exits non-zero and blocks startup.
+node /app/fresh-native-runtime/ensure-fresh-native.cjs
+
 # Fix /data permissions and run app as nextjs user
 chown -R nextjs:nodejs /data
 export HOME=/home/nextjs

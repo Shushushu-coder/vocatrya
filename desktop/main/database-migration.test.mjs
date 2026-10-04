@@ -11,7 +11,9 @@ import {
   buildMigrationEnv,
   classifyDatabase,
   listExpectedMigrations,
+  parseFreshNativeChildResult,
   prepareDatabase,
+  resolveFreshNativeBootstrap,
   verifyMigrationsApplied,
 } from "./database-migration.js";
 import { buildControlledEnv } from "./db-runner.js";
@@ -212,7 +214,7 @@ describe("prepareDatabase orchestration", () => {
   }
 
   function successDeps() {
-    const calls = { backup: 0, migrate: 0, query: 0, integrity: 0, fk: 0 };
+    const calls = { backup: 0, migrate: 0, query: 0, integrity: 0, fk: 0, fresh: 0 };
     return {
       calls,
       deps: {
@@ -237,6 +239,13 @@ describe("prepareDatabase orchestration", () => {
           calls.fk += 1;
           return [];
         },
+        runFreshNativeBootstrap: async () => {
+          calls.fresh += 1;
+          return {
+            logLine: "fresh-native activation: skipped-not-eligible",
+            result: "SKIPPED_NOT_ELIGIBLE",
+          };
+        },
       },
     };
   }
@@ -254,7 +263,9 @@ describe("prepareDatabase orchestration", () => {
     expect(result.kind).toBe(DB_KIND_FRESH_ABSENT);
     expect(calls.backup).toBe(0);
     expect(calls.migrate).toBe(1);
+    expect(calls.fresh).toBe(1);
     expect(result.integrity).toBe("ok");
+    expect(result.freshNative.logLine).toBe("fresh-native activation: skipped-not-eligible");
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -283,6 +294,7 @@ describe("prepareDatabase orchestration", () => {
     expect(result.kind).toBe(DB_KIND_EXISTING);
     expect(calls.backup).toBe(1);
     expect(calls.migrate).toBe(1);
+    expect(calls.fresh).toBe(1);
     expect(result.backup.backupPath).toBe("C:\\backups\\b.db");
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -303,6 +315,7 @@ describe("prepareDatabase orchestration", () => {
     await expect(prepareDatabase({ ...options, deps: failing })).rejects.toThrow(/backup/);
     expect(calls.backup).toBe(1);
     expect(calls.migrate).toBe(0);
+    expect(calls.fresh).toBe(0);
     expect(fs.readFileSync(options.databasePath, "utf8")).toBe("existing-db-bytes");
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -321,6 +334,7 @@ describe("prepareDatabase orchestration", () => {
     await expect(prepareDatabase({ ...options, deps: failing })).rejects.toThrow(/exit code 1/);
     expect(calls.query).toBe(0);
     expect(calls.integrity).toBe(0);
+    expect(calls.fresh).toBe(0);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -345,6 +359,151 @@ describe("prepareDatabase orchestration", () => {
       },
     };
     await expect(prepareDatabase({ ...options, deps: withBadIntegrity })).rejects.toThrow(/integrity_check/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("invokes fresh activation only after migration, verification, and integrity succeed", async () => {
+    const { dir, options } = baseOptions();
+    const order = [];
+    const { deps } = successDeps();
+    const result = await prepareDatabase({
+      ...options,
+      deps: {
+        ...deps,
+        resolveMigrationRuntime: () => makeRuntime({ migrationsDir: makeFakeMigrationsDir(dir) }),
+        runMigration: async () => {
+          order.push("migrate");
+          return { exitCode: 0, durationMs: 5, logPath: path.join(dir, "logs", "migration.log") };
+        },
+        queryAppliedMigrations: async () => {
+          order.push("query");
+          return appliedFirstRow();
+        },
+        checkPostMigrationIntegrity: async () => {
+          order.push("integrity");
+          return "ok";
+        },
+        checkPostMigrationForeignKeys: async () => {
+          order.push("fk");
+          return [];
+        },
+        runFreshNativeBootstrap: async (input) => {
+          order.push("fresh");
+          expect(input.databaseUrl).toBe(options.databaseUrl);
+          expect(input.args).toBeUndefined();
+          return { logLine: "fresh-native activation: activated", result: "ACTIVATED" };
+        },
+      },
+    });
+    expect(order).toEqual(["migrate", "query", "integrity", "fk", "fresh"]);
+    expect(result.freshNative.result).toBe("ACTIVATED");
+    const log = fs.readFileSync(path.join(options.logDirectory, "migration.log"), "utf8");
+    expect(log).toContain("fresh-native activation: activated");
+    expect(log).not.toContain(options.databaseUrl);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("does not activate when foreign-key verification fails", async () => {
+    const { dir, options } = baseOptions();
+    const { calls, deps } = successDeps();
+    const failing = {
+      ...deps,
+      resolveMigrationRuntime: () => makeRuntime({ migrationsDir: makeFakeMigrationsDir(dir) }),
+      checkPostMigrationForeignKeys: async () => {
+        calls.fk += 1;
+        throw new Error("post-migration foreign_key_check found 1 violation(s)");
+      },
+    };
+    await expect(prepareDatabase({ ...options, deps: failing })).rejects.toThrow(/foreign_key_check/);
+    expect(calls.fresh).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("continues when fresh eligibility skips and fails closed when activation throws", async () => {
+    const { dir, options } = baseOptions();
+    const { deps } = successDeps();
+    const runtime = () => makeRuntime({ migrationsDir: makeFakeMigrationsDir(dir) });
+    const skipped = await prepareDatabase({
+      ...options,
+      deps: {
+        ...deps,
+        resolveMigrationRuntime: runtime,
+        runFreshNativeBootstrap: async () => ({
+          logLine: "fresh-native activation: skipped-not-eligible",
+          result: "SKIPPED_NOT_ELIGIBLE",
+        }),
+      },
+    });
+    expect(skipped.integrity).toBe("ok");
+    expect(skipped.freshNative.result).toBe("SKIPPED_NOT_ELIGIBLE");
+
+    await expect(prepareDatabase({
+      ...options,
+      deps: {
+        ...deps,
+        resolveMigrationRuntime: runtime,
+        runFreshNativeBootstrap: async () => {
+          const error = new Error("boom file:C:/secret/vocatrya.db");
+          error.detail = "boom file:C:/secret/vocatrya.db";
+          throw error;
+        },
+      },
+    })).rejects.toThrow(/^fresh-native activation failed$/);
+
+    const log = fs.readFileSync(path.join(options.logDirectory, "migration.log"), "utf8");
+    expect(log).toContain("fresh-native activation: failed");
+    expect(log).not.toContain("secret");
+    expect(log).not.toContain("vocatrya.db");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("fresh-native bootstrap child contract", () => {
+  it("parses one success line and rejects a failed or ambiguous child", () => {
+    expect(parseFreshNativeChildResult({
+      exitCode: 0,
+      stdout: "noise\nfresh-native activation: activated\n",
+    })).toEqual({ ok: true, logLine: "fresh-native activation: activated", result: "ACTIVATED" });
+    expect(parseFreshNativeChildResult({
+      exitCode: 1,
+      stdout: "fresh-native activation: failed\nfile:C:/secret/app.db\n",
+    }).ok).toBe(false);
+    expect(parseFreshNativeChildResult({
+      exitCode: 0,
+      stdout: "fresh-native activation: activated\nfresh-native activation: already-ready\n",
+    }).ok).toBe(false);
+  });
+
+  it("selects the packaged entry without a database-path argument", () => {
+    const dir = makeTempDir("voc-fresh-entry-");
+    const entryDir = path.join(dir, "fresh-native-runtime");
+    fs.mkdirSync(entryDir, { recursive: true });
+    const entry = path.join(entryDir, "ensure-fresh-native.cjs");
+    fs.writeFileSync(entry, "module.exports = {};\n");
+    const plan = resolveFreshNativeBootstrap({
+      backendRoot: dir,
+      nodeExecutable: "C:\\runtime\\node.exe",
+      probe: () => {
+        throw new Error("probe should not run when the packaged entry exists");
+      },
+    });
+    expect(plan.kind).toBe("packaged-cjs");
+    expect(plan.args).toEqual([entry]);
+    expect(plan.args.join(" ")).not.toMatch(/--db/);
+    expect(plan.args.join(" ")).not.toMatch(/vocatrya\.db/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses to invent a bootstrap when neither entry exists", () => {
+    const dir = makeTempDir("voc-fresh-missing-");
+    const repo = path.join(dir, "repo");
+    fs.mkdirSync(path.join(repo, "scripts"), { recursive: true });
+    expect(() => resolveFreshNativeBootstrap({
+      backendRoot: path.join(dir, "backend"),
+      nodeExecutable: "C:\\runtime\\node.exe",
+      probe: () => false,
+      repoRoot: repo,
+    })).toThrow(/unavailable/);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

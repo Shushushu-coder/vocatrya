@@ -14,7 +14,9 @@ function walk(dir: string, acc: string[] = []): string[] {
       entry.name === "node_modules" ||
       entry.name === ".next" ||
       entry.name === ".git" ||
-      entry.name === ".codex-tmp"
+      entry.name === ".codex-tmp" ||
+      // Transpiled copy of the allowed career modules. It is not a new reader.
+      entry.name === "fresh-native-runtime"
     ) {
       continue;
     }

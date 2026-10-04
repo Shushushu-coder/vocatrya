@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { buildFreshNativeBootstrap } from "../../scripts/build-fresh-native-bootstrap.mjs";
 
 const require = createRequire(import.meta.url);
 const { findMissingPrismaRuntimeArtifacts, isForbiddenArtifact, scanForbiddenArtifacts } = require("../main/artifacts.js");
@@ -129,6 +130,10 @@ export function assembleDesktopBackend({
   copyFiltered(path.join(root, "public"), path.join(assembledBackendRoot, "public"));
   copyFiltered(path.join(root, ".next", "static"), path.join(assembledBackendRoot, ".next", "static"));
   const prismaRuntime = assemblePrismaRuntime({ repoRoot: root, backendRoot: assembledBackendRoot });
+  const freshNativeBootstrap = buildFreshNativeBootstrap({
+    repoRoot: root,
+    outDir: path.join(assembledBackendRoot, "fresh-native-runtime"),
+  });
   fs.cpSync(assembledBackendRoot, assembledPackagedBackendRoot, { recursive: true });
 
   function requireAssembled(relativePath) {
@@ -138,6 +143,7 @@ export function assembleDesktopBackend({
   }
 
   const serverPath = requireAssembled("server.js");
+  requireAssembled(path.join("fresh-native-runtime", "ensure-fresh-native.cjs"));
   const prismaEngine = requireAssembled("node_modules/.prisma/client/query_engine-windows.dll.node");
   const sharpRuntime = requireAssembled("node_modules/@img/sharp-win32-x64/index.cjs");
   const forbidden = scanForbiddenArtifacts(assembledBackendRoot);
@@ -154,6 +160,7 @@ export function assembleDesktopBackend({
     prismaQueryEngine: prismaEngine,
     sharpWindowsRuntime: sharpRuntime,
     prismaRuntime,
+    freshNativeBootstrap: freshNativeBootstrap.entryPath,
     packagedBackendRoot: assembledPackagedBackendRoot,
     excludedSourceArtifacts,
     forbiddenArtifacts: [],

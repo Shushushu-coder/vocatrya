@@ -81,3 +81,6 @@ evals/*/_investigate-*
 
 # Windows Desktop Shell POC disposable runtime/data/evidence (never commit).
 .codex-tmp/
+
+# Generated Node 20 fresh-native bootstrap (scripts/build-fresh-native-bootstrap.mjs).
+/fresh-native-runtime/

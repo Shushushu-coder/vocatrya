@@ -190,3 +190,14 @@ export { checkFreshAbEligibility } from "./freshEligibility";
 export type { FreshAbEligibility } from "./freshEligibility";
 export { activateFreshAbNative } from "./freshActivation";
 export type { FreshActivationResult } from "./freshActivation";
+export {
+  FRESH_NATIVE_BOOTSTRAP_RESULT,
+  ensureFreshNativeState,
+  freshNativeActivationLogLine,
+  isValidFreshReadyState,
+} from "./freshBootstrap";
+export type {
+  FreshNativeBootstrapOutcome,
+  FreshNativeBootstrapResult,
+} from "./freshBootstrap";
+export { ensureFreshNativeStateForActiveDatabase } from "./freshStartup";

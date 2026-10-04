@@ -24,6 +24,10 @@ RUN npx prisma generate
 
 RUN npm run build
 
+# Node 20 cannot execute the TypeScript bootstrap. Emit the plain JS entry
+# that docker-entrypoint.sh runs after migrate deploy.
+RUN node scripts/build-fresh-native-bootstrap.mjs
+
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
@@ -45,6 +49,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/fresh-native-runtime ./fresh-native-runtime
 
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
