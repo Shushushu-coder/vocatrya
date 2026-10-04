@@ -17,27 +17,29 @@ import {
   assertResumeV1Readable,
   assertResumeV1Writable,
   isFullAbCapabilityEnabled,
-  resolveAbRolloutScope,
 } from "@/lib/career/capabilities";
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { CareerRuntimeError } from "@/lib/career/errors";
-import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
+import {
+  resolveCareerRuntimeMode,
+  type CareerRuntimeResolution,
+} from "@/lib/career/runtimeMode";
 import { handleError } from "@/lib/utils";
 import type { ActionResult } from "@/models/action.model";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./shared";
 import type { ApplicationProcessStep } from "@prisma/client";
 
-function isFullAbReadSurface(mode: string): boolean {
-  if (mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) return true;
-  return isFullAbCapabilityEnabled(mode, resolveAbRolloutScope());
+function isFullAbReadSurface(runtime: CareerRuntimeResolution): boolean {
+  if (runtime.mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) return true;
+  return isFullAbCapabilityEnabled(runtime.mode, runtime.rolloutScope);
 }
 
-function assertAbApplicationWrites(mode: string): void {
-  if (isFullAbCapabilityEnabled(mode, resolveAbRolloutScope())) return;
+function assertAbApplicationWrites(runtime: CareerRuntimeResolution): void {
+  if (isFullAbCapabilityEnabled(runtime.mode, runtime.rolloutScope)) return;
   throw new CareerRuntimeError(
     "JOB_MUTATIONS_DISABLED",
-    `Application process steps cannot be mutated in ${mode}`,
+    `Application process steps cannot be mutated in ${runtime.mode}`,
   );
 }
 
@@ -70,7 +72,7 @@ export async function getInterviewReflection(
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (!isFullAbReadSurface(runtime.mode)) {
+    if (!isFullAbReadSurface(runtime)) {
       throw new CareerRuntimeError(
         "APPLICATION_TIMELINE_UNAVAILABLE",
         `Interview reflection is not available in ${runtime.mode}`,
@@ -89,7 +91,7 @@ export async function saveInterviewReflection(
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    assertAbApplicationWrites(runtime.mode);
+    assertAbApplicationWrites(runtime);
     const data = await applicationsFor(user.id).saveInterviewReflection({
       applicationProcessStepId: input.applicationProcessStepId,
       reflectionText: input.reflectionText,
@@ -126,7 +128,7 @@ export async function getApplicationTimeline(
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (!isFullAbReadSurface(runtime.mode)) {
+    if (!isFullAbReadSurface(runtime)) {
       throw new CareerRuntimeError(
         "APPLICATION_TIMELINE_UNAVAILABLE",
         `Application timeline is not available in ${runtime.mode}`,
@@ -145,7 +147,7 @@ export async function listUpcomingApplicationEvents(): Promise<
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (!isFullAbReadSurface(runtime.mode)) {
+    if (!isFullAbReadSurface(runtime)) {
       throw new CareerRuntimeError(
         "UPCOMING_UNAVAILABLE",
         `Upcoming events are not available in ${runtime.mode}`,
@@ -169,7 +171,7 @@ export async function createApplicationProcessStep(input: {
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    assertAbApplicationWrites(runtime.mode);
+    assertAbApplicationWrites(runtime);
     const data = await applicationsFor(user.id).createUserProcessStep({
       jobOpportunityId: input.jobOpportunityId,
       category: input.category,
@@ -197,7 +199,7 @@ export async function updateApplicationProcessStep(input: {
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    assertAbApplicationWrites(runtime.mode);
+    assertAbApplicationWrites(runtime);
     const data = await applicationsFor(user.id).updateUserProcessStep({
       stepId: input.stepId,
       category: input.category,
@@ -221,7 +223,7 @@ export async function createTransferredAttempt(input: {
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    assertAbApplicationWrites(runtime.mode);
+    assertAbApplicationWrites(runtime);
     const data = await applicationsFor(user.id).createTransferredAttempt({
       sourceAttemptId: input.sourceAttemptId,
       targetJobOpportunityId: input.targetJobOpportunityId,
@@ -239,7 +241,7 @@ export async function completeApplicationProcessStep(
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    assertAbApplicationWrites(runtime.mode);
+    assertAbApplicationWrites(runtime);
     const data = await applicationsFor(user.id).completeProcessStep(stepId);
     revalidatePath("/dashboard");
     return { success: true, data };
@@ -280,7 +282,7 @@ export async function deleteApplicationProcessStep(
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    assertAbApplicationWrites(runtime.mode);
+    assertAbApplicationWrites(runtime);
     const data = await applicationsFor(user.id).deleteUserProcessStep(stepId);
     revalidatePath("/dashboard");
     return { success: true, data };

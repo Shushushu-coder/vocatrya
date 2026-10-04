@@ -369,15 +369,19 @@ describe("ensureFreshNativeState", () => {
     expect(JSON.stringify(lines)).not.toContain("file:");
   });
 
-  it("keeps current runtime defaults disabled after FRESH_READY", async () => {
+  it("enables a trusted FRESH_READY database when AB env is absent", async () => {
     await ensureFreshNativeState(prisma);
     expect(isAbRuntimeFeatureEnabled(DEFAULT_ENV)).toBe(false);
     expect(resolveAbRolloutScope(DEFAULT_ENV)).toBe("none");
     const resolved = await resolveCareerRuntimeMode(prisma, { env: DEFAULT_ENV });
     expect(resolved.migrationStatus).toBe(AB_MIGRATION_STATUS.FRESH_READY);
-    expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
-    expect(resolved.writeFamily).toBe(CAREER_WRITE_FAMILY.blocked);
-    expect(resolved.reason).toBe("feature-disabled");
+    expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
+    expect(resolved.rolloutScope).toBe("full");
+    expect(resolved.writeFamily).toBe(CAREER_WRITE_FAMILY.ab);
+    expect(resolved.configSource).toEqual({
+      feature: "fresh-default",
+      scope: "fresh-default",
+    });
   });
 
   it("settles concurrent first startups on one FRESH_READY row", async () => {
@@ -419,25 +423,31 @@ describe("fresh-native startup entrypoints", () => {
     expect(migrateAt).toBeGreaterThanOrEqual(0);
     expect(activateAt).toBeGreaterThan(migrateAt);
     expect(serverAt).toBeGreaterThan(activateAt);
-    expect(entrypoint).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED");
-    expect(entrypoint).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE");
+    expect(entrypoint).toContain('unset VOCATRYA_AB_RUNTIME_ENABLED');
+    expect(entrypoint).toContain('unset VOCATRYA_AB_ROLLOUT_SCOPE');
+    expect(entrypoint).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED=(true|false)/);
+    expect(entrypoint).not.toMatch(/VOCATRYA_AB_ROLLOUT_SCOPE=(none|full|resume_v1)/);
 
     const dockerfile = fs.readFileSync(path.join(REPO_ROOT, "Dockerfile"), "utf8");
     expect(dockerfile).toContain("node scripts/build-fresh-native-bootstrap.mjs");
     expect(dockerfile).toContain("fresh-native-runtime");
 
     const runtime = fs.readFileSync(path.join(REPO_ROOT, "desktop", "main", "runtime.js"), "utf8");
-    expect(runtime).toContain('VOCATRYA_AB_ROLLOUT_SCOPE: "none"');
+    expect(runtime).not.toContain('VOCATRYA_AB_ROLLOUT_SCOPE: "none"');
     expect(runtime).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED:\s*"true"/);
     expect(runtime).not.toMatch(/VOCATRYA_AB_ROLLOUT_SCOPE:\s*"full"/);
 
     const compose = fs.readFileSync(path.join(REPO_ROOT, "docker-compose.yml"), "utf8");
-    expect(compose).toContain("VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-false}");
-    expect(compose).toContain("VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-none}");
+    expect(compose).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-false}");
+    expect(compose).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-none}");
+    expect(compose).toContain("VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED-__VOCATRYA_AB_UNSET__}");
+    expect(compose).toContain("VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE-__VOCATRYA_AB_UNSET__}");
 
     const example = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
-    expect(example).toContain("VOCATRYA_AB_ROLLOUT_SCOPE=none");
-    expect(example).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED=true/);
+    expect(example).not.toMatch(/^VOCATRYA_AB_ROLLOUT_SCOPE=none/m);
+    expect(example).not.toMatch(/^VOCATRYA_AB_RUNTIME_ENABLED=true/m);
+    expect(example).toContain("# VOCATRYA_AB_RUNTIME_ENABLED=false");
+    expect(example).toContain("# VOCATRYA_AB_ROLLOUT_SCOPE=none");
   });
 
   it("bootstraps a migrated database through the Node 20 entry and then no-ops", async () => {

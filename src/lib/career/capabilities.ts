@@ -3,12 +3,13 @@ import { CareerRuntimeError } from "./errors";
 import { CAREER_RUNTIME_MODE, type CareerRuntimeMode } from "./identities";
 import {
   AB_ROLLOUT_SCOPE,
+  isAbRolloutScopeEnvPresent,
   resolveAbRolloutScope,
   type AbRolloutScope,
 } from "./rolloutScope";
 import { resolveCareerRuntimeMode } from "./runtimeMode";
 
-export { AB_ROLLOUT_SCOPE, resolveAbRolloutScope };
+export { AB_ROLLOUT_SCOPE, isAbRolloutScopeEnvPresent, resolveAbRolloutScope };
 export type { AbRolloutScope };
 
 /**
@@ -66,7 +67,7 @@ async function resolveModeAndScope(
   const resolved = await resolveCareerRuntimeMode(db, { env });
   return {
     mode: resolved.mode,
-    scope: resolveAbRolloutScope(env ?? process.env),
+    scope: resolved.rolloutScope,
     reason: resolved.reason,
   };
 }
@@ -75,8 +76,7 @@ export async function assertResumeV1Readable(
   db: PrismaClient | object,
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
-  const { mode } = await resolveModeAndScope(db, env);
-  const scope = resolveAbRolloutScope(env ?? process.env);
+  const { mode, scope } = await resolveModeAndScope(db, env);
   if (!isResumeV1CapabilityEnabled(mode, scope)) {
     throw new CareerRuntimeError(
       "CAREER_READ_NOT_ENABLED",
@@ -90,8 +90,7 @@ export async function assertResumeV1Writable(
   db: PrismaClient | object,
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
-  const { mode, reason } = await resolveModeAndScope(db, env);
-  const scope = resolveAbRolloutScope(env ?? process.env);
+  const { mode, reason, scope } = await resolveModeAndScope(db, env);
   if (mode !== CAREER_RUNTIME_MODE.AB_ENABLED) {
     throw new CareerRuntimeError(
       "AB_WRITES_NOT_ENABLED",
@@ -111,8 +110,7 @@ export async function assertFullAbReadable(
   db: PrismaClient | object,
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
-  const { mode } = await resolveModeAndScope(db, env);
-  const scope = resolveAbRolloutScope(env ?? process.env);
+  const { mode, scope } = await resolveModeAndScope(db, env);
   if (mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) return mode;
   if (!isFullAbCapabilityEnabled(mode, scope)) {
     throw new CareerRuntimeError(
@@ -127,8 +125,7 @@ export async function assertFullAbWritable(
   db: PrismaClient | object,
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
-  const { mode, reason } = await resolveModeAndScope(db, env);
-  const scope = resolveAbRolloutScope(env ?? process.env);
+  const { mode, reason, scope } = await resolveModeAndScope(db, env);
   if (mode !== CAREER_RUNTIME_MODE.AB_ENABLED) {
     throw new CareerRuntimeError(
       "AB_WRITES_NOT_ENABLED",

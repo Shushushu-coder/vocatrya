@@ -5,21 +5,33 @@ import { handleError } from "@/lib/utils";
 import { NoteFormSchema } from "@/models/note.schema";
 import { NoteResponse } from "@/models/note.model";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
-import { isFullAbCapabilityEnabled, resolveAbRolloutScope } from "@/lib/career/capabilities";
+import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { CareerRuntimeError } from "@/lib/career/errors";
-import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
+import {
+  CAREER_DATA_ORIGIN,
+  resolveCareerRuntimeMode,
+  type CareerRuntimeResolution,
+} from "@/lib/career/runtimeMode";
 import { requireUser } from "./shared";
 import { z } from "zod";
 
-function isAbNoteSurface(mode: string): boolean {
-  return isAbJobReadMode(mode, resolveAbRolloutScope());
+function isAbNoteSurface(runtime: CareerRuntimeResolution): boolean {
+  return isAbJobReadMode(runtime.mode, runtime.rolloutScope);
 }
 
-function assertAbNoteWrites(mode: string): void {
-  if (isFullAbCapabilityEnabled(mode, resolveAbRolloutScope())) return;
+function assertAbNoteWrites(runtime: CareerRuntimeResolution): void {
+  if (isFullAbCapabilityEnabled(runtime.mode, runtime.rolloutScope)) return;
   throw new CareerRuntimeError(
     "JOB_MUTATIONS_DISABLED",
-    `Opportunity notes cannot be mutated in ${mode}`,
+    `Opportunity notes cannot be mutated in ${runtime.mode}`,
+  );
+}
+
+function assertFreshNotesDoNotUseLegacy(runtime: CareerRuntimeResolution): void {
+  if (runtime.origin !== CAREER_DATA_ORIGIN.fresh) return;
+  throw new CareerRuntimeError(
+    "JOBS_READ_UNAVAILABLE",
+    "Fresh-native origin does not read or write legacy notes",
   );
 }
 
@@ -29,7 +41,7 @@ export const getNotesByJobId = async (
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbNoteSurface(runtime.mode)) {
+    if (isAbNoteSurface(runtime)) {
       const opportunity = await prisma.jobOpportunity.findFirst({
         where: { id: jobId, userId: user.id },
         select: { id: true },
@@ -53,6 +65,7 @@ export const getNotesByJobId = async (
       return { success: true, data };
     }
 
+    assertFreshNotesDoNotUseLegacy(runtime);
     const job = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },
       select: { id: true },
@@ -86,8 +99,8 @@ export const addNote = async (
 
     const validated = NoteFormSchema.parse(data);
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbNoteSurface(runtime.mode)) {
-      assertAbNoteWrites(runtime.mode);
+    if (isAbNoteSurface(runtime)) {
+      assertAbNoteWrites(runtime);
       const opportunity = await prisma.jobOpportunity.findFirst({
         where: { id: validated.jobId, userId: user.id },
         select: { id: true },
@@ -105,6 +118,7 @@ export const addNote = async (
       return { success: true, data: { ...note, jobId: note.jobOpportunityId } };
     }
 
+    assertFreshNotesDoNotUseLegacy(runtime);
     const job = await prisma.job.findFirst({
       where: { id: validated.jobId, userId: user.id },
       select: { id: true },
@@ -140,8 +154,8 @@ export const updateNote = async (
       throw new Error("Note ID is required for update");
     }
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbNoteSurface(runtime.mode)) {
-      assertAbNoteWrites(runtime.mode);
+    if (isAbNoteSurface(runtime)) {
+      assertAbNoteWrites(runtime);
       const existing = await prisma.jobOpportunityNote.findFirst({
         where: { id: validated.id, userId: user.id },
         select: { id: true },
@@ -156,6 +170,7 @@ export const updateNote = async (
       return { success: true, data: { ...note, jobId: note.jobOpportunityId } };
     }
 
+    assertFreshNotesDoNotUseLegacy(runtime);
     await assertLegacyCareerWriteAllowed(prisma);
     const note = await prisma.note.update({
       where: { id: validated.id, userId: user.id },
@@ -175,8 +190,8 @@ export const deleteNote = async (
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
-    if (isAbNoteSurface(runtime.mode)) {
-      assertAbNoteWrites(runtime.mode);
+    if (isAbNoteSurface(runtime)) {
+      assertAbNoteWrites(runtime);
       const existing = await prisma.jobOpportunityNote.findFirst({
         where: { id: noteId, userId: user.id },
         select: { id: true },
@@ -190,6 +205,7 @@ export const deleteNote = async (
       return { success: true };
     }
 
+    assertFreshNotesDoNotUseLegacy(runtime);
     await assertLegacyCareerWriteAllowed(prisma);
     await prisma.note.delete({
       where: { id: noteId, userId: user.id },

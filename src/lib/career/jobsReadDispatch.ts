@@ -2,14 +2,14 @@ import type { PrismaClient } from "@prisma/client";
 import { format } from "date-fns";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { JOB_TYPES } from "@/models/job.model";
-import { resolveAbRolloutScope } from "./capabilities";
 import { CAREER_RUNTIME_MODE } from "./identities";
+import { CareerRuntimeError } from "./errors";
 import {
   getOpportunityAsJob,
   listOpportunitiesAsJobs,
 } from "./jobOpportunityAdapter";
 import { isAbJobReadMode } from "./jobsReadCapabilities";
-import { resolveCareerRuntimeMode } from "./runtimeMode";
+import { CAREER_DATA_ORIGIN, resolveCareerRuntimeMode } from "./runtimeMode";
 import { deriveUiStatus, isOfferUiStatus } from "./uiStatus";
 
 export type JobsReadFamily = "ab" | "legacy" | "blocked";
@@ -128,10 +128,25 @@ export async function resolveJobsReadFamily(
   if (runtime.mode === CAREER_RUNTIME_MODE.BLOCKED) {
     return { family: "blocked", mode: runtime.mode, reason: runtime.reason };
   }
-  if (isAbJobReadMode(runtime.mode, resolveAbRolloutScope(env))) {
+  if (isAbJobReadMode(runtime.mode, runtime.rolloutScope)) {
     return { family: "ab", mode: runtime.mode, reason: runtime.reason };
   }
+  if (runtime.origin === CAREER_DATA_ORIGIN.fresh) {
+    return {
+      family: "blocked",
+      mode: runtime.mode,
+      reason: "fresh-origin-jobs-unavailable",
+    };
+  }
   return { family: "legacy", mode: runtime.mode, reason: runtime.reason };
+}
+
+function rejectBlockedJobs(family: JobsReadFamily, reason: string): void {
+  if (family !== "blocked") return;
+  throw new CareerRuntimeError(
+    "JOBS_READ_UNAVAILABLE",
+    `Career jobs are unavailable (${reason})`,
+  );
 }
 
 function buildLegacyJobsWhere(userId: string, filters: JobsListFilters) {
@@ -303,7 +318,8 @@ export async function* iterateJobs(
   pageSize = 200,
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  const { family } = await resolveJobsReadFamily(db, env);
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
   if (family === "ab") {
     let skip = 0;
     while (true) {
@@ -366,7 +382,8 @@ export async function loadDashboardJobCounts(
   range: { start: Date; end: Date; priorStart: Date },
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<DashboardJobCounts> {
-  const { family } = await resolveJobsReadFamily(db, env);
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
   if (family === "ab") {
     const [current, prior] = await Promise.all([
       db.applicationAttempt.findMany({
@@ -427,7 +444,8 @@ export async function loadJobsAppliedDateCounts(
   range: { start: Date; end: Date },
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Array<{ appliedDate: Date; count: number }>> {
-  const { family } = await resolveJobsReadFamily(db, env);
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
   if (family === "ab") {
     const attempts = await db.applicationAttempt.findMany({
       where: attemptInRangeWhere(userId, range.start, range.end, true),
@@ -475,7 +493,8 @@ export async function loadRecentJobs(
   take = APP_CONSTANTS.RECENT_NUM_JOBS_ACTIVITIES,
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  const { family } = await resolveJobsReadFamily(db, env);
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
   if (family === "ab") {
     const { data } = await listOpportunitiesAsJobs(db, userId, {
       skip: 0,

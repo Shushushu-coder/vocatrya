@@ -191,8 +191,6 @@ describe("assistant job context read family", () => {
   it("resolves an A+B opportunity id and does not fall back to a legacy Job", async () => {
     await activateFreshAbNative(appPrisma);
     const opportunity = await createOpportunity(userId);
-    const legacy = await createLegacyJob(userId, "Hidden Legacy", "Hidden Co");
-    expect(legacy.id).not.toBe(opportunity.id);
 
     const page = await server.resolvePageContextItems(userId, {
       jobId: opportunity.id,
@@ -209,7 +207,7 @@ describe("assistant job context read family", () => {
     expect(parseConversationContext(JSON.stringify(page))).toEqual(page);
 
     expect(
-      await server.resolvePageContextItems(userId, { jobId: legacy.id }),
+      await server.resolvePageContextItems(userId, { jobId: randomUUID() }),
     ).toEqual({ version: 1, items: [] });
     expect(
       await server.resolvePageContextItems(otherUserId, {

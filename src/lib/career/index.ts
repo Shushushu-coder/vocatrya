@@ -39,9 +39,13 @@ export {
   isAbHiddenJobFilter,
 } from "./jobsReadCapabilities";
 export { canonicalize, hashCanonical, sha256Utf8 } from "./hash";
-export { isAbRuntimeFeatureEnabled } from "./featureGate";
+export {
+  isAbRuntimeFeatureEnabled,
+  isAbRuntimeFeatureEnvPresent,
+} from "./featureGate";
 export {
   AB_ROLLOUT_SCOPE,
+  isAbRolloutScopeEnvPresent,
   resolveAbRolloutScope,
   isResumeV1CapabilityEnabled,
   isFullAbCapabilityEnabled,
@@ -55,15 +59,25 @@ export {
 export type { AbRolloutScope } from "./capabilities";
 export {
   isKnownAbMigrationStatus,
+  countMigrationStateRows,
   readInstanceMigrationState,
   writeInstanceMigrationState,
 } from "./migrationState";
 export {
   resolveCareerRuntimeMode,
+  resolveEffectiveCareerRuntimeConfig,
   careerWriteFamilyFor,
   careerReadFamilyFor,
+  CAREER_CONFIG_SOURCE,
+  CAREER_DATA_ORIGIN,
 } from "./runtimeMode";
-export type { CareerRuntimeResolution } from "./runtimeMode";
+export type {
+  CareerRuntimeResolution,
+  CareerConfigSource,
+  CareerRuntimeConfigSource,
+  CareerDataOrigin,
+  EffectiveCareerRuntimeConfig,
+} from "./runtimeMode";
 export {
   assertAbWritesAllowed,
   assertLegacyCareerWriteAllowed,

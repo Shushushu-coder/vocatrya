@@ -230,33 +230,26 @@ describe("agent canonical job reads", () => {
     expect(await jobs.getJobForAgent(otherUserId, opportunity.id)).toEqual({ status: "no_job" });
   });
 
-  it("reads opportunities when A+B is ready but disabled, and not the legacy row", async () => {
+  it("reads opportunities when fresh A+B is explicitly disabled", async () => {
     enable("full");
     await activateFreshAbNative(appPrisma);
     const opportunity = await createOpportunity(userId, "Ready disabled posting");
-    delete process.env[AB_RUNTIME_FEATURE_ENV];
+    process.env[AB_RUNTIME_FEATURE_ENV] = "false";
     delete process.env[AB_ROLLOUT_SCOPE_ENV];
-    const legacy = await createLegacyJob(userId, "Hidden Legacy", "Hidden Co");
     const listed = await jobs.listJobsForAgent(userId);
     expect(listed.status).toBe("ok");
     if (listed.status !== "ok") return;
     expect(listed.jobs.map((row) => row.id)).toEqual([opportunity.id]);
-    expect(listed.jobs.some((row) => row.id === legacy.id)).toBe(false);
-    const loaded = await jobs.getJobForAgent(userId, legacy.id);
-    expect(loaded).toEqual({ status: "no_job" });
+    expect(await jobs.getJobForAgent(userId, randomUUID())).toEqual({ status: "no_job" });
   });
 
-  it("keeps resume_v1 job reads on the legacy family", async () => {
+  it("does not read legacy jobs for a fresh resume_v1 database", async () => {
     enable("full");
     await activateFreshAbNative(appPrisma);
-    const opportunity = await createOpportunity(userId, "Not the job list yet");
-    const legacy = await createLegacyJob(userId, "Scoped Legacy", "Scoped Co");
+    await createOpportunity(userId, "Not the job list yet");
     enable("resume_v1");
     const listed = await jobs.listJobsForAgent(userId);
-    expect(listed.status).toBe("ok");
-    if (listed.status !== "ok") return;
-    expect(listed.jobs.map((row) => row.id)).toEqual([legacy.id]);
-    expect(listed.jobs.some((row) => row.id === opportunity.id)).toBe(false);
+    expect(listed.status).toBe("unavailable");
   });
 
   it("does not fall back to a legacy job when the runtime is blocked", async () => {

@@ -39,6 +39,53 @@ describe("desktop runtime helpers", () => {
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.OLLAMA_BASE_URL).toBe("http://127.0.0.1:11434");
     expect(env.PATH).toBe("safe-path");
+    expect(env.VOCATRYA_AB_RUNTIME_ENABLED).toBeUndefined();
+    expect(env.VOCATRYA_AB_ROLLOUT_SCOPE).toBeUndefined();
+  });
+
+  it("passes explicit AB flags through and omits absent ones", () => {
+    const absent = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: { PATH: "safe-path" },
+      secret: "temporary",
+    });
+    expect(Object.prototype.hasOwnProperty.call(absent, "VOCATRYA_AB_RUNTIME_ENABLED")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(absent, "VOCATRYA_AB_ROLLOUT_SCOPE")).toBe(false);
+
+    const explicit = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: {
+        PATH: "safe-path",
+        VOCATRYA_AB_RUNTIME_ENABLED: "false",
+        VOCATRYA_AB_ROLLOUT_SCOPE: "none",
+      },
+      secret: "temporary",
+    });
+    expect(explicit.VOCATRYA_AB_RUNTIME_ENABLED).toBe("false");
+    expect(explicit.VOCATRYA_AB_ROLLOUT_SCOPE).toBe("none");
+
+    const blank = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: {
+        VOCATRYA_AB_RUNTIME_ENABLED: "",
+        VOCATRYA_AB_ROLLOUT_SCOPE: "",
+      },
+      secret: "temporary",
+    });
+    expect(blank.VOCATRYA_AB_RUNTIME_ENABLED).toBe("");
+    expect(blank.VOCATRYA_AB_ROLLOUT_SCOPE).toBe("");
+
+    const full = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: { VOCATRYA_AB_ROLLOUT_SCOPE: "full" },
+      secret: "temporary",
+    });
+    expect(full.VOCATRYA_AB_ROLLOUT_SCOPE).toBe("full");
+    expect(Object.prototype.hasOwnProperty.call(full, "VOCATRYA_AB_RUNTIME_ENABLED")).toBe(false);
   });
 
   it("builds a bundled-node command", () => {

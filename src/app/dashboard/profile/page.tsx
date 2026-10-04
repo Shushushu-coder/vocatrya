@@ -25,6 +25,8 @@ async function Profile() {
     runtime.mode,
     runtime.rolloutScope,
   );
+  const hideLegacyProfile =
+    runtime.origin === "fresh" && !showApplicationEntry;
   return (
     <div className="col-span-3">
       <CareerRuntimeNotice mode={runtime.mode} />
@@ -46,7 +48,9 @@ async function Profile() {
           </div>
         </div>
       )}
-      <ProfileContainer resumeReadOnly={resumeReadOnly} />
+      {hideLegacyProfile ? null : (
+        <ProfileContainer resumeReadOnly={resumeReadOnly} />
+      )}
     </div>
   );
 }

@@ -66,12 +66,21 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
     DATABASE_URL: databaseUrl || toPrismaFileUrl(path.join(dataDir, "desktop-poc.db")),
     TZ: baseEnv.TZ || "UTC",
     NEXT_TELEMETRY_DISABLED: "1",
-    VOCATRYA_AB_ROLLOUT_SCOPE: "none",
     MCP_ENABLED: "false",
   };
 
+  // Pass AB flags only when the parent actually set them. Absence must stay
+  // absence so the backend can apply a fresh-native default. Explicit values,
+  // including "false", "none", and blank strings, pass through unchanged.
+  // Truthiness is wrong here: "" is an explicit fail-closed value.
+  for (const key of ["VOCATRYA_AB_RUNTIME_ENABLED", "VOCATRYA_AB_ROLLOUT_SCOPE"]) {
+    if (Object.prototype.hasOwnProperty.call(baseEnv, key) && baseEnv[key] !== undefined) {
+      env[key] = baseEnv[key];
+    }
+  }
+
   // Preserve non-secret configuration knobs without copying credentials into the child environment.
-  for (const key of ["OLLAMA_BASE_URL", "OTEL_SERVICE_NAME", "VOCATRYA_AB_RUNTIME_ENABLED"]) {
+  for (const key of ["OLLAMA_BASE_URL", "OTEL_SERVICE_NAME"]) {
     if (baseEnv[key]) env[key] = baseEnv[key];
   }
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA"]) {

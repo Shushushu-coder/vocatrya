@@ -24,6 +24,11 @@ import {
 } from "./helpers/backupTestDb";
 
 const FEATURE_ON = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
+const FEATURE_OFF: NodeJS.ProcessEnv = {
+  ...process.env,
+  [AB_RUNTIME_FEATURE_ENV]: "false",
+};
+delete FEATURE_OFF[AB_ROLLOUT_SCOPE_ENV];
 const ctx = makeTestDbUrl();
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
 
@@ -72,7 +77,7 @@ describe("Phase 7 runtime resolver and write protection", () => {
 
   it("resolves FRESH_READY + gate off to AB_READY_DISABLED with blocked writes", async () => {
     await activateFreshAbNative(prisma);
-    const resolved = await resolveCareerRuntimeMode(prisma);
+    const resolved = await resolveCareerRuntimeMode(prisma, { env: FEATURE_OFF });
     expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
     expect(resolved.migrationStatus).toBe(AB_MIGRATION_STATUS.FRESH_READY);
     expect(resolved.writeFamily).toBe(CAREER_WRITE_FAMILY.blocked);

@@ -3,13 +3,12 @@ import prisma from "@/lib/db";
 import {
   isFullAbCapabilityEnabled,
   isResumeV1CapabilityEnabled,
-  resolveAbRolloutScope,
 } from "@/lib/career/capabilities";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 
 export async function getCareerRuntimeSnapshot() {
   const resolved = await resolveCareerRuntimeMode(prisma);
-  const rolloutScope = resolveAbRolloutScope();
+  const rolloutScope = resolved.rolloutScope;
   return {
     mode: resolved.mode,
     reason: resolved.reason,
@@ -19,5 +18,7 @@ export async function getCareerRuntimeSnapshot() {
     rolloutScope,
     resumeV1Enabled: isResumeV1CapabilityEnabled(resolved.mode, rolloutScope),
     fullAbEnabled: isFullAbCapabilityEnabled(resolved.mode, rolloutScope),
+    configSource: resolved.configSource,
+    origin: resolved.origin,
   };
 }

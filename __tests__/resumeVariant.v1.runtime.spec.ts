@@ -56,7 +56,7 @@ function setFeature(on: boolean, scope = "full") {
     process.env[AB_RUNTIME_FEATURE_ENV] = "true";
     process.env[AB_ROLLOUT_SCOPE_ENV] = scope;
   } else {
-    delete process.env[AB_RUNTIME_FEATURE_ENV];
+    process.env[AB_RUNTIME_FEATURE_ENV] = "false";
     delete process.env[AB_ROLLOUT_SCOPE_ENV];
   }
 }

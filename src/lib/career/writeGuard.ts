@@ -1,11 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
-import { isFullAbCapabilityEnabled, resolveAbRolloutScope } from "./capabilities";
+import { isFullAbCapabilityEnabled } from "./capabilities";
 import { CareerRuntimeError } from "./errors";
 import {
   CAREER_RUNTIME_MODE,
   CAREER_WRITE_FAMILY,
 } from "./identities";
-import { resolveCareerRuntimeMode } from "./runtimeMode";
+import { CAREER_DATA_ORIGIN, resolveCareerRuntimeMode } from "./runtimeMode";
 
 export async function assertAbWritesAllowed(
   db: PrismaClient | object,
@@ -31,6 +31,12 @@ export async function assertLegacyCareerWriteAllowed(
       `Career writes are blocked: ${resolved.reason}`,
     );
   }
+  if (resolved.origin === CAREER_DATA_ORIGIN.fresh) {
+    throw new CareerRuntimeError(
+      "LEGACY_WRITE_BLOCKED",
+      "Fresh-native origin never authorizes legacy career writes",
+    );
+  }
   if (resolved.mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) {
     throw new CareerRuntimeError(
       "LEGACY_WRITE_BLOCKED",
@@ -39,10 +45,7 @@ export async function assertLegacyCareerWriteAllowed(
   }
   if (
     resolved.mode === CAREER_RUNTIME_MODE.AB_ENABLED &&
-    isFullAbCapabilityEnabled(
-      resolved.mode,
-      resolveAbRolloutScope(env ?? process.env),
-    )
+    isFullAbCapabilityEnabled(resolved.mode, resolved.rolloutScope)
   ) {
     throw new CareerRuntimeError(
       "LEGACY_WRITE_BLOCKED",

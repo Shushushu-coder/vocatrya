@@ -35,6 +35,18 @@ export function hasMigrationStateDelegate(client: object): client is MigrationSt
   );
 }
 
+/**
+ * Row count for the migration-state table. Null means the client cannot
+ * count, which is not proof that cardinality is 1.
+ */
+export async function countMigrationStateRows(db: object): Promise<number | null> {
+  const count = (
+    db as { abMigrationState?: { count?: () => Promise<number> } }
+  ).abMigrationState?.count;
+  if (typeof count !== "function") return null;
+  return count();
+}
+
 const KNOWN_STATUS = new Set<string>(Object.values(AB_MIGRATION_STATUS));
 
 export function isKnownAbMigrationStatus(

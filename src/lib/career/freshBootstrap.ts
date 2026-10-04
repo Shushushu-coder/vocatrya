@@ -7,6 +7,7 @@ import {
   FRESH_NATIVE_KEY,
 } from "./identities";
 import {
+  countMigrationStateRows,
   readInstanceMigrationState,
   type InstanceMigrationState,
 } from "./migrationState";
@@ -57,14 +58,6 @@ export function freshNativeActivationLogLine(
     default:
       return "fresh-native activation: failed";
   }
-}
-
-async function countMigrationStateRows(db: object): Promise<number | null> {
-  const count = (
-    db as { abMigrationState?: { count?: () => Promise<number> } }
-  ).abMigrationState?.count;
-  if (typeof count !== "function") return null;
-  return count();
 }
 
 function hasLegacyDomainBlocker(blockers: readonly string[]): boolean {

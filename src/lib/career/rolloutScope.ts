@@ -16,6 +16,19 @@ export type AbRolloutScope =
 
 const LEGAL_SCOPES = new Set<string>(Object.values(AB_ROLLOUT_SCOPE));
 
+/**
+ * True only when the operator set the key. Undefined is unset. An empty
+ * string is present and still parses to none.
+ */
+export function isAbRolloutScopeEnvPresent(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(env, AB_ROLLOUT_SCOPE_ENV) &&
+    env[AB_ROLLOUT_SCOPE_ENV] !== undefined
+  );
+}
+
 export function resolveAbRolloutScope(
   env: NodeJS.ProcessEnv = process.env,
 ): AbRolloutScope {

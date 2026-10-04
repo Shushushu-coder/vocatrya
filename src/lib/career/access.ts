@@ -1,7 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import {
   isResumeV1CapabilityEnabled,
-  resolveAbRolloutScope,
   type AbRolloutScope,
 } from "./capabilities";
 import { CareerRuntimeError } from "./errors";
@@ -55,8 +54,7 @@ export async function assertCareerDataReadable(
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
   const resolved = await resolveCareerRuntimeMode(db, { env });
-  const scope = resolveAbRolloutScope(env ?? process.env);
-  if (!canReadCareerData(resolved.mode, scope)) {
+  if (!canReadCareerData(resolved.mode, resolved.rolloutScope)) {
     throw new CareerRuntimeError(
       "CAREER_READ_NOT_ENABLED",
       `Career data is only readable when A+B is enabled; current mode is ${resolved.mode}`,
@@ -70,8 +68,7 @@ export async function assertCareerDataWritable(
   env?: NodeJS.ProcessEnv,
 ): Promise<CareerRuntimeMode> {
   const resolved = await resolveCareerRuntimeMode(db, { env });
-  const scope = resolveAbRolloutScope(env ?? process.env);
-  if (!canWriteCareerData(resolved.mode, scope)) {
+  if (!canWriteCareerData(resolved.mode, resolved.rolloutScope)) {
     throw new CareerRuntimeError(
       "CAREER_WRITE_NOT_ENABLED",
       `Career data is only writable when A+B is enabled; current mode is ${resolved.mode}`,

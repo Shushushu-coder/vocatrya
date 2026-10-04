@@ -158,20 +158,35 @@ describe("runtime mode + rollout scope matrix", () => {
     });
   });
 
-  it("AB_ENABLED + missing/invalid scope is none", async () => {
+  it("treats a missing scope on trusted fresh as full", async () => {
     await activateFreshAbNative(prisma);
     const missing = envFor("missing");
     const runtime = await resolveCareerRuntimeMode(prisma, { env: missing });
     expect(runtime.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
+    expect(runtime.rolloutScope).toBe("full");
     expect(resolveAbRolloutScope(missing)).toBe("none");
-    await expect(assertCareerDataReadable(prisma, missing)).rejects.toMatchObject({
+    expect(runtime.configSource.scope).toBe("fresh-default");
+    await expect(assertCareerDataReadable(prisma, missing)).resolves.toBe(
+      CAREER_RUNTIME_MODE.AB_ENABLED,
+    );
+    await expect(assertFullAbWritable(prisma, missing)).resolves.toBe(
+      CAREER_RUNTIME_MODE.AB_ENABLED,
+    );
+  });
+
+  it("keeps an invalid explicit scope fail-closed on trusted fresh", async () => {
+    await activateFreshAbNative(prisma);
+    const invalid = {
+      ...process.env,
+      [AB_RUNTIME_FEATURE_ENV]: "true",
+      [AB_ROLLOUT_SCOPE_ENV]: "banana",
+    };
+    const runtime = await resolveCareerRuntimeMode(prisma, { env: invalid });
+    expect(runtime.rolloutScope).toBe("none");
+    expect(runtime.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
+    expect(runtime.configSource.scope).toBe("explicit-env");
+    await expect(assertCareerDataReadable(prisma, invalid)).rejects.toMatchObject({
       code: "CAREER_READ_NOT_ENABLED",
-    });
-    await expect(assertResumeV1Writable(prisma, missing)).rejects.toMatchObject({
-      code: "CAREER_WRITE_NOT_ENABLED",
-    });
-    await expect(assertFullAbWritable(prisma, missing)).rejects.toMatchObject({
-      code: "AB_WRITES_NOT_ENABLED",
     });
   });
 });
@@ -233,39 +248,39 @@ describe("resume_v1 bundle vs full isolation", () => {
       ),
     ).rejects.toMatchObject({ code: "AB_WRITES_NOT_ENABLED" });
 
-    await expect(assertLegacyCareerWriteAllowed(prisma, resumeEnv)).resolves.toBeUndefined();
+    await expect(assertLegacyCareerWriteAllowed(prisma, resumeEnv)).rejects.toMatchObject({
+      code: "LEGACY_WRITE_BLOCKED",
+    });
     const previousRuntime = process.env[AB_RUNTIME_FEATURE_ENV];
     const previousScope = process.env[AB_ROLLOUT_SCOPE_ENV];
     process.env[AB_RUNTIME_FEATURE_ENV] = "true";
     process.env[AB_ROLLOUT_SCOPE_ENV] = "resume_v1";
-    let job: { id: string };
     try {
-      job = await createJobRecord(
-        {
-          jobTitleId: titleId,
-          companyId,
-          statusId,
-          description: "legacy still works",
-          jobType: "full-time",
-          userId,
-        },
-        prisma,
-      );
+      await expect(
+        createJobRecord(
+          {
+            jobTitleId: titleId,
+            companyId,
+            statusId,
+            description: "legacy must stay closed",
+            jobType: "full-time",
+            userId,
+          },
+          prisma,
+        ),
+      ).rejects.toMatchObject({ code: "LEGACY_WRITE_BLOCKED" });
     } finally {
       if (previousRuntime === undefined) delete process.env[AB_RUNTIME_FEATURE_ENV];
       else process.env[AB_RUNTIME_FEATURE_ENV] = previousRuntime;
       if (previousScope === undefined) delete process.env[AB_ROLLOUT_SCOPE_ENV];
       else process.env[AB_ROLLOUT_SCOPE_ENV] = previousScope;
     }
-    expect(job.id).toBeTruthy();
+    expect(await prisma.job.count()).toBe(0);
     expect(await prisma.jobOpportunity.count()).toBe(0);
     expect(await prisma.resumeVariant.count({ where: { userId } })).toBe(1);
 
     const listed = await listJobs(prisma, userId, {}, resumeEnv);
-    expect(listed.blocked).toBe(false);
-    if (!listed.blocked) {
-      expect(listed.data.map((row) => row.id)).toContain(job.id);
-    }
+    expect(listed.blocked).toBe(true);
   });
 
   it("full scope keeps Opportunity writes and blocks legacy Job writes", async () => {

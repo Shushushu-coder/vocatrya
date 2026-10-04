@@ -10,6 +10,7 @@ import {
   AB_RUNTIME_FEATURE_ENV,
   AB_ROLLOUT_SCOPE_ENV,
   CAREER_RUNTIME_MODE,
+  CAREER_WRITE_FAMILY,
   FRESH_NATIVE_KEY,
   activateFreshAbNative,
   resolveCareerRuntimeMode,
@@ -78,9 +79,18 @@ describe("Phase 7 FRESH_READY backup v2", () => {
     expect(restored.verifiedAt).not.toBeNull();
     expect(await prisma.dataMigrationRun.count()).toBe(0);
 
-    const off = await resolveCareerRuntimeMode(prisma);
-    expect(off.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
-    expect(off.mode).not.toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
+    const absent = { ...process.env };
+    delete absent[AB_RUNTIME_FEATURE_ENV];
+    delete absent[AB_ROLLOUT_SCOPE_ENV];
+    const defaults = await resolveCareerRuntimeMode(prisma, { env: absent });
+    expect(defaults.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
+    expect(defaults.rolloutScope).toBe("full");
+    expect(defaults.writeFamily).toBe(CAREER_WRITE_FAMILY.ab);
+
+    const stopped = await resolveCareerRuntimeMode(prisma, {
+      env: { ...absent, [AB_RUNTIME_FEATURE_ENV]: "false" },
+    });
+    expect(stopped.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
 
     const on = await resolveCareerRuntimeMode(prisma, {
       env: { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" },

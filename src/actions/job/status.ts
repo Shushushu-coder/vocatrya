@@ -1,6 +1,6 @@
 "use server";
 import prisma from "@/lib/db";
-import { isFullAbCapabilityEnabled, resolveAbRolloutScope } from "@/lib/career/capabilities";
+import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import { syncApplicationFromUiStatus } from "@/lib/career/jobOpportunityAdapter";
@@ -53,7 +53,7 @@ export const updateJobStatus = async (
         `Job mutations are not allowed in ${runtime.mode}`,
       );
     }
-    if (isFullAbCapabilityEnabled(runtime.mode, resolveAbRolloutScope())) {
+    if (isFullAbCapabilityEnabled(runtime.mode, runtime.rolloutScope)) {
       // Header status writes Attempt stage/outcome only. It must not touch
       // legacy Job rows or create ApplicationProcessStep records.
       await syncApplicationFromUiStatus(prisma, user.id, jobId, status.value, {

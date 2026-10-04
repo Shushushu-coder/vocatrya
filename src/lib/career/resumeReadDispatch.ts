@@ -1,10 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
-import {
-  isResumeV1CapabilityEnabled,
-  resolveAbRolloutScope,
-} from "./capabilities";
+import { isResumeV1CapabilityEnabled } from "./capabilities";
 import { CAREER_RUNTIME_MODE } from "./identities";
-import { resolveCareerRuntimeMode } from "./runtimeMode";
+import { CAREER_DATA_ORIGIN, resolveCareerRuntimeMode } from "./runtimeMode";
 import { projectResumeVariantText } from "./resumeVariantText";
 
 export type ResumeReadFamily = "ab" | "legacy" | "blocked";
@@ -45,7 +42,8 @@ const VARIANT_VERSION_SELECT = {
 /**
  * Resume family for the surface the user can currently open.
  * AB_ENABLED + resume_v1|full reads ResumeVariant.
- * LEGACY_ONLY, AB_ENABLED + none, and AB_READY_DISABLED read legacy Resume.
+ * A fresh origin never reads legacy Resume. Disabled and none are unavailable.
+ * Migrated LEGACY_ONLY, AB_ENABLED + none, and AB_READY_DISABLED keep legacy Resume.
  * BLOCKED does not select either table.
  */
 export async function resolveResumeReadFamily(
@@ -56,8 +54,15 @@ export async function resolveResumeReadFamily(
   if (runtime.mode === CAREER_RUNTIME_MODE.BLOCKED) {
     return { family: "blocked", mode: runtime.mode, reason: runtime.reason };
   }
-  if (isResumeV1CapabilityEnabled(runtime.mode, resolveAbRolloutScope(env))) {
+  if (isResumeV1CapabilityEnabled(runtime.mode, runtime.rolloutScope)) {
     return { family: "ab", mode: runtime.mode, reason: runtime.reason };
+  }
+  if (runtime.origin === CAREER_DATA_ORIGIN.fresh) {
+    return {
+      family: "blocked",
+      mode: runtime.mode,
+      reason: "fresh-origin-resume-unavailable",
+    };
   }
   return { family: "legacy", mode: runtime.mode, reason: runtime.reason };
 }
