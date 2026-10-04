@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,33 +9,59 @@ import {
 import { AB_ROLLOUT_SCOPE_ENV } from "@/lib/career/identities";
 
 const REPO = path.resolve(__dirname, "..");
+const SCOPE_ENV = "VOCATRYA_AB_ROLLOUT_SCOPE";
 
-const SKIP_DIRS = new Set([
-  "node_modules",
-  ".next",
-  ".git",
-  ".codex-tmp",
-  ".worktrees",
-  "dist",
-  "build",
-  "out",
-  "coverage",
-  // Transpiled copy of the allowed career modules. It is not a new reader.
-  "fresh-native-runtime",
+const SCAN_NAME = /\.(ts|tsx|js|mjs|yml|yaml|example|md)$/;
+
+// The assertion is about tracked repository source, never about whatever
+// local files happen to sit in the checkout. git ls-files enumerates exactly
+// the committed tree, which excludes .gitignored docs, nested .worktrees,
+// node_modules, screenshots, and other untracked debris without maintaining
+// a hand-curated exclusion list.
+function trackedFiles(root: string): string[] {
+  return execFileSync("git", ["ls-files", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter(Boolean)
+    .map((relative) => path.join(root, relative));
+}
+
+function scanCandidates(root: string): string[] {
+  return trackedFiles(root).filter(
+    (file) =>
+      fs.existsSync(file) &&
+      (SCAN_NAME.test(file) || path.basename(file) === ".env.example"),
+  );
+}
+
+const ALLOWED_READERS = new Set([
+  path.join("src", "lib", "career", "capabilities.ts"),
+  path.join("src", "lib", "career", "rolloutScope.ts"),
+  path.join("src", "lib", "career", "identities.ts"),
+  "docker-compose.yml",
+  "docker-entrypoint.sh",
+  ".env.example",
+  // Windows Desktop Shell POC forces the disposable backend scope to
+  // fail-closed "none" for isolation. It never reads the scope to enable
+  // product capabilities; see WINDOWS_DESKTOP_SHELL_POC audit.
+  path.join("desktop", "main", "runtime.js"),
 ]);
 
-function walk(dir: string, acc: string[] = []): string[] {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (SKIP_DIRS.has(entry.name)) {
-      continue;
-    }
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(full, acc);
-    else if (/\.(ts|tsx|js|mjs|yml|yaml|example|md)$/.test(entry.name) || entry.name === ".env.example") {
-      acc.push(full);
+function violatingReaders(root: string): string[] {
+  const violations: string[] = [];
+  for (const file of scanCandidates(root)) {
+    const relative = path.relative(root, file);
+    // Tracked tests and specs stay outside the assertion, as before.
+    if (relative.split(path.sep).includes("__tests__")) continue;
+    if (/\.(spec|test)\.[cm]?[jt]sx?$/.test(relative)) continue;
+    if (ALLOWED_READERS.has(relative)) continue;
+    if (fs.readFileSync(file, "utf8").includes(SCOPE_ENV)) {
+      violations.push(relative);
     }
   }
-  return acc;
+  return violations.sort();
 }
 
 describe("VOCATRYA_AB_ROLLOUT_SCOPE parser", () => {
@@ -61,44 +88,43 @@ describe("VOCATRYA_AB_ROLLOUT_SCOPE parser", () => {
 });
 
 describe("direct env read sites", () => {
-  it("only central config, compose, env example, and tests read the scope env", () => {
-    const allowed = new Set([
-      path.join(REPO, "src/lib/career/capabilities.ts"),
-      path.join(REPO, "src/lib/career/rolloutScope.ts"),
-      path.join(REPO, "src/lib/career/identities.ts"),
-      path.join(REPO, "docker-compose.yml"),
-      path.join(REPO, "docker-entrypoint.sh"),
-      path.join(REPO, ".env.example"),
-      // Windows Desktop Shell POC forces the disposable backend scope to
-      // fail-closed "none" for isolation. It never reads the scope to enable
-      // product capabilities; see WINDOWS_DESKTOP_SHELL_POC audit.
-      path.join(REPO, "desktop", "main", "runtime.js"),
-    ]);
-    const violations: string[] = [];
-    for (const file of walk(REPO)) {
-      if (file.includes(`${path.sep}__tests__${path.sep}`)) continue;
-      if (/\.(spec|test)\.[cm]?[jt]sx?$/.test(file)) continue;
-      if (allowed.has(file)) continue;
-      const content = fs.readFileSync(file, "utf8");
-      if (content.includes("VOCATRYA_AB_ROLLOUT_SCOPE")) {
-        violations.push(path.relative(REPO, file));
-      }
-    }
-    expect(violations).toEqual([]);
+  it("flags no unapproved reader in the committed tree", () => {
+    // Gitignored docs, untracked artifacts, and nested worktrees can never
+    // affect this assertion.
+    expect(violatingReaders(REPO)).toEqual([]);
   });
 
-  it("scans the current source tree and skips independent worktrees", () => {
+  it("scans only git-tracked files and still detects violations", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "scope-scan-"));
-    fs.mkdirSync(path.join(root, ".worktrees", "other"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, ".worktrees", "other", "leak.ts"),
-      "VOCATRYA_AB_ROLLOUT_SCOPE",
-    );
-    fs.writeFileSync(path.join(root, "kept.ts"), "export const ok = true;\n");
     try {
-      const files = walk(root);
-      expect(files.some((file) => file.includes(`${path.sep}.worktrees${path.sep}`))).toBe(false);
-      expect(files.some((file) => file.endsWith("kept.ts"))).toBe(true);
+      const git = (...args: string[]) =>
+        execFileSync("git", args, { cwd: root, stdio: "ignore" });
+      git("init", "-q");
+      fs.writeFileSync(
+        path.join(root, ".gitignore"),
+        "ignored/\n.worktrees/\n",
+      );
+      fs.writeFileSync(path.join(root, "kept.ts"), "export const ok = true;\n");
+      fs.writeFileSync(
+        path.join(root, "violating.ts"),
+        `const env = "${SCOPE_ENV}";\n`,
+      );
+      fs.mkdirSync(path.join(root, "ignored"), { recursive: true });
+      fs.mkdirSync(path.join(root, ".worktrees", "other"), {
+        recursive: true,
+      });
+      fs.writeFileSync(path.join(root, "ignored", "leak.md"), SCOPE_ENV);
+      fs.writeFileSync(
+        path.join(root, ".worktrees", "other", "leak.ts"),
+        SCOPE_ENV,
+      );
+      fs.writeFileSync(path.join(root, "untracked.ts"), SCOPE_ENV);
+      git("add", ".gitignore", "kept.ts", "violating.ts");
+
+      expect(
+        scanCandidates(root).map((file) => path.relative(root, file)),
+      ).toEqual(["kept.ts", "violating.ts"]);
+      expect(violatingReaders(root)).toEqual(["violating.ts"]);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

@@ -6,6 +6,12 @@ import { updateJobFromNames } from "@/lib/jobs/updateJobFromNames";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import * as writeGuard from "@/lib/career/writeGuard";
 import { CareerRuntimeError } from "@/lib/career/errors";
+import type { CareerRuntimeMode } from "@/lib/career/identities";
+import type { AbRolloutScope } from "@/lib/career/rolloutScope";
+import {
+  CAREER_DATA_ORIGIN,
+  type CareerDataOrigin,
+} from "@/lib/career/runtimeMode";
 
 // No Prisma client is instantiated. Real resolvers and the real write guard
 // run against delegates below; runtime/scope and both provider paths are mocked.
@@ -14,7 +20,9 @@ const mocks = vi.hoisted(() => {
     findUnique: vi.fn(), create: vi.fn(), upsert: vi.fn(),
   });
   return {
-    mode: "LEGACY_ONLY", scope: "none",
+    mode: "LEGACY_ONLY" as CareerRuntimeMode,
+    scope: "none" as AbRolloutScope,
+    origin: undefined as CareerDataOrigin | undefined,
     db: {
       company: entity(), jobTitle: entity(), location: entity(),
       jobSource: entity(), tag: entity(),
@@ -33,11 +41,20 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({ default: mocks.db }));
 vi.mock("@/actions/shared", () => ({ requireUser: async () => ({ id: "user-1" }) }));
-vi.mock("@/lib/career/runtimeMode", () => ({
-  resolveCareerRuntimeMode: async () => ({
-    mode: mocks.mode, reason: "test-runtime", writeFamily: "legacy",
-  }),
-}));
+vi.mock("@/lib/career/runtimeMode", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/career/runtimeMode")>();
+  return {
+    ...actual,
+    resolveCareerRuntimeMode: async () => ({
+      mode: mocks.mode,
+      reason: "test-runtime",
+      writeFamily: actual.careerWriteFamilyFor(mocks.mode),
+      rolloutScope: mocks.scope,
+      origin: mocks.origin ?? actual.CAREER_DATA_ORIGIN.legacy,
+    }),
+  };
+});
 vi.mock("@/lib/career/rolloutScope", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/career/rolloutScope")>(),
   resolveAbRolloutScope: () => mocks.scope,
@@ -76,21 +93,46 @@ const noteActions = [
   { operation: "update" as const, call: () => updateNote(note) },
   { operation: "delete" as const, call: () => deleteNote(note.id) },
 ];
-const allowed = [
-  { mode: "LEGACY_ONLY", scope: "none" },
-  { mode: "AB_ENABLED", scope: "none" },
-  { mode: "AB_ENABLED", scope: "resume_v1" },
+type RuntimeState = {
+  mode: CareerRuntimeMode;
+  scope: AbRolloutScope;
+  origin: CareerDataOrigin;
+};
+const allowed: RuntimeState[] = [
+  { mode: "LEGACY_ONLY", scope: "none", origin: CAREER_DATA_ORIGIN.legacy },
+  { mode: "AB_ENABLED", scope: "none", origin: CAREER_DATA_ORIGIN.migrated },
+  {
+    mode: "AB_ENABLED",
+    scope: "resume_v1",
+    origin: CAREER_DATA_ORIGIN.migrated,
+  },
 ];
-const blocked = [
-  { mode: "BLOCKED", scope: "none" },
-  { mode: "AB_READY_DISABLED", scope: "none" },
-  { mode: "AB_ENABLED", scope: "full" },
+const blocked: RuntimeState[] = [
+  { mode: "BLOCKED", scope: "none", origin: CAREER_DATA_ORIGIN.unknown },
+  {
+    mode: "AB_READY_DISABLED",
+    scope: "none",
+    origin: CAREER_DATA_ORIGIN.migrated,
+  },
+  { mode: "AB_ENABLED", scope: "full", origin: CAREER_DATA_ORIGIN.migrated },
+  { mode: "AB_ENABLED", scope: "full", origin: CAREER_DATA_ORIGIN.fresh },
+  {
+    mode: "AB_ENABLED",
+    scope: "resume_v1",
+    origin: CAREER_DATA_ORIGIN.fresh,
+  },
+  {
+    mode: "AB_READY_DISABLED",
+    scope: "none",
+    origin: CAREER_DATA_ORIGIN.fresh,
+  },
 ];
 
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.mode = "LEGACY_ONLY";
   mocks.scope = "none";
+  mocks.origin = CAREER_DATA_ORIGIN.legacy;
   vi.spyOn(console, "error").mockImplementation(() => {});
   references.forEach((delegate, i) => {
     delegate.findUnique.mockResolvedValue(null);
@@ -112,8 +154,14 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe.each(blocked)("blocked writes: $mode/$scope", ({ mode, scope }) => {
-  beforeEach(() => { mocks.mode = mode; mocks.scope = scope; });
+describe.each(blocked)(
+  "blocked writes: $origin/$mode/$scope",
+  ({ mode, scope, origin }) => {
+  beforeEach(() => {
+    mocks.mode = mode;
+    mocks.scope = scope;
+    mocks.origin = origin;
+  });
 
   it("returns the guard message before either provider path or a Job write", async () => {
     const error = await assertLegacyCareerWriteAllowed(mocks.db).catch((err: Error) => err);
@@ -149,8 +197,14 @@ describe.each(blocked)("blocked writes: $mode/$scope", ({ mode, scope }) => {
   });
 });
 
-describe.each(allowed)("allowed writes: $mode/$scope", ({ mode, scope }) => {
-  beforeEach(() => { mocks.mode = mode; mocks.scope = scope; });
+describe.each(allowed)(
+  "allowed writes: $origin/$mode/$scope",
+  ({ mode, scope, origin }) => {
+  beforeEach(() => {
+    mocks.mode = mode;
+    mocks.scope = scope;
+    mocks.origin = origin;
+  });
 
   it.each(noteActions)("surfaces a guard rejection before legacy note $operation", async ({ call }) => {
     const error = new CareerRuntimeError("LEGACY_WRITE_BLOCKED", "blocked by guard");
@@ -199,6 +253,7 @@ describe.each(allowed)("allowed writes: $mode/$scope", ({ mode, scope }) => {
 
 it.each(noteActions)("preserves disabled A+B note $operation rejection", async ({ call }) => {
   mocks.mode = "AB_READY_DISABLED";
+  mocks.origin = CAREER_DATA_ORIGIN.migrated;
   expect(await call()).toEqual({
     success: false, message: "Opportunity notes cannot be mutated in AB_READY_DISABLED",
   });
@@ -210,6 +265,7 @@ it.each(noteActions)("preserves disabled A+B note $operation rejection", async (
 it.each(noteActions)("keeps full A+B note $operation on its existing branch", async ({ call, operation }) => {
   mocks.mode = "AB_ENABLED";
   mocks.scope = "full";
+  mocks.origin = CAREER_DATA_ORIGIN.migrated;
   mocks.db.jobOpportunity.findFirst.mockResolvedValue({ id: "job-1" });
   mocks.db.jobOpportunityNote.findFirst.mockResolvedValue({ id: "note-1" });
   mocks.db.jobOpportunityNote.create.mockResolvedValue({ ...note, jobOpportunityId: "job-1" });
