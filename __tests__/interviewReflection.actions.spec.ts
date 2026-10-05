@@ -86,6 +86,7 @@ describe("interview reflection actions", () => {
     try {
       resolveRuntime.mockResolvedValue({
         mode: CAREER_RUNTIME_MODE.AB_ENABLED,
+        rolloutScope: "full",
       } as never);
       const result = await saveInterviewReflection({
         applicationProcessStepId: "step-1",
@@ -110,6 +111,7 @@ describe("interview reflection actions", () => {
     try {
       resolveRuntime.mockResolvedValue({
         mode: CAREER_RUNTIME_MODE.AB_ENABLED,
+        rolloutScope: "resume_v1",
       } as never);
       const result = await saveInterviewReflection({
         applicationProcessStepId: "step-1",

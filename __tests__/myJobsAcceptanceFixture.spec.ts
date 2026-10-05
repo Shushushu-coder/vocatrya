@@ -194,7 +194,7 @@ describe("My Jobs acceptance fixture read family", () => {
     });
   });
 
-  it("follows a non-full AB_ENABLED runtime back to legacy Job rows", async () => {
+  it("keeps a fresh-disabled runtime on the canonical AB read family", async () => {
     const userId = await seedAccount(prisma, "fixture-scope@example.com");
     await activateFreshAbNative(prisma);
     const env = envWithoutAbFlags();
@@ -206,11 +206,14 @@ describe("My Jobs acceptance fixture read family", () => {
       env,
     });
 
-    expect(seeded.family).toBe("legacy");
+    // Fresh-origin + scope none resolves AB_READY_DISABLED and reads the
+    // canonical AB family: a fresh database has no authoritative legacy
+    // Job dataset to fall back to.
+    expect(seeded.family).toBe("ab");
     expect(await ownedCounts(userId, seeded.catalog.company.id)).toEqual({
-      jobs: ACCEPTANCE_JOB_COUNT,
-      opportunities: 0,
-      attempts: 0,
+      jobs: 0,
+      opportunities: ACCEPTANCE_JOB_COUNT,
+      attempts: ACCEPTANCE_JOB_COUNT - 1,
     });
     await cleanupMyJobsAcceptanceFixture(prisma, seeded);
   });

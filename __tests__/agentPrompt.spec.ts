@@ -129,6 +129,7 @@ describe("agent chat system prompt", () => {
   it("describes the read tools and does not claim unbuilt writes", () => {
     expect(Object.keys(AGENT_TOOL_DESCRIPTIONS)).toEqual([
       "add_job",
+      "add_job_canonical",
       "list_jobs",
       "get_job",
       "get_resume",
