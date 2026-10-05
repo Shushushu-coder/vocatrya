@@ -1,4 +1,43 @@
 {
+  "canonicalImport": {
+    "open": "导入简历",
+    "choose": "选择文件（PDF / DOCX，最大 5 MB）",
+    "extracting": "正在读取文件…",
+    "parsing": "正在提取与解析简历…",
+    "saving": "正在保存导入内容…",
+    "review": "确认导入内容",
+    "confirm": "确认导入",
+    "summary": "将创建 {count} 条职业素材，复用 {reused} 条，并创建草稿简历「{name}」。",
+    "conflicts": "以下字段与现有个人资料冲突，将保留现有值：",
+    "profile": "解析的个人资料",
+    "source": "查看提取原文",
+    "expressions": "简历表达与关联证据",
+    "evidenceKinds": { "RESPONSIBILITY": "职责", "ACTION": "行动", "ACHIEVEMENT": "成果", "METRIC": "量化结果", "SKILL_USAGE": "技能使用", "OUTPUT": "产出", "OTHER": "其他证据" },
+    "fields": {
+      "fullName": "姓名", "headline": "个人简介", "email": "邮箱", "phone": "电话",
+      "address": "地址", "linksData": "链接", "organization": "公司 / 组织", "role": "职位",
+      "institution": "学校 / 机构", "degree": "学位", "fieldOfStudy": "专业", "location": "地点",
+      "startDate": "开始日期", "endDate": "结束日期", "url": "链接", "venue": "发表刊物",
+      "authors": "作者", "issuer": "颁发机构", "skillName": "技能", "proficiency": "熟练程度"
+    },
+    "types": {
+      "EDUCATION": "教育", "INTERNSHIP": "实习", "EMPLOYMENT": "工作", "PROJECT": "项目",
+      "RESEARCH": "科研", "PUBLICATION": "论文", "AWARD": "奖项", "SKILL": "技能", "CUSTOM": "其他"
+    },
+    "errors": {
+      "UNSUPPORTED_FORMAT": "请选择 PDF 或 DOCX 文件（最大 5 MB）。",
+      "NO_TEXT": "未提取到可读文本，暂不支持扫描件或图片型简历。",
+      "NO_CONTENT": "简历内容为空。", "TOO_SHORT": "简历文本过短。",
+      "TOO_LONG": "简历超过文本长度或页数限制。", "FILE_TOO_LARGE": "请选择小于 5 MB 的文件。",
+      "CORRUPTED": "提取的文本不可读，请尝试其他文件。",
+      "SAVE_FAILED": "导入保存失败，请重试；预览过期后需重新上传。",
+      "AI_NOT_CONFIGURED": "请先配置简历业务的 AI 分配。",
+      "EXTRACTION_FAILED": "无法读取文件文本，请尝试其他 PDF 或 DOCX 文件。",
+      "ENCRYPTED": "文件受密码保护，请上传未加密文件。",
+      "DECOMPRESSION_BOMB": "文件解压后超过安全大小限制，请上传较小文件。",
+      "AI_PARSE_FAILED": "未能安全解析简历，请重试。"
+    }
+  },
   "common": {
     "save": "保存",
     "saving": "保存中...",

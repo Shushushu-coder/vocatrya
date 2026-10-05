@@ -128,6 +128,25 @@ export class ResumeVariantService {
     });
   }
 
+  /** Import owns facts/sections through populate; all version writes remain here. */
+  async createImportedDraft(input: {
+    id: string; name: string; resolvedConnectionId: string; resolvedModel: string;
+  }, populate: (tx: Prisma.TransactionClient, versionId: string) => Promise<string | null>) {
+    await this.gate();
+    const name = input.name.trim();
+    if (!name) throw new CareerRuntimeError("VARIANT_NAME_REQUIRED", "Resume variant name is required");
+    return this.db.$transaction(async (tx) => {
+      const variant = await tx.resumeVariant.create({ data: { id: input.id, userId: this.userId, name } });
+      const version = await tx.resumeVariantVersion.create({ data: {
+        resumeVariantId: variant.id, versionNumber: 1, status: RESUME_VERSION_STATUS.DRAFT,
+        createdVia: "IMPORT", resolvedConnectionId: input.resolvedConnectionId, resolvedModel: input.resolvedModel,
+      } });
+      const headerSnapshot = sanitizeResumeHeaderSnapshot(await populate(tx, version.id));
+      await tx.resumeVariantVersion.update({ where: { id: version.id }, data: { headerSnapshot } });
+      return tx.resumeVariant.update({ where: { id: variant.id }, data: { currentVersionId: version.id } });
+    }, { timeout: 30000 });
+  }
+
   async listVariants() {
     await this.gate();
     const rows = await this.db.resumeVariant.findMany({

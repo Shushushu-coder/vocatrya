@@ -13,6 +13,7 @@ import {
 } from "@/actions/resumeVariant.actions";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { useI18n } from "@/i18n";
+import { CanonicalResumeImport } from "./CanonicalResumeImport";
 
 type VariantRow = {
   id: string;
@@ -122,6 +123,7 @@ export function ResumeVariantList() {
           <Button onClick={() => void onCreate()} disabled={creating}>
             {t("resumeVariants.create")}
           </Button>
+          <CanonicalResumeImport />
         </CardContent>
       </Card>
 

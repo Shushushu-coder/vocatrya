@@ -1,4 +1,43 @@
 {
+  "canonicalImport": {
+    "open": "Import Resume",
+    "choose": "Choose file (PDF / DOCX, up to 5 MB)",
+    "extracting": "Reading file…",
+    "parsing": "Extracting and parsing resume…",
+    "saving": "Saving imported resume…",
+    "review": "Review Import",
+    "confirm": "Confirm Import",
+    "summary": "Create {count} career materials, reuse {reused}, and create draft resume “{name}”.",
+    "conflicts": "Keep existing profile values for conflicting fields:",
+    "profile": "Parsed profile",
+    "source": "View extracted source",
+    "expressions": "Resume wording and linked evidence",
+    "evidenceKinds": { "RESPONSIBILITY": "Responsibility", "ACTION": "Action", "ACHIEVEMENT": "Achievement", "METRIC": "Metric", "SKILL_USAGE": "Skill usage", "OUTPUT": "Output", "OTHER": "Other evidence" },
+    "fields": {
+      "fullName": "Name", "headline": "Headline", "email": "Email", "phone": "Phone",
+      "address": "Location", "linksData": "Links", "organization": "Company / organization", "role": "Role",
+      "institution": "Institution", "degree": "Degree", "fieldOfStudy": "Field of study", "location": "Location",
+      "startDate": "Start date", "endDate": "End date", "url": "URL", "venue": "Venue",
+      "authors": "Authors", "issuer": "Issuer", "skillName": "Skill", "proficiency": "Proficiency"
+    },
+    "types": {
+      "EDUCATION": "Education", "INTERNSHIP": "Internship", "EMPLOYMENT": "Employment", "PROJECT": "Project",
+      "RESEARCH": "Research", "PUBLICATION": "Publication", "AWARD": "Award", "SKILL": "Skill", "CUSTOM": "Other"
+    },
+    "errors": {
+      "UNSUPPORTED_FORMAT": "Choose a PDF or DOCX file (up to 5 MB).",
+      "NO_TEXT": "No readable text. Scanned or image-only documents are not supported.",
+      "NO_CONTENT": "The resume is empty.", "TOO_SHORT": "The resume contains too little text.",
+      "TOO_LONG": "The resume exceeds the text or page limit.", "FILE_TOO_LARGE": "Choose a file smaller than 5 MB.",
+      "CORRUPTED": "The extracted text is unreadable. Try another file.",
+      "SAVE_FAILED": "Could not save the import. Retry, or upload again if the preview has expired.",
+      "AI_NOT_CONFIGURED": "Configure a Resume AI assignment first.",
+      "EXTRACTION_FAILED": "Could not extract text. Try another PDF or DOCX file.",
+      "ENCRYPTED": "This file is password-protected. Upload an unencrypted file.",
+      "DECOMPRESSION_BOMB": "The uncompressed file exceeds safety limits. Choose a smaller file.",
+      "AI_PARSE_FAILED": "Could not parse the resume safely. Try again."
+    }
+  },
   "common": {
     "save": "Save",
     "saving": "Saving...",
