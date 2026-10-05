@@ -230,6 +230,44 @@ describe("executeText", () => {
     expect(result).toEqual({ ok: false, code: "INFERENCE_FAILED" });
   });
 
+  it("emits sanitized diagnostics with stderr summary on failure", async () => {
+    const events = [];
+    const svc = createConnectionService({
+      profilesRoot,
+      smokeWorkRoot,
+      execWorkRoot,
+      backend,
+      deps: makeDeps(),
+      diag: (ev) => events.push(ev),
+    });
+    runnerScript = [
+      {
+        match: (h) => h.includes("exec"),
+        respond: respond({ exitCode: 1, stderr: "model not found\\nerror details" }),
+      },
+    ];
+    const result = await svc.executeText({
+      ticket: "t_exec",
+      connectionId: "conn-1",
+      model: "gpt-5.5",
+      prompt: "Summarize this job",
+      structuredOutput: {
+        schema: { type: "object", properties: { ok: { type: "boolean" } } },
+        schemaName: "test_schema",
+      },
+    });
+    expect(result).toEqual({ ok: false, code: "INFERENCE_FAILED" });
+    const ev = events.find((e) => e.operation === "executeText" && e.exitCode === 1);
+    expect(ev).toBeDefined();
+    expect(ev.backendKind).toBe("CODEX_RUNTIME");
+    expect(ev.provider).toBe("OPENAI");
+    expect(ev.model).toBe("gpt-5.5");
+    expect(ev.exitCode).toBe(1);
+    expect(ev.hasStructuredOutput).toBe(true);
+    expect(ev.schemaName).toBe("test_schema");
+    expect(ev.stderrSummary).toContain("model not found");
+  });
+
   it("maps reported adapter errors to INFERENCE_FAILED", async () => {
     runnerScript = [
       {

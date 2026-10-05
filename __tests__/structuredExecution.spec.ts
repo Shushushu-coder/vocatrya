@@ -408,4 +408,33 @@ describe("executeStructuredForAssignment", () => {
     expect(r2.resolvedConnectionId).toBe(b.id);
     expect(r2.resolvedModel).toBe("m-b");
   });
+
+  it("carries canonical resume import schema through assignment resolution without modification", async () => {
+    const conn = await makeConnection();
+    await assign("RESUME", conn.id, "gpt-5.6-sol");
+    const { canonicalImportJsonSchema } = await import(
+      "@/lib/ai/resume-import/canonicalSchema"
+    );
+    const schema = canonicalImportJsonSchema();
+    const { importFixture } = await import("./helpers/canonicalImportFixture");
+    const { bodies, fetchImpl } = captureFetch(() =>
+      okResponse(JSON.stringify(importFixture)),
+    );
+    const result = await executeStructuredForAssignment(
+      {
+        userId,
+        purpose: "RESUME",
+        prompt: "Extract resume",
+        schema,
+        schemaName: "canonical_resume_import",
+      },
+      deps(fetchImpl),
+    );
+    expect(result.status).toBe("OK");
+    expect(bodies.length).toBe(1);
+    expect(bodies[0].structuredOutput).toEqual({
+      schema,
+      schemaName: "canonical_resume_import",
+    });
+  });
 });

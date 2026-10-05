@@ -74,6 +74,41 @@ describe("codex structured invocation", () => {
     expect(inv.args[inv.args.length - 1]).toBe("the task");
     fs.rmSync(workDir, { recursive: true, force: true });
   });
+
+  it("materializes canonical resume import schema into workDir and wires --output-schema", () => {
+    const workDir = tmpDir();
+    const resumeSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        profile: { type: "object" },
+        profileSourceText: { type: ["string", "null"] },
+        sections: { type: "array" },
+      },
+      required: ["profile", "profileSourceText", "sections"],
+      additionalProperties: false,
+    };
+    const inv = codexAdapter.buildStructuredInvocation({
+      ...BASE,
+      workingDirectory: workDir,
+      model: "gpt-5.6-sol",
+      prompt: "Extract resume into schema",
+      schema: resumeSchema,
+      schemaName: "canonical_resume_import",
+    });
+    const schemaIdx = inv.args.indexOf("--output-schema");
+    expect(schemaIdx).toBeGreaterThan(-1);
+    const schemaPath = inv.args[schemaIdx + 1];
+    expect(schemaPath).toBe(
+      path.join(workDir, "canonical_resume_import.schema.json"),
+    );
+    expect(fs.existsSync(schemaPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(schemaPath, "utf8"))).toEqual(resumeSchema);
+    expect(inv.args).toContain("-m");
+    expect(inv.args).toContain("gpt-5.6-sol");
+    expect(inv.args[inv.args.length - 1]).toBe("Extract resume into schema");
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
 });
 
 describe("claude structured invocation", () => {

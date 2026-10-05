@@ -111,6 +111,14 @@ const CONNECTION_OP_CODES = Object.freeze({
   STRUCTURED_OUTPUT_NOT_VERIFIED: "STRUCTURED_OUTPUT_NOT_VERIFIED",
 });
 
+function summarizeSanitizedStderr(rawStderr, maxChars = 500) {
+  if (typeof rawStderr !== "string" || rawStderr.trim().length === 0) return null;
+  const trimmed = rawStderr.trim();
+  if (trimmed.length <= maxChars) return trimmed;
+  const half = Math.floor(maxChars / 2) - 3;
+  return `${trimmed.slice(0, half)}...${trimmed.slice(-half)}`;
+}
+
 function createConnectionService({
   profilesRoot,
   smokeWorkRoot,
@@ -1078,9 +1086,24 @@ function createConnectionService({
       if (result.error || result.exitCode !== 0 || result.aborted) {
         diag({
           operation: "executeText",
+          backendKind: adapter.backendKind,
+          provider: connection.provider,
+          executable: runtime.executable,
+          version: runtime.version,
+          model: execModel,
+          cwd: workDir,
           exitCode: result.exitCode,
-          timedOut: result.timedOut,
+          signal: result.signal ?? null,
+          timedOut: result.timedOut === true,
           aborted: result.aborted === true,
+          stdoutLength: (result.stdout || "").length,
+          stderrLength: (result.stderr || "").length,
+          stderrSummary: summarizeSanitizedStderr(result.stderr),
+          hasStructuredOutput: Boolean(structuredOutput),
+          schemaByteLength: structuredOutput
+            ? Buffer.byteLength(JSON.stringify(structuredOutput.schema))
+            : 0,
+          schemaName: structuredOutput?.schemaName || null,
         });
         return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
       }
@@ -1089,7 +1112,21 @@ function createConnectionService({
         workDir,
       });
       if (reportedError || !text) {
-        diag({ operation: "executeText", reportedError: reportedError === true });
+        diag({
+          operation: "executeText",
+          backendKind: adapter.backendKind,
+          provider: connection.provider,
+          executable: runtime.executable,
+          version: runtime.version,
+          model: execModel,
+          cwd: workDir,
+          reportedError: reportedError === true,
+          stdoutLength: (result.stdout || "").length,
+          stderrLength: (result.stderr || "").length,
+          stderrSummary: summarizeSanitizedStderr(result.stderr),
+          hasStructuredOutput: Boolean(structuredOutput),
+          hasExtractedText: Boolean(text),
+        });
         return fail(CONNECTION_OP_CODES.INFERENCE_FAILED);
       }
       return {
