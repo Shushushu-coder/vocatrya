@@ -86,6 +86,7 @@ export class OpportunityService {
     status?: string;
     notes?: string | null;
     createdVia?: string | null;
+    externalSourceKey?: string | null;
   }) {
     await this.gate();
     const status = (input.status ?? OPPORTUNITY_STATUS.UNKNOWN).toUpperCase();
@@ -118,6 +119,9 @@ export class OpportunityService {
         status,
         notes: input.notes ?? null,
         createdVia: input.createdVia ?? "USER",
+        ...(input.externalSourceKey
+          ? { externalSourceKey: input.externalSourceKey }
+          : {}),
       },
     });
   }

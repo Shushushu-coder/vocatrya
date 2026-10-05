@@ -430,10 +430,11 @@ describe("JobDetails under fresh + full", () => {
 // ---------------------------------------------------------------------------
 
 describe("AgentChatEmptyState under fresh + full", () => {
-  it("does not suggest the deferred add_job flow", () => {
+  it("suggests adding a job without the legacy posting copy", () => {
     chat.context = { version: 1, items: [] };
     render(wrap(<AgentChatEmptyState />));
 
+    expect(screen.getByText("Add a job")).toBeInTheDocument();
     expect(
       screen.queryByText("Add a job posting"),
     ).not.toBeInTheDocument();

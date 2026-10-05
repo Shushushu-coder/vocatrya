@@ -89,8 +89,8 @@ export type CareerDialogueContextInput = {
   fixedOverheadText?: string;
   budgets?: Partial<CareerDialogueContextBudgets>;
   /**
-   * Trusted fresh + full A+B: the page line must not point the model at the
-   * deferred write tools (add_job / match_job / generate_cover_letter).
+   * Trusted fresh + full A+B: the page line may name add_job and must not
+   * point the model at match_job or generate_cover_letter.
    */
   freshNativeFull?: boolean;
 };
@@ -199,8 +199,37 @@ function charsOf(text: string): number {
 export function projectToolOutput(
   output: unknown,
   profile: CareerDialogueContextProfile,
+  toolName?: string,
 ): unknown {
   const projected = stripInternal(output);
+  // Routing needs the owned job ids returned by reads to call get_job.
+  // Keep them only at the documented result paths, never in final prose.
+  if (
+    profile === "AGENT_DECISION" &&
+    output && typeof output === "object" &&
+    projected && typeof projected === "object"
+  ) {
+    const raw = output as Record<string, unknown>;
+    const target = projected as Record<string, unknown>;
+    if (
+      toolName === "list_jobs" &&
+      Array.isArray(raw.jobs) && Array.isArray(target.jobs)
+    ) {
+      raw.jobs.forEach((job, index) => {
+        if (job && typeof job === "object" && typeof job.id === "string") {
+          (target.jobs as Record<string, unknown>[])[index].id = job.id;
+        }
+      });
+    }
+    if (
+      toolName === "get_job" &&
+      raw.job && typeof raw.job === "object" &&
+      "id" in raw.job && typeof raw.job.id === "string" &&
+      target.job && typeof target.job === "object"
+    ) {
+      (target.job as Record<string, unknown>).id = raw.job.id;
+    }
+  }
   if (profile !== "AGENT_DECISION") return projected;
   return compactDecisionOutput(projected);
 }
@@ -287,7 +316,7 @@ function toolLine(
   if (state === "output-available") {
     return {
       kind: "tool",
-      text: `Tool ${name} returned: ${JSON.stringify(projectToolOutput(part.output ?? null, profile))}`,
+      text: `Tool ${name} returned: ${JSON.stringify(projectToolOutput(part.output ?? null, profile, name))}`,
     };
   }
   return {
@@ -391,7 +420,7 @@ function sessionLines(
 ): string[] {
   return facts.map((fact) => {
     if (fact.line) return fact.line;
-    return `Tool ${fact.name} returned: ${JSON.stringify(projectToolOutput(fact.output ?? null, profile))}`;
+    return `Tool ${fact.name} returned: ${JSON.stringify(projectToolOutput(fact.output ?? null, profile, fact.name))}`;
   });
 }
 

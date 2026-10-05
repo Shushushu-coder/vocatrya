@@ -105,11 +105,12 @@ async function statusesByValue(db: PrismaClient): Promise<Map<string, JobStatusR
   return new Map(rows.map((row) => [row.value, row]));
 }
 
-async function syncJdVersion(
+export async function syncJdVersion(
   db: PrismaClient,
   opportunityId: string,
   rawContent: string,
   sourceUrl: string | null,
+  rawContentFormat: "HTML" | "PLAIN_TEXT" = "HTML",
 ) {
   const hash = sha256Text(rawContent);
   const existing = await db.jobDescriptionVersion.findFirst({
@@ -132,7 +133,7 @@ async function syncJdVersion(
       jobOpportunityId: opportunityId,
       versionNumber: (max._max.versionNumber ?? 0) + 1,
       rawContent,
-      rawContentFormat: "HTML",
+      rawContentFormat,
       sourceUrl,
       capturedAt: new Date(),
       contentHash: hash,

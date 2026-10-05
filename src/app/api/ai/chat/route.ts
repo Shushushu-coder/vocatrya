@@ -57,6 +57,7 @@ import {
 } from "@/lib/telemetry";
 import { addJobSettled, AGENT_CHAT_TERMINAL_TOOLS } from "@/models/agent.model";
 import prisma from "@/lib/db";
+import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import {
@@ -133,6 +134,7 @@ async function accountChatResponse({
   pageContext,
   lock,
   freshNativeFull,
+  canonicalJobs,
 }: {
   req: NextRequest;
   userId: string;
@@ -142,6 +144,7 @@ async function accountChatResponse({
   pageContext: Parameters<typeof buildPageContextMessage>[0];
   lock: { connectionId: string; model: string | null };
   freshNativeFull: boolean;
+  canonicalJobs: boolean;
 }) {
   // The lock is a provenance pointer — the connection's CURRENT state is
   // re-checked every turn (disconnect/reauth/archive degrade it), and it is
@@ -276,6 +279,7 @@ async function accountChatResponse({
           decision: prepared.decision,
           routerDurationMs: prepared.routerDurationMs,
           freshNativeFull,
+          canonicalJobs,
         });
         contextSize = result.contextSize;
       });
@@ -405,10 +409,15 @@ export const POST = async (req: NextRequest) => {
   const lock = chatLockFromRow(conversation);
   const pageContext = pageContextFromConversation(contextOfRow(conversation));
 
-  // One resolution per turn: fresh-native full withholds the deferred write
-  // tools from the registry, the system prompt and the page-context line.
+  // One resolution per turn. Fresh-native full keeps add_job and withholds
+  // match_job and generate_cover_letter. Any AB_ENABLED + full runtime,
+  // including migrated full, writes add_job through the canonical service.
   const careerRuntime = await resolveCareerRuntimeMode(prisma);
   const freshNativeFull = isFreshNativeFullSurface(careerRuntime);
+  const canonicalJobs = isFullAbCapabilityEnabled(
+    careerRuntime.mode,
+    careerRuntime.rolloutScope,
+  );
 
   if (lock.kind === "account") {
     return accountChatResponse({
@@ -420,6 +429,7 @@ export const POST = async (req: NextRequest) => {
       pageContext,
       lock,
       freshNativeFull,
+      canonicalJobs,
     });
   }
 
@@ -590,6 +600,7 @@ export const POST = async (req: NextRequest) => {
           modelName,
           writer,
           freshNativeFull,
+          canonicalJobs,
         });
         prefixMetrics = measureTurnPrefix({
           userId,

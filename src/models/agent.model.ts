@@ -50,6 +50,10 @@ export type AgentResolvedEntity = {
 export type AgentAddJobResult = {
   created: boolean;
   jobId?: string;
+  /** Canonical JobOpportunity id. Same value as jobId on the canonical path. */
+  jobOpportunityId?: string;
+  company?: string;
+  title?: string;
   duplicateOf?: { id: string; title: string; company: string };
   resolutions: AgentResolvedEntity[];
   descriptionSource?: "pasted" | "model";

@@ -22,18 +22,24 @@ export function buildAgentTools(ctx: {
   modelName: string;
   writer: UIMessageStreamWriter;
   /**
-   * Trusted fresh + full A+B: add_job writes the legacy Job table the write
-   * guard rejects, and match/cover-letter have no canonical implementation
-   * yet — none of the three may be advertised or callable on this runtime.
+   * Trusted fresh + full A+B: match_job and generate_cover_letter have no
+   * canonical implementation and stay unregistered. add_job stays and writes
+   * a canonical job opportunity.
    */
   freshNativeFull?: boolean;
+  /**
+   * AB_ENABLED + full. Includes migrated full, which is not fresh-native but
+   * already reads and writes canonical jobs.
+   */
+  canonicalJobs?: boolean;
 }): ToolSet {
   // One per request, so no two nested tools run at once but two users never
   // block each other.
   const nestedGuard: NestedGenerationGuard = { running: false };
 
+  const canonicalJobs = ctx.canonicalJobs === true || ctx.freshNativeFull === true;
   const tools: ToolSet = {
-    add_job: buildAddJobTool(ctx.userId, ctx.pastedText),
+    add_job: buildAddJobTool(ctx.userId, ctx.pastedText, { canonical: canonicalJobs }),
     list_jobs: buildListJobsTool(ctx.userId),
     get_job: buildGetJobTool(ctx.userId, ctx.pageContext?.jobId),
     get_resume: buildGetResumeTool(ctx.userId, ctx.pageContext?.resumeId),
@@ -67,7 +73,6 @@ export function buildAgentTools(ctx: {
   };
 
   if (ctx.freshNativeFull) {
-    delete tools.add_job;
     delete tools.match_job;
     delete tools.generate_cover_letter;
   }

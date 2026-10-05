@@ -32,9 +32,9 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
     });
 
   const addJob = t("agent.suggestions.addJob");
-  // Fresh + full never offers a deferred write path: no add_job seed, no
-  // match suggestion — the remaining prompts resolve to canonical reads or
-  // plain dialogue.
+  const addCanonicalJob = t("agent.suggestions.addCanonicalJob");
+  // Fresh + full may suggest adding a job opportunity. It does not suggest
+  // match or cover-letter actions.
   const suggestions: SuggestionItem[] = job
     ? prompts(
         freshNativeFull
@@ -64,23 +64,21 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
             icon: FileText,
           },
           { label: t("agent.addContext"), run: () => requestAddContext?.(), icon: Plus },
-          ...(freshNativeFull
-            ? []
-            : [
-                {
-                  label: addJob,
-                  icon: BriefcaseMedical,
-                  run: () => {
-                    if (!preflight.ok) return;
-                    seedExchange(
-                      addJob,
-                      locale === "zh-CN"
-                        ? t("agent.addJobIntro")
-                        : AGENT_ADD_JOB_INTRO,
-                    );
-                  },
-                },
-              ]),
+          {
+            label: freshNativeFull ? addCanonicalJob : addJob,
+            icon: BriefcaseMedical,
+            run: () => {
+              if (!preflight.ok) return;
+              seedExchange(
+                freshNativeFull ? addCanonicalJob : addJob,
+                freshNativeFull
+                  ? t("agent.addCanonicalJobIntro")
+                  : locale === "zh-CN"
+                    ? t("agent.addJobIntro")
+                    : AGENT_ADD_JOB_INTRO,
+              );
+            },
+          },
         ];
 
   return (

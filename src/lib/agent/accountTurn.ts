@@ -183,8 +183,8 @@ function describeToolsForPrompt(tools: ToolSet): string {
   return Object.entries(tools)
     .map(([name, tool]) => {
       const description =
-        AGENT_TOOL_DESCRIPTIONS[name as keyof typeof AGENT_TOOL_DESCRIPTIONS] ??
         (tool as { description?: string }).description ??
+        AGENT_TOOL_DESCRIPTIONS[name as keyof typeof AGENT_TOOL_DESCRIPTIONS] ??
         "";
       const schema = asSchema(tool.inputSchema).jsonSchema;
       return `- ${name}: ${description}\n  arguments JSON schema: ${JSON.stringify(schema)}`;
@@ -379,8 +379,16 @@ export type AccountAgentTurnInput = {
   summary?: string | null;
   writer: UIMessageStreamWriter;
   signal: AbortSignal;
-  /** Trusted fresh + full A+B: deferred write tools are unregistered. */
+  /**
+   * Trusted fresh + full A+B: match_job and generate_cover_letter stay
+   * unregistered. add_job remains, and writes a canonical job opportunity.
+   */
   freshNativeFull?: boolean;
+  /**
+   * AB_ENABLED + full, including migrated full. add_job writes a canonical
+   * job opportunity instead of a legacy Job.
+   */
+  canonicalJobs?: boolean;
 };
 
 export type AccountAgentTurnResult = {
@@ -450,6 +458,7 @@ export async function runAccountAgentTurn(
     modelName,
     writer,
     freshNativeFull: input.freshNativeFull,
+    canonicalJobs: input.canonicalJobs === true || input.freshNativeFull === true,
   });
   const toolsBlock = describeToolsForPrompt(tools);
 

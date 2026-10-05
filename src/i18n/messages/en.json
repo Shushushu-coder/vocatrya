@@ -1657,12 +1657,14 @@
     "viewJob": "View Job",
     "send": "Send",
     "addJobIntro": "Happy to add it. Paste the job posting here and I'll pull the details out of it.\n\nIf you don't have the posting text, tell me:\n- **Company** — who is hiring\n- **Job title** — the role they are hiring for\n- **What the role involves** — one sentence is enough\n\nYou will see everything I extracted on a confirmation card before anything is saved.",
+    "addCanonicalJobIntro": "I can add this job. Tell me the company and the job title. Location, source, URL, and a description are optional — leave out anything you do not have, and I will not invent it. You will see what will be saved on a confirmation card before anything is written. Adding a job does not submit an application.",
     "pasteChip": "Pasted Job Posting",
     "approvalTitle": "Confirm Extracted Job Details",
     "approvalPending": "Approval pending",
     "emptyGreeting": "I can add a job to your tracker — paste a posting or type the details, and I'll show you what I extracted before anything is saved. I can also read and review your resumes, and while you're looking at a job I can score how well one of them matches it or write you a cover letter. I can't search your existing jobs or read your tasks yet.",
     "suggestions": {
       "addJob": "Add a job posting",
+      "addCanonicalJob": "Add a job",
       "reviewResume": "Review resume",
       "matchJob": "Match a job",
       "coverLetter": "Generate cover letter"

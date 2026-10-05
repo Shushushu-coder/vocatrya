@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { AGENT_TOOL_DESCRIPTIONS } from "@/lib/agent/prompt";
 import { AgentAddJobParseSchema, AgentAddJobSchema } from "@/models/agent.schema";
+import { createAgentOpportunity } from "@/lib/career/createAgentOpportunity";
 import { createJobFromNames } from "@/lib/jobs/createJobFromNames";
 import { JobResolutionError } from "@/lib/jobs/resolve";
 import { log } from "@/lib/telemetry";
@@ -18,30 +19,48 @@ const NO_DESCRIPTION = "No job description was supplied, and no pasted posting r
 // and all — into the user's own transcript.
 const NO_DESCRIPTION_DISPLAY = "no description came through with it. Paste the posting or say what the role involves, and it will be added.";
 
+const SAVE_FAILED = "Saving the job failed. Try again, or add it from the Jobs page.";
+
 function failed(validationError: string, displayError?: string): AgentAddJobResult {
   return { created: false, resolutions: [], validationError, displayError };
+}
+
+function namedText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 /**
  * userId and pastedText are captured from the route's authenticated session
  * and message array. Anything with those names inside the model's input is
  * ignored — this is the IDOR boundary and it has a dedicated test.
+ *
+ * canonical selects the Career A-side writer. It never falls back to the
+ * legacy Job table when that writer fails.
  */
-export function buildAddJobTool(userId: string, pastedText?: string) {
+export function buildAddJobTool(
+  userId: string,
+  pastedText?: string,
+  options?: { canonical?: boolean },
+) {
+  const canonical = options?.canonical === true;
   return tool({
-    description: AGENT_TOOL_DESCRIPTIONS.add_job,
+    description: canonical
+      ? AGENT_TOOL_DESCRIPTIONS.add_job_canonical
+      : AGENT_TOOL_DESCRIPTIONS.add_job,
     // Date transforms are deferred here so this schema doubles as the JSON
     // schema the model reads — see src/models/agent.schema.ts.
     inputSchema: AgentAddJobSchema,
     // Approval is asked for every call that could write, and skipped only for
     // one that execute is already certain to reject. The card renders before
     // execute runs, so a doomed call otherwise spends a Confirm and the retry
-    // spends a second one — the user confirms the same job twice. This stays
-    // in lockstep with the jobDescription check below: widening it to any
-    // other condition would let a write reach the database unapproved.
-    needsApproval: (input: { jobDescription?: string }) =>
-      Boolean(pastedText ?? input?.jobDescription),
-    execute: async (raw): Promise<AgentAddJobResult> => {
+    // spends a second one — the user confirms the same job twice.
+    needsApproval: (input: { jobDescription?: string; company?: string; jobTitle?: string }) => {
+      if (canonical) {
+        return Boolean(namedText(input?.company) && namedText(input?.jobTitle));
+      }
+      return Boolean(pastedText ?? input?.jobDescription);
+    },
+    execute: async (raw, exec): Promise<AgentAddJobResult> => {
       const parsed = AgentAddJobParseSchema.safeParse(raw);
       if (!parsed.success) {
         // Returned, not thrown, so the model can see why and retry.
@@ -54,13 +73,56 @@ export function buildAddJobTool(userId: string, pastedText?: string) {
 
       const input = parsed.data;
       const jobDescription = pastedText ?? input.jobDescription;
-      if (!jobDescription) return failed(NO_DESCRIPTION, NO_DESCRIPTION_DISPLAY);
+      if (!canonical && !jobDescription) {
+        return failed(NO_DESCRIPTION, NO_DESCRIPTION_DISPLAY);
+      }
 
+      const started = Date.now();
       try {
+        if (canonical) {
+          const result = await createAgentOpportunity(
+            {
+              company: input.company,
+              jobTitle: input.jobTitle,
+              jobDescription,
+              location: input.location,
+              source: input.source,
+              jobType: input.jobType,
+              workplaceType: input.workplaceType,
+              dueDate: input.dueDate,
+              jobUrl: input.jobUrl,
+              salaryRange: input.salaryRange,
+              toolCallId: exec?.toolCallId,
+            },
+            userId,
+          );
+          log.info("[agent-chat] add_job", {
+            tool: "add_job",
+            result: result.replayed ? "replayed" : "created",
+            jobOpportunityId: result.jobOpportunityId,
+            hasDescription: result.hasDescription,
+            elapsedMs: Date.now() - started,
+          });
+          return {
+            created: true,
+            jobId: result.jobOpportunityId,
+            jobOpportunityId: result.jobOpportunityId,
+            company: result.company,
+            title: result.title,
+            resolutions: result.resolutions,
+            descriptionSource: jobDescription
+              ? pastedText
+                ? "pasted"
+                : "model"
+              : undefined,
+            descriptionChars: jobDescription ? jobDescription.length : undefined,
+          };
+        }
+
         const result = await createJobFromNames(
           {
             ...input,
-            jobDescription,
+            jobDescription: jobDescription as string,
             createdVia: APP_CONSTANTS.AGENT_CHAT_CREATED_VIA,
           },
           userId,
@@ -75,18 +137,24 @@ export function buildAddJobTool(userId: string, pastedText?: string) {
           duplicateOf: result.duplicateOf,
           resolutions: result.resolutions,
           descriptionSource: pastedText ? "pasted" : "model",
-          descriptionChars: jobDescription.length,
+          descriptionChars: (jobDescription as string).length,
           descriptionCompleteness: result.descriptionCompleteness,
         };
       } catch (error) {
-        log.error("[agent-chat] add_job failed", { error: String(error) });
+        log.error("[agent-chat] add_job failed", {
+          tool: "add_job",
+          result: "failed",
+          hasDescription: Boolean(jobDescription && jobDescription !== "N/A"),
+          elapsedMs: Date.now() - started,
+          error: error instanceof JobResolutionError ? error.message : error instanceof Error ? error.name : "error",
+        });
         // Our own text, naming the field and the values it accepts, so the
         // model can fix the argument instead of guessing — its guess was to
         // drop the field, losing a value the posting stated. Every other
         // error keeps the fixed string: provider and Prisma messages carry
         // request context that must not reach the model.
         if (error instanceof JobResolutionError) return failed(error.message);
-        return failed("Saving the job failed. Try again, or add it from the Jobs page.");
+        return failed(SAVE_FAILED);
       }
     },
   });

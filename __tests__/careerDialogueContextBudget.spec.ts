@@ -280,6 +280,33 @@ describe("career dialogue context budget", () => {
     });
   });
 
+  it("routes from job read ids in historical and current tool results without exposing private ids", () => {
+    const output = {
+      status: "ok",
+      jobs: [{ id: "opportunity-1", title: "Engineer", company: "Acme", userId: "private-owner", nested: { id: "private-nested" } }],
+    };
+    const messages = [
+      user("list-request", "列出我的职位"),
+      assistant("list-result", "已列出", [{ type: "tool-list_jobs", toolCallId: "list-call", state: "output-available", input: {}, output } as never]),
+      user("detail-request", "给我看看刚才添加的职位详情"),
+    ];
+    for (const input of [
+      { messages },
+      { messages: [user("current", "读取职位详情")], sessionFacts: [{ name: "list_jobs", output }] },
+      { messages: [user("current", "读取职位详情")], sessionFacts: [{ name: "get_job", output: { status: "ok", job: output.jobs[0] } }] },
+    ]) {
+      const decision = buildCareerDialogueContext({ profile: "AGENT_DECISION", ...input });
+      const answer = buildCareerDialogueContext({ profile: "AGENT_RESPONSE", ...input });
+      if (!decision.ok || !answer.ok) throw new Error("Unexpected context overflow");
+      expect(decision.transcript).toContain('"id":"opportunity-1"');
+      expect(decision.transcript).not.toContain("private-owner");
+      expect(decision.transcript).not.toContain("private-nested");
+      expect(answer.transcript).not.toContain("opportunity-1");
+    }
+    expect(output.jobs[0].id).toBe("opportunity-1");
+    expect(projectToolOutput(output, "AGENT_DECISION", "get_resume")).not.toHaveProperty("jobs.0.id");
+  });
+
   it("estimates CJK denser than the same number of latin characters", () => {
     const latin = estimateContextTokens("a".repeat(40));
     const cjk = estimateContextTokens("中".repeat(40));

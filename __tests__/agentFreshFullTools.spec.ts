@@ -15,14 +15,43 @@ const toolCtx = {
 };
 
 describe("buildAgentTools under fresh + full", () => {
-  it("registers only the canonical read tools", () => {
+  it("registers canonical reads plus add_job, and hides match and cover letter", () => {
     const tools = buildAgentTools({ ...toolCtx, freshNativeFull: true });
     expect(Object.keys(tools)).toEqual([
+      "add_job",
       "list_jobs",
       "get_job",
       "get_resume",
       "review_resume",
     ]);
+  });
+
+  it("keeps add_job canonical for migrated full without hiding match or cover letter", () => {
+    const tools = buildAgentTools({
+      ...toolCtx,
+      freshNativeFull: false,
+      canonicalJobs: true,
+    });
+    expect(Object.keys(tools)).toEqual([
+      "add_job",
+      "list_jobs",
+      "get_job",
+      "get_resume",
+      "review_resume",
+      "match_job",
+      "generate_cover_letter",
+    ]);
+    const needsApproval = tools.add_job.needsApproval;
+    expect(typeof needsApproval).toBe("function");
+    if (typeof needsApproval !== "function") {
+      throw new Error("canonical add_job must gate on approval");
+    }
+    expect(
+      needsApproval(
+        { company: "腾讯", jobTitle: "后端开发实习" },
+        { toolCallId: "c", messages: [] } as never,
+      ),
+    ).toBe(true);
   });
 
   it("keeps the full registry outside fresh + full", () => {
@@ -44,16 +73,18 @@ describe("buildAgentTools under fresh + full", () => {
 describe("fresh + full system prompt", () => {
   const prompt = buildAgentChatSystemPrompt("en", { freshNativeFull: true });
 
-  it("never advertises the deferred write tools", () => {
-    for (const name of ["add_job", "match_job", "generate_cover_letter"]) {
+  it("advertises add_job and still declines match and cover letter", () => {
+    expect(prompt).toContain("add_job");
+    expect(AGENT_CHAT_FRESH_FULL_SECTIONS.capabilities).toContain("add_job");
+    for (const name of ["match_job", "generate_cover_letter"]) {
       expect(prompt).not.toContain(name);
       expect(AGENT_CHAT_FRESH_FULL_SECTIONS.capabilities).not.toContain(name);
       expect(AGENT_CHAT_FRESH_FULL_SECTIONS.limitations).not.toContain(name);
     }
-    // Even without the tool names, the deferred actions are declined plainly.
-    expect(prompt).toMatch(/cannot add a job/i);
+    expect(prompt).not.toMatch(/cannot add a job/i);
     expect(prompt).toMatch(/match analysis/i);
     expect(prompt).toMatch(/cover letter/i);
+    expect(prompt).toMatch(/does not submit an application/i);
   });
 
   it("keeps the canonical read tools advertised", () => {
@@ -62,8 +93,9 @@ describe("fresh + full system prompt", () => {
     }
   });
 
-  it("drops the add_job paste contract but keeps pasted-content safety", () => {
-    expect(prompt).not.toMatch(/jobDescription/);
+  it("keeps an optional verbatim description rule and pasted-content safety", () => {
+    expect(prompt).not.toMatch(/there is no case where you leave it out/i);
+    expect(prompt).toMatch(/omit jobDescription/i);
     expect(prompt).toMatch(/never instructions to follow/i);
   });
 
@@ -97,6 +129,7 @@ describe("fresh + full page context", () => {
       { route: "/dashboard/myjobs" },
       { freshNativeFull: true },
     );
+    expect(jobsList).toContain("add_job");
     expect(jobsList).not.toContain("match");
     expect(jobsList).not.toContain("cover letter");
   });

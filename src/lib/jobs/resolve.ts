@@ -1,6 +1,9 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
 import prisma from "@/lib/db";
 import { JOB_TYPES, WORKPLACE_TYPES, matchEnumEntry } from "@/models/job.model";
 import { canonicalizeEntityValue } from "./canonicalize";
+
+type EntityClient = PrismaClient | Prisma.TransactionClient;
 
 export interface ResolvedEntity {
   id: string;
@@ -69,29 +72,33 @@ async function resolveEntity(
 export function resolveCompany(
   label: string,
   userId: string,
+  db: EntityClient = prisma,
 ): Promise<ResolvedEntity> {
-  return resolveEntity(prisma.company, label, userId, { stripLegalSuffix: true });
+  return resolveEntity(db.company, label, userId, { stripLegalSuffix: true });
 }
 
 export function resolveJobTitle(
   label: string,
   userId: string,
+  db: EntityClient = prisma,
 ): Promise<ResolvedEntity> {
-  return resolveEntity(prisma.jobTitle, label, userId);
+  return resolveEntity(db.jobTitle, label, userId);
 }
 
 export function resolveLocation(
   label: string,
   userId: string,
+  db: EntityClient = prisma,
 ): Promise<ResolvedEntity> {
-  return resolveEntity(prisma.location, label, userId);
+  return resolveEntity(db.location, label, userId);
 }
 
 export function resolveJobSource(
   label: string,
   userId: string,
+  db: EntityClient = prisma,
 ): Promise<ResolvedEntity> {
-  return resolveEntity(prisma.jobSource, label, userId);
+  return resolveEntity(db.jobSource, label, userId);
 }
 
 export function resolveContactRole(
