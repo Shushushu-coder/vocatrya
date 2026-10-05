@@ -97,7 +97,7 @@ export async function persistResumeImport(db: PrismaClient, userId: string, inpu
         for (const [itemOrder, item] of section.items.entries()) {
           const material = await existingMaterial(tx, userId, item) ?? await createMaterial(tx, userId, item);
           const sectionItem = await tx.resumeVariantSectionItem.create({ data: {
-            resumeVariantSectionId: createdSection.id, careerMaterialItemId: material.id,
+            resumeVariantSectionId: createdSection.id, careerMaterialItemId: material.id, materialTitleSnapshot: material.title,
             itemKind: item.type, sortOrder: itemOrder,
           } });
           for (const [expressionOrder, content] of item.expressions.entries()) {

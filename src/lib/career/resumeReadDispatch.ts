@@ -28,7 +28,7 @@ const VARIANT_VERSION_SELECT = {
       items: {
         orderBy: { sortOrder: "asc" as const },
         select: {
-          careerMaterialItem: { select: { title: true } },
+          materialTitleSnapshot: true,
           expressions: {
             orderBy: { sortOrder: "asc" as const },
             select: { content: true },

@@ -820,6 +820,7 @@ const ResumeVariantSectionItem = z.object({
   id,
   resumeVariantSectionId: id,
   careerMaterialItemId: optId,
+  materialTitleSnapshot: optStr.optional().default(null),
   itemKind: str,
   sortOrder: int,
 });

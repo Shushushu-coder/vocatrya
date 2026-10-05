@@ -3,7 +3,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { listSubmittableResumeVersions } from "@/actions/resumeVariant.actions";
-import { submitAttemptResumeVersion } from "@/actions/application.actions";
+import { attachAttemptResumeVersion } from "@/actions/application.actions";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 
@@ -67,7 +67,7 @@ export function SubmitResumePicker({
   const onSubmit = () => {
     if (!versionId) return;
     startTransition(async () => {
-      const result = await submitAttemptResumeVersion({
+      const result = await attachAttemptResumeVersion({
         attemptId,
         submittedResumeVersionId: versionId,
       });

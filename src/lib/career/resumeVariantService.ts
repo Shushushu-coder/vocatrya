@@ -359,10 +359,13 @@ export class ResumeVariantService {
 
   async updateDraft(versionId: string, fields: HeaderFields) {
     await this.gate();
-    await this.requireOwnedEditableVersion(versionId);
-    return this.db.resumeVariantVersion.update({
-      where: { id: versionId },
-      data: this.sanitizeDraftFields(fields),
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { id: versionId });
+      await this.requireOwnedEditableVersion(versionId, tx);
+      return tx.resumeVariantVersion.update({
+        where: { id: versionId },
+        data: this.sanitizeDraftFields(fields),
+      });
     });
   }
 
@@ -378,58 +381,85 @@ export class ResumeVariantService {
     },
   ) {
     await this.gate();
-    await this.requireOwnedEditableVersion(versionId);
-    const headerSnapshot = sanitizeResumeHeaderSnapshot(
-      JSON.stringify({
-        fullName: header.fullName ?? null,
-        headline: header.headline ?? null,
-        email: header.email ?? null,
-        phone: header.phone ?? null,
-        address: header.address ?? null,
-        links: header.links ?? [],
-      }),
-    );
-    return this.db.resumeVariantVersion.update({
-      where: { id: versionId },
-      data: { headerSnapshot },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { id: versionId });
+      await this.requireOwnedEditableVersion(versionId, tx);
+      const headerSnapshot = sanitizeResumeHeaderSnapshot(
+        JSON.stringify({
+          fullName: header.fullName ?? null,
+          headline: header.headline ?? null,
+          email: header.email ?? null,
+          phone: header.phone ?? null,
+          address: header.address ?? null,
+          links: header.links ?? [],
+        }),
+      );
+      return tx.resumeVariantVersion.update({
+        where: { id: versionId },
+        data: { headerSnapshot },
+      });
     });
   }
 
   async freeze(versionId: string) {
     await this.gate();
-    const version = await this.requireOwnedVersion(versionId);
-    this.assertNotArchived(version.resumeVariant.archivedAt);
-    this.assertDraft(version.status);
-    await this.assertNotSubmittedReference(versionId);
-    return this.db.resumeVariantVersion.update({
-      where: { id: versionId },
-      data: {
-        status: RESUME_VERSION_STATUS.FROZEN,
-        frozenAt: new Date(),
-      },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { id: versionId });
+      const changed = await tx.resumeVariantVersion.updateMany({
+        where: { id: versionId, status: RESUME_VERSION_STATUS.DRAFT },
+        data: { status: RESUME_VERSION_STATUS.FROZEN },
+      });
+      if (changed.count !== 1) throw new CareerRuntimeError("VERSION_IMMUTABLE", "Only a draft can be frozen");
+      await tx.resumeVariantVersion.updateMany({ where: { id: versionId, frozenAt: null }, data: { frozenAt: new Date() } });
+      return this.requireOwnedVersion(versionId, tx);
     });
   }
 
   async markSubmitted(versionId: string) {
     await this.gate();
-    const version = await this.requireOwnedVersion(versionId);
-    this.assertNotArchived(version.resumeVariant.archivedAt);
-    if (version.status === RESUME_VERSION_STATUS.SUBMITTED) {
-      return version;
-    }
-    if (IMMUTABLE.has(version.status) && version.status !== RESUME_VERSION_STATUS.FROZEN) {
-      throw new CareerRuntimeError(
-        "VERSION_IMMUTABLE",
-        `Cannot mark ${version.status} version submitted`,
-      );
-    }
-    return this.db.resumeVariantVersion.update({
-      where: { id: versionId },
+    return this.db.$transaction((tx) => this.markSubmittedInTransaction(tx, versionId));
+  }
+
+  async markSubmittedInTransaction(tx: Prisma.TransactionClient, versionId: string) {
+    const locked = await tx.resumeVariantVersion.updateMany({
+      where: { id: versionId, status: { in: ["DRAFT", "FROZEN", "SUBMITTED"] },
+        resumeVariant: { userId: this.userId, archivedAt: null } },
+      data: { id: versionId },
+    });
+    if (locked.count !== 1) throw new CareerRuntimeError("VERSION_IMMUTABLE", "Resume version cannot be submitted");
+    const version = await this.requireOwnedVersion(versionId, tx);
+    if (version.status === RESUME_VERSION_STATUS.SUBMITTED) return version;
+    const changed = await tx.resumeVariantVersion.updateMany({
+      where: { id: versionId, status: version.status },
       data: {
         status: RESUME_VERSION_STATUS.SUBMITTED,
-        frozenAt: version.frozenAt ?? new Date(),
+        // Only a new DRAFT transition establishes a freeze timestamp. Even a
+        // historical null on FROZEN must be preserved rather than invented.
+        ...(version.status === RESUME_VERSION_STATUS.DRAFT && version.frozenAt === null ? { frozenAt: new Date() } : {}),
       },
     });
+    if (changed.count !== 1) throw new CareerRuntimeError("VERSION_IMMUTABLE", "Resume version changed concurrently");
+    return this.requireOwnedVersion(versionId, tx);
+  }
+
+  /** The conditional write acquires SQLite's writer before any content reads/writes. */
+  async guardDraftMutationInTransaction(tx: Prisma.TransactionClient, target: Prisma.ResumeVariantVersionWhereInput, notFoundCode = "VERSION_NOT_FOUND") {
+    const guarded = await tx.resumeVariantVersion.updateMany({
+      where: { AND: [target, { status: RESUME_VERSION_STATUS.DRAFT,
+        resumeVariant: { userId: this.userId, archivedAt: null }, submittedAttempts: { none: {} } }] },
+      data: { status: RESUME_VERSION_STATUS.DRAFT },
+    });
+    if (guarded.count !== 1) {
+      const version = await tx.resumeVariantVersion.findFirst({
+        where: { AND: [target, { resumeVariant: { userId: this.userId } }] },
+        include: { resumeVariant: { select: { archivedAt: true } } },
+      });
+      if (!version) throw new CareerRuntimeError(notFoundCode, "Resume content not found");
+      this.assertNotArchived(version.resumeVariant.archivedAt);
+      this.assertDraft(version.status);
+      await this.assertNotSubmittedReference(version.id, tx);
+      throw new CareerRuntimeError("VERSION_IMMUTABLE", "Resume version changed concurrently");
+    }
   }
 
   /**
@@ -444,10 +474,7 @@ export class ResumeVariantService {
     const referenced = await this.isSubmittedReference(versionId);
     const sanitized = this.sanitizeDraftFields(fields);
     if (version.status === RESUME_VERSION_STATUS.DRAFT && !referenced) {
-      return this.db.resumeVariantVersion.update({
-        where: { id: versionId },
-        data: sanitized,
-      });
+      return this.updateDraft(versionId, sanitized);
     }
     if (!IMMUTABLE.has(version.status) && !referenced) {
       throw new CareerRuntimeError(
@@ -548,27 +575,30 @@ export class ResumeVariantService {
     sortOrder?: number;
   }) {
     await this.gate();
-    const version = await this.requireOwnedEditableVersion(input.versionId);
-    const title = input.title.trim();
-    if (!title) {
-      throw new CareerRuntimeError(
-        "SECTION_TITLE_REQUIRED",
-        "Section title is required",
-      );
-    }
-    const systemKind = this.assertSystemKind(input.systemKind);
-    const sortOrder =
-      input.sortOrder ??
-      (await this.nextSortOrder("resumeVariantSection", {
-        resumeVariantVersionId: version.id,
-      }));
-    return this.db.resumeVariantSection.create({
-      data: {
-        resumeVariantVersionId: version.id,
-        title,
-        systemKind,
-        sortOrder,
-      },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { id: input.versionId });
+      const version = await this.requireOwnedEditableVersion(input.versionId, tx);
+      const title = input.title.trim();
+      if (!title) {
+        throw new CareerRuntimeError(
+          "SECTION_TITLE_REQUIRED",
+          "Section title is required",
+        );
+      }
+      const systemKind = this.assertSystemKind(input.systemKind);
+      const sortOrder =
+        input.sortOrder ??
+        (await this.nextSortOrder("resumeVariantSection", {
+          resumeVariantVersionId: version.id,
+        }, tx));
+      return tx.resumeVariantSection.create({
+        data: {
+          resumeVariantVersionId: version.id,
+          title,
+          systemKind,
+          sortOrder,
+        },
+      });
     });
   }
 
@@ -578,54 +608,61 @@ export class ResumeVariantService {
     systemKind?: string | null;
   }) {
     await this.gate();
-    const section = await this.requireOwnedEditableSection(input.sectionId);
-    const data: Prisma.ResumeVariantSectionUpdateInput = {};
-    if (input.title !== undefined) {
-      const title = input.title.trim();
-      if (!title) {
-        throw new CareerRuntimeError(
-          "SECTION_TITLE_REQUIRED",
-          "Section title is required",
-        );
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { id: input.sectionId } } }, "SECTION_NOT_FOUND");
+      const section = await this.requireOwnedEditableSection(input.sectionId, tx);
+      const data: Prisma.ResumeVariantSectionUpdateInput = {};
+      if (input.title !== undefined) {
+        const title = input.title.trim();
+        if (!title) {
+          throw new CareerRuntimeError(
+            "SECTION_TITLE_REQUIRED",
+            "Section title is required",
+          );
+        }
+        data.title = title;
       }
-      data.title = title;
-    }
-    if (input.systemKind !== undefined) {
-      data.systemKind = this.assertSystemKind(input.systemKind);
-    }
-    return this.db.resumeVariantSection.update({
-      where: { id: section.id },
-      data,
+      if (input.systemKind !== undefined) {
+        data.systemKind = this.assertSystemKind(input.systemKind);
+      }
+      return tx.resumeVariantSection.update({
+        where: { id: section.id },
+        data,
+      });
     });
   }
 
   async deleteSection(sectionId: string) {
     await this.gate();
-    const section = await this.requireOwnedEditableSection(sectionId);
-    return this.db.resumeVariantSection.delete({
-      where: { id: section.id },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { id: sectionId } } }, "SECTION_NOT_FOUND");
+      const section = await this.requireOwnedEditableSection(sectionId, tx);
+      return tx.resumeVariantSection.delete({
+        where: { id: section.id },
+      });
     });
   }
 
   async reorderSections(versionId: string, orderedIds: string[]) {
     await this.gate();
-    const version = await this.requireOwnedEditableVersion(versionId);
-    const sections = await this.db.resumeVariantSection.findMany({
-      where: { resumeVariantVersionId: version.id },
-      select: { id: true },
-    });
-    this.assertCompleteReorder(sections.map((row) => row.id), orderedIds);
-    await this.db.$transaction(
-      orderedIds.map((id, index) =>
-        this.db.resumeVariantSection.update({
-          where: { id },
-          data: { sortOrder: index },
-        }),
-      ),
-    );
-    return this.db.resumeVariantSection.findMany({
-      where: { resumeVariantVersionId: version.id },
-      orderBy: { sortOrder: "asc" },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { id: versionId });
+      const version = await this.requireOwnedEditableVersion(versionId, tx);
+      const sections = await tx.resumeVariantSection.findMany({
+        where: { resumeVariantVersionId: version.id },
+        select: { id: true },
+      });
+      this.assertCompleteReorder(sections.map((row) => row.id), orderedIds);
+      for (const [index, id] of orderedIds.entries()) {
+        await tx.resumeVariantSection.update({
+            where: { id },
+            data: { sortOrder: index },
+          });
+      }
+      return tx.resumeVariantSection.findMany({
+        where: { resumeVariantVersionId: version.id },
+        orderBy: { sortOrder: "asc" },
+      });
     });
   }
 
@@ -635,43 +672,49 @@ export class ResumeVariantService {
     itemKind?: string | null;
   }) {
     await this.gate();
-    const section = await this.requireOwnedEditableSection(input.sectionId);
-    const careerMaterialItemId = optionalTrimmed(input.careerMaterialItemId ?? null);
-    let itemKind = input.itemKind?.trim() || null;
-    if (careerMaterialItemId) {
-      const material = await this.requireOwnedActiveMaterial(careerMaterialItemId);
-      const duplicate = await this.db.resumeVariantSectionItem.findFirst({
-        where: {
-          resumeVariantSectionId: section.id,
-          careerMaterialItemId: material.id,
-        },
-        select: { id: true },
-      });
-      if (duplicate) {
-        throw new CareerRuntimeError(
-          "MATERIAL_ALREADY_IN_SECTION",
-          "This career material is already in the section",
-        );
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { id: input.sectionId } } }, "SECTION_NOT_FOUND");
+      const section = await this.requireOwnedEditableSection(input.sectionId, tx);
+      const careerMaterialItemId = optionalTrimmed(input.careerMaterialItemId ?? null);
+      let itemKind = input.itemKind?.trim() || null;
+      let materialTitleSnapshot: string | null = null;
+      if (careerMaterialItemId) {
+        const material = await this.requireOwnedActiveMaterial(careerMaterialItemId, tx);
+        materialTitleSnapshot = material.title;
+        const duplicate = await tx.resumeVariantSectionItem.findFirst({
+          where: {
+            resumeVariantSectionId: section.id,
+            careerMaterialItemId: material.id,
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new CareerRuntimeError(
+            "MATERIAL_ALREADY_IN_SECTION",
+            "This career material is already in the section",
+          );
+        }
+        if (!itemKind) {
+          itemKind = RESUME_SECTION_ITEM_KINDS.has(material.type)
+            ? material.type
+            : RESUME_SECTION_ITEM_KIND.CUSTOM;
+        }
+      } else if (!itemKind) {
+        itemKind = RESUME_SECTION_ITEM_KIND.MANUAL;
       }
-      if (!itemKind) {
-        itemKind = RESUME_SECTION_ITEM_KINDS.has(material.type)
-          ? material.type
-          : RESUME_SECTION_ITEM_KIND.CUSTOM;
-      }
-    } else if (!itemKind) {
-      itemKind = RESUME_SECTION_ITEM_KIND.MANUAL;
-    }
-    const kind = this.assertItemKind(itemKind);
-    const sortOrder = await this.nextSortOrder("resumeVariantSectionItem", {
-      resumeVariantSectionId: section.id,
-    });
-    return this.db.resumeVariantSectionItem.create({
-      data: {
+      const kind = this.assertItemKind(itemKind);
+      const sortOrder = await this.nextSortOrder("resumeVariantSectionItem", {
         resumeVariantSectionId: section.id,
-        careerMaterialItemId,
-        itemKind: kind,
-        sortOrder,
-      },
+      }, tx);
+      return tx.resumeVariantSectionItem.create({
+        data: {
+          resumeVariantSectionId: section.id,
+          careerMaterialItemId,
+          materialTitleSnapshot,
+          itemKind: kind,
+          sortOrder,
+        },
+      });
     });
   }
 
@@ -680,44 +723,51 @@ export class ResumeVariantService {
     itemKind?: string;
   }) {
     await this.gate();
-    const item = await this.requireOwnedEditableItem(input.itemId);
-    const data: Prisma.ResumeVariantSectionItemUpdateInput = {};
-    if (input.itemKind !== undefined) {
-      data.itemKind = this.assertItemKind(input.itemKind);
-    }
-    return this.db.resumeVariantSectionItem.update({
-      where: { id: item.id },
-      data,
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { id: input.itemId } } } } }, "ITEM_NOT_FOUND");
+      const item = await this.requireOwnedEditableItem(input.itemId, tx);
+      const data: Prisma.ResumeVariantSectionItemUpdateInput = {};
+      if (input.itemKind !== undefined) {
+        data.itemKind = this.assertItemKind(input.itemKind);
+      }
+      return tx.resumeVariantSectionItem.update({
+        where: { id: item.id },
+        data,
+      });
     });
   }
 
   async deleteSectionItem(itemId: string) {
     await this.gate();
-    const item = await this.requireOwnedEditableItem(itemId);
-    return this.db.resumeVariantSectionItem.delete({
-      where: { id: item.id },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { id: itemId } } } } }, "ITEM_NOT_FOUND");
+      const item = await this.requireOwnedEditableItem(itemId, tx);
+      return tx.resumeVariantSectionItem.delete({
+        where: { id: item.id },
+      });
     });
   }
 
   async reorderSectionItems(sectionId: string, orderedIds: string[]) {
     await this.gate();
-    const section = await this.requireOwnedEditableSection(sectionId);
-    const items = await this.db.resumeVariantSectionItem.findMany({
-      where: { resumeVariantSectionId: section.id },
-      select: { id: true },
-    });
-    this.assertCompleteReorder(items.map((row) => row.id), orderedIds);
-    await this.db.$transaction(
-      orderedIds.map((id, index) =>
-        this.db.resumeVariantSectionItem.update({
-          where: { id },
-          data: { sortOrder: index },
-        }),
-      ),
-    );
-    return this.db.resumeVariantSectionItem.findMany({
-      where: { resumeVariantSectionId: section.id },
-      orderBy: { sortOrder: "asc" },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { id: sectionId } } }, "SECTION_NOT_FOUND");
+      const section = await this.requireOwnedEditableSection(sectionId, tx);
+      const items = await tx.resumeVariantSectionItem.findMany({
+        where: { resumeVariantSectionId: section.id },
+        select: { id: true },
+      });
+      this.assertCompleteReorder(items.map((row) => row.id), orderedIds);
+      for (const [index, id] of orderedIds.entries()) {
+        await tx.resumeVariantSectionItem.update({
+            where: { id },
+            data: { sortOrder: index },
+          });
+      }
+      return tx.resumeVariantSectionItem.findMany({
+        where: { resumeVariantSectionId: section.id },
+        orderBy: { sortOrder: "asc" },
+      });
     });
   }
 
@@ -727,28 +777,31 @@ export class ResumeVariantService {
     kind?: string | null;
   }) {
     await this.gate();
-    const item = await this.requireOwnedEditableItem(input.itemId);
-    const content = input.content.trim();
-    if (!content) {
-      throw new CareerRuntimeError(
-        "EXPRESSION_CONTENT_REQUIRED",
-        "Expression content is required",
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { id: input.itemId } } } } }, "ITEM_NOT_FOUND");
+      const item = await this.requireOwnedEditableItem(input.itemId, tx);
+      const content = input.content.trim();
+      if (!content) {
+        throw new CareerRuntimeError(
+          "EXPRESSION_CONTENT_REQUIRED",
+          "Expression content is required",
+        );
+      }
+      const kind = this.assertExpressionKind(
+        input.kind?.trim() || RESUME_EXPRESSION_KIND.BODY,
       );
-    }
-    const kind = this.assertExpressionKind(
-      input.kind?.trim() || RESUME_EXPRESSION_KIND.BODY,
-    );
-    const sortOrder = await this.nextSortOrder("resumeExpression", {
-      resumeVariantSectionItemId: item.id,
-    });
-    return this.db.resumeExpression.create({
-      data: {
+      const sortOrder = await this.nextSortOrder("resumeExpression", {
         resumeVariantSectionItemId: item.id,
-        content,
-        kind,
-        sortOrder,
-        evidenceStatus: EVIDENCE_STATUS.UNLINKED,
-      },
+      }, tx);
+      return tx.resumeExpression.create({
+        data: {
+          resumeVariantSectionItemId: item.id,
+          content,
+          kind,
+          sortOrder,
+          evidenceStatus: EVIDENCE_STATUS.UNLINKED,
+        },
+      });
     });
   }
 
@@ -758,54 +811,61 @@ export class ResumeVariantService {
     kind?: string;
   }) {
     await this.gate();
-    const expression = await this.requireOwnedEditableExpression(input.expressionId);
-    const data: Prisma.ResumeExpressionUpdateInput = {};
-    if (input.content !== undefined) {
-      const content = input.content.trim();
-      if (!content) {
-        throw new CareerRuntimeError(
-          "EXPRESSION_CONTENT_REQUIRED",
-          "Expression content is required",
-        );
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { expressions: { some: { id: input.expressionId } } } } } } }, "EXPRESSION_NOT_FOUND");
+      const expression = await this.requireOwnedEditableExpression(input.expressionId, tx);
+      const data: Prisma.ResumeExpressionUpdateInput = {};
+      if (input.content !== undefined) {
+        const content = input.content.trim();
+        if (!content) {
+          throw new CareerRuntimeError(
+            "EXPRESSION_CONTENT_REQUIRED",
+            "Expression content is required",
+          );
+        }
+        data.content = content;
       }
-      data.content = content;
-    }
-    if (input.kind !== undefined) {
-      data.kind = this.assertExpressionKind(input.kind);
-    }
-    return this.db.resumeExpression.update({
-      where: { id: expression.id },
-      data,
+      if (input.kind !== undefined) {
+        data.kind = this.assertExpressionKind(input.kind);
+      }
+      return tx.resumeExpression.update({
+        where: { id: expression.id },
+        data,
+      });
     });
   }
 
   async deleteExpression(expressionId: string) {
     await this.gate();
-    const expression = await this.requireOwnedEditableExpression(expressionId);
-    return this.db.resumeExpression.delete({
-      where: { id: expression.id },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { expressions: { some: { id: expressionId } } } } } } }, "EXPRESSION_NOT_FOUND");
+      const expression = await this.requireOwnedEditableExpression(expressionId, tx);
+      return tx.resumeExpression.delete({
+        where: { id: expression.id },
+      });
     });
   }
 
   async reorderExpressions(itemId: string, orderedIds: string[]) {
     await this.gate();
-    const item = await this.requireOwnedEditableItem(itemId);
-    const expressions = await this.db.resumeExpression.findMany({
-      where: { resumeVariantSectionItemId: item.id },
-      select: { id: true },
-    });
-    this.assertCompleteReorder(expressions.map((row) => row.id), orderedIds);
-    await this.db.$transaction(
-      orderedIds.map((id, index) =>
-        this.db.resumeExpression.update({
-          where: { id },
-          data: { sortOrder: index },
-        }),
-      ),
-    );
-    return this.db.resumeExpression.findMany({
-      where: { resumeVariantSectionItemId: item.id },
-      orderBy: { sortOrder: "asc" },
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { id: itemId } } } } }, "ITEM_NOT_FOUND");
+      const item = await this.requireOwnedEditableItem(itemId, tx);
+      const expressions = await tx.resumeExpression.findMany({
+        where: { resumeVariantSectionItemId: item.id },
+        select: { id: true },
+      });
+      this.assertCompleteReorder(expressions.map((row) => row.id), orderedIds);
+      for (const [index, id] of orderedIds.entries()) {
+        await tx.resumeExpression.update({
+            where: { id },
+            data: { sortOrder: index },
+          });
+      }
+      return tx.resumeExpression.findMany({
+        where: { resumeVariantSectionItemId: item.id },
+        orderBy: { sortOrder: "asc" },
+      });
     });
   }
 
@@ -841,21 +901,21 @@ export class ResumeVariantService {
     }
   }
 
-  private async isSubmittedReference(versionId: string): Promise<boolean> {
-    const attempt = await this.db.applicationAttempt.findFirst({
+  private async isSubmittedReference(versionId: string, tx: Prisma.TransactionClient = this.db): Promise<boolean> {
+    const attempt = await tx.applicationAttempt.findFirst({
       where: { submittedResumeVersionId: versionId },
       select: { id: true },
     });
     return attempt != null;
   }
 
-  private async isEditableDraft(versionId: string, status: string): Promise<boolean> {
+  private async isEditableDraft(versionId: string, status: string, tx: Prisma.TransactionClient = this.db): Promise<boolean> {
     if (status !== RESUME_VERSION_STATUS.DRAFT) return false;
-    return !(await this.isSubmittedReference(versionId));
+    return !(await this.isSubmittedReference(versionId, tx));
   }
 
-  private async assertNotSubmittedReference(versionId: string): Promise<void> {
-    if (await this.isSubmittedReference(versionId)) {
+  private async assertNotSubmittedReference(versionId: string, tx: Prisma.TransactionClient = this.db): Promise<void> {
+    if (await this.isSubmittedReference(versionId, tx)) {
       throw new CareerRuntimeError(
         "SUBMITTED_RESUME_PROVENANCE",
         "Versions referenced by ApplicationAttempt.submittedResumeVersionId cannot be overwritten",
@@ -873,8 +933,8 @@ export class ResumeVariantService {
     return variant;
   }
 
-  private async requireOwnedVersion(versionId: string) {
-    const version = await this.db.resumeVariantVersion.findFirst({
+  private async requireOwnedVersion(versionId: string, tx: Prisma.TransactionClient = this.db) {
+    const version = await tx.resumeVariantVersion.findFirst({
       where: {
         id: versionId,
         resumeVariant: { userId: this.userId },
@@ -891,16 +951,16 @@ export class ResumeVariantService {
     return version;
   }
 
-  private async requireOwnedEditableVersion(versionId: string) {
-    const version = await this.requireOwnedVersion(versionId);
+  private async requireOwnedEditableVersion(versionId: string, tx: Prisma.TransactionClient = this.db) {
+    const version = await this.requireOwnedVersion(versionId, tx);
     this.assertNotArchived(version.resumeVariant.archivedAt);
     this.assertDraft(version.status);
-    await this.assertNotSubmittedReference(versionId);
+    await this.assertNotSubmittedReference(versionId, tx);
     return version;
   }
 
-  private async requireOwnedEditableSection(sectionId: string) {
-    const section = await this.db.resumeVariantSection.findFirst({
+  private async requireOwnedEditableSection(sectionId: string, tx: Prisma.TransactionClient = this.db) {
+    const section = await tx.resumeVariantSection.findFirst({
       where: {
         id: sectionId,
         version: { resumeVariant: { userId: this.userId } },
@@ -912,12 +972,12 @@ export class ResumeVariantService {
     if (!section) {
       throw new CareerRuntimeError("SECTION_NOT_FOUND", "Resume section not found");
     }
-    await this.requireOwnedEditableVersion(section.version.id);
+    await this.requireOwnedEditableVersion(section.version.id, tx);
     return section;
   }
 
-  private async requireOwnedEditableItem(itemId: string) {
-    const item = await this.db.resumeVariantSectionItem.findFirst({
+  private async requireOwnedEditableItem(itemId: string, tx: Prisma.TransactionClient = this.db) {
+    const item = await tx.resumeVariantSectionItem.findFirst({
       where: {
         id: itemId,
         section: { version: { resumeVariant: { userId: this.userId } } },
@@ -929,12 +989,12 @@ export class ResumeVariantService {
     if (!item) {
       throw new CareerRuntimeError("ITEM_NOT_FOUND", "Resume section item not found");
     }
-    await this.requireOwnedEditableVersion(item.section.version.id);
+    await this.requireOwnedEditableVersion(item.section.version.id, tx);
     return item;
   }
 
-  private async requireOwnedEditableExpression(expressionId: string) {
-    const expression = await this.db.resumeExpression.findFirst({
+  private async requireOwnedEditableExpression(expressionId: string, tx: Prisma.TransactionClient = this.db) {
+    const expression = await tx.resumeExpression.findFirst({
       where: {
         id: expressionId,
         sectionItem: {
@@ -956,14 +1016,14 @@ export class ResumeVariantService {
         "Resume expression not found",
       );
     }
-    await this.requireOwnedEditableVersion(expression.sectionItem.section.version.id);
+    await this.requireOwnedEditableVersion(expression.sectionItem.section.version.id, tx);
     return expression;
   }
 
-  private async requireOwnedActiveMaterial(materialId: string) {
-    const material = await this.db.careerMaterialItem.findFirst({
+  private async requireOwnedActiveMaterial(materialId: string, tx: Prisma.TransactionClient = this.db) {
+    const material = await tx.careerMaterialItem.findFirst({
       where: { id: materialId, userId: this.userId },
-      select: { id: true, type: true, archivedAt: true },
+      select: { id: true, title: true, type: true, archivedAt: true },
     });
     if (!material) {
       throw new CareerRuntimeError("MATERIAL_NOT_FOUND", "Career material not found");
@@ -1052,8 +1112,9 @@ export class ResumeVariantService {
   private async nextSortOrder(
     model: "resumeVariantSection" | "resumeVariantSectionItem" | "resumeExpression",
     where: Record<string, string>,
+    tx: Prisma.TransactionClient = this.db,
   ): Promise<number> {
-    const delegate = this.db[model] as unknown as {
+    const delegate = tx[model] as unknown as {
       aggregate: (args: {
         where: Record<string, string>;
         _max: { sortOrder: true };
@@ -1067,39 +1128,44 @@ export class ResumeVariantService {
   }
 
   private async copyVersionGraph(sourceVersionId: string, fields: HeaderFields) {
-    const source = await this.db.resumeVariantVersion.findFirst({
-      where: {
-        id: sourceVersionId,
-        resumeVariant: { userId: this.userId },
-      },
-      include: {
-        sections: {
-          include: {
-            items: {
-              include: {
-                expressions: {
-                  include: { evidenceLinks: true },
-                  orderBy: { sortOrder: "asc" },
-                },
-              },
-              orderBy: { sortOrder: "asc" },
-            },
-          },
-          orderBy: { sortOrder: "asc" },
-        },
-      },
-    });
-    if (!source) {
-      throw new CareerRuntimeError("VERSION_NOT_FOUND", "Resume version not found");
-    }
-
-    const latest = await this.db.resumeVariantVersion.findFirst({
-      where: { resumeVariantId: source.resumeVariantId },
-      orderBy: { versionNumber: "desc" },
-      select: { versionNumber: true },
-    });
-
     return this.db.$transaction(async (tx) => {
+      const locked = await tx.resumeVariantVersion.updateMany({
+        where: { id: sourceVersionId, resumeVariant: { userId: this.userId, archivedAt: null } },
+        data: { id: sourceVersionId },
+      });
+      if (locked.count !== 1) throw new CareerRuntimeError("VERSION_NOT_FOUND", "Resume version not found or variant archived");
+      const source = await tx.resumeVariantVersion.findFirst({
+        where: {
+          id: sourceVersionId,
+          resumeVariant: { userId: this.userId },
+        },
+        include: {
+          sections: {
+            include: {
+              items: {
+                include: {
+                  expressions: {
+                    include: { evidenceLinks: true },
+                    orderBy: { sortOrder: "asc" },
+                  },
+                },
+                orderBy: { sortOrder: "asc" },
+              },
+            },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+      });
+      if (!source) {
+        throw new CareerRuntimeError("VERSION_NOT_FOUND", "Resume version not found");
+      }
+
+      const latest = await tx.resumeVariantVersion.findFirst({
+        where: { resumeVariantId: source.resumeVariantId },
+        orderBy: { versionNumber: "desc" },
+        select: { versionNumber: true },
+      });
+
       const version = await tx.resumeVariantVersion.create({
         data: {
           resumeVariantId: source.resumeVariantId,
@@ -1134,6 +1200,7 @@ export class ResumeVariantService {
             data: {
               resumeVariantSectionId: createdSection.id,
               careerMaterialItemId: item.careerMaterialItemId,
+              materialTitleSnapshot: item.materialTitleSnapshot,
               itemKind: item.itemKind,
               sortOrder: item.sortOrder,
             },

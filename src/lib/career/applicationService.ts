@@ -8,7 +8,6 @@ import {
   PROCESS_STEP_CATEGORIES,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_STATUS,
-  RESUME_VERSION_STATUS,
 } from "./identities";
 import {
   type ApplicationTimelineDTO,
@@ -36,6 +35,14 @@ import {
   assertResumeV1Writable,
 } from "./capabilities";
 import { resolveOwnedMappedOpportunityId } from "./legacyJobOpportunityMapping";
+
+export type SubmissionProvenanceInput = {
+  attemptId: string;
+  submittedResumeVersionId?: string | null;
+  submittedResumeArtifactId?: string | null;
+  submittedAgainstJdVersionId?: string | null;
+};
+export type SubmitApplicationInput = SubmissionProvenanceInput & { submittedAt?: Date };
 
 const RESERVED_COMPATIBILITY_SORT_ORDERS = new Set<number>([
   COMPATIBILITY_PROCESS_STEPS.INTERVIEW.sortOrder,
@@ -68,9 +75,9 @@ export class ApplicationService {
     sourceUrl?: string | null;
     notes?: string | null;
     createdVia?: string | null;
-  }) {
-    await this.gate();
-    const opportunity = await this.db.jobOpportunity.findFirst({
+  }, tx: Prisma.TransactionClient = this.db) {
+    await assertFullAbWritable(tx, this.env);
+    const opportunity = await tx.jobOpportunity.findFirst({
       where: { id: input.jobOpportunityId, userId: this.userId },
       select: { id: true },
     });
@@ -78,7 +85,7 @@ export class ApplicationService {
       throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
     }
 
-    return this.db.applicationAttempt.create({
+    return tx.applicationAttempt.create({
       data: {
         userId: this.userId,
         jobOpportunityId: input.jobOpportunityId,
@@ -93,109 +100,138 @@ export class ApplicationService {
     });
   }
 
-  async markSubmitted(input: {
-    attemptId: string;
-    submittedResumeVersionId?: string | null;
-    submittedResumeArtifactId?: string | null;
-    submittedAgainstJdVersionId?: string | null;
-    submittedAt?: Date;
-  }) {
+  async submitApplication(input: SubmitApplicationInput) {
     await this.gate();
-    return this.applySubmittedResumeBinding(input);
+    return this.db.$transaction((tx) => this.submitApplicationInTransaction(tx, input));
   }
 
-  async bindSubmittedResumeVersion(input: {
-    attemptId: string;
-    submittedResumeVersionId: string;
-  }) {
+  /** Compatibility entrypoint: initial submission only; use attach for historical provenance. */
+  async markSubmitted(input: SubmitApplicationInput) {
+    return this.submitApplication(input);
+  }
+
+  async attachSubmissionProvenance(input: SubmissionProvenanceInput) {
     await assertResumeV1Writable(this.db, this.env);
-    return this.applySubmittedResumeBinding({
-      attemptId: input.attemptId,
-      submittedResumeVersionId: input.submittedResumeVersionId,
-    });
+    return this.db.$transaction((tx) => this.attachSubmissionProvenanceInTransaction(tx, input));
   }
 
-  private async applySubmittedResumeBinding(input: {
-    attemptId: string;
-    submittedResumeVersionId?: string | null;
-    submittedResumeArtifactId?: string | null;
-    submittedAgainstJdVersionId?: string | null;
-    submittedAt?: Date;
-  }) {
-    const attempt = await this.requireOwnedAttempt(input.attemptId);
-    const requestedVersionId = input.submittedResumeVersionId ?? null;
+  async bindSubmittedResumeVersion(input: { attemptId: string; submittedResumeVersionId: string }) {
+    return this.attachSubmissionProvenance(input);
+  }
 
-    if (
-      attempt.submittedResumeVersionId &&
-      requestedVersionId &&
-      attempt.submittedResumeVersionId !== requestedVersionId
-    ) {
-      throw new CareerRuntimeError(
-        "SUBMITTED_RESUME_PROVENANCE",
-        "submittedResumeVersionId is immutable after first submit",
-      );
+  async submitApplicationInTransaction(tx: Prisma.TransactionClient, input: SubmitApplicationInput) {
+    return this.writeSubmissionInTransaction(tx, input, true);
+  }
+
+  async attachSubmissionProvenanceInTransaction(tx: Prisma.TransactionClient, input: SubmissionProvenanceInput) {
+    return this.writeSubmissionInTransaction(tx, input, false);
+  }
+
+  private async writeSubmissionInTransaction(tx: Prisma.TransactionClient, input: SubmitApplicationInput, initial: boolean) {
+    // Acquire SQLite's writer before reading provenance. The later CAS still
+    // states every first-binding and initial-submission precondition explicitly.
+    const locked = await tx.$executeRaw`UPDATE "ApplicationAttempt" SET "id" = "id" WHERE "id" = ${input.attemptId} AND "userId" = ${this.userId}`;
+    if (locked !== 1) throw new CareerRuntimeError("ATTEMPT_NOT_FOUND", "Application attempt not found");
+    if (initial) await assertFullAbWritable(tx, this.env);
+    else await assertResumeV1Writable(tx, this.env);
+    const attempt = await tx.applicationAttempt.findUniqueOrThrow({ where: { id: input.attemptId } });
+    const firstSubmission = initial && attempt.currentStageCategory === ATTEMPT_STAGE.DRAFT &&
+      attempt.outcome === ATTEMPT_OUTCOME.ACTIVE && attempt.submittedAt === null && attempt.archivedAt === null;
+    if (initial && !firstSubmission && attempt.submittedAt === null) {
+      throw new CareerRuntimeError("ATTEMPT_NOT_SUBMITTABLE", "Initial submission requires an active, unarchived draft attempt");
     }
 
-    let nextVersionId = attempt.submittedResumeVersionId;
-    if (requestedVersionId) {
-      const version = await this.db.resumeVariantVersion.findFirst({
-        where: {
-          id: requestedVersionId,
-          resumeVariant: { userId: this.userId },
-        },
-        select: {
-          id: true,
-          status: true,
-          resumeVariant: { select: { archivedAt: true } },
-        },
+    let requestedVersionId = input.submittedResumeVersionId ?? null;
+    const requestedArtifactId = input.submittedResumeArtifactId ?? null;
+    let requestedJdId = input.submittedAgainstJdVersionId ?? null;
+    if (requestedArtifactId) {
+      const artifact = await tx.resumeArtifact.findFirst({
+        where: { id: requestedArtifactId, version: { resumeVariant: { userId: this.userId } } },
       });
-      if (!version) {
+      if (!artifact) throw new CareerRuntimeError("ARTIFACT_NOT_FOUND", "Resume artifact does not reference an owned version");
+      if (requestedVersionId && requestedVersionId !== artifact.resumeVariantVersionId) {
+        throw new CareerRuntimeError("SUBMISSION_PROVENANCE_CONFLICT", "Artifact and resume version do not match");
+      }
+      requestedVersionId = artifact.resumeVariantVersionId;
+    }
+    if (firstSubmission && !requestedJdId && !attempt.submittedAgainstJdVersionId) {
+      const opportunity = await tx.jobOpportunity.findFirstOrThrow({ where: { id: attempt.jobOpportunityId, userId: this.userId } });
+      requestedJdId = opportunity.currentJdVersionId;
+    }
+    const bind = (existing: string | null, requested: string | null, field: string) => {
+      if (existing && requested && existing !== requested) {
         throw new CareerRuntimeError(
-          "VERSION_NOT_FOUND",
-          "submittedResumeVersionId does not reference an owned resume version",
+          field === "submittedResumeVersionId" ? "SUBMITTED_RESUME_PROVENANCE" : "SUBMISSION_PROVENANCE_CONFLICT",
+          `${field} conflicts with its immutable first binding`,
         );
       }
-
-      const isNewBinding = attempt.submittedResumeVersionId !== version.id;
-      if (isNewBinding && version.resumeVariant.archivedAt != null) {
-        throw new CareerRuntimeError(
-          "VARIANT_ARCHIVED",
-          "Archived resume variants cannot be bound to a new application attempt",
-        );
+      return existing ?? requested;
+    };
+    const nextVersionId = bind(attempt.submittedResumeVersionId, requestedVersionId, "submittedResumeVersionId");
+    const nextArtifactId = bind(attempt.submittedResumeArtifactId, requestedArtifactId, "submittedResumeArtifactId");
+    const nextJdId = bind(attempt.submittedAgainstJdVersionId, requestedJdId, "submittedAgainstJdVersionId");
+    if (initial && !firstSubmission && (
+      nextVersionId !== attempt.submittedResumeVersionId || nextArtifactId !== attempt.submittedResumeArtifactId || nextJdId !== attempt.submittedAgainstJdVersionId
+    )) throw new CareerRuntimeError("ATTEMPT_ALREADY_SUBMITTED", "Use provenance attach to supplement an existing submission");
+    if (nextVersionId) {
+      const version = await tx.resumeVariantVersion.findFirst({
+        where: { id: nextVersionId, resumeVariant: { userId: this.userId } },
+        include: { resumeVariant: { select: { archivedAt: true } } },
+      });
+      if (!version) throw new CareerRuntimeError("VERSION_NOT_FOUND", "Resume version not owned by this user");
+      if (version.resumeVariant.archivedAt && attempt.submittedResumeVersionId !== version.id) {
+        throw new CareerRuntimeError("VARIANT_ARCHIVED", "Archived variants cannot be newly bound");
       }
-
-      const variants = new ResumeVariantService(this.db, this.userId, this.env);
-      if (version.status !== RESUME_VERSION_STATUS.SUBMITTED) {
-        await variants.markSubmitted(version.id);
+    }
+    if (nextArtifactId) {
+      const artifact = await tx.resumeArtifact.findFirst({
+        where: { id: nextArtifactId, version: { resumeVariant: { userId: this.userId } } },
+      });
+      if (!artifact || artifact.resumeVariantVersionId !== nextVersionId) {
+        throw new CareerRuntimeError("SUBMISSION_PROVENANCE_CONFLICT", "Artifact and bound resume version do not match");
       }
-      nextVersionId = version.id;
+    }
+    if (requestedJdId) {
+      const jd = await tx.jobDescriptionVersion.findFirst({ where: { id: requestedJdId, jobOpportunityId: attempt.jobOpportunityId } });
+      if (!jd) throw new CareerRuntimeError("JD_VERSION_MISMATCH", "JD version must belong to the attempt's opportunity");
     }
 
-    return this.db.applicationAttempt.update({
-      where: { id: attempt.id },
+    if (nextVersionId && (firstSubmission || nextVersionId !== attempt.submittedResumeVersionId)) {
+      // Transition only a new submission/binding. Same-value historical replay
+      // retains its existing state, including archive state and unknown dates.
+      const version = await tx.resumeVariantVersion.findUniqueOrThrow({ where: { id: nextVersionId } });
+      if (version.status !== "SUBMITTED") {
+        await new ResumeVariantService(this.db, this.userId, this.env).markSubmittedInTransaction(tx, nextVersionId);
+      }
+    }
+    if (!firstSubmission && nextVersionId === attempt.submittedResumeVersionId &&
+      nextArtifactId === attempt.submittedResumeArtifactId && nextJdId === attempt.submittedAgainstJdVersionId) return attempt;
+    const changed = await tx.applicationAttempt.updateMany({
+      where: {
+        id: attempt.id, userId: this.userId,
+        submittedResumeVersionId: attempt.submittedResumeVersionId,
+        submittedResumeArtifactId: attempt.submittedResumeArtifactId,
+        submittedAgainstJdVersionId: attempt.submittedAgainstJdVersionId,
+        ...(firstSubmission ? { currentStageCategory: ATTEMPT_STAGE.DRAFT, outcome: ATTEMPT_OUTCOME.ACTIVE, submittedAt: null, archivedAt: null } : {}),
+      },
       data: {
-        submittedAt: input.submittedAt ?? attempt.submittedAt ?? new Date(),
-        currentStageCategory: ATTEMPT_STAGE.SUBMITTED,
         submittedResumeVersionId: nextVersionId,
-        submittedResumeArtifactId:
-          input.submittedResumeArtifactId === undefined
-            ? attempt.submittedResumeArtifactId
-            : input.submittedResumeArtifactId,
-        submittedAgainstJdVersionId:
-          input.submittedAgainstJdVersionId === undefined
-            ? attempt.submittedAgainstJdVersionId
-            : input.submittedAgainstJdVersionId,
+        submittedResumeArtifactId: nextArtifactId,
+        submittedAgainstJdVersionId: nextJdId,
+        ...(firstSubmission ? { currentStageCategory: ATTEMPT_STAGE.SUBMITTED, submittedAt: input.submittedAt ?? new Date() } : {}),
       },
     });
+    if (changed.count !== 1) throw new CareerRuntimeError("SUBMISSION_PROVENANCE_CONFLICT", "Submission changed concurrently");
+    return tx.applicationAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
   }
 
   async ensureAttempt(input: {
     jobOpportunityId: string;
     channelLabel?: string;
     sourceUrl?: string | null;
-  }) {
-    await this.gate();
-    const existing = await this.db.applicationAttempt.findFirst({
+  }, tx: Prisma.TransactionClient = this.db) {
+    await assertFullAbWritable(tx, this.env);
+    const existing = await tx.applicationAttempt.findFirst({
       where: {
         jobOpportunityId: input.jobOpportunityId,
         userId: this.userId,
@@ -211,22 +247,22 @@ export class ApplicationService {
       jobOpportunityId: input.jobOpportunityId,
       channelLabel: input.channelLabel ?? "USER",
       sourceUrl: input.sourceUrl ?? null,
-    });
+    }, tx);
   }
 
-  async updateStage(attemptId: string, currentStageCategory: string) {
-    await this.gate();
-    const attempt = await this.requireOwnedAttempt(attemptId);
-    return this.db.applicationAttempt.update({
+  async updateStage(attemptId: string, currentStageCategory: string, tx: Prisma.TransactionClient = this.db) {
+    await assertFullAbWritable(tx, this.env);
+    const attempt = await this.requireOwnedAttempt(attemptId, tx);
+    return tx.applicationAttempt.update({
       where: { id: attempt.id },
       data: { currentStageCategory },
     });
   }
 
-  async recordOutcome(attemptId: string, outcome: string) {
-    await this.gate();
-    const attempt = await this.requireOwnedAttempt(attemptId);
-    return this.db.applicationAttempt.update({
+  async recordOutcome(attemptId: string, outcome: string, tx: Prisma.TransactionClient = this.db) {
+    await assertFullAbWritable(tx, this.env);
+    const attempt = await this.requireOwnedAttempt(attemptId, tx);
+    return tx.applicationAttempt.update({
       where: { id: attempt.id },
       data: { outcome },
     });
@@ -864,8 +900,8 @@ export class ApplicationService {
     };
   }
 
-  private async requireOwnedAttempt(attemptId: string) {
-    const attempt = await this.db.applicationAttempt.findFirst({
+  private async requireOwnedAttempt(attemptId: string, tx: Prisma.TransactionClient = this.db) {
+    const attempt = await tx.applicationAttempt.findFirst({
       where: { id: attemptId, userId: this.userId },
     });
     if (!attempt) {

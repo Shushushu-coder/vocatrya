@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { ApplicationResumeBindingPanel } from "@/components/myjobs/job-details/ApplicationResumeBindingPanel";
 import {
   getSubmittedResumeBindings,
-  submitAttemptResumeVersion,
+  attachAttemptResumeVersion,
 } from "@/actions/application.actions";
 import { listSubmittableResumeVersions } from "@/actions/resumeVariant.actions";
 
@@ -14,7 +14,7 @@ vi.mock("@/lib/toast", () => ({
 
 vi.mock("@/actions/application.actions", () => ({
   getSubmittedResumeBindings: vi.fn(),
-  submitAttemptResumeVersion: vi.fn(),
+  attachAttemptResumeVersion: vi.fn(),
 }));
 
 vi.mock("@/actions/resumeVariant.actions", () => ({
@@ -22,7 +22,7 @@ vi.mock("@/actions/resumeVariant.actions", () => ({
 }));
 
 const getBindings = vi.mocked(getSubmittedResumeBindings);
-const submitBind = vi.mocked(submitAttemptResumeVersion);
+const submitBind = vi.mocked(attachAttemptResumeVersion);
 const listSubmittable = vi.mocked(listSubmittableResumeVersions);
 
 function attemptDto(

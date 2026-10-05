@@ -44,7 +44,7 @@ import {
 import {
   createApplicationProcessStep,
   saveInterviewReflection,
-  submitAttemptResumeVersion,
+  attachAttemptResumeVersion,
 } from "@/actions/application.actions";
 
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -116,7 +116,7 @@ describe("Resume Variant V1 runtime matrix", () => {
     expect(listed).not.toHaveProperty("data");
     const write = await createResumeSection({ versionId: "x", title: "Nope" });
     expect(write.success).toBe(false);
-    const submit = await submitAttemptResumeVersion({
+    const submit = await attachAttemptResumeVersion({
       attemptId: "attempt",
       submittedResumeVersionId: "version",
     });

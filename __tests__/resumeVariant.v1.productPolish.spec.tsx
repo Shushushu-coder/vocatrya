@@ -63,7 +63,7 @@ vi.mock("@/actions/application.actions", () => ({
   deleteApplicationProcessStep: vi.fn(),
   getInterviewReflection: vi.fn(),
   saveInterviewReflection: vi.fn(),
-  submitAttemptResumeVersion: vi.fn(),
+  attachAttemptResumeVersion: vi.fn(),
 }));
 
 const listVariants = vi.mocked(listResumeVariants);
@@ -366,7 +366,7 @@ describe("Resume Variant V1 product polish UI", () => {
     );
     await userEvent.selectOptions(screen.getByLabelText("Choose version"), "ver-draft");
     expect(screen.getByTestId("submit-draft-lock-warning")).toHaveTextContent(
-      "Submitting this draft will lock it",
+      "Binding this draft locks the version",
     );
 
     await userEvent.selectOptions(screen.getByLabelText("Choose version"), "ver-frozen");
@@ -384,7 +384,7 @@ describe("Resume Variant V1 product polish UI", () => {
     render(<SubmitResumePicker attemptId="att-1" locked={false} onBound={vi.fn()} />);
     const empty = await screen.findByTestId("submit-resume-picker-empty");
     expect(empty).toHaveTextContent(
-      "You don't have a resume version available to submit yet.",
+      "You don't have a resume version available to bind to this application yet.",
     );
     expect(
       screen.getByRole("link", { name: "Create a resume" }),
@@ -406,7 +406,7 @@ describe("Resume Variant V1 product polish UI", () => {
     );
     expect(
       await screen.findByTestId("submit-resume-picker-no-versions"),
-    ).toHaveTextContent("This resume has no version available to submit yet.");
+    ).toHaveTextContent("This resume has no version available to bind yet.");
     expect(screen.getByRole("link", { name: "Open resume" })).toHaveAttribute(
       "href",
       "/dashboard/profile/resumes/var-1",

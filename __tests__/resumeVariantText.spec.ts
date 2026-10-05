@@ -14,7 +14,8 @@ describe("projectResumeVariantText", () => {
           title: "Experience",
           items: [
             {
-              careerMaterialItem: { title: "Analytical Engines" },
+              materialTitleSnapshot: "Analytical Engines",
+              careerMaterialItem: { title: "LIVE TITLE MUST NOT RENDER" },
               expressions: [{ content: "Built the first program." }],
             },
           ],

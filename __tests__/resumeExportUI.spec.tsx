@@ -177,13 +177,14 @@ it("keeps the workspace frozen after export fails and retries without a second f
   expect(actions.freezeResumeVersion).toHaveBeenCalledOnce();
 });
 
-const sections = [{ id: "section", title: "经历", items: [{ id: "item", careerMaterialItem: { title: "编译器" }, expressions: [{ id: "expression", sortOrder: 0, content: "开发中文简历" }, { id: "empty", sortOrder: 1, content: "   " }] }] }];
+const sections = [{ id: "section", title: "经历", items: [{ id: "item", materialTitleSnapshot: "编译器", careerMaterialItem: { title: "Live renamed title" }, expressions: [{ id: "expression", sortOrder: 0, content: "开发中文简历" }, { id: "empty", sortOrder: 1, content: "   " }] }] }];
 it("print preview keeps resume content and omits preview notice, placeholders and empty expressions", () => {
   render(<ResumePreview print headerSnapshot='{"fullName":"张三"}' sections={sections} />);
   const preview = screen.getByTestId("resume-print-preview");
   for (const text of ["张三", "经历", "编译器", "开发中文简历"]) expect(preview).toHaveTextContent(text);
   expect(preview).not.toHaveTextContent(translate("en", "resumeVariants.previewReadOnly"));
   expect(preview).not.toHaveTextContent(translate("en", "applicationProfile.emptyValue"));
+  expect(preview).not.toHaveTextContent("Live renamed title");
   expect(preview.querySelectorAll("li")).toHaveLength(1);
   expect(within(preview).queryByRole("button")).not.toBeInTheDocument();
 });

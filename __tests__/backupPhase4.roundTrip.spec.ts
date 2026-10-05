@@ -8,6 +8,8 @@ import { buildBackupZip, collectBackupData } from "@/lib/backup/export";
 import { importBackup } from "@/lib/backup/import";
 import { BackupError, buildManifest } from "@/lib/backup/manifest";
 import { BackupDataSchema } from "@/lib/backup/schema";
+import { ResumeVariantService } from "@/lib/career/resumeVariantService";
+import { projectResumeVariantText } from "@/lib/career/resumeVariantText";
 import { seedAccount } from "./helpers/backupTestDb";
 import {
   LEGACY,
@@ -249,6 +251,7 @@ async function seedPhase4Graph() {
     data: {
       resumeVariantSectionId: section.id,
       careerMaterialItemId: material.id,
+      materialTitleSnapshot: "Captured historical title",
       itemKind: "EMPLOYMENT",
       sortOrder: 0,
     },
@@ -425,6 +428,29 @@ function migrateOpts() {
 }
 
 describe("Phase 4 v2 backup / restore round-trip", () => {
+  it("restores old backup items without a snapshot as null, with no live title fallback", async () => {
+    const { buffer } = await buildBackupZip(userId, "phase4@example.com");
+    const zip = await JSZip.loadAsync(buffer);
+    const data = JSON.parse(await zip.file("data.json")!.async("string"));
+    for (const row of data.ResumeVariantSectionItem) delete row.materialTitleSnapshot;
+    zip.file("data.json", JSON.stringify(data));
+    try {
+      await importBackup(await zip.generateAsync({ type: "nodebuffer" }), userId, "phase4@example.com", true);
+      const items = await prisma.resumeVariantSectionItem.findMany({ where: { section: { version: { resumeVariant: { userId } } } } });
+      expect(items.length).toBeGreaterThan(0);
+      expect(items.every((item) => item.materialTitleSnapshot === null)).toBe(true);
+      const variant = await prisma.resumeVariant.findFirstOrThrow({ where: { userId } });
+      const service = new ResumeVariantService(prisma, userId, { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" });
+      const version = await service.getVersion(variant.currentVersionId!);
+      expect(projectResumeVariantText(version)).not.toContain("Captured historical title");
+      for (const item of version.sections.flatMap((section) => section.items)) {
+        if (item.careerMaterialItem) expect(item.materialTitleSnapshot).toBeNull();
+      }
+    } finally {
+      await importBackup(buffer, userId, "phase4@example.com", true);
+    }
+  }, 120_000);
+
   it("writes formatVersion 3 and omits DataMigrationRun", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
@@ -476,6 +502,7 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(variant.currentVersionId).toBe(variant.currentVersion?.id);
     expect(variant.versions).toHaveLength(2);
     const current = variant.currentVersion!;
+    expect((await prisma.resumeVariantSectionItem.findFirstOrThrow({ where: { section: { resumeVariantVersionId: current.id } } })).materialTitleSnapshot).toBe("Captured historical title");
     expect(current.status).toBe("FROZEN");
     expect(current.layoutConfig).toBe(LAYOUT);
     expect(current.headerSnapshot).toBe(HEADER);

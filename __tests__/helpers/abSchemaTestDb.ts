@@ -15,6 +15,7 @@ export const CANDIDATE_PROFILE_MIGRATION =
 export const PHASE3A_INTERVIEW_MIGRATION = "phase3a_interview_schema";
 export const ACCOUNT_LOGIN_FOUNDATION_MIGRATION =
   "phase_account_login_connection_foundation";
+export const RESUME_TITLE_SNAPSHOT_MIGRATION = "resume_material_title_snapshot";
 
 export function makeAbTestDbUrl(): { url: string; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-ab-schema-"));

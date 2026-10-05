@@ -14,6 +14,7 @@ import {
   CANDIDATE_PROFILE_MIGRATION,
   PHASE3A_INTERVIEW_MIGRATION,
   ACCOUNT_LOGIN_FOUNDATION_MIGRATION,
+  RESUME_TITLE_SNAPSHOT_MIGRATION,
 } from "./helpers/abSchemaTestDb";
 
 const LEGACY_TABLES = [
@@ -187,6 +188,8 @@ describe("Vocatrya A+B phase 1 schema", () => {
         // ResumeVariantVersion — all created in the waves above — so it is
         // the last migration of the upgrade wave, not the legacy base.
         ACCOUNT_LOGIN_FOUNDATION_MIGRATION,
+        // Resume items exist only after the foundation upgrade wave.
+        RESUME_TITLE_SNAPSHOT_MIGRATION,
       ],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -268,6 +271,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
       // Timestamp-ordered after the foundation, so it applies last.
       copyMigrationBySuffix(ctx.dir, PHASE3A_INTERVIEW_MIGRATION);
       copyMigrationBySuffix(ctx.dir, ACCOUNT_LOGIN_FOUNDATION_MIGRATION);
+      copyMigrationBySuffix(ctx.dir, RESUME_TITLE_SNAPSHOT_MIGRATION);
       migrateDeploy(ctx.url, schemaPath);
 
       expect(await prisma.job.count()).toBe(before.jobs);

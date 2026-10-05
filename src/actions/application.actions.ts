@@ -250,7 +250,7 @@ export async function completeApplicationProcessStep(
   }
 }
 
-export async function submitAttemptResumeVersion(input: {
+export async function attachAttemptResumeVersion(input: {
   attemptId: string;
   submittedResumeVersionId: string;
 }): Promise<ActionResult> {
@@ -263,9 +263,9 @@ export async function submitAttemptResumeVersion(input: {
       typeof input?.submittedResumeVersionId !== "string" ||
       input.submittedResumeVersionId.trim() === ""
     ) {
-      throw new CareerRuntimeError("INVALID_ID", "Invalid submit binding input");
+      throw new CareerRuntimeError("INVALID_ID", "Invalid provenance binding input");
     }
-    const data = await applicationsFor(user.id).bindSubmittedResumeVersion({
+    const data = await applicationsFor(user.id).attachSubmissionProvenance({
       attemptId: input.attemptId.trim(),
       submittedResumeVersionId: input.submittedResumeVersionId.trim(),
     });

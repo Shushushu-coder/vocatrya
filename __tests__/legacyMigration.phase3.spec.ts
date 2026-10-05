@@ -514,6 +514,10 @@ describe("Phase 3 disposable SQLite backfill", () => {
       });
       expect(dated.submittedAt?.toISOString()).toBe("2024-02-02T00:00:00.000Z");
       expect(dated.submittedResumeVersionId).toBeNull();
+      expect(dated.submittedAgainstJdVersionId).toBeNull();
+      const migratedItems = await verify.resumeVariantSectionItem.findMany({ include: { careerMaterialItem: true } });
+      expect(migratedItems.filter((item) => item.careerMaterialItem).length).toBeGreaterThan(0);
+      for (const item of migratedItems) expect(item.materialTitleSnapshot).toBe(item.careerMaterialItem?.title ?? null);
       expect(dated.channelLabel).toBe(UNSPECIFIED_CHANNEL_LABEL);
       expect(dated.channelCategory).toBeNull();
 

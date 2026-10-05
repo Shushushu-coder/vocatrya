@@ -1,6 +1,7 @@
 import { parseResumeHeaderSnapshot } from "./resumeHeaderSnapshot";
 
 export type ResumeVariantTextItem = {
+  materialTitleSnapshot?: string | null;
   careerMaterialItem?: { title: string | null } | null;
   expressions: Array<{ content: string }>;
 };
@@ -40,7 +41,7 @@ export function projectResumeVariantText(source: ResumeVariantTextSource): strin
     const title = section.title.trim();
     if (title) lines.push(`## ${title}`);
     for (const item of section.items) {
-      const itemTitle = item.careerMaterialItem?.title?.trim();
+      const itemTitle = item.materialTitleSnapshot?.trim();
       if (itemTitle) lines.push(itemTitle);
       for (const expression of item.expressions) {
         const content = expression.content.trim();

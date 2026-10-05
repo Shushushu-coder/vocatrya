@@ -72,6 +72,7 @@ type ExpressionRow = {
 };
 
 type ItemRow = {
+  materialTitleSnapshot: string | null;
   id: string;
   itemKind: string;
   careerMaterialItemId: string | null;
@@ -554,7 +555,7 @@ export function ResumeVariantWorkspace({
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <p className="font-medium">
-                            {item.careerMaterialItem?.title ?? t("resumeVariants.manualItem")}
+                            {item.materialTitleSnapshot ?? t("resumeVariants.manualItem")}
                           </p>
                           {item.careerMaterialItem ? (
                             <p className="text-xs text-muted-foreground">

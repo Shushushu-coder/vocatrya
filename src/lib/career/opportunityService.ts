@@ -60,7 +60,7 @@ function assertOpportunityStatus(status: string): void {
 
 export class OpportunityService {
   constructor(
-    private readonly db: PrismaClient,
+    private readonly db: PrismaClient | Prisma.TransactionClient,
     private readonly userId: string,
     private readonly env?: NodeJS.ProcessEnv,
   ) {}

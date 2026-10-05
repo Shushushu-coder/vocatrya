@@ -11,6 +11,7 @@ type Expression = {
 type Item = {
   id: string;
   expressions: Expression[];
+  materialTitleSnapshot?: string | null;
   careerMaterialItem?: { title: string | null } | null;
 };
 
@@ -61,8 +62,8 @@ export function ResumePreview({ headerSnapshot, sections, print = false }: Resum
             <div className="mt-3 space-y-3">
               {section.items.map((item) => (
                 <div key={item.id} className={print ? "resume-print-item" : undefined}>
-                  {item.careerMaterialItem?.title ? (
-                    <p className="text-sm font-medium">{item.careerMaterialItem.title}</p>
+                  {item.materialTitleSnapshot ? (
+                    <p className="text-sm font-medium">{item.materialTitleSnapshot}</p>
                   ) : null}
                   <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
                     {item.expressions.filter((expression) => !print || expression.content.trim()).map((expression) => (

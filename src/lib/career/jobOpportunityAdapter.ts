@@ -106,7 +106,7 @@ async function statusesByValue(db: PrismaClient): Promise<Map<string, JobStatusR
 }
 
 export async function syncJdVersion(
-  db: PrismaClient,
+  db: Prisma.TransactionClient,
   opportunityId: string,
   rawContent: string,
   sourceUrl: string | null,
@@ -157,9 +157,13 @@ export async function syncApplicationFromUiStatus(
     sourceUrl?: string | null;
     env?: NodeJS.ProcessEnv;
   } = {},
-) {
+  tx?: Prisma.TransactionClient,
+): Promise<void> {
+  if (!tx) {
+    return db.$transaction((transaction) => syncApplicationFromUiStatus(db, userId, opportunityId, uiStatus, options, transaction));
+  }
   const applications = new ApplicationService(db, userId, options.env);
-  const opportunities = new OpportunityService(db, userId, options.env);
+  const opportunities = new OpportunityService(tx, userId, options.env);
   const plan = planUiStatusWrite(uiStatus);
 
   if (plan.kind === "expire-opportunity") {
@@ -183,12 +187,13 @@ export async function syncApplicationFromUiStatus(
     jobOpportunityId: opportunityId,
     channelLabel: "USER",
     sourceUrl: options.sourceUrl ?? null,
-  });
+  }, tx);
 
   const shouldMarkSubmitted =
     (plan.kind === "attempt" && plan.markSubmitted) || options.applied === true;
-  if (shouldMarkSubmitted) {
-    await applications.markSubmitted({
+  const initialSubmission = shouldMarkSubmitted && attempt.currentStageCategory === ATTEMPT_STAGE.DRAFT && attempt.outcome === ATTEMPT_OUTCOME.ACTIVE && attempt.submittedAt === null && attempt.archivedAt === null;
+  if (initialSubmission) {
+    await applications.submitApplicationInTransaction(tx, {
       attemptId: attempt.id,
       submittedAt: options.appliedDate ?? undefined,
     });
@@ -199,9 +204,9 @@ export async function syncApplicationFromUiStatus(
       shouldMarkSubmitted &&
       plan.currentStageCategory === ATTEMPT_STAGE.SUBMITTED;
     if (!alreadyAtStage) {
-      await applications.updateStage(attempt.id, plan.currentStageCategory);
+      await applications.updateStage(attempt.id, plan.currentStageCategory, tx);
     }
-    await applications.recordOutcome(attempt.id, plan.outcome);
+    await applications.recordOutcome(attempt.id, plan.outcome, tx);
   }
 }
 
@@ -229,7 +234,7 @@ export async function createOpportunityFromJobForm(
   const status = await statusById(db, input.status);
   assertNoLegacyResumeBinding(input.resume);
   return db.$transaction(async (tx) => {
-    const client = tx as unknown as PrismaClient;
+    const client = tx;
     const opportunities = new OpportunityService(client, userId, env);
     const created = await opportunities.create({
       companyId: input.company,
@@ -257,12 +262,12 @@ export async function createOpportunityFromJobForm(
     // applied/dateApplied/status are application semantics, not opportunity fields.
     // Map them onto ApplicationAttempt stage/outcome; this is a no-op when the
     // UI state does not imply an application.
-    await syncApplicationFromUiStatus(client, userId, created.id, status.value, {
+    await syncApplicationFromUiStatus(db, userId, created.id, status.value, {
       applied: input.applied,
       appliedDate: input.dateApplied ?? null,
       sourceUrl: input.jobUrl ?? null,
       env,
-    });
+    }, tx);
 
     return created;
   });
@@ -282,7 +287,7 @@ export async function updateOpportunityFromJobForm(
   const source = await optionalOwned(db, userId, input.source, "jobSource");
   const status = await statusById(db, input.status);
   return db.$transaction(async (tx) => {
-    const client = tx as unknown as PrismaClient;
+    const client = tx;
     const opportunities = new OpportunityService(client, userId, env);
     const updated = await opportunities.updateSafe(input.id!, {
       companyId: input.company,
@@ -312,12 +317,12 @@ export async function updateOpportunityFromJobForm(
     );
     assertNoLegacyResumeBinding(input.resume);
 
-    await syncApplicationFromUiStatus(client, userId, updated.id, status.value, {
+    await syncApplicationFromUiStatus(db, userId, updated.id, status.value, {
       applied: input.applied,
       appliedDate: input.dateApplied ?? null,
       sourceUrl: input.jobUrl ?? null,
       env,
-    });
+    }, tx);
 
     return updated;
   });

@@ -59,7 +59,7 @@ vi.mock("next/cache", () => ({
 import { getCurrentUser } from "@/utils/user.utils";
 import {
   getSubmittedResumeBindings,
-  submitAttemptResumeVersion,
+  attachAttemptResumeVersion,
 } from "@/actions/application.actions";
 
 const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -355,7 +355,7 @@ describe("restricted submitted resume read/bind", () => {
     });
     const variant = await variants().createVariant({ name: "Campus" });
     setScope("none");
-    const action = await submitAttemptResumeVersion({
+    const action = await attachAttemptResumeVersion({
       attemptId: attempt.id,
       submittedResumeVersionId: variant.currentVersionId!,
     });

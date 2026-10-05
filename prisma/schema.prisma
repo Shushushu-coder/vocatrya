@@ -1431,6 +1431,7 @@ model ResumeVariantSection {
 }
 
 model ResumeVariantSectionItem {
+  materialTitleSnapshot  String?
   id                     String  @id @default(uuid())
   resumeVariantSectionId String
   careerMaterialItemId   String?

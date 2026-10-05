@@ -768,12 +768,6 @@ async function migrateJobRoot(
     } else {
       const submittedAt =
         job.appliedDate != null ? parseDate(job.appliedDate) : null;
-      const jdMapping = await findMapping(tx, {
-        userId: job.userId,
-        legacyEntityType: LEGACY.JOB,
-        legacyEntityId: job.id,
-        targetEntityType: TARGET.JOB_DESCRIPTION_VERSION,
-      });
       const attempt = await tx.applicationAttempt.create({
         data: {
           userId: job.userId,
@@ -786,7 +780,8 @@ async function migrateJobRoot(
           outcome: (lifecycle.outcome ?? "ACTIVE") as AttemptOutcome as string,
           submittedResumeVersionId: null,
           submittedResumeArtifactId: null,
-          submittedAgainstJdVersionId: jdMapping?.targetEntityId ?? null,
+          // Historical submission JD is unknown; migration-time JD is not proof.
+          submittedAgainstJdVersionId: null,
           createdVia: job.createdVia ?? PHASE3_CREATED_VIA,
         },
       });
@@ -1430,10 +1425,13 @@ async function migrateResumes(
                 `CAREER_MATERIAL_NOT_READY ${legacyType}:${legacyId}`,
               );
             }
+            // Capture the title observable now, without claiming original historical state.
+            const material = await tx.careerMaterialItem.findUniqueOrThrow({ where: { id: mapped.targetEntityId } });
             const item = await tx.resumeVariantSectionItem.create({
               data: {
                 resumeVariantSectionId: createdSection.id,
                 careerMaterialItemId: mapped.targetEntityId,
+                materialTitleSnapshot: material.title,
                 itemKind,
                 sortOrder,
               },

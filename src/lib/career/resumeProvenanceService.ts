@@ -1,6 +1,7 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { CareerRuntimeError } from "./errors";
 import { EVIDENCE_STATUS, RESUME_VERSION_STATUS } from "./identities";
+import { ResumeVariantService } from "./resumeVariantService";
 import { sha256Utf8 } from "./hash";
 import { assertResumeV1Writable } from "./capabilities";
 
@@ -30,69 +31,20 @@ export class ResumeProvenanceService {
     evidenceId: string;
   }) {
     await this.gate();
-    const expression = await this.requireOwnedMutableExpression(input.expressionId);
-    const existing = expression.evidenceLinks.find(
-      (link) => link.careerEvidenceId === input.evidenceId,
-    );
-    if (existing) {
-      return existing;
-    }
+    return this.db.$transaction(async (tx) => {
+      await new ResumeVariantService(this.db, this.userId, this.env).guardDraftMutationInTransaction(tx, {
+        sections: { some: { items: { some: { expressions: { some: { id: input.expressionId } } } } } },
+      }, "EXPRESSION_NOT_FOUND");
+      const expression = await this.requireOwnedMutableExpression(input.expressionId, tx);
+      const existing = expression.evidenceLinks.find(
+        (link) => link.careerEvidenceId === input.evidenceId,
+      );
+      if (existing) {
+        return existing;
+      }
 
-    const evidence = await this.requireOwnedEvidence(input.evidenceId);
-    const created = await this.db.resumeExpressionEvidence.create({
-      data: {
-        resumeExpressionId: expression.id,
-        careerEvidenceId: evidence.id,
-        evidenceContentSnapshot: evidence.content,
-        evidenceHashSnapshot: hashEvidenceContent(evidence.content),
-        evidenceUpdatedAtSnapshot: evidence.updatedAt,
-      },
-    });
-    await this.syncEvidenceStatus(expression.id);
-    return created;
-  }
-
-  async unlinkEvidenceFromExpression(input: {
-    expressionId: string;
-    evidenceId: string;
-  }) {
-    await this.gate();
-    await this.requireOwnedMutableExpression(input.expressionId);
-    await this.db.resumeExpressionEvidence.deleteMany({
-      where: {
-        resumeExpressionId: input.expressionId,
-        careerEvidenceId: input.evidenceId,
-      },
-    });
-    await this.syncEvidenceStatus(input.expressionId);
-  }
-
-  async replaceExpressionEvidence(input: {
-    expressionId: string;
-    evidenceIds: string[];
-  }) {
-    await this.gate();
-    const expression = await this.requireOwnedMutableExpression(input.expressionId);
-    const uniqueIds = [...new Set(input.evidenceIds)];
-    const evidences = [];
-    for (const evidenceId of uniqueIds) {
-      evidences.push(await this.requireOwnedEvidence(evidenceId));
-    }
-
-    const keep = new Set(uniqueIds);
-    const staleLinks = expression.evidenceLinks.filter(
-      (link) => !keep.has(link.careerEvidenceId),
-    );
-    if (staleLinks.length > 0) {
-      await this.db.resumeExpressionEvidence.deleteMany({
-        where: { id: { in: staleLinks.map((link) => link.id) } },
-      });
-    }
-
-    const present = new Set(expression.evidenceLinks.map((link) => link.careerEvidenceId));
-    for (const evidence of evidences) {
-      if (present.has(evidence.id)) continue;
-      await this.db.resumeExpressionEvidence.create({
+      const evidence = await this.requireOwnedEvidence(input.evidenceId, tx);
+      const created = await tx.resumeExpressionEvidence.create({
         data: {
           resumeExpressionId: expression.id,
           careerEvidenceId: evidence.id,
@@ -101,17 +53,81 @@ export class ResumeProvenanceService {
           evidenceUpdatedAtSnapshot: evidence.updatedAt,
         },
       });
-    }
-
-    await this.syncEvidenceStatus(expression.id);
-    return this.getExpressionEvidence(expression.id);
+      await this.syncEvidenceStatus(expression.id, tx);
+      return created;
+    });
   }
 
-  private async syncEvidenceStatus(expressionId: string): Promise<void> {
-    const count = await this.db.resumeExpressionEvidence.count({
+  async unlinkEvidenceFromExpression(input: {
+    expressionId: string;
+    evidenceId: string;
+  }) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      await new ResumeVariantService(this.db, this.userId, this.env).guardDraftMutationInTransaction(tx, {
+        sections: { some: { items: { some: { expressions: { some: { id: input.expressionId } } } } } },
+      }, "EXPRESSION_NOT_FOUND");
+      await this.requireOwnedMutableExpression(input.expressionId, tx);
+      await tx.resumeExpressionEvidence.deleteMany({
+        where: {
+          resumeExpressionId: input.expressionId,
+          careerEvidenceId: input.evidenceId,
+        },
+      });
+      await this.syncEvidenceStatus(input.expressionId, tx);
+    });
+  }
+
+  async replaceExpressionEvidence(input: {
+    expressionId: string;
+    evidenceIds: string[];
+  }) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      await new ResumeVariantService(this.db, this.userId, this.env).guardDraftMutationInTransaction(tx, {
+        sections: { some: { items: { some: { expressions: { some: { id: input.expressionId } } } } } },
+      }, "EXPRESSION_NOT_FOUND");
+      const expression = await this.requireOwnedMutableExpression(input.expressionId, tx);
+      const uniqueIds = [...new Set(input.evidenceIds)];
+      const evidences = [];
+      for (const evidenceId of uniqueIds) {
+        evidences.push(await this.requireOwnedEvidence(evidenceId, tx));
+      }
+
+      const keep = new Set(uniqueIds);
+      const staleLinks = expression.evidenceLinks.filter(
+        (link) => !keep.has(link.careerEvidenceId),
+      );
+      if (staleLinks.length > 0) {
+        await tx.resumeExpressionEvidence.deleteMany({
+          where: { id: { in: staleLinks.map((link) => link.id) } },
+        });
+      }
+
+      const present = new Set(expression.evidenceLinks.map((link) => link.careerEvidenceId));
+      for (const evidence of evidences) {
+        if (present.has(evidence.id)) continue;
+        await tx.resumeExpressionEvidence.create({
+          data: {
+            resumeExpressionId: expression.id,
+            careerEvidenceId: evidence.id,
+            evidenceContentSnapshot: evidence.content,
+            evidenceHashSnapshot: hashEvidenceContent(evidence.content),
+            evidenceUpdatedAtSnapshot: evidence.updatedAt,
+          },
+        });
+      }
+
+      await this.syncEvidenceStatus(expression.id, tx);
+      return (await this.requireOwnedExpression(expression.id, tx)).evidenceLinks;
+    });
+  }
+
+  private async syncEvidenceStatus(expressionId: string, tx: Prisma.TransactionClient = this.db): Promise<void> {
+    const count = await tx.resumeExpressionEvidence.count({
       where: { resumeExpressionId: expressionId },
     });
-    await this.db.resumeExpression.update({
+    await tx.resumeExpression.update({
       where: { id: expressionId },
       data: {
         evidenceStatus:
@@ -120,8 +136,8 @@ export class ResumeProvenanceService {
     });
   }
 
-  private async requireOwnedMutableExpression(expressionId: string) {
-    const expression = await this.requireOwnedExpression(expressionId);
+  private async requireOwnedMutableExpression(expressionId: string, tx: Prisma.TransactionClient = this.db) {
+    const expression = await this.requireOwnedExpression(expressionId, tx);
     const version = expression.sectionItem.section.version;
     if (version.resumeVariant.archivedAt) {
       throw new CareerRuntimeError(
@@ -135,7 +151,7 @@ export class ResumeProvenanceService {
         `Cannot change provenance on ${version.status} version`,
       );
     }
-    const referenced = await this.db.applicationAttempt.findFirst({
+    const referenced = await tx.applicationAttempt.findFirst({
       where: { submittedResumeVersionId: version.id },
       select: { id: true },
     });
@@ -148,8 +164,8 @@ export class ResumeProvenanceService {
     return expression;
   }
 
-  private async requireOwnedExpression(expressionId: string) {
-    const expression = await this.db.resumeExpression.findFirst({
+  private async requireOwnedExpression(expressionId: string, tx: Prisma.TransactionClient = this.db) {
+    const expression = await tx.resumeExpression.findFirst({
       where: {
         id: expressionId,
         sectionItem: {
@@ -186,8 +202,8 @@ export class ResumeProvenanceService {
     return expression;
   }
 
-  private async requireOwnedEvidence(evidenceId: string) {
-    const evidence = await this.db.careerEvidence.findFirst({
+  private async requireOwnedEvidence(evidenceId: string, tx: Prisma.TransactionClient = this.db) {
+    const evidence = await tx.careerEvidence.findFirst({
       where: {
         id: evidenceId,
         materialItem: { userId: this.userId },

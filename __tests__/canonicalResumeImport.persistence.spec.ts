@@ -60,6 +60,7 @@ it("creates canonical facts, original expressions and evidence links atomically 
   expect((await inspectResumeImport(db, userId, request.parsed)).conflicts).toEqual(["phone"]);
   const variant = await persistResumeImport(db, userId, request, env);
   const version = await new ResumeVariantService(db, userId, env).getVersion(variant.currentVersionId!);
+  for (const item of version.sections.flatMap((section) => section.items)) expect(item.materialTitleSnapshot).toBe(item.careerMaterialItem?.title ?? null);
   expect(version.status).toBe("DRAFT");
   expect(version.createdVia).toBe("IMPORT");
   expect(version.sections.map((section) => section.title)).toEqual(importFixture.sections.map((section) => section.title));
@@ -115,4 +116,24 @@ it("does not merge same company and role when dates/source differ", async () => 
   expect(await inspectResumeImport(db, userId, request.parsed)).toMatchObject({ created: 1, reused: 3 });
   await persistResumeImport(db, userId, request, env);
   expect(await db.careerMaterialItem.count({ where: { type: "INTERNSHIP" } })).toBe(2);
+});
+
+it("keeps imported frozen titles stable in actual Agent get/review tools after material rename", async () => {
+  const variant = await persistResumeImport(db, userId, input(), env);
+  const service = new ResumeVariantService(db, userId, env);
+  const version = await service.getVersion(variant.currentVersionId!);
+  const linked = version.sections.flatMap((section) => section.items).find((item) => item.careerMaterialItemId)!;
+  const title = linked.materialTitleSnapshot!;
+  await service.freeze(version.id);
+  await db.careerMaterialItem.update({ where: { id: linked.careerMaterialItemId! }, data: { title: "LIVE RENAMED MATERIAL MUST NOT APPEAR" } });
+  mocks.lookup.mockImplementation(async () => ({ ...await readAbResumeVariant(db, userId, variant.id), status: "ok", family: "ab", source: "page", ambiguousTitle: false }));
+  const read = await buildGetResumeTool(userId, variant.id).execute!({}, { toolCallId: "get-history", messages: [] });
+  expect(JSON.stringify(read)).toContain(title);
+  expect(JSON.stringify(read)).not.toContain("LIVE RENAMED MATERIAL MUST NOT APPEAR");
+  mocks.generation.mockResolvedValue({ status: "ok", text: "Review\nSCORES: overall=80 impact=80 clarity=80 ats=80" });
+  const review = buildReviewResumeTool({ userId, pageResumeId: variant.id, model: {} as LanguageModel,
+    provider: "test", modelName: "test", writer: {} as UIMessageStreamWriter, guard: { running: false } });
+  await review.execute!({}, { toolCallId: "review-history", messages: [] });
+  const prompt = mocks.generation.mock.calls.at(-1)![0].prompt;
+  expect(prompt).toContain(title); expect(prompt).not.toContain("LIVE RENAMED MATERIAL MUST NOT APPEAR");
 });
