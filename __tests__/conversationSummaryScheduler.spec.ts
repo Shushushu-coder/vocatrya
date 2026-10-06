@@ -18,7 +18,7 @@ import {
   summaryBoundaryUnderStoragePressure,
   validateConversationSummaryCoverage,
 } from "@/lib/agent/conversationSummaryCoverage";
-import { CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION } from "@/lib/agent/conversationSummaryPrompt";
+import { CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION, projectConversationSummaryInput } from "@/lib/agent/conversationSummaryPrompt";
 import {
   condenseCareerDialogueSummary,
   conversationSummaryInFlight,
@@ -149,6 +149,33 @@ function depsFor(
 }
 
 describe("career dialogue summary scheduler", () => {
+  it("catches up a 120-message prefix cumulatively, carrying early facts in each prompt", async () => {
+    const messages = dialogue(60);
+    messages[0] = user("u0", "UNIQUE_CONSTRAINT_ALPHA EARLY_FACT_001");
+    const repo = memoryRepository({ messages });
+    const prompts: string[] = [];
+    const executeText = mockExecute(async ({ prompt }) => {
+      prompts.push(prompt);
+      expect(prompt).toContain("EARLY_FACT_001");
+      return { text: "EARLY_FACT_001 UNIQUE_CONSTRAINT_ALPHA" };
+    });
+    const deps = depsFor(repo, executeText);
+    for (const [pass, expectedCount] of [50, 74, 110].entries()) {
+      expect(await condenseCareerDialogueSummary({ userId: USER, conversationId: CONVERSATION }, deps)).toMatchObject({ status: "committed", coveredCount: expectedCount });
+      expect(repo.state.summary).toMatchObject({ coveredCount: expectedCount, throughMessageId: messages[expectedCount - 1].id, revision: pass + 1 });
+      expect(repo.state.summary?.coverageHash).toBe(hashSummaryCoverage(messages.slice(0, expectedCount)));
+      const delta = JSON.parse(prompts[pass].split("New dialogue (JSON data):\n\n")[1]).new_messages as string;
+      const start = pass === 0 ? 0 : pass === 1 ? 50 : 74;
+      expect(delta).toBe(projectConversationSummaryInput(messages.slice(start, expectedCount)));
+      if (pass === 0) expect(prompts[pass]).not.toContain('"previous_summary":');
+      else {
+        expect(prompts[pass]).toContain('"previous_summary":"EARLY_FACT_001 UNIQUE_CONSTRAINT_ALPHA"');
+        expect(delta).not.toContain("EARLY_FACT_001");
+      }
+      expect(estimateContextTokens(prompts[pass])).toBeLessThanOrEqual(CAREER_DIALOGUE_CONTEXT_BUDGETS.dynamicTokens);
+      expect(repo.state.messages).toEqual(messages);
+    }
+  });
   beforeEach(() => {
     resetConversationSummaryInFlightForTests();
   });

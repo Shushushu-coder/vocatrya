@@ -122,7 +122,7 @@ export async function runCareerDialogueTurn(
 
   const lastMessage = messages[messages.length - 1];
   const messageId =
-    lastMessage?.role === "assistant" ? lastMessage.id : generateId();
+    input.request?.responseMessageId ?? (lastMessage?.role === "assistant" ? lastMessage.id : generateId());
   writer.write({ type: "start", messageId });
 
   const rendered = renderCareerDialoguePrompt({

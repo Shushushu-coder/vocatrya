@@ -20,6 +20,8 @@ export const RESUME_TITLE_SNAPSHOT_MIGRATION = "resume_material_title_snapshot";
 export function makeAbTestDbUrl(): { url: string; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-ab-schema-"));
   const dbPath = path.join(dir, "test.db").replace(/\\/g, "/");
+  // Prisma migrate deploy on Windows requires an existing disposable file.
+  fs.writeFileSync(dbPath, "");
   return { url: `file:${dbPath}`, dir };
 }
 

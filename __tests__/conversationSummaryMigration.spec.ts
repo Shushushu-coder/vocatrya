@@ -121,7 +121,9 @@ describe("ConversationSummary migration", () => {
 
     const freshDir = mkdtempSync(path.join(tmpdir(), "vocatrya-summary-fresh-"));
     directories.push(freshDir);
-    const freshUrl = fileUrl(path.join(freshDir, "fresh.db"));
+    const freshDatabase = path.join(freshDir, "fresh.db");
+    writeFileSync(freshDatabase, "");
+    const freshUrl = fileUrl(freshDatabase);
     runPrisma(["migrate", "deploy"], freshUrl);
 
     const prisma = new PrismaClient({ datasourceUrl: freshUrl });

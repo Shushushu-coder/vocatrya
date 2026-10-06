@@ -4,7 +4,7 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
-import { buildCoverLetterTitle } from "@/lib/coverLetterTitle";
+import { saveCoverLetterInTransaction } from "@/lib/jobs/generatedResults";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 
 // html:false escapes raw HTML in the model output before it is ever stored,
@@ -157,57 +157,10 @@ export const generateCoverLetterForJob = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
-    await assertLegacyCareerWriteAllowed(prisma);
-
-    if (
-      !markdown ||
-      markdown.trim().length < APP_CONSTANTS.MIN_COVER_LETTER_CHARS
-    ) {
-      throw new Error("Generated cover letter was too short to save.");
-    }
-
-    const job = await prisma.job.findUnique({
-      where: { id: jobId, userId: user.id },
-      include: { JobTitle: true, Company: true },
-    });
-
-    if (!job) {
-      throw new Error("Job not found");
-    }
-
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-    });
-
-    if (!profile) {
-      throw new Error("No profile found for this user.");
-    }
-
-    const existing = await prisma.coverLetter.findMany({
-      where: { profile: { userId: user.id } },
-      select: { title: true },
-    });
-
-    const title = buildCoverLetterTitle(
-      job.JobTitle?.label ?? "Cover Letter",
-      job.Company?.label ?? "",
-      existing.map((letter) => letter.title)
-    );
-
     const content = md.render(markdown);
-
-    const created = await prisma.$transaction(async (tx) => {
-      const letter = await tx.coverLetter.create({
-        data: { profileId: profile.id, title, content },
-      });
-
-      await tx.job.update({
-        where: { id: jobId, userId: user.id },
-        data: { coverLetterId: letter.id },
-      });
-
-      return letter;
-    });
+    const created = await prisma.$transaction(tx =>
+      saveCoverLetterInTransaction(tx, user.id, jobId, content, markdown),
+    );
 
     return { success: true, data: { id: created.id, title: created.title } };
   } catch (error) {

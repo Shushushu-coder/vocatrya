@@ -1850,6 +1850,9 @@
       "generic": "Action"
     },
     "errors": {
+      "conversationChanged": "This conversation has been updated. Its saved history has been reloaded; repeat your action when ready.",
+      "operationSaved": "Your operation was saved, but the follow-up AI reply did not finish.",
+      "recoveryFailed": "Conversation could not be refreshed or stopped. Please reopen the conversation before continuing.",
       "cannotSend": "Couldn't send the message",
       "connectionDown": "Codex can't be reached right now.",
       "reauthTitle": "Codex sign-in expired.",

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import prisma from "@/lib/db";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 
@@ -22,7 +22,7 @@ export async function createJobRecord(fields: {
   tagIds?: string[];
   createdVia?: string | null;
   descriptionCompleteness?: string | null;
-}, client: PrismaClient = prisma) {
+}, client: PrismaClient | Prisma.TransactionClient = prisma) {
   const { tagIds = [], ...rest } = fields;
   await assertLegacyCareerWriteAllowed(client);
   return client.job.create({

@@ -81,7 +81,7 @@ export type CareerDialogueContextInput = {
    * Fresh transcript-compression cache, already validated by the caller.
    * Omitted when missing, stale, legacy, or over the summary budget.
    */
-  summary?: string | null;
+  summary?: string | { text: string; throughMessageId: string } | null;
   /** Tool results produced in this turn and not yet on `messages`. */
   sessionFacts?: SessionToolFact[];
   systemText?: string;
@@ -547,8 +547,8 @@ export function buildCareerDialogueContext(
     keptToolCount += 1;
   }
 
-  let summary =
-    input.summary && input.summary.trim() ? input.summary.trim() : undefined;
+  const summaryText = typeof input.summary === "string" ? input.summary : input.summary?.text;
+  let summary = summaryText?.trim() || undefined;
   if (summary && estimateContextTokens(summary) > budgets.summaryTokens) {
     summary = undefined;
   }
@@ -661,6 +661,19 @@ export function buildCareerDialogueContext(
 
   while (over() && dropLowest()) {
     // One lowest-priority unit per step. No unordered collection.
+  }
+
+  // Check the final retained turns, including drops caused by this profile's
+  // tool results and fixed overhead. A partial catch-up cache cannot fill a gap.
+  if (summary && input.summary && typeof input.summary !== "string") {
+    const throughMessageId = input.summary.throughMessageId;
+    const throughIndex = messages.findIndex(message => message.id === throughMessageId);
+    const coveredIds = new Set(messages.slice(0, throughIndex + 1).map(message => message.id));
+    const keptTurns = new Set(history.map(rendered => rendered.turn));
+    if (throughIndex < 0 || historyPool.some(turn => !keptTurns.has(turn) && turnMessageIds(turn).some(id => !coveredIds.has(id)))) {
+      summaryLine = undefined;
+      summary = undefined;
+    }
   }
 
   const transcriptLines = assemble();

@@ -43,7 +43,7 @@ describe("ChatConversation AI lock migration", () => {
     // that migration copies resolvedConnectionId, so it cannot run before
     // this one. It has its own disposable round-trip.
     const schemaPath = preparePrismaProject(ctx.dir, {
-      excludeSuffix: [MIGRATION_SUFFIX, "chat_conversation_multi"],
+      excludeSuffix: [MIGRATION_SUFFIX, "chat_conversation_multi", "chat_conversation_concurrency"],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
     try {

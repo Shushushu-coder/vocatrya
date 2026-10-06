@@ -54,6 +54,7 @@ beforeAll(async () => {
     data: {
       userId,
       messages,
+      revision: 12, activeRequestId: "old-execution", activeRequestExpiresAt: new Date(Date.now() + 300000),
       resolvedConnectionId: connectionId,
       resolvedModel: "swe-2",
     },
@@ -74,6 +75,11 @@ describe("ChatConversation lock backup", () => {
       where: { userId },
     });
     expect(restored.messages).toBe(messages);
+    expect(restored).toMatchObject({ revision: 0, activeRequestId: null, activeRequestExpiresAt: null });
+    const { admitConversationRequest, cancelConversationRequest } = await import("@/lib/agent/conversationRequest");
+    const admitted = await admitConversationRequest({ userId, conversationId: restored.id, expectedRevision: 0, requestId: "after-restore", operation: "send", newMessage: { id: "fresh", role: "user", parts: [{ type: "text", text: "hello" }] } }, prisma);
+    expect(admitted.revision).toBe(1);
+    await cancelConversationRequest(userId, restored.id, "after-restore", prisma);
     expect(restored.resolvedModel).toBe("swe-2");
     // Remapped, not copied verbatim — the restored AIConnection has a fresh
     // id, and the lock followed it.

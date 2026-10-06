@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
 import MarkdownIt from "markdown-it";
 import prisma from "@/lib/db";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
@@ -22,6 +23,10 @@ import {
 // html:false escapes any raw HTML in the input; TipTapContentViewer further
 // strips unrecognized tags, so the stored/rendered description is safe.
 const md = new MarkdownIt({ html: false, linkify: false, breaks: true });
+
+export function renderJobDescription(description: string): string {
+  return md.render(description);
+}
 
 export interface CreateJobFromNamesInput {
   company: string;
@@ -54,6 +59,8 @@ export interface CreateJobFromNamesResult {
 export async function createJobFromNames(
   input: CreateJobFromNamesInput,
   userId: string,
+  db: PrismaClient | Prisma.TransactionClient = prisma,
+  renderedDescription?: string,
 ): Promise<CreateJobFromNamesResult> {
   const {
     company,
@@ -79,7 +86,7 @@ export async function createJobFromNames(
   const jobTypeValue = resolveJobType(jobType);
   const workplaceTypeValue = resolveWorkplaceType(workplaceType);
 
-  await assertLegacyCareerWriteAllowed(prisma);
+  await assertLegacyCareerWriteAllowed(db);
 
   // Resolve Bucket A and B in parallel where possible
   const [
@@ -90,12 +97,12 @@ export async function createJobFromNames(
     resolvedTagsResult,
     statusId,
   ] = await Promise.all([
-    resolveCompany(company, userId),
-    resolveJobTitle(jobTitle, userId),
-    location ? resolveLocation(location, userId) : Promise.resolve(null),
-    source ? resolveJobSource(source, userId) : Promise.resolve(null),
-    resolveTags(tags, userId, APP_CONSTANTS.MAX_JOB_TAGS),
-    resolveJobStatus(status),
+    resolveCompany(company, userId, db),
+    resolveJobTitle(jobTitle, userId, db),
+    location ? resolveLocation(location, userId, db) : Promise.resolve(null),
+    source ? resolveJobSource(source, userId, db) : Promise.resolve(null),
+    resolveTags(tags, userId, APP_CONSTANTS.MAX_JOB_TAGS, db),
+    resolveJobStatus(status, db),
   ]);
 
   const resolutions: ResolvedEntity[] = [
@@ -113,6 +120,7 @@ export async function createJobFromNames(
       resolvedCompany.id,
       resolvedTitle.id,
       jobUrl,
+      db,
     );
     if (duplicate) {
       return {
@@ -141,7 +149,7 @@ export async function createJobFromNames(
     // Markdown-rendered here, unlike UI-created jobs which store raw
     // Tiptap HTML directly — both are valid HTML for TipTapContentViewer,
     // but don't assume Tiptap-specific structure when reading this field.
-    description: md.render(jobDescription),
+    description: renderedDescription ?? renderJobDescription(jobDescription),
     jobType: jobTypeValue,
     workplaceType: workplaceTypeValue,
     userId,
@@ -150,7 +158,7 @@ export async function createJobFromNames(
     tagIds: resolvedTagsResult.resolved.map((t) => t.id),
     createdVia: createdVia ?? null,
     descriptionCompleteness,
-  });
+  }, db);
 
   const message = buildSuccessMessage(resolutions, resolvedTagsResult.dropped, job.id);
 
@@ -167,21 +175,22 @@ async function detectDuplicate(
   userId: string,
   companyId: string,
   jobTitleId: string,
-  jobUrl?: string,
+  jobUrl: string | undefined,
+  db: PrismaClient | Prisma.TransactionClient,
 ): Promise<{ id: string; title: string; company: string } | null> {
   // Tier 1 — URL match (no time window). Uses the same canonical key as
   // automation dedup (jobDedupeKey folds host case, leading "www.", param
   // order, and tracking params), so URL variants of the same posting are
   // caught — not just exact-string matches.
   if (jobUrl) {
-    const byUrl = await findExistingJobByUrl(userId, jobUrl);
+    const byUrl = await findExistingJobByUrl(userId, jobUrl, db);
     if (byUrl) return byUrl;
   }
 
   // Tier 2 — company + title within window
   const windowDays = APP_CONSTANTS.MCP_DUPLICATE_WINDOW_DAYS;
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
-  const byNameWindow = await prisma.job.findFirst({
+  const byNameWindow = await db.job.findFirst({
     where: {
       userId,
       companyId,

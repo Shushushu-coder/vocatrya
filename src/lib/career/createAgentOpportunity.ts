@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { normalizeJobUrl } from "@/lib/scraper/utils";
@@ -77,6 +77,14 @@ export async function createAgentOpportunity(
   input: CreateAgentOpportunityInput,
   userId: string,
 ): Promise<CreateAgentOpportunityResult> {
+  return prisma.$transaction(tx => createAgentOpportunityInTransaction(tx, input, userId));
+}
+
+export async function createAgentOpportunityInTransaction(
+  db: Prisma.TransactionClient,
+  input: CreateAgentOpportunityInput,
+  userId: string,
+): Promise<CreateAgentOpportunityResult> {
   const companyName = requiredName(input.company, "company");
   const titleName = requiredName(input.jobTitle, "jobTitle");
   const employmentType = input.jobType ? resolveJobType(input.jobType) : null;
@@ -87,72 +95,70 @@ export async function createAgentOpportunity(
   const locationName = input.location?.trim() ? input.location.trim() : null;
   const sourceName = input.source?.trim() ? input.source.trim() : null;
 
-  return prisma.$transaction(async (tx) => {
-    const db = tx as unknown as PrismaClient;
-    if (key) {
-      const existing = await db.jobOpportunity.findFirst({
-        where: { userId, externalSourceKey: key },
-        select: {
-          id: true,
-          title: true,
-          company: { select: { label: true } },
-          currentJdVersionId: true,
-        },
-      });
-      if (existing) {
-        return {
-          created: true,
-          jobOpportunityId: existing.id,
-          company: existing.company.label,
-          title: existing.title,
-          resolutions: [],
-          hasDescription: existing.currentJdVersionId !== null,
-          replayed: true,
-        };
-      }
-    }
 
-    const resolvedCompany = await resolveCompany(companyName, userId, db);
-    const resolvedTitle = await resolveJobTitle(titleName, userId, db);
-    const resolvedLocation = locationName
-      ? await resolveLocation(locationName, userId, db)
-      : null;
-    const resolvedSource = sourceName
-      ? await resolveJobSource(sourceName, userId, db)
-      : null;
-
-    const created = await new OpportunityService(db, userId).create({
-      companyId: resolvedCompany.id,
-      title: resolvedTitle.label,
-      locationText: resolvedLocation?.label ?? null,
-      employmentType,
-      workplaceType,
-      sourceUrl,
-      sourceLabel: resolvedSource?.label ?? null,
-      deadline: input.dueDate ?? null,
-      salaryText: normalizeOptionalText(input.salaryRange) ?? null,
-      status: OPPORTUNITY_STATUS.UNKNOWN,
-      createdVia: APP_CONSTANTS.AGENT_CHAT_CREATED_VIA,
-      externalSourceKey: key,
+  if (key) {
+    const existing = await db.jobOpportunity.findFirst({
+      where: { userId, externalSourceKey: key },
+      select: {
+        id: true,
+        title: true,
+        company: { select: { label: true } },
+        currentJdVersionId: true,
+      },
     });
-
-    if (rawDescription) {
-      await syncJdVersion(db, created.id, rawDescription, sourceUrl, "PLAIN_TEXT");
+    if (existing) {
+      return {
+        created: true,
+        jobOpportunityId: existing.id,
+        company: existing.company.label,
+        title: existing.title,
+        resolutions: [],
+        hasDescription: existing.currentJdVersionId !== null,
+        replayed: true,
+      };
     }
+  }
 
-    return {
-      created: true,
-      jobOpportunityId: created.id,
-      company: resolvedCompany.label,
-      title: resolvedTitle.label,
-      resolutions: [
-        resolvedCompany,
-        resolvedTitle,
-        ...(resolvedLocation ? [resolvedLocation] : []),
-        ...(resolvedSource ? [resolvedSource] : []),
-      ],
-      hasDescription: rawDescription !== null,
-      replayed: false,
-    };
+  const resolvedCompany = await resolveCompany(companyName, userId, db);
+  const resolvedTitle = await resolveJobTitle(titleName, userId, db);
+  const resolvedLocation = locationName
+    ? await resolveLocation(locationName, userId, db)
+    : null;
+  const resolvedSource = sourceName
+    ? await resolveJobSource(sourceName, userId, db)
+    : null;
+
+  const created = await new OpportunityService(db, userId).create({
+    companyId: resolvedCompany.id,
+    title: resolvedTitle.label,
+    locationText: resolvedLocation?.label ?? null,
+    employmentType,
+    workplaceType,
+    sourceUrl,
+    sourceLabel: resolvedSource?.label ?? null,
+    deadline: input.dueDate ?? null,
+    salaryText: normalizeOptionalText(input.salaryRange) ?? null,
+    status: OPPORTUNITY_STATUS.UNKNOWN,
+    createdVia: APP_CONSTANTS.AGENT_CHAT_CREATED_VIA,
+    externalSourceKey: key,
   });
+
+  if (rawDescription) {
+    await syncJdVersion(db, created.id, rawDescription, sourceUrl, "PLAIN_TEXT");
+  }
+
+  return {
+    created: true,
+    jobOpportunityId: created.id,
+    company: resolvedCompany.label,
+    title: resolvedTitle.label,
+    resolutions: [
+      resolvedCompany,
+      resolvedTitle,
+      ...(resolvedLocation ? [resolvedLocation] : []),
+      ...(resolvedSource ? [resolvedSource] : []),
+    ],
+    hasDescription: rawDescription !== null,
+    replayed: false,
+  };
 }

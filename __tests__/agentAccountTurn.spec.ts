@@ -291,6 +291,39 @@ describe("runAccountAgentTurn", () => {
     expect(chunks[0]).toMatchObject({ type: "start", messageId: "asst-1" });
   });
 
+  it("executes only the admitted approval after an earlier proposal was canceled", async () => {
+    const executed: unknown[] = [];
+    (buildAgentTools as any).mockReturnValue({
+      add_job: fakeTool({
+        name: "add_job", needsApproval: true,
+        inputSchema: z.object({ company: z.string() }),
+        execute: input => { executed.push(input); return { created: true, jobId: "j2" }; },
+      }),
+    });
+    const messages = [userMsg("add jobs"), {
+      id: "asst-1", role: "assistant",
+      parts: ["canceled", "selected"].map(id => ({
+        type: "tool-add_job", toolCallId: id, state: "approval-responded",
+        input: { company: id }, approval: { id: `approval-${id}`, approved: true },
+      })),
+    }] as UIMessage[];
+    const request: import("@/lib/agent/conversationRequest").ConversationRequest = {
+      userId: "user-1", conversationId: "conversation-1", requestId: "request-2",
+      revision: 2, messages, responseMessageId: "asst-1", released: false, wrote: false,
+      operation: "approval", approvalToolCallId: "selected",
+    };
+    const { writer, chunks } = captureWriter();
+    await runAccountAgentTurn({ ...baseInput, request, messages, writer, signal: new AbortController().signal });
+    expect(executed).toEqual([{ company: "selected" }]);
+    expect(chunks.find(c => c.type === "tool-output-available")).toMatchObject({ toolCallId: "selected" });
+
+    // A later ordinary turn cannot replay the canceled approval either.
+    executed.length = 0;
+    (executeAIConnectionTextStream as any).mockReturnValue(streamEvents([{ type: "completed", text: "Done" }]));
+    await runAccountAgentTurn({ ...baseInput, request: { ...request, operation: "send", approvalToolCallId: undefined }, messages, writer, signal: new AbortController().signal });
+    expect(executed).toEqual([]);
+  });
+
   it("denied resume emits tool-output-denied and lets the model react", async () => {
     (buildAgentTools as any).mockReturnValue({
       add_job: fakeTool({

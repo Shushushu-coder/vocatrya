@@ -1,3 +1,4 @@
+import { ConversationRequestError, type ConversationRequest } from "./conversationRequest";
 import "server-only";
 
 import {
@@ -32,6 +33,7 @@ import {
   buildCareerDialogueContext,
   estimateContextTokens,
   type CareerDialogueContextProfile,
+  type CareerDialogueContextInput,
   type CareerDialogueContextSize,
   type SessionToolFact,
 } from "./contextBudget";
@@ -252,7 +254,7 @@ export function renderCareerDialoguePrompt(input: {
   toolsBlock?: string;
   directChat?: boolean;
   correction?: string;
-  summary?: string | null;
+  summary?: CareerDialogueContextInput["summary"];
   freshNativeFull?: boolean;
 }): { prompt: string; size: CareerDialogueContextSize } {
   const lastIsUser = input.messages[input.messages.length - 1]?.role === "user";
@@ -365,6 +367,7 @@ export function parseAgentDecision(
 // ---------------------------------------------------------------------------
 
 export type AccountAgentTurnInput = {
+  request?: ConversationRequest;
   userId: string;
   connectionId: string;
   provider: string;
@@ -376,7 +379,7 @@ export type AccountAgentTurnInput = {
   pastedText?: string;
   pageContext?: PageContext;
   /** Fresh summary text. Missing, stale, and legacy conversations omit it. */
-  summary?: string | null;
+  summary?: CareerDialogueContextInput["summary"];
   writer: UIMessageStreamWriter;
   signal: AbortSignal;
   /**
@@ -459,6 +462,7 @@ export async function runAccountAgentTurn(
     writer,
     freshNativeFull: input.freshNativeFull,
     canonicalJobs: input.canonicalJobs === true || input.freshNativeFull === true,
+    request: input.request,
   });
   const toolsBlock = describeToolsForPrompt(tools);
 
@@ -491,15 +495,16 @@ export async function runAccountAgentTurn(
   const lastMessage = messages[messages.length - 1];
 
   // --- Approval continuation -------------------------------------------
-  // The POST body carries the assistant message whose tool part is
-  // approval-responded. Vocatrya decides what to do with it — the model
-  // only ever PROPOSED the call.
-  const resumePart = findApprovalResponse(lastMessage);
+  // Admission identifies the approved proposal from the durable transcript.
+  // Older responded parts can remain after cancellation and must not replay.
+  const resumePart = input.request
+    ? findApprovalResponse(lastMessage, input.request.approvalToolCallId ?? "")
+    : findApprovalResponse(lastMessage);
 
   // Message id: a continuation appends to the existing assistant message —
   // same convention as toUIMessageStream's responseMessageId.
   const messageId =
-    lastMessage?.role === "assistant" ? lastMessage.id : generateId();
+    input.request?.responseMessageId ?? (lastMessage?.role === "assistant" ? lastMessage.id : generateId());
   writer.write({ type: "start", messageId });
 
   let stepsUsed = 0;
@@ -552,7 +557,7 @@ export async function runAccountAgentTurn(
           abortSignal: signal,
         });
       } catch (error) {
-        if (signal.aborted) throw error;
+        if (signal.aborted || error instanceof ConversationRequestError) throw error;
         failed = true;
         writer.write({
           type: "tool-output-error",
@@ -749,7 +754,7 @@ export async function runAccountAgentTurn(
         abortSignal: signal,
       });
     } catch (error) {
-      if (signal.aborted) throw error;
+      if (signal.aborted || error instanceof ConversationRequestError) throw error;
       failed = true;
       writer.write({
         type: "tool-output-error",
@@ -796,10 +801,11 @@ function isTerminalOutcome(toolName: string, output: unknown): boolean {
   });
 }
 
-function findApprovalResponse(message: UIMessage | undefined) {
+function findApprovalResponse(message: UIMessage | undefined, toolCallId?: string) {
   if (!message || message.role !== "assistant") return undefined;
   for (const part of message.parts ?? []) {
-    if (isToolUIPart(part) && part.state === "approval-responded") {
+    if (isToolUIPart(part) && part.state === "approval-responded" &&
+      (toolCallId === undefined || part.toolCallId === toolCallId)) {
       return part;
     }
   }

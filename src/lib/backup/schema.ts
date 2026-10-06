@@ -368,6 +368,9 @@ const AIBusinessAssignment = z.object({
 // the lock migration have no such keys, and undefined leaves Prisma on the
 // column default (null — the historical-conversation semantics).
 const ChatConversation = z.object({
+  revision: z.number().int().nonnegative().optional(),
+  activeRequestId: z.string().nullable().optional(),
+  activeRequestExpiresAt: dt.nullable().optional(),
   id,
   messages: str,
   // Optional so backups taken before multi-conversation still parse.

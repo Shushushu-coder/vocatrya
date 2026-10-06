@@ -170,44 +170,27 @@ describe("conversation message writes", () => {
     );
   });
 
-  it("existing row: updates messages only, lock columns untouched", async () => {
-    dbRow = row({
-      resolvedConnectionId: "conn-a",
-      resolvedModel: "m-a",
-      title: null,
-      context: null,
-    });
-    const result = await updateChatConversationMessages("user-1", "conv-1", [
-      msg("x"),
-    ]);
-    const update = (prisma.chatConversation.updateMany as any).mock.calls[0][0];
-    expect(update.where).toEqual({ id: "conv-1", userId: "user-1" });
-    expect(Object.keys(update.data)).toEqual(["messages"]);
+  it("raw transcript replacement is refused and leaves runtime lock intact", async () => {
+    dbRow = row({ resolvedConnectionId: "conn-a", resolvedModel: "m-a" });
+    await expect(updateChatConversationMessages("user-1", "conv-1", [msg("x")])).rejects.toThrow("CONVERSATION_TURN_CONFLICT");
+    expect(prisma.chatConversation.updateMany).not.toHaveBeenCalled();
     expect(resolveBusinessAIConfig).not.toHaveBeenCalled();
-    expect(result.resolvedConnectionId).toBe("conn-a");
-    expect(result.resolvedModel).toBe("m-a");
+    expect(dbRow.resolvedConnectionId).toBe("conn-a");
   });
-
-  it("refuses to update another user's conversation", async () => {
-    dbRow = row({ userId: "user-2" });
-    await expect(
-      updateChatConversationMessages("user-1", "conv-1", [msg("x")]),
-    ).rejects.toThrow(/not found/i);
-    expect(prisma.chatConversation.create).not.toHaveBeenCalled();
-  });
-
   it("new row: resolves the lock inside the create and does not rewrite it later", async () => {
     (resolveBusinessAIConfig as any).mockResolvedValue({
       status: "RESOLVED",
       connectionId: "conn-a",
       model: "m-a",
     });
+    const messages = Array.from({ length: 52 }, (_, i) => msg(`m${i}`));
     const created = await createChatConversationRecord({
       userId: "user-1",
-      messages: [msg("x")],
+      messages,
       context: { version: 1, items: [] },
     });
     const create = (prisma.chatConversation.create as any).mock.calls[0][0];
+    expect(JSON.parse(create.data.messages)).toEqual(messages);
     expect(create.data).toMatchObject({
       userId: "user-1",
       resolvedConnectionId: "conn-a",
@@ -218,12 +201,9 @@ describe("conversation message writes", () => {
       connectionId: "conn-later",
       model: "m-later",
     });
-    const updated = await updateChatConversationMessages("user-1", created.id, [
-      msg("x"),
-      msg("y"),
-    ]);
-    expect(updated.resolvedConnectionId).toBe("conn-a");
-    expect(updated.resolvedModel).toBe("m-a");
+    await expect(updateChatConversationMessages("user-1", created.id, [msg("y")])).rejects.toThrow("CONVERSATION_TURN_CONFLICT");
+    expect(created.resolvedConnectionId).toBe("conn-a");
+    expect(created.resolvedModel).toBe("m-a");
   });
 });
 

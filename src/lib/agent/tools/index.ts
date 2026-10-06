@@ -1,3 +1,4 @@
+import type { ConversationRequest } from "../conversationRequest";
 import type { LanguageModel, ToolSet, UIMessageStreamWriter } from "ai";
 import type { PageContext } from "@/models/agent.model";
 import type { NestedGenerationGuard } from "@/lib/agent/nestedGeneration";
@@ -15,6 +16,7 @@ import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
 // in docs/architecture/agent-chat.md rather than contorted around.
 export function buildAgentTools(ctx: {
   userId: string;
+  request?: ConversationRequest;
   pastedText?: string;
   pageContext?: PageContext;
   model: LanguageModel;
@@ -39,7 +41,7 @@ export function buildAgentTools(ctx: {
 
   const canonicalJobs = ctx.canonicalJobs === true || ctx.freshNativeFull === true;
   const tools: ToolSet = {
-    add_job: buildAddJobTool(ctx.userId, ctx.pastedText, { canonical: canonicalJobs }),
+    add_job: buildAddJobTool(ctx.userId, ctx.pastedText, { canonical: canonicalJobs, request: ctx.request }),
     list_jobs: buildListJobsTool(ctx.userId),
     get_job: buildGetJobTool(ctx.userId, ctx.pageContext?.jobId),
     get_resume: buildGetResumeTool(ctx.userId, ctx.pageContext?.resumeId),
@@ -60,6 +62,7 @@ export function buildAgentTools(ctx: {
       modelName: ctx.modelName,
       writer: ctx.writer,
       guard: nestedGuard,
+      request: ctx.request,
     }),
     generate_cover_letter: buildGenerateCoverLetterTool({
       userId: ctx.userId,
@@ -69,6 +72,7 @@ export function buildAgentTools(ctx: {
       modelName: ctx.modelName,
       writer: ctx.writer,
       guard: nestedGuard,
+      request: ctx.request,
     }),
   };
 

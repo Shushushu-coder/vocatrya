@@ -1,4 +1,5 @@
 "use server";
+import { saveMatchInTransaction } from "@/lib/jobs/generatedResults";
 import prisma from "@/lib/db";
 import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
@@ -91,11 +92,7 @@ export const saveJobMatchResult = async (
   try {
     const user = await requireUser();
 
-    await assertLegacyCareerWriteAllowed(prisma);
-    await prisma.job.update({
-      where: { id: jobId, userId: user.id },
-      data: { matchScore, matchData },
-    });
+    await saveMatchInTransaction(prisma, user.id, jobId, matchScore, matchData);
 
     return { success: true };
   } catch (error) {

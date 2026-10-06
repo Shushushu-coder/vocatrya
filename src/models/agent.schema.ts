@@ -1,23 +1,23 @@
 import { z } from "zod";
 import { McpAddJobInputShape } from "@/models/mcp.schema";
 
-export const AgentChatRequestSchema = z.object({
-  // Validated by the SDK downstream, not here. The whole array is
-  // client-supplied; nothing in it widens what the request can touch,
-  // because userId always comes from the session and the conversation
-  // id is re-checked against that user before any write.
+const chatRequestBase = {
   conversationId: z.string().min(1),
-  messages: z.array(z.any()),
-  // Ignored for execution. Persisted conversation context is the source
-  // of truth once the row exists. Kept so older clients do not 400.
-  pageContext: z
-    .object({
-      route: z.string().optional(),
-      jobId: z.string().optional(),
-      resumeId: z.string().optional(),
-    })
-    .optional(),
-});
+  expectedRevision: z.number().int().nonnegative(),
+  requestId: z.string().min(1).max(128),
+};
+const newUserMessage = z.object({
+  id: z.string().min(1), role: z.literal("user"),
+  parts: z.array(z.union([
+    z.object({ type: z.literal("text"), text: z.string() }).strict(),
+    z.object({ type: z.literal("data-paste"), data: z.object({ text: z.string(), chars: z.number().optional(), consumed: z.boolean().optional() }).passthrough() }).passthrough(),
+  ])),
+}).strict();
+export const AgentChatRequestSchema = z.discriminatedUnion("operation", [
+  z.object({ ...chatRequestBase, operation: z.literal("send"), newMessage: newUserMessage }).strict(),
+  z.object({ ...chatRequestBase, operation: z.literal("regenerate"), targetMessageId: z.string().min(1) }).strict(),
+  z.object({ ...chatRequestBase, operation: z.literal("approval"), approvalId: z.string().min(1), decision: z.boolean(), reason: z.string().max(2000).optional() }).strict(),
+]);
 
 export type AgentChatRequest = z.infer<typeof AgentChatRequestSchema>;
 

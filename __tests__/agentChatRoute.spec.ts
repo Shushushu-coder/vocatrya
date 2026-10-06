@@ -10,10 +10,22 @@ vi.mock("next/server", () => ({
 vi.mock("@/lib/ai/rate-limiter", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/ai/providers", () => ({ getModel: vi.fn() }));
 vi.mock("@/actions/userSettings.actions", () => ({ getUserSettings: vi.fn() }));
-vi.mock("@/actions/agentChat.actions", () => ({ saveChatConversation: vi.fn() }));
+vi.mock("@/lib/agent/conversationStream", () => ({ conversationCommitStream: (stream: unknown) => stream }));
+vi.mock("@/lib/agent/conversationRequest", async original => ({
+  ...await original<typeof import("@/lib/agent/conversationRequest")>(),
+  admitConversationRequest: vi.fn(async (input: any) => ({
+    ...input, revision: input.expectedRevision + 1,
+    messages: input.operation === "send" ? [...JSON.parse(conversationStore.row.messages), input.newMessage] : JSON.parse(conversationStore.row.messages),
+    approvalToolCallId: input.operation === "approval" ? JSON.parse(conversationStore.row.messages).flatMap((m: any) => m.parts).find((p: any) => p.approval?.id === input.approvalId)?.toolCallId : undefined,
+    responseMessageId: "", released: false, wrote: false,
+  })),
+  finishConversationRequest: vi.fn(async (request: any, messages: any[]) => { request.released = true; request.messages = messages; return ++request.revision; }),
+  cancelConversationRequest: vi.fn(async () => true),
+}));
 const conversationStore = vi.hoisted(() => ({
   row: {
     id: "conv-1",
+    revision: 0,
     userId: "user-1",
     title: null as string | null,
     context: null as string | null,
@@ -30,7 +42,7 @@ vi.mock("@/lib/agent/chatConversationStore", async (importOriginal) => {
   return {
     ...actual,
     getOwnedChatConversation: vi.fn(async () => conversationStore.row),
-    updateChatConversationMessages: vi.fn(
+    admitConversationRequest: vi.fn(
       async (_userId: string, _id: string, messages: unknown[]) => ({
         ...conversationStore.row,
         messages: JSON.stringify(messages),
@@ -92,8 +104,7 @@ import { auth } from "@/auth";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { getModel } from "@/lib/ai/providers";
 import { getUserSettings } from "@/actions/userSettings.actions";
-import { saveChatConversation } from "@/actions/agentChat.actions";
-import { updateChatConversationMessages } from "@/lib/agent/chatConversationStore";
+import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError } from "@/lib/agent/conversationRequest";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { buildPageContextMessage } from "@/lib/agent/prompt";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -105,11 +116,19 @@ import { AGENT_PASTE_ONLY_USER_MESSAGE } from "@/lib/agent/prompt";
 
 // signal is not optional on a real Request — the route composes the turn's
 // abort signal from it so a client disconnect stops generation.
-const req = (body: Record<string, unknown>) =>
-  ({
-    json: async () => ({ conversationId: "conv-1", ...body }),
-    signal: new AbortController().signal,
-  }) as any;
+const req = (body: Record<string, unknown>) => {
+  const messages = body.messages as any[] | undefined;
+  let operation: Record<string, unknown> = {};
+  if (messages?.at(-1)?.role === "assistant") {
+    const last = messages.at(-1);
+    conversationStore.row.messages = JSON.stringify(messages);
+    operation = { operation: "approval", approvalId: last.parts.find((p: any) => p.approval)?.approval.id ?? "approval", decision: true };
+  } else if (messages) {
+    conversationStore.row.messages = JSON.stringify(messages.slice(0, -1));
+    operation = { operation: "send", newMessage: messages.at(-1) };
+  }
+  return { json: async () => ({ conversationId: "conv-1", expectedRevision: 0, requestId: "request-1", ...operation, ...Object.fromEntries(Object.entries(body).filter(([key]) => key !== "messages" && key !== "pageContext")) }), signal: new AbortController().signal } as any;
+};
 
 const pasteMessage = (text: string) => ({
   id: "m1",
@@ -130,7 +149,8 @@ describe("POST /api/ai/chat", () => {
       data: { settings: { ai: { provider: "ollama", model: "qwen3.5:9b" } } },
     });
     (getModel as any).mockResolvedValue({ id: "fake-model" });
-    (saveChatConversation as any).mockResolvedValue({ success: true });
+    conversationStore.row.messages = "[]";
+    vi.mocked(finishConversationRequest).mockImplementation(async (request, messages) => { request.released = true; request.messages = messages; return ++request.revision; });
     conversationStore.row.context = null;
     conversationStore.row.resolvedConnectionId = null;
     conversationStore.row.resolvedModel = null;
@@ -170,12 +190,8 @@ describe("POST /api/ai/chat", () => {
     await POST(req({ messages }));
     // Write-on-receipt runs through the store's upsert — the same call that
     // pins the creation-time AI lock on a new conversation.
-    expect(updateChatConversationMessages).toHaveBeenCalledWith(
-      "user-1",
-      "conv-1",
-      messages,
-    );
-    const saveOrder = (updateChatConversationMessages as any).mock
+    expect(admitConversationRequest).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", conversationId: "conv-1", operation: "send", newMessage: messages[0], expectedRevision: 0, requestId: "request-1" }));
+    const saveOrder = (admitConversationRequest as any).mock
       .invocationCallOrder[0];
     const streamOrder = streamText.mock.invocationCallOrder[0];
     expect(saveOrder).toBeLessThan(streamOrder);
@@ -185,14 +201,14 @@ describe("POST /api/ai/chat", () => {
   // afterwards — writing there would restore exactly what was just deleted.
   it("does not write the turn back when it was cancelled", async () => {
     await POST(req({ messages: [pasteMessage("posting")] }));
-    const afterReceipt = (saveChatConversation as any).mock.calls.length;
+    const afterReceipt = (finishConversationRequest as any).mock.calls.length;
 
     await capturedOnFinish!({
       messages: [pasteMessage("posting")],
       responseMessage: undefined,
       isAborted: true,
     });
-    expect((saveChatConversation as any).mock.calls.length).toBe(afterReceipt);
+    expect((finishConversationRequest as any).mock.calls.length).toBe(afterReceipt);
     expect(summaryHooks.scheduleCareerDialogueSummary).not.toHaveBeenCalled();
   });
 
@@ -212,7 +228,7 @@ describe("POST /api/ai/chat", () => {
     ]);
     expect(outcome).toBe("done");
     expect(summaryHooks.scheduleCareerDialogueSummary).toHaveBeenCalledTimes(1);
-    const saveOrder = (saveChatConversation as any).mock.invocationCallOrder.at(-1);
+    const saveOrder = (finishConversationRequest as any).mock.invocationCallOrder.at(-1);
     const scheduleOrder = summaryHooks.scheduleCareerDialogueSummary.mock.invocationCallOrder[0];
     expect(saveOrder).toBeLessThan(scheduleOrder);
     expect(summaryHooks.scheduleCareerDialogueSummary).toHaveBeenCalledWith(
@@ -226,14 +242,14 @@ describe("POST /api/ai/chat", () => {
 
   it("still writes the turn back when it finished normally", async () => {
     await POST(req({ messages: [pasteMessage("posting")] }));
-    const afterReceipt = (saveChatConversation as any).mock.calls.length;
+    const afterReceipt = (finishConversationRequest as any).mock.calls.length;
 
     await capturedOnFinish!({
       messages: [pasteMessage("posting")],
       responseMessage: undefined,
       isAborted: false,
     });
-    expect((saveChatConversation as any).mock.calls.length).toBe(
+    expect((finishConversationRequest as any).mock.calls.length).toBe(
       afterReceipt + 1,
     );
   });
@@ -391,7 +407,7 @@ describe("POST /api/ai/chat", () => {
     await POST({
       json: async () => ({
         conversationId: "conv-1",
-        messages: [pasteMessage("posting")],
+        operation: "send", newMessage: pasteMessage("posting"), expectedRevision: 0, requestId: "request-1",
       }),
       signal: controller.signal,
     } as any);
@@ -537,4 +553,45 @@ describe("POST /api/ai/chat", () => {
     expect(JSON.stringify(streamArgs().messages)).not.toContain("match_job");
     expect(JSON.stringify(streamArgs().messages)).toContain("add_job");
   });
+});
+
+
+describe("conversation request route errors", () => {
+  it.each(["CONVERSATION_STALE_WRITE", "CONVERSATION_TURN_CONFLICT"] as const)("returns 409 for %s before generation", async code => {
+    vi.mocked(admitConversationRequest).mockRejectedValueOnce(new ConversationRequestError(code));
+    streamText.mockClear();
+    const response = await POST(req({ messages: [pasteMessage("posting")] }));
+    expect(response.status).toBe(409);
+    expect(streamText).not.toHaveBeenCalled();
+    expect(await response.json()).toMatchObject({ code });
+  });
+  it("returns 404 for a missing owned conversation", async () => {
+    vi.mocked(admitConversationRequest).mockRejectedValueOnce(new ConversationRequestError("CONVERSATION_NOT_FOUND"));
+    expect((await POST(req({ messages: [pasteMessage("posting")] }))).status).toBe(404);
+  });
+  it("rejects legacy transport without revision fields", async () => {
+    const response = await POST({ json: async () => ({ conversationId: "conv-1", messages: [pasteMessage("posting")] }), signal: new AbortController().signal } as any);
+    expect(response.status).toBe(400);
+  });
+  it("propagates final persistence failure and does not schedule summary", async () => {
+    summaryHooks.scheduleCareerDialogueSummary.mockClear();
+    await POST(req({ messages: [pasteMessage("posting")] }));
+    vi.mocked(finishConversationRequest).mockRejectedValueOnce(new ConversationRequestError("CONVERSATION_PERSISTENCE_FAILED"));
+    await expect(capturedOnFinish!({ messages: [pasteMessage("posting")], responseMessage: undefined, isAborted: false })).rejects.toMatchObject({ code: "CONVERSATION_PERSISTENCE_FAILED" });
+    expect(summaryHooks.scheduleCareerDialogueSummary).not.toHaveBeenCalled();
+  });
+});
+
+
+it("projects unselected pending approvals to model tool results without resolving their durable proposals", async () => {
+  streamText.mockClear();
+  const messages = [{ id: "u", role: "user", parts: [{ type: "text", text: "add two jobs" }] }, { id: "a", role: "assistant", parts: [
+    { type: "tool-add_job", toolCallId: "one", input: { company: "First", jobTitle: "Engineer" }, state: "approval-responded", approval: { id: "approved", approved: true } },
+    { type: "tool-add_job", toolCallId: "two", input: { company: "Second", jobTitle: "Engineer" }, state: "approval-requested", approval: { id: "pending" } },
+  ] }];
+  await POST(req({ messages }));
+  const sent = JSON.stringify(streamArgs().messages);
+  expect(sent).toContain("awaiting a separate user decision");
+  expect(sent).toContain('"toolCallId":"two"');
+  expect(conversationStore.row.messages).toContain('"state":"approval-requested"');
 });

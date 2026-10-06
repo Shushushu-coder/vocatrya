@@ -15,11 +15,10 @@ import {
   generateId,
   getToolName,
   isToolUIPart,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
   type ToolUIPart,
   type UIMessage,
 } from "ai";
-import { VocatryaChatTransport } from "@/lib/agent/chatTransport";
+import { VocatryaChatTransport, readAgentChatError } from "@/lib/agent/chatTransport";
 import { hasPendingApproval, stubConsumedPastes } from "@/lib/agent/paste";
 import { pageContextFor } from "@/lib/agent/pageContext";
 import { writeActiveConversationId } from "@/lib/agent/activeConversation";
@@ -36,7 +35,7 @@ import {
   getChatConversation,
   listChatConversations,
   resolveDraftPageContext,
-  saveChatConversation,
+  cancelChatConversationRequest,
   updateChatConversationContext,
 } from "@/actions/agentChat.actions";
 import { getUserSettings } from "@/actions/userSettings.actions";
@@ -73,6 +72,7 @@ export type AgentChatIdentity = {
 };
 
 export type AgentChatInitialConversation = {
+  revision: number;
   id: string;
   messages: UIMessage[];
   context: AgentConversationContextV1;
@@ -110,6 +110,14 @@ function createdJobToolCallIds(messages: UIMessage[]): string[] {
     }
   }
   return ids;
+}
+
+function savedWriteCallIds(messages: UIMessage[]): Set<string> {
+  return new Set(messages.flatMap(message => message.parts.flatMap(part => {
+    if (!isToolUIPart(part) || part.state !== "output-available" || !part.output || typeof part.output !== "object") return [];
+    const output = part.output as { created?: boolean; saved?: boolean };
+    return output.created === true || output.saved === true ? [part.toolCallId] : [];
+  })));
 }
 
 function firstText(parts: UIMessage["parts"]): string | null {
@@ -201,6 +209,20 @@ function useAgentChatValue(
   const [historyVersion, setHistoryVersion] = useState(0);
 
   const conversationIdRef = useRef<string | null>(initial?.id ?? null);
+  const revisionRef = useRef(initial?.revision ?? 0);
+  const activeExecutionRef = useRef<{ conversationId: string; requestId: string; existingWrites: Set<string> } | null>(null);
+  const completedExecutionRef = useRef<string | null>(null);
+  const recoveryRef = useRef<{ conversationId: string; requestId: string } | null>(null);
+  const recoveryBlockedRef = useRef(false);
+  const selectionEpochRef = useRef(0);
+  const [recoveryFailure, setRecoveryFailure] = useState<{
+    conversationId: string; requestId: string; operation: "reload" | "cancel";
+  } | null>(null);
+  const selectedApprovalRef = useRef<string | null>(null);
+  const approvalSendingRef = useRef(false);
+  const durableApprovalRef = useRef(Boolean(initial));
+  const conflictRef = useRef(false);
+  const regenerateTargetRef = useRef<string | null>(null);
   const contextRef = useRef(context);
   const explicitRef = useRef<ExplicitModelSelection | null>(null);
   const lockKindRef = useRef<ChatLockKind | null>(initial?.lockKind ?? null);
@@ -228,26 +250,87 @@ function useAgentChatValue(
     messages: initial?.messages ?? seedMessages,
     transport: new VocatryaChatTransport({
       api: "/api/ai/chat",
-      prepareSendMessagesRequest: ({ messages }) => ({
-        body: {
-          messages,
-          conversationId: conversationIdRef.current,
-        },
-      }),
+      isCurrentRequest: (id) => id === activeExecutionRef.current?.requestId,
+      prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
+        const requestId = generateId();
+        const id = conversationIdRef.current!;
+        const last = messages.at(-1);
+        const approval = last?.parts.find(p => isToolUIPart(p) && p.state === "approval-responded" && p.approval?.id === selectedApprovalRef.current);
+        const operation = trigger === "regenerate-message" ? "regenerate" : approval ? "approval" : "send";
+        activeExecutionRef.current = { conversationId: id, requestId, existingWrites: savedWriteCallIds(messages) };
+        recoveryRef.current = null;
+        completedExecutionRef.current = null;
+        durableApprovalRef.current = false;
+        return { body: {
+          conversationId: id, requestId, expectedRevision: revisionRef.current, operation,
+          ...(operation === "send" ? { newMessage: last } : operation === "regenerate" ? { targetMessageId: regenerateTargetRef.current ?? messageId } : {
+            approvalId: isToolUIPart(approval!) ? approval!.approval?.id : undefined,
+            decision: isToolUIPart(approval!) ? approval!.approval?.approved : undefined,
+            reason: isToolUIPart(approval!) ? approval!.approval?.reason : undefined,
+          }),
+        } };
+      },
     }),
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    sendAutomaticallyWhen: (options) => !conflictRef.current && durableApprovalRef.current && Boolean(selectedApprovalRef.current) && Boolean(options.messages.at(-1)?.parts.some(p => isToolUIPart(p) && p.state === "approval-responded" && p.approval?.id === selectedApprovalRef.current)),
+    onError: (error) => {
+      const active = activeExecutionRef.current;
+      if (!active || active.conversationId !== conversationIdRef.current || ("conversationRequestId" in error && error.conversationRequestId !== active.requestId)) return;
+      const { code } = readAgentChatError(error);
+      conflictRef.current = true;
+      durableApprovalRef.current = false;
+      selectedApprovalRef.current = null;
+      approvalSendingRef.current = false;
+      setQueued(undefined);
+      recoveryRef.current = active;
+      recoveryBlockedRef.current = true;
+      const isCurrent = () => recoveryRef.current === active && activeExecutionRef.current?.requestId === active.requestId && conversationIdRef.current === active.conversationId;
+      void (async () => {
+        try {
+          const result = await getChatConversation(active.conversationId);
+          if (!isCurrent()) return;
+          if (!result.success || !result.data) throw new Error("reload failed");
+          revisionRef.current = result.data.revision;
+          durableApprovalRef.current = true;
+          recoveryBlockedRef.current = false;
+          recoveryRef.current = null;
+          chat.setMessages(result.data.messages);
+          setHistoryVersion(n => n + 1);
+          const savedWrite = [...savedWriteCallIds(result.data.messages)].some(id => !active.existingWrites.has(id));
+          setActionError({ code: savedWrite && !code.startsWith("CONVERSATION_") ? "CONVERSATION_OPERATION_SAVED" : code });
+          chat.clearError();
+        } catch {
+          setRecoveryFailure({ conversationId: active.conversationId, requestId: active.requestId, operation: "reload" });
+          if (!isCurrent()) return;
+          setActionError({ code: "CONVERSATION_REFRESH_FAILED" });
+        }
+      })();
+    },
     onData: (part) => {
+      if (part.type === "data-conversation") {
+        const data = part.data as { conversationId: string; requestId: string; revision: number; durable?: boolean; released?: boolean };
+        if (data.conversationId !== conversationIdRef.current || data.requestId !== activeExecutionRef.current?.requestId) return;
+        revisionRef.current = data.revision;
+        if (data.durable && data.released) {
+          completedExecutionRef.current = data.requestId;
+          durableApprovalRef.current = true;
+        }
+        return;
+      }
+      if (!activeExecutionRef.current || activeExecutionRef.current.conversationId !== conversationIdRef.current) return;
       if (part.type !== AGENT_NESTED_STREAM_PART_TYPE || !part.id) return;
       const id = part.id;
       const { delta } = part.data as AgentNestedStreamData;
       setToolStreams((prev) => ({ ...prev, [id]: (prev[id] ?? "") + delta }));
     },
     onFinish: ({ message, isAbort, isError }) => {
-      if (isAbort || isError) return;
+      const active = activeExecutionRef.current;
+      if (!active || active.conversationId !== conversationIdRef.current || completedExecutionRef.current !== active.requestId || isAbort || isError) return;
       if (!hasPendingApproval(message ? [message] : [])) {
         setBrandCompletion((n) => n + 1);
       }
 
+      selectedApprovalRef.current = null;
+      approvalSendingRef.current = false;
       const finishedParts = message?.parts ?? [];
       const wrote = createdJobToolCallIds(message ? [message] : []).length > 0;
       const finishedTools = finishedParts
@@ -278,15 +361,47 @@ function useAgentChatValue(
   streamingRef.current =
     chat.status === "streaming" || chat.status === "submitted";
 
+  const stop = useCallback(() => {
+    const active = activeExecutionRef.current;
+    chat.stop();
+    activeExecutionRef.current = null;
+    completedExecutionRef.current = null;
+    durableApprovalRef.current = false;
+    selectedApprovalRef.current = null;
+    approvalSendingRef.current = false;
+    setQueued(undefined);
+    recoveryRef.current = active;
+    if (active) {
+      recoveryBlockedRef.current = true;
+      const isCurrent = () => recoveryRef.current === active && conversationIdRef.current === active.conversationId && !activeExecutionRef.current;
+      void (async () => {
+        try {
+          const result = await cancelChatConversationRequest(active.conversationId, active.requestId);
+          if (!result.success || !result.data) throw new Error("cancel failed");
+          if (!isCurrent()) return;
+          revisionRef.current = result.data.revision;
+          chat.setMessages(result.data.messages);
+          durableApprovalRef.current = true;
+          recoveryBlockedRef.current = false;
+          recoveryRef.current = null;
+        } catch {
+          setRecoveryFailure({ conversationId: active.conversationId, requestId: active.requestId, operation: "cancel" });
+          if (!isCurrent()) return;
+          setActionError({ code: "CONVERSATION_CANCEL_FAILED" });
+        }
+      })();
+    }
+  }, [chat]);
+
   const close = useCallback(() => {
     if (streamingRef.current) {
-      chat.stop();
+      stop();
       setInterruptedTurn(true);
       toastInfo(t("agent.generationStoppedReopen"));
     }
     setIsOpen(false);
     releaseRail(AGENT_CHAT_PANEL_ID);
-  }, [chat, releaseRail, t]);
+  }, [stop, releaseRail, t]);
 
   const runPreflight = useCallback(async () => {
     try {
@@ -427,7 +542,11 @@ function useAgentChatValue(
       context: AgentConversationContextV1;
       lockKind: ChatLockKind;
       resolvedModel: string | null;
+      revision: number;
     }) => {
+      revisionRef.current = data.revision;
+      durableApprovalRef.current = true;
+      conflictRef.current = false;
       conversationIdRef.current = data.id;
       lockKindRef.current = data.lockKind;
       setConversationId(data.id);
@@ -463,7 +582,12 @@ function useAgentChatValue(
   const startNewConversation = useCallback(
     async (options?: { explicit?: ExplicitModelSelection | null }) => {
       const wasStreaming = streamingRef.current;
-      chat.stop();
+      stop();
+      selectionEpochRef.current += 1;
+      recoveryRef.current = null;
+      recoveryBlockedRef.current = false;
+      revisionRef.current = 0;
+      conflictRef.current = false;
       conversationIdRef.current = null;
       lockKindRef.current = null;
       setConversationId(null);
@@ -492,18 +616,37 @@ function useAgentChatValue(
         contextRef.current = result.data;
       }
     },
-    [chat, resetTransient, runPreflight, t],
+    [chat, stop, resetTransient, runPreflight, t],
   );
 
   const selectConversation = useCallback(
     async (id: string) => {
-      if (streamingRef.current) chat.stop();
-      const result = await getChatConversation(id);
+      if (streamingRef.current) stop();
+      recoveryRef.current = null;
+      recoveryBlockedRef.current = true;
+      activeExecutionRef.current = null;
+      const epoch = ++selectionEpochRef.current;
+      const capturedConversationId = conversationIdRef.current;
+      let result: Awaited<ReturnType<typeof getChatConversation>>;
+      try {
+        result = await getChatConversation(id);
+      } catch {
+        if (selectionEpochRef.current === epoch && conversationIdRef.current === capturedConversationId) {
+          setActionError({ code: "CONVERSATION_REFRESH_FAILED" });
+        }
+        return false;
+      }
+      if (selectionEpochRef.current !== epoch || conversationIdRef.current !== capturedConversationId) return false;
       if (!result.success || !result.data) {
-        setActionError({ code: result.code ?? "CONVERSATION_NOT_FOUND" });
+        setActionError({ code: "CONVERSATION_REFRESH_FAILED" });
         return false;
       }
       const data = result.data;
+      revisionRef.current = data.revision;
+      durableApprovalRef.current = true;
+      recoveryBlockedRef.current = false;
+      activeExecutionRef.current = null;
+      conflictRef.current = false;
       conversationIdRef.current = data.id;
       lockKindRef.current = data.lockKind;
       explicitRef.current = null;
@@ -538,7 +681,7 @@ function useAgentChatValue(
       void runPreflight();
       return true;
     },
-    [chat, resetTransient, runPreflight],
+    [chat, stop, resetTransient, runPreflight],
   );
 
   const removeConversation = useCallback(
@@ -569,6 +712,8 @@ function useAgentChatValue(
 
   const dispatch = useCallback(
     (message: QueuedMessage) => {
+      if (recoveryBlockedRef.current) return;
+      conflictRef.current = false;
       setInterruptedTurn(false);
       setActionError(null);
       if (conversationIdRef.current) return chat.sendMessage(message);
@@ -607,7 +752,8 @@ function useAgentChatValue(
       const id = conversationIdRef.current;
       // The in-flight guard has to win before the optimistic exchange, or a
       // second click paints messages the open create call never persists.
-      if (!id && creatingRef.current) return;
+      if (id) { setActionError({ code: "CONVERSATION_TURN_CONFLICT" }); return; }
+      if (creatingRef.current) return;
 
       // setMessages publishes the seeded transcript on the chat object. The
       // pre-seed copy is the only transcript a rejected create can restore.
@@ -626,11 +772,6 @@ function useAgentChatValue(
         },
       ];
       chat.setMessages(next);
-      if (id) {
-        void saveChatConversation(id, next);
-        setHistoryVersion((n) => n + 1);
-        return;
-      }
 
       creatingRef.current = true;
       setActionError(null);
@@ -653,14 +794,16 @@ function useAgentChatValue(
   );
 
   useEffect(() => {
-    if (!queued || approvalPending || chat.status !== "ready") return;
+    if (conflictRef.current || !queued || approvalPending || chat.status !== "ready") return;
     if (creatingRef.current) return;
     setQueued(undefined);
     void dispatch(queued);
   }, [queued, approvalPending, chat.status, dispatch]);
 
   const regenerate = useCallback(() => {
-    if (streamingRef.current || !conversationIdRef.current) return;
+    if (recoveryBlockedRef.current || streamingRef.current || !conversationIdRef.current) return;
+    regenerateTargetRef.current = chat.messages.at(-1)?.id ?? null;
+    conflictRef.current = false;
     setInterruptedTurn(false);
     void chat.regenerate();
   }, [chat]);
@@ -756,6 +899,7 @@ function useAgentChatValue(
     brandCompletion,
     error: chat.error,
     actionError,
+    recoveryFailure,
     clearError: () => {
       chat.clearError();
       setActionError(null);
@@ -763,9 +907,16 @@ function useAgentChatValue(
     clearActionError,
     sendMessage,
     seedExchange,
-    stop: chat.stop,
+    stop,
     regenerate,
-    addToolApprovalResponse: chat.addToolApprovalResponse,
+    addToolApprovalResponse: (...args: Parameters<typeof chat.addToolApprovalResponse>) => {
+      if (recoveryBlockedRef.current || !durableApprovalRef.current || streamingRef.current || approvalSendingRef.current) return;
+      selectedApprovalRef.current = args[0].id;
+      approvalSendingRef.current = true;
+      conflictRef.current = false;
+      setActionError(null);
+      return chat.addToolApprovalResponse(...args);
+    },
     approvalPending,
     queued,
     clearQueued,

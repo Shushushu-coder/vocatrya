@@ -1850,6 +1850,9 @@
       "generic": "操作"
     },
     "errors": {
+      "conversationChanged": "该对话已发生更新，已重新加载保存的记录。请重新操作。",
+      "operationSaved": "操作已保存，但后续 AI 回复未完成。",
+      "recoveryFailed": "无法刷新或停止对话。请重新打开该对话后再继续。",
       "cannotSend": "无法发送消息",
       "connectionDown": "当前 Codex 暂时无法连接。",
       "reauthTitle": "Codex 登录已失效。",

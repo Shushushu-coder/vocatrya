@@ -1,3 +1,5 @@
+import { checkpointConversationTool, type ConversationRequest } from "../conversationRequest";
+import { saveCoverLetterInTransaction, renderCoverLetterContent } from "@/lib/jobs/generatedResults";
 import "server-only";
 
 import { tool, type LanguageModel, type UIMessageStreamWriter } from "ai";
@@ -23,6 +25,7 @@ import {
 import type { AgentCoverLetterResult } from "@/models/agent.model";
 
 type CoverLetterContext = {
+  request?: ConversationRequest;
   userId: string;
   pageJobId?: string;
   model: LanguageModel;
@@ -151,6 +154,13 @@ export function buildGenerateCoverLetterTool(ctx: CoverLetterContext) {
         };
       }
 
+      if (ctx.request) {
+        const content = renderCoverLetterContent(letter);
+        return checkpointConversationTool(ctx.request, { toolName: "generate_cover_letter", toolCallId, input: raw }, async tx => {
+          const savedLetter = await saveCoverLetterInTransaction(tx, ctx.userId, job.id!, content, letter);
+          return { status: "ok" as const, jobId: job.id!, jobTitle, company, resumeId: resume.id!, resumeTitle: resume.title, body: letter, coverLetterId: savedLetter.id, coverLetterTitle: savedLetter.title, saved: true };
+        });
+      }
       const saveResult = await generateCoverLetterForJob(job.id!, letter);
       const saved = saveResult?.success === true;
 

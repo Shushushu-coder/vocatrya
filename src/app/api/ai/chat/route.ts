@@ -1,3 +1,6 @@
+import { generateId } from "ai";
+import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError, type ConversationRequest } from "@/lib/agent/conversationRequest";
+import { conversationCommitStream } from "@/lib/agent/conversationStream";
 import "server-only";
 
 import { auth } from "@/auth";
@@ -44,7 +47,6 @@ import {
   formatAgentStreamError,
 } from "@/lib/agent/errors";
 import { getUserSettings } from "@/actions/userSettings.actions";
-import { saveChatConversation } from "@/actions/agentChat.actions";
 import { pageContextFromConversation } from "@/lib/agent/conversationContext";
 import { AiProvider } from "@/models/ai.model";
 import {
@@ -61,11 +63,8 @@ import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import {
-  ChatConversationNotFoundError,
   contextOfRow,
   getOwnedChatConversation,
-  updateChatConversationMessages,
-  type ChatConversationRow,
 } from "@/lib/agent/chatConversationStore";
 import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
 import { checkStreamingTurnReadiness } from "@/lib/ai/streaming-execution";
@@ -135,6 +134,7 @@ async function accountChatResponse({
   lock,
   freshNativeFull,
   canonicalJobs,
+  request,
 }: {
   req: NextRequest;
   userId: string;
@@ -145,6 +145,7 @@ async function accountChatResponse({
   lock: { connectionId: string; model: string | null };
   freshNativeFull: boolean;
   canonicalJobs: boolean;
+  request: ConversationRequest;
 }) {
   // The lock is a provenance pointer — the connection's CURRENT state is
   // re-checked every turn (disconnect/reauth/archive degrade it), and it is
@@ -223,7 +224,10 @@ async function accountChatResponse({
 
   // Same abort contract as the legacy path: client disconnect / stop()
   // aborts the runtime child through the execute-stream socket.
+  const executionAbort = new AbortController();
+  request.abort = () => executionAbort.abort();
   const turnSignal = AbortSignal.any([
+    executionAbort.signal,
     req.signal,
     AbortSignal.timeout(APP_CONSTANTS.AGENT_CHAT_TIMEOUT_MS),
   ]);
@@ -244,9 +248,11 @@ async function accountChatResponse({
   });
 
   let contextSize: CareerDialogueContextSize | undefined;
+  let turnFailed = false;
   const alreadyMapped = new Set<string>();
   const mapTurnError = (error: unknown): string =>
     runInSpan(turnSpan, () => {
+      turnFailed = true;
       const message = error instanceof Error ? error.message : "";
       if (alreadyMapped.has(message)) return message;
       const mapped = formatAgentStreamError(error, errorContext);
@@ -257,6 +263,7 @@ async function accountChatResponse({
   const stream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
+      request.onCheckpoint = () => writer.write({ type: "data-conversation", transient: true, data: { conversationId, requestId: request.requestId, revision: request.revision, durable: true, released: false, wrote: request.wrote } });
       await runInSpan(turnSpan, async () => {
         const summary = await loadFreshConversationSummary({
           userId,
@@ -280,6 +287,7 @@ async function accountChatResponse({
           routerDurationMs: prepared.routerDurationMs,
           freshNativeFull,
           canonicalJobs,
+          request,
         });
         contextSize = result.contextSize;
       });
@@ -326,27 +334,26 @@ async function accountChatResponse({
       });
       // Same write-on-finish contract as the legacy path: a cancelled turn
       // never writes back (Clear would otherwise resurrect).
-      if (isAborted) return;
-      const saved = await saveChatConversation(
-        conversationId,
-        stubConsumedPastes(finalMessages),
-      );
-      if (!saved.success) return;
+      if (isAborted || turnFailed) {
+        await cancelConversationRequest(userId, conversationId, request.requestId);
+        return;
+      }
+      await finishConversationRequest(request, stubConsumedPastes(finalMessages));
       scheduleCareerDialogueSummary({
         userId,
         conversationId,
         resolvedConnectionId: lock.connectionId,
         resolvedModel: lock.model,
-        messages: finalMessages,
+        messages: request.messages,
       });
     },
     onError: mapTurnError,
   });
 
-  return createUIMessageStreamResponse({ stream });
+  return createUIMessageStreamResponse({ stream: conversationCommitStream(stream, request) });
 }
 
-export const POST = async (req: NextRequest) => {
+const executePost = async (req: NextRequest, admitted: (request: ConversationRequest) => void) => {
   const session = await auth();
   const userId = session?.user?.id;
   if (!session || !userId) {
@@ -367,7 +374,10 @@ export const POST = async (req: NextRequest) => {
     );
   }
 
-  const parsed = AgentChatRequestSchema.safeParse(await req.json());
+  let body: unknown;
+  try { body = await req.json(); }
+  catch { return NextResponse.json({ error: "Invalid chat request.", code: "INVALID_REQUEST" }, { status: 400 }); }
+  const parsed = AgentChatRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Invalid chat request.", code: "INVALID_REQUEST" },
@@ -375,37 +385,14 @@ export const POST = async (req: NextRequest) => {
     );
   }
 
-  const messages = parsed.data.messages as UIMessage[];
   const { conversationId } = parsed.data;
-
+  const request = await admitConversationRequest({ ...parsed.data, userId });
+  request.responseMessageId = request.messages.at(-1)?.role === "assistant" ? request.messages.at(-1)!.id : generateId();
+  admitted(request);
+  const messages = request.messages;
   const pastedText = resolvePastedText(messages);
-
-  // The row already exists — creation (and its immutable lock) happened
-  // before the first turn. This write only stores the transcript of that
-  // exact conversation, and only when the caller owns it.
-  let conversation: ChatConversationRow | null;
-  try {
-    conversation = await getOwnedChatConversation(userId, conversationId);
-    if (!conversation) {
-      return NextResponse.json(
-        { error: "Conversation not found", code: "CONVERSATION_NOT_FOUND" },
-        { status: 404 },
-      );
-    }
-    conversation = await updateChatConversationMessages(
-      userId,
-      conversationId,
-      messages,
-    );
-  } catch (error) {
-    if (error instanceof ChatConversationNotFoundError) {
-      return NextResponse.json(
-        { error: "Conversation not found", code: "CONVERSATION_NOT_FOUND" },
-        { status: 404 },
-      );
-    }
-    throw error;
-  }
+  const conversation = await getOwnedChatConversation(userId, conversationId);
+  if (!conversation) throw new ConversationRequestError("CONVERSATION_NOT_FOUND");
   const lock = chatLockFromRow(conversation);
   const pageContext = pageContextFromConversation(contextOfRow(conversation));
 
@@ -430,6 +417,7 @@ export const POST = async (req: NextRequest) => {
       lock,
       freshNativeFull,
       canonicalJobs,
+      request,
     });
   }
 
@@ -491,7 +479,15 @@ export const POST = async (req: NextRequest) => {
   const retained = convertible ? selectCareerDialogueMessages(messages) : messages;
   let modelMessages;
   try {
-    modelMessages = await convertToModelMessages(retained);
+    // An approved request that was cancelled before its tool checkpoint must
+    // never be transparently resumed by a subsequent ordinary SDK send.
+    const executionMessages = retained.map(message => ({ ...message, parts: message.parts.map(part => {
+      if (isToolUIPart(part) && (part.state === "approval-responded" || part.state === "approval-requested") && part.toolCallId !== request.approvalToolCallId) {
+        return { ...part, state: "output-error" as const, approval: undefined, errorText: part.state === "approval-requested" ? "This proposal is awaiting a separate user decision." : "The earlier request stopped before this operation was saved." };
+      }
+      return part;
+    }) }));
+    modelMessages = await convertToModelMessages(executionMessages);
   } catch {
     return NextResponse.json(
       { error: "Invalid chat request.", code: "INVALID_REQUEST" },
@@ -543,7 +539,10 @@ export const POST = async (req: NextRequest) => {
   // client aborting its fetch is otherwise invisible here, and streamText would
   // keep pulling tokens until the deadline. Tools inherit this via execute's
   // abortSignal, so a nested generation is cancelled too.
+  const executionAbort = new AbortController();
+  request.abort = () => executionAbort.abort();
   const turnSignal = AbortSignal.any([
+    executionAbort.signal,
     req.signal,
     AbortSignal.timeout(APP_CONSTANTS.AGENT_CHAT_TIMEOUT_MS),
   ]);
@@ -577,9 +576,11 @@ export const POST = async (req: NextRequest) => {
   // the mapped string as an Error and hands it to createUIMessageStream's
   // onError, which would map and log the same failure a second time. Passing
   // an already-mapped string straight back keeps it to one line per failure.
+  let turnFailed = false;
   const alreadyMapped = new Set<string>();
   const mapTurnError = (error: unknown): string =>
     runInSpan(turnSpan, () => {
+      turnFailed = true;
       const message = error instanceof Error ? error.message : "";
       if (alreadyMapped.has(message)) return message;
       const mapped = formatAgentStreamError(error, errorContext);
@@ -591,6 +592,7 @@ export const POST = async (req: NextRequest) => {
     originalMessages: messages,
     execute: ({ writer }) =>
       runInSpan(turnSpan, () => {
+        request.onCheckpoint = () => writer.write({ type: "data-conversation", transient: true, data: { conversationId, requestId: request.requestId, revision: request.revision, durable: true, released: false, wrote: request.wrote } });
         const tools = buildAgentTools({
           userId,
           pastedText,
@@ -601,6 +603,7 @@ export const POST = async (req: NextRequest) => {
           writer,
           freshNativeFull,
           canonicalJobs,
+          request,
         });
         prefixMetrics = measureTurnPrefix({
           userId,
@@ -648,6 +651,7 @@ export const POST = async (req: NextRequest) => {
         writer.merge(
           result.toUIMessageStream({
             onError: mapTurnError,
+            generateMessageId: () => request.responseMessageId,
           }),
         );
       }),
@@ -700,19 +704,18 @@ export const POST = async (req: NextRequest) => {
       // restore exactly what the user just deleted. The write-on-receipt above
       // already made their message durable, and an incomplete review is not
       // worth persisting.
-      if (isAborted) return;
+      if (isAborted || turnFailed) {
+        await cancelConversationRequest(userId, conversationId, request.requestId);
+        return;
+      }
       // Stubbing happens here so it lives in exactly one place.
-      const saved = await saveChatConversation(
-        conversationId,
-        stubConsumedPastes(finalMessages),
-      );
-      if (!saved.success) return;
+      await finishConversationRequest(request, stubConsumedPastes(finalMessages));
       scheduleCareerDialogueSummary({
         userId,
         conversationId,
         resolvedConnectionId: null,
         resolvedModel: null,
-        messages: finalMessages,
+        messages: request.messages,
       });
     },
     // NOTE: this signature takes the error directly, unlike streamText's
@@ -720,5 +723,26 @@ export const POST = async (req: NextRequest) => {
     onError: mapTurnError,
   });
 
-  return createUIMessageStreamResponse({ stream });
+  return createUIMessageStreamResponse({ stream: conversationCommitStream(stream, request) });
+};
+
+export const POST = async (req: NextRequest) => {
+  let request: ConversationRequest | undefined;
+  try {
+    const response = await executePost(req, owned => {
+      request = owned;
+      const cancel = () => { void cancelConversationRequest(owned.userId, owned.conversationId, owned.requestId).catch(() => { owned.failure = new ConversationRequestError("CONVERSATION_PERSISTENCE_FAILED"); owned.abort?.(); }); };
+      req.signal.addEventListener("abort", cancel, { once: true });
+      if (req.signal.aborted) cancel();
+    });
+    if (response.status !== 200 && request) await cancelConversationRequest(request.userId, request.conversationId, request.requestId);
+    return response;
+  } catch (error) {
+    if (request) {
+      try { await cancelConversationRequest(request.userId, request.conversationId, request.requestId); }
+      catch { error = new ConversationRequestError("CONVERSATION_PERSISTENCE_FAILED"); }
+    }
+    const failure = error instanceof ConversationRequestError ? error : new ConversationRequestError("CONVERSATION_PERSISTENCE_FAILED");
+    return NextResponse.json(agentErrorEnvelope(failure), { status: failure.code === "CONVERSATION_NOT_FOUND" ? 404 : failure.code === "CONVERSATION_PERSISTENCE_FAILED" ? 500 : 409 });
+  }
 };

@@ -70,7 +70,7 @@ function resolvedToolMessage(): UIMessage {
 
 describe("conversation summary coverage", () => {
   it("keeps the summary prompt version in one module", () => {
-    expect(CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION).toBe("career-dialogue-summary-v1");
+    expect(CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION).toBe("career-dialogue-summary-v2");
     const root = path.resolve("src");
     const hits: string[] = [];
     const walk = (dir: string) => {
@@ -81,7 +81,7 @@ describe("conversation summary coverage", () => {
           continue;
         }
         if (!/\.(ts|tsx)$/.test(entry)) continue;
-        if (readFileSync(full, "utf8").includes("career-dialogue-summary-v1")) hits.push(full);
+        if (readFileSync(full, "utf8").includes("career-dialogue-summary-v2")) hits.push(full);
       }
     };
     walk(root);

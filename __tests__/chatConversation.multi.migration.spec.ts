@@ -34,7 +34,7 @@ describe("ChatConversation multi-conversation migration", () => {
   it("keeps the existing row and allows a second conversation for the same user", async () => {
     const ctx = makeAbTestDbUrl();
     const schemaPath = preparePrismaProject(ctx.dir, {
-      excludeSuffix: MIGRATION_SUFFIX,
+      excludeSuffix: [MIGRATION_SUFFIX, "chat_conversation_concurrency"],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
     try {
@@ -79,6 +79,7 @@ describe("ChatConversation multi-conversation migration", () => {
       `;
 
       copyMigrationBySuffix(ctx.dir, MIGRATION_SUFFIX);
+      copyMigrationBySuffix(ctx.dir, "chat_conversation_concurrency");
       migrateDeploy(ctx.url, schemaPath);
 
       const rows = (await prisma.$queryRaw`

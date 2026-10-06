@@ -1,5 +1,6 @@
 "use server";
 
+import { cancelConversationRequest, ConversationRequestError } from "@/lib/agent/conversationRequest";
 import type { UIMessage } from "ai";
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
@@ -54,6 +55,7 @@ function fail(error: unknown, fallback: string): {
   message: string;
   code?: string;
 } {
+  if (error instanceof ConversationRequestError) return { success: false, message: error.message, code: error.code };
   if (error instanceof AIBusinessError) {
     return { success: false, message: error.message, code: error.code };
   }
@@ -81,6 +83,7 @@ function snapshotOf(row: ChatConversationRow): ChatConversationSnapshot {
   const lock = chatLockFromRow(row);
   return {
     id: row.id,
+    revision: row.revision,
     title: row.title,
     titleFallback: row.title ? null : titleFallbackFromUiMessages(messages),
     createdAt: row.createdAt.toISOString(),
@@ -561,4 +564,14 @@ export const getAgentChatPreflight = async (input?: {
   } catch (error) {
     return fail(error, "Failed to check the assistant configuration.");
   }
+};
+
+export const cancelChatConversationRequest = async (conversationId: string, requestId: string) => {
+  try {
+    const user = await requireUser();
+    await cancelConversationRequest(user.id, conversationId, requestId);
+    const row = await getOwnedChatConversation(user.id, conversationId);
+    if (!row) return { success: false as const, code: "CONVERSATION_NOT_FOUND" };
+    return { success: true as const, data: snapshotOf(row) };
+  } catch (error) { return fail(error, "Failed to cancel conversation request."); }
 };

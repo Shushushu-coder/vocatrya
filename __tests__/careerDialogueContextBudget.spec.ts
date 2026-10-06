@@ -13,6 +13,30 @@ function user(id: string, text: string): UIMessage {
   return { id, role: "user", parts: [{ type: "text", text }] } as UIMessage;
 }
 
+it("omits partial prefix summaries across an uncovered gap, then injects after catch-up", () => {
+  const messages = Array.from({ length: 60 }, (_, i) => pair(i, `goal ${i}`, `answer ${i}`)).flat();
+  const partial = buildCareerDialogueContext({ profile: "FAST_CHAT", messages, summary: { text: "EARLY_FACT_001", throughMessageId: "a24" } });
+  expect(partial.ok).toBe(true);
+  if (!partial.ok) return;
+  expect(partial.summary).toBeUndefined();
+  expect(partial.transcript).not.toContain("EARLY_FACT_001");
+  const caughtUp = buildCareerDialogueContext({ profile: "FAST_CHAT", messages, summary: { text: "EARLY_FACT_001", throughMessageId: "a54" } });
+  if (!caughtUp.ok) throw new Error(caughtUp.code);
+  expect(caughtUp.summary).toBe("EARLY_FACT_001");
+  expect(caughtUp.transcript).toContain("Earlier conversation summary:");
+});
+
+it("checks summary coverage after profile-specific budget drops", () => {
+  const messages = Array.from({ length: 10 }, (_, i) => pair(i, `goal ${i} ${"x".repeat(100)}`, `answer ${i} ${"y".repeat(100)}`)).flat();
+  const input = { profile: "AGENT_RESPONSE" as const, messages, summary: { text: "EARLY_FACT_001", throughMessageId: "a4" } };
+  const normal = buildCareerDialogueContext(input);
+  if (!normal.ok) throw new Error(normal.code);
+  expect(normal.summary).toBe("EARLY_FACT_001");
+  const pressured = buildCareerDialogueContext({ ...input, budgets: { dynamicTokens: 250 } });
+  if (!pressured.ok) throw new Error(pressured.code);
+  expect(pressured.summary).toBeUndefined();
+});
+
 function assistant(id: string, text: string, extra: UIMessage["parts"] = []): UIMessage {
   return {
     id,

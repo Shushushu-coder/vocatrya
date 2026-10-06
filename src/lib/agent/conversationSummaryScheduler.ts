@@ -6,18 +6,21 @@ import { log } from "@/lib/telemetry";
 import {
   CAREER_DIALOGUE_CONTEXT_BUDGETS,
   buildCareerDialogueContext,
+  careerDialogueTurnIndexSpans,
   estimateContextTokens,
 } from "./contextBudget";
 import type { SummaryAttempt } from "./conversationSummaryCommit";
 import {
   additionalDroppedTurnsBeyondCoverage,
   conversationSummaryBackoffElapsed,
+  hashSummaryCoverage,
   selectConversationSummaryCoverage,
   shouldOpenConversationSummaryTask,
   storedSummaryMessages,
   summaryAgeTurns,
   summaryBoundaryUnderStoragePressure,
   SUMMARY_REFRESH_DROPPED_TURNS,
+  turnEligible,
   validateConversationSummaryCoverage,
 } from "./conversationSummaryCoverage";
 import {
@@ -56,6 +59,7 @@ export type SummarySchedulerDeps = {
 };
 
 const inFlight = new Map<string, Promise<void>>();
+const SUMMARY_GENERATION_MAX_MESSAGES = 50;
 
 export function conversationSummaryInFlight(
   conversationId: string,
@@ -123,6 +127,7 @@ export async function condenseCareerDialogueSummary(
       return finish({ status: "skipped", reason: "legacy" });
     }
     const messages = storedSummaryMessages(snapshot.messages);
+    const windowStartIndex = snapshot.messages.length - messages.length;
     const failureCount = snapshot.summary?.failureCount ?? 0;
     if (
       !conversationSummaryBackoffElapsed(
@@ -134,16 +139,17 @@ export async function condenseCareerDialogueSummary(
       return finish({ status: "skipped", reason: "backoff", failureCount });
     }
 
-    const verdict = validateConversationSummaryCoverage(snapshot.summary, messages);
+    const verdict = validateConversationSummaryCoverage(snapshot.summary, snapshot.messages);
     const budget = buildCareerDialogueContext({ profile: "FAST_CHAT", messages });
     if (!budget.ok) return finish({ status: "skipped", reason: "budget" });
     const pressure =
       verdict.status === "FRESH" &&
       snapshot.summary?.throughMessageId != null &&
-      summaryBoundaryUnderStoragePressure(messages, snapshot.summary.throughMessageId);
+      (verdict.throughIndex < windowStartIndex ||
+        summaryBoundaryUnderStoragePressure(messages, snapshot.summary.throughMessageId));
     const additional =
       verdict.status === "FRESH"
-        ? additionalDroppedTurnsBeyondCoverage(messages, verdict.throughIndex)
+        ? additionalDroppedTurnsBeyondCoverage(messages, verdict.throughIndex - windowStartIndex)
         : 0;
     let trigger: "pressure" | "missing" | "refresh" | null = null;
     if (pressure) trigger = "pressure";
@@ -160,10 +166,34 @@ export async function condenseCareerDialogueSummary(
       });
     }
 
-    const target = selectConversationSummaryCoverage(messages, {
-      extendForStorageCap: trigger === "pressure",
-    });
-    if (!target) return finish({ status: "skipped", reason: "no_boundary" });
+    const desired = selectConversationSummaryCoverage(snapshot.messages, { extendForStorageCap: trigger === "pressure" });
+    if (!desired) return finish({ status: "skipped", reason: "no_boundary" });
+    const startIndex = verdict.status === "FRESH" ? verdict.throughIndex + 1 : 0;
+    const previousSummary = verdict.status === "FRESH" ? verdict.text : undefined;
+    let coveredCount = startIndex;
+    // Bound the next contiguous delta, never an arbitrary recent window.
+    // A turn that cannot fit is left uncovered rather than sliced or skipped.
+    for (const span of careerDialogueTurnIndexSpans(snapshot.messages)) {
+      if (span.lastIndex < startIndex) continue;
+      if (span.firstIndex < startIndex || !span.complete || span.lastIndex > desired.throughIndex) break;
+      const delta = snapshot.messages.slice(startIndex, span.lastIndex + 1);
+      if (delta.length > SUMMARY_GENERATION_MAX_MESSAGES || !turnEligible(delta, delta.map(message => message.id))) break;
+      const prompt = buildCareerDialogueSummaryPrompt(projectConversationSummaryInput(delta), previousSummary);
+      if (estimateContextTokens(prompt) > CAREER_DIALOGUE_CONTEXT_BUDGETS.dynamicTokens) break;
+      coveredCount = span.lastIndex + 1;
+    }
+    if (coveredCount === startIndex) return finish({ status: "skipped", reason: "no_boundary" });
+    const authoritativePrefix = snapshot.messages.slice(0, coveredCount);
+    if (!turnEligible(authoritativePrefix, authoritativePrefix.map(message => message.id))) {
+      return finish({ status: "skipped", reason: "no_boundary" });
+    }
+    const target = {
+      prefix: snapshot.messages.slice(startIndex, coveredCount),
+      throughMessageId: snapshot.messages[coveredCount - 1].id,
+      throughIndex: coveredCount - 1,
+      coveredCount,
+      coverageHash: hashSummaryCoverage(authoritativePrefix),
+    };
     if (
       verdict.status === "FRESH" &&
       trigger !== "pressure" &&
@@ -182,7 +212,7 @@ export async function condenseCareerDialogueSummary(
         userId: input.userId,
         connectionId: snapshot.resolvedConnectionId,
         model: snapshot.resolvedModel,
-        prompt: buildCareerDialogueSummaryPrompt(projection),
+        prompt: buildCareerDialogueSummaryPrompt(projection, previousSummary),
       });
       raw = executed.text ?? "";
     } catch {
@@ -191,7 +221,7 @@ export async function condenseCareerDialogueSummary(
         summaryStatus: "failed",
         summaryCoverage: target.coveredCount,
         summaryUnits: 0,
-        summaryAgeTurns: summaryAgeTurns(messages, target.throughIndex),
+        summaryAgeTurns: summaryAgeTurns(snapshot.messages, target.throughIndex),
         generationMs: Math.max(0, Math.round(deps.now() - started)),
         failureCount: nextFailureCount,
       });
@@ -214,7 +244,7 @@ export async function condenseCareerDialogueSummary(
         summaryStatus: "failed",
         summaryCoverage: target.coveredCount,
         summaryUnits: units,
-        summaryAgeTurns: summaryAgeTurns(messages, target.throughIndex),
+        summaryAgeTurns: summaryAgeTurns(snapshot.messages, target.throughIndex),
         generationMs,
         failureCount: nextFailureCount,
       });
@@ -248,7 +278,7 @@ export async function condenseCareerDialogueSummary(
       summaryStatus: outcome,
       summaryCoverage: target.coveredCount,
       summaryUnits: units,
-      summaryAgeTurns: summaryAgeTurns(messages, target.throughIndex),
+      summaryAgeTurns: summaryAgeTurns(snapshot.messages, target.throughIndex),
       generationMs,
       failureCount: outcome === "committed" ? 0 : failureCount,
     });

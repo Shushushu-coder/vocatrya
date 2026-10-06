@@ -84,12 +84,12 @@ describe("AgentAddJobSchema", () => {
 });
 
 describe("AgentChatRequestSchema", () => {
-  it("requires a conversation id and still accepts an optional page context", () => {
+  it("requires request ownership and accepts a new user intent", () => {
     expect(
       AgentChatRequestSchema.safeParse({
         conversationId: "conv-1",
-        messages: [{ id: "1", role: "user", parts: [] }],
-        pageContext: { route: "/dashboard/myjobs" },
+        expectedRevision: 0, requestId: "request", operation: "send",
+        newMessage: { id: "1", role: "user", parts: [] },
       }).success,
     ).toBe(true);
   });

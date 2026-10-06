@@ -569,6 +569,12 @@ export async function importBackup(
             // intentionally never in the backup: attribute the restored
             // revision to the importing user instead of replaying a stale
             // cross-account id that would violate the Restrict FK.
+            if (model === "ChatConversation") {
+              // Restored history starts inactive. A backup cannot grant execution authority.
+              payload.revision = 0;
+              payload.activeRequestId = null;
+              payload.activeRequestExpiresAt = null;
+            }
             if (model === "TranscriptRevision") {
               if (payload.createdByUserId !== null && payload.createdByUserId !== undefined) {
                 payload = { ...payload, createdByUserId: userId };

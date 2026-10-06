@@ -11,6 +11,7 @@ const chat = {
   queued: undefined as any,
   clearQueued: vi.fn(),
   error: undefined as Error | undefined,
+  actionError: null as { code: string } | null,
   clearError: vi.fn(),
   preflight: { checked: true, ok: true } as any,
   composerNonce: 0,
@@ -42,6 +43,7 @@ describe("AgentChatInput", () => {
     chat.approvalPending = false;
     chat.queued = undefined;
     chat.error = undefined;
+    chat.actionError = null;
     chat.preflight = { checked: true, ok: true };
     chat.composerNonce = 0;
   });
@@ -192,6 +194,15 @@ describe("AgentChatInput", () => {
       screen.getByRole("button", { name: /dismiss error/i }),
     );
     expect(chat.clearError).toHaveBeenCalled();
+  });
+
+  it.each(["CONVERSATION_REFRESH_FAILED", "CONVERSATION_CANCEL_FAILED"])("prioritizes %s over an old AI error without offering Retry AI", (code) => {
+    chat.error = Object.assign(new Error("Old AI failure"), { code: "AI_EXECUTION_FAILED" });
+    chat.actionError = { code };
+    render(<AgentChatInput />);
+    expect(screen.getByText(/please reopen the conversation/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Old AI failure")).not.toBeInTheDocument();
   });
 
   it("disables sending entirely when the preflight failed", () => {

@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
 import prisma from "@/lib/db";
 import { jobDedupeKey, normalizeJobUrl } from "@/lib/scraper/utils";
 
@@ -58,11 +59,12 @@ const existingJobByUrlSelect = {
 export async function findExistingJobByUrl(
   userId: string,
   jobUrl: string,
+  db: PrismaClient | Prisma.TransactionClient = prisma,
 ): Promise<ExistingJobRef | null> {
   // Fast path: jobUrl is stored normalized (normalizeJobUrl), so an exact
   // match on the same normalization covers the overwhelming majority of
   // adds without scanning every URL-bearing job.
-  const exact = await prisma.job.findFirst({
+  const exact = await db.job.findFirst({
     where: { userId, jobUrl: normalizeJobUrl(jobUrl) },
     select: existingJobByUrlSelect,
   });
@@ -78,7 +80,7 @@ export async function findExistingJobByUrl(
   // deliberately doesn't, so a small number of stored URLs may only match
   // via the aggressive canonical key. Scan only when the fast path misses.
   const key = jobDedupeKey({ url: jobUrl });
-  const jobs = await prisma.job.findMany({
+  const jobs = await db.job.findMany({
     where: { userId, jobUrl: { not: null } },
     select: existingJobByUrlSelect,
   });

@@ -25,6 +25,13 @@ vi.mock("@ai-sdk/react", () => ({
 }));
 
 const chatInit = (call = 0) => useChatSpy.mock.calls[call][0] as any;
+function beginExecution(durable = true) {
+  const init = chatInit();
+  const prepared = init.transport.prepareSendMessagesRequest({ messages: [{ id: "request-user", role: "user", parts: [{ type: "text", text: "hi" }] }], trigger: "submit-message" });
+  const data = { conversationId: "conv-1", requestId: prepared.body.requestId, revision: durable ? 2 : 1, durable, released: durable };
+  init.onData({ type: "data-conversation", data });
+  return data;
+}
 
 const refresh = vi.fn();
 let currentPathname = "/dashboard/myjobs";
@@ -34,6 +41,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/actions/agentChat.actions", () => ({
+  cancelChatConversationRequest: vi.fn(async () => ({ success: true, data: conversation() })),
   clearChatConversation: vi.fn(async () => ({ success: true })),
   deleteChatConversation: vi.fn(async () => ({ success: true })),
   saveChatConversation: vi.fn(async () => ({ success: true })),
@@ -66,6 +74,8 @@ import {
   createChatConversation,
   deleteChatConversation,
   saveChatConversation,
+  cancelChatConversationRequest,
+  getChatConversation,
 } from "@/actions/agentChat.actions";
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { checkOllamaConnection } from "@/utils/ai.utils";
@@ -80,6 +90,8 @@ function Probe() {
       <button onClick={c.close}>close</button>
       <button onClick={() => void c.startNewConversation()}>newConversation</button>
       <button onClick={() => void c.regenerate()}>regenerate</button>
+      <button onClick={c.stop}>stop</button>
+      <button onClick={() => void c.selectConversation("conv-2")}>switchConversation</button>
       <button
         onClick={() =>
           void c.sendMessage({ parts: [{ type: "text", text: "hello" }] } as any)
@@ -111,6 +123,7 @@ function Probe() {
       </button>
       <span data-testid="conversation-id">{c.conversationId ?? ""}</span>
       <span data-testid="action-error">{c.actionError?.code ?? ""}</span>
+      <span data-testid="recovery-failure">{c.recoveryFailure ? `${c.recoveryFailure.conversationId}:${c.recoveryFailure.operation}` : ""}</span>
       <span data-testid="message-roles">
         {c.messages.map((message) => message.role).join(",")}
       </span>
@@ -122,6 +135,8 @@ function Probe() {
       </span>
       <span data-testid="history-version">{c.historyVersion}</span>
       <span data-testid="brand-completion">{c.brandCompletion}</span>
+      <button onClick={() => void c.addToolApprovalResponse({ id: "ap1", approved: true })}>approve</button>
+      <button onClick={() => void c.addToolApprovalResponse({ id: "ap2", approved: false })}>rejectSecond</button>
       <button onClick={c.clearQueued}>clearQueued</button>
       <span data-testid="queued">
         {c.queued ? (c.queued.parts[0] as any).text : ""}
@@ -139,6 +154,7 @@ function Probe() {
 }
 
 const conversation = (messages: any[] = []) => ({
+  revision: 0,
   id: "conv-1",
   title: null,
   titleFallback: null,
@@ -177,6 +193,7 @@ const createdSnapshot = (id: string) => ({
   success: true,
   data: {
     id,
+    revision: 0,
     title: null,
     titleFallback: "Add a job posting",
     createdAt: "2026-10-01T00:00:00.000Z",
@@ -206,6 +223,7 @@ const approvalMessage = {
 describe("AgentChatProvider", () => {
   it("signals brand completion only for successful finished turns and resets on a new conversation", async () => {
     setup();
+    beginExecution();
     const finish = chatInit().onFinish;
     for (const flags of [{ isAbort: true }, { isError: true }]) {
       act(() => finish({ message: { parts: [] }, ...flags }));
@@ -234,24 +252,13 @@ describe("AgentChatProvider", () => {
 
   // The canned exchange never reaches the route, so it is the one pair that
   // has to persist itself or it disappears on the next reload.
-  it("appends a seeded exchange to the transcript and persists it", async () => {
+  it("refuses an existing-conversation seed without touching the transcript", async () => {
     chat.messages = [{ id: "m1", role: "user", parts: [] }];
     setup();
     await userEvent.click(screen.getByText("seedExchange"));
-
-    expect(chat.sendMessage).not.toHaveBeenCalled();
-    const next = chat.setMessages.mock.calls[0][0] as typeof chat.messages;
-    expect(next).toHaveLength(3);
-    expect(next[1]).toMatchObject({
-      role: "user",
-      parts: [{ type: "text", text: "Add a job posting" }],
-    });
-    expect(next[2]).toMatchObject({
-      role: "assistant",
-      parts: [{ type: "text", text: "canned" }],
-    });
-    expect(next[1].id).not.toBe(next[2].id);
-    expect(saveChatConversation).toHaveBeenCalledWith("conv-1", next);
+    expect(chat.setMessages).not.toHaveBeenCalled();
+    expect(saveChatConversation).not.toHaveBeenCalled();
+    expect(screen.getByTestId("action-error")).toHaveTextContent("CONVERSATION_TURN_CONFLICT");
   });
 
   it("wires sendAutomaticallyWhen, without which an approved tool never executes", () => {
@@ -526,6 +533,7 @@ describe("AgentChatProvider", () => {
   it("refreshes the page after a completed review", async () => {
     setup();
     await act(async () => {
+      beginExecution();
       chatInit().onFinish({
         message: reviewToolMessage,
         messages: [reviewToolMessage],
@@ -588,6 +596,7 @@ describe("AgentChatProvider", () => {
   it("stubs the client-side paste after a successful add_job", async () => {
     setup();
     await act(async () => {
+      beginExecution();
       chatInit().onFinish({
         message: createdToolMessage,
         messages: [createdToolMessage],
@@ -621,6 +630,7 @@ describe("AgentChatProvider", () => {
   it("does not stub the client-side paste when no job was created", async () => {
     setup();
     await act(async () => {
+      beginExecution();
       chatInit().onFinish({
         message: reviewToolMessage,
         messages: [reviewToolMessage],
@@ -631,6 +641,7 @@ describe("AgentChatProvider", () => {
 
   it("accumulates transient review deltas keyed by tool call id", async () => {
     setup();
+    beginExecution(false);
     await act(async () => {
       chatInit().onData({
         type: "data-nested-stream",
@@ -825,5 +836,153 @@ describe("AgentChatProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
     });
+  });
+});
+
+
+describe("conversation client concurrency protocol", () => {
+  beforeEach(() => { vi.clearAllMocks(); chat.messages = []; chat.status = "ready"; });
+  it("sends a unique requestId and the acknowledged revision, without a full transcript", () => {
+    setup();
+    const first = beginExecution();
+    const body = chatInit().transport.prepareSendMessagesRequest({ messages: [{ id: "second", role: "user", parts: [{ type: "text", text: "second" }] }], trigger: "submit-message" }).body;
+    expect(body).toMatchObject({ conversationId: "conv-1", expectedRevision: 2, operation: "send" });
+    expect(body.requestId).not.toBe(first.requestId);
+    expect(body.messages).toBeUndefined();
+  });
+  it("does not approve a streamed proposal until its durable release acknowledgement", async () => {
+    setup([approvalMessage]);
+    const execution = beginExecution(false);
+    await userEvent.click(screen.getByText("approve"));
+    expect(chat.addToolApprovalResponse).not.toHaveBeenCalled();
+    act(() => chatInit().onData({ type: "data-conversation", data: { ...execution, durable: true, released: true, revision: 2 } }));
+    await userEvent.click(screen.getByText("approve"));
+    expect(chat.addToolApprovalResponse).toHaveBeenCalledWith({ id: "ap1", approved: true });
+  });
+  it("continues exactly the selected approval while preserving another pending proposal", async () => {
+    const second = { ...approvalMessage, parts: [{ ...approvalMessage.parts[0], toolCallId: "c2", approval: { id: "ap2" } }] };
+    const message = { ...approvalMessage, parts: [...approvalMessage.parts, ...second.parts] };
+    setup([message]);
+    await userEvent.click(screen.getByText("approve"));
+    const responded = { ...message, parts: [{ ...message.parts[0], state: "approval-responded", approval: { id: "ap1", approved: true } }, message.parts[1]] };
+    expect(chatInit().sendAutomaticallyWhen({ messages: [responded] })).toBe(true);
+    const body = chatInit().transport.prepareSendMessagesRequest({ messages: [responded], trigger: "submit-message" }).body;
+    expect(body).toMatchObject({ operation: "approval", approvalId: "ap1", decision: true });
+    await userEvent.click(screen.getByText("rejectSecond"));
+    expect(chat.addToolApprovalResponse).toHaveBeenCalledTimes(1);
+  });
+  it("reloads conflict authority and permits a new explicit approval without replaying it automatically", async () => {
+    setup([approvalMessage]);
+    const execution = beginExecution(false);
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: { ...conversation([approvalMessage]), revision: 7 } });
+    await act(async () => chatInit().onError(Object.assign(new Error("conflict"), { code: "CONVERSATION_STALE_WRITE", conversationRequestId: execution.requestId })));
+    expect(getChatConversation).toHaveBeenCalledWith("conv-1");
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    expect(chatInit().sendAutomaticallyWhen({ messages: [approvalMessage] })).toBe(false);
+    await userEvent.click(screen.getByText("approve"));
+    expect(chat.addToolApprovalResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["reject", "typed"])("handles %s reload failure and leaves local authority blocked", async (failure) => {
+    setup([approvalMessage]);
+    const execution = beginExecution(false);
+    if (failure === "reject") vi.mocked(getChatConversation).mockRejectedValueOnce(new Error("transport failed"));
+    else vi.mocked(getChatConversation).mockResolvedValueOnce({ success: false, code: "CONVERSATION_NOT_FOUND" });
+    chat.setMessages.mockClear();
+    await act(async () => chatInit().onError(Object.assign(new Error("old AI error"), { code: "AI_EXECUTION_FAILED", conversationRequestId: execution.requestId })));
+    await waitFor(() => expect(screen.getByTestId("action-error")).toHaveTextContent("CONVERSATION_REFRESH_FAILED"));
+    expect(chat.setMessages).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByText("sendMessage"));
+    await userEvent.click(screen.getByText("regenerate"));
+    await userEvent.click(screen.getByText("approve"));
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    expect(chat.regenerate).not.toHaveBeenCalled();
+    expect(chat.addToolApprovalResponse).not.toHaveBeenCalled();
+  });
+
+  it("handles a rejected cancel, cleans the request identity and requires reopening", async () => {
+    setup();
+    const execution = beginExecution(false);
+    vi.mocked(cancelChatConversationRequest).mockRejectedValueOnce(new Error("cancel transport failed"));
+    await userEvent.click(screen.getByText("stop"));
+    await waitFor(() => expect(screen.getByTestId("action-error")).toHaveTextContent("CONVERSATION_CANCEL_FAILED"));
+    expect(cancelChatConversationRequest).toHaveBeenCalledWith("conv-1", execution.requestId);
+    act(() => chatInit().onData({ type: "data-conversation", data: { ...execution, revision: 99, durable: true, released: true } }));
+    await userEvent.click(screen.getByText("sendMessage"));
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByTestId("recovery-failure")).toHaveTextContent("conv-1:cancel");
+  });
+
+  it("can send in a new conversation while the old conversation's cancel is unresolved", async () => {
+    setup();
+    beginExecution(false);
+    let reject!: (error: Error) => void;
+    vi.mocked(cancelChatConversationRequest).mockReturnValueOnce(new Promise<never>((_, fail) => { reject = fail; }));
+    vi.mocked(createChatConversation).mockResolvedValueOnce(createdSnapshot("conv-new"));
+    await userEvent.click(screen.getByText("newConversation"));
+    await userEvent.click(screen.getByText("sendMessage"));
+    await waitFor(() => expect(chat.sendMessage).toHaveBeenCalledTimes(1));
+    await act(async () => reject(new Error("old cancel failed")));
+    expect(screen.getByTestId("conversation-id")).toHaveTextContent("conv-new");
+    expect(screen.getByTestId("action-error")).toBeEmptyDOMElement();
+  });
+
+  it.each(["reload", "cancel"])("ignores a late successful %s after a newer conversation selection", async (operation) => {
+    setup();
+    const execution = beginExecution(false);
+    let resolve!: (result: Awaited<ReturnType<typeof cancelChatConversationRequest>>) => void;
+    const pending = new Promise<Awaited<ReturnType<typeof cancelChatConversationRequest>>>(done => { resolve = done; });
+    if (operation === "reload") {
+      vi.mocked(getChatConversation).mockReturnValueOnce(pending);
+      act(() => chatInit().onError(Object.assign(new Error("conflict"), { code: "CONVERSATION_STALE_WRITE", conversationRequestId: execution.requestId })));
+    } else {
+      vi.mocked(cancelChatConversationRequest).mockReturnValueOnce(pending);
+      await userEvent.click(screen.getByText("stop"));
+    }
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: { ...conversation(), id: "conv-2", revision: 8 } });
+    await userEvent.click(screen.getByText("switchConversation"));
+    chat.setMessages.mockClear();
+    await act(async () => resolve({ success: true, data: { ...conversation(), revision: 99 } }));
+    expect(screen.getByTestId("conversation-id")).toHaveTextContent("conv-2");
+    expect(chat.setMessages).not.toHaveBeenCalled();
+    expect(screen.getByTestId("action-error")).toBeEmptyDOMElement();
+  });
+
+  it.each(["reload", "cancel"])("ignores late rejected C1 %s after switching to C2, preserving diagnostics", async (operation) => {
+    setup();
+    const execution = beginExecution(false);
+    let reject!: (error: Error) => void;
+    const pending = new Promise<never>((_, fail) => { reject = fail; });
+    if (operation === "reload") {
+      vi.mocked(getChatConversation).mockReturnValueOnce(pending);
+      act(() => chatInit().onError(Object.assign(new Error("conflict"), { code: "CONVERSATION_STALE_WRITE", conversationRequestId: execution.requestId })));
+    } else {
+      vi.mocked(cancelChatConversationRequest).mockReturnValueOnce(pending);
+      await userEvent.click(screen.getByText("stop"));
+    }
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: { ...conversation([{ id: "c2-message", role: "user", parts: [] }]), id: "conv-2", revision: 8 } });
+    await userEvent.click(screen.getByText("switchConversation"));
+    await waitFor(() => expect(screen.getByTestId("conversation-id")).toHaveTextContent("conv-2"));
+    chat.setMessages.mockClear();
+    await act(async () => reject(new Error("late failure")));
+    expect(screen.getByTestId("action-error")).toBeEmptyDOMElement();
+    expect(chat.setMessages).not.toHaveBeenCalled();
+    expect(screen.getByTestId("recovery-failure")).toHaveTextContent(`conv-1:${operation}`);
+    await userEvent.click(screen.getByText("sendMessage"));
+    expect(chat.sendMessage).toHaveBeenCalledTimes(1);
+  });
+  it("cancels captured C1 identity on New Conversation and ignores its late durable finish", async () => {
+    setup();
+    const execution = beginExecution(false);
+    await userEvent.click(screen.getByText("newConversation"));
+    expect(cancelChatConversationRequest).toHaveBeenCalledWith("conv-1", execution.requestId);
+    const before = screen.getByTestId("history-version").textContent;
+    act(() => {
+      chatInit().onData({ type: "data-conversation", data: { ...execution, revision: 99, durable: true, released: true } });
+      chatInit().onFinish({ message: { parts: [] }, isAbort: false, isError: false });
+    });
+    expect(screen.getByTestId("conversation-id")).toHaveTextContent("");
+    expect(screen.getByTestId("history-version").textContent).toBe(before);
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

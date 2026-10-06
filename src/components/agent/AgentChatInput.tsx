@@ -260,7 +260,9 @@ function ChatErrorBanner() {
   } = useAgentChat();
   const parsed = error ? readAgentChatError(error) : null;
   const code =
-    parsed?.code && parsed.code !== "GENERIC"
+    actionError?.code && categorizeAgentErrorCode(actionError.code) === "recovery"
+      ? actionError.code
+      : parsed?.code && parsed.code !== "GENERIC"
       ? parsed.code
       : (actionError?.code ?? preflight.code ?? parsed?.code ?? "GENERIC");
   const copy = agentErrorCopy(categorizeAgentErrorCode(code));

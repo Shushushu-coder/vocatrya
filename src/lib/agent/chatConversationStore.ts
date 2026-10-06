@@ -1,3 +1,4 @@
+import { ConversationRequestError } from "./conversationRequest";
 import "server-only";
 
 import type { Prisma } from "@prisma/client";
@@ -23,11 +24,12 @@ import type { ExplicitModelSelection } from "./chatTypes";
  * writes touch messages or context only.
  *
  * The old userId-unique create race is gone: two creates are two
- * conversations. Updates still replace the transcript of one owned row
- * and never rewrite the lock.
+ * conversations. Existing transcripts use request-owned revision CAS and
+ * never rewrite the lock.
  */
 export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
   select: {
+    revision: true;
     id: true;
     userId: true;
     title: true;
@@ -41,6 +43,7 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
 }>;
 
 const CHAT_ROW_SELECT = {
+  revision: true,
   id: true,
   userId: true,
   title: true,
@@ -68,9 +71,7 @@ export class ChatConversationNotFoundError extends Error {
 }
 
 function serializeMessages(messages: UIMessage[]): string {
-  return JSON.stringify(
-    messages.slice(-APP_CONSTANTS.AGENT_CHAT_MAX_STORED_MESSAGES),
-  );
+  return JSON.stringify(messages);
 }
 
 export async function getOwnedChatConversation(
@@ -149,23 +150,18 @@ export async function createChatConversationRecord(input: {
 }
 
 /**
- * Replace the transcript of one owned conversation. Lock columns are not
- * in the write. A missing or foreign id throws.
+ * Reject the former full-snapshot write API. Existing transcripts can only
+ * change through request admission, tool checkpoint, finish, or cancellation.
  */
 export async function updateChatConversationMessages(
   userId: string,
   conversationId: string,
   messages: UIMessage[],
 ): Promise<ChatConversationRow> {
-  const serialized = serializeMessages(messages);
-  const updated = await prisma.chatConversation.updateMany({
-    where: { id: conversationId, userId },
-    data: { messages: serialized },
-  });
-  if (updated.count !== 1) throw new ChatConversationNotFoundError();
-  const row = await getOwnedChatConversation(userId, conversationId);
-  if (!row) throw new ChatConversationNotFoundError();
-  return row;
+  // Existing-row snapshot replacement is forbidden. Execution uses the
+  // request-owned CAS helpers; seed snapshots belong to creation only.
+  void userId; void conversationId; void messages;
+  throw new ConversationRequestError("CONVERSATION_TURN_CONFLICT");
 }
 
 export async function updateOwnedChatConversationContext(

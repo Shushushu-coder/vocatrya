@@ -1,3 +1,4 @@
+import { ConversationRequestError } from "./conversationRequest";
 import {
   InvalidToolApprovalError,
   InvalidToolInputError,
@@ -34,6 +35,7 @@ export function mapAgentError(
   error: unknown,
   context: ErrorContext = {},
 ): string {
+  if (error instanceof ConversationRequestError) return error.code === "CONVERSATION_PERSISTENCE_FAILED" ? "The conversation could not be saved. Reload before continuing." : "This conversation has changed. Reload and try your action again.";
   const provider = context.provider ?? "the AI provider";
   const model = context.model;
   const message = messageOf(error);
@@ -142,6 +144,7 @@ export function mapAgentError(
  * AIBusinessError.
  */
 export function agentErrorCode(error: unknown): string {
+  if (error instanceof ConversationRequestError) return error.code;
   if (error instanceof AIBusinessError) return error.code;
   const name = nameOf(error);
   const message = messageOf(error);

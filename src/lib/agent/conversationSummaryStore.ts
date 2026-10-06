@@ -45,14 +45,15 @@ export async function loadFreshConversationSummary(input: {
   userId: string;
   conversationId: string;
   messages: UIMessage[];
-}): Promise<string | undefined> {
+}): Promise<{ text: string; throughMessageId: string } | undefined> {
   try {
     const row = await prisma.conversationSummary.findFirst({
       where: { conversationId: input.conversationId, userId: input.userId },
     });
     if (!row) return undefined;
     const verdict = validateConversationSummaryCoverage(toRecord(row), input.messages);
-    return verdict.status === "FRESH" ? verdict.text : undefined;
+    if (verdict.status !== "FRESH") return undefined;
+    return { text: verdict.text, throughMessageId: input.messages[verdict.throughIndex].id };
   } catch {
     log.info("[agent-chat] summary", { summaryStatus: "read_failed" });
     return undefined;

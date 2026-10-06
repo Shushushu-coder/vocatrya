@@ -4,7 +4,7 @@ import { createJobFromNames } from "@/lib/jobs/createJobFromNames";
 import { JobResolutionError } from "@/lib/jobs/resolve";
 import { addJobSettled } from "@/models/agent.model";
 
-vi.mock("@/lib/jobs/createJobFromNames", () => ({ createJobFromNames: vi.fn() }));
+vi.mock("@/lib/jobs/createJobFromNames", async original => ({ ...await original<typeof import("@/lib/jobs/createJobFromNames")>(), createJobFromNames: vi.fn() }));
 
 const created = {
   created: true,

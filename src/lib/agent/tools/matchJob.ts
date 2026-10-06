@@ -1,3 +1,5 @@
+import { checkpointConversationTool, type ConversationRequest } from "../conversationRequest";
+import { saveMatchInTransaction } from "@/lib/jobs/generatedResults";
 import "server-only";
 
 import { tool, type LanguageModel, type UIMessageStreamWriter } from "ai";
@@ -23,6 +25,7 @@ import type { AgentMatchJobResult } from "@/models/agent.model";
 import type { JobMatchData } from "@/models/ai.schemas";
 
 type MatchJobContext = {
+  request?: ConversationRequest;
   userId: string;
   pageJobId?: string;
   model: LanguageModel;
@@ -150,6 +153,12 @@ export function buildMatchJobTool(ctx: MatchJobContext) {
         model: ctx.modelName,
         surface: APP_CONSTANTS.AGENT_CHAT_MATCH_SURFACE,
       };
+      if (ctx.request) {
+        return checkpointConversationTool(ctx.request, { toolName: "match_job", toolCallId, input: raw }, async tx => {
+          await saveMatchInTransaction(tx, ctx.userId, job.id!, scores.matchScore, JSON.stringify(matchData));
+          return { status: "ok" as const, jobId: job.id!, jobTitle, company, resumeId: resume.id!, resumeTitle: resume.title, scores, body, saved: true };
+        });
+      }
       const saveResult = await saveJobMatchResult(
         job.id!,
         scores.matchScore,

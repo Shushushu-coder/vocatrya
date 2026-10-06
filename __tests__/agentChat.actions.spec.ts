@@ -98,6 +98,7 @@ describe("agentChat actions", () => {
     (prisma.chatConversation.create as any).mockImplementation(
       async ({ data }: any) => ({
         id: "created-1",
+        revision: 0,
         createdAt: new Date("2026-10-01T00:00:00.000Z"),
         updatedAt: new Date("2026-10-01T00:00:00.000Z"),
         title: data.title ?? null,
@@ -111,6 +112,7 @@ describe("agentChat actions", () => {
 
   const ownedRow = (overrides: Record<string, unknown> = {}) => ({
     id: "row-1",
+    revision: 0,
     userId: "user-1",
     title: "Saved title",
     context: null,
@@ -161,36 +163,16 @@ describe("agentChat actions", () => {
     expect(saveChatConversation.length).toBe(2);
   });
 
-  it("saveChatConversation updates messages only when the caller owns the row", async () => {
+  it("saveChatConversation cannot replace an existing transcript without request ownership", async () => {
     (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow());
-    await saveChatConversation("row-1", [msg("a")] as any);
-    const call = (prisma.chatConversation.updateMany as any).mock.calls[0][0];
-    expect(call.where).toEqual({ id: "row-1", userId: "user-1" });
-    expect(Object.keys(call.data)).toEqual(["messages"]);
-    expect(prisma.chatConversation.create).not.toHaveBeenCalled();
-    expect(prisma.aIBusinessAssignment.findMany).not.toHaveBeenCalled();
-  });
-
-  it("saveChatConversation does not create a row when the conversation is missing", async () => {
-    (prisma.chatConversation.updateMany as any).mockResolvedValue({ count: 0 });
-    const result = await saveChatConversation("missing", [msg("a")] as any);
-    expect(result.success).toBe(false);
+    expect(await saveChatConversation("row-1", [msg("a")] as any)).toMatchObject({ success: false, code: "CONVERSATION_TURN_CONFLICT" });
+    expect(prisma.chatConversation.updateMany).not.toHaveBeenCalled();
     expect(prisma.chatConversation.create).not.toHaveBeenCalled();
   });
-
-  it("saveChatConversation trims to the newest AGENT_CHAT_MAX_STORED_MESSAGES", async () => {
-    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow());
-    const many = Array.from(
-      { length: APP_CONSTANTS.AGENT_CHAT_MAX_STORED_MESSAGES + 5 },
-      (_, i) => msg(`m${i}`),
-    );
-    await saveChatConversation("row-1", many as any);
-    const call = (prisma.chatConversation.updateMany as any).mock.calls[0][0];
-    const stored = JSON.parse(call.data.messages);
-    expect(stored).toHaveLength(APP_CONSTANTS.AGENT_CHAT_MAX_STORED_MESSAGES);
-    expect(stored[stored.length - 1].id).toBe(`m${many.length - 1}`);
+  it("raw save cannot recreate a missing conversation", async () => {
+    expect((await saveChatConversation("missing", [msg("a")] as any)).success).toBe(false);
+    expect(prisma.chatConversation.create).not.toHaveBeenCalled();
   });
-
   it("deleteChatConversation deletes only the caller's named row", async () => {
     await deleteChatConversation("row-1");
     expect(prisma.chatConversation.deleteMany).toHaveBeenCalledWith({

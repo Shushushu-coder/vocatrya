@@ -111,21 +111,22 @@ export function resolveContactRole(
 export async function resolveTag(
   label: string,
   userId: string,
+  db: EntityClient = prisma,
 ): Promise<ResolvedTag> {
   const trimmed = label.trim();
   const value = canonicalizeEntityValue(trimmed);
-  const existing = await prisma.tag.findUnique({
+  const existing = await db.tag.findUnique({
     where: { value_createdBy: { value, createdBy: userId } },
   });
   if (existing) return { id: existing.id, label: existing.label, value: existing.value, createdBy: existing.createdBy, created: false };
   try {
-    const tag = await prisma.tag.create({
+    const tag = await db.tag.create({
       data: { label: trimmed, value, createdBy: userId },
     });
     return { id: tag.id, label: tag.label, value: tag.value, createdBy: tag.createdBy, created: true };
   } catch (err: any) {
     if (err?.code === "P2002") {
-      const winner = await prisma.tag.findUnique({
+      const winner = await db.tag.findUnique({
         where: { value_createdBy: { value, createdBy: userId } },
       });
       if (winner) {
@@ -140,6 +141,7 @@ export async function resolveTags(
   labels: string[],
   userId: string,
   maxTags: number,
+  db: EntityClient = prisma,
 ): Promise<{ resolved: ResolvedEntity[]; dropped: string[] }> {
   const seen = new Set<string>();
   const unique: string[] = [];
@@ -156,7 +158,7 @@ export async function resolveTags(
   const toResolve = unique.slice(0, maxTags);
   const dropped = unique.slice(maxTags);
 
-  const resolved = await Promise.all(toResolve.map((l) => resolveTag(l, userId)));
+  const resolved = await Promise.all(toResolve.map((l) => resolveTag(l, userId, db)));
   return { resolved, dropped };
 }
 
@@ -189,12 +191,12 @@ export function resolveWorkplaceType(input?: string): string | null {
   throw new JobResolutionError(`Invalid workplaceType "${input}". Valid values: ${valid.join(", ")}`);
 }
 
-export async function resolveJobStatus(value?: string): Promise<string> {
+export async function resolveJobStatus(value?: string, db: EntityClient = prisma): Promise<string> {
   // A job with no explicit status starts at "new" — never by array position.
   const target = (value ?? "new").toLowerCase();
-  const status = await prisma.jobStatus.findUnique({ where: { value: target } });
+  const status = await db.jobStatus.findUnique({ where: { value: target } });
   if (!status) {
-    const all = await prisma.jobStatus.findMany({ select: { value: true } });
+    const all = await db.jobStatus.findMany({ select: { value: true } });
     throw new JobResolutionError(
       `Invalid status "${target}". Valid values: ${all.map((s) => s.value).join(", ")}`,
     );

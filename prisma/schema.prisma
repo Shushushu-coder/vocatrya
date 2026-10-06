@@ -688,15 +688,18 @@ model McpAccessToken {
 }
 
 model ChatConversation {
-  id                   String               @id @default(uuid())
-  userId               String
+  revision               Int                  @default(0)
+  activeRequestId        String?
+  activeRequestExpiresAt DateTime?
+  id                     String               @id @default(uuid())
+  userId                 String
   // Deterministic display title. Null on rows migrated from the single
   // conversation model — History derives a fallback and does not backfill.
-  title                String?
+  title                  String?
   // JSON AgentConversationContextV1. Null on historical rows means "no
   // stored context", not "guess the page the user was on".
-  context              String?
-  messages             String // JSON-serialized UIMessage[]
+  context                String?
+  messages               String // JSON-serialized UIMessage[]
   // Career Dialogue creation-time AI lock. Captured once when the row is
   // created, never rewritten afterwards:
   // - resolvedConnectionId set -> the conversation runs the locked
@@ -706,14 +709,14 @@ model ChatConversation {
   // Deliberately NOT a relation: a restored backup may reference a
   // connection that does not exist locally, and that orphaned lock must
   // surface as an explicit error rather than be silently nulled.
-  resolvedConnectionId String?
-  resolvedModel        String?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resolvedConnectionId   String?
+  resolvedModel          String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Disposable transcript-compression cache. Deleting the row never
   // removes career facts. Cascade follows the conversation.
-  conversationSummary  ConversationSummary?
+  conversationSummary    ConversationSummary?
 
   @@index([userId, updatedAt])
 }

@@ -1,9 +1,11 @@
+import { checkpointConversationTool, ConversationRequestError, type ConversationRequest } from "../conversationRequest";
+import type { Prisma } from "@prisma/client";
 import { tool } from "ai";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { AGENT_TOOL_DESCRIPTIONS } from "@/lib/agent/prompt";
 import { AgentAddJobParseSchema, AgentAddJobSchema } from "@/models/agent.schema";
-import { createAgentOpportunity } from "@/lib/career/createAgentOpportunity";
-import { createJobFromNames } from "@/lib/jobs/createJobFromNames";
+import { createAgentOpportunity, createAgentOpportunityInTransaction } from "@/lib/career/createAgentOpportunity";
+import { createJobFromNames, renderJobDescription } from "@/lib/jobs/createJobFromNames";
 import { JobResolutionError } from "@/lib/jobs/resolve";
 import { log } from "@/lib/telemetry";
 import type { AgentAddJobResult } from "@/models/agent.model";
@@ -40,7 +42,7 @@ function namedText(value: unknown): string {
 export function buildAddJobTool(
   userId: string,
   pastedText?: string,
-  options?: { canonical?: boolean },
+  options?: { canonical?: boolean; request?: ConversationRequest },
 ) {
   const canonical = options?.canonical === true;
   return tool({
@@ -77,11 +79,12 @@ export function buildAddJobTool(
         return failed(NO_DESCRIPTION, NO_DESCRIPTION_DISPLAY);
       }
 
+      const renderedDescription = canonical ? undefined : renderJobDescription(jobDescription as string);
       const started = Date.now();
       try {
-        if (canonical) {
-          const result = await createAgentOpportunity(
-            {
+        const mutate = async (tx?: Prisma.TransactionClient): Promise<AgentAddJobResult> => {
+          if (canonical) {
+            const opportunityInput = {
               company: input.company,
               jobTitle: input.jobTitle,
               jobDescription,
@@ -93,54 +96,63 @@ export function buildAddJobTool(
               jobUrl: input.jobUrl,
               salaryRange: input.salaryRange,
               toolCallId: exec?.toolCallId,
+            };
+            const result = tx
+              ? await createAgentOpportunityInTransaction(tx, opportunityInput, userId)
+              : await createAgentOpportunity(opportunityInput, userId);
+            log.info("[agent-chat] add_job", {
+              tool: "add_job",
+              result: result.replayed ? "replayed" : "created",
+              jobOpportunityId: result.jobOpportunityId,
+              hasDescription: result.hasDescription,
+              elapsedMs: Date.now() - started,
+            });
+            return {
+              created: true,
+              jobId: result.jobOpportunityId,
+              jobOpportunityId: result.jobOpportunityId,
+              company: result.company,
+              title: result.title,
+              resolutions: result.resolutions,
+              descriptionSource: jobDescription
+                ? pastedText
+                  ? "pasted"
+                  : "model"
+                : undefined,
+              descriptionChars: jobDescription ? jobDescription.length : undefined,
+            };
+          }
+
+          const result = await createJobFromNames(
+            {
+              ...input,
+              jobDescription: jobDescription as string,
+              createdVia: APP_CONSTANTS.AGENT_CHAT_CREATED_VIA,
             },
             userId,
+            tx,
+            renderedDescription,
           );
-          log.info("[agent-chat] add_job", {
-            tool: "add_job",
-            result: result.replayed ? "replayed" : "created",
-            jobOpportunityId: result.jobOpportunityId,
-            hasDescription: result.hasDescription,
-            elapsedMs: Date.now() - started,
-          });
+
+          // result.message is deliberately NOT returned: it is MCP-facing
+          // protocol text naming update_job and allowDuplicate, neither of
+          // which this surface exposes. The card composes its own copy.
           return {
-            created: true,
-            jobId: result.jobOpportunityId,
-            jobOpportunityId: result.jobOpportunityId,
-            company: result.company,
-            title: result.title,
+            created: result.created,
+            jobId: result.jobId,
+            duplicateOf: result.duplicateOf,
             resolutions: result.resolutions,
-            descriptionSource: jobDescription
-              ? pastedText
-                ? "pasted"
-                : "model"
-              : undefined,
-            descriptionChars: jobDescription ? jobDescription.length : undefined,
-          };
-        }
-
-        const result = await createJobFromNames(
-          {
-            ...input,
-            jobDescription: jobDescription as string,
-            createdVia: APP_CONSTANTS.AGENT_CHAT_CREATED_VIA,
-          },
-          userId,
-        );
-
-        // result.message is deliberately NOT returned: it is MCP-facing
-        // protocol text naming update_job and allowDuplicate, neither of
-        // which this surface exposes. The card composes its own copy.
-        return {
-          created: result.created,
-          jobId: result.jobId,
-          duplicateOf: result.duplicateOf,
-          resolutions: result.resolutions,
-          descriptionSource: pastedText ? "pasted" : "model",
-          descriptionChars: (jobDescription as string).length,
-          descriptionCompleteness: result.descriptionCompleteness,
+            descriptionSource: pastedText ? "pasted" : "model",
+            descriptionChars: (jobDescription as string).length,
+            descriptionCompleteness: result.descriptionCompleteness,
         };
+        };
+        if (options?.request) {
+          return await checkpointConversationTool(options.request, { toolName: "add_job", toolCallId: exec.toolCallId, input: raw }, tx => mutate(tx));
+        }
+        return await mutate();
       } catch (error) {
+        if (error instanceof ConversationRequestError) throw error;
         log.error("[agent-chat] add_job failed", {
           tool: "add_job",
           result: "failed",

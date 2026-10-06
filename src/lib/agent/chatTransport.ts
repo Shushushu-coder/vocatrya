@@ -68,17 +68,38 @@ export class VocatryaChatTransport
   extends DefaultChatTransport<UIMessage>
   implements ChatTransport<UIMessage>
 {
-  constructor(options?: HttpChatTransportInitOptions<UIMessage>) {
+  private readonly options: HttpChatTransportInitOptions<UIMessage>;
+  private readonly isCurrentRequest?: (requestId: string) => boolean;
+  constructor(options?: HttpChatTransportInitOptions<UIMessage> & { isCurrentRequest?: (requestId: string) => boolean }) {
     super(options ?? {});
+    this.options = options ?? {};
+    this.isCurrentRequest = options?.isCurrentRequest;
   }
 
   async sendMessages(
     options: Parameters<ChatTransport<UIMessage>["sendMessages"]>[0],
   ): Promise<ReadableStream<UIMessageChunk>> {
+    let requestId: string | undefined;
     try {
-      return await super.sendMessages(options);
+      const transport = new DefaultChatTransport<UIMessage>({
+        ...this.options,
+        prepareSendMessagesRequest: this.options.prepareSendMessagesRequest ? async args => {
+          const prepared = await this.options.prepareSendMessagesRequest!(args);
+          requestId = (prepared.body as { requestId?: string }).requestId;
+          return prepared;
+        } : undefined,
+      });
+      const stream = await transport.sendMessages(options);
+      return stream.pipeThrough(new TransformStream<UIMessageChunk, UIMessageChunk>({
+        transform: (chunk, controller) => {
+          if (chunk.type === "data-conversation") requestId = (chunk.data as { requestId: string }).requestId;
+          if (!requestId || !this.isCurrentRequest || this.isCurrentRequest(requestId)) controller.enqueue(chunk);
+        },
+      }));
     } catch (error) {
-      throw humanizeChatTransportError(error);
+      const normalized = humanizeChatTransportError(error);
+      if (normalized instanceof Error && requestId) Object.assign(normalized, { conversationRequestId: requestId });
+      throw normalized;
     }
   }
 

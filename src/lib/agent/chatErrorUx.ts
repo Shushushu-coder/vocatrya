@@ -1,4 +1,7 @@
 export type AgentErrorCategory =
+  | "recovery"
+  | "conversation"
+  | "saved"
   | "auth"
   | "connection"
   | "capability"
@@ -48,6 +51,9 @@ export function categorizeAgentErrorCode(
   code: string | null | undefined,
 ): AgentErrorCategory {
   if (!code) return "generic";
+  if (code === "CONVERSATION_REFRESH_FAILED" || code === "CONVERSATION_CANCEL_FAILED") return "recovery";
+  if (code === "CONVERSATION_OPERATION_SAVED") return "saved";
+  if (code.startsWith("CONVERSATION_")) return "conversation";
   if (AUTH.has(code)) return "auth";
   if (CONNECTION.has(code)) return "connection";
   if (CAPABILITY.has(code)) return "capability";
@@ -62,6 +68,12 @@ export function agentErrorCopy(category: AgentErrorCategory): {
   action: "retry" | "settings" | "new-model" | null;
 } {
   switch (category) {
+    case "recovery":
+      return { titleKey: "agent.errors.cannotSend", bodyKey: "agent.errors.recoveryFailed", action: null };
+    case "conversation":
+      return { titleKey: "agent.errors.cannotSend", bodyKey: "agent.errors.conversationChanged", action: null };
+    case "saved":
+      return { titleKey: "agent.errors.cannotSend", bodyKey: "agent.errors.operationSaved", action: null };
     case "auth":
       return {
         titleKey: "agent.errors.reauthTitle",
