@@ -8,15 +8,17 @@ import {
   CareerMaterialService,
   MATCH_ANALYSIS_TYPE,
   MATCH_STALE_REASON,
-  MatchAnalysisService,
   OpportunityService,
   ResumeVariantService,
   hashEvidenceContent,
-  hashMatchInput,
-  buildDeepMatchHashInput,
-  buildFastScreeningHashInput,
   writeInstanceMigrationState,
 } from "@/lib/career";
+import {
+  MatchAnalysisService,
+  buildDeepMatchHashInput,
+  buildFastScreeningHashInput,
+  hashMatchInput,
+} from "@/lib/career/matchAnalysisService";
 import {
   makeTestDbUrl,
   pushSchema,

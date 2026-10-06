@@ -6,10 +6,9 @@
 // Composition: identity/vendor/profile facts come from the runtime
 // definition registry (never duplicated); behavior, permission, and
 // manual-verification truth live in the matrix below. The result is the
-// stable descriptor the Settings UI (via runtime:list /
-// runtime:getCapabilities IPC) and the next phase's
-// connectionId+model execution seam consume — the UI must never re-derive
-// capability decisions from backendKind itself.
+// stable descriptor the Settings UI (via runtime:list) and the next
+// phase's connectionId+model execution seam consume — the UI must never
+// re-derive capability decisions from backendKind itself.
 const {
   getRuntimeDefinition,
   listRuntimeDefinitions,

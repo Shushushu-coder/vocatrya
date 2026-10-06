@@ -123,9 +123,6 @@ function installBridges({
         capabilities: CAPABILITY_STUB(backendKind),
       })),
     ),
-    getCapabilities: vi.fn(async (backendKind: string) =>
-      CAPABILITY_STUB(backendKind),
-    ),
     detect: vi.fn(async (backendKind: string) => ({
       backendKind,
       runtimeVendor: "V",

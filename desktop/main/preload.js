@@ -21,7 +21,6 @@ const RUNTIME_CHANNELS = Object.freeze({
   detect: "runtime:detect",
   getVersion: "runtime:getVersion",
   getStatus: "runtime:getStatus",
-  getCapabilities: "runtime:getCapabilities",
   getInstallInfo: "runtime:getInstallInfo",
   getUpdateInfo: "runtime:getUpdateInfo",
 });
@@ -52,8 +51,6 @@ contextBridge.exposeInMainWorld("vocatryaRuntime", {
       backendKind,
       runtimeProfileRef,
     }),
-  getCapabilities: (backendKind) =>
-    ipcRenderer.invoke(RUNTIME_CHANNELS.getCapabilities, { backendKind }),
   getInstallInfo: (backendKind) =>
     ipcRenderer.invoke(RUNTIME_CHANNELS.getInstallInfo, { backendKind }),
   getUpdateInfo: (backendKind) =>

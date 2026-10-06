@@ -4,11 +4,6 @@ import { requireUser } from "./shared";
 import { getInterviewRuntime } from "@/lib/interview/runtime";
 import { mapInterviewError } from "@/lib/interview/productErrors";
 import { getInterviewReadiness } from "@/lib/interview/readiness";
-import {
-  updateInterviewAiSettings,
-  clearInterviewAiSettings,
-} from "./userSettings.actions";
-import type { InterviewAiSettings } from "@/models/userSettings.model";
 import type { CoachingMode } from "@/lib/interview/persistence/interviewEnums";
 
 function runtime() {
@@ -29,24 +24,6 @@ export async function getInterviewReadinessAction() {
       success: true as const,
       data: readiness,
     };
-  } catch (error) {
-    return mapInterviewError(error);
-  }
-}
-
-export async function updateInterviewConfigAction(input: InterviewAiSettings) {
-  try {
-    await requireUser();
-    return updateInterviewAiSettings(input);
-  } catch (error) {
-    return mapInterviewError(error);
-  }
-}
-
-export async function clearInterviewConfigAction() {
-  try {
-    await requireUser();
-    return clearInterviewAiSettings();
   } catch (error) {
     return mapInterviewError(error);
   }
@@ -139,16 +116,6 @@ export async function generateInterviewFeedbackAction(answerAttemptId: string) {
   }
 }
 
-export async function getInterviewFeedbackAction(answerAttemptId: string) {
-  try {
-    const user = await requireUser();
-    const data = await runtime().getInterviewFeedback(user.id, answerAttemptId);
-    return { success: true as const, data };
-  } catch (error) {
-    return mapInterviewError(error);
-  }
-}
-
 /**
  * Server-side "next question". Validates the current question was
  * answered with succeeded feedback before advancing
@@ -203,16 +170,6 @@ export async function generateInterviewSummaryAction(sessionId: string) {
       userId: user.id,
       sessionId,
     });
-    return { success: true as const, data };
-  } catch (error) {
-    return mapInterviewError(error);
-  }
-}
-
-export async function getInterviewSummaryAction(sessionId: string) {
-  try {
-    const user = await requireUser();
-    const data = await runtime().getInterviewSummary(user.id, sessionId);
     return { success: true as const, data };
   } catch (error) {
     return mapInterviewError(error);

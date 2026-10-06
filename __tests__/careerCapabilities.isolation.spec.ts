@@ -8,7 +8,6 @@ import {
   CAREER_RUNTIME_MODE,
   CandidateProfileService,
   CareerMaterialService,
-  MatchAnalysisService,
   OpportunityService,
   PROCESS_STEP_CATEGORY,
   ResumeVariantService,
@@ -23,6 +22,7 @@ import {
   resolveAbRolloutScope,
   resolveCareerRuntimeMode,
 } from "@/lib/career";
+import { MatchAnalysisService } from "@/lib/career/matchAnalysisService";
 import { listJobs } from "@/lib/career/jobsReadDispatch";
 import { createJobRecord } from "@/lib/jobs/createJobRecord";
 import {

@@ -55,7 +55,6 @@ describe("runtime IPC boundary", () => {
       "runtime:detect",
       "runtime:getVersion",
       "runtime:getStatus",
-      "runtime:getCapabilities",
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
     ]);
@@ -86,7 +85,6 @@ describe("runtime IPC boundary", () => {
       "runtime:detect",
       "runtime:getVersion",
       "runtime:getStatus",
-      "runtime:getCapabilities",
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
     ]) {
@@ -117,20 +115,19 @@ describe("runtime IPC boundary", () => {
     expect(result.runtimeVendor).toBe("OPENAI");
   });
 
-  it("serves the consolidated capability descriptor per runtime", async () => {
+  it("serves the consolidated capability descriptor via runtime:list", async () => {
     const ipcMain = fakeIpcMain();
     registerRuntimeIpcHandlers(ipcMain, service);
-    const codex = await ipcMain.invoke("runtime:getCapabilities", {
-      backendKind: "CODEX_RUNTIME",
-    });
-    expect(codex.implemented).toBe(true);
-    expect(codex.permission.level).toBe("STRONG_SANDBOX");
-    expect(codex.profile.credentialBoundary).toContain("CODEX_HOME");
-    const devin = await ipcMain.invoke("runtime:getCapabilities", {
-      backendKind: "DEVIN_RUNTIME",
-    });
-    expect(devin.login.interaction).toBe("VISIBLE_CONSOLE");
-    expect(devin.profile.browserLoginEnvPassthrough).toEqual([
+    const list = await ipcMain.invoke("runtime:list");
+    const codex = list.find((r) => r.backendKind === "CODEX_RUNTIME");
+    expect(codex.capabilities.implemented).toBe(true);
+    expect(codex.capabilities.permission.level).toBe("STRONG_SANDBOX");
+    expect(codex.capabilities.profile.credentialBoundary).toContain(
+      "CODEX_HOME",
+    );
+    const devin = list.find((r) => r.backendKind === "DEVIN_RUNTIME");
+    expect(devin.capabilities.login.interaction).toBe("VISIBLE_CONSOLE");
+    expect(devin.capabilities.profile.browserLoginEnvPassthrough).toEqual([
       "APPDATA",
       "LOCALAPPDATA",
     ]);

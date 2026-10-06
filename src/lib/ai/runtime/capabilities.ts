@@ -159,7 +159,7 @@ export function checkStructuredOutputReadiness({
     : "ELIGIBLE_PROMPT_RETRY";
 }
 
-/** The consolidated descriptor emitted by runtime:list/getCapabilities. */
+/** The consolidated descriptor emitted by runtime:list. */
 export interface AccountRuntimeCapabilities {
   backendKind: string;
   displayName: string;

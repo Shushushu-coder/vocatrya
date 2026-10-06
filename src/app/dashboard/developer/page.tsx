@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import {
   MockActivitiesCard,
   MockProfileCard,
@@ -11,6 +12,7 @@ export async function generateMetadata() {
 }
 
 export default async function DeveloperPage() {
+  if (process.env.NODE_ENV !== "development") notFound();
   const { t } = await getServerI18n();
   return (
     <>

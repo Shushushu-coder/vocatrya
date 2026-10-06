@@ -186,12 +186,6 @@ export {
   hashEvidenceContent,
 } from "./resumeProvenanceService";
 export {
-  MatchAnalysisService,
-  buildDeepMatchHashInput,
-  buildFastScreeningHashInput,
-  hashMatchInput,
-} from "./matchAnalysisService";
-export {
   RESUME_VARIANT_VERSION_DIRECT_WRITE_RE,
   RESUME_VARIANT_VERSION_WRITE_ALLOWLIST,
 } from "./resumeVariantWriteBoundary";
