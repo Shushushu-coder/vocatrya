@@ -34,7 +34,7 @@ import {
   type StructuredExecuteFn,
   type StructuredExecuteOutcome,
 } from "../src/lib/ai/structured-output.ts";
-import { STRUCTURED_VALIDATION_TRIALS } from "../src/lib/ai/structured-validation-fixtures.ts";
+import { STRUCTURED_VALIDATION_TRIALS } from "../__tests__/helpers/structured-validation-fixtures.ts";
 
 const require = createRequire(import.meta.url);
 const { createConnectionService } = require(

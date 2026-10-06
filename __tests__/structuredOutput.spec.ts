@@ -15,7 +15,7 @@ import {
 import {
   STRUCTURED_VALIDATION_SCHEMAS,
   STRUCTURED_VALIDATION_TRIALS,
-} from "@/lib/ai/structured-validation-fixtures";
+} from "./helpers/structured-validation-fixtures";
 import { checkStructuredOutputReadiness } from "@/lib/ai/runtime/capabilities";
 
 const S1 = STRUCTURED_VALIDATION_SCHEMAS.S1_FLAT.schema;

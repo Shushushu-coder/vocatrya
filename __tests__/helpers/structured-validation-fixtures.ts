@@ -19,7 +19,7 @@
 import type {
   StructuredOutputSchema,
   StructuredValidationTrial,
-} from "./structured-output";
+} from "@/lib/ai/structured-output";
 
 export const S1_FLAT_SCHEMA: StructuredOutputSchema = {
   type: "object",

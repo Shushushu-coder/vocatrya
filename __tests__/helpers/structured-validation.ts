@@ -28,7 +28,7 @@ import {
   type StructuredValidationSuiteResult,
   type StructuredValidationTrial,
 } from "@/lib/ai/structured-output";
-import { STRUCTURED_VALIDATION_TRIALS } from "@/lib/ai/structured-validation-fixtures";
+import { STRUCTURED_VALIDATION_TRIALS } from "./structured-validation-fixtures";
 
 export interface StructuredProbeInput {
   userId: string;
