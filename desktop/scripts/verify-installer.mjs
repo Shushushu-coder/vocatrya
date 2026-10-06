@@ -11,6 +11,7 @@ const {
   scanInstallerForbiddenArtifacts,
 } = require("../main/artifacts.js");
 const identity = require("../main/installer-identity.js");
+const { scanExcludedPrismaRuntimeArtifacts } = require("./prisma-runtime-filter.cjs");
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -84,6 +85,7 @@ export function inspectInstalledLayout(appDir) {
     platform: "win32",
   });
   const forbidden = scanInstallerForbiddenArtifacts(appDir);
+  forbidden.push(...scanExcludedPrismaRuntimeArtifacts(path.join(appDir, "resources", "backend", "prisma-runtime")));
   const foreign = scanForeignPlatformPayloads(appDir);
   const nodeExe = path.join(appDir, "resources", "runtime", "win32-x64", "node.exe");
   const nodeSha = fs.existsSync(nodeExe) ? sha256FileSync(nodeExe) : null;

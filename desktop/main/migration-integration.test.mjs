@@ -37,6 +37,7 @@ function dbConfig(root, file = "vocatrya.db") {
     appVersion: "1.1.20",
     nodeExecutable: nodeExecutable(),
     baseEnv: {},
+    cwd: root,
   };
 }
 

@@ -6,6 +6,7 @@ import { buildFreshNativeBootstrap } from "../../scripts/build-fresh-native-boot
 
 const require = createRequire(import.meta.url);
 const { findMissingPrismaRuntimeArtifacts, isForbiddenArtifact, scanForbiddenArtifacts } = require("../main/artifacts.js");
+const { isExcludedPrismaRuntimeArtifact, scanExcludedPrismaRuntimeArtifacts } = require("./prisma-runtime-filter.cjs");
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DEFAULT_OUTPUT_ROOT = path.join(repoRoot, ".codex-tmp", "desktop-poc");
@@ -31,7 +32,10 @@ function copyPrismaPackage(repoRootDir, targetModulesDir, packageName) {
   const destination = path.join(targetModulesDir, ...packageName.split("/"));
   fs.cpSync(source, destination, {
     recursive: true,
-    filter: (entry) => !isForbiddenArtifact(entry) && !path.basename(entry).includes(".tmp"),
+    filter: (entry) =>
+      !isForbiddenArtifact(entry) &&
+      !path.basename(entry).includes(".tmp") &&
+      !isExcludedPrismaRuntimeArtifact(path.join(packageName, path.relative(source, entry))),
   });
 }
 
@@ -88,6 +92,7 @@ export function assemblePrismaRuntime({ repoRoot: root = repoRoot, backendRoot: 
     throw new Error(`Assembled migration runtime is incomplete:\n${missing.join("\n")}`);
   }
   const forbidden = scanForbiddenArtifacts(runtimeDir);
+  forbidden.push(...scanExcludedPrismaRuntimeArtifacts(runtimeDir));
   if (!fs.existsSync(path.join(backend, "db-tool.cjs"))) {
     throw new Error("Assembled SQLite helper is missing: db-tool.cjs");
   }
