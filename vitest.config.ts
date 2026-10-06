@@ -44,7 +44,17 @@ export default defineConfig({
     },
     // /docs is gitignored local phase residue; default suite must not
     // treat those environment-sensitive smokes as isolated coverage.
-    exclude: ["e2e/**", "**/node_modules/**", "docs/**"],
+    exclude: [
+      "e2e/**",
+      "desktop/**",
+      "**/node_modules/**",
+      "docs/**",
+      ".worktrees/**",
+      ".codex-tmp/**",
+      ".tmp/**",
+      ".devin/**",
+      ".next/**",
+    ],
     server: {
       deps: {
         inline: [/@prisma/, /next-auth/, /@auth/, /@next/, /jose/],
