@@ -66,6 +66,7 @@ describe("createJobFromNames", () => {
     expect(result.created).toBe(true);
     expect(result.jobId).toBe("job-1");
     expect(result.message).toBe("Created Acme; Created Engineer. Job created (id: job-1).");
+    expect(createJobRecord).toHaveBeenCalledTimes(1);
     expect(createJobRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         companyId: "company-1",
@@ -76,6 +77,7 @@ describe("createJobFromNames", () => {
         applied: false,
         appliedDate: null,
       }),
+      prisma,
     );
   });
 
@@ -171,8 +173,10 @@ describe("createJobFromNames", () => {
     );
 
     expect(result.descriptionCompleteness).toBe("full");
+    expect(createJobRecord).toHaveBeenCalledTimes(1);
     expect(createJobRecord).toHaveBeenCalledWith(
       expect.objectContaining({ descriptionCompleteness: "full" }),
+      prisma,
     );
   });
 
@@ -183,8 +187,10 @@ describe("createJobFromNames", () => {
     );
 
     expect(result.descriptionCompleteness).toBe("title-only");
+    expect(createJobRecord).toHaveBeenCalledTimes(1);
     expect(createJobRecord).toHaveBeenCalledWith(
       expect.objectContaining({ descriptionCompleteness: "title-only" }),
+      prisma,
     );
   });
 });
