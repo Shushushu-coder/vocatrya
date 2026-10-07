@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { PrismaClient } from "@prisma/client";
 
 const schema = path.resolve("prisma/schema.prisma");
@@ -100,24 +101,29 @@ describe("ConversationSummary migration", () => {
       "20260925040704_add_chat_conversation_ai_lock",
       "20261001120000_chat_conversation_multi",
     ];
-    for (const folder of folders) {
-      runPrisma(
-        ["db", "execute", "--file", path.join(migrationDir, folder, "migration.sql")],
-        url,
+    // Replay the pre-summary schema in-process: spawning `prisma db execute`
+    // per migration folder costs ~45 serialized CLI launches and blows the
+    // test timeout under suite parallelism. db.execute applies raw SQL with
+    // no _prisma_migrations bookkeeping, which DatabaseSync.exec reproduces.
+    const legacyDb = new DatabaseSync(database);
+    try {
+      for (const folder of folders) {
+        legacyDb.exec(
+          readFileSync(path.join(migrationDir, folder, "migration.sql"), "utf8"),
+        );
+      }
+      legacyDb.exec(
+        [
+          `INSERT INTO "User" ("id", "name", "email", "password", "createdAt")`,
+          `VALUES ('user-old', 'Historical', 'historical@example.com', 'hash', CURRENT_TIMESTAMP);`,
+          `INSERT INTO "ChatConversation" ("id", "userId", "messages", "createdAt", "updatedAt")`,
+          `VALUES ('conv-old', 'user-old', '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+        ].join("\n"),
       );
+      legacyDb.exec(readFileSync(summaryMigration, "utf8"));
+    } finally {
+      legacyDb.close();
     }
-    const seed = path.join(directory, "seed.sql");
-    writeFileSync(
-      seed,
-      [
-        `INSERT INTO "User" ("id", "name", "email", "password", "createdAt")`,
-        `VALUES ('user-old', 'Historical', 'historical@example.com', 'hash', CURRENT_TIMESTAMP);`,
-        `INSERT INTO "ChatConversation" ("id", "userId", "messages", "createdAt", "updatedAt")`,
-        `VALUES ('conv-old', 'user-old', '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
-      ].join("\n"),
-    );
-    runPrisma(["db", "execute", "--file", seed], url);
-    runPrisma(["db", "execute", "--file", summaryMigration], url);
 
     const freshDir = mkdtempSync(path.join(tmpdir(), "vocatrya-summary-fresh-"));
     directories.push(freshDir);

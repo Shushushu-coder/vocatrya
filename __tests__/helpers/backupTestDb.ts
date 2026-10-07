@@ -85,12 +85,48 @@ function lockOwnerIsAlive(owner: LockOwner | null): boolean {
   }
 }
 
-function schemaPushLockDir(): string {
-  const repoKey = createHash("sha256")
-    .update(path.resolve(__dirname, "..", "..").toLowerCase())
+function repoRoot(): string {
+  return path.resolve(__dirname, "..", "..");
+}
+
+function schemaPrismaPath(): string {
+  return path.join(repoRoot(), "prisma", "schema.prisma");
+}
+
+function prismaPackageJsonPath(): string {
+  return path.join(repoRoot(), "node_modules", "prisma", "package.json");
+}
+
+function repoKey(): string {
+  return createHash("sha256")
+    .update(repoRoot().toLowerCase())
     .digest("hex")
     .slice(0, 12);
-  return path.join(os.tmpdir(), `vocatrya-prisma-db-push-${repoKey}.lock`);
+}
+
+function schemaPushLockDir(): string {
+  return path.join(os.tmpdir(), `vocatrya-prisma-db-push-${repoKey()}.lock`);
+}
+
+// db push output depends only on schema.prisma plus the Prisma version, so a
+// pushed database can be shared across every worker that needs the same
+// schema instead of serializing one CLI spawn per spec file behind the lock.
+// The hashes in the file name keep the template per-repo (matching the lock
+// namespace) and make schema edits produce a fresh template.
+function schemaTemplatePath(): string {
+  const schemaKey = createHash("sha256")
+    .update(fs.readFileSync(schemaPrismaPath()))
+    .update(
+      fs.existsSync(prismaPackageJsonPath())
+        ? fs.readFileSync(prismaPackageJsonPath())
+        : "",
+    )
+    .digest("hex")
+    .slice(0, 16);
+  return path.join(
+    os.tmpdir(),
+    `vocatrya-prisma-schema-${repoKey()}-${schemaKey}.db`,
+  );
 }
 
 function acquireSchemaPushLock(): () => void {
@@ -152,6 +188,96 @@ function acquireSchemaPushLock(): () => void {
   }
 }
 
+function runPrismaDbPush(url: string): void {
+  const prismaCli = path.join(
+    __dirname,
+    "..",
+    "..",
+    "node_modules",
+    "prisma",
+    "build",
+    "index.js",
+  );
+  // Pin the schema the template key already hashed: without --schema the CLI
+  // auto-discovers relative to cwd, and a wrong-schema push would be cached
+  // as the shared template instead of failing one disposable database.
+  const args = [
+    prismaCli,
+    "db",
+    "push",
+    "--skip-generate",
+    "--accept-data-loss",
+    "--schema",
+    schemaPrismaPath(),
+  ];
+
+  const result = spawnSync(process.execPath, args, {
+    env: { ...process.env, DATABASE_URL: url, RUST_LOG: "info" },
+    encoding: "utf8",
+  });
+  if (result.status === 0) return;
+
+  const command = [process.execPath, ...args].join(" ");
+  throw new Error(
+    [
+      "Prisma schema initialization failed.",
+      `Command: ${command}`,
+      `DATABASE_URL: ${url}`,
+      `Exit code: ${result.status ?? "unknown"}`,
+      `Signal: ${result.signal ?? "none"}`,
+      `Spawn error: ${result.error?.message ?? "none"}`,
+      `stdout:\n${result.stdout || "<empty>"}`,
+      `stderr:\n${result.stderr || "<empty>"}`,
+    ].join("\n"),
+  );
+}
+
+// At most one `prisma db push` runs per (schema.prisma, prisma version) on
+// this machine: the first caller builds a scratch DB under the existing
+// cross-process lock and publishes it with an atomic rename; everyone else
+// skips the CLI spawn entirely. Waiters re-check after acquiring, so the
+// lock is only ever contended while the single build is in flight.
+function ensureSchemaTemplate(): string {
+  const template = schemaTemplatePath();
+  if (fs.existsSync(template)) return template;
+
+  const releaseLock = acquireSchemaPushLock();
+  try {
+    if (fs.existsSync(template)) return template;
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), TEMP_DIR_PREFIX));
+    try {
+      const scratch = path.join(dir, DB_FILE_NAME);
+      runPrismaDbPush(`file:${scratch.replace(/\\/g, "/")}`);
+      fs.renameSync(scratch, template);
+    } finally {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // A leftover scratch dir is harmless; the template is already out.
+      }
+    }
+
+    const repoPrefix = `vocatrya-prisma-schema-${repoKey()}-`;
+    for (const name of fs.readdirSync(os.tmpdir())) {
+      if (
+        name.startsWith(repoPrefix) &&
+        name.endsWith(".db") &&
+        name !== path.basename(template)
+      ) {
+        try {
+          fs.rmSync(path.join(os.tmpdir(), name), { force: true });
+        } catch {
+          // Best-effort cleanup of templates from older schema versions.
+        }
+      }
+    }
+    return template;
+  } finally {
+    releaseLock();
+  }
+}
+
 // db push rather than migrate deploy: the round-trip asserts against the
 // current schema, not the migration history, and push is much faster.
 export function pushSchema(url: string): void {
@@ -162,47 +288,7 @@ export function pushSchema(url: string): void {
     return;
   }
 
-  const prismaCli = path.join(
-    __dirname,
-    "..",
-    "..",
-    "node_modules",
-    "prisma",
-    "build",
-    "index.js",
-  );
-  const args = [
-    prismaCli,
-    "db",
-    "push",
-    "--skip-generate",
-    "--accept-data-loss",
-  ];
-  const releaseLock = acquireSchemaPushLock();
-
-  try {
-    const result = spawnSync(process.execPath, args, {
-      env: { ...process.env, DATABASE_URL: url, RUST_LOG: "info" },
-      encoding: "utf8",
-    });
-    if (result.status === 0) return;
-
-    const command = [process.execPath, ...args].join(" ");
-    throw new Error(
-      [
-        "Prisma schema initialization failed.",
-        `Command: ${command}`,
-        `DATABASE_URL: file:${dbPath}`,
-        `Exit code: ${result.status ?? "unknown"}`,
-        `Signal: ${result.signal ?? "none"}`,
-        `Spawn error: ${result.error?.message ?? "none"}`,
-        `stdout:\n${result.stdout || "<empty>"}`,
-        `stderr:\n${result.stderr || "<empty>"}`,
-      ].join("\n"),
-    );
-  } finally {
-    releaseLock();
-  }
+  fs.copyFileSync(ensureSchemaTemplate(), dbPath);
 }
 
 // Mirrors what signup() seeds, so "empty account" means the same thing here as
