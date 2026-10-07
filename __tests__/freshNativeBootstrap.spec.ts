@@ -463,6 +463,8 @@ describe("fresh-native startup entrypoints", () => {
     const dbPath = path.join(proofDir, "app.db");
     const databaseUrl = `file:${dbPath.replace(/\\/g, "/")}`;
     try {
+      // Match the shared fixture: avoid Prisma's missing-file probe at RUST_LOG=warn.
+      fs.writeFileSync(dbPath, "", { flag: "wx" });
       deployMigrations(databaseUrl);
       const run = (extraArgs: string[] = []) =>
         spawnSync(process.execPath, [entryPath, ...extraArgs], {

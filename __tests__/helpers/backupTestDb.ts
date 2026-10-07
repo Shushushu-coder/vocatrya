@@ -22,6 +22,9 @@ type LockOwner = {
 export function makeTestDbUrl(): { url: string; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), TEMP_DIR_PREFIX));
   const dbPath = path.join(dir, DB_FILE_NAME).replace(/\\/g, "/");
+  // Prisma 6.19 loses the missing-file P1003 diagnostic when RUST_LOG=warn.
+  // An existing empty SQLite file avoids that probe and matches migration fixtures.
+  fs.writeFileSync(dbPath, "", { flag: "wx" });
   return { url: `file:${dbPath}`, dir };
 }
 
