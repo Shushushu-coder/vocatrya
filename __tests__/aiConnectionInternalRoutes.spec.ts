@@ -132,8 +132,22 @@ describe("POST /api/internal/ai-connections/resolve", () => {
     expect(data.ok).toBe(true);
     expect(data.connection.id).toBe("c1");
     expect(data.connection.runtimeProfileRef).toBe(RP);
-    // The response carries opaque refs only — never userId or secrets.
-    expect(data.connection.userId).toBeUndefined();
+    // The internal bridge preserves the authoritative owner id from the
+    // owned row — the runtime scopes lifecycle such as the Codex
+    // persistent pool on it. It is never read from request input.
+    expect(data.connection.userId).toBe("user-1");
+    // Exactly the internal projection — no extra row fields, never
+    // credential material.
+    expect(Object.keys(data.connection).sort()).toEqual([
+      "accountIdentity",
+      "backendKind",
+      "id",
+      "provider",
+      "runtimeProfileRef",
+      "status",
+      "userId",
+    ]);
+    expect(JSON.stringify(data.connection)).not.toMatch(/sk-|credential/i);
   });
 
   it("404s when the connection does not belong to the ticket's user", async () => {
@@ -148,6 +162,8 @@ describe("POST /api/internal/ai-connections/resolve", () => {
     const data = await res.json();
     expect(res.status).toBe(404);
     expect(data.code).toBe("CONNECTION_NOT_FOUND");
+    // Cross-user resolve must not leak the other owner's identity.
+    expect(data.connection).toBeUndefined();
   });
 });
 

@@ -481,6 +481,24 @@ describe("executeTextStream persistent Codex integration", () => {
   let version;
   let connection;
 
+  // Exactly the projection the internal resolve route
+  // (src/app/api/internal/ai-connections/resolve/route.ts) returns to
+  // Electron main — the runtime never sees the raw DB row. Stubbing a
+  // full row here is what let the missing-userId regression slip
+  // through: keep this fixture field-for-field pinned to that route.
+  function resolvedConnection(overrides = {}) {
+    return {
+      id: "conn-1",
+      backendKind: "CODEX_RUNTIME",
+      provider: "OPENAI",
+      runtimeProfileRef: RP_A,
+      accountIdentity: "first@example.com",
+      status: "CONNECTED",
+      userId: "user-1",
+      ...overrides,
+    };
+  }
+
   beforeEach(() => {
     profilesRoot = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-profiles-"));
     execWorkRoot = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-exec-"));
@@ -493,19 +511,7 @@ describe("executeTextStream persistent Codex integration", () => {
     });
     runnerCalls = [];
     version = "0.160.0";
-    connection = {
-      id: "conn-1",
-      userId: "user-1",
-      provider: "OPENAI",
-      authType: "ACCOUNT_LOGIN",
-      backendKind: "CODEX_RUNTIME",
-      displayName: "ChatGPT via Codex",
-      accountIdentity: "first@example.com",
-      status: "CONNECTED",
-      runtimeProfileRef: RP_A,
-      lastVerifiedAt: null,
-      createdAt: new Date().toISOString(),
-    };
+    connection = resolvedConnection();
     backend = {
       resolveTicket: vi.fn(async () => ({
         ok: true,
@@ -593,6 +599,22 @@ describe("executeTextStream persistent Codex integration", () => {
     expect(fake.spawned[0].prompts).toContain("ONLY-A");
     expect(fake.spawned[0].prompts).toContain("ONLY-B");
     expect(fake.spawned[0].prompts.filter((value) => value === "ONLY-A")).toHaveLength(1);
+  });
+
+  it("stays one-shot when the resolved projection carries no owner id", async () => {
+    // usePool is a security gate, not a convenience: a resolved
+    // connection without an authoritative userId must never be pooled —
+    // this is the exact regression the internal projection caused.
+    connection = resolvedConnection({ userId: undefined });
+    const result = await stream();
+    expect(result.ok).toBe(false);
+    // The turn fell back to the one-shot runner path; no pooled
+    // app-server child was spawned and no lease metadata was reported.
+    expect(
+      runnerCalls.some((call) => call.args.includes("app-server")),
+    ).toBe(true);
+    expect(fake.spawned).toHaveLength(0);
+    expect(result.runtime).toBeUndefined();
   });
 
   it("does not let summary generation acquire the foreground pool", async () => {

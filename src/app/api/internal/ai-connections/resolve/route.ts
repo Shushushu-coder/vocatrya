@@ -70,8 +70,10 @@ export async function POST(request: Request) {
       userId: record.userId,
       connectionId: record.connectionId ?? "",
     });
-    // Project the fields the runtime actually needs — userId and lifecycle
-    // internals never leave the server.
+    // Project the fields the runtime actually needs. userId must never
+    // appear in public/browser connection payloads, but it is retained on
+    // this authenticated internal projection because the runtime scopes
+    // ownership-bound process lifecycle (the Codex persistent pool) on it.
     return NextResponse.json({
       ok: true,
       operationId: record.operationId,
@@ -84,6 +86,7 @@ export async function POST(request: Request) {
         runtimeProfileRef: connection.runtimeProfileRef,
         accountIdentity: connection.accountIdentity,
         status: connection.status,
+        userId: connection.userId,
       },
     });
   } catch (error) {

@@ -510,6 +510,16 @@ describe("connection service", () => {
       }),
     );
   });
+
+  it("the public listing select never carries the owner identity", async () => {
+    // Browser-facing connection payloads must not expose userId — the
+    // owner identity is reserved for the authenticated internal bridge
+    // (e.g. Codex pool scoping). The select itself is the boundary.
+    store.findMany.mockResolvedValue([]);
+    await listConnectionsForUser("user-1", fakeDb());
+    const select = store.findMany.mock.calls[0][0].select;
+    expect(select).not.toHaveProperty("userId");
+  });
 });
 
 describe("mintAiConnectionTicket", () => {

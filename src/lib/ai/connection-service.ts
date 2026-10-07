@@ -116,6 +116,19 @@ export async function listConnectionsForUser(
 }
 
 /**
+ * Internal-only extension of {@link ConnectionSummary} returned by
+ * {@link getConnectionOperationContext}: the ownership identity and the
+ * archived flag the operation re-check consumes. The authenticated
+ * internal bridge forwards `userId` to the runtime so ownership-scoped
+ * process lifecycle (e.g. the Codex persistent pool) can key off it —
+ * neither field may appear in public/browser connection payloads.
+ */
+export interface ConnectionOperationContext extends ConnectionSummary {
+  userId: string;
+  archivedAt: Date | null;
+}
+
+/**
  * Connection context the Electron runtime needs to perform an operation:
  * the opaque profile binding plus the stored identity for reauth
  * comparison. Ownership was proven when the ticket was minted; the
@@ -124,7 +137,7 @@ export async function listConnectionsForUser(
 export async function getConnectionOperationContext(
   { userId, connectionId }: { userId: string; connectionId: string },
   dbClient: DbClient = prisma,
-): Promise<ConnectionSummary> {
+): Promise<ConnectionOperationContext> {
   const connection = await dbClient.aIConnection.findUnique({
     where: { id: connectionId },
     select: { ...CONNECTION_SUMMARY_SELECT, userId: true, archivedAt: true },
