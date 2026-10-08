@@ -1,0 +1,109 @@
+import "server-only";
+import { ManagedError, MANAGED_ERROR_CODES, type ManagedInvocation, type ManagedTextResult, type ManagedStreamEvent, type ManagedModelDTO } from "./managed-contract";
+import { managedAiProvenanceV1Schema, type ManagedAiProvenanceV1 } from "./managed-provenance";
+
+// Release-owned endpoint. Changing it requires a reviewed release build.
+export const TRUSTED_HOSTED_MANAGED_ENDPOINT = "https://managed.vocatrya.com";
+export interface HostedSessionProvider { tokenForLocalUser(localUserId: string): Promise<string | null> }
+export class DesktopHostedSessionProvider implements HostedSessionProvider {
+  async tokenForLocalUser(localUserId: string): Promise<string | null> {
+    const base = process.env.VOCATRYA_HOSTED_SESSION_URL;
+    const internalToken = process.env.VOCATRYA_DESKTOP_INTERNAL_TOKEN;
+    if (!base || !internalToken) return null;
+    const url = new URL(base);
+    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new ManagedError("MANAGED_AUTH_REQUIRED");
+    url.pathname = "/session"; url.searchParams.set("localUserId", localUserId);
+    try {
+      const response = await fetch(url, { headers: { authorization: `Bearer ${internalToken}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+      if (!response.ok) return null;
+      const body = await response.json();
+      return typeof body?.token === "string" && /^[A-Za-z0-9_-]{43}$/.test(body.token) ? body.token : null;
+    } catch { return null; }
+  }
+}
+function endpoint(): string {
+  const dev = process.env.NODE_ENV !== "production" ? process.env.VOCATRYA_DEV_HOSTED_ENDPOINT : undefined;
+  return dev ?? TRUSTED_HOSTED_MANAGED_ENDPOINT;
+}
+export class HostedManagedClient {
+  private readonly base: string;
+  constructor(private readonly sessions: HostedSessionProvider = new DesktopHostedSessionProvider(), base = endpoint(), private readonly fetchImpl: typeof fetch = fetch) {
+    const url = new URL(base);
+    const devLoopback = process.env.NODE_ENV !== "production" && url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+    if ((url.protocol !== "https:" && !devLoopback) || url.username || url.password || url.search || url.hash) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
+    this.base = url.toString().replace(/\/$/, "");
+  }
+  private async request(userId: string, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
+    const token = await this.sessions.tokenForLocalUser(userId);
+    if (!token) throw new ManagedError("MANAGED_AUTH_REQUIRED");
+    try {
+      const response = await this.fetchImpl(`${this.base}/v1/${path}`, { method: body === undefined ? "GET" : "POST", redirect: "error",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body), signal });
+      if (!response.ok) {
+        let code: unknown;
+        try { code = (await response.json())?.code; } catch { /* no raw errors */ }
+        throw new ManagedError((MANAGED_ERROR_CODES as readonly unknown[]).includes(code) ? code as typeof MANAGED_ERROR_CODES[number] : "MANAGED_RUNTIME_UNAVAILABLE");
+      }
+      return response;
+    } catch (error) { if (error instanceof ManagedError) throw error; throw new ManagedError(signal?.reason?.name === "TimeoutError" ? "GATEWAY_TIMEOUT" : "MANAGED_RUNTIME_UNAVAILABLE"); }
+  }
+  async identity(userId: string): Promise<string> {
+    const body = await (await this.request(userId, "session", undefined, AbortSignal.timeout(5000))).json();
+    if (typeof body?.hostedUserId !== "string" || !body.hostedUserId.trim()) throw new ManagedError("MANAGED_AUTH_REQUIRED");
+    return body.hostedUserId;
+  }
+  async catalog(userId: string): Promise<{ revision: string; models: ManagedModelDTO[] }> {
+    const body = await (await this.request(userId, "catalog", undefined, AbortSignal.timeout(5000))).json();
+    if (!body || typeof body.revision !== "string" || !Array.isArray(body.models) || body.models.some((model: ManagedModelDTO) =>
+      !model || typeof model.modelKey !== "string" || typeof model.displayName !== "string" || typeof model.enabled !== "boolean" || typeof model.available !== "boolean" ||
+      !model.capabilities || ["text", "streaming", "structuredOutput", "tools"].some(key => typeof model.capabilities[key as keyof typeof model.capabilities] !== "boolean"))) throw new ManagedError("GATEWAY_RESPONSE");
+    return { revision: body.revision, models: body.models.map((model: ManagedModelDTO) => ({ modelKey: model.modelKey, displayName: model.displayName, enabled: model.enabled, available: model.available, capabilities: { text: model.capabilities.text, streaming: model.capabilities.streaming, structuredOutput: model.capabilities.structuredOutput, tools: false } })) };
+  }
+  async bind(userId: string, input: { modelKey: string; business: string; resourceKey: string }, signal?: AbortSignal): Promise<ManagedAiProvenanceV1> {
+    const body = await (await this.request(userId, "bindings", input, signal ?? AbortSignal.timeout(10000))).json();
+    const parsed = managedAiProvenanceV1Schema.safeParse(body);
+    if (!parsed.success || parsed.data.requestedModelKey !== input.modelKey) throw new ManagedError("GATEWAY_RESPONSE");
+    return parsed.data;
+  }
+  async generateText(userId: string, input: ManagedInvocation, signal?: AbortSignal): Promise<ManagedTextResult> {
+    const body = await (await this.request(userId, input.structuredOutput ? "structured" : "text", input, signal)).json();
+    if (!body || typeof body.text !== "string" || body.model !== input.modelKey) throw new ManagedError("GATEWAY_RESPONSE");
+    const parsed = managedAiProvenanceV1Schema.safeParse(body.provenance);
+    if (!parsed.success || parsed.data.managedBindingId !== input.bindingId || parsed.data.requestedModelKey !== input.modelKey ||
+      body.structuredStrategy !== (input.structuredOutput ? "PROMPT_AND_VALIDATE" : null) || (body.stopReason !== null && typeof body.stopReason !== "string")) throw new ManagedError("GATEWAY_RESPONSE");
+    return { text: body.text, model: body.model, provenance: parsed.data, structuredStrategy: body.structuredStrategy, stopReason: body.stopReason };
+  }
+  async *streamText(userId: string, input: ManagedInvocation, signal?: AbortSignal): AsyncGenerator<ManagedStreamEvent> {
+    const controller = new AbortController();
+    const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const response = await this.request(userId, "stream", input, combined);
+      if (!response.body || !response.headers.get("content-type")?.includes("application/x-ndjson")) throw new ManagedError("GATEWAY_RESPONSE");
+      reader = response.body.getReader(); const decoder = new TextDecoder("utf-8", { fatal: true }); let buffer = "", total = 0;
+      while (true) {
+        const chunk = await reader.read();
+        if (combined.aborted) throw new ManagedError("GATEWAY_NETWORK");
+        if (chunk.done) throw new ManagedError("GATEWAY_RESPONSE");
+        total += chunk.value.byteLength; if (total > 4 * 1024 * 1024) throw new ManagedError("GATEWAY_RESPONSE");
+        buffer += decoder.decode(chunk.value, { stream: true });
+        while (buffer.includes("\n")) {
+          if (combined.aborted) throw new ManagedError("GATEWAY_NETWORK");
+          const index = buffer.indexOf("\n"); let event: ManagedStreamEvent;
+          try { event = JSON.parse(buffer.slice(0, index)); } catch { throw new ManagedError("GATEWAY_RESPONSE"); }
+          buffer = buffer.slice(index + 1);
+          if (event?.type === "error") throw new ManagedError(MANAGED_ERROR_CODES.includes(event.code) ? event.code : "GATEWAY_RESPONSE");
+          if (event?.type === "text-delta" && typeof event.delta === "string") yield { type: "text-delta", delta: event.delta };
+          else if (event?.type === "completed") {
+            const parsed = managedAiProvenanceV1Schema.safeParse(event.provenance);
+            if (!parsed.success || event.model !== input.modelKey || parsed.data.managedBindingId !== input.bindingId || parsed.data.requestedModelKey !== input.modelKey || buffer.trim()) throw new ManagedError("GATEWAY_RESPONSE");
+            yield { type: "completed", model: event.model, provenance: parsed.data }; return;
+          } else throw new ManagedError("GATEWAY_RESPONSE");
+        }
+        if (buffer.length > 256 * 1024) throw new ManagedError("GATEWAY_RESPONSE");
+      }
+    } catch (error) { if (error instanceof ManagedError) throw error; throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"); }
+    finally { controller.abort(); await reader?.cancel().catch(() => undefined); reader?.releaseLock(); }
+  }
+}

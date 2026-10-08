@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { buildFreshNativeBootstrap } from "../../scripts/build-fresh-native-bootstrap.mjs";
+import { scanManagedSecrets } from "./scan-managed-secrets.mjs";
 
 const require = createRequire(import.meta.url);
 const { findMissingPrismaRuntimeArtifacts, isForbiddenArtifact, scanForbiddenArtifacts } = require("../main/artifacts.js");
@@ -140,6 +141,10 @@ export function assembleDesktopBackend({
     outDir: path.join(assembledBackendRoot, "fresh-native-runtime"),
   });
   fs.cpSync(assembledBackendRoot, assembledPackagedBackendRoot, { recursive: true });
+  for (const artifactRoot of [assembledBackendRoot, assembledPackagedBackendRoot]) {
+    const failures = scanManagedSecrets(artifactRoot);
+    if (failures.length) throw new Error(`Hosted secret isolation failed: ${failures.join(", ")}`);
+  }
 
   function requireAssembled(relativePath) {
     const absolute = path.join(assembledBackendRoot, relativePath);

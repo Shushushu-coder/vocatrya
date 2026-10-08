@@ -47,6 +47,7 @@ export default defineConfig({
     exclude: [
       "e2e/**",
       "desktop/**",
+      "services/**",
       "**/node_modules/**",
       "docs/**",
       ".worktrees/**",

@@ -1,12 +1,15 @@
 import "server-only";
 
 import prisma from "@/lib/db";
+import { executeManagedStream, managedBusinessError, type ManagedDispatchInput } from "./managed-dispatch";
+import type { HostedManagedClient } from "./managed-client";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
 import {
   AI_BUSINESS_ERROR_CODES,
   AIBusinessError,
   isAIBackendKind,
   assertAccountExecutionIdentity,
+  classifyAIConnection,
   type AIBusinessErrorCode,
 } from "@/lib/ai/connections";
 import {
@@ -51,7 +54,7 @@ export type AIStreamEvent =
     }
   | { type: "error"; code: string };
 
-export interface StreamExecutionInput {
+export interface StreamExecutionInput extends Pick<ManagedDispatchInput, "managedAiProvenance" | "managedResource"> {
   userId: string;
   connectionId: string;
   model: string;
@@ -63,6 +66,7 @@ export interface StreamExecutionInput {
 type DbClient = Pick<PrismaClient, "aIConnection">;
 
 export interface StreamExecutionDeps {
+  managedClient?: HostedManagedClient;
   dbClient?: DbClient;
   execUrl?: string;
   internalToken?: string;
@@ -149,7 +153,10 @@ async function loadUsableConnection(
       "The assigned AI connection is not available",
     );
   }
-  assertAccountExecutionIdentity(connection);
+  const classification = classifyAIConnection(connection);
+  if (classification === "INVALID") fail(AI_BUSINESS_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION, "Invalid AI connection identity");
+  const managed = classification === "MANAGED";
+  if (!managed) assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;
@@ -169,7 +176,7 @@ async function loadUsableConnection(
         "The assigned AI connection is in an error state",
       );
   }
-  if (!isAIBackendKind(connection.backendKind)) {
+  if (!managed && !isAIBackendKind(connection.backendKind)) {
     fail(
       AI_BUSINESS_ERROR_CODES.RUNTIME_NOT_AVAILABLE,
       "The assigned AI connection has no recognized runtime",
@@ -220,6 +227,10 @@ export async function* executeAIConnectionTextStream(
   }
 
   const connection = await loadUsableConnection(db, userId, connectionId);
+  if (classifyAIConnection(connection) === "MANAGED") {
+    yield* executeManagedStream(input, deps.managedClient);
+    return;
+  }
   const { base, token, fetchImpl } = channelConfig(deps);
 
   const ticketRecord = mintConnectionTicket({
@@ -416,6 +427,7 @@ export async function fetchAccountRuntimeState(
  * dies on the first event.
  */
 export async function checkStreamingTurnReadiness(input: {
+  userId?: string;
   connection: Omit<ConnectionRow, "id">;
   model: string | null;
   dbClient?: DbClient;
@@ -451,6 +463,18 @@ export async function checkStreamingTurnReadiness(input: {
       AI_BUSINESS_ERROR_CODES.CONNECTION_ERROR,
       "The locked AI connection is in an error state",
     );
+  }
+  const classification = classifyAIConnection(connection);
+  if (classification === "INVALID") fail(AI_BUSINESS_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION, "Invalid AI connection identity");
+  if (classification === "MANAGED") {
+    if (!input.userId) fail(AI_BUSINESS_ERROR_CODES.MANAGED_AUTH_REQUIRED, "Hosted identity required");
+    const client = input.deps?.managedClient ?? new (await import("./managed-client")).HostedManagedClient();
+    let catalog;
+    try { catalog = await client.catalog(input.userId); } catch (error) { throw managedBusinessError(error); }
+    const entry = catalog.models.find(entry => entry.modelKey === model);
+    if (!entry?.available) fail(AI_BUSINESS_ERROR_CODES.MODEL_DISABLED, "Managed model unavailable");
+    if (!entry.capabilities.streaming) fail(AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED, "Managed streaming unavailable");
+    return;
   }
   assertAccountExecutionIdentity(connection);
   if (!isAIBackendKind(connection.backendKind)) {

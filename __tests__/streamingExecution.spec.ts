@@ -15,6 +15,7 @@ const CONNECTION = {
   archivedAt: null,
   backendKind: "DEVIN_RUNTIME",
   provider: "DEVIN",
+  authType: "ACCOUNT_LOGIN", credentialRef: null, runtimeProfileRef: "rp_test", accountIdentity: null,
 };
 
 const db = {

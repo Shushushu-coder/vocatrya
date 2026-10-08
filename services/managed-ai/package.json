@@ -1,0 +1,12 @@
+{
+  "name": "@vocatrya/managed-ai-hosted", "private": true, "version": "0.1.0",
+  "scripts": {
+    "test": "node ../../node_modules/vitest/vitest.mjs run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src test --no-warn-ignored",
+    "start": "node dist/services/managed-ai/src/main.js",
+    "provision-session": "node dist/services/managed-ai/src/provision-session.js"
+  },
+  "engines": { "node": ">=22.13" }
+}

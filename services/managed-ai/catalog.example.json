@@ -1,0 +1,9 @@
+{
+  "revision": "catalog-v1", "managedAiEnabled": false, "defaultModelKey": "vocatrya-fast",
+  "models": [{
+    "modelKey": "vocatrya-fast", "displayName": "Vocatrya Fast", "upstreamModelId": "deployment-model-id",
+    "enabled": false, "planRequirement": null, "sortOrder": 0,
+    "capabilities": { "text": true, "streaming": true, "structuredOutput": true, "tools": false },
+    "mappingRevision": "mapping-v1", "maxInputTokens": 32000, "maxOutputTokens": 4096
+  }]
+}

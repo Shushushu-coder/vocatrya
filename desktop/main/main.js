@@ -29,6 +29,7 @@ const { createConnectionService } = require("./runtime/connection-service");
 const { registerConnectionIpcHandlers } = require("./runtime/connection-ipc");
 const { createBackendClient } = require("./runtime/backend-client");
 const { startExecutionServer } = require("./runtime/execute-server");
+const { createHostedSessionStore, startHostedSessionBroker } = require("./hosted-session");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -75,6 +76,7 @@ if (!singleInstance) {
   let execServer = null;
   let connectionOps = null;
   let execServerUrl = null;
+  let hostedSessionBroker = null;
   let migrationChild = null;
   let shuttingDown = false;
   let backendExpectedExit = false;
@@ -255,6 +257,7 @@ if (!singleInstance) {
                 // Electron's own version into the backend.
                 appVersion: app.isPackaged ? app.getVersion() : undefined,
               });
+              if (hostedSessionBroker) env.VOCATRYA_HOSTED_SESSION_URL = hostedSessionBroker.url;
               backendExpectedExit = true;
               const child = spawnBackend({
                 nodeExecutable,
@@ -300,6 +303,7 @@ if (!singleInstance) {
           internalToken,
           desktopExecUrl: execServerUrl || undefined,
         });
+        if (hostedSessionBroker) env.VOCATRYA_HOSTED_SESSION_URL = hostedSessionBroker.url;
         backendExpectedExit = true;
         const child = spawnBackend({
           nodeExecutable,
@@ -379,6 +383,9 @@ if (!singleInstance) {
 
   app.whenReady().then(async () => {
     try {
+      hostedSessionBroker = await startHostedSessionBroker({ token: internalToken,
+        store: createHostedSessionStore({ directory: path.join(stateRoot(), "hosted-sessions"), safeStorage }),
+      });
       // Registry-keyed runtime IPC: detection/version/status only. No
       // arbitrary command execution crosses this boundary.
       registerRuntimeIpcHandlers(
@@ -443,6 +450,7 @@ if (!singleInstance) {
     }
     try {
       execServer?.close();
+      hostedSessionBroker?.server.close();
     } catch {
       // Closing the loopback listener must never block shutdown.
     }

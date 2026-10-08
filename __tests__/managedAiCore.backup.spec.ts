@@ -150,7 +150,7 @@ describe("Managed local backup and execution boundaries", () => {
     expect(execute).not.toHaveBeenCalled();
   }, 120_000);
 
-  it("ordinary account CRUD, assignment resolution and text/stream execution cannot use or mutate Managed identity", async () => {
+  it("ordinary account CRUD cannot mutate Managed identity; shared Managed execution requires hosted auth", async () => {
     const connection = await prisma.aIConnection.create({ data: { userId: ctx.userId, provider: "VOCATRYA", backendKind: "MANAGED_GATEWAY", authType: "MANAGED", displayName: "Vocatrya", status: "CONNECTED" } });
     const op = { userId: ctx.userId, connectionId: connection.id };
     for (const operation of [() => applyDisconnect(op, prisma), () => applyVerifyResult({ ...op, authState: "AUTHENTICATED" }, prisma), () => applyReconnectAuthenticated({ ...op, accountIdentity: "forged" }, prisma)]) {
@@ -159,11 +159,11 @@ describe("Managed local backup and execution boundaries", () => {
     await expect(createVerifiedAccountConnection({ userId: ctx.userId, backendKind: "MANAGED_GATEWAY", verifiedProvider: "VOCATRYA", runtimeProfileRef: "rp_forged", accountIdentity: null }, prisma)).rejects.toMatchObject({ code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION" });
     const fetchImpl = vi.fn();
     const input = { ...op, model: "stable-model-key", prompt: "hello" };
-    await expect(executeAIConnectionText(input, { dbClient: prisma, fetchImpl })).rejects.toMatchObject({ code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
-    await expect(executeAIConnectionTextStream(input, { dbClient: prisma, fetchImpl }).next()).rejects.toMatchObject({ code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
+    await expect(executeAIConnectionText(input, { dbClient: prisma, fetchImpl })).rejects.toMatchObject({ code: "MANAGED_AUTH_REQUIRED" });
+    await expect(executeAIConnectionTextStream(input, { dbClient: prisma, fetchImpl }).next()).rejects.toMatchObject({ code: "MANAGED_AUTH_REQUIRED" });
     expect(fetchImpl).not.toHaveBeenCalled();
     await prisma.aIBusinessAssignment.create({ data: { userId: ctx.userId, purpose: "MATCH_ANALYSIS", connectionId: connection.id, model: "stable-model-key" } });
-    expect(await resolveBusinessAIConfig({ userId: ctx.userId, purpose: "MATCH_ANALYSIS" }, prisma)).toMatchObject({ status: "INVALID_ASSIGNMENT", code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
+    expect(await resolveBusinessAIConfig({ userId: ctx.userId, purpose: "MATCH_ANALYSIS" }, prisma)).toMatchObject({ status: "RESOLVED", model: input.model, backendKind: "MANAGED_GATEWAY" });
     expect(await prisma.aIConnection.findUniqueOrThrow({ where: { id: connection.id } })).toMatchObject({ accountIdentity: null, runtimeProfileRef: null, credentialRef: null, status: "CONNECTED" });
   });
   it("rejects an authType-only Managed marker before client ticket, assignment write or streaming probe", async () => {

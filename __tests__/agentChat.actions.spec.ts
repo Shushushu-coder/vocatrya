@@ -269,6 +269,7 @@ describe("getAgentChatPreflight", () => {
     id: "conn-1",
     provider: "OPENAI",
     backendKind: "CODEX_RUNTIME",
+    authType: "ACCOUNT_LOGIN", credentialRef: null, runtimeProfileRef: "rp_test", accountIdentity: null,
     displayName: "ChatGPT via Codex",
     status: "CONNECTED",
     archivedAt: null,

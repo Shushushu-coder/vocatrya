@@ -23,6 +23,7 @@ import {
   AIBusinessError,
   isAIBackendKind,
   assertAccountExecutionIdentity,
+  classifyAIConnection,
   isAIAssignmentPurpose,
   isStreamingPurpose,
   isSupportedAccountProviderForBackend,
@@ -144,7 +145,10 @@ function classifyAssignment(
   if (connection.archivedAt !== null) {
     return invalid(AI_BUSINESS_ERROR_CODES.ASSIGNED_CONNECTION_UNAVAILABLE);
   }
-  try { assertAccountExecutionIdentity(connection); } catch (error) {
+  const classification = classifyAIConnection(connection);
+  if (classification === "INVALID") return invalid(AI_BUSINESS_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION);
+  const managed = classification === "MANAGED";
+  try { if (!managed) assertAccountExecutionIdentity(connection); } catch (error) {
     if (error instanceof AIBusinessError) return invalid(error.code);
     throw error;
   }
@@ -159,15 +163,15 @@ function classifyAssignment(
       return invalid(AI_BUSINESS_ERROR_CODES.CONNECTION_ERROR);
   }
   if (
-    !isAIBackendKind(connection.backendKind) ||
-    !isRuntimeProfileRef(connection.runtimeProfileRef)
+    !managed && (!isAIBackendKind(connection.backendKind) ||
+    !isRuntimeProfileRef(connection.runtimeProfileRef))
   ) {
     return invalid(AI_BUSINESS_ERROR_CODES.RUNTIME_NOT_AVAILABLE);
   }
   // Same matrix rule as the write path — a hand-edited or stale row must
   // not resolve to a pairing the runtime cannot serve.
   if (
-    !isSupportedAccountProviderForBackend(
+    !managed && !isSupportedAccountProviderForBackend(
       connection.backendKind,
       connection.provider,
     )

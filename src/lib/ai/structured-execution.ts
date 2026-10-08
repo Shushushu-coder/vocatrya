@@ -17,6 +17,7 @@
  * documented legacy path may keep it.
  */
 import "server-only";
+import type { ManagedAiProvenanceV1 } from "./managed-provenance";
 import {
   AI_BUSINESS_ERROR_CODES,
   AIBusinessError,
@@ -59,6 +60,7 @@ export type StructuredExecutionResult =
       status: "OK";
       /** The validated structured value (still `unknown` — cast by schema). */
       value: unknown;
+      managedAiProvenance?: ManagedAiProvenanceV1;
       /** Lock fields — the resolved pair this operation ran under. */
       resolvedConnectionId: string;
       resolvedModel: string;
@@ -155,6 +157,7 @@ export async function executeStructuredForAssignment(
   }
 
   const { connectionId, model } = resolution;
+  let managedAiProvenance: ManagedAiProvenanceV1 | undefined;
 
   const result = await runStructuredValidation({
     prompt,
@@ -168,6 +171,7 @@ export async function executeStructuredForAssignment(
             userId,
             connectionId,
             model,
+            managedAiProvenance,
             prompt: attemptPrompt,
             structuredOutput: { schema, schemaName },
             timeoutMs,
@@ -175,6 +179,7 @@ export async function executeStructuredForAssignment(
           },
           deps,
         );
+        managedAiProvenance = outcome.managedAiProvenance;
         return {
           ok: true,
           text: outcome.text,
@@ -205,6 +210,7 @@ export async function executeStructuredForAssignment(
     return {
       status: "OK",
       value: result.value,
+      ...(managedAiProvenance ? { managedAiProvenance } : {}),
       resolvedConnectionId: connectionId,
       resolvedModel: model,
       provider: resolution.provider,

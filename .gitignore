@@ -84,3 +84,9 @@ evals/*/_investigate-*
 
 # Generated Node 20 fresh-native bootstrap (scripts/build-fresh-native-bootstrap.mjs).
 /fresh-native-runtime/
+
+# Separately deployed hosted service output and authority database.
+/services/managed-ai/dist/
+/services/managed-ai/node_modules/
+/services/managed-ai/*.db
+/services/managed-ai/*.db-*

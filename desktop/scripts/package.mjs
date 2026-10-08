@@ -9,6 +9,7 @@ import { generateNotices } from "./generate-notices.mjs";
 import { prepareBundledNode } from "./node-runtime.mjs";
 import { verifyInstalledLayout } from "./verify-installer.mjs";
 import { migrationNamesSha256 } from "./release-manifest.mjs";
+import { scanManagedSecrets } from "./scan-managed-secrets.mjs";
 
 const require = createRequire(import.meta.url);
 const identity = require("../main/installer-identity.js");
@@ -140,6 +141,8 @@ run(process.execPath, builderArgs, {
 });
 
 const unpackedDir = path.join(distRoot, "win-unpacked");
+const managedSecretFailures = scanManagedSecrets(unpackedDir);
+if (managedSecretFailures.length) throw new Error(`Hosted secret isolation failed in package: ${managedSecretFailures.join(", ")}`);
 const unpackedReport = verifyInstalledLayout(unpackedDir);
 const artifactName = `Vocatrya-Setup-${version}-x64.exe`;
 const artifactPath = path.join(distRoot, artifactName);

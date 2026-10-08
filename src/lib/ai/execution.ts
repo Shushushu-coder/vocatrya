@@ -17,11 +17,15 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import prisma from "@/lib/db";
+import { executeManagedText, type ManagedDispatchInput } from "./managed-dispatch";
+import type { HostedManagedClient } from "./managed-client";
+import type { ManagedAiProvenanceV1 } from "./managed-provenance";
 import {
   AI_BUSINESS_ERROR_CODES,
   AIBusinessError,
   isAIBackendKind,
   assertAccountExecutionIdentity,
+  classifyAIConnection,
   type AIBusinessErrorCode,
 } from "@/lib/ai/connections";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
@@ -42,7 +46,7 @@ const EXEC_URL_ENV = "VOCATRYA_DESKTOP_EXEC_URL";
 const INTERNAL_TOKEN_ENV = "VOCATRYA_DESKTOP_INTERNAL_TOKEN";
 const EXECUTE_PATH = "/internal/ai-connections/execute";
 
-export interface ExecuteAIConnectionTextInput {
+export interface ExecuteAIConnectionTextInput extends Pick<ManagedDispatchInput, "managedAiProvenance" | "managedResource"> {
   userId: string;
   connectionId: string;
   model: string;
@@ -64,6 +68,7 @@ export interface ExecuteAIConnectionTextInput {
 }
 
 export interface ExecuteAIConnectionTextDeps {
+  managedClient?: HostedManagedClient;
   dbClient?: DbClient;
   execUrl?: string;
   internalToken?: string;
@@ -72,6 +77,7 @@ export interface ExecuteAIConnectionTextDeps {
 }
 
 export interface AIConnectionTextResult extends AIConnectionExecutionResult {
+  managedAiProvenance?: ManagedAiProvenanceV1;
   connectionId: string;
   durationMs?: number;
   /**
@@ -196,7 +202,10 @@ export async function executeAIConnectionText(
       "The assigned AI connection is not available",
     );
   }
-  assertAccountExecutionIdentity(connection);
+  const classification = classifyAIConnection(connection);
+  if (classification === "INVALID") fail(AI_BUSINESS_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION, "Invalid AI connection identity");
+  const managed = classification === "MANAGED";
+  if (!managed) assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;
@@ -215,6 +224,10 @@ export async function executeAIConnectionText(
         AI_BUSINESS_ERROR_CODES.CONNECTION_ERROR,
         "The assigned AI connection is in an error state",
       );
+  }
+  if (managed) {
+    const result = await executeManagedText({ ...input, structuredOutput: structuredPayload }, deps.managedClient);
+    return { ...result, connectionId, provider: connection.provider, backendKind: connection.backendKind, managedAiProvenance: result.provenance };
   }
   if (!isAIBackendKind(connection.backendKind)) {
     fail(
