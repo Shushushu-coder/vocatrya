@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { Label } from "../ui/label";
+import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Loader2 } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -72,14 +73,25 @@ export default function InterviewAiSettings() {
     setModels(fallbackModels(value));
   };
 
+  // OpenRouter aggregates 200+ upstream models behind arbitrary
+  // `provider/model` IDs. There is no curated enum and the model-catalog
+  // route needs a saved credential, so this provider gets a free-text
+  // input instead of the (empty) dropdown. The backend persists and
+  // executes the raw string unchanged.
+  const usesCustomModelInput = provider === AiProvider.OPENROUTER;
+  const trimmedModel = model.trim();
+
   const onSave = async () => {
-    if (!provider || !model) {
+    if (!provider || !trimmedModel) {
       toastError("Interview provider and model are both required.");
       return;
     }
     setSaving(true);
     try {
-      const result = await updateInterviewAiSettings({ provider, model });
+      const result = await updateInterviewAiSettings({
+        provider,
+        model: trimmedModel,
+      });
       if (result?.success) toastSuccess(t("interview.saveInterviewAi"));
       else toastError(result?.message || t("common.save"));
     } finally {
@@ -123,26 +135,48 @@ export default function InterviewAiSettings() {
       </div>
       <div>
         <Label htmlFor="interview-model">{t("interview.model")}</Label>
-        <Select
-          value={model || undefined}
-          onValueChange={setModel}
-          disabled={!provider}
-        >
-          <SelectTrigger id="interview-model" className="mt-2 w-[220px]">
-            <SelectValue placeholder={t("settings.selectAiModel")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {models.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        {usesCustomModelInput ? (
+          <>
+            <Input
+              id="interview-model"
+              className="mt-2 w-[280px]"
+              value={model}
+              onChange={(event) => setModel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && trimmedModel) void onSave();
+              }}
+              placeholder={t("interview.modelCustomPlaceholder")}
+              disabled={saving}
+            />
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("interview.modelCustomHint")}
+            </p>
+          </>
+        ) : (
+          <Select
+            value={model || undefined}
+            onValueChange={setModel}
+            disabled={!provider}
+          >
+            <SelectTrigger id="interview-model" className="mt-2 w-[220px]">
+              <SelectValue placeholder={t("settings.selectAiModel")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {models.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
       </div>
-      <Button onClick={() => void onSave()} disabled={saving || !provider || !model}>
+      <Button
+        onClick={() => void onSave()}
+        disabled={saving || !provider || !trimmedModel}
+      >
         {saving ? t("common.saving") : t("interview.saveInterviewAi")}
       </Button>
     </div>

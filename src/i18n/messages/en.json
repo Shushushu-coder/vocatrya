@@ -2237,6 +2237,8 @@
     "emptyHistory": "No interview sessions yet.",
     "provider": "Interview provider",
     "model": "Interview model",
+    "modelCustomPlaceholder": "e.g. openai/gpt-4o-mini",
+    "modelCustomHint": "Enter an OpenRouter model ID in provider/model format — see the list at openrouter.ai/models.",
     "saveInterviewAi": "Save Interview AI",
     "interviewAiDescription": "Interview practice uses its own AI config and never copies the global model automatically.",
     "selectQuestionHint": "Select at least one question.",
