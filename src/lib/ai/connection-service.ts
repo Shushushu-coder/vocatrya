@@ -14,6 +14,7 @@ import prisma from "@/lib/db";
 import {
   AI_CONNECTION_OP_ERROR_CODES,
   assertProviderMetadataSafe,
+  classifyAIConnection,
   isAIBackendKind,
   isAIConnectionProvider,
   isSupportedAccountProviderForBackend,
@@ -103,6 +104,9 @@ function serializeProviderMetadata(
   return JSON.stringify(metadata);
 }
 
+/** All unarchived persisted summaries, including Managed/invalid metadata.
+ * Account-facing consumers must use the selectable account list below.
+ */
 export async function listConnectionsForUser(
   userId: string,
   dbClient: DbClient = prisma,
@@ -113,6 +117,17 @@ export async function listConnectionsForUser(
     orderBy: { createdAt: "asc" },
   });
   return rows;
+}
+
+/** M1 account-facing selectors exclude Managed and invalid persisted identities.
+ * Historical/internal reads use their ownership-scoped DB lookup instead.
+ */
+export async function listSelectableAccountConnectionsForUser(
+  userId: string,
+  dbClient: DbClient = prisma,
+): Promise<ConnectionSummary[]> {
+  const rows = await listConnectionsForUser(userId, dbClient);
+  return rows.filter((row) => classifyAIConnection(row) === "ACCOUNT_LOGIN");
 }
 
 /**
@@ -140,7 +155,7 @@ export async function getConnectionOperationContext(
 ): Promise<ConnectionOperationContext> {
   const connection = await dbClient.aIConnection.findUnique({
     where: { id: connectionId },
-    select: { ...CONNECTION_SUMMARY_SELECT, userId: true, archivedAt: true },
+    select: { ...CONNECTION_SUMMARY_SELECT, credentialRef: true, userId: true, archivedAt: true },
   });
   if (!connection || connection.userId !== userId) {
     throw new ConnectionOpError(
@@ -153,6 +168,9 @@ export async function getConnectionOperationContext(
       AI_CONNECTION_OP_ERROR_CODES.CONNECTION_ARCHIVED,
       "Connection is archived",
     );
+  }
+  if (classifyAIConnection(connection) !== "ACCOUNT_LOGIN") {
+    throw new ConnectionOpError("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION", "Account operations require an account-login connection");
   }
   return connection;
 }

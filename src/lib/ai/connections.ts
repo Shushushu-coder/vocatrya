@@ -10,7 +10,7 @@
  * access, no provider login, no runtime calls — those land in later phases.
  */
 
-// First-wave ACCOUNT_LOGIN providers. Open-ended on purpose: new providers
+// Connection identity providers. Open-ended on purpose: new providers
 // are added here, not by schema change.
 export const AI_CONNECTION_PROVIDERS = [
   "OPENAI",
@@ -24,10 +24,11 @@ export const AI_CONNECTION_PROVIDERS = [
   "CURSOR",
   "GITHUB_COPILOT",
   "DEVIN",
+  "VOCATRYA",
 ] as const;
 export type AIConnectionProvider = (typeof AI_CONNECTION_PROVIDERS)[number];
 
-// Runtime backends a connection can bind to. Same open-registry rule.
+// Connection backends; registry membership alone never authorizes execution.
 export const AI_BACKEND_KINDS = [
   "CODEX_RUNTIME",
   "CLAUDE_RUNTIME",
@@ -36,12 +37,13 @@ export const AI_BACKEND_KINDS = [
   "CURSOR_RUNTIME",
   "COPILOT_RUNTIME",
   "DEVIN_RUNTIME",
+  "MANAGED_GATEWAY",
 ] as const;
 export type AIBackendKind = (typeof AI_BACKEND_KINDS)[number];
 
 // ACCOUNT_LOGIN is the only implemented flow this phase; API_KEY is reserved
-// for the future ApiKey seam (AIConnection.credentialRef).
-export const AI_AUTH_TYPES = ["ACCOUNT_LOGIN", "API_KEY"] as const;
+// for the future ApiKey seam (AIConnection.credentialRef). MANAGED is identity only.
+export const AI_AUTH_TYPES = ["ACCOUNT_LOGIN", "API_KEY", "MANAGED"] as const;
 export type AIAuthType = (typeof AI_AUTH_TYPES)[number];
 
 export const AI_CONNECTION_STATUSES = [
@@ -165,7 +167,7 @@ export function assertProviderMetadataSafe(
  * adapter-verified one, never derived from backendKind alone.
  */
 export const AI_BACKEND_SUPPORTED_ACCOUNT_PROVIDERS: Record<
-  AIBackendKind,
+  Exclude<AIBackendKind, "MANAGED_GATEWAY">,
   readonly AIConnectionProvider[]
 > = {
   CODEX_RUNTIME: ["OPENAI"],
@@ -199,6 +201,55 @@ export function isSupportedAccountProviderForBackend(
   return supportedAccountProvidersForBackend(backendKind).includes(
     provider as AIConnectionProvider,
   );
+}
+
+export interface AIConnectionIdentity {
+  provider: string;
+  backendKind: string;
+  authType: string;
+  credentialRef: string | null;
+  runtimeProfileRef: string | null;
+  accountIdentity: string | null;
+}
+
+type ExecutionConnectionIdentity = Pick<AIConnectionIdentity, "provider" | "backendKind"> &
+  Partial<Omit<AIConnectionIdentity, "provider" | "backendKind">>;
+
+export function hasManagedIdentityMarker(connection: ExecutionConnectionIdentity): boolean {
+  return connection.provider === "VOCATRYA" || connection.backendKind === "MANAGED_GATEWAY" || connection.authType === "MANAGED";
+}
+
+/** Identity only: MANAGED never proves hosted auth, entitlement or capability. */
+export function classifyAIConnection(
+  connection: ExecutionConnectionIdentity,
+): "ACCOUNT_LOGIN" | "MANAGED" | "INVALID" {
+  if (hasManagedIdentityMarker(connection)) {
+    return connection.provider === "VOCATRYA" &&
+      connection.backendKind === "MANAGED_GATEWAY" &&
+      connection.authType === "MANAGED" &&
+      connection.credentialRef === null &&
+      connection.runtimeProfileRef === null &&
+      connection.accountIdentity === null
+      ? "MANAGED"
+      : "INVALID";
+  }
+  return connection.authType === "ACCOUNT_LOGIN" &&
+    isSupportedAccountProviderForBackend(connection.backendKind, connection.provider)
+    ? "ACCOUNT_LOGIN"
+    : "INVALID";
+}
+
+/** Fail before minting any desktop ticket or probing a runtime. */
+export function assertAccountExecutionIdentity(connection: ExecutionConnectionIdentity): void {
+  // Existing account projections retain their existing status/matrix gates.
+  if (!hasManagedIdentityMarker(connection)) return;
+  const classification = classifyAIConnection(connection);
+  if (classification === "MANAGED") {
+    throw new AIBusinessError("MANAGED_EXECUTION_NOT_IMPLEMENTED", "Managed execution is not implemented in M1");
+  }
+  if (classification === "INVALID") {
+    throw new AIBusinessError("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION", "Invalid AI connection identity");
+  }
 }
 
 /**
@@ -294,6 +345,9 @@ export class AIResolutionError extends Error {
 // TEXT_ONLY execution. Values that already exist in the op/resolution
 // taxonomies reuse the same string — a code means one thing everywhere.
 export const AI_BUSINESS_ERROR_CODES = {
+  MANAGED_BINDING_UNAVAILABLE: "MANAGED_BINDING_UNAVAILABLE",
+  MANAGED_PROVENANCE_INVALID: "MANAGED_PROVENANCE_INVALID",
+  MANAGED_EXECUTION_NOT_IMPLEMENTED: "MANAGED_EXECUTION_NOT_IMPLEMENTED",
   // Resolution outcomes.
   AI_NOT_CONFIGURED: "AI_NOT_CONFIGURED",
   // Explicitly assigned connection is gone, archived, or foreign-owned —
@@ -422,4 +476,27 @@ export function resolveBusinessAIAssignment(
     model: chosen.model,
     source: business ? "BUSINESS" : "GLOBAL_DEFAULT",
   };
+}
+
+/** Managed metadata is portable identity only. Reject credential-shaped keys
+ * recursively; ordinary account metadata keeps its existing backup contract.
+ */
+export function assertManagedConnectionMetadataSafe(
+  connection: AIConnectionIdentity & { providerMetadata: string | null },
+): void {
+  if (!hasManagedIdentityMarker(connection)) return;
+  if (classifyAIConnection(connection) !== "MANAGED") {
+    throw new Error("Invalid Managed identity");
+  }
+  if (connection.providerMetadata === null) return;
+  assertProviderMetadataSafe(connection.providerMetadata);
+  const inspect = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(inspect); return; }
+    if (value !== null && typeof value === "object") {
+      assertProviderMetadataSafe(value as Record<string, unknown>);
+      Object.values(value).forEach(inspect);
+    }
+  };
+  const metadata: unknown = JSON.parse(connection.providerMetadata);
+  inspect(metadata);
 }

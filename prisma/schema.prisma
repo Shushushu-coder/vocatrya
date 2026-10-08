@@ -592,6 +592,8 @@ model AutomationRun {
 
   // Phase B: nullable AI lock captured at resolution time. NO_GUESS_BACKFILL:
   // existing rows keep NULL and rely on provider/model provenance alone.
+  // Immutable historical snapshot; never hosted entitlement authority.
+  managedAiProvenance String?
   resolvedConnectionId String?
   resolvedModel        String?
   resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
@@ -709,6 +711,8 @@ model ChatConversation {
   // Deliberately NOT a relation: a restored backup may reference a
   // connection that does not exist locally, and that orphaned lock must
   // surface as an explicit error rather than be silently nulled.
+  // Immutable historical snapshot; never hosted entitlement authority.
+  managedAiProvenance String?
   resolvedConnectionId   String?
   resolvedModel          String?
   createdAt              DateTime             @default(now())
@@ -909,6 +913,8 @@ model JobDescriptionParse {
 
   // Phase B: nullable AI connection lock. `model` above already carries the
   // resolved model provenance, so no resolvedModel synonym is added here.
+  // Immutable historical snapshot; never hosted entitlement authority.
+  managedAiProvenance String?
   resolvedConnectionId String?
   resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
 
@@ -1402,6 +1408,8 @@ model ResumeVariantVersion {
   frozenAt              DateTime?
 
   // Phase B: nullable AI lock captured at resolution time. NO_GUESS_BACKFILL.
+  // Immutable historical snapshot; never hosted entitlement authority.
+  managedAiProvenance String?
   resolvedConnectionId String?
   resolvedModel        String?
   resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
@@ -1533,6 +1541,8 @@ model MatchAnalysis {
 
   // Phase B: nullable AI connection lock. `model` above already carries the
   // resolved model provenance, so no resolvedModel synonym is added here.
+  // Immutable historical snapshot; never hosted entitlement authority.
+  managedAiProvenance String?
   resolvedConnectionId String?
   resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
 
@@ -1699,6 +1709,8 @@ model InterviewSession {
 
   // Phase B: nullable AI lock captured at resolution time. NO_GUESS_BACKFILL:
   // existing rows keep NULL and rely on provider/model provenance alone.
+  // Immutable historical snapshot; never hosted entitlement authority.
+  managedAiProvenance String?
   resolvedConnectionId String?
   resolvedModel        String?
   resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
@@ -2025,6 +2037,8 @@ model AIConnection {
   resumeVariantVersions ResumeVariantVersion[]
   automationRuns        AutomationRun[]
 
+  // Raw migration partial UNIQUE(userId) for active VOCATRYA/MANAGED_GATEWAY/MANAGED.
+  // See 20261008000000_add_managed_ai_core_contracts.
   @@index([userId])
   @@index([userId, provider])
   @@index([userId, archivedAt])

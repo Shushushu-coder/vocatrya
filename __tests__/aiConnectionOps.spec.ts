@@ -415,7 +415,7 @@ describe("connection service", () => {
   });
 
   it("reconnect keeps the same row and bumps lastVerifiedAt", async () => {
-    const existing = { id: "c1", userId: "user-1", archivedAt: null };
+    const existing = { id: "c1", userId: "user-1", archivedAt: null, provider: "OPENAI", backendKind: "CODEX_RUNTIME", authType: "ACCOUNT_LOGIN", credentialRef: null, runtimeProfileRef: "rp_test", accountIdentity: null };
     store.findUnique.mockResolvedValue(existing);
     store.update.mockImplementation(async ({ data }) => ({
       id: "c1",
@@ -434,7 +434,7 @@ describe("connection service", () => {
   });
 
   it("identity conflict moves the connection to ERROR", async () => {
-    store.findUnique.mockResolvedValue({ id: "c1", userId: "user-1", archivedAt: null });
+    store.findUnique.mockResolvedValue({ id: "c1", userId: "user-1", archivedAt: null, provider: "OPENAI", backendKind: "CODEX_RUNTIME", authType: "ACCOUNT_LOGIN", credentialRef: null, runtimeProfileRef: "rp_test", accountIdentity: null });
     store.update.mockImplementation(async ({ data }) => ({ id: "c1", ...data }));
     const row = await applyReconnectIdentityConflict(
       { userId: "user-1", connectionId: "c1" },
@@ -444,7 +444,7 @@ describe("connection service", () => {
   });
 
   it("verify maps auth states onto connection status", async () => {
-    store.findUnique.mockResolvedValue({ id: "c1", userId: "user-1", archivedAt: null });
+    store.findUnique.mockResolvedValue({ id: "c1", userId: "user-1", archivedAt: null, provider: "OPENAI", backendKind: "CODEX_RUNTIME", authType: "ACCOUNT_LOGIN", credentialRef: null, runtimeProfileRef: "rp_test", accountIdentity: null });
     store.update.mockImplementation(async ({ data }) => ({ id: "c1", ...data }));
 
     for (const [authState, expected] of [
@@ -463,7 +463,7 @@ describe("connection service", () => {
   });
 
   it("disconnect keeps the row and profile ref", async () => {
-    store.findUnique.mockResolvedValue({ id: "c1", userId: "user-1", archivedAt: null });
+    store.findUnique.mockResolvedValue({ id: "c1", userId: "user-1", archivedAt: null, provider: "OPENAI", backendKind: "CODEX_RUNTIME", authType: "ACCOUNT_LOGIN", credentialRef: null, runtimeProfileRef: "rp_test", accountIdentity: null });
     store.update.mockImplementation(async ({ data }) => ({ id: "c1", ...data }));
     const row = await applyDisconnect(
       { userId: "user-1", connectionId: "c1" },

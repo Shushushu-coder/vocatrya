@@ -141,6 +141,7 @@ describe("checkStreamingTurnReadiness", () => {
   const connection = {
     backendKind: "DEVIN_RUNTIME",
     provider: "DEVIN",
+    authType: "ACCOUNT_LOGIN", credentialRef: null, runtimeProfileRef: "rp_test", accountIdentity: null,
     status: "CONNECTED",
     archivedAt: null,
   };

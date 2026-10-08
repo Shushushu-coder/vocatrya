@@ -5,6 +5,8 @@ import { requireUser } from "./shared";
 import { handleError } from "@/lib/utils";
 import {
   isAIBackendKind,
+  assertAccountExecutionIdentity,
+  AIBusinessError,
   isAIConnectionOperation,
   isAIConnectionProvider,
   isSupportedAccountProviderForBackend,
@@ -12,7 +14,7 @@ import {
 } from "@/lib/ai/connections";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
 import {
-  listConnectionsForUser,
+  listSelectableAccountConnectionsForUser,
   type ConnectionSummary,
 } from "@/lib/ai/connection-service";
 
@@ -25,7 +27,7 @@ export async function listAiConnections(): Promise<{
     const user = await requireUser();
     return {
       success: true,
-      data: await listConnectionsForUser(user.id),
+      data: await listSelectableAccountConnectionsForUser(user.id),
     };
   } catch (error) {
     return handleError(error, "Failed to fetch AI connections") as {
@@ -65,7 +67,7 @@ export async function mintAiConnectionTicket(input: {
       return { success: false, code: "INVALID_OPERATION", message: "Invalid operation" };
     }
     const backendKind = input.backendKind;
-    if (typeof backendKind !== "string" || !isAIBackendKind(backendKind)) {
+    if (typeof backendKind !== "string" || !isAIBackendKind(backendKind) || backendKind === "MANAGED_GATEWAY") {
       return { success: false, code: "UNSUPPORTED_BACKEND", message: "Unsupported backend" };
     }
 
@@ -106,7 +108,7 @@ export async function mintAiConnectionTicket(input: {
       }
       const connection = await db.aIConnection.findUnique({
         where: { id: input.connectionId },
-        select: { userId: true, backendKind: true, provider: true, archivedAt: true },
+        select: { userId: true, backendKind: true, provider: true, authType: true, credentialRef: true, runtimeProfileRef: true, accountIdentity: true, archivedAt: true },
       });
       if (!connection || connection.userId !== user.id) {
         return { success: false, code: "CONNECTION_NOT_FOUND", message: "Connection not found" };
@@ -127,6 +129,10 @@ export async function mintAiConnectionTicket(input: {
           code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
           message: "Provider does not match this connection",
         };
+      }
+      try { assertAccountExecutionIdentity(connection); } catch (error) {
+        if (error instanceof AIBusinessError) return { success: false, code: error.code, message: error.message };
+        throw error;
       }
       connectionId = input.connectionId;
       accountProvider = connection.provider;

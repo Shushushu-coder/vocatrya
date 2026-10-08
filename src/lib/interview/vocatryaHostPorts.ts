@@ -1,3 +1,4 @@
+import { rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 /**
  * Phase 3B — Vocatrya Host Port adapters (HOST_IMPLEMENT).
  *
@@ -46,6 +47,7 @@ import {
 import {
   AIBusinessError,
   isAIBackendKind,
+  assertAccountExecutionIdentity,
   isSupportedAccountProviderForBackend,
 } from "@/lib/ai/connections";
 import { executeAIConnectionText } from "@/lib/ai/execution";
@@ -227,11 +229,13 @@ export interface InterviewSessionLockDb {
         userId: true;
         resolvedConnectionId: true;
         resolvedModel: true;
+        managedAiProvenance: true;
       };
     }) => Promise<{
       userId: string;
       resolvedConnectionId: string | null;
       resolvedModel: string | null;
+      managedAiProvenance?: string | null;
     } | null>;
   };
   aIConnection: {
@@ -242,6 +246,10 @@ export interface InterviewSessionLockDb {
         userId: true;
         provider: true;
         backendKind: true;
+        authType: true;
+        credentialRef: true;
+        runtimeProfileRef: true;
+        accountIdentity: true;
         status: true;
         archivedAt: true;
       };
@@ -250,6 +258,10 @@ export interface InterviewSessionLockDb {
       userId: string;
       provider: string;
       backendKind: string;
+      authType: string;
+      credentialRef: string | null;
+      runtimeProfileRef: string | null;
+      accountIdentity: string | null;
       status: string;
       archivedAt: Date | null;
     } | null>;
@@ -285,6 +297,15 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
   }): Promise<ResolvedInterviewModel> {
     const lock = await this.loadSessionLock(input);
     try {
+      if (lock.kind === "managed") {
+        const connection = lock.connectionId ? await this.db!.aIConnection.findUnique({
+          where: { id: lock.connectionId },
+          select: { id: true, userId: true, provider: true, backendKind: true,
+            authType: true, credentialRef: true, runtimeProfileRef: true, accountIdentity: true,
+            status: true, archivedAt: true },
+        }) : null;
+        rejectManagedHistoricalExecution(lock, connection, input.requestingUserId);
+      }
       if (lock.kind === "account") {
         return await this.resolveAccountModel(input.requestingUserId, lock);
       }
@@ -379,6 +400,7 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
         userId: true,
         resolvedConnectionId: true,
         resolvedModel: true,
+        managedAiProvenance: true,
       },
     });
     if (!session) {
@@ -410,6 +432,10 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
         userId: true,
         provider: true,
         backendKind: true,
+        authType: true,
+        credentialRef: true,
+        runtimeProfileRef: true,
+        accountIdentity: true,
         status: true,
         archivedAt: true,
       },
@@ -420,6 +446,7 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
     if (connection.archivedAt !== null) {
       throw accountUnavailable("The assigned AI connection is archived");
     }
+    assertAccountExecutionIdentity(connection);
     switch (connection.status) {
       case "CONNECTED":
         break;

@@ -1,6 +1,8 @@
 import "server-only";
+import { managedLockFromRow, rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 
 import type { UIMessage } from "ai";
+import { AIBusinessError } from "@/lib/ai/connections";
 import { AI_EXECUTION_DEFAULT_TIMEOUT_MS, executeAIConnectionText } from "@/lib/ai/execution";
 import { log } from "@/lib/telemetry";
 import {
@@ -123,6 +125,11 @@ export async function condenseCareerDialogueSummary(
   };
   try {
     const snapshot = await deps.repository.load(input.userId, input.conversationId);
+    const managed = snapshot ? managedLockFromRow(snapshot) : null;
+    if (managed) {
+      if (!managed.connectionId) rejectManagedHistoricalExecution(managed, null, input.userId);
+      return finish({ status: "skipped", reason: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
+    }
     if (!snapshot?.resolvedConnectionId || !snapshot.resolvedModel) {
       return finish({ status: "skipped", reason: "legacy" });
     }
@@ -292,7 +299,8 @@ export async function condenseCareerDialogueSummary(
       recentTurnCount: budget.size.recentTurnCount,
       failureCount: outcome === "committed" ? 0 : failureCount,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof AIBusinessError) return finish({ status: "failed", reason: error.code });
     log.info("[agent-chat] summary", {
       summaryStatus: "failed",
       summaryPromptVersion: CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION,

@@ -1,3 +1,5 @@
+import { assertManagedConnectionMetadataSafe } from "@/lib/ai/connections";
+import { managedAiProvenanceStringSchema as managedAiProvenance } from "@/lib/ai/managed-provenance";
 import { z } from "zod";
 
 // Carries a message safe to hand straight back to the user. Anything else
@@ -330,6 +332,7 @@ const AutomationRun = z.object({
   completedAt: optDt,
   // Phase B lock fields: optional as well as nullable — a backup taken
   // before they existed carries no such key.
+  managedAiProvenance: managedAiProvenance.optional(),
   resolvedConnectionId: optId.optional(),
   resolvedModel: optStr.optional(),
 });
@@ -353,6 +356,12 @@ const AIConnection = z.object({
   archivedAt: optDt,
   createdAt: dt,
   updatedAt: dt,
+}).superRefine((row, ctx) => {
+  try {
+    assertManagedConnectionMetadataSafe(row);
+  } catch {
+    ctx.addIssue({ code: "custom", message: "Invalid or secret-bearing Managed connection metadata" });
+  }
 });
 
 const AIBusinessAssignment = z.object({
@@ -377,6 +386,7 @@ const ChatConversation = z.object({
   // Undefined leaves Prisma on the column default (null).
   title: optStr.optional(),
   context: optStr.optional(),
+  managedAiProvenance: managedAiProvenance.optional(),
   resolvedConnectionId: optId.optional(),
   resolvedModel: optStr.optional(),
   createdAt: dt,
@@ -473,6 +483,7 @@ const JobDescriptionParse = z.object({
   errorCode: optStr,
   parsedAt: optDt,
   createdAt: dt,
+  managedAiProvenance: managedAiProvenance.optional(),
   resolvedConnectionId: optId.optional(),
 });
 
@@ -807,6 +818,7 @@ const ResumeVariantVersion = z.object({
   createdVia: str,
   createdAt: dt,
   frozenAt: optDt,
+  managedAiProvenance: managedAiProvenance.optional(),
   resolvedConnectionId: optId.optional(),
   resolvedModel: optStr.optional(),
 });
@@ -882,6 +894,7 @@ const MatchAnalysis = z.object({
   staleAt: optDt,
   createdAt: dt,
   completedAt: optDt,
+  managedAiProvenance: managedAiProvenance.optional(),
   resolvedConnectionId: optId.optional(),
 });
 
@@ -991,6 +1004,7 @@ const InterviewSession = z.object({
   createdVia: optStr,
   createdAt: dt,
   updatedAt: dt,
+  managedAiProvenance: managedAiProvenance.optional(),
   resolvedConnectionId: optId.optional(),
   resolvedModel: optStr.optional(),
 });

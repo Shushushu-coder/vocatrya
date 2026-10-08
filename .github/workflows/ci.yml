@@ -45,3 +45,5 @@ jobs:
       - run: npx prisma generate
 
       - run: npx vitest run __tests__/conversationSummaryMigration.spec.ts --reporter=verbose
+
+      - run: npx vitest run __tests__/managedAiCore.migration.spec.ts --reporter=verbose

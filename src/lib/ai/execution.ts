@@ -21,6 +21,7 @@ import {
   AI_BUSINESS_ERROR_CODES,
   AIBusinessError,
   isAIBackendKind,
+  assertAccountExecutionIdentity,
   type AIBusinessErrorCode,
 } from "@/lib/ai/connections";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
@@ -183,6 +184,10 @@ export async function executeAIConnectionText(
       archivedAt: true,
       backendKind: true,
       provider: true,
+      authType: true,
+      credentialRef: true,
+      runtimeProfileRef: true,
+      accountIdentity: true,
     },
   });
   if (!connection || connection.archivedAt !== null) {
@@ -191,6 +196,7 @@ export async function executeAIConnectionText(
       "The assigned AI connection is not available",
     );
   }
+  assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;

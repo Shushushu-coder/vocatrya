@@ -6,6 +6,7 @@ import {
   AI_BUSINESS_ERROR_CODES,
   AIBusinessError,
   isAIBackendKind,
+  assertAccountExecutionIdentity,
   type AIBusinessErrorCode,
 } from "@/lib/ai/connections";
 import {
@@ -114,6 +115,10 @@ type ConnectionRow = {
   archivedAt: Date | null;
   backendKind: string;
   provider: string;
+  authType: string;
+  credentialRef: string | null;
+  runtimeProfileRef: string | null;
+  accountIdentity: string | null;
 };
 
 // Shared lookup + status gate — identical semantics to
@@ -132,6 +137,10 @@ async function loadUsableConnection(
       archivedAt: true,
       backendKind: true,
       provider: true,
+      authType: true,
+      credentialRef: true,
+      runtimeProfileRef: true,
+      accountIdentity: true,
     },
   });
   if (!connection || connection.archivedAt !== null) {
@@ -140,6 +149,7 @@ async function loadUsableConnection(
       "The assigned AI connection is not available",
     );
   }
+  assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;
@@ -406,7 +416,7 @@ export async function fetchAccountRuntimeState(
  * dies on the first event.
  */
 export async function checkStreamingTurnReadiness(input: {
-  connection: { backendKind: string; provider: string; status: string; archivedAt: Date | null };
+  connection: Omit<ConnectionRow, "id">;
   model: string | null;
   dbClient?: DbClient;
   deps?: StreamExecutionDeps;
@@ -442,6 +452,7 @@ export async function checkStreamingTurnReadiness(input: {
       "The locked AI connection is in an error state",
     );
   }
+  assertAccountExecutionIdentity(connection);
   if (!isAIBackendKind(connection.backendKind)) {
     fail(
       AI_BUSINESS_ERROR_CODES.RUNTIME_NOT_AVAILABLE,

@@ -1,3 +1,4 @@
+import { rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 import { generateId } from "ai";
 import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError, type ConversationRequest } from "@/lib/agent/conversationRequest";
 import { conversationCommitStream } from "@/lib/agent/conversationStream";
@@ -157,6 +158,10 @@ async function accountChatResponse({
       status: true,
       backendKind: true,
       provider: true,
+      authType: true,
+      credentialRef: true,
+      runtimeProfileRef: true,
+      accountIdentity: true,
       archivedAt: true,
     },
   });
@@ -393,7 +398,22 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   const pastedText = resolvePastedText(messages);
   const conversation = await getOwnedChatConversation(userId, conversationId);
   if (!conversation) throw new ConversationRequestError("CONVERSATION_NOT_FOUND");
-  const lock = chatLockFromRow(conversation);
+  let lock: ReturnType<typeof chatLockFromRow>;
+  try {
+    lock = chatLockFromRow(conversation);
+    if (lock.kind === "managed") {
+      const connection = lock.connectionId ? await prisma.aIConnection.findFirst({
+        where: { id: lock.connectionId, userId },
+      }) : null;
+      rejectManagedHistoricalExecution(lock, connection, userId);
+    }
+  } catch (error) {
+    // Preserve explicit Managed errors through the request settlement wrapper.
+    if (error instanceof AIBusinessError) {
+      return NextResponse.json(agentErrorEnvelope(error), { status: 503 });
+    }
+    throw error;
+  }
   const pageContext = pageContextFromConversation(contextOfRow(conversation));
 
   // One resolution per turn. Fresh-native full keeps add_job and withholds

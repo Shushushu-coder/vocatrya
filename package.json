@@ -28,6 +28,7 @@
     "lint": "eslint .",
     "test:desktop": "vitest run --config desktop/vitest.config.mjs desktop/main",
     "test": "vitest run",
+    "db:verify-migration-invariants": "node scripts/verify-migration-invariants.mjs",
     "test:e2e": "npx playwright test --project=chromium",
     "test:e2e:setup": "ts-node --transpile-only --project e2e/tsconfig.setup.json e2e/setup.ts",
     "test:watch": "vitest",

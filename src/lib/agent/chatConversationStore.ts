@@ -37,6 +37,7 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
     messages: true;
     resolvedConnectionId: true;
     resolvedModel: true;
+    managedAiProvenance: true;
     createdAt: true;
     updatedAt: true;
   };
@@ -51,6 +52,7 @@ const CHAT_ROW_SELECT = {
   messages: true,
   resolvedConnectionId: true,
   resolvedModel: true,
+  managedAiProvenance: true,
   createdAt: true,
   updatedAt: true,
 } as const;

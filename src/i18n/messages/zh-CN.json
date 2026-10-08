@@ -2197,6 +2197,11 @@
     "invalidSigningOut": "当前会话已失效，正在退出登录…"
   },
   "interview": {
+    "errors": {
+      "MANAGED_BINDING_UNAVAILABLE": "当前会话关联的 AI 配置不可用，请重新创建会话或重新配置 AI。",
+      "MANAGED_PROVENANCE_INVALID": "当前会话的 AI 配置信息无效，无法继续使用该会话。",
+      "MANAGED_EXECUTION_NOT_IMPLEMENTED": "当前 AI 服务尚不可用于此功能。"
+    },
     "title": "面试练习",
     "startNew": "开始新面试",
     "history": "历史面试",

@@ -1,3 +1,4 @@
+import { managedLockFromRow, type ManagedHistoricalLock } from "@/lib/ai/managed-provenance";
 /**
  * InterviewSession AI lock — how a session's model identity is persisted.
  *
@@ -20,6 +21,7 @@
 export const LEGACY_INTERVIEW_LOCK_KIND = "LEGACY_INTERVIEW_CONFIG";
 
 export type InterviewSessionAiLock =
+  | ManagedHistoricalLock
   | { kind: "account"; connectionId: string; model: string }
   | { kind: "legacy"; provider: string; model: string }
   | { kind: "unlocked" };
@@ -44,7 +46,10 @@ export function encodeLegacyInterviewLock(
 export function sessionAiLockFromRow(row: {
   resolvedConnectionId: string | null;
   resolvedModel: string | null;
+  managedAiProvenance?: string | null;
 }): InterviewSessionAiLock {
+  const managed = managedLockFromRow(row);
+  if (managed) return managed;
   if (row.resolvedConnectionId) {
     return {
       kind: "account",

@@ -74,3 +74,6 @@ export async function resolveAutomationMatchRuntime(
   });
   return matchRuntimePlanFromResolution(resolution);
 }
+
+/** Persisted run history must decode Managed provenance before considering legacy. */
+export { managedLockFromRow as managedAutomationLockFromRow } from "@/lib/ai/managed-provenance";

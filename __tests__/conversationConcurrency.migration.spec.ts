@@ -7,7 +7,7 @@ import { seedAccount } from "./helpers/backupTestDb";
 it("adds concurrency fields without changing a pre-change conversation or its summary", async () => {
   const ctx = makeAbTestDbUrl();
   fs.writeFileSync(ctx.url.slice(5), "");
-  const schema = preparePrismaProject(ctx.dir, { excludeSuffix: "chat_conversation_concurrency" });
+  const schema = preparePrismaProject(ctx.dir, { excludeSuffix: ["chat_conversation_concurrency", "add_managed_ai_core_contracts"] });
   const db = new PrismaClient({ datasources: { db: { url: ctx.url } } });
   try {
     migrateDeploy(ctx.url, schema);
@@ -22,6 +22,8 @@ it("adds concurrency fields without changing a pre-change conversation or its su
     const after = await db.$queryRawUnsafe<Record<string, unknown>[]>("SELECT id,userId,title,context,messages,resolvedConnectionId,resolvedModel,createdAt,updatedAt,revision,activeRequestId,activeRequestExpiresAt FROM ChatConversation WHERE id = 'old'");
     expect(after[0]).toEqual({ ...before[0], revision: 0, activeRequestId: null, activeRequestExpiresAt: null });
     expect(await db.conversationSummary.findUnique({ where: { conversationId: "old" } })).toEqual(summary);
+    copyMigrationBySuffix(ctx.dir, "add_managed_ai_core_contracts");
+    migrateDeploy(ctx.url, schema);
     const row = await db.chatConversation.create({ data: { userId: owner, messages: "[]" } });
     expect(row).toMatchObject({ revision: 0, activeRequestId: null, activeRequestExpiresAt: null });
   } finally {

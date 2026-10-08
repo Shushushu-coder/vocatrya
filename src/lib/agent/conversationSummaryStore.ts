@@ -1,4 +1,5 @@
 import "server-only";
+import { managedLockFromRow, rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { UIMessage } from "ai";
@@ -21,6 +22,7 @@ export type SummaryRepository = {
     messages: UIMessage[];
     resolvedConnectionId: string | null;
     resolvedModel: string | null;
+    managedAiProvenance?: string | null;
     summary: ConversationSummaryRecord | null;
   } | null>;
   commit: (
@@ -67,9 +69,16 @@ async function loadSummarySnapshot(
 ) {
   const conversation = await client.chatConversation.findFirst({
     where: { id: conversationId, userId },
-    select: { messages: true, resolvedConnectionId: true, resolvedModel: true },
+    select: { messages: true, resolvedConnectionId: true, resolvedModel: true, managedAiProvenance: true },
   });
   if (!conversation) return null;
+  const managed = managedLockFromRow(conversation);
+  if (managed) {
+    const connection = managed.connectionId ? await client.aIConnection.findFirst({
+      where: { id: managed.connectionId, userId },
+    }) : null;
+    rejectManagedHistoricalExecution(managed, connection, userId);
+  }
   const summary = await client.conversationSummary.findFirst({
     where: { conversationId, userId },
   });
@@ -77,6 +86,7 @@ async function loadSummarySnapshot(
     messages: parseMessages(conversation.messages),
     resolvedConnectionId: conversation.resolvedConnectionId,
     resolvedModel: conversation.resolvedModel,
+    managedAiProvenance: conversation.managedAiProvenance,
     summary: summary ? toRecord(summary) : null,
   };
 }

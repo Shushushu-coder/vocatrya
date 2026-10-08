@@ -22,6 +22,7 @@ import {
   AI_BUSINESS_ERROR_CODES,
   AIBusinessError,
   isAIBackendKind,
+  assertAccountExecutionIdentity,
   isAIAssignmentPurpose,
   isStreamingPurpose,
   isSupportedAccountProviderForBackend,
@@ -86,9 +87,12 @@ const CONNECTION_SELECT = {
   userId: true,
   provider: true,
   backendKind: true,
+  authType: true,
+  credentialRef: true,
+  runtimeProfileRef: true,
+  accountIdentity: true,
   displayName: true,
   status: true,
-  runtimeProfileRef: true,
   archivedAt: true,
 } as const;
 
@@ -102,6 +106,9 @@ type AssignmentRow = {
     userId: string;
     provider: string;
     backendKind: string;
+    authType: string;
+    credentialRef: string | null;
+    accountIdentity: string | null;
     displayName: string;
     status: string;
     runtimeProfileRef: string | null;
@@ -136,6 +143,10 @@ function classifyAssignment(
   }
   if (connection.archivedAt !== null) {
     return invalid(AI_BUSINESS_ERROR_CODES.ASSIGNED_CONNECTION_UNAVAILABLE);
+  }
+  try { assertAccountExecutionIdentity(connection); } catch (error) {
+    if (error instanceof AIBusinessError) return invalid(error.code);
+    throw error;
   }
   switch (connection.status) {
     case "CONNECTED":
@@ -354,6 +365,10 @@ export async function setBusinessAssignment(
       id: true,
       userId: true,
       provider: true,
+      authType: true,
+      credentialRef: true,
+      runtimeProfileRef: true,
+      accountIdentity: true,
       backendKind: true,
       status: true,
       archivedAt: true,
@@ -370,6 +385,10 @@ export async function setBusinessAssignment(
       "CONNECTION_ARCHIVED",
       "Connection is archived",
     );
+  }
+  try { assertAccountExecutionIdentity(connection); } catch (error) {
+    if (error instanceof AIBusinessError) throw new AssignmentWriteError(error.code, error.message);
+    throw error;
   }
   if (
     !isAIBackendKind(connection.backendKind) ||

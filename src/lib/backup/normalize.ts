@@ -104,7 +104,7 @@ export function normalizeAutomation<
 export function normalizeAIConnection<
   T extends { authType: string; status: string },
 >(row: T): T {
-  if (row.authType !== "ACCOUNT_LOGIN" || row.status !== "CONNECTED") {
+  if ((row.authType !== "ACCOUNT_LOGIN" && row.authType !== "MANAGED") || row.status !== "CONNECTED") {
     return row;
   }
   return { ...row, status: "REAUTH_REQUIRED" };

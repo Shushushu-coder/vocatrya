@@ -14,7 +14,7 @@ export type ChatConversationSummary = {
   updatedAt: string;
 };
 
-export type ChatLockKind = "account" | "legacy";
+export type ChatLockKind = "account" | "legacy" | "managed";
 
 export type ChatConversationSnapshot = ChatConversationSummary & {
   revision: number;

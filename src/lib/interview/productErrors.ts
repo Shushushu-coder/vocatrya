@@ -1,3 +1,5 @@
+import { translate } from "@/i18n/translate";
+import type { Locale } from "@/i18n/config";
 import { DomainError } from "./persistence/interviewErrors";
 
 export const PRODUCT_ERROR_CODES = [
@@ -12,6 +14,9 @@ export const PRODUCT_ERROR_CODES = [
   "JOB_PAIR_REQUIRED",
   "CROSS_USER_RELATION",
   "GENERATION_FAILED",
+  "MANAGED_BINDING_UNAVAILABLE",
+  "MANAGED_PROVENANCE_INVALID",
+  "MANAGED_EXECUTION_NOT_IMPLEMENTED",
   "INVALID_TRANSCRIPT_EVIDENCE",
   "INVALID_FEEDBACK_ITEM",
   "EMPTY_ITEMS",
@@ -124,7 +129,7 @@ export type InterviewActionResult<T> =
   | { success: true; data: T }
   | InterviewActionFailure;
 
-export function mapInterviewError(error: unknown): InterviewActionFailure {
+export function mapInterviewError(error: unknown, locale: Locale = "zh-CN"): InterviewActionFailure {
   const code =
     error instanceof DomainError
       ? error.code
@@ -136,6 +141,7 @@ export function mapInterviewError(error: unknown): InterviewActionFailure {
     : "GENERATION_FAILED";
   const rawMessage = error instanceof Error ? error.message : String(error);
   const message =
+    (mapped.startsWith("MANAGED_") ? translate(locale, `interview.errors.${mapped}`) : undefined) ??
     PRODUCT_MESSAGES[mapped] ??
     (isSecretLike(rawMessage) ? PRODUCT_MESSAGES.GENERATION_FAILED : rawMessage);
   return { success: false, code: mapped, message };

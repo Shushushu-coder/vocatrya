@@ -11,8 +11,6 @@ import {
 } from "@/lib/career";
 import { createJobFromNames } from "@/lib/jobs/createJobFromNames";
 import {
-  makeTestDbUrl,
-  pushSchema,
   resetDisposableDb,
   seedAccount,
 } from "./helpers/backupTestDb";
@@ -32,8 +30,18 @@ vi.mock("@/lib/ai/streaming-execution", () => ({
   checkStreamingTurnReadiness: vi.fn(),
 }));
 
-const ctx = makeTestDbUrl();
-process.env.DATABASE_URL = ctx.url;
+// The career barrel imports db before module body env assignment. Bind the
+// disposable database explicitly so a worktree needs no production .env.
+const ctx = await vi.hoisted(async () => {
+  const helpers = await import("./helpers/backupTestDb");
+  const ctx = helpers.makeTestDbUrl();
+  helpers.pushSchema(ctx.url);
+  return ctx;
+});
+vi.mock("@/lib/db", async () => {
+  const { PrismaClient } = await import("@prisma/client");
+  return { default: new PrismaClient({ datasources: { db: { url: ctx.url } } }) };
+});
 delete process.env[AB_RUNTIME_FEATURE_ENV];
 delete process.env[AB_ROLLOUT_SCOPE_ENV];
 
@@ -49,7 +57,6 @@ let getJob: typeof import("@/lib/career/jobsReadDispatch").getJob;
 let userId: string;
 
 beforeAll(async () => {
-  pushSchema(ctx.url);
   const dbMod = await import("@/lib/db");
   appPrisma = dbMod.default;
   buildAddJobTool = (await import("@/lib/agent/tools/addJob")).buildAddJobTool;

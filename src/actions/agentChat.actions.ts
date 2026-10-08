@@ -1,5 +1,7 @@
 "use server";
 
+import { rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+
 import { cancelConversationRequest, ConversationRequestError } from "@/lib/agent/conversationRequest";
 import type { UIMessage } from "ai";
 import prisma from "@/lib/db";
@@ -21,7 +23,7 @@ import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
 import { CHAT_LOCK_PURPOSE } from "@/lib/agent/chatConversationLock";
 import { resolveChatCreationLock } from "@/lib/agent/chatConversationLock";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
-import { AIBusinessError } from "@/lib/ai/connections";
+import { AIBusinessError, assertAccountExecutionIdentity } from "@/lib/ai/connections";
 import {
   checkStreamingExecutionReadiness,
   type AccountRuntimeCapabilities,
@@ -371,6 +373,10 @@ async function accountPreflight(input: {
     select: {
       id: true,
       provider: true,
+      authType: true,
+      credentialRef: true,
+      runtimeProfileRef: true,
+      accountIdentity: true,
       backendKind: true,
       displayName: true,
       status: true,
@@ -384,6 +390,7 @@ async function accountPreflight(input: {
       connectionId: input.connectionId,
     };
   }
+  assertAccountExecutionIdentity(connection);
   if (connection.status !== "CONNECTED") {
     return {
       kind: "blocked",
@@ -451,6 +458,12 @@ export const getAgentChatPreflight = async (input?: {
         };
       }
       const lock = chatLockFromRow(row);
+      if (lock.kind === "managed") {
+        const connection = lock.connectionId ? await prisma.aIConnection.findFirst({
+          where: { id: lock.connectionId, userId: user.id },
+        }) : null;
+        rejectManagedHistoricalExecution(lock, connection, user.id);
+      }
       if (lock.kind === "account") {
         return {
           success: true,

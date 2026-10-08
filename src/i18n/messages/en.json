@@ -2197,6 +2197,11 @@
     "invalidSigningOut": "Your session is no longer valid. Signing you out…"
   },
   "interview": {
+    "errors": {
+      "MANAGED_BINDING_UNAVAILABLE": "The AI configuration linked to this session is unavailable. Create a new session or reconfigure AI.",
+      "MANAGED_PROVENANCE_INVALID": "The AI configuration for this session is invalid. This session cannot continue.",
+      "MANAGED_EXECUTION_NOT_IMPLEMENTED": "The current AI service is not yet available for this feature."
+    },
     "title": "Interview practice",
     "startNew": "Start a new interview",
     "history": "Interview history",

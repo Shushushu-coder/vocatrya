@@ -2,9 +2,14 @@
 
 import { requireUser } from "./shared";
 import { getInterviewRuntime } from "@/lib/interview/runtime";
-import { mapInterviewError } from "@/lib/interview/productErrors";
+import { getServerLocale } from "@/i18n/server";
+import { mapInterviewError as mapProductError } from "@/lib/interview/productErrors";
 import { getInterviewReadiness } from "@/lib/interview/readiness";
 import type { CoachingMode } from "@/lib/interview/persistence/interviewEnums";
+
+async function mapInterviewError(error: unknown) {
+  return mapProductError(error, await getServerLocale());
+}
 
 function runtime() {
   return getInterviewRuntime();

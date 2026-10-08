@@ -188,6 +188,8 @@ describe("Vocatrya A+B phase 1 schema", () => {
         // ResumeVariantVersion — all created in the waves above — so it is
         // the last migration of the upgrade wave, not the legacy base.
         ACCOUNT_LOGIN_FOUNDATION_MIGRATION,
+        // M1 ALTERs these same foundation/Interview owners.
+        "add_managed_ai_core_contracts",
         // Resume items exist only after the foundation upgrade wave.
         RESUME_TITLE_SNAPSHOT_MIGRATION,
       ],
@@ -272,6 +274,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
       copyMigrationBySuffix(ctx.dir, PHASE3A_INTERVIEW_MIGRATION);
       copyMigrationBySuffix(ctx.dir, ACCOUNT_LOGIN_FOUNDATION_MIGRATION);
       copyMigrationBySuffix(ctx.dir, RESUME_TITLE_SNAPSHOT_MIGRATION);
+      copyMigrationBySuffix(ctx.dir, "add_managed_ai_core_contracts");
       migrateDeploy(ctx.url, schemaPath);
 
       expect(await prisma.job.count()).toBe(before.jobs);

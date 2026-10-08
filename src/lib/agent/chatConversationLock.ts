@@ -1,3 +1,4 @@
+import { managedLockFromRow, type ManagedHistoricalLock } from "@/lib/ai/managed-provenance";
 import "server-only";
 
 import prisma from "@/lib/db";
@@ -5,6 +6,7 @@ import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
 import {
   AIBusinessError,
   isAIBackendKind,
+  assertAccountExecutionIdentity,
   isSupportedAccountProviderForBackend,
 } from "@/lib/ai/connections";
 import { isRuntimeProfileRef } from "@/lib/ai/runtime/contract";
@@ -35,13 +37,17 @@ import type { ExplicitModelSelection } from "./chatTypes";
 export const CHAT_LOCK_PURPOSE = "CAREER_DIALOGUE" as const;
 
 export type ChatConversationLock =
+  | ManagedHistoricalLock
   | { kind: "account"; connectionId: string; model: string | null }
   | { kind: "legacy" };
 
 export function chatLockFromRow(row: {
   resolvedConnectionId: string | null;
   resolvedModel: string | null;
+  managedAiProvenance?: string | null;
 }): ChatConversationLock {
+  const managed = managedLockFromRow(row);
+  if (managed) return managed;
   if (row.resolvedConnectionId) {
     return {
       kind: "account",
@@ -98,6 +104,9 @@ export async function resolveExplicitChatSelection(
     select: {
       id: true,
       provider: true,
+      authType: true,
+      credentialRef: true,
+      accountIdentity: true,
       backendKind: true,
       status: true,
       runtimeProfileRef: true,
@@ -110,6 +119,7 @@ export async function resolveExplicitChatSelection(
       "The selected AI connection is not available",
     );
   }
+  assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;
