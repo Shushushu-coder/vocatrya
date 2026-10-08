@@ -54,7 +54,7 @@ export type AIStreamEvent =
     }
   | { type: "error"; code: string };
 
-export interface StreamExecutionInput extends Pick<ManagedDispatchInput, "managedAiProvenance" | "managedResource"> {
+export interface StreamExecutionInput extends Pick<ManagedDispatchInput, "managedAiProvenance" | "managedResource" | "operationId" | "invocationKey" | "attemptIndex"> {
   userId: string;
   connectionId: string;
   model: string;

@@ -1,9 +1,15 @@
-# M2 Hosted Managed AI
+# M3 Hosted Managed AI — Subscription / Entitlement / Quota / Durable Usage
 
 This is a separate trusted service, not a route in the desktop Next server.
 Deploy only its compiled service and shared wire contract on Node 22.13 or
 newer. It has no runtime npm dependencies. TLS termination, the authority
 database and gateway secrets belong to the hosted deployment.
+
+M3 adds the hosted commercial authority on top of the M2 hosted identity and
+binding authority: normalized Subscription, versioned Plan policy, derived
+Entitlement, atomic quota admission, and a durable invocation ledger with
+idempotent admission and conservative unknown settlement. No payment
+provider, price, plan product values, or subscription UI are selected here.
 
 ## Build and validate
 
@@ -31,101 +37,132 @@ Set these variables only in the hosted process:
 | `MANAGED_AI_API_KEY` | Hosted deployment secret |
 | `MANAGED_AI_DATABASE_PATH` | Absolute path to a persistent hosted SQLite database on a private volume |
 | `MANAGED_AI_CATALOG_PATH` | Absolute path to reviewed, versioned server catalog JSON |
+| `MANAGED_AI_PLAN_PATH` | Absolute path to reviewed, versioned server plan policy JSON |
 | `MANAGED_AI_ENABLED` | Must equal `true` in addition to the catalog switch |
+| `MANAGED_AI_UNKNOWN_SETTLEMENT_MS` | Optional unknown-reconciliation grace, 1000–3600000 ms, default 60000 |
 | `PORT` | Listener port, default 8787, behind TLS ingress |
 
-The example catalog is deliberately disabled and contains a placeholder
-upstream model. Replace the mapping in the hosted deployment and version its
-catalog and mapping revisions. Validate before starting; invalid configuration
-stops startup. No plan or entitlement enforcement occurs in M2.
+`catalog.example.json` and `plans.example.json` are synthetic and disabled by
+default. Replace mappings in the hosted deployment and version catalog,
+mapping and plan revisions. Startup validates model catalog, plan config,
+schema and gateway config together; invalid configuration stops startup.
 
-Start with `npm --prefix services/managed-ai start`, or run the compiled entry
-point directly. Bindings and sessions persist across process restarts. For
-this first deployment, use one service instance/private SQLite volume; do not
-share SQLite across unrelated hosts or expose the database over HTTP.
+## Schema migrations
 
-## Minimal hosted identity bridge
+The store runs an ordered, versioned migration runner
+(`HostedSchemaMigration`). Opening a fresh database creates the latest schema;
+opening an existing M2 database upgrades it in place without a destructive
+reset. Reapplying migrations is idempotent. Never add `CREATE TABLE IF NOT
+EXISTS` outside the migration list.
+Historical M2 columns, PK/FK, unique indexes and binding immutability trigger
+are validated before adoption; registered versions are also validated on open.
+Damaged schemas fail closed. Migration metadata commits only after validation.
 
-The trusted hosted operator/identity issuer provisions the hosted account and
-a 24-hour opaque session using the compiled `provision-session.js <hosted-account-id>`
-command. It uses the same hosted database configuration. Its stdout is the
-one-time credential transfer output; do not send it to application logs.
-Only its SHA-256 hash is persisted server-side. No public request can issue a
-session or select the authenticated user through a body `userId`.
+## Subscription and operator CLI
 
-Transfer that session to the desktop's trusted main-process login completion
-code. After `app.whenReady()`, import `desktop/main/hosted-session.js` and call
-`createHostedSessionStore({ directory, safeStorage }).save(localUserId, token)`.
-Use the same directory the main process uses: `path.join(stateRoot(), "hosted-sessions")`.
-This is an internal primitive, not renderer IPC. A future hosted login flow
-can call it after authenticated login; M2 intentionally adds no product UI.
-For developer verification, execute this call in the trusted Electron main
-process with the token received in memory, never as a command-line argument,
-settings value or environment variable. `clear(localUserId)` removes a local
-session; `HostedStore.revokeSession(token)` revokes hosted authority.
+Subscription status is one of `ACTIVE`, `PAST_DUE`, `CANCELED`, `EXPIRED`.
+Only a trusted operator mutates it. The compiled `operator-cli.js` exposes:
 
-The desktop starts a separate loopback credentials broker authenticated by
-its per-launch internal bearer. The server-only Next client requests a session
-for the current local business user; a different local user receives no token.
-The broker only transfers credentials to the local backend. Managed execution
-goes directly from that backend to Hosted and never uses an Electron execution
-ticket, runtime profile, CLI or persistent pool. Browser code never receives
-either credential.
+```sh
+node dist/services/managed-ai/src/operator-cli.js provision-subscription <hostedUserId> <planKey> <periodStart> <periodEnd> [--status ACTIVE]
+node dist/services/managed-ai/src/operator-cli.js set-subscription <hostedUserId> <planKey> <status> <periodStart> <periodEnd> [--source X] [--external-ref X] [--source-revision X] [--cancel-at-period-end] [--dry-run]
+node dist/services/managed-ai/src/operator-cli.js revoke-subscription <hostedUserId> [--dry-run]
+```
 
-Missing, expired, revoked and forged sessions fail closed. The issuer creates
-HostedUser independently of local User IDs; even coincidentally equal strings
-do not confer authority. Save fails when OS encryption is unavailable or uses
-Electron's insecure `basic_text` fallback. Ciphertext is outside the local
-database/uploads backup, and the local backup schema remains unchanged.
+It validates the plan key against the deployed plan policy and the status
+against the allowed set, complete period and existing HostedUser. Provision
+the user/session separately first. `--dry-run` opens an existing database
+read-only, validates the intended mutation and never creates or migrates a DB.
+Same source + revision + normalized payload is an idempotent no-op; changed
+payload under that revision is `SOURCE_REVISION_CONFLICT`. All payload fields,
+including external reference, are compared under the write lock. Revisions
+are opaque identifiers and are never ordered lexicographically. There is
+no authenticated HTTP endpoint that changes a subscription.
 
-## Desktop endpoint and internal bootstrap
+## Plan policy is the sole entitlement authority
 
-Production desktop releases use the reviewed code constant
-`https://managed.vocatrya.com`. This defines the deployment target; this change
-does not claim that DNS/TLS/service deployment is already provisioned. Change
-that constant in release source if the deployment uses another trusted domain.
-Normal users cannot edit it. Non-production code allows
-`VOCATRYA_DEV_HOSTED_ENDPOINT`, with HTTP restricted to loopback.
+`ManagedPlan` has `planKey`, `managedAiEnabled`, `allowedModels`,
+`periodQuotaUnits` and `modelUsageUnits`. The catalog `planRequirement` field
+is metadata only. Entitlement is derived per request from the authenticated
+user's current Subscription, the versioned plan policy and the current time;
+it is never persisted. Quota uses abstract integer `units`, never tokens or
+currency. A quota period is frozen to the subscription period and records the
+`planKey` and `planRevision` it was created with; updating the plan policy
+never silently rewrites an in-flight period.
 
-After a hosted session is valid, trusted application code can call
-`ensureManagedConnectionForLocalUser(localUserId)` to create/revalidate the
-frozen `VOCATRYA / MANAGED_GATEWAY / MANAGED` tuple. Public account CRUD and
-assignment setters remain protected; business/UI onboarding is deferred.
-Core resolution recognizes an internally assigned Managed connection.
+## Invocation admission, idempotency and settlement
 
-`HostedManagedClient.bind(userId, { business, resourceKey, modelKey })` returns
-strict M1 provenance. A resource has a single immutable binding. Pass that
-provenance to shared text/stream execution for historical resources, and
-persist the returned provenance in the existing business lock. A text call
-without a resource creates an invocation-specific binding; structured repair
-reuses the first attempt's binding. Client provenance is a snapshot: the
-Hosted service looks up the binding by its ID and authenticated owner.
+Authenticated invocation endpoints (`/v1/text`, `/v1/stream`,
+`/v1/structured`) require durable `operationId`, `invocationKey` and
+`attemptIndex`; a caller without a stable identity fails closed with
+`INVOCATION_ID_REQUIRED`. The operation must identify a durable business
+operation, not an assignment or binding. Transport retries reuse its binding,
+invocation key and attempt index. Structured repair increments attemptIndex
+with a separate key; regeneration supplies a new operationId. Validation of
+identity precedes binding mutation. Binding defaults to the operation resource
+when the caller supplies no durable resource.
 
-## Execution protocol
+Admission order: hosted auth → binding ownership/catalog/capability →
+`BEGIN IMMEDIATE` → unique invocation/hash replay → current subscription →
+derived entitlement/model allow-list → exact quota period → reservation →
+`COMMIT` → gateway network → short settlement transaction. The plan snapshot
+is immutable for this service instance; subscription and time are read once
+for admission. Replays do not reserve units or consult an exhausted quota.
+No network call happens inside the authority database transaction. Hashing
+uses canonical JSON with sorted object keys and includes endpoint mode,
+structured schema, business/resource, operation/attempt, frozen upstream model
+and output limit; transport IDs, timestamps and credentials are excluded.
 
-Authenticated endpoints are `/v1/session`, `/v1/catalog`, `/v1/bindings`,
-`/v1/text`, `/v1/structured`, and `/v1/stream`. Catalog DTOs exclude upstream
-mapping and deployment secrets. Binding/provenance responses include the
-historical mapping required by M1, never credentials or gateway configuration.
+The lifecycle is `NEW → RESERVED → RUNNING → SUCCEEDED / FAILED / UNKNOWN`.
+NEW is an unpersisted request. Settlement is `RESERVED → COMMITTED / RELEASED`.
+One `settleInvocation` primitive applies a settlement CAS and counter changes
+in the same transaction. Only a successful CAS changes counters. COMMITTED
+and RELEASED are terminal, and late results cannot overwrite terminal truth.
+An unusable generated response is FAILED with COMMITTED accounting.
+Hosted status describes upstream execution/response validation; subsequent
+local structured-schema validation has its own business result and does not
+rewrite Hosted execution truth or refund an executed invocation.
 
-Text and structured use a single compatible chat completion invocation.
-Structured schema prompting, strict parsing/schema validation and at most one
-repair remain in the existing application layer (`PROMPT_AND_VALIDATE`). Both
-attempts use the same immutable upstream mapping. The gateway receives no tools.
-Gateway SSE is incrementally normalized into Hosted NDJSON, with explicit
-completion/error and upstream cancellation on disconnect/consumer return.
-Both clients disable redirects. No raw upstream errors, headers or stacks
-are returned. No prompt/response logging was added.
+`UNIQUE(hostedUserId, invocationKey)` is the accounting idempotency gate.
+Same key + same request re-executes nothing; same key + different request is
+`INVOCATION_CONFLICT`; an `UNKNOWN` row is never retried. Success commits
+quota; a proven pre-dispatch rejection releases it; an executed-but-invalid
+response commits it. Generic 400/401/403/408/409/425/429/5xx, network and timeout
+after dispatch become UNKNOWN with reservation preserved. HTTP status alone
+is not proof of no execution. UNKNOWN never transitions to RELEASED from a
+late rejection. Startup recovers abandoned `RUNNING`/`RESERVED` rows to `UNKNOWN`, and
+stale `UNKNOWN` rows are conservatively committed after the grace interval —
+never released, so crash/retry can never become a free repeat call.
+The interval starts at UNKNOWN/recovery time. Repeated reconciliation and late
+completion are accounting no-ops after commit.
 
-Input is bounded by a conservative UTF-8 byte ceiling equal to the catalog's
-maxInputTokens (and an absolute 256 KiB prompt limit), rather than trusting a
-client token estimate. Gateway max_tokens uses the frozen output bound.
-This intentionally may reject some inputs below the advertised token count;
-a verified tokenizer can refine this policy later. This is an invocation size
-guard, not a quota or usage ledger. Provider usage metadata is not persisted.
+One active Hosted service per SQLite DB is enforced before startup recovery
+using an exclusive OS-released SQLite lock on the separate adjacent
+`.service-lock` file. This lock contains no authority data and does not block
+operator/admission transactions. Process exit/crash releases ownership. Keep
+that file on the same private local volume; multiple active services against
+one DB are rejected. Hard-link aliases and network filesystems are unsupported.
 
-Real gateway interoperability is deferred to M6. Synthetic tests cover HTTP,
-SSE, auth/expiry/ownership, frozen mappings, disable switches, malformed
-responses, model mismatch, rate limits, timeout, redirect safety and abort.
-Subscription/entitlement/quota/accounting are M3; complete business migration
-is M4; login/onboarding/model/product surfaces are M5.
+Responses distinguish EXECUTED, REPLAYED, IN_PROGRESS and UNKNOWN. Completed
+replays return receipts rather than stored model output. The local client and
+dispatcher preserve typed receipts on INVOCATION_REPLAYED,
+INVOCATION_IN_PROGRESS or INVOCATION_STATUS_UNKNOWN; callers must not invent
+a new key to obtain a second execution.
+
+## Public DTO endpoints
+
+`GET /v1/me/entitlement` returns derived status, plan, allowed models, period
+and quota summary. `GET /v1/me/usage` returns the current period summary only
+— never the internal ledger, prompt, response, gateway credential, or another
+user's data.
+Both DTOs read a consistent subscription/quota snapshot and match exact
+`hostedUserId, periodStart, periodEnd`. Before quota creation they report zero
+usage for that period. `planRevision` denotes current entitlement policy;
+`quotaPlanRevision` denotes the frozen accounting policy, or null before creation.
+
+## Deferred to M4/M5/M6
+
+No payment provider (Stripe/Paddle/WeChat/Alipay), no plan product values, no
+subscription or usage UI, no business migration of Interview / Career
+Dialogue / Resume / Match, and no real gateway E2E. Real gateway
+interoperability remains deferred to M6.

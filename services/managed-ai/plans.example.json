@@ -1,0 +1,12 @@
+{
+  "revision": "plans-v1",
+  "plans": [
+    {
+      "planKey": "starter",
+      "managedAiEnabled": true,
+      "allowedModels": ["vocatrya-fast"],
+      "periodQuotaUnits": 1000,
+      "modelUsageUnits": { "vocatrya-fast": 1 }
+    }
+  ]
+}

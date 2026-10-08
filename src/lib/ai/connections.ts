@@ -1,3 +1,4 @@
+import type { ManagedInvocationReceipt } from "./managed-contract";
 /**
  * Phase B account-login foundation — minimal registry seam for
  * AIConnection / AIBusinessAssignment.
@@ -358,6 +359,14 @@ export const AI_BUSINESS_ERROR_CODES = {
   MANAGED_BINDING_UNAVAILABLE: "MANAGED_BINDING_UNAVAILABLE",
   MANAGED_PROVENANCE_INVALID: "MANAGED_PROVENANCE_INVALID",
   MANAGED_EXECUTION_NOT_IMPLEMENTED: "MANAGED_EXECUTION_NOT_IMPLEMENTED",
+  NOT_ENTITLED: "NOT_ENTITLED",
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
+  MODEL_NOT_ALLOWED: "MODEL_NOT_ALLOWED",
+  INVOCATION_ID_REQUIRED: "INVOCATION_ID_REQUIRED",
+  INVOCATION_CONFLICT: "INVOCATION_CONFLICT",
+  INVOCATION_STATUS_UNKNOWN: "INVOCATION_STATUS_UNKNOWN",
+  INVOCATION_REPLAYED: "INVOCATION_REPLAYED",
+  INVOCATION_IN_PROGRESS: "INVOCATION_IN_PROGRESS",
   // Resolution outcomes.
   AI_NOT_CONFIGURED: "AI_NOT_CONFIGURED",
   // Explicitly assigned connection is gone, archived, or foreign-owned —
@@ -413,7 +422,7 @@ export type AIBusinessErrorCode =
 export class AIBusinessError extends Error {
   readonly code: AIBusinessErrorCode;
 
-  constructor(code: AIBusinessErrorCode, message: string) {
+  constructor(code: AIBusinessErrorCode, message: string, public readonly receipt?: ManagedInvocationReceipt) {
     super(message);
     this.name = "AIBusinessError";
     this.code = code;

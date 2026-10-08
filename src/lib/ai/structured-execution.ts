@@ -53,6 +53,8 @@ export interface StructuredExecutionInput {
   /** Per-attempt timeout; the shared `signal` bounds the whole operation. */
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Durable business operation identity. Defaults to assignment:${purpose}:${connectionId}. */
+  operationId?: string;
 }
 
 export type StructuredExecutionResult =
@@ -164,7 +166,7 @@ export async function executeStructuredForAssignment(
     schema,
     schemaName,
     signal,
-    execute: async ({ prompt: attemptPrompt, signal: attemptSignal }) => {
+    execute: async ({ prompt: attemptPrompt, signal: attemptSignal, attempt }) => {
       try {
         const outcome = await executeAIConnectionText(
           {
@@ -176,6 +178,8 @@ export async function executeStructuredForAssignment(
             structuredOutput: { schema, schemaName },
             timeoutMs,
             signal: attemptSignal,
+            operationId: input.operationId,
+            attemptIndex: attempt,
           },
           deps,
         );

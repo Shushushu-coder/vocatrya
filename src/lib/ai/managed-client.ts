@@ -1,5 +1,5 @@
 import "server-only";
-import { ManagedError, MANAGED_ERROR_CODES, type ManagedInvocation, type ManagedTextResult, type ManagedStreamEvent, type ManagedModelDTO } from "./managed-contract";
+import { ManagedError, MANAGED_ERROR_CODES, type ManagedInvocationReceipt, type ManagedInvocation, type ManagedTextResult, type ManagedStreamEvent, type ManagedModelDTO } from "./managed-contract";
 import { managedAiProvenanceV1Schema, type ManagedAiProvenanceV1 } from "./managed-provenance";
 
 // Release-owned endpoint. Changing it requires a reviewed release build.
@@ -25,6 +25,17 @@ function endpoint(): string {
   const dev = process.env.NODE_ENV !== "production" ? process.env.VOCATRYA_DEV_HOSTED_ENDPOINT : undefined;
   return dev ?? TRUSTED_HOSTED_MANAGED_ENDPOINT;
 }
+function receiptError(body: unknown, invocationKey?: string): ManagedError | null {
+  if (!body || typeof body !== "object") return null;
+  const value = body as Record<string, unknown>;
+  if (!["REPLAYED", "IN_PROGRESS", "UNKNOWN"].includes(String(value.executionState))) return null;
+  if (typeof value.invocationKey !== "string" || (invocationKey !== undefined && value.invocationKey !== invocationKey) ||
+      !["RESERVED", "RUNNING", "SUCCEEDED", "FAILED", "UNKNOWN"].includes(String(value.status)) ||
+      !["RESERVED", "COMMITTED", "RELEASED"].includes(String(value.settlement))) throw new ManagedError("GATEWAY_RESPONSE");
+  const receipt: ManagedInvocationReceipt = { executionState: value.executionState as ManagedInvocationReceipt["executionState"],
+    invocationKey: value.invocationKey, status: value.status as ManagedInvocationReceipt["status"], settlement: value.settlement as ManagedInvocationReceipt["settlement"] };
+  return new ManagedError(receipt.executionState === "UNKNOWN" ? "INVOCATION_STATUS_UNKNOWN" : receipt.executionState === "IN_PROGRESS" ? "INVOCATION_IN_PROGRESS" : "INVOCATION_REPLAYED", receipt);
+}
 export class HostedManagedClient {
   private readonly base: string;
   constructor(private readonly sessions: HostedSessionProvider = new DesktopHostedSessionProvider(), base = endpoint(), private readonly fetchImpl: typeof fetch = fetch) {
@@ -42,7 +53,7 @@ export class HostedManagedClient {
         body: body === undefined ? undefined : JSON.stringify(body), signal });
       if (!response.ok) {
         let code: unknown;
-        try { code = (await response.json())?.code; } catch { /* no raw errors */ }
+        try { const errorBody = await response.json(); const replay = receiptError(errorBody, (body as ManagedInvocation | undefined)?.invocationKey); if (replay) throw replay; code = errorBody?.code; } catch (error) { if (error instanceof ManagedError) throw error; /* no raw errors */ }
         throw new ManagedError((MANAGED_ERROR_CODES as readonly unknown[]).includes(code) ? code as typeof MANAGED_ERROR_CODES[number] : "MANAGED_RUNTIME_UNAVAILABLE");
       }
       return response;
@@ -68,11 +79,12 @@ export class HostedManagedClient {
   }
   async generateText(userId: string, input: ManagedInvocation, signal?: AbortSignal): Promise<ManagedTextResult> {
     const body = await (await this.request(userId, input.structuredOutput ? "structured" : "text", input, signal)).json();
+    const replay = receiptError(body, input.invocationKey); if (replay) throw replay;
     if (!body || typeof body.text !== "string" || body.model !== input.modelKey) throw new ManagedError("GATEWAY_RESPONSE");
     const parsed = managedAiProvenanceV1Schema.safeParse(body.provenance);
     if (!parsed.success || parsed.data.managedBindingId !== input.bindingId || parsed.data.requestedModelKey !== input.modelKey ||
       body.structuredStrategy !== (input.structuredOutput ? "PROMPT_AND_VALIDATE" : null) || (body.stopReason !== null && typeof body.stopReason !== "string")) throw new ManagedError("GATEWAY_RESPONSE");
-    return { text: body.text, model: body.model, provenance: parsed.data, structuredStrategy: body.structuredStrategy, stopReason: body.stopReason };
+    return { executionState: "EXECUTED", text: body.text, model: body.model, provenance: parsed.data, structuredStrategy: body.structuredStrategy, stopReason: body.stopReason };
   }
   async *streamText(userId: string, input: ManagedInvocation, signal?: AbortSignal): AsyncGenerator<ManagedStreamEvent> {
     const controller = new AbortController();
@@ -80,6 +92,10 @@ export class HostedManagedClient {
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
       const response = await this.request(userId, "stream", input, combined);
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        const replay = receiptError(await response.json(), input.invocationKey);
+        throw replay ?? new ManagedError("GATEWAY_RESPONSE");
+      }
       if (!response.body || !response.headers.get("content-type")?.includes("application/x-ndjson")) throw new ManagedError("GATEWAY_RESPONSE");
       reader = response.body.getReader(); const decoder = new TextDecoder("utf-8", { fatal: true }); let buffer = "", total = 0;
       while (true) {
@@ -98,7 +114,7 @@ export class HostedManagedClient {
           else if (event?.type === "completed") {
             const parsed = managedAiProvenanceV1Schema.safeParse(event.provenance);
             if (!parsed.success || event.model !== input.modelKey || parsed.data.managedBindingId !== input.bindingId || parsed.data.requestedModelKey !== input.modelKey || buffer.trim()) throw new ManagedError("GATEWAY_RESPONSE");
-            yield { type: "completed", model: event.model, provenance: parsed.data }; return;
+            yield { type: "completed", executionState: "EXECUTED", model: event.model, provenance: parsed.data }; return;
           } else throw new ManagedError("GATEWAY_RESPONSE");
         }
         if (buffer.length > 256 * 1024) throw new ManagedError("GATEWAY_RESPONSE");

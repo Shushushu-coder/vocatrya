@@ -158,7 +158,7 @@ describe("Managed local backup and execution boundaries", () => {
     }
     await expect(createVerifiedAccountConnection({ userId: ctx.userId, backendKind: "MANAGED_GATEWAY", verifiedProvider: "VOCATRYA", runtimeProfileRef: "rp_forged", accountIdentity: null }, prisma)).rejects.toMatchObject({ code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION" });
     const fetchImpl = vi.fn();
-    const input = { ...op, model: "stable-model-key", prompt: "hello" };
+    const input = { ...op, model: "stable-model-key", prompt: "hello", operationId: "backup-auth-probe" };
     await expect(executeAIConnectionText(input, { dbClient: prisma, fetchImpl })).rejects.toMatchObject({ code: "MANAGED_AUTH_REQUIRED" });
     await expect(executeAIConnectionTextStream(input, { dbClient: prisma, fetchImpl }).next()).rejects.toMatchObject({ code: "MANAGED_AUTH_REQUIRED" });
     expect(fetchImpl).not.toHaveBeenCalled();

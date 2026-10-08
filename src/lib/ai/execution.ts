@@ -46,7 +46,7 @@ const EXEC_URL_ENV = "VOCATRYA_DESKTOP_EXEC_URL";
 const INTERNAL_TOKEN_ENV = "VOCATRYA_DESKTOP_INTERNAL_TOKEN";
 const EXECUTE_PATH = "/internal/ai-connections/execute";
 
-export interface ExecuteAIConnectionTextInput extends Pick<ManagedDispatchInput, "managedAiProvenance" | "managedResource"> {
+export interface ExecuteAIConnectionTextInput extends Pick<ManagedDispatchInput, "managedAiProvenance" | "managedResource" | "operationId" | "invocationKey" | "attemptIndex"> {
   userId: string;
   connectionId: string;
   model: string;

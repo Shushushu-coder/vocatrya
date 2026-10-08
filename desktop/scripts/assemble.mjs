@@ -13,10 +13,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const DEFAULT_OUTPUT_ROOT = path.join(repoRoot, ".codex-tmp", "desktop-poc");
 const backendRoot = path.join(DEFAULT_OUTPUT_ROOT, "backend");
 
-function copyFiltered(source, destination) {
+export function copyFiltered(source, destination) {
   if (!fs.existsSync(source)) throw new Error(`Required build path is missing: ${source}`);
   fs.cpSync(source, destination, {
     recursive: true,
+    // Standalone dependencies may be directory links. Traverse them now so
+    // filtering covers descendants before electron-builder dereferences them.
+    dereference: true,
     filter: (entry) => !isForbiddenArtifact(entry),
   });
 }
