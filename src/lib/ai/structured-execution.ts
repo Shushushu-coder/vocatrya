@@ -53,7 +53,7 @@ export interface StructuredExecutionInput {
   /** Per-attempt timeout; the shared `signal` bounds the whole operation. */
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** Durable business operation identity. Defaults to assignment:${purpose}:${connectionId}. */
+  /** Durable business operation identity. Managed execution requires a caller-supplied id — none is synthesized; missing identity fails with INVOCATION_ID_REQUIRED. */
   operationId?: string;
 }
 

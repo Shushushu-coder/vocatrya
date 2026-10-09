@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { ModelCatalog, type ManagedCatalog } from "../src/catalog";
+import { ModelCatalog, validateCatalog, type ManagedCatalog } from "../src/catalog";
 import { HostedStore, provenance } from "../src/store";
 import { ManagedGatewayRuntime, VERIFIED_GATEWAY_CAPABILITIES } from "../src/gateway";
 import { HostedManagedService } from "../src/service";
@@ -73,6 +73,58 @@ describe("Hosted identity and immutable authority", () => {
     const raw = new DatabaseSync(file); cleanup.push(() => raw.close());
     expect(() => raw.prepare("UPDATE ManagedAiBinding SET modelKey='x' WHERE id=?").run(binding.id)).toThrow();
   });
+  it("executes old binding with exact historical mapping after catalog update; new binding uses new mapping", async () => {
+    const { db, token, service } = fixture(); provision(db, "hosted-a", "ACTIVE");
+    const old = await bind(service, token, "old");
+    const changed = catalogConfig(); changed.revision = "catalog-2"; changed.models[0].upstreamModelId = "vendor-v2"; changed.models[0].mappingRevision = "mapping-2";
+    const models: string[] = [];
+    const runtime = gateway(async (_url, init) => { const model = JSON.parse(String(init?.body)).model; models.push(model); return fakeText(model); });
+    const nextService = new HostedManagedService(db, new ModelCatalog(changed, VERIFIED_GATEWAY_CAPABILITIES), new PlanAuthority(planConfig()), runtime);
+    const next = await bind(nextService, token, "new");
+    for (const [snapshot, op] of [[old, "op-old"], [next, "op-new"]] as const) {
+      const result = await (await call(nextService, token, "text", invokeBody(snapshot.managedBindingId, { operationId: op, invocationKey: `${op}:0` }))).json();
+      expect(result.provenance).toEqual(snapshot);
+    }
+    expect(models).toEqual(["vendor-v1", "vendor-v2"]);
+  });
+});
+
+describe("Versioned catalog", () => {
+  it("rejects duplicate keys, bad revision, limits, capabilities, defaults, upstream mappings and tools", () => {
+    const variants = [
+      (c: ManagedCatalog) => c.models.push(c.models[0]), (c: ManagedCatalog) => { c.models[0].mappingRevision = " "; },
+      (c: ManagedCatalog) => { c.models[0].upstreamModelId = ""; }, (c: ManagedCatalog) => { c.models[0].maxInputTokens = -1; },
+      (c: ManagedCatalog) => { c.defaultModelKey = "unknown"; }, (c: ManagedCatalog) => { c.models[0].capabilities.tools = true; },
+      (c: ManagedCatalog) => { c.models[0].capabilities.text = "true" as unknown as boolean; },
+    ];
+    for (const change of variants) { const c = catalogConfig(); change(c); expect(() => validateCatalog(c)).toThrow(); }
+  });
+  it("fails closed for kill switch, disabled/unknown model and unverified capabilities", async () => {
+    const c = catalogConfig(); c.managedAiEnabled = false;
+    expect(() => new ModelCatalog(c, VERIFIED_GATEWAY_CAPABILITIES).resolve("vocatrya-fast")).toThrow(expect.objectContaining({ code: "MANAGED_AI_DISABLED" }));
+    c.managedAiEnabled = true; c.models[0].enabled = false;
+    expect(() => new ModelCatalog(c, VERIFIED_GATEWAY_CAPABILITIES).resolve("vocatrya-fast")).toThrow(expect.objectContaining({ code: "MODEL_DISABLED" }));
+    c.models[0].enabled = true;
+    const catalog = new ModelCatalog(c, { ...VERIFIED_GATEWAY_CAPABILITIES, streaming: false });
+    expect(() => catalog.resolve("vocatrya-fast", "streaming")).toThrow(expect.objectContaining({ code: "CAPABILITY_UNSUPPORTED" }));
+    expect(() => catalog.resolve("unknown")).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
+    expect(JSON.stringify(catalog.dto())).not.toMatch(/upstreamModelId|vendor-v1|mappingRevision|gateway|apiKey/);
+    let calls = 0;
+    const db = store(); const token = db.issueSession("hosted-a", Date.now() + 60000);
+    provision(db, "hosted-a", "ACTIVE");
+    const plans = new PlanAuthority(planConfig());
+    const enabled = new HostedManagedService(db, new ModelCatalog(catalogConfig(), VERIFIED_GATEWAY_CAPABILITIES), plans, gateway(async () => { calls += 1; return fakeText(); }));
+    const snapshot = await bind(enabled, token);
+    const disabled = new HostedManagedService(db, new ModelCatalog(catalogConfig({ managedAiEnabled: false }), VERIFIED_GATEWAY_CAPABILITIES), plans, gateway(async () => { calls += 1; return fakeText(); }));
+    expect(await (await call(disabled, token, "text", invokeBody(snapshot.managedBindingId))).json()).toMatchObject({ code: "MANAGED_AI_DISABLED" });
+    expect(calls).toBe(0);
+  });
+  it("rejects new executions of historical bindings when model is disabled", async () => {
+    const { db, token, service } = fixture(); const snapshot = await bind(service, token);
+    const c = catalogConfig(); c.models[0].enabled = false;
+    const disabled = new HostedManagedService(db, new ModelCatalog(c, VERIFIED_GATEWAY_CAPABILITIES), new PlanAuthority(planConfig()), gateway());
+    expect(await (await call(disabled, token, "text", invokeBody(snapshot.managedBindingId))).json()).toMatchObject({ code: "MODEL_DISABLED" });
+  });
 });
 
 describe("Gateway model alias verification", () => {
@@ -82,6 +134,61 @@ describe("Gateway model alias verification", () => {
     const input = { bindingId: binding.id, modelKey: binding.modelKey, prompt: "x", operationId: "op-1", invocationKey: "op-1:0", attemptIndex: 0 };
     expect((await gateway(async () => fakeText("verified-alias")).generateText(binding, input)).model).toBe(binding.modelKey);
     await expect(gateway(async () => fakeText("unlisted-alias")).generateText(binding, input)).rejects.toMatchObject({ code: "GATEWAY_RESPONSE" });
+  });
+});
+
+describe("Synthetic gateway protocol and redaction", () => {
+  it("executes real HTTP text/structured, freezes actual mapping, limits output and keeps secrets hosted-only", async () => {
+    let upstreamBody: Record<string, unknown> = {};
+    const upstream = await listen(createServer(async (req, res) => {
+      expect(req.headers.authorization).toBe(`Bearer ${secret}`);
+      const chunks = []; for await (const chunk of req) chunks.push(chunk);
+      upstreamBody = JSON.parse(Buffer.concat(chunks).toString());
+      res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ model: "vendor-v1", choices: [{ message: { content: '{"ok":true}' }, finish_reason: "stop" }] }));
+    }));
+    const { db, token, catalog } = fixture();
+    provision(db, "hosted-a", "ACTIVE");
+    const runtime = new ManagedGatewayRuntime({ baseUrl: upstream, apiKey: secret, allowLoopbackForTests: true });
+    const base = await listen(createHostedServer(new HostedManagedService(db, catalog, new PlanAuthority(planConfig()), runtime)));
+    const snapshot = await (await fetch(`${base}/v1/bindings`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ modelKey: "vocatrya-fast", business: "RESUME", resourceKey: "real-http" }) })).json();
+    for (const [path, op] of [["text", "op-text"], ["structured", "op-structured"]] as const) {
+      const body = invokeBody(snapshot.managedBindingId, { operationId: op, invocationKey: `${op}:0`, ...(path === "structured" ? { structuredOutput: { schema: { type: "object" }, schemaName: "test" } } : {}) });
+      const response = await fetch(`${base}/v1/${path}`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+      const result = await response.json(); expect(result.text).toBe('{"ok":true}');
+      expect(result.provenance).toEqual(snapshot); expect(JSON.stringify(result)).not.toContain(secret);
+      expect(upstreamBody).toMatchObject({ model: "vendor-v1", max_tokens: 100, stream: false });
+    }
+  });
+  it.each([[401, "GATEWAY_AUTH"], [403, "GATEWAY_AUTH"], [429, "GATEWAY_RATE_LIMIT"], [500, "GATEWAY_RESPONSE"]])("normalizes status %s without raw body or headers", async (status, code) => {
+    const { db, token, service } = fixture(async () => new Response(`Authorization: ${secret} stack vendor dump`, { status: Number(status), headers: { "x-secret": secret } }));
+    provision(db, "hosted-a", "ACTIVE");
+    const snapshot = await bind(service, token);
+    const response = await call(service, token, "text", invokeBody(snapshot.managedBindingId));
+    expect(await response.json()).toEqual({ code, message: code });
+  });
+  it.each([() => new Response("{bad"), () => fakeText("unexpected"), () => Response.json({ model: "vendor-v1", choices: [] }), () => Response.json({ model: "vendor-v1", choices: { 0: { message: { content: "fake" }, finish_reason: "stop" } } })])("rejects malformed or mismatched gateway results", async factory => {
+    const { db, token, service } = fixture(async () => factory()); provision(db, "hosted-a", "ACTIVE");
+    const snapshot = await bind(service, token);
+    expect(await (await call(service, token, "text", invokeBody(snapshot.managedBindingId, { prompt: "x" }))).json()).toMatchObject({ code: "GATEWAY_RESPONSE" });
+  });
+  it("never copies auth into redirects, normalizes network and timeouts", async () => {
+    let leaked = false;
+    const target = await listen(createServer((_req, res) => { leaked = true; res.end(); }));
+    const redirect = await listen(createServer((_req, res) => { res.writeHead(307, { location: target }); res.end(); }));
+    const db = store(); db.issueSession("a", Date.now() + 60000); const binding = db.createBinding("a", "RESUME", "x", catalogConfig().models[0]);
+    const input = { bindingId: binding.id, modelKey: binding.modelKey, prompt: "x", operationId: "op-1", invocationKey: "op-1:0", attemptIndex: 0 };
+    await expect(new ManagedGatewayRuntime({ baseUrl: redirect, apiKey: secret, allowLoopbackForTests: true }).generateText(binding, input)).rejects.toMatchObject({ code: "GATEWAY_NETWORK" });
+    expect(leaked).toBe(false);
+    const slow = await listen(createServer(() => undefined));
+    await expect(new ManagedGatewayRuntime({ baseUrl: slow, apiKey: secret, timeoutMs: 20, allowLoopbackForTests: true }).generateText(binding, input)).rejects.toMatchObject({ code: "GATEWAY_TIMEOUT" });
+    await expect(gateway(async () => { throw new Error(secret); }).generateText(binding, input)).rejects.toMatchObject({ code: "GATEWAY_NETWORK", message: "GATEWAY_NETWORK" });
+  });
+  it("does not fake success for malformed structured content; application layer receives text for validation", async () => {
+    const { db, token, service } = fixture(async () => fakeText("vendor-v1", "{malformed-json")); provision(db, "hosted-a", "ACTIVE");
+    const snapshot = await bind(service, token);
+    const result = await (await call(service, token, "structured", invokeBody(snapshot.managedBindingId, { prompt: "schema prompt", structuredOutput: { schema: { type: "object" }, schemaName: "test" } }))).json();
+    expect(result).toMatchObject({ text: "{malformed-json", structuredStrategy: "PROMPT_AND_VALIDATE" });
+    expect(() => JSON.parse(result.text)).toThrow();
   });
 });
 
