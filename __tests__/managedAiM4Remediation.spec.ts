@@ -35,7 +35,7 @@ import { HostedManagedClient } from "@/lib/ai/managed-client";
 import { assignManagedBusinessSource } from "@/lib/ai/assignments";
 import { bootstrapManagedAiForUser } from "@/lib/ai/managed-bootstrap";
 import { bindManagedBusinessLock } from "@/lib/ai/business-execution-lock";
-import { AIBusinessError } from "@/lib/ai/connections";
+import { AIBusinessError, AI_BUSINESS_ERROR_CODES } from "@/lib/ai/connections";
 import type { ManagedAiProvenanceV1 } from "@/lib/ai/managed-provenance";
 import {
   executeDurableResumeImport,
@@ -95,7 +95,10 @@ const CATALOG = {
   ],
 };
 
-function hosted(upstream?: typeof fetch) {
+function hosted(
+  upstream?: typeof fetch,
+  intercept?: (response: Response, request: Request) => Response,
+) {
   let upstreamCalls = 0;
   const countUpstream = (impl?: typeof fetch): typeof fetch =>
     async (url, init) => {
@@ -148,7 +151,8 @@ function hosted(upstream?: typeof fetch) {
     async (url, init) => {
       const request = new Request(String(url), init);
       requests.push(request.clone());
-      return service.handle(request);
+      const response = await service.handle(request);
+      return intercept ? intercept(response, request) : response;
     },
   );
   return { client, store, requests, upstreamCalls: () => upstreamCalls };
@@ -168,6 +172,10 @@ const seam = vi.hoisted(() => ({
   resumeText: "resume-v1",
   jobText: "jd-v1",
   scores: [88, 91, 77],
+  /** When set, the execution seam throws AIBusinessError(forceCode). */
+  forceCode: null as string | null,
+  /** Every operationId the seam was asked to execute, in order. */
+  operations: [] as Array<string | undefined>,
 }));
 
 vi.mock("@/actions/shared", () => ({
@@ -210,11 +218,19 @@ vi.mock("@/lib/ai/execution", async (importOriginal) => {
     executeAIConnectionText: (
       input: Parameters<typeof actual.executeAIConnectionText>[0],
       deps?: Parameters<typeof actual.executeAIConnectionText>[1],
-    ) =>
-      actual.executeAIConnectionText(input, {
+    ) => {
+      seam.operations.push(input.operationId);
+      if (seam.forceCode) {
+        throw new AIBusinessError(
+          seam.forceCode as AIBusinessErrorCode,
+          seam.forceCode,
+        );
+      }
+      return actual.executeAIConnectionText(input, {
         managedClient: seam.client ?? undefined,
         ...deps,
-      }),
+      });
+    },
   };
 });
 
@@ -396,6 +412,199 @@ describe("P1-01 resume canonical import durable identity", () => {
           where: { id: requestId },
         })).state,
       ).toBe("CONFIRMED");
+    } finally {
+      store.close();
+    }
+  });
+});
+
+// --------------------------------------------------- ambiguous failures --
+describe("P1-01 ambiguous failure preserves invocation identity", () => {
+  const importJsonUpstream = async () =>
+    Response.json({
+      model: "vendor-v1",
+      choices: [
+        {
+          message: { content: JSON.stringify(importFixture) },
+          finish_reason: "stop",
+        },
+      ],
+    });
+  const requestSha = createHash("sha256").update(importRawText).digest("hex");
+  const execution = {
+    prompt: "import",
+    schema: canonicalImportJsonSchema() as Record<string, unknown>,
+    schemaName: "canonical_resume_import",
+  };
+
+  it.each([
+    ["INVOCATION_REPLAYED", true],
+    ["INVOCATION_CONFLICT", true],
+    ["STRUCTURED_OUTPUT_SCHEMA_FAILED", true],
+    ["STRUCTURED_OUTPUT_PARSE_FAILED", true],
+    ["STRUCTURED_OUTPUT_RETRY_EXHAUSTED", true],
+    ["STRUCTURED_OUTPUT_TRUNCATED", true],
+    ["MANAGED_PROVENANCE_INVALID", true],
+    ["MANAGED_RUNTIME_UNAVAILABLE", false],
+    ["GATEWAY_TIMEOUT", false],
+    ["GATEWAY_NETWORK", false],
+    ["GATEWAY_RESPONSE", false],
+    ["GATEWAY_AUTH", false],
+    ["MANAGED_AUTH_REQUIRED", false],
+    ["QUOTA_EXCEEDED", false],
+    ["NOT_ENTITLED", false],
+    ["AI_EXECUTION_FAILED", false],
+    ["AI_EXECUTION_TIMEOUT", false],
+    ["INVOCATION_STATUS_UNKNOWN", false],
+    ["INVOCATION_IN_PROGRESS", false],
+    // §6 fail-safe: an unclassified future code must never rotate.
+    ["SOME_FUTURE_UNCLASSIFIED_CODE", false],
+  ] satisfies ReadonlyArray<readonly [string, boolean]>)(
+    "%s rotates executionSeq=%s",
+    async (code, expectRotate) => {
+      const { client, store } = hosted(importJsonUpstream);
+      try {
+        await clearAssignments();
+        await assignManagedBusinessSource(
+          { userId, purpose: "RESUME", modelKey: "vocatrya-fast" },
+          { managedClient: client, dbClient: prisma },
+        );
+        const requestId = `imp-${randomUUID().slice(0, 12)}`;
+        // Codes outside the business taxonomy are collapsed to
+        // AI_EXECUTION_FAILED at the execution seam — the preserved
+        // identity decision then applies to that canonical code.
+        const surfaced = (
+          Object.values(AI_BUSINESS_ERROR_CODES) as string[]
+        ).includes(code)
+          ? code
+          : AI_BUSINESS_ERROR_CODES.AI_EXECUTION_FAILED;
+        seam.forceCode = code;
+        seam.operations = [];
+        try {
+          const first = await executeDurableResumeImport(
+            prisma,
+            { userId, requestId, requestSha, execution },
+            { managedClient: client },
+          );
+          expect(first).toMatchObject({ kind: "failed", code: surfaced });
+          const attempt = await prisma.resumeImportAttempt.findUniqueOrThrow({
+            where: { id: requestId },
+          });
+          // §7: FAILED state, but the billable identity only rotates when
+          // the failure proves the prior invocation settled or is poisoned.
+          expect(attempt.state).toBe("FAILED");
+          expect(attempt.executionSeq).toBe(expectRotate ? 1 : 0);
+
+          // §8: an immediate retry of the same requestId must reuse the
+          // same operation identity unless the failure authorized rotation.
+          const second = await executeDurableResumeImport(
+            prisma,
+            { userId, requestId, requestSha, execution },
+            { managedClient: client },
+          );
+          expect(second).toMatchObject({ kind: "failed", code: surfaced });
+          expect(seam.operations).toEqual([
+            `resume-import:${requestId}:0:import`,
+            expectRotate
+              ? `resume-import:${requestId}:1:import`
+              : `resume-import:${requestId}:0:import`,
+          ]);
+        } finally {
+          seam.forceCode = null;
+          seam.operations = [];
+        }
+      } finally {
+        store.close();
+      }
+    },
+  );
+
+  it("ambiguous post-dispatch failure replays the same invocation — no second usage row or model call", async () => {
+    // §11: the dispatch reaches Hosted and commits usage, then the
+    // response is dropped — the client sees MANAGED_RUNTIME_UNAVAILABLE.
+    let dropped = false;
+    const { client, store, requests, upstreamCalls } = hosted(
+      importJsonUpstream,
+      (response, request) => {
+        if (
+          !dropped &&
+          new URL(request.url).pathname === "/v1/structured"
+        ) {
+          dropped = true;
+          return Response.json({ code: "oops" }, { status: 503 });
+        }
+        return response;
+      },
+    );
+    try {
+      await clearAssignments();
+      await assignManagedBusinessSource(
+        { userId, purpose: "RESUME", modelKey: "vocatrya-fast" },
+        { managedClient: client, dbClient: prisma },
+      );
+      const requestId = `imp-${randomUUID().slice(0, 12)}`;
+      const key0 = `resume-import:${requestId}:0:import:0`;
+      const call = () =>
+        executeDurableResumeImport(
+          prisma,
+          { userId, requestId, requestSha, execution },
+          { managedClient: client },
+        );
+
+      // 1. Dispatch commits usage at Hosted, response lost in flight.
+      const first = await call();
+      expect(first).toMatchObject({
+        kind: "failed",
+        code: "MANAGED_RUNTIME_UNAVAILABLE",
+      });
+      let attempt = await prisma.resumeImportAttempt.findUniqueOrThrow({
+        where: { id: requestId },
+      });
+      expect(attempt).toMatchObject({ state: "FAILED", executionSeq: 0 });
+      const settled = store.usage("hosted-a", key0);
+      expect(settled).toMatchObject({ status: "SUCCEEDED" });
+      expect(settled?.chargedUnits).toBe(1);
+      expect(upstreamCalls()).toBe(1);
+
+      // 2. Retry replays the same invocation identity — the ledger
+      //    returns the settled receipt; no second usage row, no second
+      //    model call.
+      const second = await call();
+      expect(second).toMatchObject({
+        kind: "failed",
+        code: "INVOCATION_REPLAYED",
+      });
+      attempt = await prisma.resumeImportAttempt.findUniqueOrThrow({
+        where: { id: requestId },
+      });
+      // REPLAYED proves settlement → the identity is spent; rotate once.
+      expect(attempt).toMatchObject({ state: "FAILED", executionSeq: 1 });
+      expect(upstreamCalls()).toBe(1);
+      expect(
+        store.usage("hosted-a", `resume-import:${requestId}:1:import:0`),
+      ).toBeNull();
+
+      // 3. §9/§12: only the next explicit user Retry mints a new,
+      //    deliberately-billable operation — no automatic second call
+      //    ever happened inside the replayed retry itself.
+      const third = await call();
+      expect(third).toMatchObject({ kind: "ok", replayed: false });
+      expect(upstreamCalls()).toBe(2);
+      // Read recorded request bodies once — each stored Request is
+      // single-use.
+      const bodies = await Promise.all(
+        callsTo(requests, "/v1/structured").map((r) => r.json()),
+      );
+      expect(bodies.map((b) => b.invocationKey)).toEqual([
+        key0,
+        key0,
+        `resume-import:${requestId}:1:import:0`,
+      ]);
+      expect(bodies.map((b) => b.operationId)).toEqual([
+        `resume-import:${requestId}:0:import`,
+        `resume-import:${requestId}:0:import`,
+        `resume-import:${requestId}:1:import`,
+      ]);
     } finally {
       store.close();
     }

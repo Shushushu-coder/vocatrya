@@ -52,6 +52,42 @@ const businessKey = (requestId: string) => `resume-version:${requestId}`;
 const operationIdFor = (requestId: string, executionSeq: number) =>
   `resume-import:${requestId}:${executionSeq}:import`;
 
+/**
+ * Failure codes that prove the prior invocation is definitively settled
+ * — or that the current identity itself is unusable — and may therefore
+ * rotate `executionSeq` so the next retry is a deliberately new
+ * billable operation:
+ *
+ *   INVOCATION_REPLAYED        settled receipt seen; payload unrecoverable
+ *   INVOCATION_CONFLICT        the key is poisoned by an incompatible request
+ *   MANAGED_PROVENANCE_INVALID the locked binding is unusable, never reuse
+ *   STRUCTURED_OUTPUT_{SCHEMA_FAILED,PARSE_FAILED,RETRY_EXHAUSTED,TRUNCATED}
+ *                              a model response was received and failed
+ *                              local validation — the call provably ran
+ *
+ * Every other failure is ambiguous: the Hosted ledger may still hold a
+ * RESERVED/RUNNING/COMMITTED invocation for this key (transport drops,
+ * timeouts, auth/quota rejections all surface here). Rotating on an
+ * ambiguous failure converts the next retry into a second billable call
+ * for the same logical import — the P1-01 crash window reopened — so the
+ * default is ALWAYS preserve.
+ */
+const ROTATABLE_FAILURE_CODES = new Set<string>([
+  AI_BUSINESS_ERROR_CODES.INVOCATION_REPLAYED,
+  AI_BUSINESS_ERROR_CODES.INVOCATION_CONFLICT,
+  AI_BUSINESS_ERROR_CODES.MANAGED_PROVENANCE_INVALID,
+  AI_BUSINESS_ERROR_CODES.STRUCTURED_OUTPUT_SCHEMA_FAILED,
+  AI_BUSINESS_ERROR_CODES.STRUCTURED_OUTPUT_PARSE_FAILED,
+  AI_BUSINESS_ERROR_CODES.STRUCTURED_OUTPUT_RETRY_EXHAUSTED,
+  AI_BUSINESS_ERROR_CODES.STRUCTURED_OUTPUT_TRUNCATED,
+]);
+
+export function shouldRotateResumeImportExecutionIdentity(
+  code: string,
+): boolean {
+  return ROTATABLE_FAILURE_CODES.has(code);
+}
+
 /** Same request id carrying different source content is a caller bug. */
 function assertSameImport(
   attempt: { requestSha: string } | null,
@@ -236,19 +272,19 @@ export async function executeDurableResumeImport(
 
   const code =
     result.status === "NOT_CONFIGURED" ? "NOT_CONFIGURED" : result.code;
-  if (
-    code === AI_BUSINESS_ERROR_CODES.INVOCATION_STATUS_UNKNOWN ||
-    code === AI_BUSINESS_ERROR_CODES.INVOCATION_IN_PROGRESS
-  ) {
-    // Ambiguous/in-flight: keep the same operation identity so a retry
-    // replays the same invocation instead of minting a billable one.
-    return { kind: "failed", code };
-  }
-  // Definitively failed 鈥?the settled invocation replays its failure
-  // forever at the Hosted ledger, so the next retry is a new operation.
+  // FAILED is a state, not permission to mint a new invocation. Only a
+  // provably-settled or poisoned identity may rotate; ambiguous outcomes
+  // (network drop after dispatch, timeout, ledger rejection) keep the
+  // same operationId/invocationKey so the next retry replays the
+  // original invocation at the Hosted ledger instead of billing twice.
   await db.resumeImportAttempt.update({
     where: { id: requestId },
-    data: { state: "FAILED", executionSeq: { increment: 1 } },
+    data: {
+      state: "FAILED",
+      ...(shouldRotateResumeImportExecutionIdentity(code)
+        ? { executionSeq: { increment: 1 } }
+        : {}),
+    },
   });
   return { kind: "failed", code };
 }
