@@ -27,6 +27,7 @@ import {
   type SummarySchedulerDeps,
 } from "@/lib/agent/conversationSummaryScheduler";
 import type { SummaryRepository } from "@/lib/agent/conversationSummaryStore";
+import type { ManagedAiProvenanceV1 } from "@/lib/ai/managed-provenance";
 
 const USER = "user-1";
 const CONVERSATION = "conv-1";
@@ -72,12 +73,14 @@ function memoryRepository(seed?: {
   summary?: ConversationSummaryRecord | null;
   resolvedConnectionId?: string | null;
   resolvedModel?: string | null;
+  managed?: { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 };
 }): SummaryRepository & {
   state: {
     messages: UIMessage[];
     summary: ConversationSummaryRecord | null;
     resolvedConnectionId: string | null;
     resolvedModel: string | null;
+    managed: { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 } | undefined;
   };
 } {
   const state = {
@@ -85,6 +88,7 @@ function memoryRepository(seed?: {
     summary: seed?.summary ?? null,
     resolvedConnectionId: seed?.resolvedConnectionId === undefined ? "conn-locked" : seed.resolvedConnectionId,
     resolvedModel: seed?.resolvedModel === undefined ? "model-locked" : seed.resolvedModel,
+    managed: seed?.managed,
   };
   return {
     state,
@@ -94,6 +98,7 @@ function memoryRepository(seed?: {
         summary: state.summary,
         resolvedConnectionId: state.resolvedConnectionId,
         resolvedModel: state.resolvedModel,
+        managed: state.managed,
       };
     },
     async commit(_userId, _conversationId, attempt) {
@@ -506,6 +511,50 @@ describe("career dialogue summary scheduler", () => {
     });
     expect(locked.state.summary?.text ?? null).toBeNull();
     expect(locked.state.resolvedModel).toBe("model-locked");
+  });
+
+  it("forwards the managed binding and deterministic operation identity to summary execution", async () => {
+    const messages = dialogue(8);
+    const provenance: ManagedAiProvenanceV1 = {
+      schemaVersion: 1,
+      managedBindingId: "binding-1",
+      requestedModelKey: "model-locked",
+      upstreamModelId: "upstream-model-1",
+      mappingRevision: "rev-1",
+      adapterContractRevision: "rev-1",
+    };
+    const repo = memoryRepository({
+      messages,
+      resolvedConnectionId: "conn-managed",
+      resolvedModel: "model-locked",
+      managed: { connectionId: "conn-managed", model: "model-locked", provenance },
+    });
+    const executeText = mockExecute(async () => ({ text: "托管摘要：保留目标。" }));
+    const result = await condenseCareerDialogueSummary(
+      { userId: USER, conversationId: CONVERSATION },
+      depsFor(repo, executeText),
+    );
+    expect(result.status).toBe("committed");
+    const input = executeText.mock.calls[0]?.[0];
+    expect(input).toMatchObject({
+      connectionId: "conn-managed",
+      model: "model-locked",
+      managedAiProvenance: provenance,
+      managedResource: {
+        business: "CAREER_DIALOGUE",
+        resourceKey: `conversation:${CONVERSATION}`,
+      },
+      attemptIndex: 0,
+    });
+    // Coverage delta determines the operation identity — replaying the same
+    // summary coverage replays the same Hosted operation.
+    const committed = repo.state.summary;
+    const expectedHash = hashSummaryCoverage(
+      messages.slice(0, committed?.coveredCount ?? 0),
+    );
+    expect(input?.operationId).toBe(
+      `dialogue:${CONVERSATION}:summary:${expectedHash.slice(0, 16)}`,
+    );
   });
 
   it("regenerates a summary whose prompt version is not current", async () => {

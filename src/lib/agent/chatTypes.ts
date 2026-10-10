@@ -35,6 +35,18 @@ export type AgentChatPreflight =
       displayName: string;
       locked: boolean;
     }
+  | {
+      /**
+       * Managed (Hosted) source — runs through the bound Managed
+       * connection/model with the conversation's provenance; no desktop
+       * runtime gate applies.
+       */
+      kind: "managed";
+      connectionId: string;
+      model: string;
+      displayName: string;
+      locked: boolean;
+    }
   | { kind: "blocked"; code: string; connectionId?: string }
   | { kind: "legacy"; model: string | null; persisted: boolean };
 

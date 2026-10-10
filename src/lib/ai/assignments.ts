@@ -43,6 +43,9 @@ import {
   getInterviewConfig,
   type InterviewContainer,
 } from "@/lib/interview/interviewSettings";
+import { HostedManagedClient } from "@/lib/ai/managed-client";
+import { managedBusinessError } from "@/lib/ai/managed-dispatch";
+import { ensureManagedConnectionForLocalUser } from "@/lib/ai/managed-bootstrap";
 import type { PrismaClient } from "@prisma/client";
 
 type DbClient = Pick<
@@ -341,6 +344,11 @@ export class AssignmentWriteError extends Error {
  * unreachable the assignment is refused rather than saved as silently
  * compatible.
  */
+export interface BusinessAssignmentDeps extends StreamExecutionDeps {
+  /** Injected for tests; production uses the default Hosted client. */
+  managedClient?: HostedManagedClient;
+}
+
 export async function setBusinessAssignment(
   {
     userId,
@@ -354,7 +362,7 @@ export async function setBusinessAssignment(
     model: string;
   },
   dbClient: DbClient = prisma,
-  deps: StreamExecutionDeps = {},
+  deps: BusinessAssignmentDeps = {},
 ): Promise<BusinessAssignmentSummary> {
   if (!isAIAssignmentPurpose(purpose)) {
     throw new AssignmentWriteError("INVALID_PURPOSE", "Unknown assignment purpose");
@@ -390,24 +398,38 @@ export async function setBusinessAssignment(
       "Connection is archived",
     );
   }
-  try { assertAccountExecutionIdentity(connection); } catch (error) {
-    if (error instanceof AIBusinessError) throw new AssignmentWriteError(error.code, error.message);
-    throw error;
-  }
-  if (
-    !isAIBackendKind(connection.backendKind) ||
-    !isSupportedAccountProviderForBackend(
-      connection.backendKind,
-      connection.provider,
-    )
-  ) {
+  const classification = classifyAIConnection(connection);
+  if (classification === "INVALID") {
     throw new AssignmentWriteError(
       "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
-      "Provider is not supported on this runtime",
+      "The connection has no usable AI identity",
     );
   }
-  if (isStreamingPurpose(purpose)) {
-    await assertStreamingAssignmentReady(connection, deps);
+  if (classification === "MANAGED") {
+    // Managed sources are system-provisioned connections bound to the
+    // Hosted authority; the model string is a catalog modelKey, validated
+    // against Hosted rather than the account-runtime matrix.
+    await assertManagedAssignmentModel(userId, purpose, trimmedModel, deps.managedClient);
+  } else {
+    try { assertAccountExecutionIdentity(connection); } catch (error) {
+      if (error instanceof AIBusinessError) throw new AssignmentWriteError(error.code, error.message);
+      throw error;
+    }
+    if (
+      !isAIBackendKind(connection.backendKind) ||
+      !isSupportedAccountProviderForBackend(
+        connection.backendKind,
+        connection.provider,
+      )
+    ) {
+      throw new AssignmentWriteError(
+        "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+        "Provider is not supported on this runtime",
+      );
+    }
+    if (isStreamingPurpose(purpose)) {
+      await assertStreamingAssignmentReady(connection, deps);
+    }
   }
   return dbClient.aIBusinessAssignment.upsert({
     where: { userId_purpose: { userId, purpose } },
@@ -509,6 +531,89 @@ async function assertStreamingAssignmentReady(
       "The assigned runtime is not verified for the structured decisions Career Dialogue needs",
     );
   }
+}
+
+/**
+ * Managed assignment gate — the model is a Hosted catalog modelKey, so the
+ * write path validates it against the live catalog instead of the desktop
+ * runtime matrix. Catalog unreachable/auth failures fail closed (the
+ * assignment is refused, not saved as plausible).
+ */
+async function assertManagedAssignmentModel(
+  userId: string,
+  purpose: AIAssignmentPurpose,
+  modelKey: string,
+  managedClient?: HostedManagedClient,
+): Promise<void> {
+  const client = managedClient ?? new HostedManagedClient();
+  let catalog;
+  try {
+    catalog = await client.catalog(userId);
+  } catch (error) {
+    const mapped = managedBusinessError(error);
+    throw new AssignmentWriteError(mapped.code, mapped.message);
+  }
+  const entry = catalog.models.find((model) => model.modelKey === modelKey);
+  if (!entry) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.MODEL_UNAVAILABLE,
+      "Unknown Managed model",
+    );
+  }
+  if (!entry.enabled || !entry.available) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.MODEL_DISABLED,
+      "The Managed model is not enabled for this account",
+    );
+  }
+  // Every business purpose executes text generation; a model that cannot
+  // produce text is never assignable, regardless of streaming/structured
+  // needs.
+  if (!entry.capabilities.text) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED,
+      "The Managed model cannot generate text",
+    );
+  }
+  if (isStreamingPurpose(purpose) && !entry.capabilities.streaming) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED,
+      "The Managed model cannot stream responses, so it cannot run Career Dialogue",
+    );
+  }
+  if (
+    isStreamingPurpose(purpose) &&
+    !entry.capabilities.structuredOutput
+  ) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED,
+      "The Managed model cannot emit the structured decisions Career Dialogue needs",
+    );
+  }
+}
+
+/**
+ * Canonical Managed assignment entry point: ensure the local user's
+ * system-provisioned Managed connection exists (Hosted authority confirms
+ * the identity), then pin `modelKey` for the purpose. Not exposed through
+ * the account-connection CRUD path — callers never pick a managed
+ * connection id themselves.
+ */
+export async function assignManagedBusinessSource(
+  { userId, purpose, modelKey }: { userId: string; purpose: string; modelKey: string },
+  deps: BusinessAssignmentDeps & { dbClient?: DbClient } = {},
+): Promise<BusinessAssignmentSummary> {
+  const client = deps.managedClient ?? new HostedManagedClient();
+  const connection = await ensureManagedConnectionForLocalUser(
+    userId,
+    client,
+    deps.dbClient ?? prisma,
+  );
+  return setBusinessAssignment(
+    { userId, purpose, connectionId: connection.id, model: modelKey },
+    deps.dbClient ?? prisma,
+    deps,
+  );
 }
 
 export async function clearBusinessAssignment(

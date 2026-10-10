@@ -19,7 +19,7 @@ import { parseAtsConfig } from "./config";
 import { extractResumeSkills } from "./resumeText";
 import { buildSkillTerms } from "./skillTags";
 import { persistDiscoveredJob, scalePrerank } from "./persist";
-import { matchJobToResume } from "./match";
+import { matchJobToResume, PER_JOB_MATCH_ERROR_CODES } from "./match";
 import type { AutomationMatchRuntimePlan } from "./matchRuntime";
 import { finalizeRun } from "./finalize";
 import pLimit from "p-limit";
@@ -327,6 +327,7 @@ export async function runAtsRun(
         automation.userId,
         signal,
         matchPlan,
+        runId,
       );
 
       // Abort may have fired mid-call; bail before saving this job. This
@@ -336,7 +337,12 @@ export async function runAtsRun(
       if (signal?.aborted) return;
 
       if (!matchResult.success) {
-        if (matchResult.error === "ai_unavailable" || matchResult.code) {
+        const systemic =
+          matchResult.error === "ai_unavailable" ||
+          Boolean(
+            matchResult.code && !PER_JOB_MATCH_ERROR_CODES.has(matchResult.code),
+          );
+        if (systemic) {
           // Only the first concurrent task to fail logs; siblings stay quiet.
           // A business-layer code marks a systemic configuration/runtime
           // failure — every remaining job would fail identically.

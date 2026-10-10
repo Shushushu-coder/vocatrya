@@ -18,9 +18,10 @@ import "server-only";
  * execute against their persisted AI lock instead.
  */
 import {
-  resolveInterviewAiRuntime,
+  interviewPlanFromResolution,
   type InterviewAiRuntimePlan,
 } from "./interviewRuntimePlan";
+import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
 import type { AIBusinessErrorCode } from "@/lib/ai/connections";
 import type { PrismaClient } from "@prisma/client";
 
@@ -42,7 +43,7 @@ export type InterviewReadiness =
 export function readinessFromPlan(
   plan: InterviewAiRuntimePlan,
 ): InterviewReadiness {
-  if (plan.kind === "account") {
+  if (plan.kind === "account" || plan.kind === "managed") {
     return {
       status: "ready",
       source: plan.assignmentSource,
@@ -66,11 +67,22 @@ export function readinessFromPlan(
 
 export async function getInterviewReadiness(
   userId: string,
-  dbClient?: Parameters<typeof resolveInterviewAiRuntime>[1],
+  dbClient?: PrismaClient,
 ): Promise<InterviewReadiness> {
-  const { plan } = await resolveInterviewAiRuntime(
-    userId,
-    dbClient as PrismaClient | undefined,
+  // Preview-only: readiness must never first-bind — binding happens once,
+  // at session creation, against `interview-session:<id>`. A managed
+  // resolution reports ready without a Hosted call.
+  const resolution = await resolveBusinessAIConfig(
+    { userId, purpose: "INTERVIEW" },
+    dbClient,
   );
-  return readinessFromPlan(plan);
+  if (resolution.status === "RESOLVED") {
+    return {
+      status: "ready",
+      source: resolution.source,
+      provider: resolution.provider,
+      model: resolution.model,
+    };
+  }
+  return readinessFromPlan(interviewPlanFromResolution(resolution).plan);
 }

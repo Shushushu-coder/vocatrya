@@ -11,9 +11,18 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 import { executeAIConnectionText } from "@/lib/ai/execution";
-import { executeAIConnectionTextStream } from "@/lib/ai/streaming-execution";
+import {
+  executeAIConnectionTextStream,
+  type StreamExecutionDeps,
+} from "@/lib/ai/streaming-execution";
 import { runStructuredValidation } from "@/lib/ai/structured-output";
-import { AI_BUSINESS_ERROR_CODES, AIBusinessError } from "@/lib/ai/connections";
+import {
+  AI_BUSINESS_ERROR_CODES,
+  AIBusinessError,
+  type AIBusinessErrorCode,
+} from "@/lib/ai/connections";
+import type { ManagedAiProvenanceV1 } from "@/lib/ai/managed-provenance";
+import { MANAGED_ERROR_CODES } from "@/lib/ai/managed-contract";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
   AGENT_CHAT_TERMINAL_TOOLS,
@@ -366,12 +375,30 @@ export function parseAgentDecision(
 // The turn
 // ---------------------------------------------------------------------------
 
+/**
+ * Managed (Hosted) execution context for a conversation-locked turn. The
+ * provenance pins the binding the creation flow minted; operationId names
+ * the durable business operation (`dialogue:<conversationId>:<requestId>`)
+ * so every sub-call — decision, nested tool generation, final answer —
+ * carries a derived invocationKey and retries replay instead of
+ * double-billing.
+ */
+export type ManagedTurnContext = {
+  provenance: ManagedAiProvenanceV1;
+  /** `conversation:<id>` — identical to the creation-time bind key. */
+  resourceKey: string;
+  /** Turn-level durable operation identity. */
+  operationId: string;
+};
+
 export type AccountAgentTurnInput = {
   request?: ConversationRequest;
   userId: string;
   connectionId: string;
   provider: string;
   backendKind: string;
+  /** Managed execution context — present only on Managed-locked turns. */
+  managed?: ManagedTurnContext;
   modelName: string;
   systemPrompt: string;
   /** Windowed client messages (same windowing the legacy path applies). */
@@ -392,6 +419,8 @@ export type AccountAgentTurnInput = {
    * job opportunity instead of a legacy Job.
    */
   canonicalJobs?: boolean;
+  /** Injected for tests; production uses the default clients. */
+  deps?: StreamExecutionDeps;
 };
 
 export type AccountAgentTurnResult = {
@@ -445,12 +474,14 @@ export async function runAccountAgentTurn(
 
   // The nested tools run their generations through the same locked pair —
   // a LanguageModel adapter over the same execute seam, not the legacy
-  // provider.
+  // provider. Managed turns carry the binding through to every nested call.
   const nestedModel = createAccountRuntimeLanguageModel({
     userId,
     connectionId,
     modelName,
     timeoutMs: APP_CONSTANTS.AGENT_CHAT_TIMEOUT_MS,
+    managed: input.managed,
+    deps: input.deps,
   });
   const tools = buildAgentTools({
     userId,
@@ -596,9 +627,9 @@ export async function runAccountAgentTurn(
       schema: AGENT_DECISION_SCHEMA,
       schemaName: AGENT_DECISION_SCHEMA_NAME,
       signal,
-      execute: async ({ prompt }) => {
+      execute: async ({ prompt, attempt }) => {
         try {
-          const result = await executeAIConnectionText({
+          const request = {
             userId,
             connectionId,
             model: modelName,
@@ -609,7 +640,28 @@ export async function runAccountAgentTurn(
             },
             timeoutMs: APP_CONSTANTS.AGENT_CHAT_TIMEOUT_MS,
             signal,
-          });
+            ...(input.managed
+              ? {
+                  managedAiProvenance: input.managed.provenance,
+                  managedResource: {
+                    business: "CAREER_DIALOGUE",
+                    resourceKey: input.managed.resourceKey,
+                  },
+                  operationId: input.managed.operationId,
+                  // correctionsUsed participates: a corrected decision
+                  // retries the same step index, so the key must differ
+                  // from the rejected attempt it replaces — otherwise the
+                  // correction replays as INVOCATION_REPLAYED and dies.
+                  invocationKey: `${input.managed.operationId}:decision:${stepsUsed}:${correctionsUsed}:${attempt}`,
+                  attemptIndex: attempt,
+                }
+              : {}),
+          };
+          // Keep the call arity stable when no deps are injected — mocks in
+          // existing specs assert the single-argument call shape.
+          const result = input.deps
+            ? await executeAIConnectionText(request, input.deps)
+            : await executeAIConnectionText(request);
           return { ok: true as const, text: result.text };
         } catch (error) {
           return {
@@ -641,8 +693,11 @@ export async function runAccountAgentTurn(
           code === AI_BUSINESS_ERROR_CODES.CONNECTION_ERROR ||
           code === AI_BUSINESS_ERROR_CODES.AI_EXECUTION_TIMEOUT ||
           code === AI_BUSINESS_ERROR_CODES.STREAMING_NOT_VERIFIED ||
-          code === AI_BUSINESS_ERROR_CODES.STRUCTURED_OUTPUT_NOT_VERIFIED
-          ? code
+          code === AI_BUSINESS_ERROR_CODES.STRUCTURED_OUTPUT_NOT_VERIFIED ||
+          // Managed runtime failures keep their stable code — the turn
+          // failed against the business binding, not generically.
+          (MANAGED_ERROR_CODES as readonly string[]).includes(code ?? "")
+          ? (code as AIBusinessErrorCode)
           : AI_BUSINESS_ERROR_CODES.AI_EXECUTION_FAILED,
         `agent decision failed: ${decisionResult.status}${detail}`,
       );
@@ -676,6 +731,8 @@ export async function runAccountAgentTurn(
         prompt: promptFor("AGENT_RESPONSE"),
         writer,
         signal,
+        managed: input.managed,
+        deps: input.deps,
       });
       writer.write({ type: "finish" });
       return { paused: false, answerChars, steps: stepsUsed, contextSize };
@@ -819,6 +876,8 @@ export async function streamFinalAnswer({
   prompt,
   writer,
   signal,
+  managed,
+  deps,
 }: {
   userId: string;
   connectionId: string;
@@ -826,19 +885,38 @@ export async function streamFinalAnswer({
   prompt: string;
   writer: UIMessageStreamWriter;
   signal: AbortSignal;
+  managed?: ManagedTurnContext;
+  /** Injected for tests; production uses the default clients. */
+  deps?: StreamExecutionDeps;
 }): Promise<number> {
   const textId = generateId();
   let opened = false;
   let chars = 0;
   let sawTerminal = false;
-  for await (const event of executeAIConnectionTextStream({
+  const request = {
     userId,
     connectionId,
     model: modelName,
     prompt,
     timeoutMs: APP_CONSTANTS.AGENT_CHAT_TIMEOUT_MS,
     signal,
-  })) {
+    ...(managed
+      ? {
+          managedAiProvenance: managed.provenance,
+          managedResource: {
+            business: "CAREER_DIALOGUE",
+            resourceKey: managed.resourceKey,
+          },
+          operationId: managed.operationId,
+          invocationKey: `${managed.operationId}:answer:0`,
+          attemptIndex: 0,
+        }
+      : {}),
+  };
+  const events = deps
+    ? executeAIConnectionTextStream(request, deps)
+    : executeAIConnectionTextStream(request);
+  for await (const event of events) {
     if (event.type === "text-delta") {
       if (!opened) {
         writer.write({ type: "start-step" });
@@ -885,6 +963,28 @@ function mapTerminalError(code: string): never {
     AI_BUSINESS_ERROR_CODES.STREAMING_NOT_SUPPORTED,
     AI_BUSINESS_ERROR_CODES.AI_EXECUTION_TIMEOUT,
     AI_BUSINESS_ERROR_CODES.ASSIGNED_CONNECTION_UNAVAILABLE,
+    // Managed taxonomy travels verbatim — the UI maps stable codes, and
+    // none of them may degrade into a generic fallback retry.
+    AI_BUSINESS_ERROR_CODES.MANAGED_AUTH_REQUIRED,
+    AI_BUSINESS_ERROR_CODES.MANAGED_BINDING_UNAVAILABLE,
+    AI_BUSINESS_ERROR_CODES.MANAGED_PROVENANCE_INVALID,
+    AI_BUSINESS_ERROR_CODES.MANAGED_AI_DISABLED,
+    AI_BUSINESS_ERROR_CODES.MANAGED_RUNTIME_UNAVAILABLE,
+    AI_BUSINESS_ERROR_CODES.NOT_ENTITLED,
+    AI_BUSINESS_ERROR_CODES.QUOTA_EXCEEDED,
+    AI_BUSINESS_ERROR_CODES.MODEL_NOT_ALLOWED,
+    AI_BUSINESS_ERROR_CODES.MODEL_DISABLED,
+    AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED,
+    AI_BUSINESS_ERROR_CODES.INVOCATION_ID_REQUIRED,
+    AI_BUSINESS_ERROR_CODES.INVOCATION_CONFLICT,
+    AI_BUSINESS_ERROR_CODES.INVOCATION_STATUS_UNKNOWN,
+    AI_BUSINESS_ERROR_CODES.INVOCATION_REPLAYED,
+    AI_BUSINESS_ERROR_CODES.INVOCATION_IN_PROGRESS,
+    AI_BUSINESS_ERROR_CODES.GATEWAY_AUTH,
+    AI_BUSINESS_ERROR_CODES.GATEWAY_RATE_LIMIT,
+    AI_BUSINESS_ERROR_CODES.GATEWAY_TIMEOUT,
+    AI_BUSINESS_ERROR_CODES.GATEWAY_NETWORK,
+    AI_BUSINESS_ERROR_CODES.GATEWAY_RESPONSE,
   ]);
   return (known.has(code)
     ? code

@@ -3,7 +3,7 @@
  * Business assignment + TEXT_ONLY execution seam (backend side).
  *
  * Covers:
- * - resolveBusinessAIConfig: specific â†’ GLOBAL_DEFAULT â†’ NOT_CONFIGURED;
+ * - resolveBusinessAIConfig: specific â†?GLOBAL_DEFAULT â†?NOT_CONFIGURED;
  *   broken explicit assignment never falls back; ownership; status gate;
  *   runtime binding; INTERVIEW legacy coexistence precedence
  * - assignment CRUD validation (ownership, archived, model, purpose)
@@ -24,7 +24,7 @@ import {
   AI_EXECUTION_MAX_PROMPT_BYTES,
 } from "@/lib/ai/execution";
 import { AIBusinessError } from "@/lib/ai/connections";
-import { resolveAutomationMatchRuntime } from "@/lib/scraper/automation-run/matchRuntime";
+import { previewAutomationMatchRuntime } from "@/lib/scraper/automation-run/matchRuntime";
 import { seedAccount } from "./helpers/backupTestDb";
 
 const ctx = await vi.hoisted(async () => {
@@ -126,7 +126,7 @@ describe("resolveBusinessAIConfig", () => {
     expect(result.status).toBe("NOT_CONFIGURED");
   });
 
-  it("fails explicitly on a broken explicit assignment â€” never falls back", async () => {
+  it("fails explicitly on a broken explicit assignment â€?never falls back", async () => {
     const broken = await makeConnection({ status: "DISCONNECTED" });
     const healthy = await makeConnection({ displayName: "Other account" });
     await assign("RESUME", broken.id, "gpt-5.5");
@@ -193,7 +193,7 @@ describe("resolveBusinessAIConfig", () => {
     ).toMatchObject({ status: "INVALID_ASSIGNMENT", code: "CONNECTION_ERROR" });
 
     const noProfile = await makeConnection({ runtimeProfileRef: null });
-    // The row goes in directly â€” the write gate now refuses unrunnable
+    // The row goes in directly â€?the write gate now refuses unrunnable
     // CAREER_DIALOGUE assignments, but a pre-gate or externally-mutated
     // row must still surface INVALID_ASSIGNMENT at resolve time.
     await assign("CAREER_DIALOGUE", noProfile.id, "gpt-5.5");
@@ -207,8 +207,8 @@ describe("resolveBusinessAIConfig", () => {
 });
 
 describe("CAREER_DIALOGUE precedence", () => {
-  // CAREER_DIALOGUE has no legacy special-casing â€” the plain steady-state
-  // chain applies: purpose assignment â†’ GLOBAL_DEFAULT â†’ NOT_CONFIGURED.
+  // CAREER_DIALOGUE has no legacy special-casing â€?the plain steady-state
+  // chain applies: purpose assignment â†?GLOBAL_DEFAULT â†?NOT_CONFIGURED.
   it("resolves a specific assignment over GLOBAL_DEFAULT", async () => {
     const specific = await makeConnection();
     const global = await makeConnection({ displayName: "Global" });
@@ -481,7 +481,7 @@ describe("executeAIConnectionText", () => {
       permissionScope: "TEXT_ONLY",
     });
     expect(typeof capturedTicket).toBe("string");
-    // The payload carries identifiers and data only â€” never executable,
+    // The payload carries identifiers and data only â€?never executable,
     // args, env, cwd, profile path, or credential material.
     for (const forbidden of [
       "executable",
@@ -625,7 +625,7 @@ describe("AutomationRun lock-on-create", () => {
     await assign("MATCH_ANALYSIS", connection.id, "gpt-5.5");
     const automation = await makeAutomation();
 
-    const { plan, lock } = await resolveAutomationMatchRuntime(userId);
+    const { plan, lock } = await previewAutomationMatchRuntime(userId);
     expect(plan.kind).toBe("account");
     const run = await prisma.automationRun.create({
       data: { automationId: automation.id, status: "running", ...lock },
@@ -640,7 +640,7 @@ describe("AutomationRun lock-on-create", () => {
     await assign("MATCH_ANALYSIS", a.id, "model-a");
     const automation = await makeAutomation();
 
-    const first = await resolveAutomationMatchRuntime(userId);
+    const first = await previewAutomationMatchRuntime(userId);
     const run = await prisma.automationRun.create({
       data: { automationId: automation.id, status: "running", ...first.lock },
     });
@@ -657,7 +657,7 @@ describe("AutomationRun lock-on-create", () => {
     expect(reloaded.resolvedConnectionId).toBe(a.id);
     expect(reloaded.resolvedModel).toBe("model-a");
     // A new run resolves the new assignment.
-    const second = await resolveAutomationMatchRuntime(userId);
+    const second = await previewAutomationMatchRuntime(userId);
     expect(second.plan).toMatchObject({ kind: "account", connectionId: b.id });
   });
 
@@ -666,7 +666,7 @@ describe("AutomationRun lock-on-create", () => {
     const healthy = await makeConnection({ displayName: "H" });
     await assign("MATCH_ANALYSIS", broken.id, "m");
     await assign("GLOBAL_DEFAULT", healthy.id, "g");
-    const { plan, lock } = await resolveAutomationMatchRuntime(userId);
+    const { plan, lock } = await previewAutomationMatchRuntime(userId);
     expect(plan).toMatchObject({
       kind: "invalid",
       code: "CONNECTION_DISCONNECTED",
@@ -675,7 +675,7 @@ describe("AutomationRun lock-on-create", () => {
   });
 
   it("no assignments yields the legacy plan with no lock", async () => {
-    const { plan, lock } = await resolveAutomationMatchRuntime(userId);
+    const { plan, lock } = await previewAutomationMatchRuntime(userId);
     expect(plan.kind).toBe("legacy");
     expect(lock).toEqual({});
   });
@@ -695,9 +695,9 @@ describe("AutomationRun lock-on-create", () => {
   });
 });
 
-describe("setBusinessAssignment â€” streaming readiness gate", () => {
-  // The write path enforces the same readiness the turn gate checks â€”
-  // verified incremental output bound to the probed runtime version â€”
+describe("setBusinessAssignment â€?streaming readiness gate", () => {
+  // The write path enforces the same readiness the turn gate checks â€?
+  // verified incremental output bound to the probed runtime version â€?
   // through the injected runtime-state channel (real env config is what
   // production uses; the seam exists so the boundary is testable).
   const VERIFIED_EXECUTION = {
@@ -765,7 +765,7 @@ describe("setBusinessAssignment â€” streaming readiness gate", () => {
         stateResponse({ streaming: false }),
       ),
     ).rejects.toMatchObject({ code: "STREAMING_NOT_SUPPORTED" });
-    // The refusal is real â€” nothing was written.
+    // The refusal is real â€?nothing was written.
     expect(await listBusinessAssignmentsForUser(userId)).toHaveLength(0);
   });
 
@@ -831,7 +831,7 @@ describe("setBusinessAssignment â€” streaming readiness gate", () => {
   it("fails closed when the desktop channel is not configured at all", async () => {
     const connection = await makeConnection();
     await expect(
-      // No deps â†’ env unset in tests â†’ the channel cannot exist.
+      // No deps â†?env unset in tests â†?the channel cannot exist.
       setBusinessAssignment({
         userId,
         purpose: "CAREER_DIALOGUE",

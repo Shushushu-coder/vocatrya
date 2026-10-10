@@ -8,8 +8,13 @@ import type {
   LanguageModelV3StreamPart,
   LanguageModelV3Usage,
 } from "@ai-sdk/provider";
-import { executeAIConnectionText } from "@/lib/ai/execution";
+import {
+  executeAIConnectionText,
+  type ExecuteAIConnectionTextDeps,
+} from "@/lib/ai/execution";
 import { executeAIConnectionTextStream } from "@/lib/ai/streaming-execution";
+import { AIBusinessError } from "@/lib/ai/connections";
+import type { ManagedTurnContext } from "./accountTurn";
 import { log } from "@/lib/telemetry";
 
 /**
@@ -71,6 +76,15 @@ export type AccountRuntimeModelOptions = {
   modelName: string;
   /** Timeout per nested one-shot call. */
   timeoutMs?: number;
+  /**
+   * Managed turn identity (M4). Nested calls get their own invocationKey
+   * under the turn's operationId, derived from the durable tool call id
+   * carried on the call's providerOptions — each nested generation is a
+   * distinct billable step that replays identically after a crash/resume.
+   */
+  managed?: ManagedTurnContext;
+  /** Injected for tests; production uses the default clients. */
+  deps?: ExecuteAIConnectionTextDeps;
 };
 
 export function createAccountRuntimeLanguageModel({
@@ -78,7 +92,38 @@ export function createAccountRuntimeLanguageModel({
   connectionId,
   modelName,
   timeoutMs,
+  managed,
+  deps,
 }: AccountRuntimeModelOptions): LanguageModel {
+  /**
+   * Durable nested identity (M4 P1-04). The tool call id is minted by the
+   * host step and persisted in the conversation transcript's tool parts,
+   * so it survives a crash/restart: resuming the same turn request finds
+   * the same tool call and re-derives the same invocationKey, which the
+   * Hosted ledger replays instead of charging a second nested call. A
+   * process-local counter (nestedSeq) cannot do this — removed.
+   */
+  const nestedIdentity = (options: LanguageModelV3CallOptions) => {
+    if (!managed) return {};
+    const toolCallId = (options.providerOptions?.vocatrya as
+      | { toolCallId?: unknown }
+      | undefined)?.toolCallId;
+    if (typeof toolCallId !== "string" || toolCallId.trim().length === 0) {
+      throw new AIBusinessError(
+        "INVOCATION_ID_REQUIRED",
+        "Managed nested calls require the durable tool call identity",
+      );
+    }
+    return {
+      managedAiProvenance: managed.provenance,
+      managedResource: {
+        business: "CAREER_DIALOGUE",
+        resourceKey: managed.resourceKey,
+      },
+      operationId: managed.operationId,
+      invocationKey: `${managed.operationId}:nested:${toolCallId}:0`,
+    };
+  };
   const adapter: LanguageModelV3 = {
     specificationVersion: "v3",
     provider: "vocatrya.account",
@@ -86,14 +131,18 @@ export function createAccountRuntimeLanguageModel({
     supportedUrls: {},
 
     async doGenerate(options: LanguageModelV3CallOptions) {
-      const result = await executeAIConnectionText({
+      const request = {
         userId,
         connectionId,
         model: modelName,
         prompt: flattenPrompt(options.prompt),
         timeoutMs,
         signal: options.abortSignal,
-      });
+        ...nestedIdentity(options),
+      };
+      const result = deps
+        ? await executeAIConnectionText(request, deps)
+        : await executeAIConnectionText(request);
       return {
         content: [{ type: "text" as const, text: result.text }],
         finishReason: { unified: "stop" as const, raw: undefined },
@@ -170,14 +219,19 @@ export function createAccountRuntimeLanguageModel({
           controller.enqueue({ type: "stream-start", warnings: [] });
           let sawCompleted = false;
           try {
-            for await (const event of executeAIConnectionTextStream({
+            const request = {
               userId,
               connectionId,
               model: modelName,
               prompt,
               timeoutMs,
               signal: options.abortSignal,
-            })) {
+              ...nestedIdentity(options),
+            };
+            const events = deps
+              ? executeAIConnectionTextStream(request, deps)
+              : executeAIConnectionTextStream(request);
+            for await (const event of events) {
               if (terminal) break;
               if (event.type === "text-delta") {
                 if (!opened) {

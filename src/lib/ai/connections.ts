@@ -246,7 +246,7 @@ export function assertAccountExecutionIdentity(connection: ExecutionConnectionId
   if (!hasManagedIdentityMarker(connection)) return;
   const classification = classifyAIConnection(connection);
   if (classification === "MANAGED") {
-    throw new AIBusinessError("MANAGED_EXECUTION_NOT_IMPLEMENTED", "Managed execution is not implemented in M1");
+    throw new AIBusinessError("MANAGED_EXECUTION_NOT_IMPLEMENTED", "Managed AI connections execute through the business path only, never the desktop runtime");
   }
   if (classification === "INVALID") {
     throw new AIBusinessError("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION", "Invalid AI connection identity");

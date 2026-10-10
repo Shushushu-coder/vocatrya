@@ -32,7 +32,6 @@ describe("Managed errors cross the real Interview action/service/host boundary",
   it.each([
     "MANAGED_BINDING_UNAVAILABLE",
     "MANAGED_PROVENANCE_INVALID",
-    "MANAGED_EXECUTION_NOT_IMPLEMENTED",
   ])("preserves %s with participant-safe messages in both locales", async (code) => {
     const session = await db.interviewSession.create({ data: {
       userId: ctx.userId, coachingMode: "PRACTICE", feedbackReleasePolicy: "IMMEDIATE", knowledgeBaseVersion: "old-kb",
@@ -48,6 +47,23 @@ describe("Managed errors cross the real Interview action/service/host boundary",
     expect(await db.interviewSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({
       managedAiProvenance: session.managedAiProvenance, resolvedConnectionId: session.resolvedConnectionId,
     });
+    expect(await db.dialogueTurn.count({ where: { sessionId: session.id } })).toBe(0);
+  });
+
+  it("reports the connection's honest state for an intact managed binding (M4)", async () => {
+    // M4: a valid managed lock no longer fails with NOT_IMPLEMENTED — it
+    // reaches the execution seam, which reports the restored connection's
+    // REAUTH_REQUIRED status before any Hosted call.
+    const session = await db.interviewSession.create({ data: {
+      userId: ctx.userId, coachingMode: "PRACTICE", feedbackReleasePolicy: "IMMEDIATE", knowledgeBaseVersion: "old-kb",
+      resolvedConnectionId: connectionId, resolvedModel: "stable-model", managedAiProvenance: provenance,
+    } });
+    for (const locale of ["zh-CN", "en"] as Locale[]) {
+      ctx.locale = locale;
+      const result = await sendInterviewFollowUpAction({ sessionId: session.id, userText: "Help me improve." });
+      expect(result).toMatchObject({ success: false, code: "REAUTH_REQUIRED" });
+      if (!result.success) expect(result.message).not.toMatch(/private-|stable-model|mappingRevision|\{/);
+    }
     expect(await db.dialogueTurn.count({ where: { sessionId: session.id } })).toBe(0);
   });
 

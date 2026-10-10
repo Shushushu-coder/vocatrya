@@ -1,6 +1,7 @@
 "use server";
 
-import { rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import { isManagedResolution } from "@/lib/ai/business-execution-lock";
 
 import { cancelConversationRequest, ConversationRequestError } from "@/lib/agent/conversationRequest";
 import type { UIMessage } from "ai";
@@ -462,7 +463,31 @@ export const getAgentChatPreflight = async (input?: {
         const connection = lock.connectionId ? await prisma.aIConnection.findFirst({
           where: { id: lock.connectionId, userId: user.id },
         }) : null;
-        rejectManagedHistoricalExecution(lock, connection, user.id);
+        try {
+          assertManagedHistoricalExecution(lock, connection, user.id);
+        } catch (error) {
+          if (error instanceof AIBusinessError) {
+            return {
+              success: true,
+              data: {
+                kind: "blocked",
+                code: error.code,
+                connectionId: lock.connectionId ?? undefined,
+              },
+            };
+          }
+          throw error;
+        }
+        return {
+          success: true,
+          data: {
+            kind: "managed",
+            connectionId: lock.connectionId!,
+            model: lock.model,
+            displayName: connection?.displayName ?? "Vocatrya Managed AI",
+            locked: true,
+          },
+        };
       }
       if (lock.kind === "account") {
         return {
@@ -528,6 +553,20 @@ export const getAgentChatPreflight = async (input?: {
         where: { id: resolution.connectionId, userId: user.id },
         select: { displayName: true, status: true },
       });
+      if (isManagedResolution(resolution)) {
+        // Managed sources are served by the Hosted authority — the
+        // desktop runtime/streaming gates do not apply.
+        return {
+          success: true,
+          data: {
+            kind: "managed",
+            connectionId: resolution.connectionId,
+            model: resolution.model,
+            displayName: connection?.displayName ?? "Vocatrya Managed AI",
+            locked: false,
+          },
+        };
+      }
       const streamBlock = await accountStreamingBlockCode({
         backendKind: resolution.backendKind,
         provider: resolution.provider,

@@ -1,4 +1,8 @@
-import { rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import {
+  assertManagedHistoricalExecution,
+  decodeManagedAiProvenance,
+  type ManagedAiProvenanceV1,
+} from "@/lib/ai/managed-provenance";
 /**
  * Phase 3B — Vocatrya Host Port adapters (HOST_IMPLEMENT).
  *
@@ -269,15 +273,21 @@ export interface InterviewSessionLockDb {
 }
 
 /**
- * The ACCOUNT_LOGIN one-shot transport. Defaults to the shared
- * TEXT_ONLY execution seam; injectable so tests can observe the locked
- * connectionId/model without a desktop channel.
+ * The one-shot transport behind interview model calls. Defaults to the
+ * shared execution seam (ACCOUNT_LOGIN → desktop runtime, MANAGED →
+ * Hosted); injectable so tests can observe the locked
+ * connectionId/model/provenance without a live channel. The managed
+ * fields are forwarded verbatim to `executeAIConnectionText`.
  */
 export type InterviewAccountExec = (input: {
   userId: string;
   connectionId: string;
   model: string;
   prompt: string;
+  managedAiProvenance?: ManagedAiProvenanceV1;
+  managedResource?: { business: string; resourceKey: string };
+  operationId?: string;
+  attemptIndex?: number;
 }) => Promise<{ text: string }>;
 
 function accountUnavailable(message: string): DomainError {
@@ -304,7 +314,18 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
             authType: true, credentialRef: true, runtimeProfileRef: true, accountIdentity: true,
             status: true, archivedAt: true },
         }) : null;
-        rejectManagedHistoricalExecution(lock, connection, input.requestingUserId);
+        // M4: the historical Managed binding is executable — validate it
+        // is intact, then run Hosted through the stored provenance. The
+        // session's resourceKey is deterministic from its id, identical
+        // to the one the creation-time bind used.
+        assertManagedHistoricalExecution(lock, connection, input.requestingUserId);
+        return this.managedInterviewModel({
+          requestingUserId: input.requestingUserId,
+          connectionId: lock.connectionId!,
+          model: lock.model,
+          provenance: lock.provenance,
+          resourceKey: `interview-session:${input.sessionId}`,
+        });
       }
       if (lock.kind === "account") {
         return await this.resolveAccountModel(input.requestingUserId, lock);
@@ -351,6 +372,41 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
   }): Promise<ResolvedInterviewModel> {
     const { plan } = input;
     try {
+      if (plan.kind === "managed") {
+        // Fail closed: a managed plan missing any lock field is a
+        // half-state — never fall through to live legacy resolution.
+        if (!plan.connectionId || !plan.model || !plan.managedAiProvenance || !plan.resourceKey) {
+          throw new DomainError(
+            "MANAGED_PROVENANCE_INVALID",
+            "The managed interview plan is missing its binding",
+          );
+        }
+        // The creation flow already first-bound this session; the
+        // planning call must run on exactly that binding so the lock it
+        // persists is the binding the call consumed.
+        assertManagedHistoricalExecution(
+          {
+            kind: "managed",
+            connectionId: plan.connectionId,
+            model: plan.model,
+            provenance: decodeManagedAiProvenance(plan.managedAiProvenance)!,
+          },
+          await this.db!.aIConnection.findUnique({
+            where: { id: plan.connectionId },
+            select: { id: true, userId: true, provider: true, backendKind: true,
+              authType: true, credentialRef: true, runtimeProfileRef: true, accountIdentity: true,
+              status: true, archivedAt: true },
+          }),
+          input.requestingUserId,
+        );
+        return this.managedInterviewModel({
+          requestingUserId: input.requestingUserId,
+          connectionId: plan.connectionId,
+          model: plan.model,
+          provenance: decodeManagedAiProvenance(plan.managedAiProvenance)!,
+          resourceKey: plan.resourceKey,
+        });
+      }
       if (plan.kind === "account" && plan.connectionId && plan.model) {
         return await this.resolveAccountModel(input.requestingUserId, {
           connectionId: plan.connectionId,
@@ -523,6 +579,63 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
         } catch {
           // Never propagate the raw parse error — its message can embed a
           // snippet of model output, which must not reach diagnostics.
+          throw new DomainError(
+            "GENERATION_FAILED",
+            "Interview model returned non-JSON output",
+          );
+        }
+      },
+    };
+  }
+
+  /**
+   * Hosted Managed execution for a session/plan already bound at creation
+   * time. The stored provenance pins the binding id and upstream mapping;
+   * `managedResource` keeps first-bind replay keyed to the same resource.
+   * Every Hosted/managed error code reaches the caller unchanged — there
+   * is no account or legacy fallback on this path.
+   */
+  private managedInterviewModel(input: {
+    requestingUserId: string;
+    connectionId: string;
+    model: string;
+    provenance: ManagedAiProvenanceV1;
+    resourceKey: string;
+  }): ResolvedInterviewModel {
+    const { requestingUserId, connectionId, model, provenance, resourceKey } = input;
+    return {
+      provider: "VOCATRYA",
+      model,
+      generateJson: async ({ system, prompt }, operation) => {
+        let executed: { text: string };
+        try {
+          executed = await this.execText({
+            userId: requestingUserId,
+            connectionId,
+            model,
+            prompt: `${system}\n\n${prompt}`,
+            managedAiProvenance: provenance,
+            managedResource: { business: "INTERVIEW", resourceKey },
+            operationId: operation?.operationId,
+            attemptIndex: operation?.attemptIndex,
+          });
+        } catch (error) {
+          if (error instanceof AIBusinessError) {
+            throw new DomainError(error.code, error.message);
+          }
+          throw error;
+        }
+        const text =
+          typeof executed.text === "string" ? executed.text.trim() : "";
+        if (!text) {
+          throw new DomainError(
+            "GENERATION_FAILED",
+            "Interview model returned empty output",
+          );
+        }
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
           throw new DomainError(
             "GENERATION_FAILED",
             "Interview model returned non-JSON output",

@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import db from "@/lib/db";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { requireUser } from "../shared";
@@ -36,6 +37,7 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
   success: boolean;
   matchScore?: number;
   message?: string;
+  code?: string;
 }> {
   try {
     const user = await requireUser();
@@ -77,6 +79,14 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
       };
     }
     const useAccountRuntime = matchResolution.status === "RESOLVED";
+    // A managed assignment executes through Hosted with a durable
+    // operation identity keyed on the job — the manual analysis of a job
+    // is one stable operation, so a repeated trigger replays to the same
+    // receipt rather than double-billing.
+    const managed =
+      matchResolution.status === "RESOLVED" &&
+      matchResolution.provider === "VOCATRYA" &&
+      matchResolution.backendKind === "MANAGED_GATEWAY";
 
     const userSettings = await db.userSettings.findUnique({
       where: { userId: user.id },
@@ -107,12 +117,28 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
       jobPre.data.normalizedText,
     );
 
+    // P1-02: the operation identity freezes the actual inputs, not just
+    // the job. Legacy Job/Resume rows mutate in place and carry no
+    // version authority, so the snapshot identity is the hash of the
+    // exact normalized text sent to the model — a retried analysis of
+    // the same input set replays, while a changed resume or JD mints a
+    // new operation instead of returning the old score.
+    const inputFingerprint = (text: string) =>
+      createHash("sha256").update(text).digest("hex").slice(0, 20);
+    const matchInput = {
+      resume: inputFingerprint(resumePre.data.normalizedText),
+      jobDescription: inputFingerprint(jobPre.data.normalizedText),
+    };
+    const matchInputKey = `${matchInput.resume}:${matchInput.jobDescription}`;
+
     let resultText: string;
     let effectiveProvider: string;
     let effectiveModel: string;
 
     if (useAccountRuntime && matchResolution.status === "RESOLVED") {
-      const executed = await withSpan(
+      let executed;
+      try {
+        executed = await withSpan(
         "automation.analyze",
         {
           ...genAiRequestAttrs({
@@ -136,6 +162,15 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
             connectionId: matchResolution.connectionId,
             model: matchResolution.model,
             prompt: `${JOB_MATCH_SYSTEM_PROMPT}\n\n${promptText}`,
+            ...(managed
+              ? {
+                  operationId: `match-analysis:${jobId}:${matchInputKey}`,
+                  managedResource: {
+                    business: "MATCH_ANALYSIS",
+                    resourceKey: `job-match:${jobId}`,
+                  },
+                }
+              : {}),
           });
           span.setAttrs(
             genAiResponseAttrs({ finishReason: "stop", text: exec.text }),
@@ -143,8 +178,29 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
           return exec;
         },
       );
+      } catch (error) {
+        // Replay semantics: this exact input set's operation already
+        // exists on the Hosted receipt ledger — return the score that
+        // was persisted FOR THOSE INPUTS. A different input set mints a
+        // different operationId, so a replay here can only mean the
+        // same analysis ran before (same-key same-request dedupe).
+        if (error instanceof AIBusinessError && error.code === "INVOCATION_REPLAYED") {
+          const replayedScore = replayedMatchScore(job.matchData, matchInputKey);
+          if (replayedScore !== undefined) {
+            return { success: true, matchScore: replayedScore };
+          }
+          return {
+            success: false,
+            message: "This job was already analyzed",
+            code: "INVOCATION_REPLAYED",
+          };
+        }
+        throw error;
+      }
       resultText = executed.text;
-      effectiveProvider = matchResolution.provider;
+      // Match the runner's label for the same managed execution path so
+      // persisted matchData provenance is uniform across entry points.
+      effectiveProvider = managed ? "VOCATRYA_MANAGED" : matchResolution.provider;
       effectiveModel = matchResolution.model;
     } else {
       const model = await getModel(
@@ -205,6 +261,20 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
       previous = {};
     }
 
+    // Retain a bounded per-input analysis ledger alongside the headline
+    // score: an older input set stays queryable for replay instead of
+    // being silently overwritten by the newest analysis.
+    const matchedAt = new Date().toISOString();
+    const analyses: Record<string, { matchScore: number; matchedAt: string }> = {
+      ...(typeof previous.analyses === "object" && previous.analyses !== null
+        ? (previous.analyses as Record<string, { matchScore: number; matchedAt: string }>)
+        : {}),
+      [matchInputKey]: { matchScore: scores.matchScore, matchedAt },
+    };
+    const analysisKeys = Object.keys(analyses)
+      .sort((a, b) => analyses[b].matchedAt.localeCompare(analyses[a].matchedAt))
+      .slice(0, 20);
+
     const matchData = JSON.stringify({
       ...previous,
       matchScore: scores.matchScore,
@@ -212,10 +282,12 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
       body,
       resumeId,
       resumeTitle: resume.title,
-      matchedAt: new Date().toISOString(),
+      matchedAt,
       provider: effectiveProvider,
       model: effectiveModel,
       analyzed: true,
+      analysisInputKey: matchInputKey,
+      analyses: Object.fromEntries(analysisKeys.map((key) => [key, analyses[key]])),
     });
 
     await db.job.update({
@@ -231,5 +303,37 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
       return { success: false, message: `AI execution failed (${error.code})` };
     }
     return formatError(error, "Failed to analyze discovered job");
+  }
+}
+
+/**
+ * The score persisted for exactly this input set — the current analysis
+ * when its key matches, or any older retained entry. A replay can only
+ * resolve a score that was computed for the same resume+JD inputs;
+ * anything else reports nothing rather than serving a stale answer.
+ */
+function replayedMatchScore(
+  matchData: string | null,
+  matchInputKey: string,
+): number | undefined {
+  try {
+    const persisted = JSON.parse(matchData ?? "{}") as {
+      matchScore?: number;
+      analyzed?: boolean;
+      analysisInputKey?: string;
+      analyses?: Record<string, { matchScore?: number }>;
+    };
+    const retained = persisted.analyses?.[matchInputKey]?.matchScore;
+    if (typeof retained === "number") return retained;
+    if (
+      persisted.analyzed &&
+      persisted.analysisInputKey === matchInputKey &&
+      typeof persisted.matchScore === "number"
+    ) {
+      return persisted.matchScore;
+    }
+    return undefined;
+  } catch {
+    return undefined;
   }
 }

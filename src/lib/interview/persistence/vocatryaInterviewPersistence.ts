@@ -139,11 +139,18 @@ export interface CreateSessionInput {
   jobOpportunityId?: string | null;
   jobDescriptionVersionId?: string | null;
   createdVia?: string | null;
+  /**
+   * Caller-allocated session id (M4). The creation flow mints it before
+   * the Managed binding so `interview-session:<id>` is the same resource
+   * key the Hosted bind and the row share. Absent → generated here.
+   */
+  id?: string;
   // AI lock captured at creation (see sessionAiLock.ts). Written inside
   // the same $transaction as the session row so the lock and the session
   // share one atomic boundary.
   resolvedConnectionId?: string | null;
   resolvedModel?: string | null;
+  managedAiProvenance?: string | null;
   questions: SessionQuestionInput[];
 }
 
@@ -316,7 +323,7 @@ export class VocatryaInterviewPersistence {
       });
     }
 
-    const sessionId = randomUUID();
+    const sessionId = input.id ?? randomUUID();
     try {
       return await this.db.$transaction(async (tx) => {
         const delegated = tx as unknown as PrismaClient;
@@ -333,6 +340,7 @@ export class VocatryaInterviewPersistence {
             createdVia: input.createdVia ?? "USER",
             resolvedConnectionId: input.resolvedConnectionId ?? null,
             resolvedModel: input.resolvedModel ?? null,
+            managedAiProvenance: input.managedAiProvenance ?? null,
           },
         });
         const instances: QuestionInstanceRecord[] = [];

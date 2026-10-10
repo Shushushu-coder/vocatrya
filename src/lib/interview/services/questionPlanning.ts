@@ -15,7 +15,10 @@
  *   reach the prompt.
  */
 import { DomainError, ErrorCodes } from "../persistence/interviewErrors";
-import type { ResolvedInterviewModel } from "../hostPorts";
+import type {
+  InterviewInvocationIdentity,
+  ResolvedInterviewModel,
+} from "../hostPorts";
 import type { VocatryaInterviewQueries } from "./hostQueries";
 
 export const QUESTION_PLANNING_PROMPT_VERSION = "interview_question_planning_v1";
@@ -273,11 +276,13 @@ export function buildQuestionPlanningPrompt(context: InterviewPlanningContext): 
 export async function generateInterviewQuestionPlan(input: {
   model: ResolvedInterviewModel;
   context: InterviewPlanningContext;
+  /** Durable invocation identity forwarded to the execution seam (M4). */
+  operation?: InterviewInvocationIdentity;
 }): Promise<QuestionPlan> {
   const built = buildQuestionPlanningPrompt(input.context);
   let raw: unknown;
   try {
-    raw = await input.model.generateJson(built);
+    raw = await input.model.generateJson(built, input.operation);
   } catch (error) {
     if (error instanceof DomainError) throw error;
     throw new DomainError(

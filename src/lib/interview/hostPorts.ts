@@ -151,10 +151,25 @@ export interface GenerateJsonInput {
   prompt: string;
 }
 
+/**
+ * Durable invocation identity (M4). The caller names the business
+ * operation (operationId) and its attempt index; the adapter forwards them
+ * verbatim to the execution seam so a retried business operation replays
+ * instead of double-billing. Optional — models that cannot honour
+ * identity may ignore it.
+ */
+export interface InterviewInvocationIdentity {
+  operationId: string;
+  attemptIndex?: number;
+}
+
 export interface ResolvedInterviewModel {
   provider: string;
   model: string;
-  generateJson(input: GenerateJsonInput): Promise<unknown>;
+  generateJson(
+    input: GenerateJsonInput,
+    operation?: InterviewInvocationIdentity,
+  ): Promise<unknown>;
 }
 
 export const INTERVIEW_MODEL_ERRORS = {
@@ -171,10 +186,14 @@ export type InterviewModelErrorCode =
  * surface does not import the assignment module.
  */
 export interface InterviewCreationPlanRef {
-  kind: "account" | "legacy" | "invalid" | "unconfigured";
+  kind: "account" | "managed" | "legacy" | "invalid" | "unconfigured";
   connectionId?: string;
   model?: string;
   provider?: string;
+  /** Encoded managedAiProvenanceV1 — present only for kind "managed". */
+  managedAiProvenance?: string;
+  /** The resource identity the Managed binding was issued for. */
+  resourceKey?: string;
 }
 
 export interface InterviewModelPort {

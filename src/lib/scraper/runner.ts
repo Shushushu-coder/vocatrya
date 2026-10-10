@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import db from "@/lib/db";
 import type { Automation } from "@/models/automation.model";
 import { ATS_PROVIDERS } from "./ats/registry";
@@ -75,11 +76,19 @@ async function runAutomationTraced(
   // lifetime (assignment edits after this point must not affect the run,
   // and an explicitly broken assignment fails the AI step rather than
   // falling back to another account).
-  const matchRuntime = await resolveAutomationMatchRuntime(automation.userId);
+  // The run id is pre-allocated so the Managed binding can key on the
+  // resource's durable identity before the row exists — the provenance is
+  // persisted with the same insert.
+  const runId = randomUUID();
+  const matchRuntime = await resolveAutomationMatchRuntime(
+    automation.userId,
+    { resourceKey: `automation-run:${runId}` },
+  );
   let run;
   try {
     run = await db.automationRun.create({
       data: {
+        id: runId,
         automationId: automation.id,
         status: "running",
         ...matchRuntime.lock,

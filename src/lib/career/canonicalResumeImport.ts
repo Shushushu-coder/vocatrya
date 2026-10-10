@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { managedLockFromRow } from "@/lib/ai/managed-provenance";
 import { assertResumeV1Writable } from "./capabilities";
 import { hashEvidenceContent } from "./resumeProvenanceService";
 import { buildResumeHeaderSnapshot } from "./resumeHeaderSnapshot";
@@ -72,15 +73,27 @@ async function createMaterial(tx: Prisma.TransactionClient, userId: string, item
 export async function persistResumeImport(db: PrismaClient, userId: string, input: {
   requestId: string; name: string; rawText: string; parsed: ParsedResumeImport;
   resolvedConnectionId: string; resolvedModel: string;
+  /** Signed Managed provenance from preview execution — persisted verbatim. */
+  managedAiProvenance?: string | null;
 }, env?: NodeJS.ProcessEnv) {
   await assertResumeV1Writable(db, env);
   const parsed = validateResumeImport(input.parsed, input.rawText);
+  if (input.managedAiProvenance) {
+    // Confirm must never persist a binding whose provenance contradicts
+    // the locked pair — decode order is identical to every other lock.
+    managedLockFromRow({
+      managedAiProvenance: input.managedAiProvenance,
+      resolvedConnectionId: input.resolvedConnectionId,
+      resolvedModel: input.resolvedModel,
+    });
+  }
   const replay = () => db.resumeVariant.findFirst({ where: { id: input.requestId, userId } });
   const previous = await replay();
   if (previous) return previous;
   try {
     return await new ResumeVariantService(db, userId, env).createImportedDraft({
       id: input.requestId, name: input.name, resolvedConnectionId: input.resolvedConnectionId, resolvedModel: input.resolvedModel,
+      managedAiProvenance: input.managedAiProvenance ?? null,
     }, async (tx, versionId) => {
       const existingProfile = await tx.candidateProfile.findUnique({ where: { userId } });
       const fill: Record<string, string> = {};

@@ -103,7 +103,13 @@ export async function runNestedGeneration({
         abortSignal: AbortSignal.any(signals),
         // Deliberately no think:true. These sub-calls have no tools, so
         // reasoning buys nothing and costs 30s. The chat loop enables it.
-        providerOptions: { ollama: { options: { num_ctx: numCtx } } },
+        // vocatrya.toolCallId is the durable nested identity the Managed
+        // adapter mints invocation keys from — persisted in the transcript
+        // tool parts, so a crash/resume replays instead of double-billing.
+        providerOptions: {
+          ollama: { options: { num_ctx: numCtx } },
+          vocatrya: { toolCallId },
+        },
       });
 
       for await (const delta of sub.textStream) {

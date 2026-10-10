@@ -18,9 +18,17 @@ export function CanonicalResumeImport() {
   const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
   const controller = useRef<AbortController | null>(null);
+  // Durable import identity: one opaque id per logical import, reused by
+  // every retry of the same upload so the server replays one operation.
+  const requestId = useRef<string | null>(null);
+  // The file behind the current requestId — lets a failed upload retry
+  // under the same durable identity instead of minting a new import.
+  const selectedFile = useRef<File | null>(null);
   const active = phase !== "idle";
   const cancel = () => {
     controller.current?.abort();
+    requestId.current = null;
+    selectedFile.current = null;
     setPreview(null); setError(null); setOpen(false); setPhase("idle");
   };
   const upload = async (file: File) => {
@@ -32,6 +40,7 @@ export function CanonicalResumeImport() {
     const timer = setTimeout(() => { if (!abort.signal.aborted) setPhase("parsing"); }, 1000);
     try {
       const form = new FormData(); form.set("file", file);
+      form.set("requestId", requestId.current ?? (requestId.current = crypto.randomUUID()));
       const response = await fetch("/api/profile/resume-import", { method: "POST", body: form, signal: abort.signal });
       const result = await response.json();
       if (!response.ok) throw new Error(result.code);
@@ -58,11 +67,21 @@ export function CanonicalResumeImport() {
     <h2 className="font-medium">{t(preview ? "canonicalImport.review" : "canonicalImport.open")}</h2>
     {!preview && <label className="block space-y-2"><span>{t("canonicalImport.choose")}</span>
       <Input type="file" accept=".pdf,.docx" disabled={active} onChange={(event) => {
-        const file = event.target.files?.[0]; if (file) void upload(file);
+        const file = event.target.files?.[0];
+        if (file) {
+          // A new file selection is a new logical import — mint a fresh
+          // requestId; only an explicit retry reuses the current one.
+          selectedFile.current = file;
+          requestId.current = crypto.randomUUID();
+          void upload(file);
+        }
         event.target.value = "";
       }} /></label>}
     {active && <p role="status">{t(`canonicalImport.${phase}`)}</p>}
     {errorKey && <p role="alert" className="text-destructive">{t(`canonicalImport.errors.${errorKey}`)}</p>}
+    {!active && !preview && error && selectedFile.current && (
+      <Button variant="outline" onClick={() => void upload(selectedFile.current!)}>{t("common.retry")}</Button>
+    )}
     {preview && <div className="space-y-3" data-testid="canonical-import-review">
       <p>{t("canonicalImport.summary", { count: preview.summary.created, reused: preview.summary.reused, name: preview.name })}</p>
       {preview.summary.conflicts.length > 0 && <p>{t("canonicalImport.conflicts")} {preview.summary.conflicts.map((field) => t(`canonicalImport.fields.${field}`)).join(" / ")}</p>}

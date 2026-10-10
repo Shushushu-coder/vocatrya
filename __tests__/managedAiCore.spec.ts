@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { classifyAIConnection, supportedAccountProvidersForBackend, assertAccountExecutionIdentity } from "@/lib/ai/connections";
-import { decodeManagedAiProvenance, encodeManagedAiProvenance, managedLockFromRow, rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import { decodeManagedAiProvenance, encodeManagedAiProvenance, managedLockFromRow, assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 import { sessionAiLockFromRow, encodeLegacyInterviewLock } from "@/lib/interview/sessionAiLock";
 import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
 import { managedAutomationLockFromRow } from "@/lib/scraper/automation-run/matchRuntime";
@@ -53,15 +53,17 @@ describe("Strict versioned historical provenance", () => {
     for (const id of [null, "ghost"]) {
       const lock = managedLockFromRow({ ...lockRow, resolvedConnectionId: id })!;
       expect(decode({ ...lockRow, resolvedConnectionId: id })).toMatchObject({ kind: "managed" });
-      expect(() => rejectManagedHistoricalExecution(lock, null, "u")).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
+      expect(() => assertManagedHistoricalExecution(lock, null, "u")).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
     }
   });
-  it("rejects foreign, archived and account connections; valid metadata still cannot execute", () => {
+  it("executes against the same live managed connection; foreign, archived and account connections fail closed", () => {
     const lock = managedLockFromRow(lockRow)!;
     const connection = { ...managed, id: "conn-1", userId: "u", archivedAt: null };
-    expect(() => rejectManagedHistoricalExecution(lock, connection, "u")).toThrow(expect.objectContaining({ code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" }));
+    // M4: an intact historical binding IS executable — it replays through
+    // Hosted against the persisted provenance.
+    expect(() => assertManagedHistoricalExecution(lock, connection, "u")).not.toThrow();
     for (const change of [{ userId: "other" }, { archivedAt: new Date() }, { provider: "OPENAI" }]) {
-      expect(() => rejectManagedHistoricalExecution(lock, { ...connection, ...change }, "u")).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
+      expect(() => assertManagedHistoricalExecution(lock, { ...connection, ...change }, "u")).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
     }
   });
   it("rejects model reinterpretation and malformed provenance before legacy decoding", () => {
@@ -92,7 +94,7 @@ describe("Additive backup contract", () => {
       const data = buildCreateData(owner, { id: "old", managedAiProvenance: raw, ...model, resolvedConnectionId: "ghost" }, ids, "u");
       expect(data.managedAiProvenance).toBe(raw);
       const decoded = managedLockFromRow({ managedAiProvenance: String(data.managedAiProvenance), resolvedModel: String(data.resolvedModel ?? data.model), resolvedConnectionId: data.resolvedConnectionId as string | null });
-      expect(() => rejectManagedHistoricalExecution(decoded!, null, "u")).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
+      expect(() => assertManagedHistoricalExecution(decoded!, null, "u")).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
     }
   });
   it("restored CONNECTED metadata proves neither account login nor hosted authentication", () => {

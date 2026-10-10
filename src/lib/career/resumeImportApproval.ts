@@ -8,10 +8,17 @@ const key = randomBytes(32);
 type Approval = {
   userId: string; requestId: string; expiresAt: number; name: string;
   rawText: string; parsed: ParsedResumeImport; resolvedConnectionId: string; resolvedModel: string;
+  /** Encoded Managed provenance captured at preview execution (M4). The
+   *  signature makes it tamper-proof; confirm persists it verbatim — it
+   *  never re-resolves or re-binds. */
+  managedAiProvenance?: string | null;
 };
 function signature(payload: string) { return createHmac("sha256", key).update(payload).digest(); }
-export function issueImportApproval(input: Omit<Approval, "requestId" | "expiresAt">) {
-  const approval = { ...input, requestId: randomUUID(), expiresAt: Date.now() + 30 * 60 * 1000 };
+export function issueImportApproval(
+  input: Omit<Approval, "requestId" | "expiresAt">,
+  requestId: string = randomUUID(),
+) {
+  const approval = { ...input, requestId, expiresAt: Date.now() + 30 * 60 * 1000 };
   const payload = Buffer.from(JSON.stringify(approval)).toString("base64url");
   return `${payload}.${signature(payload).toString("base64url")}`;
 }

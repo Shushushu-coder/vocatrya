@@ -20,6 +20,8 @@ import {
   type CareerDialogueRouteDecision,
   type CareerDialogueRouteMessage,
 } from "./careerDialogueRoute";
+import { HostedManagedClient } from "@/lib/ai/managed-client";
+import { managedBusinessError } from "@/lib/ai/managed-dispatch";
 
 export type { CareerDialogueRouteDecision };
 
@@ -62,6 +64,39 @@ export async function assertAgentStructuredReadiness(connection: {
   }
 }
 
+/**
+ * Managed-agent gate parity: the AGENT path runs a structured decision
+ * one-shot, so the locked catalog model must still be enabled for
+ * structured output. Catalog/auth failures fail closed like the desktop
+ * probe does for account runtimes.
+ */
+async function assertManagedAgentStructuredReadiness(input: {
+  userId: string;
+  model: string;
+  managedClient?: HostedManagedClient;
+}): Promise<void> {
+  const client = input.managedClient ?? new HostedManagedClient();
+  let catalog;
+  try {
+    catalog = await client.catalog(input.userId);
+  } catch (error) {
+    throw managedBusinessError(error);
+  }
+  const entry = catalog.models.find((model) => model.modelKey === input.model);
+  if (!entry?.available) {
+    throw new AIBusinessError(
+      AI_BUSINESS_ERROR_CODES.MODEL_DISABLED,
+      "The Managed model this conversation uses is no longer available",
+    );
+  }
+  if (!entry.capabilities.structuredOutput) {
+    throw new AIBusinessError(
+      AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED,
+      "The Managed model cannot emit the structured decisions Career Dialogue needs",
+    );
+  }
+}
+
 export type CareerDialoguePreparation =
   | {
       ok: true;
@@ -79,6 +114,12 @@ export async function prepareCareerDialogueTurn(input: {
   messages: CareerDialogueRouteMessage[];
   pageContext?: unknown;
   connection: { backendKind: string; provider: string };
+  /** Managed conversation: the catalog check replaces the desktop probe. */
+  managed?: {
+    userId: string;
+    model: string;
+    managedClient?: HostedManagedClient;
+  };
 }): Promise<CareerDialoguePreparation> {
   const started = performance.now();
   const decision = routeCareerDialogueTurn({
@@ -88,7 +129,11 @@ export async function prepareCareerDialogueTurn(input: {
   const routerDurationMs = performance.now() - started;
   if (decision.route === "AGENT") {
     try {
-      await assertAgentStructuredReadiness(input.connection);
+      if (input.managed) {
+        await assertManagedAgentStructuredReadiness(input.managed);
+      } else {
+        await assertAgentStructuredReadiness(input.connection);
+      }
     } catch (error) {
       return { ok: false, decision, routerDurationMs, error };
     }
@@ -142,6 +187,8 @@ export async function runCareerDialogueTurn(
     prompt: rendered.prompt,
     writer,
     signal,
+    managed: input.managed,
+    deps: input.deps,
   });
   writer.write({ type: "finish" });
   return {

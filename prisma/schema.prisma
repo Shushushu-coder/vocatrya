@@ -51,6 +51,7 @@ model User {
   candidateProfile       CandidateProfile?
   candidateSensitiveInfo CandidateSensitiveInfo?
   resumeVariants         ResumeVariant[]
+  resumeImportAttempts   ResumeImportAttempt[]
   matchAnalyses          MatchAnalysis[]
   legacyMigrationMaps    LegacyMigrationMap[]
   dataMigrationRuns      DataMigrationRun[]
@@ -1511,6 +1512,38 @@ model ResumeArtifact {
   submittedAttempts ApplicationAttempt[] @relation("AttemptSubmittedResumeArtifact")
 
   @@index([resumeVariantVersionId])
+}
+
+/// Durable pre-invocation identity for the canonical resume import (M4).
+/// The client mints `id` before the first POST and reuses it on transport
+/// retries, so the same logical import always resolves to the same
+/// attempt — and therefore the same Managed binding + operation identity.
+/// state: PENDING (created) → RUNNING (lock persisted) → EXECUTED
+/// (resultJson cached) | FAILED (execution failed; executionSeq bumped so
+/// a later retry is a genuinely new operation) → CONFIRMED.
+/// requestSha is a consistency guard only — never an operation key.
+model ResumeImportAttempt {
+  id     String @id
+  userId String
+
+  state        String @default("PENDING")
+  executionSeq Int    @default(0)
+  requestSha   String
+
+  resolvedConnectionId String?
+  resolvedModel        String?
+  managedAiProvenance  String?
+
+  /// Cached structured result — replayed to post-crash retries because
+  /// the Hosted invocation ledger returns receipts, not payloads.
+  resultJson String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 /// FAST_SCREENING requires resumeVariantVersionId = null;

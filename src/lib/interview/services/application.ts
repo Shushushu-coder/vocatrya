@@ -4,6 +4,7 @@
  * Frozen domain semantics via Host Port v0 + Phase 3B persistence.
  * No Prisma in this file. Model calls only through InterviewModelPort.
  */
+import { createHash, randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import {
   COACHING_PROMPT_VERSION,
@@ -69,7 +70,10 @@ import { BundledKnowledgeProvider, type KnowledgeProvider } from "./knowledge";
 import { SystemClock, type Clock } from "./clock";
 import { VocatryaInterviewQueries } from "./hostQueries";
 import { ensureCanonicalPreset } from "../presets/install";
-import { resolveInterviewAiRuntime } from "../interviewRuntimePlan";
+import {
+  interviewCreationPlanRef,
+  resolveInterviewAiRuntime,
+} from "../interviewRuntimePlan";
 import {
   assembleInterviewPlanningContext,
   generateInterviewQuestionPlan,
@@ -159,10 +163,14 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     // createSession's transaction so the session and its bound config are
     // one atomic write; a broken explicit assignment fails here and never
     // falls back to legacy/global. Question planning runs on this same
-    // resolved runtime — no second resolve, no mid-create failover.
+    // resolved runtime — no second resolve, no mid-create failover. The
+    // session id is allocated up-front because a Managed resolution
+    // first-binds `interview-session:<id>` before the row exists.
+    const sessionId = randomUUID();
     const { plan, lock } = await resolveInterviewAiRuntime(
       input.userId,
       deps.db,
+      { resourceKey: `interview-session:${sessionId}` },
     );
     if (plan.kind === "invalid") {
       throw new DomainError(
@@ -177,7 +185,7 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       const planningModel = modelPort.resolveInterviewModelForPlan
         ? await modelPort.resolveInterviewModelForPlan({
             requestingUserId: input.userId,
-            plan,
+            plan: interviewCreationPlanRef({ plan, lock }),
           })
         : await modelPort.resolveInterviewModel({
             requestingUserId: input.userId,
@@ -190,6 +198,10 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       const questionPlan = await generateInterviewQuestionPlan({
         model: planningModel,
         context,
+        operation: {
+          operationId: `interview:${sessionId}:question-plan`,
+          attemptIndex: 0,
+        },
       });
       specs = questionPlan.questions.map((question) => ({
         displayedText: question.text,
@@ -221,6 +233,7 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     }
     return persistence.createSession({
       actorUserId: input.userId,
+      id: sessionId,
       coachingMode: input.coachingMode,
       feedbackReleasePolicy: input.feedbackReleasePolicy,
       knowledgeBaseVersion: knowledge.version,
@@ -229,6 +242,7 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       createdVia: "USER",
       resolvedConnectionId: lock.resolvedConnectionId ?? null,
       resolvedModel: lock.resolvedModel ?? null,
+      managedAiProvenance: lock.managedAiProvenance ?? null,
       questions: prepared,
     });
   }
@@ -505,7 +519,10 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
 
       for (let cycle = 0; cycle <= MAX_REGENERATIONS; cycle += 1) {
         try {
-          const raw = await model.generateJson(built);
+          const raw = await model.generateJson(built, {
+            operationId: `interview:${attempt.sessionId}:feedback:${generation.id}`,
+            attemptIndex: cycle,
+          });
           const items = validateAndGround(raw);
           if (!items.length) {
             throw new DomainError(
@@ -686,6 +703,10 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       }
       const raw = await model.generateJson(
         buildSummaryPrompt({ job: jobContext, questions }),
+        {
+          operationId: `interview:${session.id}:summary:${generation.id}`,
+          attemptIndex: 0,
+        },
       );
       const payload = raw as {
         bodyText?: string;
@@ -781,7 +802,17 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       history,
       userText: input.userText,
     });
-    const raw = await model.generateJson(built);
+    // Each user message is a new business operation — the ordinal plus a
+    // content hash make the identity unique per turn and stable across a
+    // retried submission of the same message.
+    const turnHash = createHash("sha256")
+      .update(`${target.targetType}:${input.userText}`)
+      .digest("hex")
+      .slice(0, 16);
+    const raw = await model.generateJson(built, {
+      operationId: `interview:${input.sessionId}:dialogue:${turns.length}:${turnHash}`,
+      attemptIndex: 0,
+    });
     const reply = String((raw as { reply?: string }).reply ?? "").trim();
     if (!reply) {
       throw new DomainError(ErrorCodes.GENERATION_FAILED, "Coaching reply was empty");

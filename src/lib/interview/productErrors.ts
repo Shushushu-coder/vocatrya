@@ -1,6 +1,9 @@
 import { translate } from "@/i18n/translate";
 import type { Locale } from "@/i18n/config";
 import { DomainError } from "./persistence/interviewErrors";
+import { MANAGED_ERROR_CODES } from "@/lib/ai/managed-contract";
+
+const MANAGED_CODES = new Set<string>(MANAGED_ERROR_CODES);
 
 export const PRODUCT_ERROR_CODES = [
   "INTERVIEW_MODEL_NOT_CONFIGURED",
@@ -17,6 +20,26 @@ export const PRODUCT_ERROR_CODES = [
   "MANAGED_BINDING_UNAVAILABLE",
   "MANAGED_PROVENANCE_INVALID",
   "MANAGED_EXECUTION_NOT_IMPLEMENTED",
+  // Managed Hosted taxonomy (M4) — codes travel verbatim so the client
+  // can distinguish auth/entitlement/quota/replay states.
+  "MANAGED_AI_DISABLED",
+  "MANAGED_AUTH_REQUIRED",
+  "MANAGED_RUNTIME_UNAVAILABLE",
+  "MODEL_DISABLED",
+  "CAPABILITY_UNSUPPORTED",
+  "GATEWAY_AUTH",
+  "GATEWAY_RATE_LIMIT",
+  "GATEWAY_TIMEOUT",
+  "GATEWAY_NETWORK",
+  "GATEWAY_RESPONSE",
+  "NOT_ENTITLED",
+  "QUOTA_EXCEEDED",
+  "MODEL_NOT_ALLOWED",
+  "INVOCATION_ID_REQUIRED",
+  "INVOCATION_CONFLICT",
+  "INVOCATION_STATUS_UNKNOWN",
+  "INVOCATION_REPLAYED",
+  "INVOCATION_IN_PROGRESS",
   "INVALID_TRANSCRIPT_EVIDENCE",
   "INVALID_FEEDBACK_ITEM",
   "EMPTY_ITEMS",
@@ -141,7 +164,9 @@ export function mapInterviewError(error: unknown, locale: Locale = "zh-CN"): Int
     : "GENERATION_FAILED";
   const rawMessage = error instanceof Error ? error.message : String(error);
   const message =
-    (mapped.startsWith("MANAGED_") ? translate(locale, `interview.errors.${mapped}`) : undefined) ??
+    ((mapped.startsWith("MANAGED_") || MANAGED_CODES.has(mapped))
+      ? translate(locale, `interview.errors.${mapped}`)
+      : undefined) ??
     PRODUCT_MESSAGES[mapped] ??
     (isSecretLike(rawMessage) ? PRODUCT_MESSAGES.GENERATION_FAILED : rawMessage);
   return { success: false, code: mapped, message };

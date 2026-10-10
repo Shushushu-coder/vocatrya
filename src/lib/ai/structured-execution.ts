@@ -55,6 +55,18 @@ export interface StructuredExecutionInput {
   signal?: AbortSignal;
   /** Durable business operation identity. Managed execution requires a caller-supplied id — none is synthesized; missing identity fails with INVOCATION_ID_REQUIRED. */
   operationId?: string;
+  /**
+   * Business resource the Managed binding is issued for (M4). The first
+   * call binds `{business, resourceKey}` at the Hosted authority and every
+   * later call on this resource replays that binding.
+   */
+  managedResource?: { business: string; resourceKey: string };
+  /**
+   * Pre-bound provenance persisted on a durable business owner (M4 P1-01).
+   * When supplied it is sent verbatim from the first attempt — the seam
+   * never re-binds — and each response's provenance is verified against it.
+   */
+  managedAiProvenance?: ManagedAiProvenanceV1;
 }
 
 export type StructuredExecutionResult =
@@ -159,7 +171,10 @@ export async function executeStructuredForAssignment(
   }
 
   const { connectionId, model } = resolution;
-  let managedAiProvenance: ManagedAiProvenanceV1 | undefined;
+  // A caller-persisted lock replays verbatim; otherwise the first attempt
+  // binds and the response provenance is captured for the repair attempt.
+  let managedAiProvenance: ManagedAiProvenanceV1 | undefined =
+    input.managedAiProvenance;
 
   const result = await runStructuredValidation({
     prompt,
@@ -174,6 +189,7 @@ export async function executeStructuredForAssignment(
             connectionId,
             model,
             managedAiProvenance,
+            managedResource: input.managedResource,
             prompt: attemptPrompt,
             structuredOutput: { schema, schemaName },
             timeoutMs,

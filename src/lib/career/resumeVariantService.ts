@@ -131,6 +131,7 @@ export class ResumeVariantService {
   /** Import owns facts/sections through populate; all version writes remain here. */
   async createImportedDraft(input: {
     id: string; name: string; resolvedConnectionId: string; resolvedModel: string;
+    managedAiProvenance?: string | null;
   }, populate: (tx: Prisma.TransactionClient, versionId: string) => Promise<string | null>) {
     await this.gate();
     const name = input.name.trim();
@@ -140,6 +141,7 @@ export class ResumeVariantService {
       const version = await tx.resumeVariantVersion.create({ data: {
         resumeVariantId: variant.id, versionNumber: 1, status: RESUME_VERSION_STATUS.DRAFT,
         createdVia: "IMPORT", resolvedConnectionId: input.resolvedConnectionId, resolvedModel: input.resolvedModel,
+        managedAiProvenance: input.managedAiProvenance ?? null,
       } });
       const headerSnapshot = sanitizeResumeHeaderSnapshot(await populate(tx, version.id));
       await tx.resumeVariantVersion.update({ where: { id: version.id }, data: { headerSnapshot } });

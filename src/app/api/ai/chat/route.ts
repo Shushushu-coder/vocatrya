@@ -1,4 +1,4 @@
-import { rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 import { generateId } from "ai";
 import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError, type ConversationRequest } from "@/lib/agent/conversationRequest";
 import { conversationCommitStream } from "@/lib/agent/conversationStream";
@@ -74,7 +74,7 @@ import {
   prepareCareerDialogueTurn,
   runCareerDialogueTurn,
 } from "@/lib/agent/careerDialogueTurn";
-import { AIBusinessError } from "@/lib/ai/connections";
+import { AIBusinessError, classifyAIConnection } from "@/lib/ai/connections";
 import { loadFreshConversationSummary } from "@/lib/agent/conversationSummaryStore";
 import { scheduleCareerDialogueSummary } from "@/lib/agent/conversationSummaryScheduler";
 
@@ -136,6 +136,7 @@ async function accountChatResponse({
   freshNativeFull,
   canonicalJobs,
   request,
+  managed,
 }: {
   req: NextRequest;
   userId: string;
@@ -147,6 +148,8 @@ async function accountChatResponse({
   freshNativeFull: boolean;
   canonicalJobs: boolean;
   request: ConversationRequest;
+  /** Managed-locked turn — provenance + operation identity (M4). */
+  managed?: import("@/lib/agent/accountTurn").ManagedTurnContext;
 }) {
   // The lock is a provenance pointer — the connection's CURRENT state is
   // re-checked every turn (disconnect/reauth/archive degrade it), and it is
@@ -179,10 +182,21 @@ async function accountChatResponse({
       ),
     );
   }
+  if (!managed && classifyAIConnection(connection) === "MANAGED") {
+    // Half-state (M4): the row names a Managed connection but carries no
+    // provenance — fail closed rather than silently binding at run time.
+    return deny(
+      new AIBusinessError(
+        "MANAGED_PROVENANCE_INVALID",
+        "The conversation's Managed binding record is incomplete",
+      ),
+    );
+  }
   try {
     await checkStreamingTurnReadiness({
       connection,
       model: lock.model,
+      userId,
     });
   } catch (error) {
     return deny(error);
@@ -209,6 +223,9 @@ async function accountChatResponse({
       backendKind: connection.backendKind,
       provider: connection.provider,
     },
+    managed: managed
+      ? { userId, model: lock.model ?? "" }
+      : undefined,
   });
   const routeFields = careerDialogueObservabilityFields({
     decision: prepared.decision,
@@ -220,7 +237,7 @@ async function accountChatResponse({
   if (!prepared.ok) {
     logTurn({
       ...routeFields,
-      provider: `account:${connection.provider}`,
+      provider: managed ? "managed:VOCATRYA" : `account:${connection.provider}`,
       backendKind: connection.backendKind,
       outcome: "capability_blocked",
     });
@@ -281,6 +298,7 @@ async function accountChatResponse({
           provider: connection.provider,
           backendKind: connection.backendKind,
           modelName: lock.model ?? "",
+          managed,
           systemPrompt,
           messages,
           pastedText,
@@ -302,7 +320,7 @@ async function accountChatResponse({
       runInSpan(turnSpan, () =>
         logTurn({
           ...routeFields,
-          provider: `account:${connection.provider}`,
+          provider: managed ? "managed:VOCATRYA" : `account:${connection.provider}`,
           backendKind: connection.backendKind,
           tool,
           toolState: state,
@@ -399,13 +417,23 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   const conversation = await getOwnedChatConversation(userId, conversationId);
   if (!conversation) throw new ConversationRequestError("CONVERSATION_NOT_FOUND");
   let lock: ReturnType<typeof chatLockFromRow>;
+  let managedTurn: import("@/lib/agent/accountTurn").ManagedTurnContext | undefined;
   try {
     lock = chatLockFromRow(conversation);
     if (lock.kind === "managed") {
       const connection = lock.connectionId ? await prisma.aIConnection.findFirst({
         where: { id: lock.connectionId, userId },
       }) : null;
-      rejectManagedHistoricalExecution(lock, connection, userId);
+      // M4: the persisted binding is executable — validate it is intact,
+      // then run every model call in this turn on the stored provenance.
+      // `conversation:<id>` is the same resourceKey the creation-time
+      // bind used; requestId makes the turn a durable operation.
+      assertManagedHistoricalExecution(lock, connection, userId);
+      managedTurn = {
+        provenance: lock.provenance,
+        resourceKey: `conversation:${conversationId}`,
+        operationId: `dialogue:${conversationId}:${request.requestId}`,
+      };
     }
   } catch (error) {
     // Preserve explicit Managed errors through the request settlement wrapper.
@@ -426,7 +454,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     careerRuntime.rolloutScope,
   );
 
-  if (lock.kind === "account") {
+  if (lock.kind === "account" || lock.kind === "managed") {
     return accountChatResponse({
       req,
       userId,
@@ -434,10 +462,11 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       messages,
       pastedText,
       pageContext,
-      lock,
+      lock: lock as { connectionId: string; model: string | null },
       freshNativeFull,
       canonicalJobs,
       request,
+      managed: managedTurn,
     });
   }
 

@@ -76,6 +76,37 @@ export function mapAgentError(
       case "STRUCTURED_OUTPUT_NOT_VERIFIED":
       case "STRUCTURED_OUTPUT_UNSUPPORTED":
         return "The assigned AI runtime is not verified for the structured decisions Career Dialogue needs.";
+      case "MANAGED_AUTH_REQUIRED":
+        return "Managed AI requires a Hosted sign-in. Open Settings → AI Connections.";
+      case "MANAGED_BINDING_UNAVAILABLE":
+      case "MANAGED_PROVENANCE_INVALID":
+        return "This conversation's Managed AI binding is no longer valid. Start a new conversation or fix the assignment in Settings.";
+      case "MANAGED_AI_DISABLED":
+      case "MANAGED_RUNTIME_UNAVAILABLE":
+      case "GATEWAY_NETWORK":
+      case "GATEWAY_RESPONSE":
+        return "Managed AI is unavailable right now. Try again in a moment.";
+      case "GATEWAY_AUTH":
+        return "Managed AI authorization failed. Sign in again in Settings → AI Connections.";
+      case "GATEWAY_RATE_LIMIT":
+      case "GATEWAY_TIMEOUT":
+        return "Managed AI is busy or timed out. Ask again to retry.";
+      case "NOT_ENTITLED":
+        return "This Managed AI model is not included in the current plan. Pick another model in Settings.";
+      case "QUOTA_EXCEEDED":
+        return "The Managed AI quota is exhausted. Try again after it resets or pick another model.";
+      case "MODEL_NOT_ALLOWED":
+      case "MODEL_DISABLED":
+        return "This Managed AI model is not enabled for this account. Pick another model in Settings.";
+      case "CAPABILITY_UNSUPPORTED":
+        return "This Managed AI model lacks a capability Career Dialogue needs. Pick another model in Settings.";
+      case "INVOCATION_ID_REQUIRED":
+      case "INVOCATION_CONFLICT":
+      case "INVOCATION_STATUS_UNKNOWN":
+      case "INVOCATION_IN_PROGRESS":
+        return "That request is still being settled by Managed AI. Wait a moment, then retry.";
+      case "INVOCATION_REPLAYED":
+        return "That request was already completed by Managed AI. Reload the conversation to see it.";
       case "AI_EXECUTION_TIMEOUT":
         return "That response took too long. Ask again to retry.";
       case "AI_REQUEST_TOO_LARGE":

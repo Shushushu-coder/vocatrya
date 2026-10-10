@@ -5,7 +5,7 @@ import { POST } from "@/app/api/ai/chat/route";
 import { PrismaClient } from "@prisma/client";
 import { buildBackupZip } from "@/lib/backup/export";
 import { importBackup } from "@/lib/backup/import";
-import { encodeManagedAiProvenance, managedLockFromRow, rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import { encodeManagedAiProvenance, managedLockFromRow, assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 import { VocatryaInterviewModelAdapter } from "@/lib/interview/vocatryaHostPorts";
 import { getAgentChatPreflight } from "@/actions/agentChat.actions";
 import { listConnectionsForUser, listSelectableAccountConnectionsForUser, applyReconnectAuthenticated, applyVerifyResult, applyDisconnect, createVerifiedAccountConnection } from "@/lib/ai/connection-service";
@@ -93,7 +93,9 @@ describe("Managed local backup and execution boundaries", () => {
       expect(owner.resolvedConnectionId).toBe(connection.id);
       const historical = managedLockFromRow(owner)!;
       expect(historical.model).toBe("stable-model-key");
-      expect(() => rejectManagedHistoricalExecution(historical, connection, ctx.userId)).toThrow(expect.objectContaining({ code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" }));
+      // M4: the restored binding's identity assertion passes — execution
+      // authority lives in Hosted, which denies unauthenticated calls.
+      expect(() => assertManagedHistoricalExecution(historical, connection, ctx.userId)).not.toThrow();
     }
     const assignment = await prisma.aIBusinessAssignment.findFirstOrThrow({ where: { userId: ctx.userId } });
     expect(assignment.connectionId).toBe(connection.id);
@@ -102,19 +104,31 @@ describe("Managed local backup and execution boundaries", () => {
     await prisma.aIConnection.create({ data: { userId: ctx.userId, provider: "UNKNOWN", backendKind: "CODEX_RUNTIME", displayName: "Invalid identity" } });
     expect(await listConnectionsForUser(ctx.userId, prisma)).toEqual(expect.arrayContaining([expect.objectContaining({ id: connection.id })]));
     expect(await listSelectableAccountConnectionsForUser(ctx.userId, prisma)).toEqual([expect.objectContaining({ id: account.id })]);
-    await expect(setBusinessAssignment({ userId: ctx.userId, purpose: "INTERVIEW", connectionId: connection.id, model: "stable-model-key" }, prisma)).rejects.toMatchObject({ code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
+    // M4: Managed assignments are writable — but catalog validation runs
+    // against Hosted, which denies the unauthenticated local user.
+    await expect(setBusinessAssignment({ userId: ctx.userId, purpose: "INTERVIEW", connectionId: connection.id, model: "stable-model-key" }, prisma)).rejects.toMatchObject({ code: "MANAGED_AUTH_REQUIRED" });
     expect(await prisma.aIBusinessAssignment.findUniqueOrThrow({ where: { id: assignment.id } })).toMatchObject({ connectionId: connection.id });
 
     const conversation = await prisma.chatConversation.findFirstOrThrow({ where: { userId: ctx.userId } });
     expect(conversation).toMatchObject({ resolvedConnectionId: connection.id, resolvedModel: "stable-model-key", managedAiProvenance: provenance });
-    await assertBlockedChatTurn(conversation, "MANAGED_EXECUTION_NOT_IMPLEMENTED");
+    // The restored connection is REAUTH_REQUIRED — the turn gate reports
+    // that honest state before any Hosted call is attempted.
+    await assertBlockedChatTurn(conversation, "REAUTH_REQUIRED");
     const result = await getAgentChatPreflight({ conversationId: conversation.id });
-    expect(result).toMatchObject({ success: false, code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
-    await expect(createPrismaSummaryRepository(prisma).load(ctx.userId, conversation.id)).rejects.toMatchObject({ code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
-    expect(await condenseCareerDialogueSummary({ userId: ctx.userId, conversationId: conversation.id })).toMatchObject({ status: "failed", reason: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
+    expect(result).toMatchObject({ success: true, data: { kind: "managed", connectionId: connection.id, model: "stable-model-key", locked: true } });
+    // The summary snapshot still loads — the intact binding decodes to a
+    // managed lock; failure is recorded per-surface, not at read time.
+    await expect(createPrismaSummaryRepository(prisma).load(ctx.userId, conversation.id)).resolves.toMatchObject({ managed: { connectionId: connection.id, model: "stable-model-key" }, lockInvalid: undefined });
+    // A single orphaned user turn has no eligible coverage — the
+    // scheduler skips instead of generating (no Hosted call needed).
+    expect(await condenseCareerDialogueSummary({ userId: ctx.userId, conversationId: conversation.id })).toMatchObject({ status: "skipped" });
     const model = new VocatryaInterviewModelAdapter(prisma);
     const session = await prisma.interviewSession.findFirstOrThrow({ where: { userId: ctx.userId } });
-    await expect(model.resolveInterviewModel({ requestingUserId: ctx.userId, sessionId: session.id })).rejects.toMatchObject({ code: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
+    // Resolution succeeds — the restored connection's REAUTH_REQUIRED
+    // state is what the execution seam reports before any Hosted call.
+    const resolved = await model.resolveInterviewModel({ requestingUserId: ctx.userId, sessionId: session.id });
+    expect(resolved).toMatchObject({ provider: "VOCATRYA", model: "stable-model-key" });
+    await expect(resolved.generateJson({ system: "s", prompt: "p" })).rejects.toMatchObject({ code: "REAUTH_REQUIRED" });
   }, 120_000);
 
   it("restores pruned connection references and provenance with explicit failure, even with legacy settings configured", async () => {
@@ -130,14 +144,16 @@ describe("Managed local backup and execution boundaries", () => {
     const conversation = await prisma.chatConversation.findFirstOrThrow({ where: { userId: ctx.userId } });
     expect(conversation.managedAiProvenance).toBe(provenance);
     await assertBlockedChatTurn(conversation, "MANAGED_BINDING_UNAVAILABLE");
-    await expect(createPrismaSummaryRepository(prisma).load(ctx.userId, conversation.id)).rejects.toMatchObject({ code: "MANAGED_BINDING_UNAVAILABLE" });
+    // M4: load reports the broken binding as a fail-closed marker rather
+    // than throwing — the scheduler turns it into an explicit failure.
+    await expect(createPrismaSummaryRepository(prisma).load(ctx.userId, conversation.id)).resolves.toMatchObject({ lockInvalid: "MANAGED_BINDING_UNAVAILABLE", managed: undefined });
     expect(await condenseCareerDialogueSummary({ userId: ctx.userId, conversationId: conversation.id })).toMatchObject({ status: "failed", reason: "MANAGED_BINDING_UNAVAILABLE" });
     const owners = await Promise.all([prisma.automationRun.findFirstOrThrow(), prisma.resumeVariantVersion.findFirstOrThrow(), prisma.matchAnalysis.findFirstOrThrow(), prisma.jobDescriptionParse.findFirstOrThrow()]);
     for (const owner of owners) {
       expect(owner.managedAiProvenance).toBe(provenance);
-      expect(() => rejectManagedHistoricalExecution(managedLockFromRow(owner)!, null, ctx.userId)).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
+      expect(() => assertManagedHistoricalExecution(managedLockFromRow(owner)!, null, ctx.userId)).toThrow(expect.objectContaining({ code: "MANAGED_BINDING_UNAVAILABLE" }));
     }
-    expect(await getAgentChatPreflight({ conversationId: conversation.id })).toMatchObject({ success: false, code: "MANAGED_BINDING_UNAVAILABLE" });
+    expect(await getAgentChatPreflight({ conversationId: conversation.id })).toMatchObject({ success: true, data: { kind: "blocked", code: "MANAGED_BINDING_UNAVAILABLE" } });
     const session = await prisma.interviewSession.findFirstOrThrow({ where: { userId: ctx.userId } });
     expect(session.managedAiProvenance).toBe(provenance);
     expect(session.resolvedConnectionId).toBeNull();

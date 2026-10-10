@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { streamText, Output } from "ai";
@@ -204,6 +205,15 @@ export const POST = async (req: NextRequest) => {
         schemaName: RESUME_IMPORT_SCHEMA_NAME,
         timeoutMs: APP_CONSTANTS.AI_RESUME_IMPORT_TIMEOUT_MS,
         signal: controller.signal,
+        // The legacy Resume row carries no lock columns, so the durable
+        // operation identity is derived from the file content — a client
+        // retry of the same upload replays at Hosted instead of
+        // double-billing; a different upload is a new operation.
+        operationId: `resume-import:${resumeId}:${createHash("sha256").update(normalizedText).digest("hex").slice(0, 20)}`,
+        managedResource: {
+          business: "RESUME",
+          resourceKey: `resume-file:${resumeId}`,
+        },
       }),
     );
   } catch (error) {

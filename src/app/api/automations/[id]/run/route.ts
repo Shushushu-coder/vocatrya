@@ -8,7 +8,7 @@ import {
   getUserAiSettings,
   AutomationAlreadyRunningError,
 } from "@/lib/scraper";
-import { resolveAutomationMatchRuntime } from "@/lib/scraper/automation-run/matchRuntime";
+import { previewAutomationMatchRuntime } from "@/lib/scraper/automation-run/matchRuntime";
 import { PROVIDER_VERIFIERS } from "@/lib/ai/provider-registry.server";
 import { getOllamaBaseUrl } from "@/actions/apiKey.actions";
 import { AiProvider } from "@/models/ai.model";
@@ -98,7 +98,7 @@ export async function POST(
     // desktop runtime instead, and a broken assignment fails explicitly
     // inside the run rather than being shadowed by an unrelated Ollama
     // check here.
-    const matchRuntime = await resolveAutomationMatchRuntime(userId);
+    const matchRuntime = await previewAutomationMatchRuntime(userId);
     const aiSettings = await getUserAiSettings(userId);
     if (
       matchRuntime.plan.kind === "legacy" &&

@@ -478,4 +478,56 @@ describe("Career Dialogue fast path", () => {
     expect(executeAIConnectionTextStream).not.toHaveBeenCalled();
     expect(executeAIConnectionText).not.toHaveBeenCalled();
   });
+
+  it("issues a fresh managed invocation key for a corrected decision at the same step", async () => {
+    (buildAgentTools as any).mockReturnValue({} satisfies Partial<ToolSet>);
+    const provenance = {
+      schemaVersion: 1 as const,
+      managedBindingId: "binding-1",
+      requestedModelKey: "gpt-5.6-sol",
+      upstreamModelId: "upstream-1",
+      mappingRevision: "rev-1",
+      adapterContractRevision: "rev-1",
+    };
+    // First decision names a tool that does not exist — the correction loop
+    // retries the SAME step position, so its invocation key must differ from
+    // the rejected attempt it replaces or Hosted replays it dead.
+    (executeAIConnectionText as any)
+      .mockResolvedValueOnce({
+        text: '{"type":"tool_call","tool":"not_a_tool","arguments":"{}"}',
+      })
+      .mockResolvedValueOnce({
+        text: '{"type":"assistant_response","tool":null,"arguments":null}',
+      });
+    const { writer } = captureWriter();
+    const result = await runCareerDialogueTurn({
+      ...baseInput,
+      messages: [userMsg("save this job")],
+      writer,
+      signal: new AbortController().signal,
+      decision: { route: "AGENT", reason: "RESUME_DATA_INTENT" },
+      managed: {
+        provenance,
+        resourceKey: "conversation:conv-1",
+        operationId: "op-conv-1",
+      },
+    });
+    expect(result.paused).toBe(false);
+    expect(executeAIConnectionText).toHaveBeenCalledTimes(2);
+    const first = (executeAIConnectionText as any).mock.calls[0][0];
+    const second = (executeAIConnectionText as any).mock.calls[1][0];
+    expect(first).toMatchObject({
+      managedAiProvenance: provenance,
+      managedResource: {
+        business: "CAREER_DIALOGUE",
+        resourceKey: "conversation:conv-1",
+      },
+      operationId: "op-conv-1",
+      invocationKey: "op-conv-1:decision:1:0:0",
+    });
+    expect(second.invocationKey).toBe("op-conv-1:decision:1:1:0");
+    expect(second.invocationKey).not.toBe(first.invocationKey);
+    expect((executeAIConnectionTextStream as any).mock.calls[0][0].invocationKey)
+      .toBe("op-conv-1:answer:0");
+  });
 });

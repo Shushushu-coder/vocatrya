@@ -19,3 +19,22 @@ export async function ensureManagedConnectionForLocalUser(userId: string, client
     return await db.aIConnection.update({ where: { id: connection.id }, data: { status: "CONNECTED", lastVerifiedAt: new Date() } });
   } catch (error) { throw managedBusinessError(error); }
 }
+
+/**
+ * Canonical server-side Managed bootstrap (M4). Product surfaces call this
+ * when they need the user's Managed source to exist — e.g. an
+ * assignManagedBusinessSource flow or a managed-capable preflight. The
+ * connection is system-provisioned; it never appears in account CRUD.
+ */
+export async function bootstrapManagedAiForUser(
+  userId: string,
+  client: HostedManagedClient = new HostedManagedClient(),
+  db: Pick<PrismaClient, "aIConnection"> = prisma,
+): Promise<{ connectionId: string; displayName: string; status: string }> {
+  const connection = await ensureManagedConnectionForLocalUser(userId, client, db);
+  return {
+    connectionId: connection.id,
+    displayName: connection.displayName,
+    status: connection.status,
+  };
+}

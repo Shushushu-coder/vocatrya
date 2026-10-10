@@ -54,16 +54,22 @@ export function managedLockFromRow(row: HistoricalAIContract): ManagedHistorical
   return { kind: "managed", connectionId: row.resolvedConnectionId, model: provenance.requestedModelKey, provenance };
 }
 
-/** No legacy/default fallback; even a valid binding has no M1 execution path. */
-export function rejectManagedHistoricalExecution(
+/**
+ * M4: historical Managed locks are executable. Asserts the lock still points
+ * at the same live Managed connection for this user, then returns the binding
+ * details callers pass to the execution seam (managedAiProvenance +
+ * managedResource keep every invocation on the original binding). No
+ * legacy/default fallback: binding drift or a missing/degraded connection
+ * fails closed, never re-resolves the assignment.
+ */
+export function assertManagedHistoricalExecution(
   lock: ManagedHistoricalLock,
   connection: (AIConnectionIdentity & { id: string; userId: string; archivedAt: Date | null }) | null,
   userId: string,
-): never {
+): void {
   if (!lock.connectionId || !connection || connection.id !== lock.connectionId ||
     connection.userId !== userId || connection.archivedAt !== null ||
     classifyAIConnection(connection) !== "MANAGED") {
     throw new AIBusinessError("MANAGED_BINDING_UNAVAILABLE", "The historical Managed AI connection is unavailable");
   }
-  throw new AIBusinessError("MANAGED_EXECUTION_NOT_IMPLEMENTED", "Managed execution is not implemented in M1");
 }

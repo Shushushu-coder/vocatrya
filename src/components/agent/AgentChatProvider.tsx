@@ -63,7 +63,7 @@ export const AGENT_CHAT_PANEL_ID = "chat";
 export type AgentChatIdentity = {
   checked: boolean;
   ok: boolean;
-  kind: "account" | "legacy" | "blocked" | "unknown";
+  kind: "account" | "managed" | "legacy" | "blocked" | "unknown";
   locked: boolean;
   model: string | null;
   displayName: string | null;
@@ -139,11 +139,11 @@ function identityFromInitial(
   initial: AgentChatInitialConversation | null,
 ): AgentChatIdentity {
   if (!initial) return UNKNOWN_IDENTITY;
-  if (initial.lockKind === "account") {
+  if (initial.lockKind === "account" || initial.lockKind === "managed") {
     return {
       checked: false,
       ok: true,
-      kind: "account",
+      kind: initial.lockKind,
       locked: true,
       model: initial.resolvedModel,
       displayName: null,
@@ -410,11 +410,11 @@ function useAgentChatValue(
         explicit: conversationIdRef.current ? null : explicitRef.current,
       });
       const state = account?.data;
-      if (state?.kind === "account") {
+      if (state?.kind === "account" || state?.kind === "managed") {
         setIdentity({
           checked: true,
           ok: true,
-          kind: "account",
+          kind: state.kind,
           locked: state.locked,
           model: state.model,
           displayName: state.displayName,
@@ -658,11 +658,11 @@ function useAgentChatValue(
       resetTransient();
       writeActiveConversationId(data.id);
       setIdentity(
-        data.lockKind === "account"
+        data.lockKind === "account" || data.lockKind === "managed"
           ? {
               checked: false,
               ok: true,
-              kind: "account",
+              kind: data.lockKind,
               locked: true,
               model: data.resolvedModel,
               displayName: null,

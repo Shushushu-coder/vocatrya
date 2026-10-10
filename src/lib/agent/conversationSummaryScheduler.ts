@@ -1,5 +1,5 @@
 import "server-only";
-import { managedLockFromRow, rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import type { ManagedAiProvenanceV1 } from "@/lib/ai/managed-provenance";
 
 import type { UIMessage } from "ai";
 import { AIBusinessError } from "@/lib/ai/connections";
@@ -55,6 +55,11 @@ export type SummarySchedulerDeps = {
     connectionId: string;
     model: string;
     prompt: string;
+    /** Managed execution fields — forwarded verbatim to the seam (M4). */
+    managedAiProvenance?: ManagedAiProvenanceV1;
+    managedResource?: { business: string; resourceKey: string };
+    operationId?: string;
+    attemptIndex?: number;
   }) => Promise<{ text: string }>;
   onGenerationStart?: () => void;
   onResult?: (result: SummaryTaskResult) => void;
@@ -125,10 +130,10 @@ export async function condenseCareerDialogueSummary(
   };
   try {
     const snapshot = await deps.repository.load(input.userId, input.conversationId);
-    const managed = snapshot ? managedLockFromRow(snapshot) : null;
-    if (managed) {
-      if (!managed.connectionId) rejectManagedHistoricalExecution(managed, null, input.userId);
-      return finish({ status: "skipped", reason: "MANAGED_EXECUTION_NOT_IMPLEMENTED" });
+    if (snapshot?.lockInvalid) {
+      // Managed binding drift or a provenance-less managed half-state —
+      // surface the stable code, never re-resolve or auto-heal.
+      return finish({ status: "failed", reason: snapshot.lockInvalid });
     }
     if (!snapshot?.resolvedConnectionId || !snapshot.resolvedModel) {
       return finish({ status: "skipped", reason: "legacy" });
@@ -220,9 +225,27 @@ export async function condenseCareerDialogueSummary(
         connectionId: snapshot.resolvedConnectionId,
         model: snapshot.resolvedModel,
         prompt: buildCareerDialogueSummaryPrompt(projection, previousSummary),
+        // M4: the summary is a business operation of the conversation's
+        // binding — identity is deterministic per coverage delta, so a
+        // retried summary of the same coverage replays. Scheduler
+        // failureCount is backoff state only and must NOT mint invocation
+        // identity: transport retries (UNKNOWN, network, 503) re-enter
+        // with the same operationId + attemptIndex and hit the same
+        // invocationKey instead of becoming new billable invocations.
+        ...(snapshot.managed
+          ? {
+              managedAiProvenance: snapshot.managed.provenance,
+              managedResource: {
+                business: "CAREER_DIALOGUE",
+                resourceKey: `conversation:${input.conversationId}`,
+              },
+              operationId: `dialogue:${input.conversationId}:summary:${target.coverageHash.slice(0, 16)}`,
+              attemptIndex: 0,
+            }
+          : {}),
       });
       raw = executed.text ?? "";
-    } catch {
+    } catch (error) {
       const nextFailureCount = await recordFailure(deps, input);
       logSummary({
         summaryStatus: "failed",
@@ -234,7 +257,9 @@ export async function condenseCareerDialogueSummary(
       });
       return finish({
         status: "failed",
-        reason: "provider",
+        // Stable business codes survive the boundary instead of collapsing
+        // into "provider" — they are diagnosable in logs and callers.
+        reason: error instanceof AIBusinessError ? error.code : "provider",
         failureCount: nextFailureCount,
         coveredCount: target.coveredCount,
         droppedTurnCount: budget.size.droppedTurnCount,
@@ -320,6 +345,13 @@ function defaultSummarySchedulerDeps(): SummarySchedulerDeps {
         model: input.model,
         prompt: input.prompt,
         timeoutMs: AI_EXECUTION_DEFAULT_TIMEOUT_MS,
+        // Managed fields forward verbatim — dropping provenance/operation
+        // identity here would fail every managed summary with
+        // INVOCATION_ID_REQUIRED.
+        managedAiProvenance: input.managedAiProvenance,
+        managedResource: input.managedResource,
+        operationId: input.operationId,
+        attemptIndex: input.attemptIndex,
       });
       return { text: result.text };
     },

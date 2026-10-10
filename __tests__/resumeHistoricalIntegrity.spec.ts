@@ -89,7 +89,9 @@ function controlledClients(model: "resumeVariantVersion" | "applicationAttempt")
   return { first: first as unknown as PrismaClient, second: second as unknown as PrismaClient, locked, release, contender };
 }
 
-describe("version-owned title authority", () => {
+// DB-heavy suite: per-test bodies do many sequential writes and can exceed
+// the default 5s timeout under full-suite CPU contention.
+describe("version-owned title authority", { timeout: 20_000 }, () => {
   it.each(["FROZEN", "SUBMITTED"])("keeps %s preview, print, text and Agent review input stable after live rename", async (status) => {
     const g = await graph();
     if (status === "FROZEN") await variants().freeze(g.versionId);
@@ -129,7 +131,7 @@ describe("version-owned title authority", () => {
   });
 });
 
-describe("atomic immutable mutation boundary", () => {
+describe("atomic immutable mutation boundary", { timeout: 20_000 }, () => {
   it("rolls back evidence replacement and evidenceStatus if any requested evidence is not owned", async () => {
     const g = await graph(), foreign = await graph(otherUserId);
     await provenance().linkEvidenceToExpression({ expressionId: g.expression.id, evidenceId: g.evidence.id });
@@ -166,7 +168,7 @@ describe("atomic immutable mutation boundary", () => {
   });
 });
 
-describe("two independent SQLite clients with controlled writer ordering", () => {
+describe("two independent SQLite clients with controlled writer ordering", { timeout: 20_000 }, () => {
   it.each(["edit-first", "freeze-first"])("serializes edit/freeze: %s", async (order) => {
     const g = await graph(), c = controlledClients("resumeVariantVersion");
     const first = order === "edit-first"
@@ -212,7 +214,7 @@ describe("two independent SQLite clients with controlled writer ordering", () =>
   });
 });
 
-describe("submission and historical provenance", () => {
+describe("submission and historical provenance", { timeout: 20_000 }, () => {
   it.each(["FROZEN", "SUBMITTED"])("preserves an unknown frozenAt on historical %s transition/replay", async (status) => {
     const g = await graph();
     await db.resumeVariantVersion.update({ where: { id: g.versionId }, data: { status, frozenAt: null } });

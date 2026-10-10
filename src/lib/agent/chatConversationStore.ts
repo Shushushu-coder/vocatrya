@@ -1,6 +1,7 @@
 import { ConversationRequestError } from "./conversationRequest";
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { UIMessage } from "ai";
 import prisma from "@/lib/db";
@@ -130,8 +131,17 @@ export async function createChatConversationRecord(input: {
   context: AgentConversationContextV1;
   explicit?: ExplicitModelSelection | null;
   firstUserText?: string | null;
+  /** Injected for tests; production uses the default Hosted client. */
+  managedClient?: import("@/lib/ai/managed-client").HostedManagedClient;
 }): Promise<ChatConversationRow> {
-  const lock = await resolveChatCreationLock(input.userId, input.explicit);
+  // The id is allocated before the lock resolves: a Managed assignment
+  // first-binds `conversation:<id>` through the Hosted authority and the
+  // row persists that binding in the same create.
+  const conversationId = randomUUID();
+  const lock = await resolveChatCreationLock(input.userId, input.explicit, {
+    resourceKey: `conversation:${conversationId}`,
+    managedClient: input.managedClient,
+  });
   const firstUserText =
     input.firstUserText ?? firstUserMessageText(input.messages);
   const title = deriveConversationTitle({
@@ -140,12 +150,14 @@ export async function createChatConversationRecord(input: {
   });
   return prisma.chatConversation.create({
     data: {
+      id: conversationId,
       userId: input.userId,
       title,
       context: serializeConversationContext(input.context),
       messages: serializeMessages(input.messages),
       resolvedConnectionId: lock.resolvedConnectionId,
       resolvedModel: lock.resolvedModel,
+      managedAiProvenance: lock.managedAiProvenance ?? null,
     },
     select: CHAT_ROW_SELECT,
   });

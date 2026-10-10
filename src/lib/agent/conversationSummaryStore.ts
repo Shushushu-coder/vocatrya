@@ -1,5 +1,10 @@
 import "server-only";
-import { managedLockFromRow, rejectManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import {
+  assertManagedHistoricalExecution,
+  managedLockFromRow,
+  type ManagedAiProvenanceV1,
+} from "@/lib/ai/managed-provenance";
+import { classifyAIConnection } from "@/lib/ai/connections";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { UIMessage } from "ai";
@@ -23,6 +28,14 @@ export type SummaryRepository = {
     resolvedConnectionId: string | null;
     resolvedModel: string | null;
     managedAiProvenance?: string | null;
+    /**
+     * Decoded Managed binding for a Managed-locked conversation —
+     * validated against the live connection during load. Undefined for
+     * account/legacy conversations.
+     */
+    managed?: { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 };
+    /** Fail-closed marker for an inconsistent lock row (M4 §114). */
+    lockInvalid?: string;
     summary: ConversationSummaryRecord | null;
   } | null>;
   commit: (
@@ -73,11 +86,37 @@ async function loadSummarySnapshot(
   });
   if (!conversation) return null;
   const managed = managedLockFromRow(conversation);
+  let managedLock: { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 } | undefined;
+  let lockInvalid: string | undefined;
   if (managed) {
+    // M4: summaries for Managed conversations are executable — validate
+    // the binding is intact here so the scheduler fails explicitly rather
+    // than re-resolving or silently degrading.
     const connection = managed.connectionId ? await client.aIConnection.findFirst({
       where: { id: managed.connectionId, userId },
     }) : null;
-    rejectManagedHistoricalExecution(managed, connection, userId);
+    try {
+      assertManagedHistoricalExecution(managed, connection, userId);
+      managedLock = {
+        connectionId: managed.connectionId!,
+        model: managed.model,
+        provenance: managed.provenance,
+      };
+    } catch (error) {
+      lockInvalid = error instanceof Error && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : "MANAGED_BINDING_UNAVAILABLE";
+    }
+  } else if (conversation.resolvedConnectionId) {
+    // Half-state (M4 §114): an account-shaped lock pointing at a Managed
+    // connection has no usable provenance — mark it invalid instead of
+    // letting the summary auto-bind at run time.
+    const connection = await client.aIConnection.findFirst({
+      where: { id: conversation.resolvedConnectionId, userId },
+    });
+    if (connection && classifyAIConnection(connection) === "MANAGED") {
+      lockInvalid = "MANAGED_PROVENANCE_INVALID";
+    }
   }
   const summary = await client.conversationSummary.findFirst({
     where: { conversationId, userId },
@@ -87,6 +126,8 @@ async function loadSummarySnapshot(
     resolvedConnectionId: conversation.resolvedConnectionId,
     resolvedModel: conversation.resolvedModel,
     managedAiProvenance: conversation.managedAiProvenance,
+    managed: managedLock,
+    lockInvalid,
     summary: summary ? toRecord(summary) : null,
   };
 }

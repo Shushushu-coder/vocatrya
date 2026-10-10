@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { generateText } from "ai";
 import {
   getModel,
@@ -7,7 +8,10 @@ import {
   removeHtmlTags,
 } from "@/lib/ai";
 import { AIBusinessError } from "@/lib/ai/connections";
-import { executeAIConnectionText } from "@/lib/ai/execution";
+import {
+  executeAIConnectionText,
+  type ExecuteAIConnectionTextDeps,
+} from "@/lib/ai/execution";
 import { APP_CONSTANTS } from "@/lib/constants";
 import type { JobBoard } from "@/models/automation.model";
 import type { AiSettings } from "@/models/userSettings.model";
@@ -25,6 +29,19 @@ import { getDefaultModelForProvider } from "./aiSettings";
 import type { AutomationMatchRuntimePlan } from "./matchRuntime";
 import { convertResumeForMatch } from "./resumeText";
 
+/**
+ * Invocation-ledger codes scoped to a single job's operation identity —
+ * a replayed/in-flight/unknown receipt means THIS job already ran (or is
+ * running), not that the run's AI is broken. Systemic codes (assignment,
+ * auth, quota, binding) still halt the run; per-job ones are logged and
+ * the job is saved unanalyzed while siblings proceed.
+ */
+export const PER_JOB_MATCH_ERROR_CODES = new Set([
+  "INVOCATION_REPLAYED",
+  "INVOCATION_IN_PROGRESS",
+  "INVOCATION_STATUS_UNKNOWN",
+]);
+
 export interface MatchResult {
   success: boolean;
   score: number;
@@ -32,7 +49,7 @@ export interface MatchResult {
   error?: string;
   // Stable business-layer code when the AI step failed for a configuration
   // or runtime reason (assignment broken, connection not connected, runtime
-  // unavailable, …). Systemic: every job in the run would fail identically.
+  // unavailable, …). Systemic unless listed in PER_JOB_MATCH_ERROR_CODES.
   code?: string;
   // Effective provider/model that produced the analysis — provenance for
   // the persisted match record alongside the run's resolved lock fields.
@@ -48,6 +65,11 @@ export async function matchJobToResume(
   userId: string,
   signal?: AbortSignal,
   matchPlan: AutomationMatchRuntimePlan = { kind: "legacy" },
+  // The run id scopes the per-job Managed operation identity — each job's
+  // analysis is a distinct durable operation under the run's binding.
+  runId?: string,
+  /** Injected for tests; production uses the default clients. */
+  deps?: ExecuteAIConnectionTextDeps,
 ): Promise<MatchResult> {
   // A run whose MATCH_ANALYSIS assignment resolved to an unusable
   // connection fails its AI step explicitly — no GLOBAL_DEFAULT fallback,
@@ -58,6 +80,16 @@ export async function matchJobToResume(
       score: 0,
       error: matchPlan.code,
       code: matchPlan.code,
+    };
+  }
+  // A preview plan is non-executable — it carries no Hosted binding, so
+  // running it would lazily bind under the wrong resource identity.
+  if (matchPlan.kind === "managed-preview") {
+    return {
+      success: false,
+      score: 0,
+      error: "MANAGED_BINDING_UNAVAILABLE",
+      code: "MANAGED_BINDING_UNAVAILABLE",
     };
   }
   try {
@@ -78,17 +110,24 @@ ${removeHtmlTags(job.description)}
     let effectiveProvider: string;
     let effectiveModel: string;
 
-    if (matchPlan.kind === "account") {
+    if (matchPlan.kind === "account" || matchPlan.kind === "managed") {
       // Locked resolved configuration — the run's connectionId + model.
       // The account runtime executes TEXT_ONLY; system prompt and business
-      // prompt travel as one plain-text prompt payload.
-      effectiveProvider = matchPlan.provider;
+      // prompt travel as one plain-text prompt payload. A managed plan
+      // replays the run's persisted binding provenance and carries a
+      // stable per-job operation identity.
+      const managed = matchPlan.kind === "managed";
+      const jobKey = createHash("sha256")
+        .update(job.url || `${job.title}@${job.company}`)
+        .digest("hex")
+        .slice(0, 20);
+      effectiveProvider = managed ? "VOCATRYA_MANAGED" : matchPlan.provider;
       effectiveModel = matchPlan.model;
       const executed = await withSpan(
         "scraper.match",
         {
           ...genAiRequestAttrs({
-            provider: matchPlan.backendKind,
+            provider: managed ? "MANAGED_GATEWAY" : matchPlan.backendKind,
             model: matchPlan.model,
             surface: SURFACES.AUTOMATION_MATCH,
             system: AUTOMATION_JOB_MATCH_SYSTEM_PROMPT,
@@ -109,7 +148,17 @@ ${removeHtmlTags(job.description)}
             model: matchPlan.model,
             prompt: `${AUTOMATION_JOB_MATCH_SYSTEM_PROMPT}\n\n${promptText}`,
             signal,
-          });
+            ...(managed
+              ? {
+                  operationId: `automation-match:${runId ?? matchPlan.resourceKey}:${jobKey}`,
+                  managedAiProvenance: matchPlan.provenance,
+                  managedResource: {
+                    business: "MATCH_ANALYSIS",
+                    resourceKey: matchPlan.resourceKey,
+                  },
+                }
+              : {}),
+          }, deps);
           span.setAttrs(
             genAiResponseAttrs({
               finishReason: "stop",

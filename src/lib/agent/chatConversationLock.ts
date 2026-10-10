@@ -1,4 +1,8 @@
 import { managedLockFromRow, type ManagedHistoricalLock } from "@/lib/ai/managed-provenance";
+import {
+  bindManagedBusinessLock,
+  isManagedResolution,
+} from "@/lib/ai/business-execution-lock";
 import "server-only";
 
 import prisma from "@/lib/db";
@@ -61,6 +65,8 @@ export function chatLockFromRow(row: {
 export type ChatCreationLock = {
   resolvedConnectionId: string | null;
   resolvedModel: string | null;
+  /** Encoded Managed provenance — set only when the lock is Managed. */
+  managedAiProvenance?: string | null;
 };
 
 /**
@@ -168,6 +174,11 @@ export async function resolveExplicitChatSelection(
 export async function resolveChatCreationLock(
   userId: string,
   explicit?: ExplicitModelSelection | null,
+  options?: {
+    /** `conversation:<id>` — the binding identity this row will carry. */
+    resourceKey?: string;
+    managedClient?: import("@/lib/ai/managed-client").HostedManagedClient;
+  },
 ): Promise<ChatCreationLock> {
   if (explicit) {
     return resolveExplicitChatSelection(userId, explicit);
@@ -176,6 +187,23 @@ export async function resolveChatCreationLock(
     userId,
     purpose: CHAT_LOCK_PURPOSE,
   });
+  if (resolution.status === "RESOLVED" && isManagedResolution(resolution)) {
+    // First-bind the conversation now so the row's lock and the Hosted
+    // binding are created together; a bind failure aborts creation.
+    const lock = await bindManagedBusinessLock({
+      userId,
+      connectionId: resolution.connectionId,
+      model: resolution.model,
+      business: "CAREER_DIALOGUE",
+      resourceKey: options?.resourceKey ?? "",
+      client: options?.managedClient,
+    });
+    return {
+      resolvedConnectionId: lock.connectionId,
+      resolvedModel: lock.model,
+      managedAiProvenance: lock.managedAiProvenance,
+    };
+  }
   if (
     resolution.status === "RESOLVED" ||
     resolution.status === "INVALID_ASSIGNMENT"
