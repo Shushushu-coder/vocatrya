@@ -27,6 +27,15 @@ Deploy `services/managed-ai/dist/`. The entry point within that directory is
 Do not copy this package into the desktop application. The desktop assembly
 scans the actual backend/resources and rejects hosted code and key markers.
 
+## Public origin
+
+`REVISION: BETA2_MANAGED_ENDPOINT_SHUCUBED` — the beta.2 managed hosted
+endpoint is `https://managed.shucubed.xyz`. It supersedes
+`https://managed.vocatrya.com`, which was never registered; the internal beta
+uses the existing `shucubed.xyz` domain. TLS terminates at the ingress in
+front of the single active service instance; the service itself keeps
+listening on `PORT` and performs no host or origin validation of its own.
+
 ## Hosted deployment configuration
 
 Set these variables only in the hosted process:

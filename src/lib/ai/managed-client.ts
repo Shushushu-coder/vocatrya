@@ -3,7 +3,12 @@ import { ManagedError, MANAGED_ERROR_CODES, type ManagedInvocationReceipt, type 
 import { managedAiProvenanceV1Schema, type ManagedAiProvenanceV1 } from "./managed-provenance";
 
 // Release-owned endpoint. Changing it requires a reviewed release build.
-export const TRUSTED_HOSTED_MANAGED_ENDPOINT = "https://managed.vocatrya.com";
+// REVISION: BETA2_MANAGED_ENDPOINT_SHUCUBED
+// SUPERSEDED: https://managed.vocatrya.com
+// EFFECTIVE_ENDPOINT: https://managed.shucubed.xyz
+// REASON: vocatrya.com is not registered. Internal Beta will use the
+// existing shucubed.xyz domain.
+export const TRUSTED_HOSTED_MANAGED_ENDPOINT = "https://managed.shucubed.xyz";
 export interface HostedSessionProvider { tokenForLocalUser(localUserId: string): Promise<string | null> }
 export class DesktopHostedSessionProvider implements HostedSessionProvider {
   async tokenForLocalUser(localUserId: string): Promise<string | null> {
