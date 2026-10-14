@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import type { HostedManagedService } from "./service";
-export function createHostedServer(service: HostedManagedService) {
+
+/** Shared Request adapter for the Hosted service and the loopback Operator service. */
+export function createHostedServer(service: { handle(request: Request): Promise<Response> }) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const controller = new AbortController();
     res.on("close", () => controller.abort());

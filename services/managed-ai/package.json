@@ -9,7 +9,9 @@
     "lint": "eslint src test --no-warn-ignored",
     "start": "node dist/services/managed-ai/src/main.js",
     "provision-session": "node dist/services/managed-ai/src/provision-session.js",
-    "operator-cli": "node dist/services/managed-ai/src/operator-cli.js"
+    "operator-cli": "node dist/services/managed-ai/src/operator-cli.js",
+    "operator": "node dist/services/managed-ai/src/operator/main.js",
+    "operator-bootstrap": "node dist/services/managed-ai/src/operator/bootstrap-cli.js"
   },
   "engines": {
     "node": ">=22.13"

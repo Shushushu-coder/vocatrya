@@ -89,6 +89,62 @@ export const MIGRATIONS: SchemaMigration[] = [
         CREATE INDEX IF NOT EXISTS ManagedAiUsageStatus ON ManagedAiUsage(status);`);
     },
   },
+  {
+    version: 3,
+    name: "operator-surface",
+    up(db) {
+      // Operator identity is a separate authority from HostedSession. Operator
+      // secrets are stored only as SHA-256 digests; sessions are short-lived
+      // bearer tokens. The runtime row is the durable kill-switch state read by
+      // admission inside the reservation transaction. Staged catalogs are
+      // review payloads only — this schema has no activation path.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS OperatorCredential(
+          id TEXT PRIMARY KEY,
+          label TEXT NOT NULL,
+          secretHash TEXT NOT NULL UNIQUE,
+          createdAt INTEGER NOT NULL,
+          revokedAt INTEGER);
+        CREATE TABLE IF NOT EXISTS OperatorSession(
+          tokenHash TEXT PRIMARY KEY,
+          credentialId TEXT NOT NULL REFERENCES OperatorCredential(id),
+          expiresAt INTEGER NOT NULL,
+          createdAt INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS OperatorSessionCredential ON OperatorSession(credentialId);
+        CREATE TABLE IF NOT EXISTS OperatorAudit(
+          id TEXT PRIMARY KEY,
+          credentialId TEXT,
+          action TEXT NOT NULL,
+          target TEXT,
+          detail TEXT,
+          result TEXT NOT NULL,
+          createdAt INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS OperatorAuditCreatedAt ON OperatorAudit(createdAt, id);
+        CREATE TABLE IF NOT EXISTS ManagedAiRuntimeState(
+          id INTEGER PRIMARY KEY CHECK(id=1),
+          disabled INTEGER NOT NULL DEFAULT 0,
+          reason TEXT,
+          updatedAt INTEGER NOT NULL,
+          updatedBy TEXT);
+        INSERT OR IGNORE INTO ManagedAiRuntimeState(id, disabled, updatedAt) VALUES (1, 0, 0);
+        CREATE TABLE IF NOT EXISTS ManagedAiStagedCatalog(
+          id TEXT PRIMARY KEY,
+          revision TEXT NOT NULL UNIQUE,
+          payload TEXT NOT NULL,
+          status TEXT NOT NULL,
+          validationErrors TEXT,
+          createdBy TEXT,
+          createdAt INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS ManagedAiProviderProbe(
+          id INTEGER PRIMARY KEY CHECK(id=1),
+          probedAt INTEGER NOT NULL,
+          ok INTEGER NOT NULL,
+          httpStatus INTEGER,
+          latencyMs INTEGER,
+          error TEXT,
+          updatedBy TEXT);`);
+    },
+  },
 ];
 
 /** Compare the actual baseline contract before allowing IF NOT EXISTS to adopt it. */

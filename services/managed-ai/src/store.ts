@@ -89,11 +89,37 @@ export class HostedStore {
     try { const result = fn(); this.db.exec("COMMIT"); return result; }
     catch (error) { this.db.exec("ROLLBACK"); throw error; }
   }
-  issueSession(hostedUserId: string, expiresAt: number): string {
+  /** Shared handle for the trusted loopback Operator authority on this same DB. */
+  internalDb(): DatabaseSync { return this.db; }
+  /** Creates a HostedUser row for operator provisioning; never authenticates it. Returns true when inserted. */
+  ensureHostedUser(hostedUserId: string, audit?: (db: DatabaseSync) => void): boolean {
+    if (!hostedUserId.trim() || hostedUserId.length > 256) throw new Error("Invalid hosted user");
+    return this.transaction(() => {
+      const inserted = this.db.prepare("INSERT OR IGNORE INTO HostedUser(id) VALUES (?)").run(hostedUserId);
+      audit?.(this.db);
+      return Number(inserted.changes) === 1;
+    });
+  }
+  /**
+   * Durable runtime kill switch, read inside the admission transaction so the
+   * decision is atomic with quota reservation. A missing or unreadable state
+   * row fails closed: new paid invocations are never admitted on doubt.
+   * Already-admitted rows and idempotent replays are unaffected by design.
+   */
+  private runtimeDisabledLocked(): boolean {
+    try {
+      const row = this.db.prepare("SELECT disabled FROM ManagedAiRuntimeState WHERE id=1").get() as { disabled: number } | undefined;
+      return !row || Number(row.disabled) !== 0;
+    } catch { return true; }
+  }
+  issueSession(hostedUserId: string, expiresAt: number, audit?: (db: DatabaseSync) => void): string {
     if (!hostedUserId.trim() || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) throw new Error("Invalid hosted session provisioning");
     const token = randomBytes(32).toString("base64url");
-    this.db.prepare("INSERT OR IGNORE INTO HostedUser(id) VALUES (?)").run(hostedUserId);
-    this.db.prepare("INSERT INTO HostedSession VALUES (?,?,?)").run(digest(token), hostedUserId, expiresAt);
+    this.transaction(() => {
+      this.db.prepare("INSERT OR IGNORE INTO HostedUser(id) VALUES (?)").run(hostedUserId);
+      this.db.prepare("INSERT INTO HostedSession VALUES (?,?,?)").run(digest(token), hostedUserId, expiresAt);
+      audit?.(this.db);
+    });
     return token;
   }
   authenticate(authorization: string | null): string {
@@ -103,7 +129,12 @@ export class HostedStore {
     if (!row || typeof row.hostedUserId !== "string" || Number(row.expiresAt) <= Date.now()) throw new ManagedError("MANAGED_AUTH_REQUIRED");
     return row.hostedUserId;
   }
-  revokeSession(token: string): void { this.db.prepare("DELETE FROM HostedSession WHERE tokenHash=?").run(digest(token)); }
+  revokeSession(token: string, audit?: (db: DatabaseSync) => void): void {
+    this.transaction(() => {
+      this.db.prepare("DELETE FROM HostedSession WHERE tokenHash=?").run(digest(token));
+      audit?.(this.db);
+    });
+  }
   createBinding(hostedUserId: string, business: string, resourceKey: string, model: ManagedModel): ManagedAiBinding {
     if (!/^[A-Z][A-Z_]{0,63}$/.test(business) || !resourceKey.trim() || resourceKey.length > 256) throw new ManagedError("MANAGED_BINDING_UNAVAILABLE");
     const existing = this.db.prepare("SELECT id FROM ManagedAiBinding WHERE hostedUserId=? AND business=? AND resourceKey=?").get(hostedUserId, business, resourceKey);
@@ -145,10 +176,10 @@ export class HostedStore {
     const { normalized, replay } = this.validateSubscriptionLocked(hostedUserId, input);
     return { mutation: normalized, replay };
   }
-  setSubscription(hostedUserId: string, input: SetSubscriptionInput, now = Date.now()): HostedSubscription {
+  setSubscription(hostedUserId: string, input: SetSubscriptionInput, now = Date.now(), audit?: (db: DatabaseSync) => void): HostedSubscription {
     return this.transaction(() => {
       const { existing, replay, normalized: value } = this.validateSubscriptionLocked(hostedUserId, input);
-      if (replay) return existing!;
+      if (replay) { audit?.(this.db); return existing!; }
       const id = existing ? existing.id : randomUUID();
       const revision = existing ? existing.revision + 1 : 1;
       if (existing) {
@@ -158,7 +189,9 @@ export class HostedStore {
         this.db.prepare(`INSERT INTO Subscription(id, hostedUserId, planKey, status, periodStart, periodEnd, cancelAtPeriodEnd, source, externalSubscriptionRef, sourceRevision, revision, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
           .run(id, hostedUserId, value.planKey, value.status, value.periodStart, value.periodEnd, value.cancelAtPeriodEnd ? 1 : 0, value.source, value.externalSubscriptionRef, value.sourceRevision, revision, now, now);
       }
-      return this.subscription(hostedUserId)!;
+      const result = this.subscription(hostedUserId)!;
+      audit?.(this.db);
+      return result;
     });
   }
   subscription(hostedUserId: string): HostedSubscription | null {
@@ -191,6 +224,9 @@ export class HostedStore {
         if (existing.requestHash !== args.requestHash) throw new ManagedError("INVOCATION_CONFLICT");
         return { created: false, existing };
       }
+      // Runtime kill switch: idempotent replays above still return receipts so
+      // admitted invocations can always resolve; only new paid admissions stop.
+      if (this.runtimeDisabledLocked()) throw new ManagedError("MANAGED_AI_DISABLED");
       const now = args.now();
       const subscription = this.subscription(args.hostedUserId);
       const entitlement = deriveEntitlement(subscription, args.plans, now);

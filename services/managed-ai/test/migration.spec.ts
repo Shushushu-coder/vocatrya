@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HostedStore } from "../src/store";
-import { schemaVersion } from "../src/schema";
+import { MIGRATIONS, schemaVersion } from "../src/schema";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => { while (cleanup.length) cleanup.pop()!(); });
@@ -15,8 +15,9 @@ describe("Hosted schema migration", () => {
     const dir = directory();
     const store = new HostedStore(join(dir, "hosted.db"));
     const db = new DatabaseSync(join(dir, "hosted.db"));
-    expect(schemaVersion(db)).toBe(2);
-    for (const table of ["HostedUser", "HostedSession", "ManagedAiBinding", "Subscription", "ManagedAiQuotaPeriod", "ManagedAiUsage"]) {
+    expect(schemaVersion(db)).toBe(3);
+    for (const table of ["HostedUser", "HostedSession", "ManagedAiBinding", "Subscription", "ManagedAiQuotaPeriod", "ManagedAiUsage",
+      "OperatorCredential", "OperatorSession", "OperatorAudit", "ManagedAiRuntimeState", "ManagedAiStagedCatalog", "ManagedAiProviderProbe"]) {
       expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)).toBeTruthy();
     }
     db.close(); store.close();
@@ -34,9 +35,28 @@ describe("Hosted schema migration", () => {
     m2.close();
     const store = new HostedStore(file);
     const db = new DatabaseSync(file);
-    expect(schemaVersion(db)).toBe(2);
+    expect(schemaVersion(db)).toBe(3);
     expect(db.prepare("SELECT hostedUserId FROM HostedSession WHERE tokenHash=?").get("hash")).toEqual({ hostedUserId: "hosted-legacy" });
     db.close(); store.close();
+  });
+  it("upgrades a recorded v1+v2 history to v3 in place, preserving data", () => {
+    const dir = directory();
+    const file = join(dir, "hosted.db");
+    const v2 = new DatabaseSync(file);
+    v2.exec("CREATE TABLE IF NOT EXISTS HostedSchemaMigration(version INTEGER PRIMARY KEY, name TEXT NOT NULL, appliedAt INTEGER NOT NULL)");
+    for (const migration of MIGRATIONS.filter(item => item.version <= 2)) {
+      migration.up(v2);
+      v2.prepare("INSERT INTO HostedSchemaMigration(version, name, appliedAt) VALUES (?,?,?)").run(migration.version, migration.name, 1);
+    }
+    v2.prepare("INSERT INTO HostedUser(id) VALUES ('v2-user')").run();
+    v2.close();
+    const store = new HostedStore(file);
+    const raw = new DatabaseSync(file);
+    expect(schemaVersion(raw)).toBe(3);
+    expect(raw.prepare("SELECT id FROM HostedUser WHERE id='v2-user'").get()).toEqual({ id: "v2-user" });
+    for (const table of ["OperatorCredential", "OperatorSession", "OperatorAudit", "ManagedAiRuntimeState", "ManagedAiStagedCatalog", "ManagedAiProviderProbe"])
+      expect(raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)).toBeTruthy();
+    raw.close(); store.close();
   });
   it("preserves data across restarts", () => {
     const dir = directory();
@@ -57,7 +77,7 @@ describe("Hosted schema migration", () => {
     store.close();
     const reopened = new HostedStore(file);
     const raw = new DatabaseSync(file);
-    expect(schemaVersion(raw)).toBe(2);
+    expect(schemaVersion(raw)).toBe(3);
     raw.close();
     reopened.close();
   });

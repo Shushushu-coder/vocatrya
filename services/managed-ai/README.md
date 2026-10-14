@@ -169,6 +169,52 @@ Both DTOs read a consistent subscription/quota snapshot and match exact
 usage for that period. `planRevision` denotes current entitlement policy;
 `quotaPlanRevision` denotes the frozen accounting policy, or null before creation.
 
+## Loopback Operator console (V1)
+
+`src/operator/` adds a second, separately-authenticated listener for the
+platform owner. It binds `127.0.0.1` only (default `OPERATOR_LISTEN_PORT`
+8790) and is intended to be reached over an owner-authorized SSH local
+forward — never through the public ingress. It shares the authority database
+with the hosted service but is its own credential domain:
+
+- `OperatorCredential` long-lived secrets are issued exclusively by
+  `operator-bootstrap` over SSH and printed exactly once; only SHA-256
+  digests persist. `OperatorSession` tokens (`ops_` + 43 chars) are exchanged
+  for a credential at `POST /operator/v1/session` and shown once.
+  Hosted (`Bearer <43>`) and operator token formats are disjoint by
+  construction, so neither authenticates against the other authority.
+- `OperatorAudit` records every write, every login outcome, probes and
+  runtime changes. Audit detail is whitelisted — never tokens, secrets,
+  prompts or responses.
+- The console is a self-contained static shell (no CDN) under
+  `default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'`,
+  `no-store`, `nosniff`, `no-referrer`, and emits no CORS headers.
+
+Management writes currently implemented: subscription
+provision/set/revoke (idempotent through an explicit `idempotencyKey`
+carried as `sourceRevision`, source `OPERATOR_CONSOLE`), hosted session
+issue/revoke (token displayed once), staged catalog upload (validated,
+one row per revision, **no activation path exists**), provider
+connectivity probe (unauthenticated `HEAD` to the provider origin only),
+and the runtime kill switch.
+
+The kill switch is a durable `ManagedAiRuntimeState` row read inside the
+`BEGIN IMMEDIATE` reservation transaction, so the decision is atomic with
+quota admission: while disabled, only *new* invocations fail with
+`MANAGED_AI_DISABLED`; already-admitted invocations still settle normally
+and idempotent replays still return receipts. A missing/unreadable state
+fails closed. Disable requires a reason; both transitions are audited.
+
+The surface cannot: expose or change the platform upstream key, activate
+a staged catalog, restart services, rewrite usage/ledger rows (UNKNOWN
+history is read-only here), or promote hosted/desktop users to operator.
+
+```sh
+node dist/services/managed-ai/src/operator/bootstrap-cli.js create-credential owner
+MANAGED_AI_DATABASE_PATH=… MANAGED_AI_CATALOG_PATH=… MANAGED_AI_PLAN_PATH=… \
+  node dist/services/managed-ai/src/operator/main.js   # listens on 127.0.0.1:8790
+```
+
 ## Deferred to M4/M5/M6
 
 No payment provider (Stripe/Paddle/WeChat/Alipay), no plan product values, no

@@ -63,7 +63,8 @@ try {
   }
 
   function run(input: SetSubscriptionInput & { hostedUserId: string }): void {
-    if (!plans.plan(input.planKey)) fail(`Unknown or disabled plan: ${input.planKey}`);
+    // Terminal transitions must still work after the plan is retired from plan.json.
+    if ((input.status === "ACTIVE" || input.status === "PAST_DUE") && !plans.plan(input.planKey)) fail(`Unknown or disabled plan: ${input.planKey}`);
     const mutation: SetSubscriptionInput = {
       planKey: input.planKey, status: input.status, periodStart: input.periodStart, periodEnd: input.periodEnd,
       cancelAtPeriodEnd: has("--cancel-at-period-end"), source: valueOf("--source") ?? "OPERATOR",
