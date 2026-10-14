@@ -151,7 +151,8 @@ function classifyAssignment(
   const classification = classifyAIConnection(connection);
   if (classification === "INVALID") return invalid(AI_BUSINESS_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION);
   const managed = classification === "MANAGED";
-  try { if (!managed) assertAccountExecutionIdentity(connection); } catch (error) {
+  const byok = classification === "BYOK";
+  try { if (!managed && !byok) assertAccountExecutionIdentity(connection); } catch (error) {
     if (error instanceof AIBusinessError) return invalid(error.code);
     throw error;
   }
@@ -166,15 +167,17 @@ function classifyAssignment(
       return invalid(AI_BUSINESS_ERROR_CODES.CONNECTION_ERROR);
   }
   if (
-    !managed && (!isAIBackendKind(connection.backendKind) ||
+    !managed && !byok && (!isAIBackendKind(connection.backendKind) ||
     !isRuntimeProfileRef(connection.runtimeProfileRef))
   ) {
     return invalid(AI_BUSINESS_ERROR_CODES.RUNTIME_NOT_AVAILABLE);
   }
   // Same matrix rule as the write path — a hand-edited or stale row must
-  // not resolve to a pairing the runtime cannot serve.
+  // not resolve to a pairing the runtime cannot serve. BYOK pairings are
+  // already validated inside classifyAIConnection (BYOK_API_KEY_PROVIDERS),
+  // so no desktop-runtime matrix applies.
   if (
-    !managed && !isSupportedAccountProviderForBackend(
+    !managed && !byok && !isSupportedAccountProviderForBackend(
       connection.backendKind,
       connection.provider,
     )
@@ -410,6 +413,14 @@ export async function setBusinessAssignment(
     // Hosted authority; the model string is a catalog modelKey, validated
     // against Hosted rather than the account-runtime matrix.
     await assertManagedAssignmentModel(userId, purpose, trimmedModel, deps.managedClient);
+  } else if (classification === "BYOK") {
+    // BYOK pins the provider's own model id — the same string the legacy
+    // API-key path passes to the AI SDK factory. No runtime matrix, no
+    // catalog: the connection's CONNECTED status already proves the bound
+    // key exists; a missing key degrades the row to DISCONNECTED via the
+    // ApiKey lifecycle, which the resolver maps to CONNECTION_DISCONNECTED.
+    // Streaming purposes need no desktop probe — BYOK streams through the
+    // AI SDK in-process.
   } else {
     try { assertAccountExecutionIdentity(connection); } catch (error) {
       if (error instanceof AIBusinessError) throw new AssignmentWriteError(error.code, error.message);

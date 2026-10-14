@@ -100,7 +100,9 @@ describe("Additive backup contract", () => {
   it("restored CONNECTED metadata proves neither account login nor hosted authentication", () => {
     expect(normalizeAIConnection({ ...managed, status: "CONNECTED" }).status).toBe("REAUTH_REQUIRED");
     expect(normalizeAIConnection({ authType: "ACCOUNT_LOGIN", status: "CONNECTED" }).status).toBe("REAUTH_REQUIRED");
-    expect(normalizeAIConnection({ authType: "API_KEY", status: "CONNECTED" }).status).toBe("CONNECTED");
+    // ApiKey rows are excluded from backups, so a restored BYOK
+    // connection's credentialRef cannot resolve — CONNECTED would be a lie.
+    expect(normalizeAIConnection({ authType: "API_KEY", status: "CONNECTED" }).status).toBe("REAUTH_REQUIRED");
   });
   it("rejects secret-bearing or forged Managed metadata in a backup", () => {
     const connection = { ...managed, id: "c", displayName: "Managed", status: "CONNECTED", providerMetadata: null,

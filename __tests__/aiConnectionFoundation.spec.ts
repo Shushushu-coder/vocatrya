@@ -507,7 +507,7 @@ describe("backup round trip", () => {
       where: { userId },
     });
     expect(connections).toHaveLength(5);
-    // Remapped ids â€?the restore must never replay source ids.
+    // Remapped ids ï¿½?the restore must never replay source ids.
     expect(connections.map((c) => c.id)).not.toContain(connId);
 
     const accountLogin = connections.filter((c) => c.authType === "ACCOUNT_LOGIN");
@@ -515,9 +515,11 @@ describe("backup round trip", () => {
     for (const conn of accountLogin) {
       expect(conn.status).toBe("REAUTH_REQUIRED");
     }
-    // API_KEY rows are not re-auth normalized (different seam entirely).
+    // API_KEY (BYOK) rows normalize too: ApiKey is excluded from backup,
+    // so the restored credentialRef cannot resolve on the target â€” a
+    // CONNECTED row would claim a bound key that never travelled.
     const apiKeyConn = connections.find((c) => c.authType === "API_KEY");
-    expect(apiKeyConn?.status).toBe("CONNECTED");
+    expect(apiKeyConn?.status).toBe("REAUTH_REQUIRED");
 
     const assignments = await prisma.aIBusinessAssignment.findMany({
       where: { userId },

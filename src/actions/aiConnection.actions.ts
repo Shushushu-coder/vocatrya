@@ -7,16 +7,19 @@ import {
   isAIBackendKind,
   assertAccountExecutionIdentity,
   AIBusinessError,
+  classifyAIConnection,
   isAIConnectionOperation,
   isAIConnectionProvider,
   isSupportedAccountProviderForBackend,
   supportedAccountProvidersForBackend,
+  BYOK_BACKEND_KIND,
 } from "@/lib/ai/connections";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
 import {
   listSelectableAccountConnectionsForUser,
   type ConnectionSummary,
 } from "@/lib/ai/connection-service";
+import { ensureByokConnectionsForUser } from "@/lib/ai/byok";
 
 export async function listAiConnections(): Promise<{
   success: boolean;
@@ -28,6 +31,54 @@ export async function listAiConnections(): Promise<{
     return {
       success: true,
       data: await listSelectableAccountConnectionsForUser(user.id),
+    };
+  } catch (error) {
+    return handleError(error, "Failed to fetch AI connections") as {
+      success: boolean;
+      message: string;
+    };
+  }
+}
+
+/**
+ * Assignment pickers list every user-pinnable source: account-login
+ * connections plus BYOK API-key connections (self-healed against the
+ * ApiKey table on read). Managed connections are provisioned by the
+ * managed assignment entry point instead — callers never pick their id.
+ */
+export async function listAssignableAiConnections(): Promise<{
+  success: boolean;
+  data?: ConnectionSummary[];
+  message?: string;
+}> {
+  try {
+    const user = await requireUser();
+    await ensureByokConnectionsForUser(user.id);
+    const rows = await db.aIConnection.findMany({
+      where: { userId: user.id, archivedAt: null },
+      select: {
+        id: true,
+        provider: true,
+        authType: true,
+        backendKind: true,
+        displayName: true,
+        accountIdentity: true,
+        status: true,
+        runtimeProfileRef: true,
+        credentialRef: true,
+        lastVerifiedAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    return {
+      success: true,
+      data: rows
+        .filter((row) => {
+          const kind = classifyAIConnection(row);
+          return kind === "ACCOUNT_LOGIN" || kind === "BYOK";
+        })
+        .map(({ credentialRef: _credentialRef, ...row }) => row),
     };
   } catch (error) {
     return handleError(error, "Failed to fetch AI connections") as {
@@ -67,7 +118,7 @@ export async function mintAiConnectionTicket(input: {
       return { success: false, code: "INVALID_OPERATION", message: "Invalid operation" };
     }
     const backendKind = input.backendKind;
-    if (typeof backendKind !== "string" || !isAIBackendKind(backendKind) || backendKind === "MANAGED_GATEWAY") {
+    if (typeof backendKind !== "string" || !isAIBackendKind(backendKind) || backendKind === "MANAGED_GATEWAY" || backendKind === BYOK_BACKEND_KIND) {
       return { success: false, code: "UNSUPPORTED_BACKEND", message: "Unsupported backend" };
     }
 

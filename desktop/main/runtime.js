@@ -19,6 +19,10 @@ const SENSITIVE_ENV_KEYS = new Set([
   // exists only when Electron main creates it; an inherited host value must
   // never impersonate it.
   "VOCATRYA_DESKTOP_EXEC_URL",
+  // Same rule for the BYOK credential-envelope broker URL — the backend
+  // reads its presence as "desktop runtime" and must never be tricked into
+  // that by an inherited environment value.
+  "VOCATRYA_CREDENTIAL_URL",
 ]);
 
 function assertLoopbackHost(hostname) {
@@ -54,7 +58,7 @@ function toPrismaFileUrl(filePath) {
   return `file:${path.resolve(filePath).replaceAll("\\", "/")}`;
 }
 
-function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion, internalToken, desktopExecUrl }) {
+function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion, internalToken, desktopExecUrl, credentialUrl }) {
   assertLoopbackHost("127.0.0.1");
   const env = {
     NODE_ENV: "production",
@@ -122,6 +126,15 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
     env.VOCATRYA_DESKTOP_EXEC_URL = desktopExecUrl.trim();
   } else {
     delete env.VOCATRYA_DESKTOP_EXEC_URL;
+  }
+  // Backend → main BYOK credential broker (safeStorage seal/unseal oracle).
+  // Presence alone marks the desktop backend: when injected-but-unreachable
+  // the store fails closed there, never degrading to plaintext or the
+  // application cipher on a Windows build.
+  if (typeof credentialUrl === "string" && credentialUrl.trim()) {
+    env.VOCATRYA_CREDENTIAL_URL = credentialUrl.trim();
+  } else {
+    delete env.VOCATRYA_CREDENTIAL_URL;
   }
   return env;
 }

@@ -1,7 +1,9 @@
 import "server-only";
 
 import prisma from "@/lib/db";
+import { generateText, streamText } from "ai";
 import { executeManagedStream, managedBusinessError, type ManagedDispatchInput } from "./managed-dispatch";
+import { executeByokConnectionTextStream } from "./byok-execution";
 import type { HostedManagedClient } from "./managed-client";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
 import {
@@ -63,7 +65,7 @@ export interface StreamExecutionInput extends Pick<ManagedDispatchInput, "manage
   signal?: AbortSignal;
 }
 
-type DbClient = Pick<PrismaClient, "aIConnection">;
+type DbClient = Pick<PrismaClient, "aIConnection" | "apiKey">;
 
 export interface StreamExecutionDeps {
   managedClient?: HostedManagedClient;
@@ -71,6 +73,9 @@ export interface StreamExecutionDeps {
   execUrl?: string;
   internalToken?: string;
   fetchImpl?: typeof fetch;
+  /** Test seam for the BYOK AI SDK call. */
+  generateTextImpl?: typeof generateText;
+  streamTextImpl?: typeof streamText;
 }
 
 function fail(code: AIBusinessErrorCode, message: string): never {
@@ -156,7 +161,8 @@ async function loadUsableConnection(
   const classification = classifyAIConnection(connection);
   if (classification === "INVALID") fail(AI_BUSINESS_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION, "Invalid AI connection identity");
   const managed = classification === "MANAGED";
-  if (!managed) assertAccountExecutionIdentity(connection);
+  const byok = classification === "BYOK";
+  if (!managed && !byok) assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;
@@ -227,8 +233,18 @@ export async function* executeAIConnectionTextStream(
   }
 
   const connection = await loadUsableConnection(db, userId, connectionId);
-  if (classifyAIConnection(connection) === "MANAGED") {
+  const streamClassification = classifyAIConnection(connection);
+  if (streamClassification === "MANAGED") {
     yield* executeManagedStream(input, deps.managedClient);
+    return;
+  }
+  if (streamClassification === "BYOK") {
+    // BYOK streams in-process through the AI SDK — the same text-delta/
+    // completed event shape, no desktop channel, no ticket.
+    yield* executeByokConnectionTextStream(
+      { userId, connection, model, prompt: input.prompt, timeoutMs: input.timeoutMs, signal: input.signal },
+      deps,
+    );
     return;
   }
   const { base, token, fetchImpl } = channelConfig(deps);
@@ -474,6 +490,12 @@ export async function checkStreamingTurnReadiness(input: {
     const entry = catalog.models.find(entry => entry.modelKey === model);
     if (!entry?.available) fail(AI_BUSINESS_ERROR_CODES.MODEL_DISABLED, "Managed model unavailable");
     if (!entry.capabilities.streaming) fail(AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED, "Managed streaming unavailable");
+    return;
+  }
+  if (classification === "BYOK") {
+    // BYOK streams natively through the AI SDK — there is no desktop
+    // runtime descriptor to probe. Connection status already gated above;
+    // credential usability is enforced by the strict binding at execution.
     return;
   }
   assertAccountExecutionIdentity(connection);

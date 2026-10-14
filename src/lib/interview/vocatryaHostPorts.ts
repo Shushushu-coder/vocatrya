@@ -52,6 +52,7 @@ import {
   AIBusinessError,
   isAIBackendKind,
   assertAccountExecutionIdentity,
+  classifyAIConnection,
   isSupportedAccountProviderForBackend,
 } from "@/lib/ai/connections";
 import { executeAIConnectionText } from "@/lib/ai/execution";
@@ -502,7 +503,8 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
     if (connection.archivedAt !== null) {
       throw accountUnavailable("The assigned AI connection is archived");
     }
-    assertAccountExecutionIdentity(connection);
+    const byok = classifyAIConnection(connection) === "BYOK";
+    if (!byok) assertAccountExecutionIdentity(connection);
     switch (connection.status) {
       case "CONNECTED":
         break;
@@ -522,13 +524,16 @@ export class VocatryaInterviewModelAdapter implements InterviewModelPort {
           "The assigned AI connection is in an error state",
         );
     }
-    if (!isAIBackendKind(connection.backendKind)) {
+    // BYOK pins no runtime and obeys no account matrix — the API_KEY
+    // identity checks already ran inside classifyAIConnection.
+    if (!byok && !isAIBackendKind(connection.backendKind)) {
       throw new DomainError(
         "RUNTIME_NOT_AVAILABLE",
         "The assigned AI connection has no recognized runtime",
       );
     }
     if (
+      !byok &&
       !isSupportedAccountProviderForBackend(
         connection.backendKind,
         connection.provider,

@@ -24,7 +24,7 @@ import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
 import { CHAT_LOCK_PURPOSE } from "@/lib/agent/chatConversationLock";
 import { resolveChatCreationLock } from "@/lib/agent/chatConversationLock";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
-import { AIBusinessError, assertAccountExecutionIdentity } from "@/lib/ai/connections";
+import { AIBusinessError, assertAccountExecutionIdentity, classifyAIConnection } from "@/lib/ai/connections";
 import {
   checkStreamingExecutionReadiness,
   type AccountRuntimeCapabilities,
@@ -330,6 +330,10 @@ async function accountStreamingBlockCode(connection: {
   provider: string;
   status: string;
 }): Promise<string | null> {
+  if (connection.backendKind === "LOCAL_BYOK") {
+    // BYOK streams through the AI SDK in-process — no desktop runtime to probe.
+    return null;
+  }
   let state;
   try {
     state = await fetchAccountRuntimeState({
@@ -391,7 +395,15 @@ async function accountPreflight(input: {
       connectionId: input.connectionId,
     };
   }
-  assertAccountExecutionIdentity(connection);
+  const classification = classifyAIConnection(connection);
+  if (classification === "INVALID") {
+    return {
+      kind: "blocked",
+      code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+      connectionId: input.connectionId,
+    };
+  }
+  if (classification !== "BYOK") assertAccountExecutionIdentity(connection);
   if (connection.status !== "CONNECTED") {
     return {
       kind: "blocked",

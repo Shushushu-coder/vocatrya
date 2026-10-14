@@ -4,8 +4,19 @@ import db from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { requireUser } from "./shared";
 import { handleError } from "@/lib/utils";
-import { encrypt, getLast4 } from "@/lib/encryption";
+import { getLast4 } from "@/lib/encryption";
+import {
+  CredentialStoreError,
+  isOsEnvelopeIv,
+  resolveApiKeySecret,
+  sealApiKeySecret,
+} from "@/lib/ai/credential-store";
+import {
+  markByokConnectionDisconnected,
+  upsertByokConnectionForApiKey,
+} from "@/lib/ai/byok";
 import { apiKeySaveSchema } from "@/models/apiKey.schema";
+import { PROVIDER_REGISTRY } from "@/lib/ai/provider-registry";
 import type {
   ApiKeyClientResponse,
   ApiKeyProvider,
@@ -41,6 +52,10 @@ export async function getUserApiKeys(): Promise<{
           id: k.id,
           provider: k.provider as ApiKeyProvider,
           last4: k.last4,
+          // Storage-format metadata only — "os" marks the DPAPI-bound
+          // envelope, "app" the application cipher, "none" the
+          // non-sensitive plaintext passthrough. Ciphertext never leaves.
+          protection: isSensitive ? (isOsEnvelopeIv(k.iv) ? "os" : "app") : "none",
           ...(isSensitive ? {} : { displayValue: k.encryptedKey }),
           label: k.label,
           createdAt: k.createdAt,
@@ -65,20 +80,29 @@ export async function saveApiKey(input: {
   success: boolean;
   data?: ApiKeyClientResponse;
   message?: string;
+  code?: string;
 }> {
   try {
     const user = await requireUser();
 
     const parsed = apiKeySaveSchema.parse(input);
-    const isSensitive = parsed.sensitive;
+    // Sensitivity is decided server-side by the provider registry — a
+    // client-supplied flag can never downgrade an api-key provider to
+    // plaintext storage.
+    const isSensitive =
+      PROVIDER_REGISTRY[parsed.provider]?.keyConfig.sensitive ?? true;
 
     let encryptedKey: string;
     let iv: string;
     let last4: string;
 
     if (isSensitive) {
-      const result = encrypt(parsed.key);
-      encryptedKey = result.encrypted;
+      // Credential-store write policy: a desktop backend seals through the
+      // OS broker (iv = "os:v1"); without the broker env the existing v1
+      // application cipher applies. A configured-but-unavailable broker
+      // throws CredentialStoreError — there is no downgrade path.
+      const result = await sealApiKeySecret(parsed.key);
+      encryptedKey = result.encryptedKey;
       iv = result.iv;
       last4 = getLast4(parsed.key);
     } else {
@@ -119,9 +143,14 @@ export async function saveApiKey(input: {
       },
     });
 
+    // Keep the provider's BYOK AIConnection bound to the saved row —
+    // saves rebind credentialRef and flip the connection to CONNECTED.
+    await upsertByokConnectionForApiKey({ userId: user.id, apiKey });
+
     const response: ApiKeyClientResponse = {
       ...apiKey,
       provider: apiKey.provider as ApiKeyProvider,
+      protection: isSensitive ? (isOsEnvelopeIv(iv) ? "os" : "app") : "none",
     };
     if (!isSensitive) {
       response.displayValue = parsed.key;
@@ -129,6 +158,11 @@ export async function saveApiKey(input: {
 
     return { success: true, data: response };
   } catch (error) {
+    if (error instanceof CredentialStoreError) {
+      // Fail closed and machine-readable — the UI maps the code, and no
+      // key material or internals ever enter the message.
+      return { success: false, code: error.code, message: error.message };
+    }
     return handleError(error, "Failed to save API key") as {
       success: boolean;
       message: string;
@@ -146,6 +180,10 @@ export async function deleteApiKey(provider: string): Promise<{
     await db.apiKey.deleteMany({
       where: { userId: user.id, provider },
     });
+
+    // The BYOK connection degrades to DISCONNECTED — assignments pinned
+    // to it fail explicitly rather than resolving a stale credential.
+    await markByokConnectionDisconnected({ userId: user.id, provider });
 
     return { success: true };
   } catch (error) {
@@ -174,9 +212,7 @@ export async function getOllamaBaseUrl(userId?: string): Promise<string> {
         },
       });
       if (apiKey) {
-        if (apiKey.iv === "") return apiKey.encryptedKey;
-        const { decrypt } = await import("@/lib/encryption");
-        return decrypt(apiKey.encryptedKey, apiKey.iv);
+        return await resolveApiKeySecret(apiKey);
       }
     }
   } catch {

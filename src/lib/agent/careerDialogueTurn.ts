@@ -1,7 +1,7 @@
 import "server-only";
 
 import { generateId } from "ai";
-import { AI_BUSINESS_ERROR_CODES, AIBusinessError } from "@/lib/ai/connections";
+import { AI_BUSINESS_ERROR_CODES, AIBusinessError, BYOK_BACKEND_KIND } from "@/lib/ai/connections";
 import { fetchAccountRuntimeState } from "@/lib/ai/streaming-execution";
 import {
   checkStructuredOutputReadiness,
@@ -131,6 +131,9 @@ export async function prepareCareerDialogueTurn(input: {
     try {
       if (input.managed) {
         await assertManagedAgentStructuredReadiness(input.managed);
+      } else if (input.connection.backendKind === BYOK_BACKEND_KIND) {
+        // BYOK structured decisions run PROMPT_AND_VALIDATE through the
+        // AI SDK — there is no desktop runtime descriptor to probe.
       } else {
         await assertAgentStructuredReadiness(input.connection);
       }

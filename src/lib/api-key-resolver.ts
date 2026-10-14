@@ -1,12 +1,16 @@
 import "server-only";
 
 import db from "@/lib/db";
-import { decrypt } from "@/lib/encryption";
+import {
+  resolveApiKeySecret,
+  type CredentialStoreDeps,
+} from "@/lib/ai/credential-store";
 import { PROVIDER_REGISTRY } from "@/lib/ai/provider-registry";
 
 export async function resolveApiKey(
   userId: string | undefined,
   provider: string,
+  storeDeps?: CredentialStoreDeps,
 ): Promise<string | undefined> {
   if (userId) {
     try {
@@ -21,8 +25,10 @@ export async function resolveApiKey(
           })
           .catch(() => {});
 
-        if (apiKey.iv === "") return apiKey.encryptedKey;
-        return decrypt(apiKey.encryptedKey, apiKey.iv);
+        // All stored formats dispatch through the credential store —
+        // plaintext passthrough, OS envelope, and the v1/legacy cipher.
+        // Any failure keeps the existing env/default fallback contract.
+        return await resolveApiKeySecret(apiKey, storeDeps);
       }
     } catch {
       // Fall through to env var

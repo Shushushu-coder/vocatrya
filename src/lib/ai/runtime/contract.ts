@@ -57,7 +57,7 @@ export interface RuntimeProfileConnectionRow {
 
 export interface ResolvedRuntimeProfile {
   connectionId: string;
-  backendKind: Exclude<AIBackendKind, "MANAGED_GATEWAY">;
+  backendKind: Exclude<AIBackendKind, "MANAGED_GATEWAY" | "LOCAL_BYOK">;
   runtimeProfileRef: RuntimeProfileRef;
 }
 
@@ -70,7 +70,7 @@ export interface ResolvedRuntimeProfile {
 export function resolveRuntimeProfile(
   connection: RuntimeProfileConnectionRow,
 ): ResolvedRuntimeProfile {
-  if (!isAIBackendKind(connection.backendKind) || connection.backendKind === "MANAGED_GATEWAY") {
+  if (!isAIBackendKind(connection.backendKind) || connection.backendKind === "MANAGED_GATEWAY" || connection.backendKind === "LOCAL_BYOK") {
     throw new AIResolutionError(
       AI_RESOLUTION_ERROR_CODES.RUNTIME_NOT_AVAILABLE,
       `Connection ${connection.id} references unknown backendKind "${connection.backendKind}".`,

@@ -11,6 +11,7 @@ import {
   AIBusinessError,
   isAIBackendKind,
   assertAccountExecutionIdentity,
+  classifyAIConnection,
   isSupportedAccountProviderForBackend,
 } from "@/lib/ai/connections";
 import { isRuntimeProfileRef } from "@/lib/ai/runtime/contract";
@@ -125,7 +126,15 @@ export async function resolveExplicitChatSelection(
       "The selected AI connection is not available",
     );
   }
-  assertAccountExecutionIdentity(connection);
+  const classification = classifyAIConnection(connection);
+  if (classification === "INVALID") {
+    throw new AIBusinessError(
+      "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+      "The selected AI connection has no usable identity",
+    );
+  }
+  const byok = classification === "BYOK";
+  if (!byok) assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;
@@ -145,9 +154,13 @@ export async function resolveExplicitChatSelection(
         "The selected AI connection is not usable",
       );
   }
+  // BYOK connections carry no runtime profile — classification already
+  // proved the API_KEY binding is well-formed; the runtime matrix only
+  // governs account-login pairings.
   if (
-    !isAIBackendKind(connection.backendKind) ||
-    !isRuntimeProfileRef(connection.runtimeProfileRef)
+    !byok &&
+    (!isAIBackendKind(connection.backendKind) ||
+    !isRuntimeProfileRef(connection.runtimeProfileRef))
   ) {
     throw new AIBusinessError(
       "RUNTIME_NOT_AVAILABLE",
@@ -155,6 +168,7 @@ export async function resolveExplicitChatSelection(
     );
   }
   if (
+    !byok &&
     !isSupportedAccountProviderForBackend(
       connection.backendKind,
       connection.provider,

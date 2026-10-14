@@ -213,6 +213,9 @@ describe("resolveExplicitChatSelection", () => {
     provider: "OPENAI",
     backendKind: "CODEX_RUNTIME",
     status: "CONNECTED",
+    authType: "ACCOUNT_LOGIN",
+    credentialRef: null,
+    accountIdentity: null,
     runtimeProfileRef: "rp_11111111-2222-4333-8444-555555555555",
     archivedAt: null,
   };

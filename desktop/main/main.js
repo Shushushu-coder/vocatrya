@@ -30,6 +30,7 @@ const { registerConnectionIpcHandlers } = require("./runtime/connection-ipc");
 const { createBackendClient } = require("./runtime/backend-client");
 const { startExecutionServer } = require("./runtime/execute-server");
 const { createHostedSessionStore, startHostedSessionBroker } = require("./hosted-session");
+const { startCredentialBroker } = require("./credential-broker");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -77,6 +78,7 @@ if (!singleInstance) {
   let connectionOps = null;
   let execServerUrl = null;
   let hostedSessionBroker = null;
+  let credentialBroker = null;
   let migrationChild = null;
   let shuttingDown = false;
   let backendExpectedExit = false;
@@ -127,6 +129,16 @@ if (!singleInstance) {
   // Per-launch bearer for the backend's internal AI-connection endpoints.
   // Generated in main, injected into the backend env, never leaves main.
   const internalToken = createPocSecret();
+
+  // Injected when the credential broker could not bind: the backend must
+  // still see "desktop" (URL present) so BYOK OS-protected writes fail
+  // closed there instead of silently degrading to the shared application
+  // cipher. Port 9 (discard) is unreachable, so every call fails fast.
+  const CREDENTIAL_BROKER_DOWN_URL = "http://127.0.0.1:9/";
+
+  function credentialBrokerUrl() {
+    return credentialBroker ? credentialBroker.url : CREDENTIAL_BROKER_DOWN_URL;
+  }
 
   function createConnectionOpsService() {
     return createConnectionService({
@@ -252,6 +264,7 @@ if (!singleInstance) {
                 databaseUrl: foundationConfig.databaseUrl,
                 internalToken,
                 desktopExecUrl: execServerUrl || undefined,
+                credentialUrl: credentialBrokerUrl(),
                 // app.getVersion() only reflects the packaged installer
                 // version when packaged; dev/foundation probes must not leak
                 // Electron's own version into the backend.
@@ -302,6 +315,7 @@ if (!singleInstance) {
           baseEnv: process.env,
           internalToken,
           desktopExecUrl: execServerUrl || undefined,
+          credentialUrl: credentialBrokerUrl(),
         });
         if (hostedSessionBroker) env.VOCATRYA_HOSTED_SESSION_URL = hostedSessionBroker.url;
         backendExpectedExit = true;
@@ -416,6 +430,21 @@ if (!singleInstance) {
           error,
         );
       }
+      // BYOK credential broker: the backend's safeStorage seal/unseal
+      // oracle for OS-protected API keys. A bind failure is degradable —
+      // the backend still receives a credential URL marker and fails
+      // closed on OS-store operations rather than dropping to the shared
+      // application cipher on a Windows build.
+      try {
+        credentialBroker = await startCredentialBroker({
+          token: internalToken,
+          safeStorage,
+        });
+      } catch (error) {
+        console.error(
+          "BYOK credential store channel failed to bind; OS-protected key storage is unavailable",
+        );
+      }
       const buildInfo = readBuildInfo();
       if (buildInfo) {
         console.log(
@@ -451,6 +480,7 @@ if (!singleInstance) {
     try {
       execServer?.close();
       hostedSessionBroker?.server.close();
+      credentialBroker?.server.close();
     } catch {
       // Closing the loopback listener must never block shutdown.
     }

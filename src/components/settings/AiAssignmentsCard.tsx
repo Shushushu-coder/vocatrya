@@ -10,13 +10,14 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 import {
-  listAiConnections,
+  listAssignableAiConnections,
   mintAiConnectionTicket,
 } from "@/actions/aiConnection.actions";
 import {
@@ -25,6 +26,11 @@ import {
   resolveBusinessAiConfig,
   setBusinessAiAssignment,
 } from "@/actions/aiAssignment.actions";
+import {
+  assignManagedBusinessAiSource,
+  getManagedAiOverview,
+  type ManagedAiOverview,
+} from "@/actions/managedAi.actions";
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
 import type { BusinessAssignmentSummary } from "@/lib/ai/assignments";
 import {
@@ -32,7 +38,12 @@ import {
   checkStructuredOutputReadiness,
   type AccountRuntimeCapabilities,
 } from "@/lib/ai/runtime/capabilities";
-import { AI_STREAMING_PURPOSES } from "@/lib/ai/connections";
+import {
+  AI_STREAMING_PURPOSES,
+  BYOK_API_KEY_PROVIDERS,
+  BYOK_BACKEND_KIND,
+} from "@/lib/ai/connections";
+import { PROVIDER_REGISTRY } from "@/lib/ai/provider-registry";
 
 // Purposes editable this phase. INTERVIEW is editable now that interview
 // execution runs through the locked account runtime (TEXT_ONLY one-shot);
@@ -83,6 +94,11 @@ const TEXT_ONLY_PURPOSES = new Set<string>(["INTERVIEW"]);
 // gates this one is fail-closed — when the capability bridge is absent
 // the runtime counts as unverifiable rather than silently compatible.
 const STREAMING_PURPOSES = new Set<string>(AI_STREAMING_PURPOSES);
+
+// The Managed source is system-provisioned — pickers offer a sentinel
+// option instead of the real connection id (which callers never choose
+// themselves); the save path routes it to assignManagedBusinessSource.
+const MANAGED_CONNECTION_ID = "__managed__";
 
 type Draft = { connectionId: string; model: string };
 
@@ -142,15 +158,23 @@ function AiAssignmentsCard() {
   const [runtimeVersions, setRuntimeVersions] = useState<
     Record<string, string | null>
   >({});
+  // The Managed source's live state: its provisioned connection plus the
+  // catalog models the Hosted authority currently offers. null = Hosted
+  // unreachable — the Managed option still renders with its error code.
+  const [managed, setManaged] = useState<ManagedAiOverview | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [connResult, assignResult, interviewResult] = await Promise.all([
-        listAiConnections(),
+      const [connResult, assignResult, interviewResult, managedResult] = await Promise.all([
+        listAssignableAiConnections(),
         listBusinessAiAssignments(),
         resolveBusinessAiConfig({ purpose: "INTERVIEW" }),
+        getManagedAiOverview(),
       ]);
+      if (managedResult.success && managedResult.data) {
+        setManaged(managedResult.data);
+      }
       const runtime = window.vocatryaRuntime;
       if (runtime) {
         try {
@@ -188,7 +212,12 @@ function AiAssignmentsCard() {
         for (const assignment of assignResult.data) {
           nextAssignments[assignment.purpose] = assignment;
           nextDrafts[assignment.purpose] = {
-            connectionId: assignment.connectionId,
+            // Saved Managed rows surface as the Managed sentinel — the
+            // connection id stays server-side.
+            connectionId:
+              assignment.connection?.backendKind === "MANAGED_GATEWAY"
+                ? MANAGED_CONNECTION_ID
+                : assignment.connectionId,
             model: assignment.model,
           };
         }
@@ -216,6 +245,48 @@ function AiAssignmentsCard() {
 
   const loadCatalog = useCallback(
     async (connection: ConnectionSummary) => {
+      // BYOK connections discover models through the provider's own
+      // /api/ai/* listing route — the same route the legacy settings used;
+      // there is no runtime ticket to mint.
+      if (connection.backendKind === BYOK_BACKEND_KIND) {
+        const apiKeyProvider =
+          BYOK_API_KEY_PROVIDERS[
+            connection.provider as keyof typeof BYOK_API_KEY_PROVIDERS
+          ];
+        const registryEntry = apiKeyProvider
+          ? PROVIDER_REGISTRY[apiKeyProvider]
+          : undefined;
+        if (!registryEntry?.modelsEndpoint) {
+          toastError(t("settings.aiConnErrModelUnavailable"));
+          return;
+        }
+        setCatalogBusy(connection.id);
+        try {
+          const response = await fetch(`/api/ai/${registryEntry.modelsEndpoint}`);
+          const data = await response.json();
+          const modelIds = response.ok
+            ? registryEntry.parseModelsResponse?.(data) ?? []
+            : [];
+          if (modelIds.length > 0) {
+            setCatalogs((prev) => ({
+              ...prev,
+              [connection.id]: modelIds.map((id) => ({
+                id,
+                displayName: id,
+                source: "byok",
+                availability: "available",
+              })),
+            }));
+          } else {
+            toastError(t("settings.aiConnErrModelUnavailable"));
+          }
+        } catch {
+          toastError(t("settings.aiConnErrModelUnavailable"));
+        } finally {
+          setCatalogBusy(null);
+        }
+        return;
+      }
       const ai = window.vocatryaAi;
       if (!ai) {
         toastError(t("settings.aiConnErrBackendUnavailable"));
@@ -248,8 +319,14 @@ function AiAssignmentsCard() {
     [t],
   );
 
+  const isByokConnection = (connection: ConnectionSummary): boolean =>
+    connection.backendKind === BYOK_BACKEND_KIND;
+
   // null = unknown (no desktop bridge); true/false = verified verdict.
+  // BYOK structured output runs PROMPT_AND_VALIDATE in-process — there is
+  // no runtime verification surface, so it is never marked unverified.
   const structuredReady = (connection: ConnectionSummary): boolean | null => {
+    if (isByokConnection(connection)) return true;
     const caps = runtimeCaps[connection.backendKind];
     if (!caps) return null;
     return checkStructuredOutputReadiness({ capabilities: caps }).startsWith(
@@ -258,8 +335,10 @@ function AiAssignmentsCard() {
   };
 
   // TEXT_ONLY interview execution needs the runtime's local one-shot
-  // invocation. null = unknown (no desktop bridge) — marking is skipped.
+  // invocation. BYOK executes the one-shot in-process — always ready.
+  // null = unknown (no desktop bridge) — marking is skipped.
   const textOnlyReady = (connection: ConnectionSummary): boolean | null => {
+    if (isByokConnection(connection)) return true;
     const caps = runtimeCaps[connection.backendKind];
     if (!caps) return null;
     return caps.implemented === true && caps.execution?.localOneShot === true;
@@ -274,6 +353,9 @@ function AiAssignmentsCard() {
   const streamingBlockReason = (
     connection: ConnectionSummary,
   ): string | null => {
+    // BYOK streams natively through the AI SDK — real incremental output,
+    // no runtime verification surface exists to consult.
+    if (isByokConnection(connection)) return null;
     const caps = runtimeCaps[connection.backendKind];
     if (!caps) return "UNVERIFIABLE";
     const runtimeVersion = runtimeVersions[connection.backendKind];
@@ -304,6 +386,28 @@ function AiAssignmentsCard() {
     const draft = drafts[purpose];
     if (!draft?.connectionId || !draft.model.trim()) {
       toastError(t("settings.aiAssignErrModelRequired"));
+      return;
+    }
+    if (draft.connectionId === MANAGED_CONNECTION_ID) {
+      // The Managed source saves through its own entry point — the model
+      // is a Hosted catalog modelKey validated against the live catalog.
+      setBusy(`save:${purpose}`);
+      try {
+        const result = await assignManagedBusinessAiSource({
+          purpose,
+          modelKey: draft.model.trim(),
+        });
+        if (result.success) {
+          toastSuccess(t("settings.aiAssignSaved"));
+          await load();
+        } else {
+          toastError(
+            t(ERROR_KEY[result.code ?? ""] ?? "settings.aiConnErrGeneric"),
+          );
+        }
+      } finally {
+        setBusy(null);
+      }
       return;
     }
     // Structured purposes reject connections on runtimes whose structured
@@ -389,15 +493,28 @@ function AiAssignmentsCard() {
   const draftFor = (purpose: string): Draft =>
     drafts[purpose] ?? { connectionId: "", model: "" };
 
+  // Managed catalog entries ride the same catalog dropdown as runtime
+  // model lists — populated from the live Hosted overview on load.
+  const managedCatalog: ModelEntry[] = (managed?.models ?? []).map((m) => ({
+    id: m.modelKey,
+    displayName: m.displayName,
+    source: "managed",
+    availability: "available",
+  }));
+  const managedAvailable = managed?.connection?.status === "CONNECTED";
+
   const renderPurposeRow = (purpose: string) => {
     const draft = draftFor(purpose);
     const saved = assignments[purpose];
     const selectedConnection = connections.find(
       (c) => c.id === draft.connectionId,
     );
-    const catalog = draft.connectionId
-      ? catalogs[draft.connectionId]
-      : undefined;
+    const catalog =
+      draft.connectionId === MANAGED_CONNECTION_ID
+        ? managedCatalog
+        : draft.connectionId
+          ? catalogs[draft.connectionId]
+          : undefined;
     const dirty =
       !!draft.connectionId &&
       !!draft.model.trim() &&
@@ -458,7 +575,16 @@ function AiAssignmentsCard() {
                 />
               </SelectTrigger>
               <SelectContent>
+                {managedAvailable && (
+                  <SelectGroup>
+                    <SelectLabel>{t("settings.aiAssignManagedGroup")}</SelectLabel>
+                    <SelectItem value={MANAGED_CONNECTION_ID}>
+                      {t("settings.aiAssignManagedOption")}
+                    </SelectItem>
+                  </SelectGroup>
+                )}
                 <SelectGroup>
+                  <SelectLabel>{t("settings.aiAssignLocalGroup")}</SelectLabel>
                   {connections.map((connection) => {
                     const eligible = isStructuredPurpose
                       ? structuredReady(connection)
@@ -514,7 +640,7 @@ function AiAssignmentsCard() {
             />
           </div>
 
-          {draft.connectionId && (
+          {draft.connectionId && draft.connectionId !== MANAGED_CONNECTION_ID && (
             <Button
               variant="outline"
               size="sm"
@@ -589,9 +715,16 @@ function AiAssignmentsCard() {
         </p>
       </div>
 
-      {connections.length === 0 && (
+      {connections.length === 0 && !managedAvailable && (
         <p className="text-sm text-muted-foreground">
           {t("settings.aiAssignNoConnections")}
+        </p>
+      )}
+      {managed && managed.errorCode && managedAvailable === false && (
+        <p className="text-sm text-muted-foreground">
+          {t("settings.aiAssignManagedUnavailable", {
+            code: managed.errorCode,
+          })}
         </p>
       )}
 

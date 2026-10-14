@@ -127,4 +127,100 @@ export class HostedManagedClient {
     } catch (error) { if (error instanceof ManagedError) throw error; throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"); }
     finally { controller.abort(); await reader?.cancel().catch(() => undefined); reader?.releaseLock(); }
   }
+  /**
+   * GET /v1/me/entitlement — derived subscription/plan/quota authority. The
+   * shape is the hosted EntitlementDto: a strict field-presence check, no
+   * fields trusted beyond their declared type, nothing invented locally.
+   */
+  async entitlement(userId: string): Promise<ManagedEntitlement> {
+    const body = await (await this.request(userId, "me/entitlement", undefined, AbortSignal.timeout(5000))).json();
+    return parseEntitlementDto(body);
+  }
+  /**
+   * GET /v1/me/usage — current-period quota summary only. The hosted
+   * service deliberately returns no ledger rows, prompts, or credentials;
+   * the client renders exactly what arrives.
+   */
+  async usage(userId: string): Promise<ManagedUsageSummary> {
+    const body = await (await this.request(userId, "me/usage", undefined, AbortSignal.timeout(5000))).json();
+    const dto = parseEntitlementDto(body, { usageSummary: true });
+    const { subscriptionStatus, planKey, planRevision, quotaPlanRevision, periodStart, periodEnd, quotaLimitUnits, reservedUnits, committedUnits, remainingUnits } = dto;
+    return { subscriptionStatus, planKey, planRevision, quotaPlanRevision, periodStart, periodEnd, quotaLimitUnits, reservedUnits, committedUnits, remainingUnits };
+  }
+}
+
+export interface ManagedEntitlement {
+  subscriptionStatus: string | null;
+  planKey: string | null;
+  planRevision: string | null;
+  quotaPlanRevision: string | null;
+  managedAiEnabled: boolean;
+  allowedModels: string[];
+  periodStart: number | null;
+  periodEnd: number | null;
+  quotaLimitUnits: number | null;
+  reservedUnits: number;
+  committedUnits: number;
+  remainingUnits: number | null;
+}
+
+/** The /v1/me/usage payload — entitlement minus enablement/model fields. */
+export type ManagedUsageSummary = Omit<ManagedEntitlement, "managedAiEnabled" | "allowedModels">;
+
+function nullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+function nullableNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value));
+}
+function intField(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function parseEntitlementDto(
+  body: unknown,
+  options?: { usageSummary?: boolean },
+): ManagedEntitlement {
+  const b = body as Record<string, unknown> | null;
+  if (!b || typeof b !== "object") throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableString(b.subscriptionStatus)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableString(b.planKey)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableString(b.planRevision)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableString(b.quotaPlanRevision)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableNumber(b.periodStart)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableNumber(b.periodEnd)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableNumber(b.quotaLimitUnits)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!intField(b.reservedUnits)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!intField(b.committedUnits)) throw new ManagedError("GATEWAY_RESPONSE");
+  if (!nullableNumber(b.remainingUnits)) throw new ManagedError("GATEWAY_RESPONSE");
+  // The usage summary omits these two entitlement-only fields entirely;
+  // for the entitlement read they are mandatory.
+  if (
+    b.managedAiEnabled === undefined
+      ? options?.usageSummary !== true
+      : typeof b.managedAiEnabled !== "boolean"
+  ) {
+    throw new ManagedError("GATEWAY_RESPONSE");
+  }
+  const allowedModelsValid =
+    b.allowedModels === undefined
+      ? options?.usageSummary === true
+      : Array.isArray(b.allowedModels) &&
+        b.allowedModels.every((m) => typeof m === "string");
+  if (!allowedModelsValid) throw new ManagedError("GATEWAY_RESPONSE");
+  const allowedModels = Array.isArray(b.allowedModels) ? b.allowedModels : [];
+  return {
+    subscriptionStatus: b.subscriptionStatus,
+    planKey: b.planKey,
+    planRevision: b.planRevision,
+    quotaPlanRevision: b.quotaPlanRevision,
+    managedAiEnabled: b.managedAiEnabled === true,
+    allowedModels,
+    periodStart: b.periodStart,
+    periodEnd: b.periodEnd,
+    quotaLimitUnits: b.quotaLimitUnits,
+    reservedUnits: b.reservedUnits,
+    committedUnits: b.committedUnits,
+    remainingUnits: b.remainingUnits,
+  };
 }

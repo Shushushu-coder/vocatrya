@@ -12,7 +12,9 @@ import type { ManagedInvocationReceipt } from "./managed-contract";
  */
 
 // Connection identity providers. Open-ended on purpose: new providers
-// are added here, not by schema change.
+// are added here, not by schema change. The BYOK set is the ApiKey
+// registry's provider ids uppercased — the same user-keyed product under
+// a different credential surface.
 export const AI_CONNECTION_PROVIDERS = [
   "OPENAI",
   "ANTHROPIC",
@@ -26,6 +28,11 @@ export const AI_CONNECTION_PROVIDERS = [
   "GITHUB_COPILOT",
   "DEVIN",
   "VOCATRYA",
+  // BYOK providers (authType=API_KEY, backendKind=LOCAL_BYOK).
+  "DEEPSEEK",
+  "OPENROUTER",
+  "GEMINI",
+  "OLLAMA",
 ] as const;
 export type AIConnectionProvider = (typeof AI_CONNECTION_PROVIDERS)[number];
 
@@ -39,8 +46,15 @@ export const AI_BACKEND_KINDS = [
   "COPILOT_RUNTIME",
   "DEVIN_RUNTIME",
   "MANAGED_GATEWAY",
+  // The user's own API key executed in-process through the AI SDK —
+  // no desktop runtime, no ticket, no profile. Membership here only
+  // names the identity; the LOCAL_BYOK backend is refused everywhere a
+  // runtime operation is required.
+  "LOCAL_BYOK",
 ] as const;
 export type AIBackendKind = (typeof AI_BACKEND_KINDS)[number];
+
+export const BYOK_BACKEND_KIND = "LOCAL_BYOK" as const;
 
 // ACCOUNT_LOGIN is the only implemented flow this phase; API_KEY is reserved
 // for the future ApiKey seam (AIConnection.credentialRef). MANAGED is identity only.
@@ -167,8 +181,10 @@ export function assertProviderMetadataSafe(
  * which pairings are eligible — the persisted provider is always the
  * adapter-verified one, never derived from backendKind alone.
  */
+// Account-login pairings only — LOCAL_BYOK has no account surface: its
+// "provider" names which user-held ApiKey row the connection binds.
 export const AI_BACKEND_SUPPORTED_ACCOUNT_PROVIDERS: Record<
-  Exclude<AIBackendKind, "MANAGED_GATEWAY">,
+  Exclude<AIBackendKind, "MANAGED_GATEWAY" | "LOCAL_BYOK">,
   readonly AIConnectionProvider[]
 > = {
   CODEX_RUNTIME: ["OPENAI"],
@@ -204,6 +220,67 @@ export function isSupportedAccountProviderForBackend(
   );
 }
 
+// ---------------------------------------------------------------------------
+// BYOK (Custom API Key) identity — authType=API_KEY + backendKind=LOCAL_BYOK.
+// credentialRef is the bound ApiKey row id; the actual key material never
+// enters AIConnection (see src/lib/ai/byok.ts).
+// ---------------------------------------------------------------------------
+
+/** AIConnection.provider → ApiKey.provider (the registry's lowercase ids). */
+export const BYOK_API_KEY_PROVIDERS = {
+  OPENAI: "openai",
+  DEEPSEEK: "deepseek",
+  OPENROUTER: "openrouter",
+  GEMINI: "gemini",
+  OLLAMA: "ollama",
+} as const;
+export type ByokConnectionProvider = keyof typeof BYOK_API_KEY_PROVIDERS;
+export type ByokApiKeyProvider =
+  (typeof BYOK_API_KEY_PROVIDERS)[ByokConnectionProvider];
+
+export function byokApiKeyProviderFor(
+  provider: string,
+): ByokApiKeyProvider | null {
+  return (
+    (BYOK_API_KEY_PROVIDERS as Record<string, ByokApiKeyProvider>)[provider] ??
+    null
+  );
+}
+
+export function apiKeyProviderToByokProvider(
+  provider: string,
+): ByokConnectionProvider | null {
+  for (const [connectionProvider, apiKeyProvider] of Object.entries(
+    BYOK_API_KEY_PROVIDERS,
+  )) {
+    if (apiKeyProvider === provider) {
+      return connectionProvider as ByokConnectionProvider;
+    }
+  }
+  return null;
+}
+
+// credentialRef points at an ApiKey row id (uuid) — an opaque reference,
+// never a path or the key material itself.
+const API_KEY_CREDENTIAL_REF_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isApiKeyCredentialRef(
+  value: string | null | undefined,
+): value is string {
+  return (
+    typeof value === "string" && API_KEY_CREDENTIAL_REF_PATTERN.test(value)
+  );
+}
+
+export function hasByokIdentityMarker(
+  connection: ExecutionConnectionIdentity,
+): boolean {
+  return (
+    connection.backendKind === BYOK_BACKEND_KIND ||
+    connection.authType === "API_KEY"
+  );
+}
+
 export interface AIConnectionIdentity {
   provider: string;
   backendKind: string;
@@ -220,10 +297,16 @@ export function hasManagedIdentityMarker(connection: ExecutionConnectionIdentity
   return connection.provider === "VOCATRYA" || connection.backendKind === "MANAGED_GATEWAY" || connection.authType === "MANAGED";
 }
 
-/** Identity only: MANAGED never proves hosted auth, entitlement or capability. */
+/**
+ * Identity only: MANAGED never proves hosted auth, entitlement or
+ * capability; BYOK never proves a usable key — it only asserts the row
+ * is a well-formed API-key binding (provider maps to the ApiKey
+ * registry, credentialRef is an ApiKey row id, no runtime profile or
+ * account identity can exist on this surface).
+ */
 export function classifyAIConnection(
   connection: ExecutionConnectionIdentity,
-): "ACCOUNT_LOGIN" | "MANAGED" | "INVALID" {
+): "ACCOUNT_LOGIN" | "MANAGED" | "BYOK" | "INVALID" {
   if (hasManagedIdentityMarker(connection)) {
     return connection.provider === "VOCATRYA" &&
       connection.backendKind === "MANAGED_GATEWAY" &&
@@ -232,6 +315,16 @@ export function classifyAIConnection(
       connection.runtimeProfileRef === null &&
       connection.accountIdentity === null
       ? "MANAGED"
+      : "INVALID";
+  }
+  if (hasByokIdentityMarker(connection)) {
+    return connection.backendKind === BYOK_BACKEND_KIND &&
+      connection.authType === "API_KEY" &&
+      byokApiKeyProviderFor(connection.provider) !== null &&
+      isApiKeyCredentialRef(connection.credentialRef) &&
+      connection.runtimeProfileRef === null &&
+      connection.accountIdentity === null
+      ? "BYOK"
       : "INVALID";
   }
   return connection.authType === "ACCOUNT_LOGIN" &&
@@ -243,10 +336,13 @@ export function classifyAIConnection(
 /** Fail before minting any desktop ticket or probing a runtime. */
 export function assertAccountExecutionIdentity(connection: ExecutionConnectionIdentity): void {
   // Existing account projections retain their existing status/matrix gates.
-  if (!hasManagedIdentityMarker(connection)) return;
+  if (!hasManagedIdentityMarker(connection) && !hasByokIdentityMarker(connection)) return;
   const classification = classifyAIConnection(connection);
   if (classification === "MANAGED") {
     throw new AIBusinessError("MANAGED_EXECUTION_NOT_IMPLEMENTED", "Managed AI connections execute through the business path only, never the desktop runtime");
+  }
+  if (classification === "BYOK") {
+    throw new AIBusinessError("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION", "BYOK API-key connections execute in-process, never through the desktop runtime");
   }
   if (classification === "INVALID") {
     throw new AIBusinessError("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION", "Invalid AI connection identity");
@@ -385,6 +481,10 @@ export const AI_BUSINESS_ERROR_CODES = {
   PERMISSION_BOUNDARY_NOT_READY: "PERMISSION_BOUNDARY_NOT_READY",
   AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
   AI_EXECUTION_FAILED: "AI_EXECUTION_FAILED",
+  // BYOK credential surface: the bound ApiKey row is gone or undecryptable.
+  // Distinct from env-var/legacy resolution — an explicit BYOK connection
+  // never falls through to another credential.
+  BYOK_CREDENTIAL_UNAVAILABLE: "BYOK_CREDENTIAL_UNAVAILABLE",
   // A streaming consumer (Career Dialogue) resolved to a runtime without
   // verified incremental output — explicit failure, never a buffered
   // one-shot masquerading as a stream.

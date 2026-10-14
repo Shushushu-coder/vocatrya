@@ -18,6 +18,10 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import prisma from "@/lib/db";
 import { executeManagedText, type ManagedDispatchInput } from "./managed-dispatch";
+import {
+  executeByokConnectionText,
+  type ByokExecutionDeps,
+} from "./byok-execution";
 import type { HostedManagedClient } from "./managed-client";
 import type { ManagedAiProvenanceV1 } from "./managed-provenance";
 import {
@@ -32,7 +36,7 @@ import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
 import type { AIConnectionExecutionResult } from "@/lib/ai/runtime/capabilities";
 import type { PrismaClient } from "@prisma/client";
 
-type DbClient = Pick<PrismaClient, "aIConnection">;
+type DbClient = Pick<PrismaClient, "aIConnection" | "apiKey">;
 
 /** Prompts are business data, not commands — bounded like any request body. */
 export const AI_EXECUTION_MAX_PROMPT_BYTES = 256 * 1024;
@@ -67,7 +71,7 @@ export interface ExecuteAIConnectionTextInput extends Pick<ManagedDispatchInput,
   signal?: AbortSignal;
 }
 
-export interface ExecuteAIConnectionTextDeps {
+export interface ExecuteAIConnectionTextDeps extends ByokExecutionDeps {
   managedClient?: HostedManagedClient;
   dbClient?: DbClient;
   execUrl?: string;
@@ -205,7 +209,8 @@ export async function executeAIConnectionText(
   const classification = classifyAIConnection(connection);
   if (classification === "INVALID") fail(AI_BUSINESS_ERROR_CODES.UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION, "Invalid AI connection identity");
   const managed = classification === "MANAGED";
-  if (!managed) assertAccountExecutionIdentity(connection);
+  const byok = classification === "BYOK";
+  if (!managed && !byok) assertAccountExecutionIdentity(connection);
   switch (connection.status) {
     case "CONNECTED":
       break;
@@ -228,6 +233,31 @@ export async function executeAIConnectionText(
   if (managed) {
     const result = await executeManagedText({ ...input, structuredOutput: structuredPayload }, deps.managedClient);
     return { ...result, connectionId, provider: connection.provider, backendKind: connection.backendKind, managedAiProvenance: result.provenance };
+  }
+  if (byok) {
+    // BYOK executes in-process through the AI SDK on the bound ApiKey
+    // row — no ticket, no desktop channel, no managed fields.
+    const result = await executeByokConnectionText(
+      {
+        userId,
+        connection,
+        model,
+        prompt,
+        structuredOutput: structuredPayload,
+        timeoutMs: input.timeoutMs,
+        signal: input.signal,
+      },
+      deps,
+    );
+    return {
+      text: result.text,
+      provider: connection.provider,
+      backendKind: connection.backendKind,
+      model: model.trim(),
+      connectionId,
+      structuredStrategy: result.structuredStrategy,
+      stopReason: result.stopReason,
+    };
   }
   if (!isAIBackendKind(connection.backendKind)) {
     fail(
