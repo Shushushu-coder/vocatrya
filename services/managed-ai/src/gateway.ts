@@ -40,7 +40,8 @@ export class ManagedGatewayRuntime {
       const response = await this.fetchImpl(this.url, {
         method: "POST", redirect: "error", signal,
         headers: { "content-type": "application/json", authorization: `Bearer ${this.config.apiKey}` },
-        body: JSON.stringify({ model: binding.upstreamModelId, messages: [{ role: "user", content: input.prompt }], stream, max_tokens: binding.maxOutputTokens }),
+        // REAL_PROVIDER_VERIFICATION_PENDING: Qingyun support for stream_options.include_usage is unverified.
+        body: JSON.stringify({ model: binding.upstreamModelId, messages: [{ role: "user", content: input.prompt }], stream, ...(stream ? { stream_options: { include_usage: true } } : {}), max_tokens: binding.maxOutputTokens }),
       });
       if (!response.ok) {
         await response.body?.cancel();
@@ -88,6 +89,8 @@ export class ManagedGatewayRuntime {
       reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8", { fatal: true });
       let buffer = "", finished = false, total = 0;
+      let stopReason: string | undefined;
+      let streamUsage: { inputTokens: number; outputTokens: number } | undefined;
       while (true) {
         const chunk = await reader.read();
         if (combined.aborted) throw this.normalize(null, combined);
@@ -103,22 +106,42 @@ export class ManagedGatewayRuntime {
           if (!data) continue;
           if (data === "[DONE]") {
             if (!finished || buffer.trim()) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
-            yield { type: "completed", model: binding.modelKey, provenance: provenance(binding) };
+            yield { type: "completed", model: binding.modelKey, provenance: provenance(binding), stopReason, ...streamUsage };
             return;
           }
           let payload: GatewayPayload;
           try { payload = JSON.parse(data); } catch { throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED"); }
           if (!payload || typeof payload !== "object") throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
           this.actualModel(payload, binding);
+          // Upstream may carry total usage on the terminal content chunk (exactly one
+          // choice, non-null finish_reason, no new content); an OpenAI-style
+          // usage-only choices:[] frame is equally valid after finish, before DONE.
+          // Usage may appear at most once; any other placement fails closed.
+          // Accepted SSE usage shapes: REAL_PROVIDER_VERIFICATION_PENDING (Qingyun).
+          let frameUsage: { inputTokens: number; outputTokens: number } | undefined;
+          if (payload.usage != null) {
+            const inputTokens = usageNumber(payload.usage.prompt_tokens);
+            const outputTokens = usageNumber(payload.usage.completion_tokens);
+            if (inputTokens === undefined || outputTokens === undefined || streamUsage) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
+            frameUsage = { inputTokens, outputTokens };
+          }
+          if (Array.isArray(payload.choices) && payload.choices.length === 0) {
+            if (!finished || !frameUsage) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
+            streamUsage = frameUsage;
+            continue;
+          }
           if (!Array.isArray(payload.choices) || payload.choices.length !== 1) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
           const choice = payload.choices?.[0];
           if (!choice || !choice.delta || typeof choice.delta !== "object" || (choice.delta.content != null && typeof choice.delta.content !== "string")) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
           if (finished) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
+          if (frameUsage && choice.finish_reason == null) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
           if (choice.delta.content) yield { type: "text-delta", delta: choice.delta.content as string };
           if (choice.finish_reason != null) {
             if (typeof choice.finish_reason !== "string") throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
+            stopReason = choice.finish_reason;
             finished = true;
           }
+          if (frameUsage) streamUsage = frameUsage;
         }
         if (buffer.length > 256 * 1024) throw new GatewayFailure("GATEWAY_RESPONSE", "COMMITTED");
       }

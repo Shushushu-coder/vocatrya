@@ -157,6 +157,7 @@ describe("Synthetic gateway protocol and redaction", () => {
       const result = await response.json(); expect(result.text).toBe('{"ok":true}');
       expect(result.provenance).toEqual(snapshot); expect(JSON.stringify(result)).not.toContain(secret);
       expect(upstreamBody).toMatchObject({ model: "vendor-v1", max_tokens: 100, stream: false });
+      expect(upstreamBody).not.toHaveProperty("thinking");
     }
   });
   it.each([[401, "GATEWAY_AUTH"], [403, "GATEWAY_AUTH"], [429, "GATEWAY_RATE_LIMIT"], [500, "GATEWAY_RESPONSE"]])("normalizes status %s without raw body or headers", async (status, code) => {
@@ -195,6 +196,69 @@ describe("Synthetic gateway protocol and redaction", () => {
 describe("Incremental streaming and cancellation", () => {
   const frame = (delta: string, finish: string | null = null, model = "vendor-v1") => `data: ${JSON.stringify({ model, choices: [{ delta: { content: delta }, finish_reason: finish }] })}\n\n`;
   const streamInput = (bindingId: string) => ({ bindingId, modelKey: "vocatrya-fast", prompt: "x", operationId: "op-1", invocationKey: "op-1:0", attemptIndex: 0 });
+  // Synthetic frames only: Qingyun support for include_usage and these SSE usage
+  // shapes is REAL_PROVIDER_VERIFICATION_PENDING, not verified compatibility.
+  it("requests streaming usage and persists the validated final usage-only frame", async () => {
+    let requestBody: Record<string, unknown> = {};
+    const body = frame("ok", "stop") + `data: ${JSON.stringify({ model: "vendor-v1", choices: [], usage: { prompt_tokens: 7, completion_tokens: 11 } })}\n\ndata: [DONE]\n\n`;
+    const { db, token, service } = fixture(async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(body, { headers: { "content-type": "text/event-stream" } });
+    });
+    provision(db, "hosted-a", "ACTIVE");
+    const snapshot = await bind(service, token);
+    const response = await call(service, token, "stream", invokeBody(snapshot.managedBindingId));
+    const events = (await response.text()).trim().split("\n").map(line => JSON.parse(line));
+    expect(requestBody.stream_options).toEqual({ include_usage: true });
+    expect(events.at(-1)).toMatchObject({ type: "completed", stopReason: "stop", inputTokens: 7, outputTokens: 11, executionState: "EXECUTED" });
+    expect(db.usage("hosted-a", "op-1:0")).toMatchObject({ status: "SUCCEEDED", settlement: "COMMITTED", inputTokens: 7, outputTokens: 11 });
+  });
+  it("persists usage carried on the terminal content chunk, tolerating usage:null frames", async () => {
+    const nullUsage = `data: ${JSON.stringify({ model: "vendor-v1", choices: [{ delta: { content: "more" }, finish_reason: null }], usage: null })}\n\n`;
+    const terminal = `data: ${JSON.stringify({ model: "vendor-v1", choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 7, completion_tokens: 11 } })}\n\ndata: [DONE]\n\n`;
+    const { db, token, service } = fixture(async () => new Response(frame("ok") + nullUsage + terminal, { headers: { "content-type": "text/event-stream" } }));
+    provision(db, "hosted-a", "ACTIVE");
+    const snapshot = await bind(service, token);
+    const response = await call(service, token, "stream", invokeBody(snapshot.managedBindingId));
+    const events = (await response.text()).trim().split("\n").map(line => JSON.parse(line));
+    expect(events.at(-1)).toMatchObject({ type: "completed", stopReason: "stop", inputTokens: 7, outputTokens: 11, executionState: "EXECUTED" });
+    expect(db.usage("hosted-a", "op-1:0")).toMatchObject({ status: "SUCCEEDED", settlement: "COMMITTED", inputTokens: 7, outputTokens: 11 });
+  });
+  it.each([
+    // usage object on a non-terminal content chunk
+    `data: ${JSON.stringify({ model: "vendor-v1", choices: [{ delta: { content: "x" }, finish_reason: null }], usage: { prompt_tokens: 1, completion_tokens: 2 } })}\n\n` + frame("y", "stop") + "data: [DONE]\n\n",
+    // usage on terminal chunk then again on a usage-only frame
+    `data: ${JSON.stringify({ model: "vendor-v1", choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 2 } })}\n\n` + `data: ${JSON.stringify({ model: "vendor-v1", choices: [], usage: { prompt_tokens: 1, completion_tokens: 2 } })}\n\ndata: [DONE]\n\n`,
+    // usage-only frame before any finish chunk
+    `data: ${JSON.stringify({ model: "vendor-v1", choices: [], usage: { prompt_tokens: 1, completion_tokens: 2 } })}\n\n` + frame("y", "stop") + "data: [DONE]\n\n",
+    // invalid usage numbers on the terminal chunk
+    `data: ${JSON.stringify({ model: "vendor-v1", choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: -1, completion_tokens: 2 } })}\n\ndata: [DONE]\n\n`,
+  ])("rejects misplaced, duplicate or invalid stream usage", async body => {
+    const db = store(); db.issueSession("a", Date.now() + 60000);
+    const binding = db.createBinding("a", "RESUME", "usage-misplace", catalogConfig().models[0]);
+    const runtime = gateway(async () => new Response(body, { headers: { "content-type": "text/event-stream" } }));
+    await expect((async () => { for await (const event of runtime.streamText(binding, streamInput(binding.id))) void event; })()).rejects.toMatchObject({ code: "GATEWAY_RESPONSE", disposition: "COMMITTED" });
+  });
+  it.each([
+    { model: "vendor-v1", choices: [] },
+    { model: "vendor-v1", choices: [], usage: { prompt_tokens: -1, completion_tokens: 2 } },
+    { model: "unexpected", choices: [], usage: { prompt_tokens: 1, completion_tokens: 2 } },
+  ])("rejects invalid usage-only frames after finish", async payload => {
+    const db = store(); db.issueSession("a", Date.now() + 60000);
+    const binding = db.createBinding("a", "RESUME", "usage", catalogConfig().models[0]);
+    const body = frame("ok", "stop") + `data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`;
+    const runtime = gateway(async () => new Response(body, { headers: { "content-type": "text/event-stream" } }));
+    await expect((async () => { for await (const event of runtime.streamText(binding, streamInput(binding.id))) void event; })()).rejects.toMatchObject({ code: "GATEWAY_RESPONSE", disposition: "COMMITTED" });
+  });
+  it("exposes stream truncation so the real execution Gate cannot mistake it for normal stop", async () => {
+    const usage = `data: ${JSON.stringify({ model: "vendor-v1", choices: [], usage: { prompt_tokens: 7, completion_tokens: 1024 } })}\n\n`;
+    const { db, token, service } = fixture(async () => new Response(frame("partial", "length") + usage + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } }));
+    provision(db, "hosted-a", "ACTIVE"); const snapshot = await bind(service, token);
+    const response = await call(service, token, "stream", invokeBody(snapshot.managedBindingId));
+    const events = (await response.text()).trim().split("\n").map(line => JSON.parse(line));
+    expect(events.at(-1)).toMatchObject({ type: "completed", stopReason: "length", inputTokens: 7, outputTokens: 1024 });
+    expect(db.usage("hosted-a", "op-1:0")).toMatchObject({ settlement: "COMMITTED", chargedUnits: 1 });
+  });
   it("suppresses buffered late deltas after abort between iterator.next calls", async () => {
     const db = store(); db.issueSession("a", Date.now() + 60000); const binding = db.createBinding("a", "RESUME", "x", catalogConfig().models[0]);
     const runtime = gateway(async () => new Response(frame("first") + frame("late", "stop") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } }));
@@ -214,7 +278,7 @@ describe("Incremental streaming and cancellation", () => {
     const stream = runtime.streamText(binding, streamInput(binding.id));
     expect((await stream.next()).value).toEqual({ type: "text-delta", delta: "first" });
     endUpstream(); const rest = []; for await (const event of stream) rest.push(event);
-    expect(rest).toEqual([{ type: "text-delta", delta: "second" }, { type: "completed", model: binding.modelKey, provenance: provenance(binding) }]);
+    expect(rest).toEqual([{ type: "text-delta", delta: "second" }, { type: "completed", model: binding.modelKey, provenance: provenance(binding), stopReason: "stop" }]);
     const early = runtime.streamText(binding, streamInput(binding.id)); await early.next(); await early.return(undefined); await disconnected;
   });
   it("propagates hosted HTTP client abort to upstream without late deltas or hanging request", async () => {

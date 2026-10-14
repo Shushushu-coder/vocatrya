@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { MANAGED_ADAPTER_REVISION, ManagedError, type ManagedInvocation } from "../../../src/lib/ai/managed-contract";
+import { MANAGED_ADAPTER_REVISION, ManagedError, type ManagedInvocation, type ManagedStreamEvent } from "../../../src/lib/ai/managed-contract";
 import { ModelCatalog, type ManagedModel } from "./catalog";
 import { GatewayFailure, ManagedGatewayRuntime } from "./gateway";
 import { HostedStore, provenance, type ManagedAiBinding } from "./store";
@@ -181,13 +181,13 @@ export class HostedManagedService {
     let dispatched = false;
     let settled = false;
     const settle = (fn: () => void) => { if (settled) return; settled = true; fn(); };
-    const commit = () => store.settleCommitted(usage.id, { latencyMs: now() - startedAt, completedAt: now() });
+    const commit = (event?: Extract<ManagedStreamEvent, { type: "completed" }>) => store.settleCommitted(usage.id, { inputTokens: event?.inputTokens, outputTokens: event?.outputTokens, latencyMs: now() - startedAt, completedAt: now() });
     store.markRunning(usage.id);
     return new Response(new ReadableStream<Uint8Array>({
       async pull(stream) {
         if (request.signal.aborted) { settle(() => dispatched ? store.settleUnknown(usage.id, "CLIENT_ABORT", now()) : store.settleReleased(usage.id, "CLIENT_ABORT", now())); controller.abort(); try { stream.close(); } catch { /* closed */ } return; }
         dispatched = true;
-        let event: IteratorResult<unknown>;
+        let event: IteratorResult<ManagedStreamEvent>;
         try { event = await iterator.next(); }
         catch (error) {
           const disposition = dispositionOf(error);
@@ -199,8 +199,9 @@ export class HostedManagedService {
           return;
         }
         if (event.done) { try { stream.close(); } catch { /* closed */ } return; }
-        try { stream.enqueue(encoder.encode(`${JSON.stringify((event.value as { type?: string }).type === "completed" ? { ...(event.value as object), executionState: "EXECUTED" } : event.value)}\n`)); } catch { return; }
-        if ((event.value as { type?: string }).type === "completed") settle(() => commit());
+        try { stream.enqueue(encoder.encode(`${JSON.stringify(event.value.type === "completed" ? { ...event.value, executionState: "EXECUTED" } : event.value)}\n`)); } catch { return; }
+        const value = event.value;
+        if (value.type === "completed") settle(() => commit(value));
       },
       async cancel() {
         if (dispatched) settle(() => commit());

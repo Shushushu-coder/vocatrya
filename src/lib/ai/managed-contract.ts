@@ -48,5 +48,5 @@ export interface ManagedTextResult {
 }
 export type ManagedStreamEvent =
   | { type: "text-delta"; delta: string }
-  | { type: "completed"; model: string; provenance: ManagedProvenance; executionState?: "EXECUTED" }
+  | { type: "completed"; model: string; provenance: ManagedProvenance; executionState?: "EXECUTED"; stopReason?: string; inputTokens?: number; outputTokens?: number }
   | { type: "error"; code: ManagedErrorCode };
