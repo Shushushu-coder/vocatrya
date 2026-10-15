@@ -74,6 +74,7 @@ const ERROR_KEY: Record<string, string> = {
   UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION:
     "settings.aiAssignErrUnsupportedCombination",
   MODEL_UNAVAILABLE: "settings.aiAssignErrModelRequired",
+  MANAGED_NOT_LAUNCHED: "settings.aiAssignManagedComingSoon",
 };
 
 // Purposes whose execution path is structured output. Connections whose

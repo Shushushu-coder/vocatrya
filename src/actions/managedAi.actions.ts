@@ -16,8 +16,19 @@ import {
 import { managedBusinessError } from "@/lib/ai/managed-dispatch";
 import { AIBusinessError } from "@/lib/ai/connections";
 import type { ManagedModelDTO } from "@/lib/ai/managed-contract";
+import {
+  MANAGED_NOT_LAUNCHED,
+  managedAiAvailability,
+  type ManagedAiAvailability,
+} from "@/lib/ai/managed-availability";
 
 export interface ManagedAiOverview {
+  /**
+   * COMING_SOON: this release does not offer Managed AI — no Hosted request
+   * was made and every field below is empty (not an outage). ENABLED: the
+   * fields are live Hosted reads and errorCode reports any failure.
+   */
+  availability: ManagedAiAvailability;
   /** The system-provisioned Managed connection's safe metadata. */
   connection: {
     id: string;
@@ -50,6 +61,12 @@ export async function getManagedAiOverview(): Promise<{
 }> {
   try {
     const user = await requireUser();
+    if (managedAiAvailability() !== "ENABLED") {
+      return {
+        success: true,
+        data: { availability: "COMING_SOON", connection: null, entitlement: null, usage: null, models: [], errorCode: null },
+      };
+    }
     const client = new HostedManagedClient();
 
     let connection: ManagedAiOverview["connection"] = null;
@@ -70,7 +87,7 @@ export async function getManagedAiOverview(): Promise<{
       const mapped = error instanceof AIBusinessError ? error : managedBusinessError(error);
       return {
         success: true,
-        data: { connection: null, entitlement: null, usage: null, models: [], errorCode: mapped.code },
+        data: { availability: "ENABLED", connection: null, entitlement: null, usage: null, models: [], errorCode: mapped.code },
       };
     }
 
@@ -98,6 +115,7 @@ export async function getManagedAiOverview(): Promise<{
     return {
       success: true,
       data: {
+        availability: "ENABLED",
         connection,
         entitlement: entitlement.value,
         usage: usage.value,
@@ -129,6 +147,9 @@ export async function assignManagedBusinessAiSource(input: {
 }> {
   try {
     const user = await requireUser();
+    if (managedAiAvailability() !== "ENABLED") {
+      return { success: false, code: MANAGED_NOT_LAUNCHED, message: "Managed AI is not available in this release" };
+    }
     await assignManagedBusinessSource({
       userId: user.id,
       purpose: input?.purpose ?? "",
