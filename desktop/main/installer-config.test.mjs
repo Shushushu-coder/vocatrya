@@ -112,6 +112,36 @@ describe("electron-builder configuration", () => {
   });
 });
 
+describe("old-version uninstall failure handling", () => {
+  const nsh = read("desktop/installer.nsh");
+
+  it("overrides both upstream result hooks so a failed old uninstaller cannot block /S", () => {
+    // Upstream installUtil.nsh handleUninstallResult ends with a MessageBox
+    // that has no /SD, so a non-zero old-uninstaller exit (observed: exit 2 on
+    // upgrades) waits forever on a dialog during a silent install. Both
+    // registry passes (SHELL_CONTEXT and HKEY_CURRENT_USER) must be replaced.
+    expect(nsh).toMatch(/!macro customUnInstallCheck\b/);
+    expect(nsh).toMatch(/!macro customUnInstallCheckCurrentUser\b/);
+    const uninstallFailedLines = nsh
+      .split("\n")
+      .filter((line) => line.includes("$(uninstallFailed)") && !line.trimStart().startsWith(";"));
+    expect(uninstallFailedLines.length).toBeGreaterThan(0);
+    for (const line of uninstallFailedLines) {
+      expect(line).toContain("/SD IDOK");
+    }
+  });
+
+  it("keeps the failure semantics: a failed old uninstaller still aborts the install", () => {
+    // The override must not swallow the failure - it still logs, sets the
+    // upstream exit level and quits, so an upgrade never silently proceeds
+    // over a half-uninstalled directory. User data stays under
+    // %LOCALAPPDATA%\Vocatrya either way (/KEEP_APP_DATA + --updated).
+    const body = nsh.slice(nsh.indexOf("!macro vocatryaHandleOldUninstallResult"));
+    expect(body).toMatch(/IfErrors 0 \+3[\s\S]*Not able to launch uninstaller[\s\S]*Return/);
+    expect(body).toMatch(/\$R0 != 0[\s\S]*\/SD IDOK[\s\S]*SetErrorLevel 2[\s\S]*Quit/);
+  });
+});
+
 describe("installer artifact scanning", () => {
   it("fails closed on env, database, secrets, and packaging leftovers", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-installer-scan-"));
