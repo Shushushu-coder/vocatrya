@@ -559,6 +559,7 @@ type OpportunityListOptions = {
   search?: string;
   appliedOnly?: boolean;
   filter?: string;
+  companyId?: string;
   companyValue?: string;
   titleValue?: string;
   locationValue?: string;
@@ -620,6 +621,9 @@ function opportunityListWhereSql(
   }
   if (options.filter === "expired") {
     parts.push(Prisma.sql`o.status = ${OPPORTUNITY_STATUS.EXPIRED}`);
+  }
+  if (options.companyId) {
+    parts.push(Prisma.sql`o.companyId = ${options.companyId}`);
   }
   if (options.companyValue) {
     parts.push(Prisma.sql`c.value = ${options.companyValue}`);

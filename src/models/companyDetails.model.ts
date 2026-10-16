@@ -18,7 +18,9 @@ export interface CompanyJobRow {
 export interface CompanyDetails extends Company {
   jobs: CompanyJobRow[];
   appliedCount: number;
-  dismissedJobsCount: number;
+  // null in the A+B read family: legacy dismissed-discovery rows are frozen
+  // there, so showing a number would fake a current value.
+  dismissedJobsCount: number | null;
   currentContacts: Contact[];
   formerContacts: Contact[];
 }

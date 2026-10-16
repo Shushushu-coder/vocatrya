@@ -6,6 +6,8 @@ import BoardsTable from "./BoardsTable";
 import CompaniesTable from "./CompaniesTable";
 import { WatchMergeDialog, type PendingMerge } from "./WatchMergeDialog";
 import { Card, CardContent, CardTitle } from "../ui/card";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Button } from "../ui/button";
 import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import Loading from "../Loading";
 import { RecordsCount } from "../RecordsCount";
@@ -124,25 +126,45 @@ function CompaniesContainer() {
               </div>
             )}
             {loading && <Loading />}
-            {provider
-              ? browse.rows.length > 0 && (
-                  <BoardsTable
-                    provider={provider}
-                    rows={browse.rows}
-                    watchedMap={browse.watchedMap}
-                    onWatched={browse.markWatched}
-                    onUnwatched={browse.unmarkWatched}
-                    onNeedsMerge={setPendingMerge}
-                  />
-                )
-              : list.companies.length > 0 && (
-                  <CompaniesTable
-                    companies={list.companies}
-                    reloadCompanies={list.reload}
-                    editCompany={onEditCompany}
-                    scope={listScope}
-                  />
-                )}
+            {provider ? (
+              browse.rows.length > 0 && (
+                <BoardsTable
+                  provider={provider}
+                  rows={browse.rows}
+                  watchedMap={browse.watchedMap}
+                  onWatched={browse.markWatched}
+                  onUnwatched={browse.unmarkWatched}
+                  onNeedsMerge={setPendingMerge}
+                />
+              )
+            ) : list.error !== null ? (
+              // A failed read (e.g. blocked jobs family) is not an empty
+              // list — surface the Action message with an explicit retry.
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>{t("companies.loadFailed")}</AlertTitle>
+                <AlertDescription>
+                  {list.error ? <p>{list.error}</p> : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={loading}
+                    onClick={list.reload}
+                  >
+                    {t("common.retry")}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              list.companies.length > 0 && (
+                <CompaniesTable
+                  companies={list.companies}
+                  reloadCompanies={list.reload}
+                  editCompany={onEditCompany}
+                  scope={listScope}
+                />
+              )
+            )}
             {hasMore && (
               <div ref={sentinelRef} className="flex justify-center p-4">
                 {loadingMore && (

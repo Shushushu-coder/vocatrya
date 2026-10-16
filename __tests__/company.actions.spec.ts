@@ -34,6 +34,19 @@ vi.mock("@prisma/client", () => {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
+    jobOpportunity: {
+      count: vi.fn(),
+      groupBy: vi.fn(),
+    },
+    recruitmentCampaign: {
+      count: vi.fn(),
+    },
+    careerInternshipDetail: {
+      count: vi.fn(),
+    },
+    careerEmploymentDetail: {
+      count: vi.fn(),
+    },
   };
   return {
     PrismaClient: vi.fn(function () {
@@ -41,6 +54,18 @@ vi.mock("@prisma/client", () => {
     }),
   };
 });
+
+// The stats columns follow resolveJobsReadFamily; these mocked-action tests
+// exercise the legacy branch, so pin the family instead of growing a fake
+// migration-state delegate surface. The factory supplies only what queries.ts
+// imports.
+vi.mock("@/lib/career/jobsReadDispatch", () => ({
+  resolveJobsReadFamily: vi.fn(async () => ({
+    family: "legacy",
+    mode: "LEGACY_ONLY",
+    reason: "test-legacy",
+  })),
+}));
 
 vi.mock("@/utils/user.utils", () => ({
   getCurrentUser: vi.fn(),
@@ -883,6 +908,10 @@ describe("Company Actions", () => {
   describe("deleteCompanyById", () => {
     beforeEach(() => {
       (prisma.contact.count as any).mockResolvedValue(0);
+      (prisma.jobOpportunity.count as any).mockResolvedValue(0);
+      (prisma.recruitmentCampaign.count as any).mockResolvedValue(0);
+      (prisma.careerInternshipDetail.count as any).mockResolvedValue(0);
+      (prisma.careerEmploymentDetail.count as any).mockResolvedValue(0);
     });
 
     it("should delete a company successfully", async () => {
@@ -988,6 +1017,49 @@ describe("Company Actions", () => {
       const result = await deleteCompanyById("company-id");
 
       expect(result).toEqual({ success: false, message: "Delete failed" });
+    });
+
+    it("blocks on any surviving opportunity reference, archived included", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as any).mockResolvedValue(0);
+      (prisma.job.count as any).mockResolvedValue(0);
+      (prisma.jobOpportunity.count as any).mockResolvedValue(1);
+
+      const result = await deleteCompanyById("co1");
+
+      // No userId/archivedAt narrowing: Restrict counts every surviving row.
+      expect(prisma.jobOpportunity.count).toHaveBeenCalledWith({
+        where: { companyId: "co1" },
+      });
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/opportunit/i);
+      expect(prisma.company.delete).not.toHaveBeenCalled();
+    });
+
+    it("blocks on a recruitment campaign reference", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as any).mockResolvedValue(0);
+      (prisma.job.count as any).mockResolvedValue(0);
+      (prisma.recruitmentCampaign.count as any).mockResolvedValue(2);
+
+      const result = await deleteCompanyById("co1");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/2 associated recruitment campaigns/);
+      expect(prisma.company.delete).not.toHaveBeenCalled();
+    });
+
+    it("blocks on career material company links", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as any).mockResolvedValue(0);
+      (prisma.job.count as any).mockResolvedValue(0);
+      (prisma.careerEmploymentDetail.count as any).mockResolvedValue(1);
+
+      const result = await deleteCompanyById("co1");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/career record/i);
+      expect(prisma.company.delete).not.toHaveBeenCalled();
     });
   });
 });

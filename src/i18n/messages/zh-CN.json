@@ -850,6 +850,7 @@
     "jobsCount": "关联职位",
     "contactsCount": "关联人脉",
     "noCompanies": "暂无公司记录",
+    "loadFailed": "公司列表加载失败",
     "searchPlaceholder": "搜索公司名称...",
     "details": "公司详情",
     "watchlist": "关注公司",
