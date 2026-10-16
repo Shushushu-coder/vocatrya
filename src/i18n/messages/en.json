@@ -2017,7 +2017,8 @@
     "jobSourceItem": "source",
     "jobLocationItem": "location",
     "skillItem": "skill",
-    "activityTypeItem": "activity type"
+    "activityTypeItem": "activity type",
+    "loadFailed": "Failed to load the list."
   },
   "career": {
     "runtimeReadyTitle": "A+B is ready but disabled",

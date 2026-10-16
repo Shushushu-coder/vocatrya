@@ -4,6 +4,8 @@ import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
+import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { AB_APPLIED_OPPORTUNITY_WHERE } from "@/lib/career/jobOpportunityAdapter";
 import { getReferenceEntityList } from "./referenceList";
 
 export const getAllJobTitles = async (): Promise<any | undefined> => {
@@ -30,11 +32,39 @@ export const getJobTitleList = async (
   try {
     const user = await requireUser();
 
+    // The job stats columns must follow the active read family; a blocked
+    // runtime must not silently fall back to frozen legacy Job rows.
+    const { family, reason } = await resolveJobsReadFamily(prisma);
+    if (family === "blocked") {
+      return {
+        success: false,
+        message: `Career jobs are unavailable (${reason})`,
+      };
+    }
+    const ab = family === "ab";
+
     return await getReferenceEntityList({
       model: prisma.jobTitle,
       userId: user.id,
       fkField: "jobTitleId",
       appliedRelation: "jobs",
+      // A+B has no dictionary FK: stats group JobOpportunity.title and map
+      // back by exact label equality, the same match My Jobs applies.
+      // The applied groupBy overrides the stale _count.jobs relation count.
+      ...(ab
+        ? {
+            countDelegate: prisma.jobOpportunity,
+            countGroupBy: "title",
+            countMapKey: "label",
+            jobsTotalWhere: { archivedAt: null },
+            extraCounts: [
+              { key: "jobs", where: AB_APPLIED_OPPORTUNITY_WHERE },
+            ],
+            // No AB relation exists to order by — label order stays
+            // deterministic instead of sorting on frozen legacy counts.
+            orderBy: [{ label: "asc" }],
+          }
+        : {}),
       page,
       limit,
       countBy,

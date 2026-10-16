@@ -274,5 +274,125 @@ describe("JobTitlesContainer Search Functionality", () => {
 
       expect(getJobTitleList).toHaveBeenCalledTimes(1);
     });
+
+    it("stops auto-retrying through the sentinel after a load-more failure", async () => {
+      (getJobTitleList as any)
+        .mockResolvedValueOnce({ data: mockTitles, total: 4 })
+        .mockResolvedValueOnce({ success: false, message: "failed" });
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Software Engineer")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        intersectionCallback!(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+      // Existing rows stay visible behind the error banner.
+      expect(screen.getByText("Software Engineer")).toBeInTheDocument();
+
+      await act(async () => {
+        intersectionCallback?.(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
+
+      expect(getJobTitleList).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("Error state", () => {
+    it("shows an error banner instead of an empty list when the action fails", async () => {
+      (getJobTitleList as any).mockResolvedValue({
+        success: false,
+        message: "Career jobs are unavailable (migration-in-progress)",
+      });
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText(
+            "Career jobs are unavailable (migration-in-progress)",
+          ),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText("Software Engineer"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the error banner when the action rejects", async () => {
+      (getJobTitleList as any).mockRejectedValue(new Error("network down"));
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText("Software Engineer"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the error banner when the action returns undefined", async () => {
+      (getJobTitleList as any).mockResolvedValue(undefined);
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("recovers through the explicit Retry action", async () => {
+      (getJobTitleList as any)
+        .mockResolvedValueOnce({ success: false, message: "blocked" })
+        .mockResolvedValueOnce({ data: mockTitles, total: 2 });
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Retry" }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Software Engineer")).toBeInTheDocument();
+        expect(
+          screen.queryByText("Failed to load the list."),
+        ).not.toBeInTheDocument();
+      });
+      expect(getJobTitleList).toHaveBeenCalledTimes(2);
+      expect(getJobTitleList).toHaveBeenLastCalledWith(
+        1,
+        25,
+        "applied",
+        undefined,
+      );
+    });
   });
 });

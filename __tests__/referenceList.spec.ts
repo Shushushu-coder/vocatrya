@@ -418,4 +418,131 @@ describe("getReferenceEntityList", () => {
       });
     });
   });
+
+  describe("countDelegate / countGroupBy / countMapKey", () => {
+    // Mirrors AB_APPLIED_OPPORTUNITY_WHERE in jobOpportunityAdapter.ts: the
+    // stage-aware applied fact (submitted OR past DRAFT on any live attempt).
+    const appliedWhere = {
+      archivedAt: null,
+      applicationAttempts: {
+        some: {
+          archivedAt: null,
+          OR: [
+            { submittedAt: { not: null } },
+            { currentStageCategory: { not: "DRAFT" } },
+          ],
+        },
+      },
+    };
+
+    it("runs every countSpec groupBy on the supplied delegate, not prisma.job", async () => {
+      const opportunity = { groupBy: vi.fn().mockResolvedValue([]) };
+      const model = makeModel([
+        { id: "t1", label: "Engineer", value: "engineer", _count: { jobs: 9 } },
+      ]);
+
+      await getReferenceEntityList({
+        model,
+        userId,
+        fkField: "jobTitleId",
+        appliedRelation: "jobs",
+        countDelegate: opportunity,
+        countGroupBy: "title",
+        countMapKey: "label",
+        jobsTotalWhere: { archivedAt: null },
+        extraCounts: [{ key: "jobs", where: appliedWhere }],
+        page: 1,
+        limit: 10,
+        countBy: "applied",
+      });
+
+      expect(prisma.job.groupBy).not.toHaveBeenCalled();
+      expect(opportunity.groupBy).toHaveBeenNthCalledWith(1, {
+        by: ["title"],
+        where: { userId, ...appliedWhere },
+        _count: { id: true },
+      });
+      expect(opportunity.groupBy).toHaveBeenNthCalledWith(2, {
+        by: ["title"],
+        where: { userId, archivedAt: null },
+        _count: { id: true },
+      });
+    });
+
+    it("keys groupBy rows by countGroupBy and looks entities up by countMapKey", async () => {
+      const opportunity = {
+        groupBy: vi
+          .fn()
+          // applied spec, then built-in jobsTotal spec.
+          .mockResolvedValueOnce([
+            { title: "Engineer", _count: { id: 2 } },
+          ])
+          .mockResolvedValueOnce([
+            { title: "Engineer", _count: { id: 5 } },
+            { title: "Unlisted", _count: { id: 3 } },
+          ]),
+      };
+      const model = makeModel(
+        [
+          {
+            id: "t1",
+            label: "Engineer",
+            value: "engineer",
+            // Stale legacy relation counts — the label-keyed map must
+            // overwrite them rather than let frozen Job rows leak through.
+            _count: { jobs: 9 },
+          },
+          { id: "t2", label: "Designer", value: "designer", _count: { jobs: 4 } },
+        ],
+        2
+      );
+
+      const { data } = await getReferenceEntityList({
+        model,
+        userId,
+        fkField: "jobTitleId",
+        appliedRelation: "jobs",
+        countDelegate: opportunity,
+        countGroupBy: "title",
+        countMapKey: "label",
+        jobsTotalWhere: { archivedAt: null },
+        extraCounts: [{ key: "jobs", where: appliedWhere }],
+        page: 1,
+        limit: 10,
+        countBy: "applied",
+      });
+
+      // Exact label match only: "Unlisted" opportunities belong to no row,
+      // and Designer drops its frozen legacy count to a real zero.
+      expect(data[0]._count).toEqual({ jobs: 2, jobsTotal: 5 });
+      expect(data[1]._count).toEqual({ jobs: 0, jobsTotal: 0 });
+    });
+
+    it("keeps the legacy field-keyed defaults when no count params are given", async () => {
+      const model = makeModel(
+        [{ id: "a", label: "A", value: "a", _count: { jobsApplied: 1 } }],
+        1
+      );
+      (prisma.job.groupBy as any).mockResolvedValue([
+        { locationId: "a", _count: { id: 7 } },
+      ]);
+
+      const { data } = await getReferenceEntityList({
+        model,
+        userId,
+        fkField: "locationId",
+        appliedRelation: "jobsApplied",
+        page: 1,
+        limit: 10,
+        countBy: "applied",
+      });
+
+      expect(prisma.job.groupBy).toHaveBeenCalledWith({
+        by: ["locationId"],
+        where: { userId },
+        _count: { id: true },
+      });
+      expect(data[0]._count).toEqual({ jobsApplied: 1, jobsTotal: 7 });
+    });
+  });
 });
