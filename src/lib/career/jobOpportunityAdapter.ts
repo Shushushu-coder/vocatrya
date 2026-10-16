@@ -525,6 +525,30 @@ export function mapOpportunityToJobView(
   };
 }
 
+// A+B "applied" = the position has at least one live attempt that either
+// carried a real submission (submittedAt set) or already moved past DRAFT —
+// stage-aware, so migrated attempts whose submission timestamp was never
+// recorded still count. `some` counts the opportunity once no matter how
+// many attempts went out, and a later draft attempt never erases an
+// earlier submission.
+// INTEGRATION NOTE: this mirrors APPLIED_ATTEMPT_WHERE in
+// src/lib/career/applicationFact.ts, which lives on the
+// fix/r2-application-submission-truthfulness branch and is not yet part of
+// this baseline. When R2-B lands, replace the inline `some` operand with
+// APPLIED_ATTEMPT_WHERE and keep this export as the single dictionary fact.
+export const AB_APPLIED_OPPORTUNITY_WHERE = {
+  archivedAt: null,
+  applicationAttempts: {
+    some: {
+      archivedAt: null,
+      OR: [
+        { submittedAt: { not: null } },
+        { currentStageCategory: { not: ATTEMPT_STAGE.DRAFT } },
+      ],
+    },
+  },
+};
+
 export const OPPORTUNITY_LIST_INCLUDE = {
   company: true,
   currentJdVersion: { select: { rawContent: true } },

@@ -5,6 +5,8 @@ import {
   deleteJobSourceById,
 } from "@/actions/jobSource.actions";
 import { getCurrentUser } from "@/utils/user.utils";
+import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { ATTEMPT_STAGE } from "@/lib/career/identities";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -20,6 +22,10 @@ vi.mock("@prisma/client", () => {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
+    jobOpportunity: {
+      count: vi.fn(),
+      groupBy: vi.fn(),
+    },
   };
   return {
     PrismaClient: vi.fn(function () {
@@ -27,6 +33,17 @@ vi.mock("@prisma/client", () => {
     }),
   };
 });
+
+// The stats columns follow resolveJobsReadFamily; these mocked-action tests
+// exercise the legacy branch, so pin the family instead of growing a fake
+// migration-state delegate surface.
+vi.mock("@/lib/career/jobsReadDispatch", () => ({
+  resolveJobsReadFamily: vi.fn(async () => ({
+    family: "legacy",
+    mode: "LEGACY_ONLY",
+    reason: "test-legacy",
+  })),
+}));
 
 vi.mock("@/utils/user.utils", () => ({
   getCurrentUser: vi.fn(),
@@ -166,6 +183,77 @@ describe("Job Source Actions", () => {
         take: 10,
         orderBy: [{ jobsApplied: { _count: "desc" } }, { label: "asc" }],
       });
+    });
+
+    it("reads stats from JobOpportunity label groups under the A+B family", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (resolveJobsReadFamily as any).mockResolvedValueOnce({
+        family: "ab",
+        mode: "AB_NATIVE",
+        reason: "test-ab",
+      });
+      const mockData = [
+        {
+          id: "src-1",
+          label: "Indeed",
+          value: "indeed",
+          _count: { jobsApplied: 8 },
+        },
+      ];
+      (prisma.jobSource.findMany as any).mockResolvedValue(mockData);
+      (prisma.jobSource.count as any).mockResolvedValue(1);
+      (prisma.jobOpportunity.groupBy as any)
+        .mockResolvedValueOnce([{ sourceLabel: "Indeed", _count: { id: 3 } }])
+        .mockResolvedValueOnce([{ sourceLabel: "Indeed", _count: { id: 6 } }]);
+
+      const result = await getJobSourceList(1, 10, "applied");
+
+      expect(prisma.job.groupBy).not.toHaveBeenCalled();
+      expect(prisma.jobOpportunity.groupBy).toHaveBeenNthCalledWith(1, {
+        by: ["sourceLabel"],
+        where: {
+          userId: mockUser.id,
+          archivedAt: null,
+          applicationAttempts: {
+            some: {
+              archivedAt: null,
+              OR: [
+                { submittedAt: { not: null } },
+                { currentStageCategory: { not: ATTEMPT_STAGE.DRAFT } },
+              ],
+            },
+          },
+        },
+        _count: { id: true },
+      });
+      expect(prisma.jobOpportunity.groupBy).toHaveBeenNthCalledWith(2, {
+        by: ["sourceLabel"],
+        where: { userId: mockUser.id, archivedAt: null },
+        _count: { id: true },
+      });
+      expect(prisma.jobSource.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: [{ label: "asc" }] })
+      );
+      // The stale relation count (8) is overwritten by the label-mapped
+      // opportunity aggregate.
+      expect(result.data[0]._count.jobsApplied).toBe(3);
+      expect(result.data[0]._count.jobsTotal).toBe(6);
+    });
+
+    it("fails closed instead of reading legacy stats when the family is blocked", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (resolveJobsReadFamily as any).mockResolvedValueOnce({
+        family: "blocked",
+        mode: "BLOCKED",
+        reason: "migration-in-progress",
+      });
+
+      const result = await getJobSourceList(1, 10, "applied");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/unavailable/i);
+      expect(prisma.jobSource.findMany).not.toHaveBeenCalled();
+      expect(prisma.job.groupBy).not.toHaveBeenCalled();
     });
   });
 

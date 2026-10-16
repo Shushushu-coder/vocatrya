@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardTitle } from "../ui/card";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { JobSource } from "@/models/job.model";
@@ -17,18 +18,30 @@ function JobSourcesContainer() {
   const [totalJobSources, setTotalJobSources] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(false);
+  // null = healthy. A string carries the Action's failure message (possibly
+  // empty) so a blocked read family or failed fetch never renders as a
+  // normal empty list or a spinner that never stops.
+  const [error, setError] = useState<string | null>(null);
   const loadJobSources = useCallback(
     async (page: number) => {
       setLoading(true);
-      const { data, total } = await getJobSourceList(
-        page,
-        APP_CONSTANTS.RECORDS_PER_PAGE,
-        "applied"
-      );
-      if (data) {
-        setSources((prev) => (page === 1 ? data : [...prev, ...data]));
-        setTotalJobSources(total);
+      try {
+        const res = await getJobSourceList(
+          page,
+          APP_CONSTANTS.RECORDS_PER_PAGE,
+          "applied"
+        );
+        if (!res || res.success === false || !Array.isArray(res.data)) {
+          setError(res?.message ?? "");
+          return;
+        }
+        setSources((prev) => (page === 1 ? res.data : [...prev, ...res.data]));
+        setTotalJobSources(res.total);
         setPage(page);
+        setError(null);
+      } catch {
+        setError("");
+      } finally {
         setLoading(false);
       }
     },
@@ -59,6 +72,25 @@ function JobSourcesContainer() {
           </ResponsiveCardHeader>
           <CardContent>
             {loading && <Loading />}
+            {error !== null && (
+              // A failed read (e.g. blocked jobs family) is not an empty
+              // list — surface the Action message with an explicit retry.
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>{t("library.loadFailed")}</AlertTitle>
+                <AlertDescription>
+                  {error ? <p>{error}</p> : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={loading}
+                    onClick={reloadJobSources}
+                  >
+                    {t("common.retry")}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {sources.length > 0 && (
               <>
                 <JobSourcesTable
@@ -67,7 +99,7 @@ function JobSourcesContainer() {
                 />
               </>
             )}
-            {sources.length < totalJobSources && (
+            {error === null && sources.length < totalJobSources && (
               <div className="flex justify-center p-4">
                 <Button
                   size="sm"

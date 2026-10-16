@@ -2016,7 +2016,8 @@
     "jobSourceItem": "求职渠道",
     "jobLocationItem": "工作地点",
     "skillItem": "技能",
-    "activityTypeItem": "活动类型"
+    "activityTypeItem": "活动类型",
+    "loadFailed": "列表加载失败。"
   },
   "career": {
     "runtimeReadyTitle": "A+B 已就绪但未启用",

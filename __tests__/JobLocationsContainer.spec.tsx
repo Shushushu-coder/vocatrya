@@ -1,5 +1,6 @@
 import JobLocationsContainer from "@/components/admin/JobLocationsContainer";
 import { screen, render, waitFor, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { getJobLocationsList } from "@/actions/jobLocation.actions";
 
 vi.mock("@/actions/jobLocation.actions", () => ({
@@ -95,6 +96,114 @@ describe("JobLocationsContainer", () => {
       });
 
       expect(getJobLocationsList).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops auto-retrying through the sentinel after a load-more failure", async () => {
+      (getJobLocationsList as any)
+        .mockResolvedValueOnce({ data: mockLocations, total: 4 })
+        .mockResolvedValueOnce({ success: false, message: "failed" });
+
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Remote")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        intersectionCallback!(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+      // Existing rows stay visible behind the error banner.
+      expect(screen.getByText("Remote")).toBeInTheDocument();
+
+      await act(async () => {
+        intersectionCallback?.(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
+
+      expect(getJobLocationsList).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("Error state", () => {
+    it("shows an error banner instead of an empty list when the action fails", async () => {
+      (getJobLocationsList as any).mockResolvedValue({
+        success: false,
+        message: "Career jobs are unavailable (migration-in-progress)",
+      });
+
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText(
+            "Career jobs are unavailable (migration-in-progress)",
+          ),
+        ).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Remote")).not.toBeInTheDocument();
+    });
+
+    it("shows the error banner when the action rejects or returns nothing", async () => {
+      (getJobLocationsList as any).mockResolvedValue(undefined);
+      const { unmount } = render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+      unmount();
+
+      (getJobLocationsList as any).mockRejectedValue(new Error("network down"));
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("recovers through the explicit Retry action", async () => {
+      const user = userEvent.setup({ delay: null });
+      (getJobLocationsList as any)
+        .mockResolvedValueOnce({ success: false, message: "blocked" })
+        .mockResolvedValueOnce({ data: mockLocations, total: 2 });
+
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Retry" }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Remote")).toBeInTheDocument();
+        expect(
+          screen.queryByText("Failed to load the list."),
+        ).not.toBeInTheDocument();
+      });
+      expect(getJobLocationsList).toHaveBeenCalledTimes(2);
+      expect(getJobLocationsList).toHaveBeenLastCalledWith(1, 25, "applied");
     });
   });
 });

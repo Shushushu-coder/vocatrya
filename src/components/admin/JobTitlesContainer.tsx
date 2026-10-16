@@ -1,9 +1,11 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardTitle } from "../ui/card";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Button } from "../ui/button";
 import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import { APP_CONSTANTS } from "@/lib/constants";
-import { JobTitle } from "@prisma/client";
+import { JobTitle } from "@/models/job.model";
 import JobTitlesTable from "./JobTitlesTable";
 import { getJobTitleList } from "@/actions/jobtitle.actions";
 import Loading from "../Loading";
@@ -20,6 +22,10 @@ function JobTitlesContainer() {
   const [page, setPage] = useState<number>(1);
   const [initialLoading, setInitialLoading] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  // null = healthy. A string carries the Action's failure message (possibly
+  // empty) so a blocked read family or failed fetch never renders as a
+  // normal empty list.
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const hasSearched = useRef(false);
   const requestIdRef = useRef(0);
@@ -28,20 +34,31 @@ function JobTitlesContainer() {
       const requestId = ++requestIdRef.current;
       if (page === 1) setInitialLoading(true);
       else setLoadingMore(true);
-      const { data, total } = await getJobTitleList(
-        page,
-        APP_CONSTANTS.RECORDS_PER_PAGE,
-        "applied",
-        search
-      );
-      if (requestId !== requestIdRef.current) return;
-      if (data) {
-        setTitles((prev) => (page === 1 ? data : [...prev, ...data]));
-        setTotalJobTitles(total);
+      try {
+        const res = await getJobTitleList(
+          page,
+          APP_CONSTANTS.RECORDS_PER_PAGE,
+          "applied",
+          search
+        );
+        if (requestId !== requestIdRef.current) return;
+        if (!res || res.success === false || !Array.isArray(res.data)) {
+          setError(res?.message ?? "");
+          return;
+        }
+        setTitles((prev) => (page === 1 ? res.data : [...prev, ...res.data]));
+        setTotalJobTitles(res.total);
         setPage(page);
+        setError(null);
+      } catch {
+        if (requestId === requestIdRef.current) setError("");
+      } finally {
+        // A stale request must not clear the newer request's loading flags.
+        if (requestId === requestIdRef.current) {
+          setInitialLoading(false);
+          setLoadingMore(false);
+        }
       }
-      setInitialLoading(false);
-      setLoadingMore(false);
     },
     []
   );
@@ -67,7 +84,9 @@ function JobTitlesContainer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
-  const hasMoreJobTitles = titles.length < totalJobTitles;
+  // No silent auto-retries through the sentinel while an error is showing —
+  // recovery goes through the explicit Retry action.
+  const hasMoreJobTitles = error === null && titles.length < totalJobTitles;
   const sentinelRef = useInfiniteScroll(
     hasMoreJobTitles,
     initialLoading || loadingMore,
@@ -99,6 +118,25 @@ function JobTitlesContainer() {
           </ResponsiveCardHeader>
           <CardContent>
             {initialLoading && <Loading />}
+            {error !== null && (
+              // A failed read (e.g. blocked jobs family) is not an empty
+              // list — surface the Action message with an explicit retry.
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>{t("library.loadFailed")}</AlertTitle>
+                <AlertDescription>
+                  {error ? <p>{error}</p> : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={initialLoading}
+                    onClick={reloadJobTitles}
+                  >
+                    {t("common.retry")}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {titles.length > 0 && (
               <>
                 <JobTitlesTable

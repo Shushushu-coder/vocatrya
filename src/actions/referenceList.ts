@@ -39,6 +39,13 @@ export type ReferenceListParams = {
   // Extra predicates merged into the built-in jobsTotal groupBy, e.g.
   // { archivedAt: null } when the count runs on JobOpportunity.
   jobsTotalWhere?: Record<string, any>;
+  // Column the countSpecs groupBy runs against on the count delegate.
+  // Defaults to fkField (a Job FK); A+B dictionaries group JobOpportunity
+  // text columns (title / locationText / sourceLabel) instead.
+  countGroupBy?: string;
+  // Entity field whose value matches a groupBy row key. Defaults to "id";
+  // A+B dictionaries match on the exact label text.
+  countMapKey?: string;
   extraWhere?: Record<string, any>;
   searchFields?: string[];
   orderBy?: any;
@@ -58,6 +65,8 @@ export const getReferenceEntityList = async ({
   relationCounts,
   countDelegate,
   jobsTotalWhere,
+  countGroupBy,
+  countMapKey,
   extraWhere,
   searchFields,
   orderBy,
@@ -95,6 +104,8 @@ export const getReferenceEntityList = async ({
   // groupBy source for every countSpec: the caller's count delegate, or the
   // legacy Job table when none is given.
   const countSource = countDelegate ?? prisma.job;
+  const countField = countGroupBy ?? fkField;
+  const mapKey = countMapKey ?? "id";
 
   const [data, total, ...groups] = await Promise.all([
     model.findMany({
@@ -139,7 +150,7 @@ export const getReferenceEntityList = async ({
     // Prisma's groupBy generics need a literal `by` tuple; ours is dynamic.
     ...countSpecs.map((spec) =>
       (countSource.groupBy as any)({
-        by: [fkField],
+        by: [countField],
         where: spec.where,
         _count: { id: true },
       })
@@ -153,7 +164,10 @@ export const getReferenceEntityList = async ({
   const maps = countSpecs.map((spec, index) => ({
     key: spec.key,
     counts: new Map(
-      (groups[index] ?? []).map((row: any) => [row[fkField], row._count.id])
+      (groups[index] ?? []).map((row: any) => [
+        row[countField],
+        row._count.id,
+      ])
     ),
   }));
 
@@ -169,7 +183,7 @@ export const getReferenceEntityList = async ({
       _count: {
         ...counts,
         ...Object.fromEntries(
-          maps.map(({ key, counts: m }) => [key, m.get(entity.id) ?? 0])
+          maps.map(({ key, counts: m }) => [key, m.get(entity[mapKey]) ?? 0])
         ),
       },
     };
