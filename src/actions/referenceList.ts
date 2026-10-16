@@ -8,6 +8,12 @@ export type ReferenceListDelegate = {
   count: (args: any) => Promise<any>;
 };
 
+// Delegate shape for the table the countSpecs groupBy runs against. Defaults
+// to prisma.job; the A+B company list points it at prisma.jobOpportunity.
+export type ReferenceCountDelegate = {
+  groupBy: (args: any) => Promise<any>;
+};
+
 export type ReferenceExtraCount = {
   key: string;
   where: Record<string, any>;
@@ -29,6 +35,10 @@ export type ReferenceListParams = {
   extraSelect?: Record<string, true>;
   extraCounts?: ReferenceExtraCount[];
   relationCounts?: ReferenceRelationCount[];
+  countDelegate?: ReferenceCountDelegate;
+  // Extra predicates merged into the built-in jobsTotal groupBy, e.g.
+  // { archivedAt: null } when the count runs on JobOpportunity.
+  jobsTotalWhere?: Record<string, any>;
   extraWhere?: Record<string, any>;
   searchFields?: string[];
   orderBy?: any;
@@ -46,6 +56,8 @@ export const getReferenceEntityList = async ({
   extraSelect,
   extraCounts,
   relationCounts,
+  countDelegate,
+  jobsTotalWhere,
   extraWhere,
   searchFields,
   orderBy,
@@ -76,9 +88,13 @@ export const getReferenceEntityList = async ({
           key: extra.key,
           where: { userId, ...extra.where },
         })),
-        { key: "jobsTotal", where: { userId } },
+        { key: "jobsTotal", where: { userId, ...jobsTotalWhere } },
       ]
     : [];
+
+  // groupBy source for every countSpec: the caller's count delegate, or the
+  // legacy Job table when none is given.
+  const countSource = countDelegate ?? prisma.job;
 
   const [data, total, ...groups] = await Promise.all([
     model.findMany({
@@ -122,7 +138,7 @@ export const getReferenceEntityList = async ({
     }),
     // Prisma's groupBy generics need a literal `by` tuple; ours is dynamic.
     ...countSpecs.map((spec) =>
-      (prisma.job.groupBy as any)({
+      (countSource.groupBy as any)({
         by: [fkField],
         where: spec.where,
         _count: { id: true },

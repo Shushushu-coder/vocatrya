@@ -851,6 +851,7 @@
     "jobsCount": "Jobs",
     "contactsCount": "Contacts",
     "noCompanies": "No companies found",
+    "loadFailed": "Failed to load companies",
     "searchPlaceholder": "Search companies...",
     "details": "Company Details",
     "watchlist": "Watchlist",

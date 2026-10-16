@@ -228,8 +228,10 @@ describe("PHASE 2 A+B jobs read layer", () => {
     const listed = await listOpportunitiesAsJobs(prisma, userId, {});
     expect(listed.data).toHaveLength(1);
     expect(listed.data[0].abCompat.uiStatus).toBe("interview");
+    // appliedDate is the FIRST real submission (MIN submittedAt), not the
+    // latest attempt's submission timestamp.
     expect(listed.data[0].appliedDate?.toISOString()).toBe(
-      "2026-06-01T00:00:00.000Z",
+      "2026-01-01T00:00:00.000Z",
     );
   });
 
@@ -367,13 +369,17 @@ describe("PHASE 3 list + detail wiring", () => {
         outcome: ATTEMPT_OUTCOME.ACTIVE,
       },
     });
+    // "applied" is the ever-applied fact, not the latest attempt's stage:
+    // an earlier real submission keeps the job in the applied set even when
+    // a later attempt has moved on to interview.
     const applied = await listOpportunitiesAsJobs(prisma, userId, {
       filter: "applied",
     });
     const interview = await listOpportunitiesAsJobs(prisma, userId, {
       filter: "interview",
     });
-    expect(applied.total).toBe(0);
+    expect(applied.total).toBe(1);
+    expect(applied.data[0].id).toBe(created.id);
     expect(interview.total).toBe(1);
     expect(interview.data[0].id).toBe(created.id);
   });

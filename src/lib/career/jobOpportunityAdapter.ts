@@ -13,6 +13,11 @@ import {
 } from "./opportunityService";
 import { isAbHiddenJobFilter } from "./jobsReadCapabilities";
 import {
+  appliedAttemptExistsSql,
+  firstSubmittedAtSql,
+  isAppliedAttempt,
+} from "./applicationFact";
+import {
   deriveUiStatus,
   pickLatestAttempt,
   planUiStatusWrite,
@@ -475,7 +480,27 @@ export function mapOpportunityToJobView(
     ? lookups.sources.get(opportunity.sourceLabel) ?? null
     : null;
 
-  const applied = Boolean(latestAttempt?.submittedAt);
+  // The applied fact is decoupled from the latest attempt's stage: it holds
+  // when ANY live attempt has a real submission timestamp OR a post-DRAFT
+  // stage (isAppliedAttempt — the shared ever-applied contract). appliedDate
+  // is a separate dimension: always the first real submission
+  // (MIN(submittedAt)), staying null for stage-only applied history. A newer
+  // draft attempt therefore cannot erase earlier application history, and no
+  // date is ever inferred from createdAt or a stage alone. The list include
+  // already filters archivedAt, so every attempt here is live.
+  let firstSubmittedAt: Date | null = null;
+  let applied = false;
+  for (const attempt of opportunity.applicationAttempts) {
+    if (isAppliedAttempt(attempt)) {
+      applied = true;
+    }
+    if (
+      attempt.submittedAt &&
+      (firstSubmittedAt === null || attempt.submittedAt < firstSubmittedAt)
+    ) {
+      firstSubmittedAt = attempt.submittedAt;
+    }
+  }
   // Compatibility projection: legacy Job fields without a reliable A+B mapping
   // are returned as explicit null/empty plus abCompat.unsupported markers.
   // Never fabricate a legacy Resume id from a ResumeVariantVersion id, and never
@@ -493,7 +518,7 @@ export function mapOpportunityToJobView(
     jobType: opportunity.employmentType ?? "",
     workplaceType: opportunity.workplaceType,
     createdAt: opportunity.createdAt,
-    appliedDate: latestAttempt?.submittedAt ?? null,
+    appliedDate: firstSubmittedAt,
     dueDate: opportunity.deadline ?? null,
     recruitmentCohort: opportunity.recruitmentCohort ?? null,
     recruitmentBatch: opportunity.recruitmentBatch ?? null,
@@ -541,9 +566,11 @@ export const OPPORTUNITY_LIST_INCLUDE = {
   _count: { select: { opportunityNotes: true } },
 } as const;
 
+// Stage-derived filters only. "applied" is deliberately absent: it is the
+// ever-applied fact (any live attempt submitted or past DRAFT), not a stage
+// of the latest attempt.
 const DERIVED_UI_STATUS_FILTERS = new Set([
   "draft",
-  "applied",
   "interview",
   "offer",
   "rejected",
@@ -559,6 +586,8 @@ type OpportunityListOptions = {
   search?: string;
   appliedOnly?: boolean;
   filter?: string;
+  orderBy?: "createdAtDesc" | "firstSubmittedAtDesc";
+  companyId?: string;
   companyValue?: string;
   titleValue?: string;
   locationValue?: string;
@@ -602,6 +631,12 @@ function latestAttemptJoinSql() {
   `;
 }
 
+// One shared "ever applied" fact: at least one live (non-archived) attempt
+// that was really submitted OR already sits at a post-DRAFT stage. Same
+// contract as APPLIED_ATTEMPT_WHERE in src/lib/career/applicationFact.ts,
+// which also backs AB_APPLIED_OPPORTUNITY_WHERE in
+// src/actions/company/queries.ts.
+
 function opportunityListWhereSql(
   userId: string,
   options: OpportunityListOptions,
@@ -621,6 +656,9 @@ function opportunityListWhereSql(
   if (options.filter === "expired") {
     parts.push(Prisma.sql`o.status = ${OPPORTUNITY_STATUS.EXPIRED}`);
   }
+  if (options.companyId) {
+    parts.push(Prisma.sql`o.companyId = ${options.companyId}`);
+  }
   if (options.companyValue) {
     parts.push(Prisma.sql`c.value = ${options.companyValue}`);
   }
@@ -633,13 +671,18 @@ function opportunityListWhereSql(
   if (options.sourceValue) {
     parts.push(Prisma.sql`o.sourceLabel = ${labels.source ?? "\0"}`);
   }
-  if (options.appliedOnly) {
-    parts.push(Prisma.sql`latest.submittedAt IS NOT NULL`);
+  // appliedOnly and filter="applied" are the same fact filter: the position
+  // counts as applied when any live attempt was submitted or reached a
+  // post-DRAFT stage. A later draft attempt must not hide earlier history,
+  // and a position with several attempts still counts once.
+  if (options.appliedOnly || options.filter === "applied") {
+    parts.push(appliedAttemptExistsSql());
   }
   if (options.filter && DERIVED_UI_STATUS_FILTERS.has(options.filter)) {
     parts.push(Prisma.sql`(${derivedUiStatusSql()}) = ${options.filter}`);
   } else if (
     options.filter &&
+    options.filter !== "applied" &&
     options.filter !== "archived" &&
     options.filter !== "expired" &&
     !isAbHiddenJobFilter(options.filter)
@@ -717,17 +760,24 @@ export async function listOpportunitiesAsJobs(
     Prisma.sql`SELECT COUNT(*) as n ${fromSql}`,
   );
   const total = Number(countRows[0]?.n ?? 0);
+  // "firstSubmittedAtDesc" ranks by MIN(submittedAt) of live attempts — the
+  // same first-application date legacy reads order applied jobs by. Stage-only
+  // applied rows (no real submittedAt) sort NULL-last and keep a null date.
+  const orderSql =
+    options.orderBy === "firstSubmittedAtDesc"
+      ? Prisma.sql`ORDER BY ${firstSubmittedAtSql()} DESC, o.createdAt DESC`
+      : Prisma.sql`ORDER BY o.createdAt DESC`;
   const idSql =
     take === undefined
       ? Prisma.sql`
           SELECT o.id
           ${fromSql}
-          ORDER BY o.createdAt DESC
+          ${orderSql}
         `
       : Prisma.sql`
           SELECT o.id
           ${fromSql}
-          ORDER BY o.createdAt DESC
+          ${orderSql}
           LIMIT ${take} OFFSET ${skip}
         `;
   const idRows = await db.$queryRaw<Array<{ id: string }>>(idSql);

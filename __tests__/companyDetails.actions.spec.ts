@@ -14,6 +14,16 @@ vi.mock("@/utils/user.utils", () => ({ getCurrentUser: vi.fn() }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+// These tests exercise the legacy branch of getCompanyDetails; pin the read
+// family so the fake db needs no migration-state surface.
+vi.mock("@/lib/career/jobsReadDispatch", () => ({
+  resolveJobsReadFamily: vi.fn(async () => ({
+    family: "legacy",
+    mode: "LEGACY_ONLY",
+    reason: "test-legacy",
+  })),
+}));
+
 const db = prisma as any;
 const user = { id: "user-1" };
 const company = {

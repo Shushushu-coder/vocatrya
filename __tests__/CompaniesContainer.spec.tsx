@@ -476,4 +476,100 @@ describe("CompaniesContainer Search Functionality", () => {
       expect(items[0]).toHaveAttribute("href", "/dashboard/admin/companies/1");
     });
   });
+
+  describe("List error state", () => {
+    it("shows the Action's blocked-family message instead of a blank list", async () => {
+      // Same payload getCompanyList returns when resolveJobsReadFamily is
+      // blocked — before the fix this rendered as a normal empty list.
+      (getCompanyList as any).mockResolvedValue({
+        success: false,
+        message: "Career jobs are unavailable (ab-migration-incomplete)",
+      });
+
+      render(<CompaniesContainer />);
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Failed to load companies");
+      expect(alert).toHaveTextContent(
+        "Career jobs are unavailable (ab-migration-incomplete)",
+      );
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    });
+
+    it("shows the error state for a generic Action failure", async () => {
+      (getCompanyList as any).mockResolvedValue({
+        success: false,
+        message: "Failed to fetch company list. boom",
+      });
+
+      render(<CompaniesContainer />);
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(
+        "Failed to fetch company list. boom",
+      );
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    });
+
+    it("shows the error state when the Action call rejects", async () => {
+      (getCompanyList as any).mockRejectedValue(new Error("network down"));
+
+      render(<CompaniesContainer />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Failed to load companies",
+      );
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("loader")).not.toBeInTheDocument();
+    });
+
+    it("shows the error state when the Action returns no result", async () => {
+      (getCompanyList as any).mockResolvedValue(undefined);
+
+      render(<CompaniesContainer />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Failed to load companies",
+      );
+    });
+
+    it("renders neither the error nor a table for a genuinely empty list", async () => {
+      (getCompanyList as any).mockResolvedValue({ data: [], total: 0 });
+
+      render(<CompaniesContainer />);
+
+      await waitFor(() => expect(getCompanyList).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("loader")).not.toBeInTheDocument();
+    });
+
+    it("recovers the real list once a retried load succeeds", async () => {
+      (getCompanyList as any)
+        .mockResolvedValueOnce({
+          success: false,
+          message: "Career jobs are unavailable (ab-migration-incomplete)",
+        })
+        .mockResolvedValue({ data: mockCompanies, total: 2 });
+
+      render(<CompaniesContainer />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Career jobs are unavailable",
+      );
+
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Retry" }));
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      });
+      expect(screen.getByText("Amazon")).toBeInTheDocument();
+      expect(screen.getByText("Google")).toBeInTheDocument();
+      expect(getCompanyList).toHaveBeenCalledTimes(2);
+    });
+  });
 });

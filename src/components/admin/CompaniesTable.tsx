@@ -222,7 +222,9 @@ function CompaniesTable({
                       )}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {company._count?.jobsRejected ?? 0}
+                      {/* Not computed under the A+B read family — a neutral
+                          dash, never a fake zero. */}
+                      {company._count?.jobsRejected ?? "—"}
                     </TableCell>
                     <TableCell className="font-medium">
                       {company._count?.contacts ?? 0}

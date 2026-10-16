@@ -2,10 +2,26 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { listOpportunitiesAsJobs } from "@/lib/career/jobOpportunityAdapter";
+import { APPLIED_ATTEMPT_WHERE } from "@/lib/career/applicationFact";
 import { requireUser } from "../shared";
 import { getReferenceEntityList } from "../referenceList";
 import { CONTACT_LIST_INCLUDE } from "../contact/shared";
 import { hideUnanalyzedScore } from "../job/shared";
+
+// A+B "applied" = the position has at least one live attempt that was
+// actually submitted OR already sits at a post-DRAFT stage — the shared
+// ever-applied fact (APPLIED_ATTEMPT_WHERE). Stage-only migrated history
+// still counts even without a submittedAt. `some` counts the opportunity
+// once no matter how many attempts qualify, and a later draft attempt never
+// erases earlier application history.
+const AB_APPLIED_OPPORTUNITY_WHERE = {
+  archivedAt: null,
+  applicationAttempts: {
+    some: APPLIED_ATTEMPT_WHERE,
+  },
+};
 
 export const getCompanyList = async (
   page: number = 1,
@@ -17,13 +33,26 @@ export const getCompanyList = async (
   try {
     const user = await requireUser();
 
+    // The job stats columns must follow the active read family; a blocked
+    // runtime must not silently fall back to frozen legacy Job rows.
+    const { family, reason } = await resolveJobsReadFamily(prisma);
+    if (family === "blocked") {
+      return {
+        success: false,
+        message: `Career jobs are unavailable (${reason})`,
+      };
+    }
+    const ab = family === "ab";
+
     const watchlist = scope === "watchlist";
 
     return await getReferenceEntityList({
       model: prisma.company,
       userId: user.id,
       fkField: "companyId",
-      appliedRelation: "jobsApplied",
+      // AB sorts by total opportunities, the same way legacy sorts by total
+      // jobs — the relation-count orderBy is unfiltered either way.
+      appliedRelation: ab ? "jobOpportunities" : "jobsApplied",
       extraSelect: {
         logoUrl: true,
         watched: true,
@@ -32,12 +61,27 @@ export const getCompanyList = async (
         atsToken: true,
         atsHost: true,
       },
-      extraCounts: [
-        { key: "jobsRejected", where: { Status: { value: "rejected" } } },
-      ],
+      // A+B has no per-company "rejected" rollup yet; leaving the key out
+      // lets the table render a neutral "—" instead of a fake 0.
+      extraCounts: ab
+        ? []
+        : [{ key: "jobsRejected", where: { Status: { value: "rejected" } } }],
       relationCounts: [
+        // Same relation as appliedRelation, so this entry replaces the
+        // default {applied: true} select and renames it to jobsApplied.
+        ...(ab
+          ? [
+              {
+                key: "jobsApplied",
+                relation: "jobOpportunities",
+                where: AB_APPLIED_OPPORTUNITY_WHERE,
+              },
+            ]
+          : []),
         { key: "contacts", relation: "contacts", where: { createdBy: user.id } },
       ],
+      countDelegate: ab ? prisma.jobOpportunity : undefined,
+      jobsTotalWhere: ab ? { archivedAt: null } : undefined,
       // A watched row sits at applied-count 0, so the default sort would bury
       // whatever was just watched; most-recent-first is what the scope is for.
       ...(watchlist
@@ -126,23 +170,58 @@ export const getCompanyDetails = async (
     });
     if (!company) return null;
 
-    const [jobs, dismissedJobsCount, currentContacts, formerContacts] =
-      await Promise.all([
-        prisma.job.findMany({
-          where: {
-            companyId,
-            userId: user.id,
-            OR: [
-              { discoveryStatus: null },
-              { discoveryStatus: { not: "dismissed" } },
-            ],
-          },
-          select: COMPANY_JOB_SELECT,
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.job.count({
+    const { family, reason } = await resolveJobsReadFamily(prisma);
+    // A blocked family must not masquerade as an empty Jobs tab; an error
+    // result keeps "no jobs" and "jobs unreadable" distinguishable.
+    if (family === "blocked") {
+      return {
+        success: false,
+        message: `Career jobs are unavailable (${reason})`,
+      };
+    }
+    const ab = family === "ab";
+
+    const jobsPromise = ab
+      ? listOpportunitiesAsJobs(prisma, user.id, {
+          companyId: company.id,
+        }).then((result) => result.data)
+      : prisma.job
+          .findMany({
+            where: {
+              companyId,
+              userId: user.id,
+              OR: [
+                { discoveryStatus: null },
+                { discoveryStatus: { not: "dismissed" } },
+              ],
+            },
+            select: COMPANY_JOB_SELECT,
+            orderBy: { createdAt: "desc" },
+          })
+          .then((rows) => rows.map(hideUnanalyzedScore));
+
+    // Same applied basis as the company list: distinct non-archived
+    // opportunities with at least one live attempt proving the ever-applied
+    // fact (submitted or post-DRAFT stage).
+    const appliedCountPromise = ab
+      ? prisma.jobOpportunity.count({
+          where: { companyId: company.id, userId: user.id, ...AB_APPLIED_OPPORTUNITY_WHERE },
+        })
+      : Promise.resolve(0);
+
+    // A+B has no dismissed-discovery concept, and the legacy Job table is
+    // frozen then — reporting its count would be a stale fake, so null.
+    const dismissedCountPromise = ab
+      ? Promise.resolve(null)
+      : prisma.job.count({
           where: { companyId, userId: user.id, discoveryStatus: "dismissed" },
-        }),
+        });
+
+    const [jobs, appliedCountAb, dismissedJobsCount, currentContacts, formerContacts] =
+      await Promise.all([
+        jobsPromise,
+        appliedCountPromise,
+        dismissedCountPromise,
         prisma.contact.findMany({
           where: { companyId, createdBy: user.id },
           include: CONTACT_LIST_INCLUDE,
@@ -155,12 +234,12 @@ export const getCompanyDetails = async (
         }),
       ]);
 
-    const visibleJobs = jobs.map(hideUnanalyzedScore);
-
     return {
       ...company,
-      jobs: visibleJobs,
-      appliedCount: visibleJobs.filter((job) => job.applied).length,
+      jobs,
+      appliedCount: ab
+        ? appliedCountAb
+        : jobs.filter((job) => job.applied).length,
       dismissedJobsCount,
       currentContacts,
       formerContacts,

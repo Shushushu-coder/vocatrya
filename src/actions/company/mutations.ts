@@ -204,6 +204,25 @@ export const deleteCompanyById = async (
       );
     }
 
+    // JobOpportunity.companyId and RecruitmentCampaign.companyId are
+    // onDelete: Restrict — every surviving row blocks the delete, archived
+    // ones included. These counts therefore ignore archivedAt and userId to
+    // mirror the constraints, not the visible list.
+    const [opportunities, campaigns] = await Promise.all([
+      prisma.jobOpportunity.count({ where: { companyId } }),
+      prisma.recruitmentCampaign.count({ where: { companyId } }),
+    ]);
+    if (opportunities > 0) {
+      throw new Error(
+        `Company cannot be deleted due to ${opportunities} associated job ${opportunities === 1 ? "opportunity" : "opportunities"}! `,
+      );
+    }
+    if (campaigns > 0) {
+      throw new Error(
+        `Company cannot be deleted due to ${campaigns} associated recruitment ${campaigns === 1 ? "campaign" : "campaigns"}! `,
+      );
+    }
+
     // Contact.companyId and .workedAtCompanyId are optional relations, whose
     // Prisma default is SetNull — deleting would silently blank the employer
     // rather than fail. This guard is the only thing stopping it.
@@ -216,6 +235,17 @@ export const deleteCompanyById = async (
     if (contacts > 0) {
       throw new Error(
         `Company cannot be deleted due to ${contacts} associated contact${contacts === 1 ? "" : "s"}! `,
+      );
+    }
+
+    // CareerInternshipDetail/CareerEmploymentDetail.companyId are optional
+    // SetNull links — same silent-detach hazard as contacts.
+    const careerLinks =
+      (await prisma.careerInternshipDetail.count({ where: { companyId } })) +
+      (await prisma.careerEmploymentDetail.count({ where: { companyId } }));
+    if (careerLinks > 0) {
+      throw new Error(
+        `Company cannot be deleted due to ${careerLinks} associated career ${careerLinks === 1 ? "record" : "records"}! `,
       );
     }
 

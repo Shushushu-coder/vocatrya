@@ -51,6 +51,9 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
   });
 
   const { jobs, dismissedJobsCount, currentContacts, formerContacts } = details;
+  // null means the read family does not track dismissed jobs (A+B) — treat
+  // it as zero for the pre-delete check; the server guard stays authoritative.
+  const dismissedCount = dismissedJobsCount ?? 0;
   const contactsCount = new Set(
     [...currentContacts, ...formerContacts].map((contact) => contact.id),
   ).size;
@@ -80,7 +83,7 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
   // Jobs block up front, dismissed ones included, because the server guard
   // counts them; contacts and resume entries are left to the server message.
   const onDelete = () => {
-    const total = jobs.length + dismissedJobsCount;
+    const total = jobs.length + dismissedCount;
     if (total > 0) {
       const jobsText = t(
         total === 1
@@ -89,12 +92,12 @@ function CompanyDetails({ details }: CompanyDetailsProps) {
         { count: total },
       );
       const dismissedText =
-        dismissedJobsCount > 0
+        dismissedCount > 0
           ? t(
-              dismissedJobsCount === 1
+              dismissedCount === 1
                 ? "companies.dismissedHiddenOne"
                 : "companies.dismissedHiddenMany",
-              { count: dismissedJobsCount },
+              { count: dismissedCount },
             )
           : "";
       setAlert({
