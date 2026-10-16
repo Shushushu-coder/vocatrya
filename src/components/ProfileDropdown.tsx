@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { PowerIcon, Settings, Info, ArrowUpCircle } from "lucide-react";
+import { PowerIcon, ArrowUpCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -13,25 +12,28 @@ import {
 } from "./ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import UserAvatar from "./UserAvatar";
-import { SupportDialog } from "./SupportDialog";
-import { useAppVersion } from "@/hooks/useAppVersion";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
+import type { AppVersionInfo } from "@/models/version.model";
 
 interface ProfileDropdownProps {
   user: any;
   expanded: boolean;
   signOutAction: () => void;
+  // Owned by the sidebar footer so one fetch/dialog serves both the
+  // Help entry and this menu's update-available item.
+  version?: AppVersionInfo | null;
+  onOpenSupport?: () => void;
 }
 
 export function ProfileDropdown({
   user,
   expanded,
   signOutAction,
+  version,
+  onOpenSupport,
 }: ProfileDropdownProps) {
   const { t } = useI18n();
-  const [supportDialogOpen, setSupportDialogOpen] = useState(false);
-  const version = useAppVersion();
   const label = user?.email ?? t("nav.userMenu");
 
   // Radix emits a useId-derived id on the trigger that can drift between the
@@ -89,22 +91,9 @@ export function ProfileDropdown({
         <DropdownMenuContent side="right" align="end">
           <DropdownMenuLabel>{label}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href="/dashboard/settings" className="cursor-pointer">
-              <Settings className="w-5 mr-2" />
-              {t("nav.settings")}
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setSupportDialogOpen(true)}
-            className="cursor-pointer"
-          >
-            <Info className="w-5 mr-2" />
-            {t("nav.support")}
-          </DropdownMenuItem>
           {version?.updateAvailable && (
             <DropdownMenuItem
-              onClick={() => setSupportDialogOpen(true)}
+              onClick={() => onOpenSupport?.()}
               className="cursor-pointer text-primary focus:text-primary"
             >
               <ArrowUpCircle className="w-5 mr-2" />
@@ -131,12 +120,6 @@ export function ProfileDropdown({
           {triggerContent}
         </button>
       )}
-
-      <SupportDialog
-        open={supportDialogOpen}
-        onOpenChange={setSupportDialogOpen}
-        version={version}
-      />
     </>
   );
 }

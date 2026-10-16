@@ -8,6 +8,35 @@
 // env, profile path, or free-form command crosses the bridge.
 const { contextBridge, ipcRenderer } = require("electron");
 
+// Mark Electron-hosted documents before first paint so CSS can reveal the
+// desktop-only chrome (custom titlebar strip, window-drag regions). The
+// marker is a plain DOM attribute — it grants the page no new capability;
+// the window controls themselves stay native via titleBarOverlay.
+if (typeof document !== "undefined" && typeof window !== "undefined") {
+  const DESKTOP_ATTR = "data-desktop";
+  const markDesktopShell = () =>
+    document.documentElement?.setAttribute(DESKTOP_ATTR, "true");
+  const armDesktopShell = () => {
+    markDesktopShell();
+    // App Router refreshes (e.g. locale switch) re-render the <html> element
+    // and drop imperatively-set attributes. Re-assert the marker so the
+    // desktop-only chrome survives any renderer re-render.
+    new MutationObserver(() => {
+      if (
+        document.documentElement &&
+        !document.documentElement.hasAttribute(DESKTOP_ATTR)
+      ) {
+        markDesktopShell();
+      }
+    }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: [DESKTOP_ATTR],
+    });
+  };
+  if (document.documentElement) armDesktopShell();
+  else window.addEventListener("DOMContentLoaded", armDesktopShell, { once: true });
+}
+
 contextBridge.exposeInMainWorld("vocatryaWindow", {
   setTheme: (theme, preference) => ipcRenderer.invoke("window:setTheme", theme, preference),
 });

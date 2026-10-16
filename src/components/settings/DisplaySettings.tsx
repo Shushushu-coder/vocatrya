@@ -21,7 +21,6 @@ import {
   getUserSettings,
   updateDisplaySettings,
 } from "@/actions/userSettings.actions";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n";
 
 const appearanceFormSchema = z.object({
@@ -112,15 +111,6 @@ function DisplaySettings() {
         <p className="text-sm text-muted-foreground">
           {t("settings.appearanceDescription")}
         </p>
-      </div>
-      <div className="space-y-2">
-        <div className="text-sm font-medium leading-none">
-          {t("settings.language")}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {t("settings.languageDescription")}
-        </p>
-        <LanguageSwitcher />
       </div>
       <div className="@container">
         <Form {...form}>

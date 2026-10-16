@@ -36,6 +36,8 @@ import {
 import { parseResumeHeaderSnapshot } from "@/lib/career/resumeHeaderSnapshot";
 import { CAREER_MATERIAL_TYPE, EVIDENCE_STATUS } from "@/lib/career/identities";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { useSaveStatus } from "@/context/SaveStatusContext";
+import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
 import { useI18n } from "@/i18n";
 import { ResumePreview } from "./ResumePreview";
 import { ResumeExportControl } from "./ResumeExportControl";
@@ -248,13 +250,24 @@ export function ResumeVariantWorkspace({
     return [...groups.entries()].filter(([, list]) => list.length > 0);
   }, [materials]);
 
-  const run = async (result: Promise<{ success: boolean; message?: string }>, ok: string) => {
+  const saveStatus = useSaveStatus();
+  // announce="status" routes success to the quiet shell indicator instead of a
+  // toast — used by implicit saves (blur edits, reorders). Create/delete/
+  // freeze and explicit Save buttons keep announcing via toast.
+  const run = async (
+    result: Promise<{ success: boolean; message?: string }>,
+    ok: string,
+    announce: "toast" | "status" = "status",
+  ) => {
+    const seq = saveStatus.begin();
     const resolved = await result;
     if (!resolved.success) {
-      toastError(resolved.message || t("resumeVariants.saveFailed"));
+      saveStatus.finish(seq, false);
+      toastError(resolved.message || t("resumeVariants.saveFailed"), undefined, { sticky: true });
       return false;
     }
-    toastSuccess(ok);
+    saveStatus.finish(seq, true);
+    if (announce === "toast") toastSuccess(ok);
     return true;
   };
 
@@ -289,6 +302,7 @@ export function ResumeVariantWorkspace({
           .filter(Boolean),
       }),
       t("resumeVariants.saveSuccess"),
+      "toast",
     );
     if (ok) await reloadSelected(version.id);
   };
@@ -299,6 +313,7 @@ export function ResumeVariantWorkspace({
     const ok = await run(
       createResumeSection({ versionId: version.id, title }),
       t("resumeVariants.saveSuccess"),
+      "toast",
     );
     if (ok) {
       setSectionTitle("");
@@ -309,13 +324,13 @@ export function ResumeVariantWorkspace({
   const confirmAction = async () => {
     if (!confirm || !version) return;
     if (confirm.kind === "section") {
-      const ok = await run(deleteResumeSection(confirm.id), t("resumeVariants.saveSuccess"));
+      const ok = await run(deleteResumeSection(confirm.id), t("resumeVariants.saveSuccess"), "toast");
       if (ok) await reloadSelected(version.id);
     } else if (confirm.kind === "item") {
-      const ok = await run(deleteResumeSectionItem(confirm.id), t("resumeVariants.saveSuccess"));
+      const ok = await run(deleteResumeSectionItem(confirm.id), t("resumeVariants.saveSuccess"), "toast");
       if (ok) await reloadSelected(version.id);
     } else {
-      const ok = await run(freezeResumeVersion(confirm.id), t("resumeVariants.freezeSuccess"));
+      const ok = await run(freezeResumeVersion(confirm.id), t("resumeVariants.freezeSuccess"), "toast");
       if (ok) await reloadSelected(confirm.id);
     }
     setConfirm(null);
@@ -354,7 +369,10 @@ export function ResumeVariantWorkspace({
             {editable ? "" : ` · ${t("resumeVariants.readOnly")}`}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Autosave feedback sits inside the editor's own action row rather
+              than a window-wide status bar. */}
+          <SaveStatusIndicator />
           <ResumeExportControl key={version.id} versionId={version.id} status={version.status}
             archived={Boolean(version.resumeVariant.archivedAt)} onFrozen={(id) => {
               setVersion((current) => current?.id === id ? { ...current, status: "FROZEN" } : current);
@@ -376,6 +394,7 @@ export function ResumeVariantWorkspace({
                 const ok = await run(
                   cloneResumeVersionAsDraft(version.id),
                   t("resumeVariants.cloneSuccess"),
+                  "toast",
                 );
                 if (ok) await load();
               }}
@@ -753,6 +772,7 @@ export function ResumeVariantWorkspace({
                                         void run(
                                           deleteResumeExpression(expression.id),
                                           t("resumeVariants.saveSuccess"),
+                                          "toast",
                                         ).then((ok) => {
                                           if (ok) void reloadSelected(version.id);
                                         });
@@ -787,6 +807,7 @@ export function ResumeVariantWorkspace({
                                 void run(
                                   createResumeExpression({ itemId: item.id, content }),
                                   t("resumeVariants.saveSuccess"),
+                                  "toast",
                                 ).then((ok) => {
                                   if (ok) {
                                     setExpressionDrafts((current) => ({ ...current, [item.id]: "" }));
@@ -819,6 +840,7 @@ export function ResumeVariantWorkspace({
                           void run(
                             createResumeSectionItem({ sectionId: section.id }),
                             t("resumeVariants.saveSuccess"),
+                            "toast",
                           ).then((ok) => {
                             if (ok) void reloadSelected(version.id);
                           });
@@ -874,6 +896,7 @@ export function ResumeVariantWorkspace({
                           careerMaterialItemId: material.id,
                         }),
                         t("resumeVariants.saveSuccess"),
+                        "toast",
                       ).then((ok) => {
                         if (ok) {
                           setMaterialSectionId(null);
@@ -940,6 +963,7 @@ export function ResumeVariantWorkspace({
                       evidenceIds: selectedEvidenceIds,
                     }),
                     t("resumeVariants.saveSuccess"),
+                    "toast",
                   ).then((ok) => {
                     if (ok) {
                       setEvidenceExpression(null);

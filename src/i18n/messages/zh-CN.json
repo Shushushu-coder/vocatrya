@@ -41,6 +41,8 @@
   "common": {
     "save": "保存",
     "saving": "保存中...",
+    "saved": "已保存",
+    "saveFailed": "保存失败",
     "cancel": "取消",
     "delete": "删除",
     "deleting": "删除中...",
@@ -177,6 +179,7 @@
     "updated": "更新时间",
     "expandSidebar": "展开侧边栏",
     "collapseSidebar": "收起侧边栏",
+    "resizeSidebar": "调整侧边栏宽度",
     "toggleMenu": "切换菜单",
     "content": "内容",
     "accept": "接受",
@@ -207,7 +210,18 @@
     "userMenu": "用户菜单",
     "toggleMenu": "切换导航栏",
     "openAssistant": "打开 Vocatrya 助手",
-    "closeAssistant": "收起助手"
+    "closeAssistant": "收起助手",
+    "goBack": "后退",
+    "goForward": "前进",
+    "helpFeedback": "帮助与反馈",
+    "keyboardShortcuts": "键盘快捷键"
+  },
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "toggleSidebar": "展开或收起侧边栏",
+    "goBack": "后退一页",
+    "goForward": "前进一页",
+    "closeHint": "按 Esc 关闭此面板。"
   },
   "auth": {
     "signin": "登录",
@@ -1392,6 +1406,7 @@
   "settings": {
     "title": "系统设置",
     "general": "常规偏好",
+    "generalDescription": "应用级偏好设置。",
     "ai": "AI 模型配置",
     "apiKeys": "API 密钥管理",
     "data": "数据备份与恢复",

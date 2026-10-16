@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { DesktopTitleBar } from "@/components/desktop/DesktopTitleBar";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,9 @@ export default async function RootLayout({ children }: Readonly<Props>) {
             enableSystem
             disableTransitionOnChange
           >
+            {/* Desktop-only window chrome; CSS hides it outside Electron, so
+                the web build and the hidden print window render unchanged. */}
+            <DesktopTitleBar />
             {children}
             <Toaster />
           </ThemeProvider>

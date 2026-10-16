@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, Menu } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DESKTOP_APP_ID } = require("./installer-identity");
@@ -351,6 +351,21 @@ if (!singleInstance) {
       height: 820,
       minWidth: 960,
       minHeight: 640,
+      autoHideMenuBar: true,
+      // Windows controls-overlay titlebar: the renderer draws the bar itself
+      // (preload marks documents data-desktop, DesktopTitleBar fills the
+      // strip), while the OS keeps the native caption buttons so Snap
+      // layouts, hover states, and system hit-testing keep working.
+      ...(process.platform === "win32"
+        ? {
+            titleBarStyle: "hidden",
+            titleBarOverlay: {
+              height: 36,
+              color: nativeTheme.shouldUseDarkColors ? "#020817" : "#ffffff",
+              symbolColor: nativeTheme.shouldUseDarkColors ? "#f8fafc" : "#020817",
+            },
+          }
+        : {}),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -397,6 +412,11 @@ if (!singleInstance) {
 
   app.whenReady().then(async () => {
     try {
+      // The app has no menu-driven features: dropping the default
+      // File/Edit/View/Window menu frees the top of the window for the
+      // custom titlebar. Text-editing accelerators (Ctrl+C/V/X/A/Z/Y) are
+      // native to Chromium edit controls and keep working without it.
+      Menu.setApplicationMenu(null);
       hostedSessionBroker = await startHostedSessionBroker({ token: internalToken,
         store: createHostedSessionStore({ directory: path.join(stateRoot(), "hosted-sessions"), safeStorage }),
       });

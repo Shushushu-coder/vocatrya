@@ -3,6 +3,26 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@utility app-region-drag {
+  -webkit-app-region: drag;
+}
+
+@utility app-region-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Only inside the Electron shell: preload.js sets data-desktop on <html>
+   before first paint, so desktop chrome stays hidden from the plain web
+   build and from preload-less windows (the offscreen resume-print one).
+   Plain rules, not utilities, so there is no same-specificity ordering
+   hazard against Tailwind display classes. */
+.desktop-titlebar {
+  display: none;
+}
+html[data-desktop="true"] .desktop-titlebar {
+  display: flex;
+}
+
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
@@ -111,6 +131,13 @@
 }
 
 @layer base {
+  /* Height of the renderer-drawn desktop titlebar; every viewport-height
+     calc subtracts this so layouts stay identical in the plain web build
+     (the var simply resolves to its 0px fallback there). */
+  html[data-desktop="true"] {
+    --desktop-titlebar-height: 2.25rem;
+  }
+
   * {
     @apply border-border;
   }

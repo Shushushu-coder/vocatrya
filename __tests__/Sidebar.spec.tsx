@@ -1,9 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname } from "next/navigation";
 import { Briefcase } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
-import SidebarToggle from "@/components/SidebarToggle";
 import NavLink from "@/components/NavLink";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,7 +18,6 @@ const renderSidebar = () =>
   render(
     <SidebarProvider initialExpanded>
       <Sidebar user={testUser} signOutAction={() => {}} />
-      <SidebarToggle />
     </SidebarProvider>
   );
 
@@ -120,18 +118,27 @@ describe("Sidebar", () => {
     );
   });
 
-  it("shows the user's email and a settings link via the account menu", async () => {
+  it("exposes help, settings, and the account menu in the footer", async () => {
     const user = userEvent.setup();
     renderSidebar();
 
     expect(screen.getByText(testUser.email)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "User menu" }));
+    // Settings is a real route entry in the footer, not a nested menu item.
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/dashboard/settings"
+    );
 
-    // Radix gives the menu item role="menuitem" rather than "link".
+    // Help opens the existing support dialog rather than a dead link.
+    await user.click(screen.getByRole("button", { name: "Help & feedback" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "User menu" }));
     expect(
-      await screen.findByRole("menuitem", { name: "Settings" })
-    ).toHaveAttribute("href", "/dashboard/settings");
+      await screen.findByRole("menuitem", { name: "Logout" })
+    ).toBeInTheDocument();
   });
 
   it("marks the current page with aria-current", () => {
@@ -166,61 +173,69 @@ describe("Sidebar", () => {
   });
 });
 
-describe("SidebarToggle", () => {
+describe("Sidebar edge resize handle", () => {
+  const handle = () => screen.getByTestId("sidebar-resize-handle");
+
   beforeEach(() => {
     document.cookie = `${APP_CONSTANTS.SIDEBAR_STORAGE_KEY}=; path=/; max-age=0`;
+    document.cookie = `${APP_CONSTANTS.SIDEBAR_WIDTH_STORAGE_KEY}=; path=/; max-age=0`;
     (usePathname as any).mockReturnValue("/dashboard");
   });
 
-  it("collapses and expands the sidebar", async () => {
-    const user = userEvent.setup();
+  it("collapses when dragged below the threshold and re-expands from the rail", async () => {
     renderSidebar();
+    const aside = screen.getByRole("complementary");
+    expect(aside).toHaveStyle({ width: "224px" });
 
-    const toggle = screen.getAllByRole("button", { name: "Collapse sidebar" })[1];
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    // Dragging the edge left past the collapse threshold snaps to the rail.
+    fireEvent.mouseDown(handle(), { clientX: 224 });
+    fireEvent.mouseMove(document, { clientX: 60 });
+    fireEvent.mouseUp(document);
+    expect(aside).toHaveStyle({ width: "56px" });
 
-    await user.click(toggle);
-
-    const expandToggle = screen.getAllByRole("button", { name: "Expand sidebar" })[1];
-    expect(expandToggle).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(expandToggle);
-
-    expect(
-      screen.getAllByRole("button", { name: "Collapse sidebar" })[1]
-    ).toHaveAttribute("aria-expanded", "true");
+    // From the collapsed rail, dragging right past the threshold re-expands.
+    fireEvent.mouseDown(handle(), { clientX: 56 });
+    fireEvent.mouseMove(document, { clientX: 256 });
+    fireEvent.mouseUp(document);
+    expect(aside).toHaveStyle({ width: "256px" });
   });
 
-  it("hides nav labels visually when collapsed", async () => {
+  it("resizes with ArrowLeft/ArrowRight and collapses at the threshold", async () => {
     const user = userEvent.setup();
     renderSidebar();
+    const aside = screen.getByRole("complementary");
 
-    expect(screen.getByText("Jobs")).not.toHaveClass("opacity-0");
+    handle().focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(aside).toHaveStyle({ width: "208px" });
 
-    await user.click(screen.getAllByRole("button", { name: "Collapse sidebar" })[1]);
+    for (let i = 0; i < 8; i++) await user.keyboard("{ArrowLeft}");
+    expect(aside).toHaveStyle({ width: "56px" });
 
-    expect(screen.getByText("Jobs")).toHaveClass("opacity-0");
+    await user.keyboard("{ArrowRight}");
+    expect(aside).toHaveStyle({ width: "224px" });
   });
 
-  it("persists the collapsed state as a cookie", async () => {
+  it("persists the width as a cookie after a keyboard resize", async () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getAllByRole("button", { name: "Collapse sidebar" })[1]);
+    handle().focus();
+    await user.keyboard("{ArrowLeft}");
 
     expect(document.cookie).toContain(
-      `${APP_CONSTANTS.SIDEBAR_STORAGE_KEY}=false`
+      `${APP_CONSTANTS.SIDEBAR_WIDTH_STORAGE_KEY}=208`
     );
   });
 
-  it("points aria-controls at the sidebar element", () => {
+  it("double-clicking the edge toggles the rail", async () => {
+    const user = userEvent.setup();
     renderSidebar();
+    const aside = screen.getByRole("complementary");
 
-    const toggle = screen.getAllByRole("button", { name: "Collapse sidebar" })[1];
-    const target = toggle.getAttribute("aria-controls");
-
-    expect(document.getElementById(target!)).toBe(
-      screen.getByRole("complementary")
-    );
+    await user.dblClick(handle());
+    expect(aside).toHaveStyle({ width: "56px" });
+    await user.dblClick(handle());
+    expect(aside).toHaveStyle({ width: "224px" });
   });
 });

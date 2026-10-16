@@ -8,15 +8,16 @@ test("A1.5 static identity and contextual motion across repeated, failed and swi
   const sidebar = page.locator("aside svg[data-vocatrya-mark]");
   await expect(sidebar).toHaveAttribute("data-animated", "false");
   await expect(sidebar).toHaveAttribute("width", "24");
-  const existingToggle = page.locator("header").getByRole("button", { name: /sidebar/i });
-  if (await existingToggle.getAttribute("aria-expanded") === "true") {
-    await existingToggle.click();
-    await expect(existingToggle).toHaveAttribute("aria-expanded", "false");
-  }
-  await existingToggle.click();
-  await expect(existingToggle).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("aside").first()).toHaveCSS("width", "224px");
+  // The collapse toggle lives on the shell sidebar itself now (the per-page
+  // header toggle was removed); collapse/expand are exercised through it.
   const logoToggle = page.locator("aside button[aria-controls]");
+  if (await logoToggle.getAttribute("aria-expanded") === "true") {
+    await logoToggle.click();
+    await expect(logoToggle).toHaveAttribute("aria-expanded", "false");
+  }
+  await logoToggle.click();
+  await expect(logoToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("aside").first()).toHaveCSS("width", "224px");
   await logoToggle.click();
   await expect(page.locator("aside").first()).toHaveCSS("width", "56px");
   await logoToggle.press("Enter");

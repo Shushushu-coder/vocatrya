@@ -4,7 +4,9 @@ import Sidebar from "@/components/Sidebar";
 import { ActivityProvider } from "@/context/ActivityContext";
 import { GlobalActivityBanner } from "@/components/activities/GlobalActivityBanner";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { clampSidebarWidth } from "@/lib/constants";
 import SidebarInset from "@/components/SidebarInset";
+import { SaveStatusProvider } from "@/context/SaveStatusContext";
 import { RightRailProvider } from "@/context/RightRailContext";
 import { AgentChatProvider } from "@/components/agent/AgentChatProvider";
 import { AgentChatPanel } from "@/components/agent/AgentChatPanel";
@@ -25,6 +27,12 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   const sidebarCookie = cookieStore.get(APP_CONSTANTS.SIDEBAR_STORAGE_KEY);
   const initialExpanded = sidebarCookie ? sidebarCookie.value === "true" : true;
+  const sidebarWidthCookie = Number(
+    cookieStore.get(APP_CONSTANTS.SIDEBAR_WIDTH_STORAGE_KEY)?.value,
+  );
+  const initialWidth = Number.isFinite(sidebarWidthCookie)
+    ? clampSidebarWidth(sidebarWidthCookie)
+    : undefined;
   // Loaded here rather than in the client: avoids an empty-panel flash on
   // every load, and the race where a message sent before hydration completes
   // is merged against an empty transcript and then persisted.
@@ -53,10 +61,11 @@ export default async function RootLayout({
   return (
     <ActivityProvider>
       <CareerSurfacesProvider freshNativeFull={freshNativeFull}>
-      <SidebarProvider initialExpanded={initialExpanded}>
+      <SidebarProvider initialExpanded={initialExpanded} initialWidth={initialWidth}>
         <RightRailProvider>
           <AgentChatProvider initialConversation={conversation.data ?? null}>
-            <div className="flex min-h-screen w-full flex-col bg-muted/40">
+            <SaveStatusProvider>
+            <div className="flex min-h-[calc(100vh-var(--desktop-titlebar-height,0px))] w-full bg-muted/40">
               <Sidebar user={user} signOutAction={signOutAction} />
               <SidebarInset>
                 <Header />
@@ -73,6 +82,7 @@ export default async function RootLayout({
                   col-span-3 wrapper. */}
               <AgentChatPanel />
             </div>
+            </SaveStatusProvider>
           </AgentChatProvider>
         </RightRailProvider>
       </SidebarProvider>

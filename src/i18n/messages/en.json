@@ -41,6 +41,8 @@
   "common": {
     "save": "Save",
     "saving": "Saving...",
+    "saved": "Saved",
+    "saveFailed": "Save failed",
     "cancel": "Cancel",
     "delete": "Delete",
     "deleting": "Deleting...",
@@ -177,6 +179,7 @@
     "updated": "Updated",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
+    "resizeSidebar": "Resize sidebar",
     "toggleMenu": "Toggle menu",
     "content": "Content",
     "accept": "Accept",
@@ -207,7 +210,18 @@
     "userMenu": "User menu",
     "toggleMenu": "Toggle Menu",
     "openAssistant": "Open assistant",
-    "closeAssistant": "Close assistant"
+    "closeAssistant": "Close assistant",
+    "goBack": "Back",
+    "goForward": "Forward",
+    "helpFeedback": "Help & feedback",
+    "keyboardShortcuts": "Keyboard shortcuts"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "toggleSidebar": "Expand or collapse the sidebar",
+    "goBack": "Go back one page",
+    "goForward": "Go forward one page",
+    "closeHint": "Press Esc to close this panel."
   },
   "auth": {
     "signin": "Sign In",
@@ -1392,6 +1406,7 @@
   "settings": {
     "title": "Settings",
     "general": "General",
+    "generalDescription": "Application-level preferences.",
     "ai": "AI Configuration",
     "apiKeys": "API Keys",
     "data": "Data & Backup",
