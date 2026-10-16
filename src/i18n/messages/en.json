@@ -551,6 +551,7 @@
     "saveInterviewReflection": "Save reflection",
     "interviewReflectionSaved": "Interview reflection saved",
     "interviewReflectionQuestionRequired": "Interview question is required.",
+    "interviewReflectionLoadFailed": "Failed to load the reflection. Please close and reopen the dialog.",
     "interviewReflectionQuestionIndex": "Question {number}",
     "interviewReflectionContext": "{label} · {company} / {title}",
     "abUnsupportedFieldsHint": "Resume, cover letter, and tags are not available in A+B mode yet. Submit this job without those fields.",

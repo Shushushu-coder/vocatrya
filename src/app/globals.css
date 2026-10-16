@@ -46,6 +46,7 @@ html[data-desktop="true"] .desktop-titlebar {
   --color-popover-foreground: hsl(var(--popover-foreground));
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  --color-overlay-bg: var(--overlay-bg);
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -100,6 +101,8 @@ html[data-desktop="true"] .desktop-titlebar {
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    /* Single-layer modal scrim (Dialog/AlertDialog/Sheet). */
+    --overlay-bg: hsl(0 0% 0% / 0.3);
   }
 
   .dark {
@@ -127,6 +130,8 @@ html[data-desktop="true"] .desktop-titlebar {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+    /* Dark surfaces need a stronger scrim to keep modals readable. */
+    --overlay-bg: hsl(0 0% 0% / 0.5);
   }
 }
 

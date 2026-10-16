@@ -106,6 +106,7 @@ describe("AddJob Component", () => {
     expect(dialogTitle).toBeInTheDocument();
     expect(dialogTitle).toHaveTextContent("Add Job");
   });
+
   it("should set Applied status and date applied when applied switch toggles on", async () => {
     const appliedSwitch = screen.getByRole("switch");
     expect(appliedSwitch).not.toBeChecked();
@@ -414,7 +415,7 @@ describe("AddJob Component - Last Used Location/Source", () => {
 
     const overlays = document.querySelectorAll("div.fixed.inset-0");
     expect(overlays).toHaveLength(1);
-    expect(overlays[0].className).toContain("bg-black/30");
+    expect(overlays[0].className).toContain("bg-overlay-bg");
     expect(overlays[0].className).not.toContain("bg-black/80");
 
     expect(screen.getByLabelText("Job Title")).toHaveTextContent("Select Job Title");
@@ -901,7 +902,7 @@ describe("AddJob Component - Localized validation (zh-CN)", () => {
 
     const overlays = document.querySelectorAll("div.fixed.inset-0");
     expect(overlays).toHaveLength(1);
-    expect(overlays[0].className).toContain("bg-black/30");
+    expect(overlays[0].className).toContain("bg-overlay-bg");
 
     expect(screen.getByLabelText("职位名称")).toHaveTextContent("选择职位名称");
     expect(screen.getByLabelText("公司")).toHaveTextContent("选择公司");

@@ -1,11 +1,16 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InterviewReflectionDialog } from "@/components/myjobs/job-details/InterviewReflectionDialog";
+import { I18nProvider } from "@/i18n";
 import {
   getInterviewReflection,
   saveInterviewReflection,
 } from "@/actions/application.actions";
 import type { ApplicationProcessStepDTO } from "@/lib/career/applicationTimeline";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
 
 vi.mock("@/actions/application.actions", () => ({
   getInterviewReflection: vi.fn(),
@@ -290,5 +295,112 @@ describe("InterviewReflectionDialog", () => {
       screen.queryByTestId("interview-reflection-add-question"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("interview-reflection-overall")).not.toBeInTheDocument();
+  });
+
+  it("shows the load failure message when the reflection request rejects", async () => {
+    const onUnhandled = vi.fn();
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      getReflection.mockRejectedValueOnce(new Error("network down"));
+      render(
+        <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+      );
+      expect(
+        await screen.findByTestId("interview-reflection-error"),
+      ).toHaveTextContent(
+        "Failed to load the reflection. Please close and reopen the dialog.",
+      );
+      expect(
+        screen.queryByTestId("interview-reflection-loading"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("interview-reflection-save")).toBeDisabled();
+      // The catch handler renders the error before this point; a missing
+      // handler would surface as an unhandled rejection on the next tick.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(onUnhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("pins header and footer outside a dedicated scrollable body", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByDisplayValue("介绍一下你的推荐系统项目");
+
+    const content = screen.getByTestId("interview-reflection-dialog");
+    expect(content).toHaveClass("flex", "flex-col", "overflow-hidden");
+    expect(content.className).toContain("max-h-");
+
+    const body = screen.getByTestId("interview-reflection-body");
+    expect(body).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
+    expect(body.parentElement).toBe(content);
+
+    // Header and footer are siblings of the scroll region, not children, so
+    // the actions stay put when question rows overflow the max height.
+    const headerTitle = screen.getByText("Interview reflection");
+    expect(body.contains(headerTitle)).toBe(false);
+    const save = screen.getByTestId("interview-reflection-save");
+    expect(save).toBeEnabled();
+    expect(body.contains(save)).toBe(false);
+    expect(
+      body.contains(screen.getByRole("button", { name: "Cancel" })),
+    ).toBe(false);
+  });
+
+  it("closes via Escape and the X button through the shared dialog paths", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    const onOpenChange = vi.fn();
+    render(
+      <InterviewReflectionDialog
+        open
+        onOpenChange={onOpenChange}
+        step={step}
+      />,
+    );
+    await screen.findByDisplayValue("介绍一下你的推荐系统项目");
+
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Close" }),
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    onOpenChange.mockClear();
+
+    await userEvent.keyboard("{Escape}");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("renders zh-CN chrome under the zh-CN provider", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <InterviewReflectionDialog
+          open
+          onOpenChange={vi.fn()}
+          step={step}
+          companyName="Acme"
+          roleTitle="软件工程师"
+        />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText("面试复盘")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interview-reflection-save"),
+    ).toHaveTextContent("保存复盘");
+    expect(
+      screen.getByRole("button", { name: "取消" }),
+    ).toBeInTheDocument();
   });
 });

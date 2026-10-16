@@ -551,6 +551,7 @@
     "saveInterviewReflection": "保存复盘",
     "interviewReflectionSaved": "面试复盘已保存",
     "interviewReflectionQuestionRequired": "请填写面试问题。",
+    "interviewReflectionLoadFailed": "复盘加载失败，请关闭后重新打开。",
     "interviewReflectionQuestionIndex": "问题 {number}",
     "interviewReflectionContext": "{label} · {company} / {title}",
     "abUnsupportedFieldsHint": "A+B 模式下暂不支持选择简历、求职信和技能标签。请先不填写这些字段后保存。",

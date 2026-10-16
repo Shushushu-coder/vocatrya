@@ -84,31 +84,37 @@ export function InterviewReflectionDialog({
     setItems([]);
     setReflectionText("");
 
-    void getInterviewReflection(step.id).then((result) => {
-      if (cancelled) return;
-      if (!result.success) {
-        setLoadError(result.message);
+    void getInterviewReflection(step.id)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.success) {
+          setLoadError(result.message);
+          setLoading(false);
+          return;
+        }
+        const data = result.data;
+        setItems(
+          (data?.items ?? []).map((item) => ({
+            key: item.id,
+            id: item.id,
+            questionText: item.questionText,
+            answerNotes: item.answerNotes ?? "",
+          })),
+        );
+        setReflectionText(data?.reflectionText ?? "");
+        setReady(true);
         setLoading(false);
-        return;
-      }
-      const data = result.data;
-      setItems(
-        (data?.items ?? []).map((item) => ({
-          key: item.id,
-          id: item.id,
-          questionText: item.questionText,
-          answerNotes: item.answerNotes ?? "",
-        })),
-      );
-      setReflectionText(data?.reflectionText ?? "");
-      setReady(true);
-      setLoading(false);
-    });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadError(t("jobs.interviewReflectionLoadFailed"));
+        setLoading(false);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [open, step]);
+  }, [open, step, t]);
 
   const addQuestion = () => {
     setItems((current) => [
@@ -163,29 +169,33 @@ export function InterviewReflectionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto"
+        className="sm:max-w-[600px] max-h-[80vh] flex flex-col overflow-hidden"
         data-testid="interview-reflection-dialog"
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t("jobs.interviewReflection")}</DialogTitle>
           <DialogDescription>{subtitle}</DialogDescription>
         </DialogHeader>
-        {loading ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="interview-reflection-loading"
-          >
-            {t("common.loading")}
-          </p>
-        ) : loadError ? (
-          <p
-            className="text-sm text-destructive"
-            data-testid="interview-reflection-error"
-          >
-            {loadError}
-          </p>
-        ) : ready ? (
-          <div className="space-y-6">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto"
+          data-testid="interview-reflection-body"
+        >
+          {loading ? (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="interview-reflection-loading"
+            >
+              {t("common.loading")}
+            </p>
+          ) : loadError ? (
+            <p
+              className="text-sm text-destructive"
+              data-testid="interview-reflection-error"
+            >
+              {loadError}
+            </p>
+          ) : ready ? (
+            <div className="space-y-6">
             <section className="space-y-3">
               <h3 className="text-sm font-medium">
                 {t("jobs.interviewQuestion")}
@@ -269,9 +279,10 @@ export function InterviewReflectionDialog({
                 {formError}
               </p>
             ) : null}
-          </div>
-        ) : null}
-        <DialogFooter>
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter className="shrink-0">
           <Button
             type="button"
             variant="outline"

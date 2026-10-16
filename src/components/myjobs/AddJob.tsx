@@ -328,7 +328,6 @@ export function AddJob({
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent
-            overlayClassName="bg-black/30"
             className="h-full xl:h-[85vh] lg:h-[95vh] lg:max-w-screen-lg lg:max-h-screen overflow-y-scroll"
           >
             <DialogHeader>

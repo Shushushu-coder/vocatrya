@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogOverlay,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
@@ -130,8 +129,7 @@ export function QuestionForm({
 
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogOverlay>
-        <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="question-form-dialog-title">
               {pageTitle}
@@ -210,8 +208,7 @@ export function QuestionForm({
               </DialogFooter>
             </form>
           </Form>
-        </DialogContent>
-      </DialogOverlay>
+      </DialogContent>
     </Dialog>
   );
 }

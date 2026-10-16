@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogOverlay,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
@@ -150,8 +149,7 @@ export function TaskForm({
 
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogOverlay>
-        <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="task-form-dialog-title">
               {pageTitle}
@@ -384,8 +382,7 @@ export function TaskForm({
               </div>
             </form>
           </Form>
-        </DialogContent>
-      </DialogOverlay>
+      </DialogContent>
     </Dialog>
   );
 }
