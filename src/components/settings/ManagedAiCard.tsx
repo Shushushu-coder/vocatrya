@@ -20,7 +20,8 @@ function formatPeriod(unix: number | null): string | null {
  * Vocatrya Managed AI settings section. Everything rendered here is a live
  * Hosted authority read — subscription status, plan, quota and usage come
  * from GET /v1/me/entitlement and /v1/me/usage verbatim; a failed read
- * shows the real MANAGED_* code, never fabricated data.
+ * shows the real MANAGED_* code, never fabricated data. While the release
+ * has not launched Managed AI it shows Coming Soon instead and nothing else.
  */
 function ManagedAiCard() {
   const { t } = useI18n();
@@ -50,6 +51,7 @@ function ManagedAiCard() {
   const usage = overview?.usage ?? null;
   const errorCode = overview?.errorCode ?? null;
   const connected = connection?.status === "CONNECTED";
+  const comingSoon = overview?.availability === "COMING_SOON";
   const periodStart = formatPeriod(entitlement?.periodStart ?? null);
   const periodEnd = formatPeriod(entitlement?.periodEnd ?? null);
 
@@ -58,25 +60,36 @@ function ManagedAiCard() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium">{t("settings.managedTitle")}</h3>
-          <p className="text-sm text-muted-foreground">
-            {t("settings.managedDescription")}
-          </p>
+          {!comingSoon && (
+            <p className="text-sm text-muted-foreground">
+              {t("settings.managedDescription")}
+            </p>
+          )}
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0"
-          onClick={() => void refresh()}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-        </Button>
+        {!comingSoon && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            onClick={() => void refresh()}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        )}
       </div>
 
       {loading && !overview ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>{t("settings.managedLoading")}</span>
+        </div>
+      ) : comingSoon ? (
+        <div className="rounded-md border border-dashed p-3 text-sm space-y-2">
+          <Badge variant="secondary">{t("settings.managedComingSoon")}</Badge>
+          <p className="text-muted-foreground">
+            {t("settings.managedComingSoonHint")}
+          </p>
         </div>
       ) : !connected ? (
         <div className="rounded-md border border-dashed p-3 text-sm space-y-1">

@@ -39,6 +39,7 @@ export const APP_CONSTANTS = {
   AI_SLOW_RESPONSE_THRESHOLD_MS: 15_000, // 15 seconds
   INTERSECTION_OBSERVER_THRESHOLD: 0.1,
   SIDEBAR_STORAGE_KEY: "sidebar-expanded",
+  SIDEBAR_WIDTH_STORAGE_KEY: "sidebar-width",
   DASHBOARD_WEEKLY_CHART_STORAGE_KEY: "dashboard-weekly-chart-tab",
   DASHBOARD_RECENT_CARD_STORAGE_KEY: "dashboard-recent-card-tab",
   DASHBOARD_JOBS_ACTIVITY_STORAGE_KEY: "dashboard-jobs-activity-tab",
@@ -54,10 +55,15 @@ export const APP_CONSTANTS = {
   // cached. A day is plenty — releases are rare and the check is unauthenticated.
   GITHUB_REPO: "Shushushu-coder/vocatrya",
   UPDATE_CHECK_REVALIDATE_SECONDS: 86_400,
-  // Paired so the rail width and its matching content offset can't drift.
-  SIDEBAR_WIDTH: {
-    expanded: { rail: "w-56", contentOffset: "sm:pl-56" },
-    collapsed: { rail: "w-14", contentOffset: "sm:pl-14" },
+  // Sidebar geometry in px. `collapseBelow` is the drag threshold: releasing
+  // (or dragging) under it snaps the sidebar to the icon rail.
+  SIDEBAR_WIDTH_PX: {
+    default: 224,
+    min: 168,
+    max: 360,
+    collapsed: 56,
+    collapseBelow: 112,
+    keyboardStep: 16,
   },
 
   // Ollama API timeouts
@@ -326,6 +332,13 @@ export const DISCOVERY_STATUSES = [
   { label: "Accepted", value: "accepted" },
   { label: "Dismissed", value: "dismissed" },
 ] as const;
+
+// Shared by the server layout (cookie → SSR width) and the client provider
+// (drag/keyboard changes), so it lives next to the constants it clamps to.
+export function clampSidebarWidth(width: number) {
+  const { min, max } = APP_CONSTANTS.SIDEBAR_WIDTH_PX;
+  return Math.min(Math.max(Math.round(width), min), max);
+}
 
 export const SIDEBAR_LINKS = [
   {

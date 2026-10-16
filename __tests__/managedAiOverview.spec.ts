@@ -193,14 +193,22 @@ vi.mock("@/actions/shared", () => ({
   requireUser: async () => ({ id: USER_ID }),
 }));
 vi.mock("@/lib/db", () => ({ default: db }));
+// The release constant is COMING_SOON; the action tests flip it explicitly so
+// both the launched and the not-launched behavior are exercised.
+const availability = vi.hoisted(() => ({ current: "ENABLED" as "ENABLED" | "COMING_SOON" }));
+vi.mock("@/lib/ai/managed-availability", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/managed-availability")>()),
+  managedAiAvailability: () => availability.current,
+}));
 
-const { getManagedAiOverview } = await import("@/actions/managedAi.actions");
+const { getManagedAiOverview, assignManagedBusinessAiSource } = await import("@/actions/managedAi.actions");
 const { ManagedError } = await import("@/lib/ai/managed-contract");
 const mockedModule = await import("@/lib/ai/managed-client");
 
 describe("getManagedAiOverview", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    availability.current = "ENABLED";
     // resetAllMocks clears the constructor implementation — re-attach it.
     vi.mocked(mockedModule.HostedManagedClient).mockImplementation(
       function () {
@@ -278,6 +286,7 @@ describe("getManagedAiOverview", () => {
     const result = await getManagedAiOverview();
     expect(result.success).toBe(true);
     const data = result.data!;
+    expect(data.availability).toBe("ENABLED");
     expect(data.connection).toMatchObject({
       displayName: "Vocatrya Managed AI",
       status: "CONNECTED",
@@ -304,5 +313,72 @@ describe("getManagedAiOverview", () => {
     expect(result.data?.usage).toBeNull();
     expect(result.data?.errorCode).toBe("MANAGED_RUNTIME_UNAVAILABLE");
     expect(result.data?.entitlement?.planKey).toBe("starter");
+  });
+
+  it("keeps an enabled-but-unreachable Hosted distinct from coming soon", async () => {
+    stub.identity.mockRejectedValue(new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"));
+    const result = await getManagedAiOverview();
+    expect(result.data).toEqual({
+      availability: "ENABLED",
+      connection: null,
+      entitlement: null,
+      usage: null,
+      models: [],
+      errorCode: "MANAGED_RUNTIME_UNAVAILABLE",
+    });
+    expect(db.aIConnection.create).not.toHaveBeenCalled();
+  });
+
+  it("still reports the Hosted auth failure when assigning after launch", async () => {
+    stub.identity.mockRejectedValue(new ManagedError("MANAGED_AUTH_REQUIRED"));
+    const result = await assignManagedBusinessAiSource({ purpose: "GLOBAL_DEFAULT", modelKey: "vocatrya-fast" });
+    expect(result).toMatchObject({ success: false, code: "MANAGED_AUTH_REQUIRED" });
+    expect(db.aIConnection.create).not.toHaveBeenCalled();
+  });
+
+  describe("while Managed AI is coming soon", () => {
+    beforeEach(() => {
+      availability.current = "COMING_SOON";
+    });
+
+    function expectNoManagedSideEffects() {
+      expect(mockedModule.HostedManagedClient).not.toHaveBeenCalled();
+      for (const fn of Object.values(stub)) expect(fn).not.toHaveBeenCalled();
+      for (const fn of Object.values(db.aIConnection)) expect(fn).not.toHaveBeenCalled();
+    }
+
+    it("returns an empty COMING_SOON overview with no Hosted request and no connection row", async () => {
+      const result = await getManagedAiOverview();
+      expect(result).toEqual({
+        success: true,
+        data: {
+          availability: "COMING_SOON",
+          connection: null,
+          entitlement: null,
+          usage: null,
+          models: [],
+          errorCode: null,
+        },
+      });
+      expectNoManagedSideEffects();
+    });
+
+    it("does not retry the Hosted bootstrap on every settings open", async () => {
+      for (let open = 0; open < 3; open += 1) await getManagedAiOverview();
+      expectNoManagedSideEffects();
+    });
+
+    it("refuses a Managed business assignment before any Hosted call or connection write", async () => {
+      const result = await assignManagedBusinessAiSource({ purpose: "GLOBAL_DEFAULT", modelKey: "vocatrya-fast" });
+      expect(result).toMatchObject({ success: false, code: "MANAGED_NOT_LAUNCHED" });
+      expectNoManagedSideEffects();
+    });
+  });
+});
+
+describe("beta.2 release availability", () => {
+  it("is COMING_SOON: ordinary users get no Managed AI subscription or inference", async () => {
+    const release = await vi.importActual<typeof import("@/lib/ai/managed-availability")>("@/lib/ai/managed-availability");
+    expect(release.managedAiAvailability()).toBe("COMING_SOON");
   });
 });

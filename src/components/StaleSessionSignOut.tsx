@@ -17,7 +17,7 @@ function StaleSessionSignOut({
   }, [signOutAction]);
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-muted/40">
+    <div className="flex min-h-[calc(100vh-var(--desktop-titlebar-height,0px))] w-full items-center justify-center bg-muted/40">
       <p className="text-sm text-muted-foreground">
         {t("session.invalidSigningOut")}
       </p>

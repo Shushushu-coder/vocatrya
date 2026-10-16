@@ -12,9 +12,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SIDEBAR_LINKS } from "@/lib/constants";
-import SidebarToggle from "./SidebarToggle";
 import { AgentChatTrigger } from "./AgentChatTrigger";
-import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useI18n } from "@/i18n";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { isFreshFullHiddenNavRoute } from "@/lib/career/freshSurfacePolicy";
@@ -85,16 +83,9 @@ function Header() {
           </nav>
         </SheetContent>
       </Sheet>
-      <SidebarToggle />
-      <h1 className="font-semibold text-base">
-        Vocatrya
-        <span className="hidden text-muted-foreground sm:inline font-normal">
-          {" "}
-          - {t("common.appSubtitle")}
-        </span>
-      </h1>
+      {/* The desktop titlebar carries the product identity, so the in-app
+          header only keeps the mobile nav trigger and the assistant entry. */}
       <div className="relative ml-auto flex items-center gap-2">
-        <LanguageSwitcher />
         <AgentChatTrigger />
       </div>
     </header>

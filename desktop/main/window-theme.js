@@ -18,6 +18,15 @@ function registerWindowThemeIpc({ ipcMain, nativeTheme, window, origin, assetsRo
     nativeTheme.themeSource = preference;
     window.setIcon(path.join(assetsRoot, theme === "dark"
       ? "native-window-light-symbol.ico" : "native-window-dark-symbol.ico"));
+    // The caption-button overlay must match the renderer-drawn titlebar,
+    // which uses --background/--foreground (globals.css).
+    try {
+      window.setTitleBarOverlay(theme === "dark"
+        ? { height: 36, color: "#020817", symbolColor: "#f8fafc" }
+        : { height: 36, color: "#ffffff", symbolColor: "#020817" });
+    } catch {
+      // Pre-overlay Electron builds: icon swap above still applies.
+    }
   });
   return () => ipcMain.removeHandler(channel);
 }

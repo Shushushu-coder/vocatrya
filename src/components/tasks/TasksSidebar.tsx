@@ -30,7 +30,7 @@ function TasksSidebar({
   return (
     <div
       className={cn(
-        "relative border-r py-4 hidden md:flex flex-col sticky top-4 self-start transition-all duration-200 -ml-3",
+        "relative border-r py-4 hidden md:flex flex-col sticky top-[calc(var(--desktop-titlebar-height,0px)+1rem)] self-start transition-all duration-200 -ml-3",
         collapsed ? "w-0 overflow-visible" : "w-48",
       )}
     >

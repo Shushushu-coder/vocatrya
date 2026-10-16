@@ -41,6 +41,8 @@
   "common": {
     "save": "保存",
     "saving": "保存中...",
+    "saved": "已保存",
+    "saveFailed": "保存失败",
     "cancel": "取消",
     "delete": "删除",
     "deleting": "删除中...",
@@ -177,6 +179,7 @@
     "updated": "更新时间",
     "expandSidebar": "展开侧边栏",
     "collapseSidebar": "收起侧边栏",
+    "resizeSidebar": "调整侧边栏宽度",
     "toggleMenu": "切换菜单",
     "content": "内容",
     "accept": "接受",
@@ -207,7 +210,18 @@
     "userMenu": "用户菜单",
     "toggleMenu": "切换导航栏",
     "openAssistant": "打开 Vocatrya 助手",
-    "closeAssistant": "收起助手"
+    "closeAssistant": "收起助手",
+    "goBack": "后退",
+    "goForward": "前进",
+    "helpFeedback": "帮助与反馈",
+    "keyboardShortcuts": "键盘快捷键"
+  },
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "toggleSidebar": "展开或收起侧边栏",
+    "goBack": "后退一页",
+    "goForward": "前进一页",
+    "closeHint": "按 Esc 关闭此面板。"
   },
   "auth": {
     "signin": "登录",
@@ -1392,6 +1406,7 @@
   "settings": {
     "title": "系统设置",
     "general": "常规偏好",
+    "generalDescription": "应用级偏好设置。",
     "ai": "AI 模型配置",
     "apiKeys": "API 密钥管理",
     "data": "数据备份与恢复",
@@ -1547,6 +1562,7 @@
     "aiAssignManagedOption": "Vocatrya 托管 AI（订阅套餐）",
     "aiAssignLocalGroup": "我的连接",
     "aiAssignManagedUnavailable": "Vocatrya 托管 AI 当前不可用（{code}）。",
+    "aiAssignManagedComingSoon": "Vocatrya 托管 AI 即将推出，暂时无法分配。",
     "aiAssignInterviewLegacy": "面试当前使用旧版配置（{provider} / {model}）。保存上方分配后，新会话将使用所选 AI 连接；已有会话保持原配置不变。",
     "aiAssignInterviewConfigured": "新面试会话将使用此 AI 连接并锁定所选模型；已有会话不受影响。",
     "aiAssignInterviewDeferred": "未配置面试分配。新会话将使用下方旧版面试设置；未配置旧版设置时使用全局默认。",
@@ -1594,6 +1610,8 @@
     "managedQuotaReserved": "进行中",
     "managedModels": "可用模型",
     "managedAssignHint": "在下方「业务 AI 分配」中可为业务用途选择 Vocatrya 托管 AI。",
+    "managedComingSoon": "即将推出",
+    "managedComingSoonHint": "Vocatrya 托管 AI 在当前版本中暂未开放，暂时无法订阅或使用。你自己的 AI 账号与 API Key 仍可照常使用。",
     "defaultPrefix": "默认：{value}",
     "baseUrl": "Base URL",
     "apiKey": "API 密钥",

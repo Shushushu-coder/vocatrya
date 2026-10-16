@@ -126,7 +126,7 @@ export function EmergencyContactCard() {
         setRevealed(null);
         await load();
       } else {
-        toastError(t("applicationProfile.saveFailed"));
+        toastError(t("applicationProfile.saveFailed"), undefined, { sticky: true });
       }
     } finally {
       setSaving(false);

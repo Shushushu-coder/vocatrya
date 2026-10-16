@@ -1,18 +1,24 @@
 "use client";
 
-import { Bot, Database, Palette, Plug } from "lucide-react";
+import { Bot, Database, Palette, Plug, Settings2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
-export type SettingsSection = "ai-provider" | "appearance" | "mcp-access" | "data";
+export type SettingsSection =
+  | "general"
+  | "ai-provider"
+  | "appearance"
+  | "mcp-access"
+  | "data";
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
   labelKey: string;
   icon: typeof Bot;
 }[] = [
+  { id: "general", labelKey: "settings.general", icon: Settings2 },
   { id: "ai-provider", labelKey: "settings.aiProvider", icon: Bot },
   { id: "appearance", labelKey: "settings.appearance", icon: Palette },
   { id: "mcp-access", labelKey: "settings.mcpAccess", icon: Plug },

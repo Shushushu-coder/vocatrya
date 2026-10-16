@@ -162,7 +162,7 @@ export function ApplicationProfileWorkspace() {
         setEditingBasics(false);
         await load();
       } else {
-        toastError(t("applicationProfile.saveFailed"));
+        toastError(t("applicationProfile.saveFailed"), undefined, { sticky: true });
       }
     } finally {
       setSavingBasics(false);
@@ -191,7 +191,7 @@ export function ApplicationProfileWorkspace() {
         setEditingIntent(false);
         await load();
       } else {
-        toastError(t("applicationProfile.saveFailed"));
+        toastError(t("applicationProfile.saveFailed"), undefined, { sticky: true });
       }
     } finally {
       setSavingIntent(false);
@@ -238,7 +238,7 @@ export function ApplicationProfileWorkspace() {
           isCurrent: materialForm.isCurrent,
           detail: detailForSubmit(materialType),
         });
-        if (!res.success) toastError(t("applicationProfile.saveFailed"));
+        if (!res.success) toastError(t("applicationProfile.saveFailed"), undefined, { sticky: true });
         else toastSuccess(t("applicationProfile.saveSuccess"));
       } else {
         const res = await createApplicationMaterial({
@@ -250,7 +250,7 @@ export function ApplicationProfileWorkspace() {
           isCurrent: materialForm.isCurrent,
           detail: detailForSubmit(materialType),
         });
-        if (!res.success) toastError(t("applicationProfile.saveFailed"));
+        if (!res.success) toastError(t("applicationProfile.saveFailed"), undefined, { sticky: true });
         else toastSuccess(t("applicationProfile.saveSuccess"));
       }
       setEditingId(null);
@@ -316,7 +316,7 @@ export function ApplicationProfileWorkspace() {
     if (res.success) {
       toastSuccess(t("applicationProfile.saveSuccess"));
       await load();
-    } else toastError(t("applicationProfile.saveFailed"));
+    } else toastError(t("applicationProfile.saveFailed"), undefined, { sticky: true });
   }
 
   async function addEvidence(itemId: string) {
@@ -327,7 +327,7 @@ export function ApplicationProfileWorkspace() {
       toastSuccess(t("applicationProfile.saveSuccess"));
       setEvidenceForms((prev) => ({ ...prev, [itemId]: { content: "", metric: "" } }));
       await load();
-    } else toastError(t("applicationProfile.saveFailed"));
+    } else toastError(t("applicationProfile.saveFailed"), undefined, { sticky: true });
   }
 
   const projection = useMemo(() => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import GeneralSettings from "@/components/settings/GeneralSettings";
 import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import ByokConnectionsCard from "@/components/settings/ByokConnectionsCard";
@@ -29,6 +30,7 @@ function Settings() {
           onSectionChange={setActiveSection}
         />
         <div className="flex-1 min-w-0">
+          {activeSection === "general" && <GeneralSettings />}
           {activeSection === "ai-provider" && (
             <div className="space-y-6">
               {/* Three AI routes, then the assignment surface that binds
