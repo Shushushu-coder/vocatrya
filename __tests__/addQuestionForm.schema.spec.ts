@@ -58,6 +58,28 @@ describe("AddQuestionFormSchema", () => {
       expect(result.answer).toBe("1234567890");
     });
 
+    it("should accept an empty answer for a new question", () => {
+      const data = { question: "What is React?", answer: "" };
+      const result = AddQuestionFormSchema.parse(data);
+      expect(result.answer).toBe("");
+    });
+
+    it("should accept Tiptap-empty markup as an empty answer", () => {
+      for (const answer of ["<p></p>", "<p>   </p>", "<p>&nbsp;</p>"]) {
+        const result = AddQuestionFormSchema.parse({
+          question: "What is React?",
+          answer,
+        });
+        expect(result.answer).toBe(answer);
+      }
+    });
+
+    it("should accept the legacy TBD marker when updating an existing question", () => {
+      const data = { id: "q-123", question: "What is React?", answer: "TBD" };
+      const result = AddQuestionFormSchema.parse(data);
+      expect(result.answer).toBe("TBD");
+    });
+
     it("should accept up to 10 tags", () => {
       const tagIds = Array.from({ length: 10 }, (_, i) => `tag-${i}`);
       const data = {
@@ -98,6 +120,16 @@ describe("AddQuestionFormSchema", () => {
 
     it("should reject answer shorter than 10 characters", () => {
       const data = { question: "What is React?", answer: "short" };
+      expect(() => AddQuestionFormSchema.parse(data)).toThrow();
+    });
+
+    it("should reject the TBD placeholder on create (no id)", () => {
+      const data = { question: "What is React?", answer: "TBD" };
+      expect(() => AddQuestionFormSchema.parse(data)).toThrow();
+    });
+
+    it("should reject a short non-TBD answer even when updating", () => {
+      const data = { id: "q-123", question: "What is React?", answer: "short" };
       expect(() => AddQuestionFormSchema.parse(data)).toThrow();
     });
 

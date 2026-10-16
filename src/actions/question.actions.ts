@@ -4,7 +4,13 @@ import { handleError } from "@/lib/utils";
 import { AddQuestionFormSchema } from "@/models/addQuestionForm.schema";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { hasDescription } from "@/lib/tasks/description";
 import { z } from "zod";
+
+// Tiptap's "empty" is still markup ("", "<p></p>", "<p>&nbsp;</p>", ...);
+// anything without real text persists as NULL rather than placeholder HTML.
+const normalizeQuestionAnswer = (answer: string) =>
+  hasDescription(answer) ? answer : null;
 
 export const getQuestionsList = async (
   page: number = 1,
@@ -78,12 +84,14 @@ export const createQuestion = async (
   try {
     const user = await requireUser();
 
-    const validatedData = AddQuestionFormSchema.parse(data);
+    // id only exists on the edit path; stripping it keeps the legacy "TBD"
+    // allowance unreachable from create.
+    const validatedData = AddQuestionFormSchema.parse({ ...data, id: undefined });
 
     const question = await prisma.question.create({
       data: {
         question: validatedData.question,
-        answer: validatedData.answer || null,
+        answer: normalizeQuestionAnswer(validatedData.answer),
         createdBy: user.id,
         tags: validatedData.tagIds?.length
           ? { connect: validatedData.tagIds.map((id) => ({ id })) }
@@ -112,7 +120,7 @@ export const updateQuestion = async (
       where: { id: data.id, createdBy: user.id },
       data: {
         question: validatedData.question,
-        answer: validatedData.answer || null,
+        answer: normalizeQuestionAnswer(validatedData.answer),
         tags: {
           set: validatedData.tagIds?.map((id) => ({ id })) || [],
         },

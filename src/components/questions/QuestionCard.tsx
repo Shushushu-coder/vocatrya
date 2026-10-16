@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TipTapContentViewer } from "@/components/TipTapContentViewer";
+import { hasDescription } from "@/lib/tasks/description";
 import { useI18n } from "@/i18n";
 
 type QuestionCardProps = {
@@ -38,7 +39,7 @@ export function QuestionCard({
   const [expanded, setExpanded] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const hasAnswer = question.answer && question.answer.trim().length > 0;
+  const hasAnswer = hasDescription(question.answer);
   const isLongAnswer = hasAnswer && question.answer!.length > 300;
 
   return (

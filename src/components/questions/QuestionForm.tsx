@@ -56,7 +56,7 @@ export function QuestionForm({
     resolver: zodResolver(AddQuestionFormSchema),
     defaultValues: {
       question: "",
-      answer: "TBD",
+      answer: "",
       tagIds: [],
     },
   });
@@ -86,7 +86,7 @@ export function QuestionForm({
     } else {
       reset({
         question: "",
-        answer: "TBD",
+        answer: "",
         tagIds: [],
       });
     }

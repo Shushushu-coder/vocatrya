@@ -1232,7 +1232,7 @@
     "skillTags": "技能标签",
     "loadMore": "加载更多",
     "questionRequired": "面试问题 *",
-    "answerRequired": "回答思路 *",
+    "answerRequired": "回答思路",
     "searchPlaceholder": "搜索面试题...",
     "recordsLabel": "道题",
     "newQuestion": "新题目",

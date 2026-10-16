@@ -263,6 +263,59 @@ describe("Question Actions", () => {
       });
     });
 
+    it("should persist an empty answer as null", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.question.create as any).mockResolvedValue({
+        ...mockQuestion,
+        answer: null,
+      });
+
+      const result = await createQuestion({
+        question: "What is React?",
+        answer: "",
+      });
+
+      expect(result?.success).toBe(true);
+      expect(prisma.question.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ answer: null }),
+        }),
+      );
+    });
+
+    it("should normalize Tiptap-empty markup to null", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.question.create as any).mockResolvedValue({
+        ...mockQuestion,
+        answer: null,
+      });
+
+      const result = await createQuestion({
+        question: "What is React?",
+        answer: "<p></p>",
+      });
+
+      expect(result?.success).toBe(true);
+      expect(prisma.question.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ answer: null }),
+        }),
+      );
+    });
+
+    it("should reject the TBD placeholder on create even when an id is supplied", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+
+      const result = await createQuestion({
+        id: "q-1",
+        question: "What is React?",
+        answer: "TBD",
+      });
+
+      expect(result?.success).toBe(false);
+      expect(prisma.question.create).not.toHaveBeenCalled();
+    });
+
     it("should reject invalid data (null answer)", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
 
@@ -369,6 +422,61 @@ describe("Question Actions", () => {
           }),
         }),
       );
+    });
+
+    it("should keep a historical TBD answer unchanged when editing other fields", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.question.update as any).mockResolvedValue({
+        ...mockQuestion,
+        answer: "TBD",
+      });
+
+      const result = await updateQuestion({
+        id: "q-1",
+        question: "Updated question?",
+        answer: "TBD",
+      });
+
+      expect(result?.success).toBe(true);
+      expect(prisma.question.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ answer: "TBD" }),
+        }),
+      );
+    });
+
+    it("should normalize a cleared answer to null on update", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.question.update as any).mockResolvedValue({
+        ...mockQuestion,
+        answer: null,
+      });
+
+      const result = await updateQuestion({
+        id: "q-1",
+        question: "Updated question?",
+        answer: "<p></p>",
+      });
+
+      expect(result?.success).toBe(true);
+      expect(prisma.question.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ answer: null }),
+        }),
+      );
+    });
+
+    it("should reject a short non-TBD answer on update", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+
+      const result = await updateQuestion({
+        id: "q-1",
+        question: "Updated question?",
+        answer: "short",
+      });
+
+      expect(result?.success).toBe(false);
+      expect(prisma.question.update).not.toHaveBeenCalled();
     });
 
     it("should return error when id is missing", async () => {
