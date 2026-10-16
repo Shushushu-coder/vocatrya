@@ -126,6 +126,7 @@ async function createAttempt(
     userId?: string;
     submittedAt?: Date | null;
     createdAt?: Date;
+    stage?: string;
     archived?: boolean;
   } = {},
 ) {
@@ -136,9 +137,9 @@ async function createAttempt(
       channelLabel: "TEST",
       submittedAt: o.submittedAt ?? null,
       createdAt: o.createdAt ?? new Date(),
-      currentStageCategory: o.submittedAt
-        ? ATTEMPT_STAGE.SUBMITTED
-        : ATTEMPT_STAGE.DRAFT,
+      currentStageCategory:
+        o.stage ??
+        (o.submittedAt ? ATTEMPT_STAGE.SUBMITTED : ATTEMPT_STAGE.DRAFT),
       outcome: ATTEMPT_OUTCOME.ACTIVE,
       archivedAt: o.archived ? new Date() : null,
     },
@@ -235,6 +236,31 @@ describe("company list — A+B read family", () => {
     const row = result.data.find((c: any) => c.id === company.id);
     expect(row._count.jobsTotal).toBe(1);
     expect(row._count.jobsApplied).toBe(1);
+  });
+
+  it("a stage-only attempt without submittedAt still counts as applied", async () => {
+    await freshAb();
+    const company = await createCompany();
+    // Migrated-history shape: a formal stage, no provable submission date.
+    const stageOnly = await createOpportunity(company.id);
+    await createAttempt(stageOnly.id, {
+      submittedAt: null,
+      stage: ATTEMPT_STAGE.INTERVIEW,
+    });
+    const draft = await createOpportunity(company.id, { title: "Draft" });
+    await createAttempt(draft.id, { submittedAt: null });
+
+    const result = await getCompanyList(1, 10, "applied");
+
+    const row = result.data.find((c: any) => c.id === company.id);
+    expect(row._count.jobsTotal).toBe(2);
+    expect(row._count.jobsApplied).toBe(1);
+
+    const details = await getCompanyDetails(company.id);
+    expect(details.appliedCount).toBe(1);
+    const stageOnlyRow = details.jobs.find((j: any) => j.id === stageOnly.id);
+    expect(stageOnlyRow.applied).toBe(true);
+    expect(stageOnlyRow.appliedDate).toBeNull();
   });
 
   it("a draft after a submitted attempt still counts as applied", async () => {

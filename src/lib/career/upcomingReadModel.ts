@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { addDays, endOfDay } from "date-fns";
 import { ATTEMPT_OUTCOME, OPPORTUNITY_STATUS, PROCESS_STEP_STATUS } from "./identities";
+import { APPLIED_ATTEMPT_WHERE } from "./applicationFact";
 import { toIso } from "./applicationTimeline";
 
 export const UPCOMING_EVENT_KIND = {
@@ -125,11 +126,11 @@ export async function listUpcomingApplicationEvents(
         status: {
           in: [OPPORTUNITY_STATUS.ACTIVE, OPPORTUNITY_STATUS.UNKNOWN],
         },
+        // The deadline prompt is meaningful only while the position is not
+        // yet applied — the shared ever-applied fact: a submitted OR
+        // post-DRAFT live attempt suppresses it, a draft does not.
         applicationAttempts: {
-          none: {
-            archivedAt: null,
-            submittedAt: { not: null },
-          },
+          none: APPLIED_ATTEMPT_WHERE,
         },
       },
       select: {

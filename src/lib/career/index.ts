@@ -27,6 +27,12 @@ export {
 } from "./identities";
 export { CareerRuntimeError } from "./errors";
 export {
+  APPLIED_ATTEMPT_WHERE,
+  isAppliedAttempt,
+  appliedAttemptExistsSql,
+  firstSubmittedAtSql,
+} from "./applicationFact";
+export {
   deriveUiStatus,
   planUiStatusWrite,
   pickLatestAttempt,

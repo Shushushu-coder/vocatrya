@@ -4,19 +4,22 @@ import { handleError } from "@/lib/utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 import { listOpportunitiesAsJobs } from "@/lib/career/jobOpportunityAdapter";
+import { APPLIED_ATTEMPT_WHERE } from "@/lib/career/applicationFact";
 import { requireUser } from "../shared";
 import { getReferenceEntityList } from "../referenceList";
 import { CONTACT_LIST_INCLUDE } from "../contact/shared";
 import { hideUnanalyzedScore } from "../job/shared";
 
 // A+B "applied" = the position has at least one live attempt that was
-// actually submitted (submittedAt set). `some` counts the opportunity once
-// no matter how many attempts went out, and a later draft attempt never
-// erases an earlier submission.
+// actually submitted OR already sits at a post-DRAFT stage — the shared
+// ever-applied fact (APPLIED_ATTEMPT_WHERE). Stage-only migrated history
+// still counts even without a submittedAt. `some` counts the opportunity
+// once no matter how many attempts qualify, and a later draft attempt never
+// erases earlier application history.
 const AB_APPLIED_OPPORTUNITY_WHERE = {
   archivedAt: null,
   applicationAttempts: {
-    some: { archivedAt: null, submittedAt: { not: null } },
+    some: APPLIED_ATTEMPT_WHERE,
   },
 };
 
@@ -198,7 +201,8 @@ export const getCompanyDetails = async (
           .then((rows) => rows.map(hideUnanalyzedScore));
 
     // Same applied basis as the company list: distinct non-archived
-    // opportunities that have at least one submitted live attempt.
+    // opportunities with at least one live attempt proving the ever-applied
+    // fact (submitted or post-DRAFT stage).
     const appliedCountPromise = ab
       ? prisma.jobOpportunity.count({
           where: { companyId: company.id, userId: user.id, ...AB_APPLIED_OPPORTUNITY_WHERE },

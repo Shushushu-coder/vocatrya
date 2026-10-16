@@ -385,7 +385,7 @@ export async function loadDashboardJobCounts(
   const { family, reason } = await resolveJobsReadFamily(db, env);
   rejectBlockedJobs(family, reason);
   if (family === "ab") {
-    const [current, prior] = await Promise.all([
+    const [current, firstSubmissions] = await Promise.all([
       db.applicationAttempt.findMany({
         where: attemptInRangeWhere(userId, range.start, range.end, true),
         select: {
@@ -396,10 +396,30 @@ export async function loadDashboardJobCounts(
           jobOpportunity: { select: { archivedAt: true, status: true } },
         },
       }),
-      db.applicationAttempt.count({
-        where: attemptInRangeWhere(userId, range.priorStart, range.start, false),
+      // One position counts once no matter how many attempts were submitted:
+      // the window membership is decided by MIN(submittedAt), the same
+      // first-application date legacy reads on Job.appliedDate.
+      db.applicationAttempt.groupBy({
+        by: "jobOpportunityId",
+        where: {
+          userId,
+          archivedAt: null,
+          submittedAt: { not: null },
+          jobOpportunity: { userId, archivedAt: null },
+        },
+        _min: { submittedAt: true },
       }),
     ]);
+    let jobsApplied = 0;
+    let priorJobs = 0;
+    for (const row of firstSubmissions) {
+      const firstAt = row._min.submittedAt;
+      if (!firstAt) continue;
+      if (firstAt >= range.start && firstAt <= range.end) jobsApplied += 1;
+      else if (firstAt >= range.priorStart && firstAt < range.start) {
+        priorJobs += 1;
+      }
+    }
     let jobsInterview = 0;
     let jobsOffer = 0;
     for (const attempt of current) {
@@ -412,8 +432,8 @@ export async function loadDashboardJobCounts(
       if (isOfferUiStatus(uiStatus)) jobsOffer += 1;
     }
     return {
-      jobsApplied: current.length,
-      priorJobs: prior,
+      jobsApplied,
+      priorJobs,
       jobsInterview,
       jobsOffer,
     };
@@ -447,19 +467,28 @@ export async function loadJobsAppliedDateCounts(
   const { family, reason } = await resolveJobsReadFamily(db, env);
   rejectBlockedJobs(family, reason);
   if (family === "ab") {
-    const attempts = await db.applicationAttempt.findMany({
-      where: attemptInRangeWhere(userId, range.start, range.end, true),
-      select: { submittedAt: true },
+    // Same first-submission unit as loadDashboardJobCounts: each opportunity
+    // contributes its MIN(submittedAt) once, matching legacy Job.appliedDate.
+    const firstSubmissions = await db.applicationAttempt.groupBy({
+      by: "jobOpportunityId",
+      where: {
+        userId,
+        archivedAt: null,
+        submittedAt: { not: null },
+        jobOpportunity: { userId, archivedAt: null },
+      },
+      _min: { submittedAt: true },
     });
     const grouped = new Map<string, { appliedDate: Date; count: number }>();
-    for (const attempt of attempts) {
-      if (!attempt.submittedAt) continue;
-      const key = format(attempt.submittedAt, "yyyy-MM-dd");
+    for (const row of firstSubmissions) {
+      const firstAt = row._min.submittedAt;
+      if (!firstAt || firstAt < range.start || firstAt > range.end) continue;
+      const key = format(firstAt, "yyyy-MM-dd");
       const existing = grouped.get(key);
       if (existing) {
         existing.count += 1;
       } else {
-        grouped.set(key, { appliedDate: attempt.submittedAt, count: 1 });
+        grouped.set(key, { appliedDate: firstAt, count: 1 });
       }
     }
     return [...grouped.values()];
@@ -496,10 +525,14 @@ export async function loadRecentJobs(
   const { family, reason } = await resolveJobsReadFamily(db, env);
   rejectBlockedJobs(family, reason);
   if (family === "ab") {
+    // "Recent Applications" mirrors the legacy read: only positions with a
+    // real submission, newest first-application date first.
     const { data } = await listOpportunitiesAsJobs(db, userId, {
       skip: 0,
       take,
       includeArchived: false,
+      appliedOnly: true,
+      orderBy: "firstSubmittedAtDesc",
     });
     return data;
   }
