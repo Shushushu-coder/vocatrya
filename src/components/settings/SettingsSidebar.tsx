@@ -37,7 +37,7 @@ export default function SettingsSidebar({
   const { t } = useI18n();
   const { freshNativeFull } = useCareerSurfaces();
   return (
-    <nav className="flex flex-col gap-1 w-48 shrink-0">
+    <nav className="flex w-full min-w-0 flex-col gap-1 @md/main:w-48 @md/main:shrink-0">
       {SETTINGS_SECTIONS.map((section) => {
         // MCP tokens only drive legacy writes — no fresh-native entry point.
         if (freshNativeFull && section.id === "mcp-access") return null;
@@ -48,7 +48,7 @@ export default function SettingsSidebar({
             key={section.id}
             variant="ghost"
             className={cn(
-              "justify-start gap-2 rounded-none border-l-2",
+              "max-w-full justify-start gap-2 whitespace-normal rounded-none border-l-2 text-left",
               isActive
                 ? "border-l-primary bg-muted font-medium"
                 : "border-l-transparent hover:border-l-muted-foreground/25",

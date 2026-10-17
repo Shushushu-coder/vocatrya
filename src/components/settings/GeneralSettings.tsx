@@ -20,15 +20,15 @@ function GeneralSettings() {
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-medium">{t("settings.general")}</h3>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground break-words">
           {t("settings.generalDescription")}
         </p>
       </div>
       <div className="space-y-2">
-        <div className="text-sm font-medium leading-none">
+        <div className="text-sm font-medium leading-none break-words">
           {t("settings.language")}
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground break-words">
           {t("settings.languageDescription")}
         </p>
         <Select
@@ -36,7 +36,7 @@ function GeneralSettings() {
           onValueChange={(value) => setLocale(value as Locale)}
         >
           <SelectTrigger
-            className="w-56"
+            className="w-full max-w-56"
             aria-label={t("settings.language")}
             data-testid="settings-language-select"
           >
