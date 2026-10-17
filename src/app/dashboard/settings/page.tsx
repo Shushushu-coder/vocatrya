@@ -20,11 +20,15 @@ function Settings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>("ai-provider");
 
   return (
-    <div className="flex flex-col col-span-3">
-      <h3 className="text-2xl font-semibold leading-none tracking-tight mb-4">
+    <div className="flex min-w-0 flex-col col-span-3">
+      <h3 className="text-2xl font-semibold leading-none tracking-tight mb-4 break-words">
         {t("settings.title")}
       </h3>
-      <div className="flex gap-6">
+      {/* Query the main container, not the viewport. The app sidebar and a
+          docked assistant panel shrink this box without changing the window.
+          Side navigation needs 12rem + 1.5rem gap + a 14rem control. @md
+          (28rem) is the first container step above that sum. */}
+      <div className="flex min-w-0 flex-col gap-4 @md/main:flex-row @md/main:gap-6">
         <SettingsSidebar
           activeSection={activeSection}
           onSectionChange={setActiveSection}
