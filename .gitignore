@@ -90,3 +90,6 @@ evals/*/_investigate-*
 /services/managed-ai/node_modules/
 /services/managed-ai/*.db
 /services/managed-ai/*.db-*
+
+# Local private credentials — never commit
+/.private/
