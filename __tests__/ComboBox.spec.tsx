@@ -64,8 +64,10 @@ function Harness({
   freeText = false,
   label,
   onSearchChange,
+  disabled = false,
 }: {
   onChange: (v: string) => void;
+  disabled?: boolean;
   creatable?: boolean;
   name?: string;
   options?: { id: string; value: string; label: string }[];
@@ -85,6 +87,7 @@ function Harness({
               options={[...options]}
               field={{
                 ...field,
+                disabled,
                 onChange: (v: string) => {
                   onChange(v);
                   field.onChange(v);
@@ -585,5 +588,35 @@ describe("Combobox onSearchChange", () => {
     await user.type(screen.getByPlaceholderText(/Search company/i), "Ada");
 
     await waitFor(() => expect(onSearchChange).toHaveBeenCalledWith("Ada"));
+  });
+});
+
+
+describe("Combobox disabled and real pending state", () => {
+  it("does not open or submit when its form field is disabled", async () => {
+    const user = userEvent.setup();
+    render(<Harness disabled onChange={vi.fn()} />);
+    const trigger = screen.getByRole("combobox");
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveAttribute("type", "button");
+    await user.click(trigger);
+    expect(screen.queryByPlaceholderText(/Search company/i)).not.toBeInTheDocument();
+  });
+
+  it("blocks repeated creation while the existing transition is pending", async () => {
+    let finish!: (value: Awaited<ReturnType<typeof addCompany>>) => void;
+    vi.mocked(addCompany).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { user, input, onChange } = await openCombobox();
+    await user.type(input, "Synthetic pending company");
+    await user.keyboard("{Enter}");
+    const trigger = screen.getAllByRole("combobox", { hidden: true }).find(el => el.tagName === "BUTTON")!;
+    await waitFor(() => expect(trigger).toBeDisabled());
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(input).toBeDisabled();
+    await user.keyboard("{Enter}{Enter}");
+    expect(addCompany).toHaveBeenCalledTimes(1);
+    finish({ success: true, data: { id: "pending-id", label: "Synthetic pending company", value: "synthetic" } } as never);
+    await waitFor(() => expect(trigger).not.toBeDisabled());
+    expect(onChange).toHaveBeenCalledWith("pending-id");
   });
 });

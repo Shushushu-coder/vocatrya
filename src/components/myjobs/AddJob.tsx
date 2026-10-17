@@ -790,10 +790,10 @@ export function AddJob({
                         {t("common.cancel")}
                       </Button>
                     </div>
-                    <Button type="submit" data-testid="save-job-btn">
+                    <Button disabled={isPending} aria-busy={isPending} type="submit" data-testid="save-job-btn">
                       {t("common.save")}
                       {isPending && (
-                        <Loader className="h-4 w-4 shrink-0 spinner" />
+                        <Loader className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
                       )}
                     </Button>
                   </DialogFooter>

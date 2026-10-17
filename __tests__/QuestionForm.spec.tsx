@@ -170,3 +170,21 @@ describe("QuestionForm answer truthfulness", () => {
     expect(updateQuestion).not.toHaveBeenCalled();
   });
 });
+
+
+it("prevents repeat question submission while the real save is pending", async () => {
+  let finish!: (value: Awaited<ReturnType<typeof createQuestion>>) => void;
+  vi.mocked(createQuestion).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const user = userEvent.setup();
+  renderForm();
+  const dialog = await screen.findByRole("dialog");
+  await user.type(within(dialog).getByPlaceholderText("Enter interview question"), "Synthetic pending question?");
+  const save = within(dialog).getByRole("button", { name: "Save" });
+  await user.click(save);
+  await waitFor(() => expect(save).toBeDisabled());
+  expect(save).toHaveAttribute("aria-busy", "true");
+  await user.click(save);
+  expect(createQuestion).toHaveBeenCalledTimes(1);
+  finish({ success: true } as never);
+  await waitFor(() => expect(save).not.toBeDisabled());
+});

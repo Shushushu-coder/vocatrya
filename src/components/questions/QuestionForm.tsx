@@ -199,10 +199,10 @@ export function QuestionForm({
                 >
                   {t("common.cancel")}
                 </Button>
-                <Button type="submit">
+                <Button disabled={isPending} aria-busy={isPending} type="submit">
                   {t("common.save")}
                   {isPending && (
-                    <Loader className="h-4 w-4 shrink-0 spinner ml-2" />
+                    <Loader className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none ml-2" />
                   )}
                 </Button>
               </DialogFooter>

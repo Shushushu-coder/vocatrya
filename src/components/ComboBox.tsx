@@ -20,7 +20,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useState, useTransition } from "react";
-import { delay } from "@/utils/delay";
 import { createLocation } from "@/actions/job.actions";
 import { JobForm } from "@/models/job.model";
 import { addCompany } from "@/actions/company.actions";
@@ -86,7 +85,7 @@ export function Combobox({
     setNewOption("");
   };
   const onCreateOption = (label: string) => {
-    if (!label) return;
+    if (!label || isPending || field.disabled) return;
     // A free-text field has no reference record behind it — the typed text is
     // itself the stored value, so there is nothing to create server-side.
     if (freeText) {
@@ -150,6 +149,11 @@ export function Combobox({
       <PopoverTrigger asChild>
         <FormControl>
           <Button
+            type="button"
+            disabled={field.disabled || isPending}
+            aria-busy={isPending}
+            onBlur={field.onBlur}
+            ref={field.ref}
             variant="outline"
             role="combobox"
             className={cn(
@@ -165,7 +169,7 @@ export function Combobox({
             </span>
 
             {isPending ? (
-              <Loader className="h-4 w-4 shrink-0 spinner" />
+              <Loader className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
             ) : (
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             )}
@@ -186,6 +190,7 @@ export function Combobox({
           }
         >
           <CommandInput
+            disabled={isPending || field.disabled}
             value={newOption}
             onValueChange={(val: string) => {
               setNewOption(val);
@@ -224,6 +229,7 @@ export function Combobox({
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
+                  disabled={isPending || field.disabled}
                   value={`${getOptionLabel(option)} ${option.value}`}
                   key={option.id}
                   onSelect={() => {
