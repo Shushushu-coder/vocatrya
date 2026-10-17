@@ -3,25 +3,14 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
-import { listOpportunitiesAsJobs } from "@/lib/career/jobOpportunityAdapter";
-import { APPLIED_ATTEMPT_WHERE } from "@/lib/career/applicationFact";
+import {
+  AB_APPLIED_OPPORTUNITY_WHERE,
+  listOpportunitiesAsJobs,
+} from "@/lib/career/jobOpportunityAdapter";
 import { requireUser } from "../shared";
 import { getReferenceEntityList } from "../referenceList";
 import { CONTACT_LIST_INCLUDE } from "../contact/shared";
 import { hideUnanalyzedScore } from "../job/shared";
-
-// A+B "applied" = the position has at least one live attempt that was
-// actually submitted OR already sits at a post-DRAFT stage — the shared
-// ever-applied fact (APPLIED_ATTEMPT_WHERE). Stage-only migrated history
-// still counts even without a submittedAt. `some` counts the opportunity
-// once no matter how many attempts qualify, and a later draft attempt never
-// erases earlier application history.
-const AB_APPLIED_OPPORTUNITY_WHERE = {
-  archivedAt: null,
-  applicationAttempts: {
-    some: APPLIED_ATTEMPT_WHERE,
-  },
-};
 
 export const getCompanyList = async (
   page: number = 1,
