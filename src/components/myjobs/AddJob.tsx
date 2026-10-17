@@ -315,7 +315,7 @@ export function AddJob({
       {!hideTrigger && (
         <Button
           size="sm"
-          variant="outline"
+          variant="default"
           className="h-8 gap-1"
           onClick={addJobForm}
           data-testid="add-job-btn"

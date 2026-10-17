@@ -44,10 +44,11 @@ function AdminTabsContainer() {
       : "companies";
   return (
     <Tabs
+      className="min-w-0"
       defaultValue={defaultTab}
       onValueChange={(e) => onTabChange(e)}
     >
-      <TabsList className="w-full justify-start overflow-x-auto">
+      <TabsList className="w-full max-w-full justify-start overflow-x-auto">
         <TabsTrigger value="companies">{t("library.companies")}</TabsTrigger>
         <TabsTrigger value="job-titles">{t("library.jobTitles")}</TabsTrigger>
         <TabsTrigger value="locations">{t("library.locations")}</TabsTrigger>

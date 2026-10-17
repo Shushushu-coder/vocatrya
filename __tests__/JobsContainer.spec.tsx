@@ -1306,6 +1306,50 @@ describe("JobsContainer Search Functionality", () => {
   });
 });
 
+describe("JobsContainer load failure", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    (useRouter as any).mockReturnValue({
+      push: vi.fn(),
+      replace: vi.fn(),
+      refresh: vi.fn(),
+      back: vi.fn(),
+      forward: vi.fn(),
+      prefetch: vi.fn(),
+    });
+    (usePathname as any).mockReturnValue("/dashboard/myjobs");
+    (useSearchParams as any).mockReturnValue(new URLSearchParams());
+  });
+
+  it("shows the action error instead of the empty list", async () => {
+    vi.mocked(getJobsList).mockResolvedValue({
+      success: false,
+      message: "Career jobs are unavailable",
+      data: undefined,
+      total: 0,
+    } as any);
+
+    render(
+      <JobsContainer
+        statuses={[]}
+        companies={[]}
+        titles={[]}
+        locations={[]}
+        sources={[]}
+        tags={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("jobs-load-error")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Couldn't load jobs.")).toBeInTheDocument();
+    expect(screen.getByText("Career jobs are unavailable")).toBeInTheDocument();
+    expect(screen.queryByTestId("jobs-empty-state")).not.toBeInTheDocument();
+  });
+});
+
 describe("JobsContainer add-job refresh", () => {
   const user = userEvent.setup({ skipHover: true });
 

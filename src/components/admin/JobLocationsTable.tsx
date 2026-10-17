@@ -97,11 +97,17 @@ function JobLocationsTable({
           {jobLocations.map((location: JobLocation) => {
             return (
               <TableRow key={location.id}>
-                <TableCell className="font-medium">{location.label}</TableCell>
-                <TableCell className="font-medium hidden sm:table-cell">
-                  {location.value}
+                <TableCell className="max-w-[16rem] font-medium">
+                  <span className="block truncate" title={location.label}>
+                    {location.label}
+                  </span>
                 </TableCell>
-                <TableCell className="font-medium">
+                <TableCell className="hidden max-w-[12rem] font-medium sm:table-cell">
+                  <span className="block truncate" title={location.value}>
+                    {location.value}
+                  </span>
+                </TableCell>
+                <TableCell className="font-medium tabular-nums">
                   {location._count?.jobsTotal ? (
                     <Link
                       href={`/dashboard/myjobs?location=${encodeURIComponent(location.value)}`}
@@ -113,7 +119,7 @@ function JobLocationsTable({
                     (location._count?.jobsTotal ?? 0)
                   )}
                 </TableCell>
-                <TableCell className="font-medium">
+                <TableCell className="font-medium tabular-nums">
                   {location._count?.jobsApplied ? (
                     <Link
                       href={`/dashboard/myjobs?location=${encodeURIComponent(location.value)}&applied=true`}
@@ -146,7 +152,7 @@ function JobLocationsTable({
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem
-                        className="text-red-600 cursor-pointer"
+                        className="cursor-pointer text-destructive-text focus:text-destructive-text"
                         onClick={() => onDeleteJobLocation(location)}
                       >
                         <Trash className="mr-2 h-4 w-4" />

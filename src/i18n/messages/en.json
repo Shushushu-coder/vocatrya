@@ -288,7 +288,13 @@
     "weeklyJobs": "Weekly Jobs",
     "weeklyActivities": "Weekly Activities",
     "hoursAbbr": "{hours} hrs",
-    "selectYear": "Select year"
+    "selectYear": "Select year",
+    "window7d": "7 days",
+    "window30d": "30 days",
+    "calendarJobsOne": "{count} job applied",
+    "calendarJobsMany": "{count} jobs applied",
+    "calendarHoursOne": "{count} hr activity",
+    "calendarHoursMany": "{count} hrs activity"
   },
   "jobs": {
     "title": "Jobs",
@@ -308,6 +314,7 @@
     "noJobsDescription": "Add jobs manually or let the Vocatrya assistant extract postings for you.",
     "noJobsMatchFilters": "No jobs match the current filters.",
     "clearFilters": "Clear filters",
+    "loadFailed": "Couldn't load jobs.",
     "validation": {
       "jobTitleRequired": "Job title is required.",
       "jobTitleMin": "Job title must be at least 2 characters.",
@@ -2018,7 +2025,8 @@
     "jobLocationItem": "location",
     "skillItem": "skill",
     "activityTypeItem": "activity type",
-    "loadFailed": "Failed to load the list."
+    "loadFailed": "Failed to load the list.",
+    "emptyList": "Nothing here yet."
   },
   "career": {
     "runtimeReadyTitle": "A+B is ready but disabled",

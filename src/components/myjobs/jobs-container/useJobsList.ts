@@ -42,6 +42,10 @@ export function useJobsList({
   const [totalJobs, setTotalJobs] = useState(0);
   const [initialLoading, setInitialLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // null = the last read succeeded. A string is the action message so a
+  // failed read is not presented as an empty job list.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const failedPageRef = useRef(1);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // URL-derived filter state
@@ -125,7 +129,10 @@ export function useJobsList({
         setJobs((prev) => (page === 1 ? data : [...prev, ...data]));
         setTotalJobs(total);
         setPage(page);
+        setLoadError(null);
       } else {
+        failedPageRef.current = page;
+        setLoadError(message ?? "");
         toastError(message);
       }
       setInitialLoading(false);
@@ -145,6 +152,10 @@ export function useJobsList({
 
   const reloadJobs = useCallback(async () => {
     await loadJobs(1);
+  }, [loadJobs]);
+
+  const retryLoad = useCallback(async () => {
+    await loadJobs(failedPageRef.current);
   }, [loadJobs]);
 
   useEffect(() => {
@@ -171,6 +182,7 @@ export function useJobsList({
           entries[0].isIntersecting &&
           !initialLoading &&
           !loadingMore &&
+          loadError === null &&
           jobs.length < totalJobs
         ) {
           loadJobs(page + 1);
@@ -187,6 +199,7 @@ export function useJobsList({
     page,
     initialLoading,
     loadingMore,
+    loadError,
     loadJobs,
   ]);
 
@@ -201,8 +214,10 @@ export function useJobsList({
     setSearchTerm: setSearch,
     initialLoading,
     loadingMore,
+    loadError,
     loadJobs,
     reloadJobs,
+    retryLoad,
     onFilterChange,
     sentinelRef,
   };

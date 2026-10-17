@@ -109,12 +109,21 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
   );
 
   return (
-    <Card className="@lg:col-span-2">
+    <Card className="min-w-0 @lg:col-span-2">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-lg text-green-600 min-w-0 truncate">
-            {t("dashboard.jobsAndActivity")}
-          </CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <CardTitle className="min-w-0 truncate text-lg text-foreground">
+              {t("dashboard.jobsAndActivity")}
+            </CardTitle>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {current.label === "7d"
+                ? t("dashboard.window7d")
+                : current.label === "30d"
+                  ? t("dashboard.window30d")
+                  : current.label}
+            </span>
+          </div>
           <div
             className="flex shrink-0 rounded-md border text-xs"
             data-testid="jobs-activity-toggle-group"
@@ -122,9 +131,10 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
             {data.map((item, index) => (
               <button
                 key={item.label}
+                type="button"
                 onClick={() => selectTab(index)}
                 className={cn(
-                  "px-2 py-1 transition-colors",
+                  "px-2 py-1 transition-colors motion-reduce:transition-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   index === 0 && "rounded-l-md",
                   index === data.length - 1 && "rounded-r-md",
                   activeIndex === index
@@ -132,7 +142,11 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
                     : "hover:bg-muted",
                 )}
               >
-                {item.label}
+                {item.label === "7d"
+                  ? t("dashboard.window7d")
+                  : item.label === "30d"
+                    ? t("dashboard.window30d")
+                    : item.label}
               </button>
             ))}
           </div>
@@ -185,14 +199,18 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
                 theme={{
                   text: { fontSize: 11 },
                   tooltip: {
-                    container: { background: "#1e293b", color: "#fff" },
+                    container: {
+                      background: "var(--color-popover)",
+                      color: "var(--color-popover-foreground)",
+                    },
                   },
                 }}
                 tooltip={({ datum }) => (
                   <div
                     style={{
-                      background: "#1e293b",
-                      color: "#fff",
+                      background: "var(--color-popover)",
+                      color: "var(--color-popover-foreground)",
+                      border: "1px solid var(--color-border)",
                       padding: "6px 12px",
                       borderRadius: "4px",
                       fontSize: "12px",
@@ -272,7 +290,7 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
               <span
                 className={cn(
                   "flex items-center gap-0.5 text-[10px] tabular-nums",
-                  jobsTrend > 0 ? "text-emerald-600" : "text-rose-600",
+                  jobsTrend > 0 ? "text-success" : "text-destructive-text",
                 )}
               >
                 {jobsTrend > 0 ? (

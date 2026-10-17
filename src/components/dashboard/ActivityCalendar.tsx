@@ -27,16 +27,16 @@ export default function ActivityCalendar({
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
   const [year, setYear] = useState(years.at(-1));
-  const borderColor = resolvedTheme === "light" ? "#ffffff" : "#0e1117";
+  const borderColor = "var(--color-card)";
   const data = dataByYear[year ?? ""] ?? [];
   const hoursMap = Object.fromEntries(
     data.map((d) => [d.day, d.hours ?? 0]),
   );
   return (
-    <Card className="w-[100%]">
+    <Card className="w-full min-w-0">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg text-green-600">{t("dashboard.activityCalendar")}</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="min-w-0 text-lg text-foreground">{t("dashboard.activityCalendar")}</CardTitle>
           <Select value={year} onValueChange={setYear}>
             <SelectTrigger className="w-[100px]" aria-label={t("dashboard.selectYear")}>
               <SelectValue placeholder={t("dashboard.selectYear")} />
@@ -51,11 +51,11 @@ export default function ActivityCalendar({
           </Select>
         </div>
       </CardHeader>
-      <CardContent className="h-[200px]">
+      <CardContent className="h-[200px] min-w-0 overflow-hidden">
         <ResponsiveCalendar
           data={data}
-          from={`${year}-04-02`}
-          to={`${year}-04-02`}
+          from={`${year}-01-01`}
+          to={`${year}-12-31`}
           emptyColor={resolvedTheme === "light" ? "#eeeeee" : "#30363d"}
           colors={["#90e0ef", "#48cae4", "#00b4d8", "#0096c7", "#0077b6"]}
           minValue={2}
@@ -69,8 +69,9 @@ export default function ActivityCalendar({
             return (
               <div
                 style={{
-                  background: "#1e293b",
-                  color: "#fff",
+                  background: "var(--color-popover)",
+                  color: "var(--color-popover-foreground)",
+                  border: "1px solid var(--color-border)",
                   padding: "6px 12px",
                   borderRadius: "4px",
                   fontSize: "12px",
@@ -78,19 +79,33 @@ export default function ActivityCalendar({
                 }}
               >
                 <div><strong>{format(parseISO(day.day), "EEE MMM d, yyyy")}</strong></div>
-                <div>{day.value} job{Number(day.value) === 1 ? "" : "s"} applied</div>
-                <div>{hours} hr{hours === 1 ? "" : "s"} activity</div>
+                <div>
+                  {t(
+                    Number(day.value) === 1
+                      ? "dashboard.calendarJobsOne"
+                      : "dashboard.calendarJobsMany",
+                    { count: day.value },
+                  )}
+                </div>
+                <div>
+                  {t(
+                    hours === 1
+                      ? "dashboard.calendarHoursOne"
+                      : "dashboard.calendarHoursMany",
+                    { count: hours },
+                  )}
+                </div>
               </div>
             );
           }}
           theme={{
             text: {
-              fill: "#9ca3af",
+              fill: "var(--color-muted-foreground)",
             },
             tooltip: {
               container: {
-                background: "#1e293b",
-                color: "#fff",
+                background: "var(--color-popover)",
+                color: "var(--color-popover-foreground)",
               },
             },
           }}

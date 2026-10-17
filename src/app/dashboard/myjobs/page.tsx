@@ -25,7 +25,7 @@ async function MyJobs() {
       getCareerRuntimeSnapshot(),
     ]);
   return (
-    <div className="col-span-3">
+    <div className="col-span-3 min-w-0">
       <CareerRuntimeNotice mode={runtime.mode} />
       <MyJobsPageTabs
         companies={companies}

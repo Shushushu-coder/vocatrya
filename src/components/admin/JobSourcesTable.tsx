@@ -100,11 +100,17 @@ function JobSourcesTable({
           {jobSources.map((source: JobSource) => {
             return (
               <TableRow key={source.id}>
-                <TableCell className="font-medium">{source.label}</TableCell>
-                <TableCell className="font-medium hidden sm:table-cell">
-                  {source.value}
+                <TableCell className="max-w-[16rem] font-medium">
+                  <span className="block truncate" title={source.label}>
+                    {source.label}
+                  </span>
                 </TableCell>
-                <TableCell className="font-medium">
+                <TableCell className="hidden max-w-[12rem] font-medium sm:table-cell">
+                  <span className="block truncate" title={source.value}>
+                    {source.value}
+                  </span>
+                </TableCell>
+                <TableCell className="font-medium tabular-nums">
                   {source._count?.jobsTotal ? (
                     <Link
                       href={`/dashboard/myjobs?source=${encodeURIComponent(source.value)}`}
@@ -116,7 +122,7 @@ function JobSourcesTable({
                     (source._count?.jobsTotal ?? 0)
                   )}
                 </TableCell>
-                <TableCell className="font-medium">
+                <TableCell className="font-medium tabular-nums">
                   {source._count?.jobsApplied ? (
                     <Link
                       href={`/dashboard/myjobs?source=${encodeURIComponent(source.value)}&applied=true`}
@@ -149,7 +155,7 @@ function JobSourcesTable({
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem
-                        className="text-red-600 cursor-pointer"
+                        className="cursor-pointer text-destructive-text focus:text-destructive-text"
                         onClick={() => onDeleteJobSource(source)}
                       >
                         <Trash className="mr-2 h-4 w-4" />

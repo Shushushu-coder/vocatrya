@@ -27,6 +27,8 @@ function JobTitlesContainer() {
   // normal empty list.
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [listSettled, setListSettled] = useState(false);
+  const sawLoading = useRef(false);
   const hasSearched = useRef(false);
   const requestIdRef = useRef(0);
   const loadJobTitles = useCallback(
@@ -72,6 +74,14 @@ function JobTitlesContainer() {
   }, [loadJobTitles]);
 
   useEffect(() => {
+    if (initialLoading) {
+      sawLoading.current = true;
+      return;
+    }
+    if (sawLoading.current) setListSettled(true);
+  }, [initialLoading]);
+
+  useEffect(() => {
     if (searchTerm !== "") {
       hasSearched.current = true;
     }
@@ -98,13 +108,13 @@ function JobTitlesContainer() {
 
   return (
     <>
-      <div className="col-span-3">
-        <Card x-chunk="dashboard-06-chunk-0">
-          <ResponsiveCardHeader>
-            <div className="flex items-baseline gap-2">
-              <CardTitle>{t("library.jobTitles")}</CardTitle>
+      <div className="col-span-3 min-w-0">
+        <Card className="min-w-0" x-chunk="dashboard-06-chunk-0">
+          <ResponsiveCardHeader className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <CardTitle className="text-foreground">{t("library.jobTitles")}</CardTitle>
               {!initialLoading && totalJobTitles > 0 && (
-                <RecordsCount count={titles.length} total={totalJobTitles} label="job titles" />
+                <RecordsCount count={titles.length} total={totalJobTitles} label={t("library.jobTitlesLabel")} />
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
@@ -145,10 +155,15 @@ function JobTitlesContainer() {
                 />
               </>
             )}
+            {listSettled && !initialLoading && error === null && titles.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground" data-testid="library-empty">
+                {searchTerm ? t("common.noData") : t("library.emptyList")}
+              </p>
+            )}
             {hasMoreJobTitles && (
               <div ref={sentinelRef} className="flex justify-center p-4">
                 {loadingMore && (
-                  <Loader className="h-5 w-5 animate-spin text-blue-500" />
+                  <Loader className="h-5 w-5 animate-spin text-muted-foreground motion-reduce:animate-none" />
                 )}
               </div>
             )}

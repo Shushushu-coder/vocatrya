@@ -125,7 +125,7 @@ function BoardsTable({
                     disabled={busy === row.token}
                     aria-label={`${t("companies.unwatch")} ${row.name}`}
                     onClick={() => unwatch(row)}
-                    className="group text-emerald-600 dark:text-emerald-400"
+                    className="group text-success"
                   >
                     <Check className="h-3.5 w-3.5 group-hover:hidden" />
                     <span className="group-hover:hidden">

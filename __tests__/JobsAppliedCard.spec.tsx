@@ -24,6 +24,13 @@ describe("JobsAppliedCard", () => {
     expect(mockPush).toHaveBeenCalledWith("/dashboard/myjobs?add-job=true");
   });
 
+  it("renders the page title as a heading, not a success color", () => {
+    render(<JobsAppliedCard />);
+    const title = screen.getByRole("heading", { name: "Dashboard" });
+    expect(title).toHaveClass("text-foreground");
+    expect(title).not.toHaveClass("text-green-600");
+  });
+
   it("should navigate to tasks page with add-task=true when Task button is clicked", async () => {
     const user = userEvent.setup();
     render(<JobsAppliedCard />);

@@ -155,18 +155,19 @@ function CompaniesTable({
                     }}
                   />
                 </TableCell>
-                <TableCell className="font-medium">
-                  <span className="flex items-center gap-1.5">
+                <TableCell className="max-w-[16rem] font-medium">
+                  <span className="flex min-w-0 items-center gap-1.5">
                     <Link
                       href={detailsHref(company.id)}
-                      className="hover:underline underline-offset-4"
+                      title={company.label}
+                      className="min-w-0 truncate rounded-sm hover:underline underline-offset-4 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {company.label}
                     </Link>
                     {company.watched && (
                       <span
                         title={t("companies.onWatchlist")}
-                        className="text-emerald-600 dark:text-emerald-400"
+                        className="shrink-0 text-success"
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </span>
@@ -194,8 +195,10 @@ function CompaniesTable({
                   </>
                 ) : (
                   <>
-                    <TableCell className="font-medium hidden sm:table-cell">
-                      {company.value}
+                    <TableCell className="hidden max-w-[12rem] font-medium sm:table-cell">
+                      <span className="block truncate" title={company.value}>
+                        {company.value}
+                      </span>
                     </TableCell>
                     <TableCell className="font-medium">
                       {company._count?.jobsTotal ? (
@@ -278,7 +281,7 @@ function CompaniesTable({
                           : t("companies.watch")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        className="text-red-600 cursor-pointer"
+                        className="cursor-pointer text-destructive-text focus:text-destructive-text"
                         onClick={() => onDeleteCompany(company)}
                       >
                         <Trash className="mr-2 h-4 w-4" />

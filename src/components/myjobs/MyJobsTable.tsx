@@ -75,6 +75,7 @@ function MyJobsTable({
         </TableHeader>
         <TableBody>
           {jobs.map((job: JobResponse, index: number) => {
+            const sourceLabel = getLocalizedJobSource(job.JobSource, t);
             return (
               <TableRow key={job.id}>
                 <TableCell
@@ -90,7 +91,10 @@ function MyJobsTable({
                   className="font-medium cursor-pointer max-w-[120px] md:max-w-[220px]"
                 >
                   <div className="flex items-center gap-1.5">
-                    <Link href={`/dashboard/myjobs/${job?.id}`} className="block truncate">
+                    <Link
+                      href={`/dashboard/myjobs/${job?.id}`}
+                      className="block truncate rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                    >
                       {job.JobTitle?.label}
                     </Link>
                     {(job._count?.Notes ?? 0) > 0 && (
@@ -112,7 +116,7 @@ function MyJobsTable({
                     job={job}
                     jobStatuses={jobStatuses}
                     onChangeJobStatus={onChangeJobStatus}
-                    className="w-[110px] whitespace-nowrap justify-center"
+                    className="max-w-[10rem] justify-center overflow-hidden"
                   />
                 </TableCell>
                 {!freshNativeFull && (
@@ -129,8 +133,10 @@ function MyJobsTable({
                     )}
                   </TableCell>
                 )}
-                <TableCell className="hidden md:table-cell">
-                  {getLocalizedJobSource(job.JobSource, t)}
+                <TableCell className="hidden max-w-[10rem] md:table-cell">
+                  <span className="block truncate" title={sourceLabel}>
+                    {sourceLabel}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <JobActionsMenu

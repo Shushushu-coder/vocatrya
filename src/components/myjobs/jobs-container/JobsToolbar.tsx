@@ -30,6 +30,29 @@ import { useI18n } from "@/i18n";
 import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
+function FilterChip({
+  label,
+  onClear,
+  testId,
+}: {
+  label: string;
+  onClear: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      title={label}
+      data-testid={testId}
+      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary transition-colors motion-reduce:transition-none hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <span className="max-w-[12rem] truncate">{label}</span>
+      <X className="h-3.5 w-3.5 shrink-0" />
+    </button>
+  );
+}
+
 // Presentational: the Jobs card header — title/count, active filter chips,
 // view toggle, search, filter select, export and Add Job.
 export function JobsToolbar({
@@ -108,60 +131,33 @@ export function JobsToolbar({
   );
 
   return (
-    <CardHeader className="flex-row flex-wrap justify-between items-center gap-3">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <CardTitle>{t("jobs.title")}</CardTitle>
+    <CardHeader className="w-full min-w-0 flex-row flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+        <CardTitle className="text-foreground">{t("jobs.title")}</CardTitle>
         {!initialLoading && totalJobs > 0 && (
           <RecordsCount count={jobsCount} total={totalJobs} label={t("common.jobsLabel")} />
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+      <div className="flex max-w-full min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
         <JobsViewToggle value={viewMode} onChange={onChangeViewMode} />
         {companyLabel && (
-          <button
-            onClick={onClearCompanyFilter}
-            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-          >
-            {companyLabel}
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <FilterChip label={companyLabel} onClear={onClearCompanyFilter} />
         )}
         {titleLabel && (
-          <button
-            onClick={onClearTitleFilter}
-            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-          >
-            {titleLabel}
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <FilterChip label={titleLabel} onClear={onClearTitleFilter} />
         )}
         {locationLabel && (
-          <button
-            onClick={onClearLocationFilter}
-            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-          >
-            {locationLabel}
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <FilterChip label={locationLabel} onClear={onClearLocationFilter} />
         )}
         {sourceLabel && (
-          <button
-            onClick={onClearSourceFilter}
-            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-          >
-            {sourceLabel}
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <FilterChip label={sourceLabel} onClear={onClearSourceFilter} />
         )}
         {appliedLabel && (
-          <button
-            onClick={onClearAppliedFilter}
-            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-            data-testid="applied-filter-badge"
-          >
-            {appliedLabel}
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <FilterChip
+            label={appliedLabel}
+            onClear={onClearAppliedFilter}
+            testId="applied-filter-badge"
+          />
         )}
         <Button
           size="sm"
@@ -172,7 +168,7 @@ export function JobsToolbar({
           onClick={onReload}
         >
           <RefreshCw
-            className={`h-3.5 w-3.5 ${initialLoading ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 motion-reduce:animate-none ${initialLoading ? "animate-spin" : ""}`}
           />
           <span className="sr-only">{t("jobs.reloadJobs")}</span>
         </Button>
@@ -183,7 +179,7 @@ export function JobsToolbar({
         />
         <Select value={filterKey} onValueChange={onFilterChange}>
           <SelectTrigger
-            className="w-[120px] h-8"
+            className="h-8 w-[min(100%,14rem)] max-w-full overflow-hidden [&_span]:truncate"
             data-testid="job-filter-select"
           >
             <ListFilter className="h-3.5 w-3.5" />

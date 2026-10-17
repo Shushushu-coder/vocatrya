@@ -37,6 +37,7 @@ export default function WeeklyBarChartToggle({
     charts.map((chart) => chart.label),
   );
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const { resolvedTheme } = useTheme();
   const theme = resolvedTheme === "light" ? "light" : "dark";
   const current = charts[activeIndex];
@@ -59,6 +60,14 @@ export default function WeeklyBarChartToggle({
     const handler = (e: MediaQueryListEvent) => setIsSmallScreen(e.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setReduceMotion(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
   }, []);
 
   const roundedData = current.data.map((item) => {
@@ -101,11 +110,11 @@ export default function WeeklyBarChartToggle({
       : null;
 
   return (
-    <Card className="mb-2 @3xl/main:mb-0">
+    <Card className="mb-2 min-w-0 @3xl/main:mb-0">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2 mb-1 mt-3">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <CardTitle className="text-lg text-green-600 truncate">
+        <div className="mb-1 mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <CardTitle className="truncate text-lg text-foreground">
               {current.label === "Activities"
                 ? t("dashboard.weeklyActivities")
                 : t("dashboard.weeklyJobs")}
@@ -123,9 +132,10 @@ export default function WeeklyBarChartToggle({
             {charts.map((chart, index) => (
               <button
                 key={chart.label}
+                type="button"
                 onClick={() => selectTab(index)}
                 className={cn(
-                  "px-2 py-1 transition-colors",
+                  "px-2 py-1 transition-colors motion-reduce:transition-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   index === 0 && "rounded-l-md",
                   index === charts.length - 1 && "rounded-r-md",
                   activeIndex === index
@@ -142,17 +152,19 @@ export default function WeeklyBarChartToggle({
         </div>
       </CardHeader>
 
-      <CardContent className="h-[240px] p-3 pt-1">
-        <div className="h-[200px]">
+      <CardContent className="h-[240px] min-w-0 overflow-hidden p-3 pt-1">
+        <div className="h-[200px] min-w-0">
           <ResponsiveBar
             data={roundedData}
             keys={current.keys}
             indexBy="day"
+            animate={!reduceMotion}
+            motionConfig="gentle"
             margin={{
               top: 20,
               right: 10,
               bottom: 40,
-              left: 45,
+              left: isSmallScreen ? 44 : 56,
             }}
             padding={0.6}
             groupMode={current.groupMode}
@@ -169,12 +181,12 @@ export default function WeeklyBarChartToggle({
             }
             theme={{
               text: {
-                fill: "#9ca3af",
+                fill: "var(--color-muted-foreground)",
               },
               tooltip: {
                 container: {
-                  background: "#1e293b",
-                  color: "#fff",
+                  background: "var(--color-popover)",
+                  color: "var(--color-popover-foreground)",
                 },
               },
             }}
@@ -205,16 +217,16 @@ export default function WeeklyBarChartToggle({
               tickRotation: 0,
               legend: current.axisLeftLegend,
               legendPosition: "middle",
-              legendOffset: -40,
+              legendOffset: isSmallScreen ? -36 : -48,
               truncateTickAt: 0,
               tickValues: intTickValues,
             }}
-            motionConfig="gentle"
             tooltip={({ id, value, indexValue, color, data }) => (
               <div
                 style={{
-                  background: "#1e293b",
-                  color: "#fff",
+                  background: "var(--color-popover)",
+                  color: "var(--color-popover-foreground)",
+                  border: "1px solid var(--color-border)",
                   padding: "6px 10px",
                   borderRadius: 4,
                   fontSize: 13,

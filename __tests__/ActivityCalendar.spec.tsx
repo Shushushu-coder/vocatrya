@@ -8,7 +8,7 @@ vi.mock("next-themes", () => ({
 
 vi.mock("@nivo/calendar", () => ({
   ResponsiveCalendar: (props: any) => (
-    <div data-testid="calendar">
+    <div data-testid="calendar" data-from={props.from} data-to={props.to}>
       {props.data.map((d: any) => (
         <div key={d.day} data-testid={`day-${d.day}`}>
           {props.tooltip(d)}
@@ -34,6 +34,8 @@ describe("ActivityCalendar", () => {
     render(<ActivityCalendar years={years} dataByYear={dataByYear} />);
 
     expect(screen.getByText("Activity Calendar")).toBeInTheDocument();
+    expect(screen.getByTestId("calendar")).toHaveAttribute("data-from", "2026-01-01");
+    expect(screen.getByTestId("calendar")).toHaveAttribute("data-to", "2026-12-31");
     expect(screen.getByLabelText("Select year")).toHaveTextContent("2026");
     expect(screen.getByTestId("day-2026-06-15")).toBeInTheDocument();
     expect(screen.queryByTestId("day-2025-03-01")).not.toBeInTheDocument();

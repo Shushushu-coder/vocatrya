@@ -93,8 +93,8 @@ export default function RecentCardToggle({
   return (
     <Card className="mb-2 @3xl/main:absolute @3xl/main:inset-0 @3xl/main:mb-0 @3xl/main:flex @3xl/main:flex-col">
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-lg text-green-600 min-w-0 truncate">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="min-w-0 truncate text-lg text-foreground">
             {title}
           </CardTitle>
           <div
@@ -104,9 +104,10 @@ export default function RecentCardToggle({
             {tabs.map((tab, index) => (
               <button
                 key={tab}
+                type="button"
                 onClick={() => selectTab(index)}
                 className={cn(
-                  "px-2 py-1 transition-colors",
+                  "px-2 py-1 transition-colors motion-reduce:transition-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   index === 0 && "rounded-l-md",
                   index === tabs.length - 1 && "rounded-r-md",
                   activeIndex === index
@@ -121,6 +122,16 @@ export default function RecentCardToggle({
         </div>
       </CardHeader>
       <CardContent className="grid auto-rows-max gap-6 px-4 @3xl/main:min-h-0 @3xl/main:flex-1 @3xl/main:overflow-y-auto">
+        {activeIndex === 0 && jobs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("dashboard.noRecentApplications")}
+          </p>
+        ) : null}
+        {activeIndex === 1 && activities.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("dashboard.noRecentActivities")}
+          </p>
+        ) : null}
         {activeIndex === 0
           ? groupJobsByDate(jobs, formatDate, t("dashboard.noDate")).map(([date, dateJobs]) => (
               <div key={date} className="grid gap-4">
@@ -136,7 +147,10 @@ export default function RecentCardToggle({
                       />
                       <AvatarFallback>VC</AvatarFallback>
                     </Avatar>
-                    <Link href={`/dashboard/myjobs/${job?.id}`} className="min-w-0">
+                    <Link
+                      href={`/dashboard/myjobs/${job?.id}`}
+                      className="min-w-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                    >
                       <div className="grid gap-1">
                         <p className="text-sm font-medium leading-none truncate">
                           {job.JobTitle?.label}
@@ -183,14 +197,14 @@ export default function RecentCardToggle({
                         className="h-9 w-9 shrink-0"
                       >
                         <span>
-                          <CirclePlay className="text-green-600 h-6 w-6" />
+                          <CirclePlay className="h-6 w-6 text-primary" />
                         </span>
                       </Button>
                       <div className="grid gap-1 min-w-0 flex-1">
                         <p className="text-sm font-medium leading-none truncate">
                           {activity.activityName}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="truncate text-sm text-muted-foreground">
                           {activity.activityType?.label || t("common.unknown")}
                         </p>
                       </div>

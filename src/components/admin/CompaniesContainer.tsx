@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader } from "lucide-react";
 import AddCompany from "./AddCompany";
 import BoardsTable from "./BoardsTable";
@@ -77,6 +77,22 @@ function CompaniesContainer() {
   };
 
   const loading = provider ? browse.initialLoading : list.initialLoading;
+  const [listSettled, setListSettled] = useState(false);
+  const sawLoading = useRef(false);
+  // Browse search clears rows before its debounce. Hide the empty state until
+  // the next load actually starts and finishes, so a pending read is not shown
+  // as an empty company list.
+  useEffect(() => {
+    setListSettled(false);
+    sawLoading.current = false;
+  }, [searchTerm, scope]);
+  useEffect(() => {
+    if (loading) {
+      sawLoading.current = true;
+      return;
+    }
+    if (sawLoading.current) setListSettled(true);
+  }, [loading]);
   const loadingMore = provider ? browse.loadingMore : list.loadingMore;
   const hasMore = provider ? browse.hasMore : list.hasMore;
   const sentinelRef = provider ? browse.sentinelRef : list.sentinelRef;
@@ -85,16 +101,16 @@ function CompaniesContainer() {
 
   return (
     <>
-      <div className="col-span-3">
-        <Card x-chunk="dashboard-06-chunk-0">
-          <ResponsiveCardHeader>
-            <div className="flex items-baseline gap-2">
-              <CardTitle>{t("library.companies")}</CardTitle>
+      <div className="col-span-3 min-w-0">
+        <Card className="min-w-0" x-chunk="dashboard-06-chunk-0">
+          <ResponsiveCardHeader className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <CardTitle className="text-foreground">{t("library.companies")}</CardTitle>
               {!loading && shownCount > 0 && (
                 <RecordsCount
                   count={shownCount}
                   total={shownTotal}
-                  label="companies"
+                  label={t("library.companiesLabel")}
                 />
               )}
             </div>
@@ -155,20 +171,27 @@ function CompaniesContainer() {
                   </Button>
                 </AlertDescription>
               </Alert>
-            ) : (
-              list.companies.length > 0 && (
+            ) : list.companies.length > 0 ? (
                 <CompaniesTable
                   companies={list.companies}
                   reloadCompanies={list.reload}
                   editCompany={onEditCompany}
                   scope={listScope}
                 />
-              )
+              ) : listSettled && !loading ? (
+                <p className="py-10 text-center text-sm text-muted-foreground" data-testid="library-empty">
+                  {t("companies.noCompanies")}
+                </p>
+              ) : null}
+            {listSettled && !loading && provider && browse.rows.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground" data-testid="library-empty">
+                {t("companies.noCompanies")}
+              </p>
             )}
             {hasMore && (
               <div ref={sentinelRef} className="flex justify-center p-4">
                 {loadingMore && (
-                  <Loader className="h-5 w-5 animate-spin text-blue-500" />
+                  <Loader className="h-5 w-5 animate-spin text-muted-foreground motion-reduce:animate-none" />
                 )}
               </div>
             )}

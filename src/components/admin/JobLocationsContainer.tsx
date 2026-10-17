@@ -26,6 +26,8 @@ function JobLocationsContainer() {
   // normal empty list.
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const [listSettled, setListSettled] = useState(false);
+  const sawLoading = useRef(false);
   const loadJobLocations = useCallback(
     async (page: number) => {
       const requestId = ++requestIdRef.current;
@@ -67,6 +69,14 @@ function JobLocationsContainer() {
     (async () => await loadJobLocations(1))();
   }, [loadJobLocations]);
 
+  useEffect(() => {
+    if (initialLoading) {
+      sawLoading.current = true;
+      return;
+    }
+    if (sawLoading.current) setListSettled(true);
+  }, [initialLoading]);
+
   // No silent auto-retries through the sentinel while an error is showing —
   // recovery goes through the explicit Retry action.
   const hasMoreJobLocations =
@@ -79,13 +89,13 @@ function JobLocationsContainer() {
 
   return (
     <>
-      <div className="col-span-3">
-        <Card x-chunk="dashboard-06-chunk-0">
-          <ResponsiveCardHeader>
-            <div className="flex items-baseline gap-2">
-              <CardTitle>{t("library.jobLocations")}</CardTitle>
+      <div className="col-span-3 min-w-0">
+        <Card className="min-w-0" x-chunk="dashboard-06-chunk-0">
+          <ResponsiveCardHeader className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <CardTitle className="text-foreground">{t("library.jobLocations")}</CardTitle>
               {!initialLoading && totalJobLocations > 0 && (
-                <RecordsCount count={locations.length} total={totalJobLocations} label="job locations" />
+                <RecordsCount count={locations.length} total={totalJobLocations} label={t("library.jobLocationsLabel")} />
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
@@ -121,10 +131,15 @@ function JobLocationsContainer() {
                 />
               </>
             )}
+            {listSettled && !initialLoading && error === null && locations.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground" data-testid="library-empty">
+                {t("library.emptyList")}
+              </p>
+            )}
             {hasMoreJobLocations && (
               <div ref={sentinelRef} className="flex justify-center p-4">
                 {loadingMore && (
-                  <Loader className="h-5 w-5 animate-spin text-blue-500" />
+                  <Loader className="h-5 w-5 animate-spin text-muted-foreground motion-reduce:animate-none" />
                 )}
               </div>
             )}

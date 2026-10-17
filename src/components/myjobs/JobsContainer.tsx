@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { Card, CardContent, CardFooter } from "../ui/card";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Button } from "../ui/button";
 import { Loader } from "lucide-react";
 import {
   deleteJobById,
@@ -88,8 +90,10 @@ function JobsContainer({
     setSearchTerm,
     initialLoading,
     loadingMore,
+    loadError,
     loadJobs,
     reloadJobs,
+    retryLoad,
     onFilterChange,
     sentinelRef,
   } = useJobsList({
@@ -153,7 +157,7 @@ function JobsContainer({
 
   return (
     <>
-      <Card x-chunk="dashboard-06-chunk-0">
+      <Card className="min-w-0" x-chunk="dashboard-06-chunk-0">
         <JobsToolbar
           jobsCount={jobs.length}
           totalJobs={totalJobs}
@@ -201,7 +205,24 @@ function JobsContainer({
         />
         <CardContent>
           {initialLoading && <Loading />}
-          {!initialLoading && jobs.length === 0 && (
+          {!initialLoading && loadError !== null && (
+            <Alert variant="destructive" className="mb-4" data-testid="jobs-load-error">
+              <AlertTitle>{t("jobs.loadFailed")}</AlertTitle>
+              <AlertDescription>
+                {loadError ? <p>{loadError}</p> : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={initialLoading || loadingMore}
+                  onClick={() => void retryLoad()}
+                >
+                  {t("common.retry")}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {!initialLoading && loadError === null && jobs.length === 0 && (
             <div
               className="flex flex-col items-center gap-2 py-10 text-center"
               data-testid="jobs-empty-state"
@@ -214,7 +235,7 @@ function JobsContainer({
                   <button
                     type="button"
                     onClick={clearAllFilters}
-                    className="text-sm font-medium text-primary hover:underline"
+                    className="rounded-sm text-sm font-medium text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {t("jobs.clearFilters")}
                   </button>
@@ -251,10 +272,10 @@ function JobsContainer({
                 deleteIsArchive={deleteIsArchive}
               />
             ))}
-          {jobs.length < totalJobs && (
+          {loadError === null && jobs.length < totalJobs && (
             <div ref={sentinelRef} className="flex justify-center p-4">
               {loadingMore && (
-                <Loader className="h-5 w-5 animate-spin text-blue-500" />
+                <Loader className="h-5 w-5 animate-spin text-muted-foreground motion-reduce:animate-none" />
               )}
             </div>
           )}

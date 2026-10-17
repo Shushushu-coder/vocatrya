@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardTitle } from "../ui/card";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
@@ -22,6 +22,8 @@ function JobSourcesContainer() {
   // empty) so a blocked read family or failed fetch never renders as a
   // normal empty list or a spinner that never stops.
   const [error, setError] = useState<string | null>(null);
+  const [listSettled, setListSettled] = useState(false);
+  const sawLoading = useRef(false);
   const loadJobSources = useCallback(
     async (page: number) => {
       setLoading(true);
@@ -56,15 +58,23 @@ function JobSourcesContainer() {
     (async () => await loadJobSources(1))();
   }, [loadJobSources]);
 
+  useEffect(() => {
+    if (loading) {
+      sawLoading.current = true;
+      return;
+    }
+    if (sawLoading.current) setListSettled(true);
+  }, [loading]);
+
   return (
     <>
-      <div className="col-span-3">
-        <Card x-chunk="dashboard-06-chunk-0">
-          <ResponsiveCardHeader>
-            <div className="flex items-baseline gap-2">
-              <CardTitle>{t("library.jobSources")}</CardTitle>
+      <div className="col-span-3 min-w-0">
+        <Card className="min-w-0" x-chunk="dashboard-06-chunk-0">
+          <ResponsiveCardHeader className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <CardTitle className="text-foreground">{t("library.jobSources")}</CardTitle>
               {!loading && totalJobSources > 0 && (
-                <RecordsCount count={sources.length} total={totalJobSources} label="job sources" />
+                <RecordsCount count={sources.length} total={totalJobSources} label={t("library.jobSourcesLabel")} />
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
@@ -99,6 +109,11 @@ function JobSourcesContainer() {
                 />
               </>
             )}
+            {listSettled && !loading && error === null && sources.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground" data-testid="library-empty">
+                {t("library.emptyList")}
+              </p>
+            )}
             {error === null && sources.length < totalJobSources && (
               <div className="flex justify-center p-4">
                 <Button
@@ -106,9 +121,8 @@ function JobSourcesContainer() {
                   variant="outline"
                   onClick={() => loadJobSources(page + 1)}
                   disabled={loading}
-                  className="btn btn-primary"
                 >
-                  {loading ? "Loading..." : "Load More"}
+                  {loading ? t("common.loading") : t("common.loadMore")}
                 </Button>
               </div>
             )}

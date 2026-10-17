@@ -17,9 +17,9 @@ export default function JobsAppliedCard() {
   const { t } = useI18n();
   const { freshNativeFull } = useCareerSurfaces();
   return (
-    <Card className="sm:col-span-2 min-w-0 flex flex-col">
+    <Card className="flex min-w-0 flex-col sm:col-span-2">
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg text-green-600">{t("nav.dashboard")}</CardTitle>
+        <CardTitle className="text-lg text-foreground">{t("nav.dashboard")}</CardTitle>
         <CardDescription className="max-w-lg text-balance leading-relaxed">
           {t("dashboard.createNewHint")}
         </CardDescription>

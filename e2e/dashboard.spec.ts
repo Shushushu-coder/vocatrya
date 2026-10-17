@@ -209,9 +209,9 @@ test.describe("Dashboard page", () => {
     page,
   }) => {
     const jobsActivityToggle = page.getByTestId("jobs-activity-toggle-group");
-    await jobsActivityToggle.getByRole("button", { name: "30d" }).click();
+    await jobsActivityToggle.getByRole("button", { name: "30 days" }).click();
     await expect(
-      jobsActivityToggle.getByRole("button", { name: "30d" }),
+      jobsActivityToggle.getByRole("button", { name: "30 days" }),
     ).toHaveClass(/bg-primary/);
 
     const recentToggle = page.getByTestId("recent-card-toggle-group");
