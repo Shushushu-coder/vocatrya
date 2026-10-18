@@ -1,8 +1,8 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getJobsList } from "@/actions/job.actions";
-import { toastError } from "@/lib/toast";
+import { GENERIC_ERROR_MESSAGE, toastError } from "@/lib/toast";
 import { JobResponse, JobsViewMode } from "@/models/job.model";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
@@ -53,6 +53,34 @@ export function useJobsList({
   const searchParam = searchParams.get("search") ?? "";
   const [searchTerm, setSearchTerm] = useState(searchParam);
 
+  // Monotonic generation identifying the current list query. It bumps in a
+  // layout effect when the committed URL-derived inputs change — a response already in
+  // flight for the previous conditions is stale before the refetch even
+  // starts — and again on every page-1 load (filter/search reload, manual
+  // reload, job-write refresh). A render React abandons never reaches
+  // the layout effect, so it cannot invalidate requests that still belong
+  // to the committed query. Page loads beyond the first share the
+  // generation of the reset they followed, so a stale response can never
+  // append onto a new list, clear a newer error, or corrupt failedPageRef.
+  const queryKey = JSON.stringify([
+    filterKey,
+    searchParam,
+    companyFilter,
+    appliedFilter,
+    titleFilter,
+    locationFilter,
+    sourceFilter,
+  ]);
+  const generationKeyRef = useRef(queryKey);
+  const generationRef = useRef(0);
+  useLayoutEffect(() => {
+    if (generationKeyRef.current === queryKey) return;
+    generationKeyRef.current = queryKey;
+    generationRef.current += 1;
+  }, [queryKey]);
+  // Highest contiguous page applied within the current generation.
+  const appliedPageRef = useRef(0);
+
   // Keep the input in sync with the URL (back/forward, chip clears, reload).
   useEffect(() => {
     setSearchTerm(searchParam);
@@ -67,9 +95,12 @@ export function useJobsList({
 
   // Debounced URL writes must merge with the latest params, not the snapshot
   // from the render that scheduled them — a chip/filter change landing inside
-  // the debounce window would otherwise be clobbered.
+  // the debounce window would otherwise be clobbered. Synced post-commit
+  // so a render React discards cannot leak uncommitted params.
   const latestParams = useRef(searchParams);
-  latestParams.current = searchParams;
+  useLayoutEffect(() => {
+    latestParams.current = searchParams;
+  });
 
   const setSearch = (value: string) => {
     setSearchTerm(value);
@@ -112,9 +143,15 @@ export function useJobsList({
 
   const loadJobs = useCallback(
     async (page: number) => {
-      if (page === 1) setInitialLoading(true);
+      const isReset = page === 1;
+      if (isReset) {
+        generationRef.current += 1;
+        appliedPageRef.current = 0;
+      }
+      const generation = generationRef.current;
+      if (isReset) setInitialLoading(true);
       else setLoadingMore(true);
-      const { success, data, total, message } = await getJobsList(
+      const result = await getJobsList(
         page,
         jobsPerPage,
         filterKey !== "none" ? filterKey : undefined,
@@ -124,15 +161,36 @@ export function useJobsList({
         titleFilter || undefined,
         locationFilter || undefined,
         sourceFilter || undefined,
-      );
+      ).catch((error: unknown) => ({
+        success: false,
+        data: undefined,
+        total: 0,
+        message: error instanceof Error ? error.message : undefined,
+      }));
+      // A response from an older generation must not touch the new query's
+      // jobs, loading flags, error state, or failedPageRef — a late
+      // success would otherwise clear a newer error, and a late failure
+      // would fail a list that already loaded.
+      if (generationRef.current !== generation) return;
+      const { success, data, total, message } = result ?? {};
       if (success && data) {
-        setJobs((prev) => (page === 1 ? data : [...prev, ...data]));
-        setTotalJobs(total);
-        setPage(page);
-        setLoadError(null);
+        // In-generation ordering: only the next contiguous page may apply.
+        // Duplicate or out-of-order page responses drop their rows; the
+        // sentinel re-requests any gap from the applied page state.
+        if (page === appliedPageRef.current + 1) {
+          appliedPageRef.current = page;
+          setJobs((prev) => {
+            if (page === 1) return data;
+            const seen = new Set(prev.map((job) => job.id));
+            return [...prev, ...data.filter((job: JobResponse) => !seen.has(job.id))];
+          });
+          setTotalJobs(total);
+          setPage(page);
+          setLoadError(null);
+        }
       } else {
         failedPageRef.current = page;
-        setLoadError(message ?? "");
+        setLoadError(message ?? GENERIC_ERROR_MESSAGE);
         toastError(message);
       }
       setInitialLoading(false);
