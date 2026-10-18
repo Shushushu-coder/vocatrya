@@ -282,6 +282,11 @@ describe("AddEducation Component", () => {
     });
   });
 
+  // R4-STAB-02: the four typing-heavy submission cases audited by
+  // R4-STAB-01 (this submit case, success toast, error toast and loading
+  // indicator) carry a local 15_000ms per-test budget for full-suite CPU
+  // contention. It widens only the execution allowance; assertions, waits
+  // and all other cases keep the default budget.
   it("should call addEducation when submitting a new education", async () => {
     (addEducation as any).mockResolvedValue({
       success: true,
@@ -352,7 +357,7 @@ describe("AddEducation Component", () => {
         })
       );
     });
-  });
+  }, 15_000);
 
   it("should call updateEducation when editing an existing education", async () => {
     const mockEducationToEdit = {
@@ -485,7 +490,7 @@ describe("AddEducation Component", () => {
         "Education has been added successfully"
       );
     });
-  });
+  }, 15_000);
 
   it("should show error toast on failed submission", async () => {
 
@@ -547,7 +552,7 @@ describe("AddEducation Component", () => {
       expect(toastError).toHaveBeenCalledWith("Failed to add education");
       expect(mockSetDialogOpen).not.toHaveBeenCalledWith(false);
     });
-  });
+  }, 15_000);
 
   it("should show updated success message when editing", async () => {
 
@@ -714,5 +719,5 @@ describe("AddEducation Component", () => {
         "spinner"
       );
     });
-  });
+  }, 15_000);
 });

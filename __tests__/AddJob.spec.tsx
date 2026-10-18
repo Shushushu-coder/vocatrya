@@ -28,6 +28,14 @@ vi.mock("@/actions/note.actions", () => ({
   deleteNote: vi.fn(),
 }));
 
+vi.mock("@/actions/profile.actions", () => ({
+  getResumeList: vi.fn().mockResolvedValue({ data: [] }),
+}));
+
+vi.mock("@/actions/coverLetter.actions", () => ({
+  getCoverLetterList: vi.fn().mockResolvedValue({ data: [] }),
+}));
+
 vi.mock("@/lib/toast", () => ({
   toastActionResult: vi.fn((result, opts) => {
     if (result?.success) opts.onSuccess?.(result.data);
