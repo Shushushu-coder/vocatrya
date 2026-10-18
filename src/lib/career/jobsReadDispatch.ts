@@ -141,10 +141,24 @@ export async function resolveJobsReadFamily(
   return { family: "legacy", mode: runtime.mode, reason: runtime.reason };
 }
 
+export const JOBS_READ_UNAVAILABLE_CODE = "JOBS_READ_UNAVAILABLE";
+
+// A blocked family is a declared runtime state, not a surprise failure:
+// surfaces that can degrade gracefully (dashboard) match this predicate
+// instead of sniffing message text.
+export function isJobsReadUnavailableError(
+  error: unknown,
+): error is CareerRuntimeError {
+  return (
+    error instanceof CareerRuntimeError &&
+    error.code === JOBS_READ_UNAVAILABLE_CODE
+  );
+}
+
 function rejectBlockedJobs(family: JobsReadFamily, reason: string): void {
   if (family !== "blocked") return;
   throw new CareerRuntimeError(
-    "JOBS_READ_UNAVAILABLE",
+    JOBS_READ_UNAVAILABLE_CODE,
     `Career jobs are unavailable (${reason})`,
   );
 }

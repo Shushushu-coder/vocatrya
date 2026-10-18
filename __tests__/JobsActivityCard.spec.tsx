@@ -46,6 +46,7 @@ describe("JobsActivityCard", () => {
     {
       label: "7d",
       summary: {
+        jobsBlocked: false as const,
         jobsApplied: 16,
         jobsTrend: 25,
         topActivities: [
@@ -64,6 +65,7 @@ describe("JobsActivityCard", () => {
     {
       label: "30d",
       summary: {
+        jobsBlocked: false as const,
         jobsApplied: 34,
         jobsTrend: -12,
         topActivities: [{ label: "Job Search", hours: 6.4 }],
@@ -169,6 +171,7 @@ describe("JobsActivityCard", () => {
           {
             label: "7d",
             summary: {
+              jobsBlocked: false as const,
               jobsApplied: 1,
               jobsTrend: 0,
               topActivities: [{ label: "Job Search", hours: 2 }],
@@ -191,6 +194,7 @@ describe("JobsActivityCard", () => {
           {
             label: "7d",
             summary: {
+              jobsBlocked: false as const,
               jobsApplied: 3,
               jobsTrend: 0,
               topActivities: [],
@@ -207,5 +211,32 @@ describe("JobsActivityCard", () => {
     expect(screen.getByText("3 jobs")).toBeInTheDocument();
     expect(screen.getByText("No activities recorded")).toBeInTheDocument();
     expect(screen.queryByTestId("donut")).not.toBeInTheDocument();
+  });
+
+  it("shows an unavailable label instead of job numbers when jobs are blocked", () => {
+    render(
+      <JobsActivityCard
+        data={[
+          {
+            label: "7d",
+            summary: {
+              jobsBlocked: true as const,
+              topActivities: [{ label: "Deep Work", hours: 1.5 }],
+              otherActivities: [],
+              otherHours: 0,
+              totalHours: 1.5,
+            },
+          },
+        ]}
+      />,
+    );
+
+    const total = screen.getByTestId("jobs-activity-total");
+    // Activity hours still render; only the jobs lines degrade.
+    expect(within(total).getByText("1.5h")).toBeInTheDocument();
+    expect(screen.getByTestId("jobs-activity-blocked")).toHaveTextContent(
+      "Jobs data unavailable",
+    );
+    expect(within(total).queryByText(/\d+ jobs?/)).not.toBeInTheDocument();
   });
 });

@@ -85,14 +85,8 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
   const { resolvedTheme } = useTheme();
   const theme = resolvedTheme === "light" ? "light" : "dark";
   const current = data[activeIndex];
-  const {
-    jobsApplied,
-    jobsTrend,
-    topActivities,
-    otherActivities,
-    otherHours,
-    totalHours,
-  } = current.summary;
+  const summary = current.summary;
+  const { topActivities, otherActivities, otherHours, totalHours } = summary;
   const slices = buildDonutSlices(
     topActivities,
     otherHours,
@@ -241,65 +235,81 @@ export default function JobsActivityCard({ data }: JobsActivityCardProps) {
               {totalHours}
               {t("common.hoursShort")}
             </span>
-            <span
-              className={cn(
-                "text-muted-foreground tabular-nums",
-                roomyTotal ? "text-sm" : "text-xs",
-              )}
-            >
-              {t(
-                jobsApplied === 1
-                  ? "dashboard.jobCountOne"
-                  : "dashboard.jobCountMany",
-                { count: jobsApplied },
-              )}
-            </span>
-            {current.summary.jobsInterview != null && (
+            {summary.jobsBlocked ? (
               <span
                 className={cn(
-                  "text-muted-foreground tabular-nums",
+                  "text-muted-foreground",
                   roomyTotal ? "text-xs" : "text-[10px]",
                 )}
-                data-testid="jobs-activity-interview-count"
+                data-testid="jobs-activity-blocked"
               >
-                {t(
-                  current.summary.jobsInterview === 1
-                    ? "dashboard.interviewCountOne"
-                    : "dashboard.interviewCountMany",
-                  { count: current.summary.jobsInterview },
-                )}
+                {t("dashboard.jobsUnavailableTitle")}
               </span>
-            )}
-            {current.summary.jobsOffer != null && (
-              <span
-                className={cn(
-                  "text-muted-foreground tabular-nums",
-                  roomyTotal ? "text-xs" : "text-[10px]",
+            ) : (
+              <>
+                <span
+                  className={cn(
+                    "text-muted-foreground tabular-nums",
+                    roomyTotal ? "text-sm" : "text-xs",
+                  )}
+                >
+                  {t(
+                    summary.jobsApplied === 1
+                      ? "dashboard.jobCountOne"
+                      : "dashboard.jobCountMany",
+                    { count: summary.jobsApplied },
+                  )}
+                </span>
+                {summary.jobsInterview != null && (
+                  <span
+                    className={cn(
+                      "text-muted-foreground tabular-nums",
+                      roomyTotal ? "text-xs" : "text-[10px]",
+                    )}
+                    data-testid="jobs-activity-interview-count"
+                  >
+                    {t(
+                      summary.jobsInterview === 1
+                        ? "dashboard.interviewCountOne"
+                        : "dashboard.interviewCountMany",
+                      { count: summary.jobsInterview },
+                    )}
+                  </span>
                 )}
-                data-testid="jobs-activity-offer-count"
-              >
-                {t(
-                  current.summary.jobsOffer === 1
-                    ? "dashboard.offerCountOne"
-                    : "dashboard.offerCountMany",
-                  { count: current.summary.jobsOffer },
+                {summary.jobsOffer != null && (
+                  <span
+                    className={cn(
+                      "text-muted-foreground tabular-nums",
+                      roomyTotal ? "text-xs" : "text-[10px]",
+                    )}
+                    data-testid="jobs-activity-offer-count"
+                  >
+                    {t(
+                      summary.jobsOffer === 1
+                        ? "dashboard.offerCountOne"
+                        : "dashboard.offerCountMany",
+                      { count: summary.jobsOffer },
+                    )}
+                  </span>
                 )}
-              </span>
-            )}
-            {jobsTrend !== 0 && roomyTotal && (
-              <span
-                className={cn(
-                  "flex items-center gap-0.5 text-[10px] tabular-nums",
-                  jobsTrend > 0 ? "text-success" : "text-destructive-text",
+                {summary.jobsTrend !== 0 && roomyTotal && (
+                  <span
+                    className={cn(
+                      "flex items-center gap-0.5 text-[10px] tabular-nums",
+                      summary.jobsTrend > 0
+                        ? "text-success"
+                        : "text-destructive-text",
+                    )}
+                  >
+                    {summary.jobsTrend > 0 ? (
+                      <TrendingUp className="h-3 w-3" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3" />
+                    )}
+                    {Math.abs(summary.jobsTrend)}%
+                  </span>
                 )}
-              >
-                {jobsTrend > 0 ? (
-                  <TrendingUp className="h-3 w-3" />
-                ) : (
-                  <TrendingDown className="h-3 w-3" />
-                )}
-                {Math.abs(jobsTrend)}%
-              </span>
+              </>
             )}
           </div>
         </div>

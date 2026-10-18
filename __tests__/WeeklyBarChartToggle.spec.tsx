@@ -88,4 +88,30 @@ describe("WeeklyBarChartToggle", () => {
 
     expect(barProps.current.animate).toBe(false);
   });
+
+  it("shows an unavailable notice instead of a chart when the series is blocked", () => {
+    render(
+      <WeeklyBarChartToggle
+        charts={[
+          {
+            label: "Jobs",
+            data: [],
+            keys: [],
+            axisLeftLegend: "Jobs Applied",
+            unavailable: true,
+          },
+          {
+            label: "Activities",
+            data: [{ day: "Mon, Jan 5", Jobsync: 1.5 }],
+            keys: ["Jobsync"],
+            groupMode: "stacked",
+            axisLeftLegend: "Hours",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("jobs-unavailable-notice")).toBeInTheDocument();
+    expect(screen.queryByTestId("weekly-bar")).not.toBeInTheDocument();
+  });
 });

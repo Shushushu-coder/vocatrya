@@ -294,7 +294,9 @@
     "calendarJobsOne": "已投递 {count} 个职位",
     "calendarJobsMany": "已投递 {count} 个职位",
     "calendarHoursOne": "活动 {count} 小时",
-    "calendarHoursMany": "活动 {count} 小时"
+    "calendarHoursMany": "活动 {count} 小时",
+    "jobsUnavailableTitle": "职位数据不可用",
+    "jobsUnavailableDescription": "当前实例状态下无法读取求职申请数据，活动等其他内容不受影响。"
   },
   "jobs": {
     "title": "我的职位",

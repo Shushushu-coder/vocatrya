@@ -9,8 +9,15 @@ import {
 import ActivityCalendar from "@/components/dashboard/ActivityCalendar";
 import JobsActivityCard from "@/components/dashboard/JobsActivityCard";
 import JobsApplied from "@/components/dashboard/JobsAppliedCard";
+import JobsUnavailableNotice from "@/components/dashboard/JobsUnavailableNotice";
 import RecentCardToggle from "@/components/dashboard/RecentCardToggle";
 import WeeklyBarChartToggle from "@/components/dashboard/WeeklyBarChartToggle";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 import { getServerI18n } from "@/i18n/server";
 
@@ -38,7 +45,9 @@ export default async function Dashboard() {
     getActivityDataForPeriod(),
     getActivityCalendarData(),
   ]);
-  const activityCalendarDataKeys = Object.keys(activityCalendarData);
+  const activityCalendarDataKeys = activityCalendarData.blocked
+    ? []
+    : Object.keys(activityCalendarData.data);
   return (
     <>
       <div className="@container grid min-w-0 grid-cols-1 auto-rows-max items-start gap-4 @3xl/main:col-span-2">
@@ -55,8 +64,9 @@ export default async function Dashboard() {
           charts={[
             {
               label: "Jobs",
-              data: weeklyData,
-              keys: ["value"],
+              data: weeklyData.blocked ? [] : weeklyData.data,
+              keys: weeklyData.blocked ? [] : ["value"],
+              unavailable: weeklyData.blocked,
               axisLeftLegend: t("dashboard.jobsAppliedAxis"),
             },
             {
@@ -73,10 +83,23 @@ export default async function Dashboard() {
         <RecentCardToggle jobs={recentJobs} activities={recentActivities} />
       </div>
       <div className="col-span-3 w-full min-w-0">
-        <ActivityCalendar
-          years={activityCalendarDataKeys}
-          dataByYear={activityCalendarData}
-        />
+        {activityCalendarData.blocked ? (
+          <Card className="w-full min-w-0">
+            <CardHeader>
+              <CardTitle className="min-w-0 text-lg text-foreground">
+                {t("dashboard.activityCalendar")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex h-[200px] min-w-0 items-center justify-center overflow-hidden">
+              <JobsUnavailableNotice className="max-w-md" />
+            </CardContent>
+          </Card>
+        ) : (
+          <ActivityCalendar
+            years={activityCalendarDataKeys}
+            dataByYear={activityCalendarData.data}
+          />
+        )}
       </div>
     </>
   );

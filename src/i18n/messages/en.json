@@ -294,7 +294,9 @@
     "calendarJobsOne": "{count} job applied",
     "calendarJobsMany": "{count} jobs applied",
     "calendarHoursOne": "{count} hr activity",
-    "calendarHoursMany": "{count} hrs activity"
+    "calendarHoursMany": "{count} hrs activity",
+    "jobsUnavailableTitle": "Jobs data unavailable",
+    "jobsUnavailableDescription": "Job application data cannot be read in the current instance state. Activities and other content are unaffected."
   },
   "jobs": {
     "title": "Jobs",

@@ -2,23 +2,36 @@ import prisma from "@/lib/db";
 import { calculatePercentageDifference } from "@/lib/utils";
 import { loadDashboardJobCounts } from "@/lib/career/jobsReadDispatch";
 import { requireUser } from "../shared";
-import { getLocalDayRange, roundToTenth } from "./shared";
+import { getLocalDayRange, jobsReadOrBlocked, roundToTenth } from "./shared";
 
 export interface TopActivityType {
   label: string;
   hours: number;
 }
 
-export interface JobsActivitySummary {
-  jobsApplied: number;
-  jobsTrend: number;
-  jobsInterview?: number;
-  jobsOffer?: number;
+// jobsBlocked carries no jobs numbers at all: absent fields are honest where a
+// fabricated 0 would masquerade as a real reading.
+export type JobsActivitySummary = {
   topActivities: TopActivityType[];
   otherActivities: TopActivityType[];
   otherHours: number;
   totalHours: number;
-}
+} & (
+  | {
+      jobsBlocked: true;
+      jobsApplied?: never;
+      jobsTrend?: never;
+      jobsInterview?: never;
+      jobsOffer?: never;
+    }
+  | {
+      jobsBlocked: false;
+      jobsApplied: number;
+      jobsTrend: number;
+      jobsInterview?: number;
+      jobsOffer?: number;
+    }
+);
 
 // One read for the merged Jobs & Activity card. Both halves share
 // getLocalDayRange so "7d" means the same window on each; the retired
@@ -36,7 +49,9 @@ export const getJobsActivitySummary = async (
     const { start: priorStart } = getLocalDayRange(daysAgo * 2 - 1);
 
     const [jobCounts, activities] = await Promise.all([
-      loadDashboardJobCounts(prisma, user.id, { start, end, priorStart }),
+      jobsReadOrBlocked(() =>
+        loadDashboardJobCounts(prisma, user.id, { start, end, priorStart }),
+      ),
       prisma.activity.findMany({
         where: {
           userId: user.id,
@@ -48,7 +63,6 @@ export const getJobsActivitySummary = async (
         },
       }),
     ]);
-    const { jobsApplied, priorJobs, jobsInterview, jobsOffer } = jobCounts;
 
     const groupedByType = activities.reduce(
       (acc: Record<string, number>, activity) => {
@@ -80,10 +94,22 @@ export const getJobsActivitySummary = async (
       topActivities.reduce((sum, entry) => sum + entry.hours, 0) + otherHours,
     );
 
+    if (jobCounts.blocked) {
+      return {
+        jobsBlocked: true,
+        topActivities,
+        otherActivities,
+        otherHours,
+        totalHours,
+      };
+    }
+
+    const { jobsApplied, priorJobs, jobsInterview, jobsOffer } = jobCounts.data;
     const jobsTrend =
       calculatePercentageDifference(priorJobs, jobsApplied) ?? 0;
 
     return {
+      jobsBlocked: false,
       jobsApplied,
       jobsTrend,
       jobsInterview,

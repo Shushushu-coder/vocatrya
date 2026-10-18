@@ -5,6 +5,7 @@
 
 export { getJobsActivitySummary } from "./dashboard/stats";
 export type { TopActivityType, JobsActivitySummary } from "./dashboard/stats";
+export type { DashboardJobsReadResult } from "./dashboard/shared";
 
 export { getRecentJobs, getRecentActivities } from "./dashboard/recent";
 
