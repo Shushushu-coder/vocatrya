@@ -19,6 +19,17 @@ vi.mock("@/lib/toast", () => ({
   toastActionResult: vi.fn(),
 }));
 
+// The container now paginates through an IntersectionObserver sentinel.
+let intersectionCallback: IntersectionObserverCallback | undefined;
+global.IntersectionObserver = class IntersectionObserver {
+  constructor(callback: IntersectionObserverCallback) {
+    intersectionCallback = callback;
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as any;
+
 const roles = [
   {
     id: "r1",
@@ -53,7 +64,9 @@ describe("ContactRolesContainer", () => {
     expect(screen.getByText("Reference")).toBeInTheDocument();
   });
 
-  it("blocks deleting a role that is in use, without calling the action", async () => {
+  // Radix dropdown + dialog interactions are slow in jsdom — give the
+  // delete-flow tests more headroom than the 5s default.
+  it("blocks deleting a role that is in use, without calling the action", { timeout: 20000 }, async () => {
     render(<ContactRolesContainer />);
     await waitFor(() =>
       expect(screen.getByText("Recruiter")).toBeInTheDocument(),
@@ -68,7 +81,7 @@ describe("ContactRolesContainer", () => {
     expect(deleteContactRoleById).not.toHaveBeenCalled();
   });
 
-  it("surfaces a failed delete as an error toast", async () => {
+  it("surfaces a failed delete as an error toast", { timeout: 20000 }, async () => {
     (deleteContactRoleById as any).mockResolvedValue({
       success: false,
       message: "Role cannot be deleted",

@@ -1979,6 +1979,8 @@
     "searchRoles": "Search roles...",
     "searchSkills": "Search skills...",
     "searchJobTitles": "Search job titles...",
+    "searchLocations": "Search locations...",
+    "searchSources": "Search sources...",
     "addActivityTypeDescription": "Add a new activity type to categorize your activities and tasks.",
     "addSkillDescription": "Add a new skill tag to use across your job applications.",
     "addRoleDescription": "Roles describe what a person was to you on one job — recruiter, interviewer, reference.",
@@ -2028,7 +2030,8 @@
     "skillItem": "skill",
     "activityTypeItem": "activity type",
     "loadFailed": "Failed to load the list.",
-    "emptyList": "Nothing here yet."
+    "emptyList": "Nothing here yet.",
+    "jobsCountUnavailable": "Not supported"
   },
   "career": {
     "runtimeReadyTitle": "A+B is ready but disabled",

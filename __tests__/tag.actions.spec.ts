@@ -5,9 +5,21 @@ import {
   deleteTagById,
 } from "@/actions/tag.actions";
 import { getCurrentUser } from "@/utils/user.utils";
+import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+
+vi.mock("@/lib/career/jobsReadDispatch", () => ({
+  resolveJobsReadFamily: vi.fn(),
+}));
+
+const mockFamily = (family: string) =>
+  (resolveJobsReadFamily as any).mockResolvedValue({
+    family,
+    mode: "LEGACY_ONLY",
+    reason: "",
+  });
 
 vi.mock("@prisma/client", () => {
   const mPrismaClient = {
@@ -47,6 +59,7 @@ describe("Tag Actions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFamily("legacy");
   });
 
   // getAllTags
@@ -99,13 +112,17 @@ describe("Tag Actions", () => {
 
       const result = await getTagList(1, 10);
 
-      expect(result).toEqual({ data: mockData, total: 1 });
+      expect(result).toEqual({
+        data: mockData,
+        total: 1,
+        jobsCountAvailable: true,
+      });
       expect(prisma.tag.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { createdBy: mockUser.id },
           skip: 0,
           take: 10,
-          orderBy: { jobs: { _count: "desc" } },
+          orderBy: [{ jobs: { _count: "desc" } }, { label: "asc" }],
         }),
       );
     });
@@ -150,7 +167,11 @@ describe("Tag Actions", () => {
 
       const result = await getTagList(1, 10, "Rea");
 
-      expect(result).toEqual({ data: mockData, total: 1 });
+      expect(result).toEqual({
+        data: mockData,
+        total: 1,
+        jobsCountAvailable: true,
+      });
       expect(prisma.tag.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { createdBy: mockUser.id, label: { contains: "Rea" } },
@@ -173,6 +194,55 @@ describe("Tag Actions", () => {
           where: { createdBy: mockUser.id },
         }),
       );
+    });
+
+    it("should fail closed when the jobs read family is blocked", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (resolveJobsReadFamily as any).mockResolvedValue({
+        family: "blocked",
+        mode: "BLOCKED",
+        reason: "migration-incomplete",
+      });
+
+      const result = await getTagList(1, 10);
+
+      expect(result).toEqual({
+        success: false,
+        message: "Career jobs are unavailable (migration-incomplete)",
+      });
+      // A blocked runtime must never masquerade as a normal empty list.
+      expect(prisma.tag.findMany).not.toHaveBeenCalled();
+      expect(prisma.tag.count).not.toHaveBeenCalled();
+    });
+
+    it("should omit the legacy jobs count and mark it unavailable under A+B", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (resolveJobsReadFamily as any).mockResolvedValue({
+        family: "ab",
+        mode: "AB_ENABLED",
+        reason: "",
+      });
+      const mockData = [
+        { ...mockTag, _count: { questions: 2, skills: 1 } },
+      ];
+      (prisma.tag.findMany as any).mockResolvedValue(mockData);
+      (prisma.tag.count as any).mockResolvedValue(1);
+
+      const result = await getTagList(1, 10);
+
+      // No Tag→JobOpportunity relation exists under A+B — the contract
+      // reports the count as unavailable rather than freezing a legacy 0.
+      expect(result).toEqual({
+        data: mockData,
+        total: 1,
+        jobsCountAvailable: false,
+      });
+      const findManyArgs = (prisma.tag.findMany as any).mock.calls[0][0];
+      expect(findManyArgs.select._count.select).toEqual({
+        questions: true,
+        skills: true,
+      });
+      expect(findManyArgs.orderBy).toEqual([{ label: "asc" }]);
     });
   });
 

@@ -53,7 +53,9 @@ describe("AdminTabsContainer", () => {
     vi.clearAllMocks();
   });
 
-  it("should render all tabs", () => {
+  // Mounting every Library container at once is a heavy synchronous
+  // render in jsdom — keep headroom above the 5s default.
+  it("should render all tabs", { timeout: 20000 }, () => {
     render(<AdminTabsContainer />);
 
     expect(screen.getByRole("tab", { name: "Companies" })).toBeInTheDocument();

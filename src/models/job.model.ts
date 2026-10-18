@@ -28,7 +28,9 @@ export interface Tag {
   value: string;
   createdBy: string;
   _count?: {
-    jobs: number;
+    // Absent under the A+B read family — no Tag→JobOpportunity relation
+    // exists, so there is no honest number to show.
+    jobs?: number;
     questions: number;
     skills: number;
   };

@@ -42,7 +42,99 @@ describe("JobLocationsContainer", () => {
       expect(screen.getByText("New York")).toBeInTheDocument();
     });
 
-    expect(getJobLocationsList).toHaveBeenCalledWith(1, 25, "applied");
+    expect(getJobLocationsList).toHaveBeenCalledWith(1, 25, "applied", undefined);
+  });
+
+  describe("Search", () => {
+    it("debounces search input and re-queries from page 1", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ delay: null });
+      (getJobLocationsList as any)
+        .mockResolvedValueOnce({ data: mockLocations, total: 2 })
+        .mockResolvedValueOnce({ data: [mockLocations[0]], total: 1 });
+
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Remote")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByPlaceholderText("Search locations...");
+      await act(async () => {
+        await user.type(searchInput, "Rem");
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      await waitFor(() => {
+        expect(getJobLocationsList).toHaveBeenCalledWith(
+          1,
+          25,
+          "applied",
+          "Rem",
+        );
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Remote")).toBeInTheDocument();
+        expect(screen.queryByText("New York")).not.toBeInTheDocument();
+      });
+      vi.useRealTimers();
+    });
+
+    it("preserves the search term when loading the next page", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ delay: null });
+      (getJobLocationsList as any)
+        .mockResolvedValueOnce({ data: mockLocations, total: 4 })
+        .mockResolvedValueOnce({ data: mockLocations, total: 4 })
+        .mockResolvedValueOnce({
+          data: [
+            { id: "3", label: "Remote EU", value: "remote-eu", createdBy: "user-1" },
+          ],
+          total: 4,
+        });
+
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Remote")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByPlaceholderText("Search locations...");
+      await act(async () => {
+        await user.type(searchInput, "Remote");
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      await waitFor(() => {
+        expect(getJobLocationsList).toHaveBeenCalledWith(
+          1,
+          25,
+          "applied",
+          "Remote",
+        );
+      });
+
+      await act(async () => {
+        intersectionCallback!(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
+
+      await waitFor(() => {
+        expect(getJobLocationsList).toHaveBeenCalledWith(
+          2,
+          25,
+          "applied",
+          "Remote",
+        );
+      });
+      vi.useRealTimers();
+    });
   });
 
   describe("Infinite Scroll", () => {
@@ -70,7 +162,7 @@ describe("JobLocationsContainer", () => {
       });
 
       await waitFor(() => {
-        expect(getJobLocationsList).toHaveBeenCalledWith(2, 25, "applied");
+        expect(getJobLocationsList).toHaveBeenCalledWith(2, 25, "applied", undefined);
         expect(screen.getByText("Austin")).toBeInTheDocument();
         expect(screen.getByText("Remote")).toBeInTheDocument();
       });
@@ -203,7 +295,7 @@ describe("JobLocationsContainer", () => {
         ).not.toBeInTheDocument();
       });
       expect(getJobLocationsList).toHaveBeenCalledTimes(2);
-      expect(getJobLocationsList).toHaveBeenLastCalledWith(1, 25, "applied");
+      expect(getJobLocationsList).toHaveBeenLastCalledWith(1, 25, "applied", undefined);
     });
   });
 });

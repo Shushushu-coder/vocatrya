@@ -11,6 +11,7 @@ import { getJobLocationsList } from "@/actions/jobLocation.actions";
 import Loading from "../Loading";
 import { Loader } from "lucide-react";
 import { RecordsCount } from "../RecordsCount";
+import { SearchInput } from "../SearchInput";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useI18n } from "@/i18n";
 
@@ -28,8 +29,10 @@ function JobLocationsContainer() {
   const requestIdRef = useRef(0);
   const [listSettled, setListSettled] = useState(false);
   const sawLoading = useRef(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const hasSearched = useRef(false);
   const loadJobLocations = useCallback(
-    async (page: number) => {
+    async (page: number, search?: string) => {
       const requestId = ++requestIdRef.current;
       if (page === 1) setInitialLoading(true);
       else setLoadingMore(true);
@@ -37,7 +40,8 @@ function JobLocationsContainer() {
         const res = await getJobLocationsList(
           page,
           APP_CONSTANTS.RECORDS_PER_PAGE,
-          "applied"
+          "applied",
+          search
         );
         if (requestId !== requestIdRef.current) return;
         if (!res || res.success === false || !Array.isArray(res.data)) {
@@ -62,8 +66,8 @@ function JobLocationsContainer() {
   );
 
   const reloadJobLocations = useCallback(async () => {
-    await loadJobLocations(1);
-  }, [loadJobLocations]);
+    await loadJobLocations(1, searchTerm || undefined);
+  }, [loadJobLocations, searchTerm]);
 
   useEffect(() => {
     (async () => await loadJobLocations(1))();
@@ -77,6 +81,19 @@ function JobLocationsContainer() {
     if (sawLoading.current) setListSettled(true);
   }, [initialLoading]);
 
+  useEffect(() => {
+    if (searchTerm !== "") {
+      hasSearched.current = true;
+    }
+    if (searchTerm === "" && !hasSearched.current) return;
+
+    const timer = setTimeout(() => {
+      loadJobLocations(1, searchTerm || undefined);
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
   // No silent auto-retries through the sentinel while an error is showing —
   // recovery goes through the explicit Retry action.
   const hasMoreJobLocations =
@@ -84,7 +101,10 @@ function JobLocationsContainer() {
   const sentinelRef = useInfiniteScroll(
     hasMoreJobLocations,
     initialLoading || loadingMore,
-    useCallback(() => loadJobLocations(page + 1), [loadJobLocations, page])
+    useCallback(
+      () => loadJobLocations(page + 1, searchTerm || undefined),
+      [loadJobLocations, page, searchTerm]
+    )
   );
 
   return (
@@ -99,7 +119,11 @@ function JobLocationsContainer() {
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
-              {/* <AddCompany reloadCompanies={reloadJobLocations} /> */}
+              <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder={t("library.searchLocations")}
+              />
             </div>
           </ResponsiveCardHeader>
           <CardContent>
@@ -133,7 +157,7 @@ function JobLocationsContainer() {
             )}
             {listSettled && !initialLoading && error === null && locations.length === 0 && (
               <p className="py-10 text-center text-sm text-muted-foreground" data-testid="library-empty">
-                {t("library.emptyList")}
+                {searchTerm ? t("common.noData") : t("library.emptyList")}
               </p>
             )}
             {hasMoreJobLocations && (
