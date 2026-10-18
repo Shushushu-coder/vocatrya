@@ -139,7 +139,7 @@ export async function provisionR3FreshNativeData(
       `[R3 harness] Fresh-native activation failed for ${freshPath}: ${detail}. Delete the disposable database and retry.`,
     );
   }
-  const resolved = await resolveJobsReadFamily(prisma, {});
+  const resolved = await resolveJobsReadFamily(prisma, { NODE_ENV: process.env.NODE_ENV });
   if (resolved.family !== "ab") {
     throw new Error(
       `[R3 harness] fresh-native database resolves jobs read family "${resolved.family}" (${resolved.reason}); expected "ab". Delete ${freshPath} and retry.`,
@@ -157,7 +157,7 @@ export async function provisionR3FreshNativeData(
 export async function assertR3LegacyJobsFamily(databaseUrl: string) {
   const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
   try {
-    const resolved = await resolveJobsReadFamily(prisma, {});
+    const resolved = await resolveJobsReadFamily(prisma, { NODE_ENV: process.env.NODE_ENV });
     if (resolved.family !== "legacy") {
       throw new Error(
         `[R3 harness] DATABASE_URL resolves jobs read family "${resolved.family}" (${resolved.reason}); the R3 suites require an unmarked legacy database. Provision a clean migrated SQLite file and retry.`,

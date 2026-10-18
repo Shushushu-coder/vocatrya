@@ -51,7 +51,18 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
     await expect(numbers.nth(25)).toHaveText("26");
 
     for (const locale of ["zh-CN", "en"] as const) {
-      if (locale === "en") await page.getByRole("button", { name: "Switch to English" }).click();
+      if (locale === "en") {
+        await page.goto("/dashboard/settings");
+        await page
+          .locator("main nav")
+          .getByRole("button", { name: /^(General|常规偏好)$/ })
+          .click();
+        await page.getByTestId("settings-language-select").click();
+        await page.getByRole("option", { name: "English" }).click();
+        await expect(page.locator("html")).toHaveAttribute("lang", "en");
+        await page.goto("/dashboard/myjobs");
+        await page.waitForLoadState("networkidle");
+      }
       const downloadPromise = page.waitForEvent("download");
       await page.getByRole("button", { name: locale === "en" ? "Export" : "导出", exact: true }).click();
       const download = await downloadPromise;

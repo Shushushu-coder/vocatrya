@@ -167,6 +167,11 @@ const fail = (message: string): JobsListResult => ({
 const rowNumbers = () => screen.getAllByTestId("job-row-number");
 
 describe("JobsContainer request race protection", () => {
+  // R4-INT-05: each spec below carries an explicit 15_000ms per-test budget.
+  // These cases chain multi-stage React/Promise interactions and pass both
+  // standalone and in focused runs, but full-suite concurrency has shown
+  // heavy resource contention. The budget only widens each case's overall
+  // execution allowance; it changes no assertion or verification condition.
   // Every getJobsList call parks on a controllable deferred so each spec
   // decides exactly when — and in which order — the responses land.
   const pending: Array<{
@@ -282,7 +287,7 @@ describe("JobsContainer request race protection", () => {
     expect(screen.queryByText("Title a-1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("loader")).not.toBeInTheDocument();
     expect(getJobsList).toHaveBeenCalledTimes(2);
-  });
+  }, 15_000);
 
   it("ignores a stale page failure and retries the actual failed page of the new query", async () => {
     const { rerender } = renderComponent();
@@ -334,7 +339,7 @@ describe("JobsContainer request race protection", () => {
     );
     expect(rowNumbers()).toHaveLength(1);
     expect(screen.getByText("Title retried")).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("keeps the newer error when a stale success resolves after it", async () => {
     const { rerender } = renderComponent();
@@ -353,7 +358,7 @@ describe("JobsContainer request race protection", () => {
     expect(screen.getByTestId("jobs-load-error")).toBeInTheDocument();
     expect(screen.getByText("current failure")).toBeInTheDocument();
     expect(screen.queryByText("Title stale")).not.toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("applies only the latest query across a search debounce and a filter change", async () => {
     const { rerender } = renderComponent();
@@ -392,7 +397,7 @@ describe("JobsContainer request race protection", () => {
     expect(screen.getByText("Title latest")).toBeInTheDocument();
     expect(screen.queryByTestId("loader")).not.toBeInTheDocument();
     expect(getJobsList).toHaveBeenCalledTimes(3);
-  });
+  }, 15_000);
 
   it("drops a stale page response that lands during a job-write refresh", async () => {
     const { rerender } = renderComponent();
@@ -423,7 +428,7 @@ describe("JobsContainer request race protection", () => {
     expect(screen.getByText("Title fresh-1")).toBeInTheDocument();
     expect(screen.queryByTestId("loader")).not.toBeInTheDocument();
     expect(getJobsList).toHaveBeenCalledTimes(3);
-  });
+  }, 15_000);
 
   it("retries the failed page and appends its rows to the retained list", async () => {
     renderComponent();
@@ -458,7 +463,7 @@ describe("JobsContainer request race protection", () => {
     expect(rowNumbers()[25]).toHaveTextContent("26");
     expect(screen.getByText("Title seed-1")).toBeInTheDocument();
     expect(screen.getByText("Title page2-row")).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("keeps the committed query's in-flight request valid when React abandons a render", async () => {
     // A render pass React discards (suspended here, never committed) must not
@@ -505,7 +510,7 @@ describe("JobsContainer request race protection", () => {
     expect(getJobsList).toHaveBeenLastCalledWith(
       1, 25, "interview", undefined, undefined, undefined, undefined, undefined, undefined,
     );
-  });
+  }, 15_000);
 
   it("does not append rows whose id is already in the list", async () => {
     renderComponent();
@@ -526,5 +531,5 @@ describe("JobsContainer request race protection", () => {
     expect(screen.getAllByText("Title seed-25")).toHaveLength(1);
     expect(rowNumbers()[26]).toHaveTextContent("27");
     expect(getJobsList).toHaveBeenCalledTimes(2);
-  });
+  }, 15_000);
 });

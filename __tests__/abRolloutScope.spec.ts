@@ -47,6 +47,10 @@ const ALLOWED_READERS = new Set([
   // fail-closed "none" for isolation. It never reads the scope to enable
   // product capabilities; see WINDOWS_DESKTOP_SHELL_POC audit.
   path.join("desktop", "main", "runtime.js"),
+  // R3 Playwright config pins the disposable fresh-native server's scope to
+  // "full" via r3ServerLauncher.mjs. It sets a synthetic child environment
+  // and does not read the operator's rollout scope.
+  path.join("e2e", "r3-foundation.config.ts"),
 ]);
 
 function violatingReaders(root: string): string[] {
