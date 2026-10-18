@@ -1,13 +1,12 @@
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import { configureE2EDatabase } from "./support/database";
+import { requireR3HarnessEnv, r3WebServer } from "./support/r3Harness";
 
 // Explicit isolated database and evidence directory required; no .env fallback.
-if (!process.env.R3_EVIDENCE_DIR || !process.env.DATABASE_URL) {
-  throw new Error("Set R3_EVIDENCE_DIR and DATABASE_URL to isolated synthetic paths.");
-}
+const { evidenceDir } = requireR3HarnessEnv();
 const database = configureE2EDatabase();
-const evidence = path.resolve(process.env.R3_EVIDENCE_DIR);
+const evidence = path.resolve(evidenceDir);
 export default defineConfig({
   testDir: ".",
   testMatch: ["r3-business-pages.spec.ts"],
@@ -19,17 +18,5 @@ export default defineConfig({
   reporter: [["list"], ["html", { outputFolder: path.join(evidence, "playwright-report"), open: "never" }]],
   use: { baseURL: "http://localhost:3752", trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    cwd: path.resolve(__dirname, ".."),
-    command: "node node_modules/next/dist/bin/next start -p 3752",
-    url: "http://localhost:3752",
-    reuseExistingServer: false,
-    env: {
-      DATABASE_URL: database.url,
-      AUTH_SECRET: process.env.AUTH_SECRET ?? "r3-business-pages-synthetic-secret",
-      // next start rejects Auth.js requests on localhost unless the host is trusted.
-      AUTH_TRUST_HOST: "true",
-    },
-    timeout: 60_000,
-  },
+  webServer: r3WebServer(3752, database.url, path.resolve(__dirname, "..")),
 });

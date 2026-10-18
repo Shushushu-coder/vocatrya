@@ -1,13 +1,12 @@
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import { configureE2EDatabase } from "./support/database";
+import { requireR3HarnessEnv, r3WebServer } from "./support/r3Harness";
 
 // Production server against an explicit synthetic database. No .env fallback.
-if (!process.env.R3_EVIDENCE_DIR || !process.env.DATABASE_URL) {
-  throw new Error("Set R3_EVIDENCE_DIR and DATABASE_URL to isolated synthetic paths.");
-}
+const { evidenceDir } = requireR3HarnessEnv();
 const database = configureE2EDatabase();
-const evidence = path.resolve(process.env.R3_EVIDENCE_DIR);
+const evidence = path.resolve(evidenceDir);
 
 export default defineConfig({
   testDir: ".",
@@ -20,17 +19,5 @@ export default defineConfig({
   reporter: [["list"], ["html", { outputFolder: path.join(evidence, "playwright-report"), open: "never" }]],
   use: { baseURL: "http://localhost:3754", trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    cwd: path.resolve(__dirname, ".."),
-    command: "node node_modules/next/dist/bin/next start -p 3754",
-    url: "http://localhost:3754",
-    reuseExistingServer: false,
-    env: {
-      ...process.env,
-      DATABASE_URL: database.url,
-      NEXTAUTH_URL: "http://localhost:3754",
-      AUTH_TRUST_HOST: "true",
-    },
-    timeout: 60_000,
-  },
+  webServer: r3WebServer(3754, database.url, path.resolve(__dirname, "..")),
 });

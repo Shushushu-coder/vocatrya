@@ -22,6 +22,9 @@ if (reuseExistingServer) {
  */
 export default defineConfig({
   testDir: "./e2e",
+  // dialog-reflection.spec.ts requires the fresh-native disposable database
+  // and dedicated server that only e2e/r3-foundation.config.ts provisions.
+  testIgnore: "dialog-reflection.spec.ts",
   globalSetup: "./e2e/global-setup.ts",
   /* Run tests in files in parallel */
   fullyParallel: true,
