@@ -27,9 +27,13 @@ import { useI18n } from "@/i18n";
 type TagsTableProps = {
   tags: Tag[];
   reloadTags: () => void;
+  // False under the A+B read family: no Tag→JobOpportunity relation exists,
+  // so the jobs column shows the unsupported marker instead of a frozen
+  // legacy count.
+  jobsCountAvailable: boolean;
 };
 
-function TagsTable({ tags, reloadTags }: TagsTableProps) {
+function TagsTable({ tags, reloadTags, jobsCountAvailable }: TagsTableProps) {
   const { t } = useI18n();
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
@@ -37,7 +41,9 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
   });
 
   const onDeleteTag = (tag: Tag) => {
-    const jobCount = tag._count?.jobs ?? 0;
+    // An unavailable count is not a zero — it contributes no link claim to
+    // the in-use dialog; the server-side guard still owns the final answer.
+    const jobCount = jobsCountAvailable ? (tag._count?.jobs ?? 0) : 0;
     const questionCount = tag._count?.questions ?? 0;
     const skillCount = tag._count?.skills ?? 0;
 
@@ -121,7 +127,16 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
                 {tag.value}
               </TableCell>
               <TableCell className="font-medium">
-                {tag._count?.jobs ?? 0}
+                {jobsCountAvailable ? (
+                  (tag._count?.jobs ?? 0)
+                ) : (
+                  <span
+                    className="text-muted-foreground"
+                    data-testid="tag-jobs-count-unsupported"
+                  >
+                    — {t("library.jobsCountUnavailable")}
+                  </span>
+                )}
               </TableCell>
               <TableCell className="font-medium">
                 {tag._count?.questions ?? 0}

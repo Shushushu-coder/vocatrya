@@ -8,6 +8,16 @@ vi.mock("@/actions/jobSource.actions", () => ({
   deleteJobSourceById: vi.fn(),
 }));
 
+let intersectionCallback: IntersectionObserverCallback | undefined;
+global.IntersectionObserver = class IntersectionObserver {
+  constructor(callback: IntersectionObserverCallback) {
+    intersectionCallback = callback;
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as any;
+
 describe("JobSourcesContainer", () => {
   const mockSources = [
     { id: "1", label: "Indeed", value: "indeed", createdBy: "user-1" },
@@ -18,6 +28,12 @@ describe("JobSourcesContainer", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    intersectionCallback = undefined;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("should load and display job sources on mount", async () => {
@@ -33,10 +49,10 @@ describe("JobSourcesContainer", () => {
       expect(screen.getByText("Linkedin")).toBeInTheDocument();
     });
 
-    expect(getJobSourceList).toHaveBeenCalledWith(1, 25, "applied");
+    expect(getJobSourceList).toHaveBeenCalledWith(1, 25, "applied", undefined);
   });
 
-  it("loads the next page through the Load More button", async () => {
+  it("loads the next page when the sentinel becomes visible", async () => {
     (getJobSourceList as any)
       .mockResolvedValueOnce({ data: mockSources, total: 4 })
       .mockResolvedValueOnce({
@@ -51,13 +67,102 @@ describe("JobSourcesContainer", () => {
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: "Load More" }));
+      intersectionCallback!(
+        [{ isIntersecting: true }] as IntersectionObserverEntry[],
+        {} as IntersectionObserver,
+      );
     });
 
     await waitFor(() => {
-      expect(getJobSourceList).toHaveBeenCalledWith(2, 25, "applied");
+      expect(getJobSourceList).toHaveBeenCalledWith(2, 25, "applied", undefined);
       expect(screen.getByText("Monster")).toBeInTheDocument();
       expect(screen.getByText("Indeed")).toBeInTheDocument();
+    });
+  });
+
+  describe("Search", () => {
+    it("debounces search input and re-queries from page 1", async () => {
+      (getJobSourceList as any)
+        .mockResolvedValueOnce({ data: mockSources, total: 2 })
+        .mockResolvedValueOnce({ data: [mockSources[0]], total: 1 });
+
+      render(<JobSourcesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Indeed")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByPlaceholderText("Search sources...");
+      await act(async () => {
+        await user.type(searchInput, "Ind");
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      await waitFor(() => {
+        expect(getJobSourceList).toHaveBeenCalledWith(
+          1,
+          25,
+          "applied",
+          "Ind",
+        );
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Indeed")).toBeInTheDocument();
+        expect(screen.queryByText("Linkedin")).not.toBeInTheDocument();
+      });
+    });
+
+    it("preserves the search term when loading the next page", async () => {
+      (getJobSourceList as any)
+        .mockResolvedValueOnce({ data: mockSources, total: 4 })
+        .mockResolvedValueOnce({ data: mockSources, total: 4 })
+        .mockResolvedValueOnce({
+          data: [
+            { id: "3", label: "Indeed UK", value: "indeed-uk", createdBy: "user-1" },
+          ],
+          total: 4,
+        });
+
+      render(<JobSourcesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Indeed")).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByPlaceholderText("Search sources...");
+      await act(async () => {
+        await user.type(searchInput, "Indeed");
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      await waitFor(() => {
+        expect(getJobSourceList).toHaveBeenCalledWith(
+          1,
+          25,
+          "applied",
+          "Indeed",
+        );
+      });
+
+      await act(async () => {
+        intersectionCallback!(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
+
+      await waitFor(() => {
+        expect(getJobSourceList).toHaveBeenCalledWith(
+          2,
+          25,
+          "applied",
+          "Indeed",
+        );
+      });
     });
   });
 
@@ -104,7 +209,7 @@ describe("JobSourcesContainer", () => {
       });
     });
 
-    it("hides Load More after a failed page and only recovers via Retry", async () => {
+    it("stops auto-loading after a failed page and only recovers via Retry", async () => {
       (getJobSourceList as any)
         .mockResolvedValueOnce({ data: mockSources, total: 4 })
         .mockResolvedValueOnce({ success: false, message: "failed" })
@@ -117,7 +222,10 @@ describe("JobSourcesContainer", () => {
       });
 
       await act(async () => {
-        await user.click(screen.getByRole("button", { name: "Load More" }));
+        intersectionCallback!(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
       });
 
       await waitFor(() => {
@@ -125,14 +233,19 @@ describe("JobSourcesContainer", () => {
           screen.getByText("Failed to load the list."),
         ).toBeInTheDocument();
       });
-      // No automatic re-request: the Load More affordance is gone while the
-      // error is showing, so the failure cannot loop silently.
-      expect(
-        screen.queryByRole("button", { name: "Load More" }),
-      ).not.toBeInTheDocument();
+      // No automatic re-request: the sentinel is gone while the error is
+      // showing, so the failure cannot loop silently.
       expect(getJobSourceList).toHaveBeenCalledTimes(2);
       // Rows already loaded stay visible behind the error banner.
       expect(screen.getByText("Indeed")).toBeInTheDocument();
+
+      await act(async () => {
+        intersectionCallback?.(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
+      expect(getJobSourceList).toHaveBeenCalledTimes(2);
 
       await act(async () => {
         await user.click(screen.getByRole("button", { name: "Retry" }));
@@ -144,7 +257,7 @@ describe("JobSourcesContainer", () => {
         ).not.toBeInTheDocument();
       });
       expect(getJobSourceList).toHaveBeenCalledTimes(3);
-      expect(getJobSourceList).toHaveBeenLastCalledWith(1, 25, "applied");
+      expect(getJobSourceList).toHaveBeenLastCalledWith(1, 25, "applied", undefined);
     });
   });
 });

@@ -1977,6 +1977,8 @@
     "searchRoles": "搜索角色...",
     "searchSkills": "搜索技能...",
     "searchJobTitles": "搜索职位名称...",
+    "searchLocations": "搜索工作地点...",
+    "searchSources": "搜索来源...",
     "addActivityTypeDescription": "新增活动类型，用于给活动和任务分类。",
     "addSkillDescription": "新增技能标签，可在职位申请中复用。",
     "addRoleDescription": "角色描述此人在某次求职中对你的身份 — 招聘专员、面试官、推荐人等。",
@@ -2026,7 +2028,8 @@
     "skillItem": "技能",
     "activityTypeItem": "活动类型",
     "loadFailed": "列表加载失败。",
-    "emptyList": "这里还没有记录。"
+    "emptyList": "这里还没有记录。",
+    "jobsCountUnavailable": "暂不支持"
   },
   "career": {
     "runtimeReadyTitle": "A+B 已就绪但未启用",

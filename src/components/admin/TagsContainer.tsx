@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardTitle } from "../ui/card";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Button } from "../ui/button";
 import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import { Tag } from "@/models/job.model";
 import { getTagList } from "@/actions/tag.actions";
@@ -21,7 +23,18 @@ function TagsContainer() {
   const [page, setPage] = useState<number>(1);
   const [initialLoading, setInitialLoading] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  // null = healthy. A string carries the Action's failure message (possibly
+  // empty) so a blocked read family or failed fetch never renders as a
+  // normal empty list.
+  const [error, setError] = useState<string | null>(null);
+  // Count Availability, separate from the numbers: under the A+B read
+  // family no Tag→Job relation exists, so the jobs column renders the
+  // unsupported marker instead of a frozen legacy count. Responses without
+  // the flag come from a legacy read and stay treated as available.
+  const [jobsCountAvailable, setJobsCountAvailable] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [listSettled, setListSettled] = useState(false);
+  const sawLoading = useRef(false);
   const hasSearched = useRef(false);
   const requestIdRef = useRef(0);
   const loadTags = useCallback(
@@ -30,18 +43,25 @@ function TagsContainer() {
       if (page === 1) setInitialLoading(true);
       else setLoadingMore(true);
       try {
-        const { data, total } = await getTagList(
+        const res = await getTagList(
           page,
           APP_CONSTANTS.RECORDS_PER_PAGE,
           search,
         );
         if (requestId !== requestIdRef.current) return;
-        if (data) {
-          setTags((prev) => (page === 1 ? data : [...prev, ...data]));
-          setTotalTags(total);
-          setPage(page);
+        if (!res || res.success === false || !Array.isArray(res.data)) {
+          setError(res?.message ?? "");
+          return;
         }
+        setTags((prev) => (page === 1 ? res.data : [...prev, ...res.data]));
+        setTotalTags(res.total);
+        setPage(page);
+        setJobsCountAvailable(res.jobsCountAvailable !== false);
+        setError(null);
+      } catch {
+        if (requestId === requestIdRef.current) setError("");
       } finally {
+        // A stale request must not clear the newer request's loading flags.
         if (requestId === requestIdRef.current) {
           setInitialLoading(false);
           setLoadingMore(false);
@@ -60,6 +80,14 @@ function TagsContainer() {
   }, [loadTags]);
 
   useEffect(() => {
+    if (initialLoading) {
+      sawLoading.current = true;
+      return;
+    }
+    if (sawLoading.current) setListSettled(true);
+  }, [initialLoading]);
+
+  useEffect(() => {
     if (searchTerm !== "") {
       hasSearched.current = true;
     }
@@ -72,7 +100,9 @@ function TagsContainer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
-  const hasMoreTags = tags.length < totalTags;
+  // No silent auto-retries through the sentinel while an error is showing —
+  // recovery goes through the explicit Retry action.
+  const hasMoreTags = error === null && tags.length < totalTags;
   const sentinelRef = useInfiniteScroll(
     hasMoreTags,
     initialLoading || loadingMore,
@@ -84,13 +114,17 @@ function TagsContainer() {
 
   return (
     <>
-      <div className="col-span-3">
-        <Card>
-          <ResponsiveCardHeader>
-            <div className="flex items-baseline gap-2">
-              <CardTitle>{t("library.skillsTags")}</CardTitle>
+      <div className="col-span-3 min-w-0">
+        <Card className="min-w-0" x-chunk="dashboard-06-chunk-0">
+          <ResponsiveCardHeader className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <CardTitle className="text-foreground">{t("library.skillsTags")}</CardTitle>
               {!initialLoading && totalTags > 0 && (
-                <RecordsCount count={tags.length} total={totalTags} label="skills" />
+                <RecordsCount
+                  count={tags.length}
+                  total={totalTags}
+                  label={t("library.skillsLabel")}
+                />
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
@@ -104,15 +138,43 @@ function TagsContainer() {
           </ResponsiveCardHeader>
           <CardContent>
             {initialLoading && <Loading />}
+            {error !== null && (
+              // A failed read (e.g. blocked jobs family) is not an empty
+              // list — surface the Action message with an explicit retry.
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>{t("library.loadFailed")}</AlertTitle>
+                <AlertDescription>
+                  {error ? <p>{error}</p> : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={initialLoading}
+                    onClick={reloadTags}
+                  >
+                    {t("common.retry")}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {tags.length > 0 && (
               <>
-                <TagsTable tags={tags} reloadTags={reloadTags} />
+                <TagsTable
+                  tags={tags}
+                  reloadTags={reloadTags}
+                  jobsCountAvailable={jobsCountAvailable}
+                />
               </>
+            )}
+            {listSettled && !initialLoading && error === null && tags.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground" data-testid="library-empty">
+                {searchTerm ? t("common.noData") : t("library.emptyList")}
+              </p>
             )}
             {hasMoreTags && (
               <div ref={sentinelRef} className="flex justify-center p-4">
                 {loadingMore && (
-                  <Loader className="h-5 w-5 animate-spin text-blue-500" />
+                  <Loader className="h-5 w-5 animate-spin text-muted-foreground motion-reduce:animate-none" />
                 )}
               </div>
             )}

@@ -1,5 +1,5 @@
 import TagsContainer from "@/components/admin/TagsContainer";
-import { screen, render, waitFor, act } from "@testing-library/react";
+import { screen, render, waitFor, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { getTagList, deleteTagById } from "@/actions/tag.actions";
 
@@ -256,6 +256,118 @@ describe("TagsContainer Search Functionality", () => {
       });
 
       expect(getTagList).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("List state", () => {
+    it("shows the empty state only after the first load settles", async () => {
+      (getTagList as any).mockResolvedValue({ data: [], total: 0 });
+
+      render(<TagsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("library-empty")).toBeInTheDocument();
+      });
+    });
+
+    it("shows an error banner instead of an empty list when the read fails", async () => {
+      (getTagList as any).mockResolvedValue({
+        success: false,
+        message: "Career jobs are unavailable (migration-in-progress)",
+      });
+
+      render(<TagsContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText(
+            "Career jobs are unavailable (migration-in-progress)",
+          ),
+        ).toBeInTheDocument();
+      });
+      // A blocked read family is not an empty list.
+      expect(screen.queryByTestId("library-empty")).not.toBeInTheDocument();
+      expect(screen.queryByText("React")).not.toBeInTheDocument();
+    });
+
+    it("recovers through the explicit Retry action", async () => {
+      (getTagList as any)
+        .mockResolvedValueOnce({ success: false, message: "blocked" })
+        .mockResolvedValueOnce({ data: mockTags, total: 2 });
+
+      render(<TagsContainer />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the list."),
+        ).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Retry" }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("React")).toBeInTheDocument();
+        expect(
+          screen.queryByText("Failed to load the list."),
+        ).not.toBeInTheDocument();
+      });
+      expect(getTagList).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("Jobs count availability", () => {
+    it("renders the unsupported marker instead of a number under A+B", async () => {
+      const abTags = [
+        {
+          id: "1",
+          label: "React",
+          value: "react",
+          createdBy: "user-1",
+          _count: { questions: 1, skills: 0 },
+        },
+      ];
+      (getTagList as any).mockResolvedValue({
+        data: abTags,
+        total: 1,
+        jobsCountAvailable: false,
+      });
+
+      render(<TagsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("React")).toBeInTheDocument();
+      });
+      // The jobs column carries availability, not a frozen numeric 0.
+      expect(
+        screen.getByTestId("tag-jobs-count-unsupported"),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Not supported/)).toBeInTheDocument();
+    });
+
+    it("shows the real count under the legacy family", async () => {
+      (getTagList as any).mockResolvedValue({
+        data: mockTags,
+        total: 2,
+        jobsCountAvailable: true,
+      });
+
+      render(<TagsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("React")).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByTestId("tag-jobs-count-unsupported"),
+      ).not.toBeInTheDocument();
+      // React's row has jobs=1 (questions/skills are 0, so "1" is unique
+      // inside the row and proves the jobs cell carries a real number).
+      const row = screen.getByText("React").closest("tr")!;
+      expect(within(row).getByText("1")).toBeInTheDocument();
     });
   });
 });

@@ -40,6 +40,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { getJobTitleList } from "@/actions/jobtitle.actions";
 import { getJobLocationsList } from "@/actions/jobLocation.actions";
 import { getJobSourceList } from "@/actions/jobSource.actions";
+import { getTagList } from "@/actions/tag.actions";
 import { listJobs } from "@/lib/career/jobsReadDispatch";
 
 let prisma: PrismaClient;
@@ -919,5 +920,118 @@ describe("stage-aware applied predicate — A+B read family", () => {
     });
     const titles = await getJobTitleList(1, 50, "applied");
     expect(rowByLabel(titles, "Engineer")._count.jobsTotal).toBe(1);
+  });
+});
+
+async function createTag(label: string, createdBy = userId) {
+  return prisma.tag.create({
+    data: { label, value: `tag-${randomUUID()}`, createdBy },
+  });
+}
+
+describe("skill tags — read-family count availability", () => {
+  it("shows real Legacy Job counts under the legacy read family", async () => {
+    const company = await createCompany();
+    const title = await createTitle("Engineer");
+    const react = await createTag("React");
+    const python = await createTag("Python");
+    const status = await prisma.jobStatus.findFirstOrThrow({
+      where: { value: "new" },
+    });
+    await prisma.job.create({
+      data: {
+        userId,
+        companyId: company.id,
+        jobTitleId: title.id,
+        statusId: status.id,
+        jobType: "FT",
+        description: "keep",
+        applied: true,
+        appliedDate: new Date(),
+        createdAt: new Date(),
+        tags: { connect: [{ id: react.id }] },
+      },
+    });
+    await prisma.job.create({
+      data: {
+        userId,
+        companyId: company.id,
+        jobTitleId: title.id,
+        statusId: status.id,
+        jobType: "FT",
+        description: "keep",
+        createdAt: new Date(),
+        tags: { connect: [{ id: react.id }, { id: python.id }] },
+      },
+    });
+
+    const result = await getTagList(1, 10);
+
+    expect(result.success).not.toBe(false);
+    expect(result.jobsCountAvailable).toBe(true);
+    const react_ = rowByLabel(result, "React");
+    const python_ = rowByLabel(result, "Python");
+    expect(react_._count.jobs).toBe(2);
+    expect(python_._count.jobs).toBe(1);
+  });
+
+  it("marks jobs counts unavailable under A+B instead of reading frozen legacy rows", async () => {
+    const company = await createCompany();
+    const title = await createTitle("Engineer");
+    const react = await createTag("React");
+    // Frozen legacy association — must NOT surface under the A+B family.
+    // A migrated database is the only way legacy Job rows and live
+    // opportunities coexist under A+B reads.
+    const job = await createLegacyJob({
+      companyId: company.id,
+      jobTitleId: title.id,
+      applied: true,
+      userId,
+    });
+    await prisma.job.update({
+      where: { id: job.id },
+      data: { tags: { connect: [{ id: react.id }] } },
+    });
+    // And a live opportunity — still no Tag→JobOpportunity relation exists
+    // to count, so the contract stays "unavailable", never a number.
+    const opp = await createOpportunity(company.id, { title: "Engineer" });
+    // Every frozen legacy row needs its migration map or the runtime marks
+    // the instance integrity-failed instead of A+B.
+    await mapJobToOpportunity(job.id, opp.id);
+    await migratedAb();
+
+    const result = await getTagList(1, 10);
+
+    expect(result.success).not.toBe(false);
+    expect(result.jobsCountAvailable).toBe(false);
+    const react_ = rowByLabel(result, "React");
+    expect(react_).toBeDefined();
+    expect(react_._count.jobs).toBeUndefined();
+    // Questions/skills stay real counts — only the jobs column is
+    // family-dependent.
+    expect(react_._count.questions).toBe(0);
+    expect(react_._count.skills).toBe(0);
+  });
+
+  it("fails closed instead of reading frozen legacy tags when blocked", async () => {
+    const company = await createCompany();
+    const title = await createTitle("Engineer");
+    const react = await createTag("React");
+    const job = await createLegacyJob({
+      companyId: company.id,
+      jobTitleId: title.id,
+      applied: true,
+    });
+    await prisma.job.update({
+      where: { id: job.id },
+      data: { tags: { connect: [{ id: react.id }] } },
+    });
+    await blockedMigration();
+
+    const result = await getTagList(1, 10);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/unavailable/i);
+    expect(result.data).toBeUndefined();
   });
 });

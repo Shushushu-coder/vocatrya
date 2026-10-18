@@ -4,6 +4,7 @@ import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { resolveTag as resolveTagCore } from "@/lib/jobs/resolve";
+import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 
 export const getAllTags = async (): Promise<any | undefined> => {
   try {
@@ -26,6 +27,19 @@ export const getTagList = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+
+    // The Total Jobs column only exists under the legacy read family: A+B
+    // has no Tag→JobOpportunity relation, and a blocked runtime must not
+    // silently fall back to frozen legacy Job rows.
+    const { family, reason } = await resolveJobsReadFamily(prisma);
+    if (family === "blocked") {
+      return {
+        success: false,
+        message: `Career jobs are unavailable (${reason})`,
+      };
+    }
+    const ab = family === "ab";
+
     const skip = (page - 1) * limit;
 
     const whereClause: any = { createdBy: user.id };
@@ -42,14 +56,26 @@ export const getTagList = async (
           id: true,
           label: true,
           value: true,
-          _count: { select: { jobs: true, questions: true, skills: true } },
+          _count: {
+            select: ab
+              ? { questions: true, skills: true }
+              : { jobs: true, questions: true, skills: true },
+          },
         },
-        orderBy: { jobs: { _count: "desc" } },
+        // A+B cannot sort on a frozen legacy count; label order stays
+        // deterministic, and the label tiebreak keeps equal-count rows
+        // stable across pages under the legacy family.
+        orderBy: ab
+          ? [{ label: "asc" }]
+          : [{ jobs: { _count: "desc" } }, { label: "asc" }],
       }),
       prisma.tag.count({ where: whereClause }),
     ]);
 
-    return { data, total };
+    // jobsCountAvailable is the count contract: the client distinguishes
+    // "no linked jobs" (0) from "no such relation under this family" via
+    // this flag, never via the number itself.
+    return { data, total, jobsCountAvailable: !ab };
   } catch (error) {
     const msg = "Failed to fetch tag list. ";
     return handleError(error, msg);
