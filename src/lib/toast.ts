@@ -18,8 +18,10 @@ export function toastSuccess(message: string, title?: string, opts?: ToastOption
   else toast.success(message, { id, duration: opts?.sticky ? Infinity : undefined });
 }
 
+export const GENERIC_ERROR_MESSAGE = "Something went wrong. Please try again.";
+
 export function toastError(message?: string, title?: string, opts?: ToastOptions) {
-  const text = message ?? "Something went wrong. Please try again.";
+  const text = message ?? GENERIC_ERROR_MESSAGE;
   const id = dedupeId("error", title, text);
   if (title) toast.error(title, { id, description: text, duration: opts?.sticky ? Infinity : undefined });
   else toast.error(text, { id, duration: opts?.sticky ? Infinity : undefined });
