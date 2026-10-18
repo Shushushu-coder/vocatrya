@@ -4,7 +4,12 @@ import { format, parseISO } from "date-fns";
 import { OTHER_SLICE_ID } from "@/components/dashboard/jobsActivityChart";
 import { loadJobsAppliedDateCounts } from "@/lib/career/jobsReadDispatch";
 import { requireUser } from "../shared";
-import { getLocalDayRange, roundToTenth } from "./shared";
+import {
+  getLocalDayRange,
+  jobsReadOrBlocked,
+  roundToTenth,
+  type DashboardJobsReadResult,
+} from "./shared";
 
 export const getActivityDataForPeriod = async (): Promise<{
   data: any[];
@@ -107,15 +112,23 @@ export const getActivityDataForPeriod = async (): Promise<{
   }
 };
 
-export const getJobsActivityForPeriod = async (): Promise<any | undefined> => {
+export const getJobsActivityForPeriod = async (): Promise<
+  DashboardJobsReadResult<any[]>
+> => {
   try {
     const user = await requireUser();
     // Use local time for date range to match grouping and getLast7Days
     const { start: sevenDaysAgo, end: today } = getLocalDayRange(6);
-    const jobData = await loadJobsAppliedDateCounts(prisma, user.id, {
-      start: sevenDaysAgo,
-      end: today,
-    });
+    const jobDataResult = await jobsReadOrBlocked(() =>
+      loadJobsAppliedDateCounts(prisma, user.id, {
+        start: sevenDaysAgo,
+        end: today,
+      }),
+    );
+    if (jobDataResult.blocked) {
+      return jobDataResult;
+    }
+    const jobData = jobDataResult.data;
     // Reduce to a format that groups by unique date (YYYY-MM-DD) using local time
     const groupedPosts = jobData.reduce((acc: Record<string, number>, post) => {
       const date = format(new Date(post.appliedDate), "yyyy-MM-dd");
@@ -130,7 +143,7 @@ export const getJobsActivityForPeriod = async (): Promise<any | undefined> => {
       value: groupedPosts[dateStr] || 0,
     }));
 
-    return result;
+    return { blocked: false, data: result };
   } catch (error) {
     const msg = "Failed to fetch jobs list. ";
     console.error(msg, error);
@@ -138,24 +151,36 @@ export const getJobsActivityForPeriod = async (): Promise<any | undefined> => {
   }
 };
 
-export const getActivityCalendarData = async (): Promise<any | undefined> => {
+export const getActivityCalendarData = async (): Promise<
+  DashboardJobsReadResult<Record<string, any[]>>
+> => {
   try {
     const user = await requireUser();
     // Use local time for date range to match grouping
     const { start: daysAgo, end: today } = getLocalDayRange(365);
-    const jobData = await loadJobsAppliedDateCounts(prisma, user.id, {
-      start: daysAgo,
-      end: today,
-    });
+    const [jobDataResult, activityData] = await Promise.all([
+      jobsReadOrBlocked(() =>
+        loadJobsAppliedDateCounts(prisma, user.id, {
+          start: daysAgo,
+          end: today,
+        }),
+      ),
+      prisma.activity.findMany({
+        where: {
+          userId: user.id,
+          startTime: { gte: daysAgo, lte: today },
+          duration: { not: null },
+        },
+        select: { startTime: true, duration: true },
+      }),
+    ]);
 
-    const activityData = await prisma.activity.findMany({
-      where: {
-        userId: user.id,
-        startTime: { gte: daysAgo, lte: today },
-        duration: { not: null },
-      },
-      select: { startTime: true, duration: true },
-    });
+    // The heatmap's per-day value is the jobs count itself, so a blocked
+    // family degrades the whole card rather than rendering zeros.
+    if (jobDataResult.blocked) {
+      return jobDataResult;
+    }
+    const jobData = jobDataResult.data;
 
     const groupedJobs: Record<string, number> = jobData.reduce(
       (acc: Record<string, number>, job) => {
@@ -194,7 +219,7 @@ export const getActivityCalendarData = async (): Promise<any | undefined> => {
       {},
     );
 
-    return groupedByYear;
+    return { blocked: false, data: groupedByYear };
   } catch (error) {
     const msg = "Failed to fetch jobs list. ";
     console.error(msg, error);

@@ -59,7 +59,7 @@ describe("Dashboard Actions", () => {
 
       const result = await getRecentJobs();
 
-      expect(result).toEqual(mockJobs);
+      expect(result).toEqual({ blocked: false, data: mockJobs });
       expect(prisma.job.findMany).toHaveBeenCalledWith({
         where: {
           userId: mockUser.id,
@@ -104,7 +104,35 @@ describe("Dashboard Actions", () => {
 
       const result = await getRecentJobs();
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ blocked: false, data: [] });
+    });
+
+    it("returns a typed blocked result when the jobs read family is blocked", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      // A migration-state row in a non-terminal status resolves the runtime to
+      // BLOCKED before any jobs delegate is touched.
+      (prisma as any).abMigrationState = {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "state-1",
+          scopeKey: "instance",
+          migrationKey: "ab-migration",
+          status: "IN_PROGRESS",
+          completedAt: null,
+          verifiedAt: null,
+          errorCode: null,
+        }),
+      };
+      try {
+        const result = await getRecentJobs();
+        expect(result).toMatchObject({
+          blocked: true,
+          code: "JOBS_READ_UNAVAILABLE",
+        });
+        expect("data" in result).toBe(false);
+        expect(prisma.job.findMany).not.toHaveBeenCalled();
+      } finally {
+        delete (prisma as any).abMigrationState;
+      }
     });
   });
 
@@ -248,9 +276,11 @@ describe("Dashboard Actions", () => {
 
       const result = await getJobsActivityForPeriod();
 
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBe(7);
-      result.forEach((item: any) => {
+      expect(result.blocked).toBe(false);
+      if (result.blocked) return;
+      expect(Array.isArray(result.data)).toBe(true);
+      expect(result.data.length).toBe(7);
+      result.data.forEach((item: any) => {
         expect(item).toHaveProperty("day");
         expect(item).toHaveProperty("value");
         expect(typeof item.value).toBe("number");
@@ -282,8 +312,10 @@ describe("Dashboard Actions", () => {
 
       const result = await getJobsActivityForPeriod();
 
-      expect(result.length).toBe(7);
-      result.forEach((item: any) => {
+      expect(result.blocked).toBe(false);
+      if (result.blocked) return;
+      expect(result.data.length).toBe(7);
+      result.data.forEach((item: any) => {
         expect(item.value).toBe(0);
       });
     });
@@ -311,7 +343,7 @@ describe("Dashboard Actions", () => {
 
       const result = await getActivityCalendarData();
 
-      expect(typeof result).toBe("object");
+      expect(result.blocked).toBe(false);
       expect(prisma.job.groupBy).toHaveBeenCalledTimes(1);
     });
 
@@ -341,7 +373,7 @@ describe("Dashboard Actions", () => {
 
       const result = await getActivityCalendarData();
 
-      expect(result).toEqual({});
+      expect(result).toEqual({ blocked: false, data: {} });
     });
 
     it("should correctly group jobs by year", async () => {
@@ -361,10 +393,12 @@ describe("Dashboard Actions", () => {
 
       const result = await getActivityCalendarData();
 
-      expect(result).toHaveProperty("2024");
-      expect(Array.isArray(result["2024"])).toBe(true);
-      expect(result["2024"].length).toBe(2);
-      result["2024"].forEach((item: any) => {
+      expect(result.blocked).toBe(false);
+      if (result.blocked) return;
+      expect(result.data).toHaveProperty("2024");
+      expect(Array.isArray(result.data["2024"])).toBe(true);
+      expect(result.data["2024"].length).toBe(2);
+      result.data["2024"].forEach((item: any) => {
         expect(item).toHaveProperty("day");
         expect(item).toHaveProperty("value");
       });
@@ -387,8 +421,10 @@ describe("Dashboard Actions", () => {
 
       const result = await getActivityCalendarData();
 
-      expect(result["2024"].length).toBe(1);
-      expect(result["2024"][0].value).toBe(5);
+      expect(result.blocked).toBe(false);
+      if (result.blocked) return;
+      expect(result.data["2024"].length).toBe(1);
+      expect(result.data["2024"][0].value).toBe(5);
     });
   });
 
@@ -484,6 +520,7 @@ describe("Dashboard Actions", () => {
       const result = await getJobsActivitySummary(7);
 
       expect(result).toEqual({
+        jobsBlocked: false,
         jobsApplied: 0,
         jobsTrend: 0,
         jobsInterview: undefined,

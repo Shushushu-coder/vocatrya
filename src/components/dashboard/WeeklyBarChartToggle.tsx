@@ -14,6 +14,7 @@ import {
   otherBucketLabel,
 } from "./jobsActivityChart";
 import { useI18n } from "@/i18n";
+import JobsUnavailableNotice from "./JobsUnavailableNotice";
 
 type ChartConfig = {
   label: string;
@@ -22,6 +23,9 @@ type ChartConfig = {
   groupMode?: "grouped" | "stacked";
   axisLeftLegend: string;
   tooltipLabel?: (key: string) => string;
+  // Set when the series' source read is blocked: the tab stays selectable but
+  // shows an explicit unavailable state instead of a fabricated chart.
+  unavailable?: boolean;
 };
 
 type WeeklyBarChartToggleProps = {
@@ -153,6 +157,11 @@ export default function WeeklyBarChartToggle({
       </CardHeader>
 
       <CardContent className="h-[240px] min-w-0 overflow-hidden p-3 pt-1">
+        {current.unavailable ? (
+          <div className="flex h-[200px] items-center justify-center">
+            <JobsUnavailableNotice className="max-w-md" />
+          </div>
+        ) : (
         <div className="h-[200px] min-w-0">
           <ResponsiveBar
             data={roundedData}
@@ -276,6 +285,7 @@ export default function WeeklyBarChartToggle({
             )}
           />
         </div>
+        )}
       </CardContent>
     </Card>
   );

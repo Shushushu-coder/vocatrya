@@ -23,7 +23,12 @@ describe("RecentCardToggle - Start Activity", () => {
   ];
 
   const renderComponent = () => {
-    render(<RecentCardToggle jobs={[]} activities={activities} />);
+    render(
+      <RecentCardToggle
+        jobs={{ blocked: false, data: [] }}
+        activities={activities}
+      />,
+    );
   };
 
   const switchToActivitiesTab = async () => {
@@ -91,5 +96,32 @@ describe("RecentCardToggle - Start Activity", () => {
       expect(mockStopActivity).toHaveBeenCalledTimes(1);
       expect(mockStartActivity).toHaveBeenCalledWith("activity-1");
     });
+  });
+
+  it("shows an unavailable notice on the Jobs tab while activities still render", async () => {
+    (useActivity as any).mockReturnValue({
+      currentActivity: undefined,
+      startActivity: mockStartActivity,
+      stopActivity: mockStopActivity,
+    });
+
+    render(
+      <RecentCardToggle
+        jobs={{
+          blocked: true,
+          code: "JOBS_READ_UNAVAILABLE",
+          message: "blocked",
+        }}
+        activities={activities}
+      />,
+    );
+
+    expect(screen.getByTestId("jobs-unavailable-notice")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No recent applications"),
+    ).not.toBeInTheDocument();
+
+    await switchToActivitiesTab();
+    expect(screen.getByTestId("recent-activity-row")).toBeInTheDocument();
   });
 });

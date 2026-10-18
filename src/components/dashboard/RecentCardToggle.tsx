@@ -13,6 +13,8 @@ import { useActivitySwitchConfirm } from "@/hooks/useActivitySwitchConfirm";
 import { JobResponse } from "@/models/job.model";
 import { CirclePlay } from "lucide-react";
 import Link from "next/link";
+import type { DashboardJobsReadResult } from "@/actions/dashboard.actions";
+import JobsUnavailableNotice from "./JobsUnavailableNotice";
 
 type RecentActivity = {
   id: string;
@@ -23,7 +25,7 @@ type RecentActivity = {
 };
 
 interface RecentCardToggleProps {
-  jobs: JobResponse[];
+  jobs: DashboardJobsReadResult<JobResponse[]>;
   activities: RecentActivity[];
 }
 
@@ -122,7 +124,10 @@ export default function RecentCardToggle({
         </div>
       </CardHeader>
       <CardContent className="grid auto-rows-max gap-6 px-4 @3xl/main:min-h-0 @3xl/main:flex-1 @3xl/main:overflow-y-auto">
-        {activeIndex === 0 && jobs.length === 0 ? (
+        {activeIndex === 0 && jobs.blocked ? (
+          <JobsUnavailableNotice />
+        ) : null}
+        {activeIndex === 0 && !jobs.blocked && jobs.data.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("dashboard.noRecentApplications")}
           </p>
@@ -133,7 +138,9 @@ export default function RecentCardToggle({
           </p>
         ) : null}
         {activeIndex === 0
-          ? groupJobsByDate(jobs, formatDate, t("dashboard.noDate")).map(([date, dateJobs]) => (
+          ? jobs.blocked
+            ? null
+            : groupJobsByDate(jobs.data, formatDate, t("dashboard.noDate")).map(([date, dateJobs]) => (
               <div key={date} className="grid gap-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {date}
