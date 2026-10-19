@@ -2,7 +2,6 @@ const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, na
 const fs = require("node:fs");
 const path = require("node:path");
 const { DESKTOP_APP_ID } = require("./installer-identity");
-const { registerWindowThemeIpc } = require("./window-theme");
 
 app.setAppUserModelId(DESKTOP_APP_ID);
 const {
@@ -24,7 +23,7 @@ const { prepareDatabase } = require("./database-migration");
 const { runStartupSequence } = require("./startup");
 const { createRuntimeStatusService } = require("./runtime/service");
 const { registerRuntimeIpcHandlers } = require("./runtime/ipc");
-const { registerResumePrintIpc } = require("./resume-print");
+const { createMainWindowIpcRegistry } = require("./window-ipc");
 const { createConnectionService } = require("./runtime/connection-service");
 const { registerConnectionIpcHandlers } = require("./runtime/connection-ipc");
 const { createBackendClient } = require("./runtime/backend-client");
@@ -373,6 +372,11 @@ if (!singleInstance) {
     },
   });
 
+  // Per-window IPC ownership: window:setTheme and resume:printToPDF are
+  // process-wide channels bound to the current main window — the registry
+  // arms their release on "closed" before the first load settles.
+  const mainWindowIpc = createMainWindowIpcRegistry();
+
   async function createMainWindow() {
     const iconPath = desktopIconPath();
     const startMinimized = desktopLifecycle.shouldStartMinimized();
@@ -416,17 +420,18 @@ if (!singleInstance) {
     desktopLifecycle.attachWindow(mainWindow);
     const origin = `http://127.0.0.1:${backendPort}`;
     configureNavigation(mainWindow, origin);
-    const unregisterResumePrint = registerResumePrintIpc({ ipcMain, BrowserWindow, window: mainWindow, origin });
-    const unregisterTheme = registerWindowThemeIpc({
-      ipcMain, nativeTheme, window: mainWindow, origin,
+    const createdWindow = mainWindow;
+    // IPC cleanup is armed on "closed" BEFORE loadURL: a window closed
+    // mid-load still releases its channels so a later window can register.
+    mainWindowIpc.registerWindowIpc({
+      ipcMain, BrowserWindow, nativeTheme, window: createdWindow, origin,
       assetsRoot: app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "assets"),
     });
-    await mainWindow.loadURL(`${origin}/signin`);
-    mainWindow.on("closed", () => {
-      unregisterTheme();
-      unregisterResumePrint();
-      mainWindow = undefined;
+    createdWindow.on("closed", () => {
+      // A stale "closed" must never detach the window that replaced this one.
+      if (mainWindow === createdWindow) mainWindow = undefined;
     });
+    await createdWindow.loadURL(`${origin}/signin`);
   }
 
   app.on("second-instance", () => {
