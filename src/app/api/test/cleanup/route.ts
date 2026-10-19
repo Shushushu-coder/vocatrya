@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { deleteResumeById } from "@/actions/profile.actions";
@@ -61,9 +62,6 @@ export async function POST(req: NextRequest) {
 
   // Delete jobs, resumes and tasks first (they/their sections reference the
   // Library items), so those items become unused and eligible for deletion.
-  for (const id of jobIds) {
-    await prisma.job.deleteMany({ where: { id, userId } });
-  }
   for (const title of resumes) {
     const rows = await prisma.resume.findMany({
       where: { title, profile: { userId } },
@@ -116,16 +114,38 @@ export async function POST(req: NextRequest) {
 
   // Sources are never created by the tests (they select the seeded "Indeed"),
   // so they are intentionally not cleaned up here.
-  await deleteLibraryByName("jobTitle", titles, userId);
-  await deleteLibraryByName("company", companies, userId);
-  await deleteLibraryByName("location", locations, userId);
-  await deleteLibraryByName("activityType", activityTypes, userId);
-  await deleteLibraryByName("contactRole", contactRoles, userId);
-  await deleteTagsByName(tags, userId);
-  if (mcpTokens.length > 0) {
-    await prisma.mcpAccessToken.deleteMany({
-      where: { name: { in: mcpTokens }, userId },
+  // jobIds from A+B tests are JobOpportunity ids. Remove that owned graph
+  // before Library rows. One transaction rolls the job and Library deletes
+  // back together when a later restrict constraint still applies.
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const id of jobIds) {
+        await tx.job.deleteMany({ where: { id, userId } });
+        await deleteOwnedOpportunity(tx, id, userId);
+      }
+      await deleteLibraryByName(tx, "jobTitle", titles, userId);
+      await deleteLibraryByName(tx, "company", companies, userId);
+      await deleteLibraryByName(tx, "location", locations, userId);
+      await deleteLibraryByName(tx, "activityType", activityTypes, userId);
+      await deleteLibraryByName(tx, "contactRole", contactRoles, userId);
+      await deleteTagsByName(tx, tags, userId);
+      if (mcpTokens.length > 0) {
+        await tx.mcpAccessToken.deleteMany({
+          where: { name: { in: mcpTokens }, userId },
+        });
+      }
     });
+  } catch (error) {
+    const code =
+      error instanceof Prisma.PrismaClientKnownRequestError
+        ? error.code
+        : error instanceof CleanupBlockedError
+          ? "CLEANUP_BLOCKED"
+          : "CLEANUP_FAILED";
+    return NextResponse.json(
+      { error: "Cleanup failed", code },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ success: true });
@@ -133,11 +153,15 @@ export async function POST(req: NextRequest) {
 
 // Tags are shared across jobs/questions/skills (not a single ref model like
 // the Library types above), so they get their own reference count + delete.
-async function deleteTagsByName(names: string[], userId: string) {
+async function deleteTagsByName(
+  db: Prisma.TransactionClient,
+  names: string[],
+  userId: string,
+) {
   for (const name of names) {
     const value = name.trim().toLowerCase();
     if (!value) continue;
-    const tag = await prisma.tag.findFirst({
+    const tag = await db.tag.findFirst({
       where: { value, createdBy: userId },
       select: {
         id: true,
@@ -147,7 +171,7 @@ async function deleteTagsByName(names: string[], userId: string) {
     if (!tag) continue;
     const { jobs, questions, skills } = tag._count;
     if (jobs + questions + skills > 0) continue;
-    await prisma.tag.delete({ where: { id: tag.id } });
+    await db.tag.delete({ where: { id: tag.id } });
   }
 }
 
@@ -161,41 +185,50 @@ type RefModel =
 // Count every place a Library row can still be referenced from, so we never
 // delete one that another job or resume section still uses.
 async function referenceCount(
+  db: Prisma.TransactionClient,
   model: RefModel,
   refId: string,
 ): Promise<number> {
   if (model === "jobTitle") {
     return (
-      (await prisma.job.count({ where: { jobTitleId: refId } })) +
-      (await prisma.workExperience.count({ where: { jobTitleId: refId } }))
+      (await db.job.count({ where: { jobTitleId: refId } })) +
+      (await db.workExperience.count({ where: { jobTitleId: refId } }))
     );
   }
   if (model === "company") {
+    // JobOpportunity and RecruitmentCampaign restrict Company. Count them
+    // so a shared Library row is left in place instead of raising P2003.
+    // Career detail rows set the company null on delete; counting them
+    // avoids changing records this request does not own.
     return (
-      (await prisma.job.count({ where: { companyId: refId } })) +
-      (await prisma.workExperience.count({ where: { companyId: refId } })) +
-      (await prisma.contact.count({
+      (await db.job.count({ where: { companyId: refId } })) +
+      (await db.workExperience.count({ where: { companyId: refId } })) +
+      (await db.contact.count({
         where: { OR: [{ companyId: refId }, { workedAtCompanyId: refId }] },
-      }))
+      })) +
+      (await db.jobOpportunity.count({ where: { companyId: refId } })) +
+      (await db.recruitmentCampaign.count({ where: { companyId: refId } })) +
+      (await db.careerInternshipDetail.count({ where: { companyId: refId } })) +
+      (await db.careerEmploymentDetail.count({ where: { companyId: refId } }))
     );
   }
   if (model === "activityType") {
     return (
-      (await prisma.activity.count({ where: { activityTypeId: refId } })) +
-      (await prisma.task.count({ where: { activityTypeId: refId } }))
+      (await db.activity.count({ where: { activityTypeId: refId } })) +
+      (await db.task.count({ where: { activityTypeId: refId } }))
     );
   }
   if (model === "contactRole") {
     return (
-      (await prisma.jobContact.count({ where: { roleId: refId } })) +
-      (await prisma.contact.count({ where: { roleId: refId } }))
+      (await db.jobContact.count({ where: { roleId: refId } })) +
+      (await db.contact.count({ where: { roleId: refId } }))
     );
   }
   return (
-    (await prisma.job.count({ where: { locationId: refId } })) +
-    (await prisma.workExperience.count({ where: { locationId: refId } })) +
-    (await prisma.education.count({ where: { locationId: refId } })) +
-    (await prisma.contact.count({ where: { locationId: refId } }))
+    (await db.job.count({ where: { locationId: refId } })) +
+    (await db.workExperience.count({ where: { locationId: refId } })) +
+    (await db.education.count({ where: { locationId: refId } })) +
+    (await db.contact.count({ where: { locationId: refId } }))
   );
 }
 
@@ -203,6 +236,7 @@ async function referenceCount(
 // it: value = label.trim().toLowerCase()), scoped to the user and only when
 // nothing references it anymore.
 async function deleteLibraryByName(
+  db: Prisma.TransactionClient,
   model: RefModel,
   names: string[],
   userId: string,
@@ -210,12 +244,74 @@ async function deleteLibraryByName(
   for (const name of names) {
     const value = name.trim().toLowerCase();
     if (!value) continue;
-    const row = await (prisma[model] as any).findFirst({
+    const row = await (db[model] as any).findFirst({
       where: { value, createdBy: userId },
       select: { id: true },
     });
     if (!row) continue;
-    if ((await referenceCount(model, row.id)) > 0) continue;
-    await (prisma[model] as any).delete({ where: { id: row.id } });
+    if ((await referenceCount(db, model, row.id)) > 0) continue;
+    await (db[model] as any).delete({ where: { id: row.id } });
   }
+}
+
+class CleanupBlockedError extends Error {
+  constructor() {
+    super("CLEANUP_BLOCKED");
+    this.name = "CleanupBlockedError";
+  }
+}
+
+// Deletes one JobOpportunity the caller named and owns, plus the attempt,
+// process-step, and job-description rows that exist only for that id.
+// Restrict links from another owner fail the surrounding transaction.
+// SetNull links to resumes or other attempts are refused before any write.
+async function deleteOwnedOpportunity(
+  db: Prisma.TransactionClient,
+  id: string,
+  userId: string,
+) {
+  const owned = await db.jobOpportunity.findFirst({
+    where: { id, userId },
+    select: { id: true },
+  });
+  if (!owned) return;
+
+  const resumeTargets = await db.resumeVariant.count({
+    where: { targetJobOpportunityId: owned.id },
+  });
+  if (resumeTargets > 0) throw new CleanupBlockedError();
+
+  const ownedAttempts = await db.applicationAttempt.findMany({
+    where: { jobOpportunityId: owned.id, userId },
+    select: { id: true },
+  });
+  const ownedAttemptIds = ownedAttempts.map((attempt) => attempt.id);
+  if (ownedAttemptIds.length > 0) {
+    const externalTransfers = await db.applicationAttempt.count({
+      where: {
+        transferredFromAttemptId: { in: ownedAttemptIds },
+        NOT: { id: { in: ownedAttemptIds } },
+      },
+    });
+    if (externalTransfers > 0) throw new CleanupBlockedError();
+  }
+
+  await db.jobOpportunity.update({
+    where: { id: owned.id },
+    data: { currentJdVersionId: null },
+  });
+  await db.jobDescriptionVersion.updateMany({
+    where: { jobOpportunityId: owned.id },
+    data: { currentParseId: null },
+  });
+  await db.applicationAttempt.deleteMany({
+    where: { jobOpportunityId: owned.id, userId },
+  });
+  await db.jobDescriptionParse.deleteMany({
+    where: { jobDescriptionVersion: { jobOpportunityId: owned.id } },
+  });
+  await db.jobDescriptionVersion.deleteMany({
+    where: { jobOpportunityId: owned.id },
+  });
+  await db.jobOpportunity.delete({ where: { id: owned.id } });
 }
