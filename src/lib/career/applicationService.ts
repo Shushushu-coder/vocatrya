@@ -438,8 +438,10 @@ export class ApplicationService {
       opportunityId: opportunity.id,
       attempts: orderedAttempts.map((attempt) => ({
         id: attempt.id,
+        channelLabel: attempt.channelLabel,
         submittedAt: toIso(attempt.submittedAt),
         createdAt: attempt.createdAt.toISOString(),
+        archivedAt: toIso(attempt.archivedAt),
         currentStageCategory: attempt.currentStageCategory,
         outcome: attempt.outcome,
         transferredFromAttemptId: attempt.transferredFromAttemptId,

@@ -28,8 +28,10 @@ export type TransferredFromDTO = {
 
 export type ApplicationAttemptTimelineDTO = {
   id: string;
+  channelLabel: string;
   submittedAt: string | null;
   createdAt: string;
+  archivedAt: string | null;
   currentStageCategory: string;
   outcome: string;
   transferredFromAttemptId: string | null;

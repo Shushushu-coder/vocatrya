@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CalendarClock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,14 @@ type ApplicationTimelineTabProps = {
   roleTitle?: string | null;
 };
 
+const ATTEMPT_RESELECT_ERROR_KEYS: Record<string, string> = {
+  PROCESS_STEP_ATTEMPT_AMBIGUOUS: "jobs.attemptErrorAmbiguous",
+  ATTEMPT_ARCHIVED: "jobs.attemptErrorArchived",
+  ATTEMPT_NOT_FOUND: "jobs.attemptErrorUnavailable",
+  ATTEMPT_OPPORTUNITY_MISMATCH: "jobs.attemptErrorUnavailable",
+  INVALID_ID: "jobs.attemptErrorUnavailable",
+};
+
 function isCompleted(step: ApplicationProcessStepDTO): boolean {
   return (
     step.completedAt != null || step.status === PROCESS_STEP_STATUS.COMPLETED
@@ -59,6 +67,12 @@ export function ApplicationTimelineTab({
     useState<ApplicationProcessStepDTO | null>(null);
   const [completingId, startComplete] = useTransition();
   const [deletingId, startDelete] = useTransition();
+
+  // Mirrors the backend rule: only non-archived attempts may receive new steps.
+  const liveAttempts = useMemo(
+    () => (timeline?.attempts ?? []).filter((attempt) => attempt.archivedAt == null),
+    [timeline],
+  );
 
   const loadTimeline = useCallback(async () => {
     const result = await getApplicationTimeline(jobId);
@@ -101,6 +115,7 @@ export function ApplicationTimelineTab({
         })
       : await createApplicationProcessStep({
           jobOpportunityId: jobId,
+          applicationAttemptId: values.applicationAttemptId || undefined,
           category: values.category,
           label: values.label,
           scheduledAt: values.scheduledAt,
@@ -108,7 +123,14 @@ export function ApplicationTimelineTab({
           notes: values.notes || null,
         });
     if (!result.success) {
-      toastError(result.message);
+      const attemptErrorKey =
+        !editStep && result.code
+          ? ATTEMPT_RESELECT_ERROR_KEYS[result.code]
+          : undefined;
+      toastError(attemptErrorKey ? t(attemptErrorKey) : result.message);
+      if (attemptErrorKey) {
+        await loadTimeline();
+      }
       return false;
     }
     toastSuccess(editStep ? t("jobs.stepUpdated") : t("jobs.stepAdded"));
@@ -196,13 +218,14 @@ export function ApplicationTimelineTab({
           icon={CalendarClock}
           title={t("jobs.timelineEmptyTitle")}
           description={t("jobs.timelineEmptyDescription")}
-          actionLabel={canMutate ? t("jobs.addProcessStep") : undefined}
+          actionLabel={canMutate ? t("jobs.addProcessStepWithDraft") : undefined}
           onAction={canMutate ? openCreate : undefined}
         />
         {canMutate && (
           <ProcessStepDialog
             open={dialogOpen}
             onOpenChange={setDialogOpen}
+            attempts={editStep ? undefined : liveAttempts}
             onSubmit={onSave}
           />
         )}
@@ -216,12 +239,18 @@ export function ApplicationTimelineTab({
         <div className="flex justify-end">
           <Button type="button" size="sm" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
-            {t("jobs.addProcessStep")}
+            {liveAttempts.length === 0
+              ? t("jobs.addProcessStepWithDraft")
+              : t("jobs.addProcessStep")}
           </Button>
         </div>
       )}
       {timeline.attempts.map((attempt) => (
-        <section key={attempt.id} className="space-y-4 rounded-lg border p-4">
+        <section
+          key={attempt.id}
+          className="space-y-4 rounded-lg border p-4"
+          data-attempt-id={attempt.id}
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-sm text-muted-foreground">
@@ -247,6 +276,11 @@ export function ApplicationTimelineTab({
               </p>
               <p className="mt-1 font-medium">
                 {stageLabel(attempt.currentStageCategory)}
+                {attempt.archivedAt ? (
+                  <Badge variant="outline" className="ml-2">
+                    {t("jobs.attemptArchived")}
+                  </Badge>
+                ) : null}
               </p>
             </div>
             <div>
@@ -430,6 +464,7 @@ export function ApplicationTimelineTab({
           onOpenChange={setDialogOpen}
           editStep={editStep}
           restrictFields={restrictFields}
+          attempts={editStep ? undefined : liveAttempts}
           onSubmit={onSave}
         />
       )}
