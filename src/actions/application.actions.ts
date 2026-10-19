@@ -162,6 +162,7 @@ export async function listUpcomingApplicationEvents(): Promise<
 
 export async function createApplicationProcessStep(input: {
   jobOpportunityId: string;
+  applicationAttemptId?: string | null;
   category: string;
   label: string;
   scheduledAt?: Date | string | null;
@@ -172,8 +173,20 @@ export async function createApplicationProcessStep(input: {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertAbApplicationWrites(runtime);
+    const applicationAttemptId = input.applicationAttemptId ?? undefined;
+    if (
+      applicationAttemptId !== undefined &&
+      (typeof applicationAttemptId !== "string" ||
+        applicationAttemptId.trim() === "")
+    ) {
+      throw new CareerRuntimeError(
+        "INVALID_ID",
+        "Invalid application attempt id",
+      );
+    }
     const data = await applicationsFor(user.id).createUserProcessStep({
       jobOpportunityId: input.jobOpportunityId,
+      applicationAttemptId: applicationAttemptId?.trim(),
       category: input.category,
       label: input.label,
       scheduledAt: parseOptionalDate(input.scheduledAt, "scheduledAt") ?? null,
@@ -183,7 +196,11 @@ export async function createApplicationProcessStep(input: {
     revalidatePath("/dashboard");
     return { success: true, data };
   } catch (error) {
-    return handleError(error, "Failed to create process step.");
+    const result = handleError(error, "Failed to create process step.");
+    if (error instanceof CareerRuntimeError) {
+      return { success: false, code: error.code, message: result.message };
+    }
+    return result;
   }
 }
 

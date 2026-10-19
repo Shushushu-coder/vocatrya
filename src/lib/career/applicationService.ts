@@ -597,6 +597,7 @@ export class ApplicationService {
 
   async createUserProcessStep(input: {
     jobOpportunityId: string;
+    applicationAttemptId?: string | null;
     category: string;
     label: string;
     scheduledAt?: Date | null;
@@ -610,7 +611,12 @@ export class ApplicationService {
       throw new CareerRuntimeError("PROCESS_STEP_LABEL_REQUIRED", "Process step label is required");
     }
     await this.requireOwnedOpportunity(input.jobOpportunityId);
-    const attempt = await this.requireCurrentAttempt(input.jobOpportunityId);
+    const attempt = input.applicationAttemptId
+      ? await this.requireOwnedAttemptForOpportunity(
+          input.applicationAttemptId,
+          input.jobOpportunityId,
+        )
+      : await this.requireCurrentAttempt(input.jobOpportunityId);
     const max = await this.db.applicationProcessStep.aggregate({
       where: { applicationAttemptId: attempt.id },
       _max: { sortOrder: true },
@@ -840,8 +846,33 @@ export class ApplicationService {
     return opportunity;
   }
 
+  private async requireOwnedAttemptForOpportunity(
+    attemptId: string,
+    jobOpportunityId: string,
+  ) {
+    const attempt = await this.db.applicationAttempt.findFirst({
+      where: { id: attemptId, userId: this.userId },
+    });
+    if (!attempt) {
+      throw new CareerRuntimeError("ATTEMPT_NOT_FOUND", "Application attempt not found");
+    }
+    if (attempt.jobOpportunityId !== jobOpportunityId) {
+      throw new CareerRuntimeError(
+        "ATTEMPT_OPPORTUNITY_MISMATCH",
+        "Application attempt does not belong to this opportunity",
+      );
+    }
+    if (attempt.archivedAt !== null) {
+      throw new CareerRuntimeError(
+        "ATTEMPT_ARCHIVED",
+        "Archived application attempts cannot accept process steps",
+      );
+    }
+    return attempt;
+  }
+
   private async requireCurrentAttempt(jobOpportunityId: string) {
-    const existing = await this.db.applicationAttempt.findFirst({
+    const candidates = await this.db.applicationAttempt.findMany({
       where: {
         jobOpportunityId,
         userId: this.userId,
@@ -849,7 +880,13 @@ export class ApplicationService {
       },
       orderBy: { createdAt: "desc" },
     });
-    if (existing) return existing;
+    if (candidates.length > 1) {
+      throw new CareerRuntimeError(
+        "PROCESS_STEP_ATTEMPT_AMBIGUOUS",
+        "Multiple application attempts exist for this opportunity; specify applicationAttemptId",
+      );
+    }
+    if (candidates.length === 1) return candidates[0];
     return this.createAttempt({
       jobOpportunityId,
       channelLabel: "USER",
