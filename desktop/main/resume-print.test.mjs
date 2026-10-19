@@ -114,7 +114,9 @@ describe("resume print IPC", () => {
     bridge.printToPDF("version-1");
     expect(invoke).toHaveBeenCalledWith(CHANNEL, "version-1");
     const main = fs.readFileSync(new URL("./main.js", import.meta.url), "utf8");
-    expect(main).toContain('registerResumePrintIpc({ ipcMain, BrowserWindow, window: mainWindow, origin })');
-    expect(main).toContain("unregisterResumePrint();");
+    const windowIpc = fs.readFileSync(new URL("./window-ipc.js", import.meta.url), "utf8");
+    expect(main).toContain("mainWindowIpc.registerWindowIpc({");
+    expect(windowIpc).toContain("registerResumePrintIpc({ ipcMain, BrowserWindow, window, origin })");
+    expect(windowIpc).toContain('window.once("closed", release)');
   });
 });

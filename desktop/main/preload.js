@@ -6,6 +6,11 @@
 // Phase D adds vocatryaAi: account-login operations keyed by a
 // session-minted ticket plus a connectionId. Still no executable, args,
 // env, profile path, or free-form command crosses the bridge.
+//
+// vocatryaDesktop adds the device-level lifecycle surface: boolean
+// preferences (close-to-tray, launch minimized), the OS-owned login-item
+// toggle whose state is verified by the main process, and window
+// restore/quit. No paths, commands, or credentials cross this bridge.
 const { contextBridge, ipcRenderer } = require("electron");
 
 // Mark Electron-hosted documents before first paint so CSS can reveal the
@@ -134,4 +139,27 @@ contextBridge.exposeInMainWorld("vocatryaAi", {
     return () =>
       ipcRenderer.removeListener(AI_CONNECTION_EVENTS.oauthUrl, listener);
   },
+});
+
+const DESKTOP_LIFECYCLE_CHANNELS = Object.freeze({
+  getState: "desktopLifecycle:getState",
+  setCloseToTray: "desktopLifecycle:setCloseToTray",
+  setStartMinimized: "desktopLifecycle:setStartMinimized",
+  setOpenAtLogin: "desktopLifecycle:setOpenAtLogin",
+  showWindow: "desktopLifecycle:showWindow",
+  quit: "desktopLifecycle:quit",
+});
+
+contextBridge.exposeInMainWorld("vocatryaDesktop", {
+  getState: () => ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.getState),
+  setCloseToTray: (enabled) =>
+    ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.setCloseToTray, { enabled }),
+  setStartMinimized: (enabled) =>
+    ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.setStartMinimized, { enabled }),
+  // OS-owned login item: resolves to the verified post-write state, rejects
+  // when the OS write does not take effect.
+  setOpenAtLogin: (enabled) =>
+    ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.setOpenAtLogin, { enabled }),
+  showWindow: () => ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.showWindow),
+  quit: () => ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.quit),
 });
