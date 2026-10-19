@@ -163,6 +163,7 @@ export async function listUpcomingApplicationEvents(): Promise<
 export async function createApplicationProcessStep(input: {
   jobOpportunityId: string;
   applicationAttemptId?: string | null;
+  createDraftAttempt?: boolean;
   category: string;
   label: string;
   scheduledAt?: Date | string | null;
@@ -187,6 +188,7 @@ export async function createApplicationProcessStep(input: {
     const data = await applicationsFor(user.id).createUserProcessStep({
       jobOpportunityId: input.jobOpportunityId,
       applicationAttemptId: applicationAttemptId?.trim(),
+      createDraftAttempt: input.createDraftAttempt === true,
       category: input.category,
       label: input.label,
       scheduledAt: parseOptionalDate(input.scheduledAt, "scheduledAt") ?? null,

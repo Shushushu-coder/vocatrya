@@ -135,10 +135,13 @@ describe("zero live attempts", () => {
         expect.objectContaining({
           jobOpportunityId: "job-1",
           label: "Phone screen",
-          applicationAttemptId: undefined,
+          createDraftAttempt: true,
         }),
       ),
     );
+    expect(
+      createStep.mock.calls[0][0].applicationAttemptId,
+    ).toBeUndefined();
   });
 
   it("offers the draft flow when every existing attempt is archived", async () => {
@@ -164,6 +167,66 @@ describe("zero live attempts", () => {
       await screen.findByTestId("attempt-draft-notice"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("attempt-select")).not.toBeInTheDocument();
+  });
+
+  it("keeps the draft and demands an explicit re-pick when the attempt list changed", async () => {
+    getTimeline
+      .mockResolvedValueOnce({ success: true, data: timeline([]) })
+      .mockResolvedValue({
+        success: true,
+        data: timeline([
+          attempt({ id: "att-new", channelLabel: "Portal" }),
+        ]),
+      });
+    createStep
+      .mockResolvedValueOnce({
+        success: false,
+        code: "PROCESS_STEP_ATTEMPT_STATE_CHANGED",
+        message: "changed",
+      })
+      .mockResolvedValue({ success: true, data: { id: "s-1" } as never });
+    const user = userEvent.setup();
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Create application draft and add step",
+      }),
+    );
+    await user.type(await screen.findByLabelText("Step name"), "Phone screen");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(createStep).toHaveBeenCalledWith(
+        expect.objectContaining({ createDraftAttempt: true }),
+      ),
+    );
+    await waitFor(() =>
+      expect(errorToast).toHaveBeenCalledWith(
+        "The application list changed while you were editing. The list was refreshed — confirm which application this step belongs to.",
+      ),
+    );
+    await waitFor(() => expect(getTimeline).toHaveBeenCalledTimes(2));
+
+    // Draft fields survive the refresh; the picker appears with no implicit
+    // selection so the user must confirm ownership again.
+    expect(screen.getByLabelText("Step name")).toHaveValue("Phone screen");
+    expect(
+      screen.queryByTestId("attempt-draft-notice"),
+    ).not.toBeInTheDocument();
+    const select = await screen.findByTestId("attempt-select");
+    expect(select).toHaveValue("");
+
+    await user.selectOptions(select, "att-new");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(createStep).toHaveBeenLastCalledWith(
+        expect.objectContaining({ applicationAttemptId: "att-new" }),
+      ),
+    );
+    expect(
+      createStep.mock.calls[1][0].createDraftAttempt,
+    ).toBeUndefined();
   });
 });
 

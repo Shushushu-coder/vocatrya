@@ -558,6 +558,7 @@
     "attemptErrorAmbiguous": "存在多条申请记录，请选择此事件所属的申请。",
     "attemptErrorArchived": "所选申请已归档，无法添加事件。列表已刷新，请重新选择。",
     "attemptErrorUnavailable": "所选申请不再可用。列表已刷新，请重新选择。",
+    "attemptErrorStateChanged": "申请列表在您编辑期间发生了变化。列表已刷新，请重新确认此事件所属的申请。",
     "stepAdded": "流程步骤已添加",
     "stepUpdated": "流程步骤已更新",
     "stepCompleted": "流程步骤已标记完成",

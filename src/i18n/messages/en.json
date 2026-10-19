@@ -558,6 +558,7 @@
     "attemptErrorAmbiguous": "Several applications exist — choose which one this step belongs to.",
     "attemptErrorArchived": "That application was archived and can no longer accept steps. The list was refreshed — choose an application again.",
     "attemptErrorUnavailable": "The selected application is no longer available. The list was refreshed — choose an application again.",
+    "attemptErrorStateChanged": "The application list changed while you were editing. The list was refreshed — confirm which application this step belongs to.",
     "stepAdded": "Process step added",
     "stepUpdated": "Process step updated",
     "stepCompleted": "Process step marked complete",

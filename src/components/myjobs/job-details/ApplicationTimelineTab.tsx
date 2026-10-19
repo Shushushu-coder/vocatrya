@@ -37,6 +37,7 @@ type ApplicationTimelineTabProps = {
 
 const ATTEMPT_RESELECT_ERROR_KEYS: Record<string, string> = {
   PROCESS_STEP_ATTEMPT_AMBIGUOUS: "jobs.attemptErrorAmbiguous",
+  PROCESS_STEP_ATTEMPT_STATE_CHANGED: "jobs.attemptErrorStateChanged",
   ATTEMPT_ARCHIVED: "jobs.attemptErrorArchived",
   ATTEMPT_NOT_FOUND: "jobs.attemptErrorUnavailable",
   ATTEMPT_OPPORTUNITY_MISMATCH: "jobs.attemptErrorUnavailable",
@@ -115,7 +116,13 @@ export function ApplicationTimelineTab({
         })
       : await createApplicationProcessStep({
           jobOpportunityId: jobId,
-          applicationAttemptId: values.applicationAttemptId || undefined,
+          // Zero live attempts means the user explicitly asked to create the
+          // draft together with this step; with one or more live attempts the
+          // picker's explicit id is the only accepted ownership signal. The
+          // two inputs are mutually exclusive on the server.
+          ...(liveAttempts.length === 0
+            ? { createDraftAttempt: true }
+            : { applicationAttemptId: values.applicationAttemptId || undefined }),
           category: values.category,
           label: values.label,
           scheduledAt: values.scheduledAt,
@@ -211,6 +218,42 @@ export function ApplicationTimelineTab({
     );
   }
 
+  // The dialogs render at a fixed position outside the attempt-count branch so
+  // the process-step form survives a zero→nonzero timeline flip: a refresh
+  // after PROCESS_STEP_ATTEMPT_STATE_CHANGED must keep the typed draft for an
+  // explicit re-selection instead of remounting and wiping it.
+  const dialogs = canMutate ? (
+    <>
+      <ProcessStepDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editStep={editStep}
+        restrictFields={restrictFields}
+        attempts={editStep ? undefined : liveAttempts}
+        onSubmit={onSave}
+      />
+      <InterviewReflectionDialog
+        open={reflectionStep != null}
+        onOpenChange={(open) => {
+          if (!open) setReflectionStep(null);
+        }}
+        step={reflectionStep}
+        companyName={companyName}
+        roleTitle={roleTitle}
+      />
+      <DeleteAlertDialog
+        pageTitle=""
+        open={stepToDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setStepToDelete(null);
+        }}
+        onDelete={onConfirmDelete}
+        alertTitle={t("jobs.deleteProcessStepTitle")}
+        alertDescription={t("jobs.deleteProcessStepDescription")}
+      />
+    </>
+  ) : null;
+
   if (timeline.attempts.length === 0) {
     return (
       <>
@@ -221,19 +264,13 @@ export function ApplicationTimelineTab({
           actionLabel={canMutate ? t("jobs.addProcessStepWithDraft") : undefined}
           onAction={canMutate ? openCreate : undefined}
         />
-        {canMutate && (
-          <ProcessStepDialog
-            open={dialogOpen}
-            onOpenChange={setDialogOpen}
-            attempts={editStep ? undefined : liveAttempts}
-            onSubmit={onSave}
-          />
-        )}
+        {dialogs}
       </>
     );
   }
 
   return (
+    <>
     <div className="space-y-6" data-testid="application-timeline">
       {canMutate && (
         <div className="flex justify-end">
@@ -458,39 +495,8 @@ export function ApplicationTimelineTab({
           )}
         </section>
       ))}
-      {canMutate && (
-        <ProcessStepDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          editStep={editStep}
-          restrictFields={restrictFields}
-          attempts={editStep ? undefined : liveAttempts}
-          onSubmit={onSave}
-        />
-      )}
-      {canMutate && (
-        <InterviewReflectionDialog
-          open={reflectionStep != null}
-          onOpenChange={(open) => {
-            if (!open) setReflectionStep(null);
-          }}
-          step={reflectionStep}
-          companyName={companyName}
-          roleTitle={roleTitle}
-        />
-      )}
-      {canMutate && (
-        <DeleteAlertDialog
-          pageTitle=""
-          open={stepToDelete != null}
-          onOpenChange={(open) => {
-            if (!open) setStepToDelete(null);
-          }}
-          onDelete={onConfirmDelete}
-          alertTitle={t("jobs.deleteProcessStepTitle")}
-          alertDescription={t("jobs.deleteProcessStepDescription")}
-        />
-      )}
     </div>
+    {dialogs}
+    </>
   );
 }

@@ -600,6 +600,7 @@ export class ApplicationService {
   async createUserProcessStep(input: {
     jobOpportunityId: string;
     applicationAttemptId?: string | null;
+    createDraftAttempt?: boolean;
     category: string;
     label: string;
     scheduledAt?: Date | null;
@@ -612,29 +613,55 @@ export class ApplicationService {
     if (!label) {
       throw new CareerRuntimeError("PROCESS_STEP_LABEL_REQUIRED", "Process step label is required");
     }
-    await this.requireOwnedOpportunity(input.jobOpportunityId);
-    const attempt = input.applicationAttemptId
-      ? await this.requireOwnedAttemptForOpportunity(
-          input.applicationAttemptId,
-          input.jobOpportunityId,
-        )
-      : await this.requireCurrentAttempt(input.jobOpportunityId);
-    const max = await this.db.applicationProcessStep.aggregate({
-      where: { applicationAttemptId: attempt.id },
-      _max: { sortOrder: true },
-    });
-    return this.db.applicationProcessStep.create({
-      data: {
-        applicationAttemptId: attempt.id,
-        category: input.category,
-        label,
-        sortOrder: allocateUserSortOrder(max._max.sortOrder),
-        status: PROCESS_STEP_STATUS.PENDING,
-        scheduledAt: input.scheduledAt ?? null,
-        deadlineAt: input.deadlineAt ?? null,
-        notes: input.notes ?? null,
-        source: PROCESS_STEP_SOURCE.USER,
-      },
+    const requestedAttemptId =
+      typeof input.applicationAttemptId === "string" &&
+      input.applicationAttemptId.trim() !== ""
+        ? input.applicationAttemptId.trim()
+        : null;
+    const createDraftAttempt = input.createDraftAttempt === true;
+    if (createDraftAttempt && requestedAttemptId) {
+      throw new CareerRuntimeError(
+        "INVALID_INPUT",
+        "createDraftAttempt and applicationAttemptId are mutually exclusive",
+      );
+    }
+    return this.db.$transaction(async (tx) => {
+      // Acquire the SQLite writer on the opportunity row before reading attempt
+      // state. The lock serializes concurrent writes on this opportunity, so
+      // the live-attempt check cannot keep a stale zero-candidate snapshot
+      // while another transaction inserts an attempt underneath it.
+      const locked = await tx.$executeRaw`UPDATE "JobOpportunity" SET "id" = "id" WHERE "id" = ${input.jobOpportunityId} AND "userId" = ${this.userId}`;
+      if (locked !== 1) {
+        throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
+      }
+      const attempt = requestedAttemptId
+        ? await this.requireOwnedAttemptForOpportunity(
+            requestedAttemptId,
+            input.jobOpportunityId,
+            tx,
+          )
+        : await this.resolveAttemptForNewStep(
+            tx,
+            input.jobOpportunityId,
+            createDraftAttempt,
+          );
+      const max = await tx.applicationProcessStep.aggregate({
+        where: { applicationAttemptId: attempt.id },
+        _max: { sortOrder: true },
+      });
+      return tx.applicationProcessStep.create({
+        data: {
+          applicationAttemptId: attempt.id,
+          category: input.category,
+          label,
+          sortOrder: allocateUserSortOrder(max._max.sortOrder),
+          status: PROCESS_STEP_STATUS.PENDING,
+          scheduledAt: input.scheduledAt ?? null,
+          deadlineAt: input.deadlineAt ?? null,
+          notes: input.notes ?? null,
+          source: PROCESS_STEP_SOURCE.USER,
+        },
+      });
     });
   }
 
@@ -837,22 +864,12 @@ export class ApplicationService {
     }
   }
 
-  private async requireOwnedOpportunity(jobOpportunityId: string) {
-    const opportunity = await this.db.jobOpportunity.findFirst({
-      where: { id: jobOpportunityId, userId: this.userId },
-      select: { id: true },
-    });
-    if (!opportunity) {
-      throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
-    }
-    return opportunity;
-  }
-
   private async requireOwnedAttemptForOpportunity(
     attemptId: string,
     jobOpportunityId: string,
+    tx: Prisma.TransactionClient = this.db,
   ) {
-    const attempt = await this.db.applicationAttempt.findFirst({
+    const attempt = await tx.applicationAttempt.findFirst({
       where: { id: attemptId, userId: this.userId },
     });
     if (!attempt) {
@@ -873,8 +890,14 @@ export class ApplicationService {
     return attempt;
   }
 
-  private async requireCurrentAttempt(jobOpportunityId: string) {
-    const candidates = await this.db.applicationAttempt.findMany({
+  // Runs inside the createUserProcessStep transaction while the opportunity
+  // write lock is held, so `candidates` reflects the committed state right now.
+  private async resolveAttemptForNewStep(
+    tx: Prisma.TransactionClient,
+    jobOpportunityId: string,
+    createDraftAttempt: boolean,
+  ) {
+    const candidates = await tx.applicationAttempt.findMany({
       where: {
         jobOpportunityId,
         userId: this.userId,
@@ -882,17 +905,28 @@ export class ApplicationService {
       },
       orderBy: { createdAt: "desc" },
     });
+    if (candidates.length === 0) {
+      return this.createAttempt(
+        {
+          jobOpportunityId,
+          channelLabel: "USER",
+        },
+        tx,
+      );
+    }
+    if (createDraftAttempt) {
+      throw new CareerRuntimeError(
+        "PROCESS_STEP_ATTEMPT_STATE_CHANGED",
+        "The application list changed while the form was open; refresh and confirm the attempt again",
+      );
+    }
     if (candidates.length > 1) {
       throw new CareerRuntimeError(
         "PROCESS_STEP_ATTEMPT_AMBIGUOUS",
         "Multiple application attempts exist for this opportunity; specify applicationAttemptId",
       );
     }
-    if (candidates.length === 1) return candidates[0];
-    return this.createAttempt({
-      jobOpportunityId,
-      channelLabel: "USER",
-    });
+    return candidates[0];
   }
 
   private async findCompatibilityStep(attemptId: string, category: string) {
