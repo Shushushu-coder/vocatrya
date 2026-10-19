@@ -11,7 +11,14 @@ import { addJob, updateJob } from "@/actions/job.actions";
 import { Loader, PlusCircle } from "lucide-react";
 import { Button } from "../ui/button";
 import { useForm } from "react-hook-form";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   AddJobFormValues,
   createAddJobFormSchema,
@@ -41,7 +48,6 @@ import {
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import SelectFormCtrl from "../Select";
 import { DatePicker } from "../DatePicker";
-import { SALARY_RANGES } from "@/lib/data/salaryRangeData";
 import { RECRUITMENT_BATCH_SUGGESTIONS } from "@/lib/data/recruitmentBatchData";
 import TiptapEditor from "../TiptapEditor";
 import { Input } from "../ui/input";
@@ -276,31 +282,62 @@ export function AddJob({
     : t("jobs.addJobDescription");
 
   const addJobForm = () => {
+    appliedDraftAutoFill.current = null;
     reset(newJobDefaultValues);
     resetEditJob();
     setDialogOpen(true);
   };
 
+  // What the applied switch generated for the current draft, so switching it
+  // back off undoes exactly those values — and nothing the user typed after.
+  const appliedDraftAutoFill = useRef<{
+    statusId?: string;
+    prevStatusId?: string;
+    dateApplied?: Date;
+    prevDateApplied?: Date;
+  } | null>(null);
+
   const jobAppliedChange = (applied: boolean) => {
-    // Applied is a one-way historical fact: the switch is disabled once it is
-    // on, so a false edge should never arrive — guard anyway.
-    if (!applied) return;
-    // A job in a pre-application stage advances to `applied`; a job already
-    // in a later stage (interview/offer/rejected/…) keeps its status.
-    const currentStatusValue = jobStatuses.find(
-      (s) => s.id === getValues("status"),
-    )?.value;
-    if (
-      currentStatusValue === "new" ||
-      currentStatusValue === "draft" ||
-      currentStatusValue === undefined
-    ) {
-      const appliedStatusId = statusIdByValue.get("applied");
+    if (applied) {
+      // A job in a pre-application stage advances to `applied`; a job already
+      // in a later stage (interview/offer/rejected/…) keeps its status.
+      const prevStatusId = getValues("status");
+      const currentStatusValue = jobStatuses.find(
+        (s) => s.id === prevStatusId,
+      )?.value;
+      const appliedStatusId =
+        currentStatusValue === "new" ||
+        currentStatusValue === "draft" ||
+        currentStatusValue === undefined
+          ? statusIdByValue.get("applied")
+          : undefined;
       if (appliedStatusId) setValue("status", appliedStatusId);
+      // appliedDate records the FIRST application only — never overwrite a
+      // date the form already carries.
+      const prevDateApplied = getValues("dateApplied");
+      const generatedDate = prevDateApplied ?? new Date();
+      if (!prevDateApplied) setValue("dateApplied", generatedDate);
+      appliedDraftAutoFill.current = {
+        statusId: appliedStatusId,
+        prevStatusId,
+        dateApplied: prevDateApplied ? undefined : generatedDate,
+        prevDateApplied,
+      };
+      return;
     }
-    // appliedDate records the FIRST application only.
-    if (!getValues("dateApplied")) {
-      setValue("dateApplied", new Date());
+    // Switching the draft back off clears only the values this toggle
+    // generated; edits made on top of them afterwards are kept.
+    const auto = appliedDraftAutoFill.current;
+    appliedDraftAutoFill.current = null;
+    if (!auto) return;
+    if (
+      auto.dateApplied &&
+      getValues("dateApplied")?.getTime() === auto.dateApplied.getTime()
+    ) {
+      setValue("dateApplied", auto.prevDateApplied);
+    }
+    if (auto.statusId && getValues("status") === auto.statusId) {
+      setValue("status", auto.prevStatusId as string);
     }
   };
 
@@ -526,9 +563,9 @@ export function AddJob({
                         <Switch
                           id="applied-switch"
                           checked={field.value ?? false}
-                          // Applied is a recorded fact, not a toggle — once a
-                          // job is applied the control locks in the on state.
-                          disabled={field.value === true}
+                          // Saved applied history stays locked; on a draft the
+                          // switch stays reversible until the job is saved.
+                          disabled={editJob?.applied === true}
                           onCheckedChange={(a) => {
                             field.onChange(a);
                             jobAppliedChange(a);
@@ -663,21 +700,21 @@ export function AddJob({
                   </>
                 )}
 
-                {/* Salary Range */}
+                {/* Salary */}
                 <div>
                   <FormField
                     control={form.control}
                     name="salaryRange"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>{t("jobs.salaryRange")}</FormLabel>
-                        <Combobox
-                          options={SALARY_RANGES}
-                          field={field}
-                          creatable
-                          freeText
-                          label={t("jobs.salaryRange")}
-                        />
+                        <FormLabel>{t("jobs.salaryOptional")}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={t("jobs.salaryPlaceholder")}
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

@@ -50,10 +50,9 @@ test.describe("zh-CN locale", () => {
     // jobs.abUnsupportedFieldsHint. Present only when AddJob sets
     // hideUnsupportedAbFields (AB_ENABLED + full). Legacy and narrower
     // scopes render resume, cover letter, and skill tags instead.
-    const zhNotice =
-      "A+B 模式下暂不支持选择简历、求职信和技能标签。请先不填写这些字段后保存。";
+    const zhNotice = "暂不支持关联简历、求职信和技能标签，可先保存职位。";
     const enNotice =
-      "Resume, cover letter, and tags are not available in A+B mode yet. Submit this job without those fields.";
+      "Resume, cover letter, and tags aren't available here yet. You can still save this job.";
 
     await page.context().addCookies([
       { name: "vocatrya_locale", value: "zh-CN", url: baseURL! },
@@ -63,7 +62,7 @@ test.describe("zh-CN locale", () => {
 
     const backdrop = page.locator("div.fixed.inset-0");
     await expect(backdrop).toHaveCount(1);
-    await expect(backdrop).toHaveClass(/bg-black\/30/);
+    await expect(backdrop).toHaveClass(/bg-overlay-bg/);
     await expect(backdrop).not.toHaveClass(/bg-black\/80/);
 
     const dialog = page.getByRole("dialog").filter({
@@ -73,7 +72,10 @@ test.describe("zh-CN locale", () => {
     await expect(dialog.getByLabel("公司")).toContainText("选择公司");
     await expect(dialog.getByLabel("工作地点")).toContainText("选择工作地点");
     await expect(dialog.getByLabel("求职渠道")).toContainText("选择求职渠道");
-    await expect(dialog.getByLabel("薪资范围")).toContainText("选择薪资范围");
+    await expect(dialog.getByLabel("薪资待遇（选填）")).toHaveAttribute(
+      "placeholder",
+      "例如：15k-25k/月、面议",
+    );
     await expect(dialog.getByText("Select title", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Select source", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Select location", { exact: true })).toHaveCount(0);
@@ -114,7 +116,10 @@ test.describe("zh-CN locale", () => {
     await expect(dialog.getByLabel("Company")).toContainText("Select Company");
     await expect(dialog.getByLabel("Job Location")).toContainText("Select Job Location");
     await expect(dialog.getByLabel("Job Source")).toContainText("Select Job Source");
-    await expect(dialog.getByLabel("Salary Range")).toContainText("Select Salary Range");
+    await expect(dialog.getByLabel("Salary (optional)")).toHaveAttribute(
+      "placeholder",
+      "e.g. $120k-$150k or negotiable",
+    );
 
     const enNoticeText = dialog.getByText(enNotice, { exact: true });
     const enResume = dialog.getByLabel("Resume");

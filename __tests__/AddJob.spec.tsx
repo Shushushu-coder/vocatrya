@@ -126,8 +126,45 @@ describe("AddJob Component", () => {
     expect(dateApplied).toHaveTextContent(format(new Date(), "PP")); // to have today's date
     const status = screen.getByLabelText("Status");
     expect(status).toHaveTextContent("Applied");
-    // applied is an irreversible historical fact — the control locks on
-    expect(appliedSwitch).toBeDisabled();
+    // Still an unsaved draft — the switch locks only once applied is persisted.
+    expect(appliedSwitch).toBeEnabled();
+  });
+
+  it("undoes only the generated date and stage when a draft is un-applied, repeatedly", async () => {
+    const appliedSwitch = screen.getByRole("switch");
+    const status = screen.getByLabelText("Status");
+    const dateApplied = screen.getByLabelText("Date Applied");
+
+    for (let i = 0; i < 2; i++) {
+      await user.click(appliedSwitch);
+      expect(appliedSwitch).toBeChecked();
+      expect(status).toHaveTextContent("Applied");
+      expect(dateApplied).toHaveTextContent(format(new Date(), "PP"));
+
+      await user.click(appliedSwitch);
+      expect(appliedSwitch).not.toBeChecked();
+      // Only the generated values are undone — date cleared, stage restored.
+      expect(dateApplied).toBeDisabled();
+      expect(dateApplied).toHaveTextContent("Pick a date");
+      expect(status).toHaveTextContent("New");
+    }
+  });
+
+  it("keeps a status the user changed on top of the auto-filled one when un-applying", async () => {
+    const appliedSwitch = screen.getByRole("switch");
+    await user.click(appliedSwitch);
+    expect(screen.getByLabelText("Status")).toHaveTextContent("Applied");
+
+    await user.click(screen.getByLabelText("Status"));
+    await user.click(screen.getByRole("option", { name: "Interview" }));
+
+    await user.click(appliedSwitch);
+    expect(appliedSwitch).not.toBeChecked();
+    // The generated Applied stage is undone; the user's Interview stays.
+    expect(screen.getByLabelText("Status")).toHaveTextContent("Interview");
+    expect(screen.getByLabelText("Date Applied")).toHaveTextContent(
+      "Pick a date",
+    );
   });
 
   it("should default the status to New", async () => {
@@ -272,26 +309,13 @@ describe("AddJob Component", () => {
       expect(screen.getByRole("option", { name })).toBeInTheDocument();
     }
   });
-  it("should load and show the salary range suggestions", async () => {
-    const salaryRangeCombobox = screen.getByLabelText("Salary Range");
-    await user.click(salaryRangeCombobox);
-    const options = screen.getAllByRole("option");
-    expect(options.length).toBeGreaterThan(0);
-    expect(options[0].textContent).toBe("Under 50,000");
-    expect(options.at(-1)!.textContent).toBe("300,000+");
-  });
-
-  it("should accept a typed salary that is not in the suggestions", async () => {
-    const salaryRangeCombobox = screen.getByLabelText("Salary Range");
-    await user.click(salaryRangeCombobox);
-    const input = screen.getByPlaceholderText("Create or Search Salary Range");
-    await user.type(input, "$185k - $210k{Enter}");
-
-    await waitFor(() =>
-      expect(screen.getByLabelText("Salary Range")).toHaveTextContent(
-        "$185k - $210k",
-      ),
-    );
+  it("renders salary as an optional free-text input", async () => {
+    const salaryInput = screen.getByLabelText("Salary (optional)");
+    expect(salaryInput.tagName).toBe("INPUT");
+    expect(salaryInput).toHaveValue("");
+    // No constrained range list — any text the user types is kept verbatim.
+    await user.type(salaryInput, "$185k - $210k");
+    expect(salaryInput).toHaveValue("$185k - $210k");
   });
   it("offers internship as a job type", () => {
     expect(screen.getByRole("radio", { name: "Internship" })).toBeInTheDocument();
@@ -434,8 +458,9 @@ describe("AddJob Component - Last Used Location/Source", () => {
     expect(screen.getByLabelText("Job Source")).toHaveTextContent(
       "Select Job Source",
     );
-    expect(screen.getByLabelText("Salary Range")).toHaveTextContent(
-      "Select Salary Range",
+    expect(screen.getByLabelText("Salary (optional)")).toHaveAttribute(
+      "placeholder",
+      "e.g. $120k-$150k or negotiable",
     );
     expect(screen.getByLabelText("Resume")).toHaveTextContent("Select Resume");
     expect(screen.getByLabelText("Cover Letter")).toHaveTextContent(
@@ -561,7 +586,7 @@ describe("AddJob Component - Edit Mode", () => {
     expect(screen.getByLabelText("Job URL")).toHaveValue(
       "https://example.com/job",
     );
-    expect(screen.getByLabelText("Salary Range")).toHaveTextContent(
+    expect(screen.getByLabelText("Salary (optional)")).toHaveValue(
       "100,000 - 110,000",
     );
 
@@ -574,7 +599,7 @@ describe("AddJob Component - Edit Mode", () => {
   it("pre-fills a free-text salary that matches no suggestion", async () => {
     await renderEditMode({ salaryRange: "$190k – $220k" } as Partial<JobResponse>);
 
-    expect(screen.getByLabelText("Salary Range")).toHaveTextContent(
+    expect(screen.getByLabelText("Salary (optional)")).toHaveValue(
       "$190k – $220k",
     );
   });
@@ -636,14 +661,14 @@ describe("AddJob Component - Edit Mode", () => {
   });
 });
 
-describe("AddJob A+B unsupported fields", () => {
+describe("AddJob unsupported fields", () => {
   const mockJobStatuses = JOB_STATUSES;
   const mockJobSources = JOB_SOURCES;
   const mockResetEditJob = vi.fn();
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   window.HTMLElement.prototype.hasPointerCapture = vi.fn();
 
-  it("hides resume, cover letter and tags in A+B mode", async () => {
+  it("hides resume, cover letter and tags in canonical-read mode", async () => {
     const mockCompanies = (await getMockList(1, 10, "companies")).data;
     const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
     const mockLocations = (await getMockList(1, 10, "locations")).data;
@@ -664,8 +689,10 @@ describe("AddJob A+B unsupported fields", () => {
     );
 
     expect(
-      screen.getByText(/not available in A\+B mode yet/i),
+      screen.getByText(/aren't available here yet/i),
     ).toBeInTheDocument();
+    // No internal rollout jargon leaks into the dialog copy.
+    expect(screen.queryByText(/A\+B|legacy/i)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("combobox", { name: /select resume/i }),
     ).not.toBeInTheDocument();
@@ -674,7 +701,7 @@ describe("AddJob A+B unsupported fields", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does not default a fake due date in A+B mode", async () => {
+  it("does not default a fake due date in canonical-read mode", async () => {
     const mockCompanies = (await getMockList(1, 10, "companies")).data;
     const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
     const mockLocations = (await getMockList(1, 10, "locations")).data;
@@ -696,7 +723,7 @@ describe("AddJob A+B unsupported fields", () => {
     expect(screen.getByLabelText(/due date/i)).toHaveTextContent("Pick a date");
   });
 
-  it("shows optional recruitment cohort and batch fields in A+B mode", async () => {
+  it("shows optional recruitment cohort and batch fields in canonical-read mode", async () => {
     const mockCompanies = (await getMockList(1, 10, "companies")).data;
     const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
     const mockLocations = (await getMockList(1, 10, "locations")).data;
@@ -916,7 +943,10 @@ describe("AddJob Component - Localized validation (zh-CN)", () => {
     expect(screen.getByLabelText("公司")).toHaveTextContent("选择公司");
     expect(screen.getByLabelText("工作地点")).toHaveTextContent("选择工作地点");
     expect(screen.getByLabelText("求职渠道")).toHaveTextContent("选择求职渠道");
-    expect(screen.getByLabelText("薪资范围")).toHaveTextContent("选择薪资范围");
+    expect(screen.getByLabelText("薪资待遇（选填）")).toHaveAttribute(
+      "placeholder",
+      "例如：15k-25k/月、面议",
+    );
     expect(screen.getByLabelText("简历")).toHaveTextContent("选择简历");
     expect(screen.getByLabelText("求职信")).toHaveTextContent("选择求职信");
     expect(screen.queryByText("Select title")).not.toBeInTheDocument();
