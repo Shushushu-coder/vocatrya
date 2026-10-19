@@ -391,6 +391,11 @@ test.describe("Add New Job", () => {
   }) => {
     const jobText = uniqueName("developer test title url filter");
     await createNewJob(page, jobText, cleanup);
+    // Saving closes the dialog before its effect finishes replacing
+    // ?add-job=true. Let that replacement commit before pushing a filter,
+    // so Back restores the saved list rather than the dialog's entry URL.
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible();
+    await expect(page).toHaveURL(/\/dashboard\/myjobs$/);
     const row = page.getByRole("row", { name: jobText });
     await expect(row.first()).toBeVisible();
 
