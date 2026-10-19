@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { test as base, expect } from "@playwright/test";
+import bcrypt from "bcryptjs";
 import Papa from "papaparse";
-import { test, expect, uniqueName } from "./fixtures";
-import { E2E_TEST_USER } from "./support/testUser";
+import { uniqueName, useEnglishLocale } from "./fixtures";
 import { configureE2EDatabase } from "./support/database";
 import {
   ACCEPTANCE_SALARY,
@@ -14,14 +16,49 @@ import {
 const database = configureE2EDatabase();
 const prisma = new PrismaClient({ datasourceUrl: database.url });
 
-test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", async ({ page, baseURL }) => {
+// A test-scoped identity keeps the unfiltered list and exports exclusive to
+// these 28 records, even while other workers create jobs for E2E_TEST_USER.
+const test = base.extend<{ acceptanceUser: { id: string; email: string; password: string } }>({
+  acceptanceUser: async ({}, use) => {
+    const password = randomUUID();
+    const user = await prisma.user.create({
+      data: {
+        name: "My Jobs acceptance",
+        email: `my-jobs-${randomUUID()}@example.com`,
+        password: await bcrypt.hash(password, 10),
+      },
+    });
+    try {
+      await use({ id: user.id, email: user.email, password });
+    } finally {
+      try {
+        await prisma.userSettings.deleteMany({ where: { userId: user.id } });
+        // Visiting My Jobs also provisions this user's default sources.
+        await prisma.jobSource.deleteMany({ where: { createdBy: user.id } });
+        await prisma.user.delete({ where: { id: user.id } });
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
+  },
+  page: async ({ page, baseURL, acceptanceUser }, use) => {
+    await useEnglishLocale(page.context(), baseURL);
+    await page.goto("/");
+    await page.getByPlaceholder("id@example.com").fill(acceptanceUser.email);
+    await page.getByRole("textbox", { name: "Password" }).fill(acceptanceUser.password);
+    await page.getByRole("button", { name: "Login", exact: true }).click();
+    await expect(page).toHaveURL(baseURL + "/dashboard");
+    await use(page);
+  },
+});
+
+test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", async ({ page, baseURL, acceptanceUser }) => {
   // Seed enough owned records to exercise real server pagination without
   // coupling My Jobs acceptance to the unrelated Add Job dialog controls.
-  const user = await prisma.user.findUniqueOrThrow({ where: { email: E2E_TEST_USER.email } });
   const marker = uniqueName("验收岗位");
   let seeded: SeededAcceptanceJobs | undefined;
   try {
-    seeded = await seedMyJobsAcceptanceFixture(prisma, { userId: user.id, marker });
+    seeded = await seedMyJobsAcceptanceFixture(prisma, { userId: acceptanceUser.id, marker });
     console.log(`[my-jobs-acceptance] read family=${seeded.family}`);
     const { company, title, location, source } = seeded.catalog;
     await page.context().addCookies([{ name: "vocatrya_locale", value: "zh-CN", url: baseURL! }]);
@@ -75,6 +112,7 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
       expect(rows[0][4]).toBe(locale === "en" ? "Company" : "公司");
       expect(rows[0][11]).toBe(locale === "en" ? "Salary" : "薪资待遇");
       const ownedRows = rows.slice(1).filter((row) => row[4] === company.label);
+      expect(rows.slice(1).filter((row) => row.length > 1)).toHaveLength(28);
       expect(ownedRows).toHaveLength(28);
       expect(ownedRows.some((row) => row[2] === (locale === "en" ? "Yes" : "是"))).toBe(true);
       expect(ownedRows.some((row) => row[2] === (locale === "en" ? "No" : "否"))).toBe(true);
@@ -89,10 +127,6 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
       }
     }
   } finally {
-    try {
-      if (seeded) await cleanupMyJobsAcceptanceFixture(prisma, seeded);
-    } finally {
-      await prisma.$disconnect();
-    }
+    if (seeded) await cleanupMyJobsAcceptanceFixture(prisma, seeded);
   }
 });
