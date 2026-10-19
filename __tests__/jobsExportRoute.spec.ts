@@ -15,6 +15,7 @@ const job = {
   Company: { label: "中文公司" }, JobTitle: { label: "实习岗位" },
   Location: { label: "用户地点" }, JobSource: { label: "自定义渠道", value: "custom" },
   Status: { label: "Interview", value: "interview" },
+  salaryRange: "15k–20k·15薪",
 };
 
 describe("CSV POST request locale", () => {
@@ -23,7 +24,7 @@ describe("CSV POST request locale", () => {
   it.each(["zh-CN", "en"])("uses the current %s cookie and emits BOM once across chunks", async (locale) => {
     vi.mocked(cookies).mockResolvedValue({ get: () => ({ value: locale }) } as never);
     vi.mocked(getJobsIterator).mockImplementation(async function* () {
-      yield [job]; yield [{ ...job, applied: false }];
+      yield [job]; yield [{ ...job, applied: false, salaryRange: null }];
     });
     const response = await POST();
     expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
@@ -33,14 +34,17 @@ describe("CSV POST request locale", () => {
     expect(csv.split("\uFEFF")).toHaveLength(2);
     const rows = Papa.parse<string[]>(csv.slice(1)).data;
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toHaveLength(11);
+    expect(rows[0]).toHaveLength(12);
     expect(rows[0][4]).toBe(locale === "en" ? "Company" : "公司");
+    expect(rows[0][11]).toBe(locale === "en" ? "Salary" : "薪资待遇");
     expect(rows[1][2]).toBe(locale === "en" ? "Yes" : "是");
     expect(rows[2][2]).toBe(locale === "en" ? "No" : "否");
     expect(rows[1][6]).toBe(locale === "en" ? "Internship" : "实习");
     expect(rows[1][10]).toBe(locale === "en" ? "Interview" : "面试中");
     expect(rows[1][4]).toBe("中文公司");
     expect(rows[1][9]).toBe("自定义渠道");
+    expect(rows[1][11]).toBe("15k–20k·15薪");
+    expect(rows[2][11]).toBe("");
     expect(rows[2][0]).toBe("2");
   });
 
