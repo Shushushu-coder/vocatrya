@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, Menu } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, nativeImage, Menu, Tray } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DESKTOP_APP_ID } = require("./installer-identity");
@@ -31,6 +31,8 @@ const { createBackendClient } = require("./runtime/backend-client");
 const { startExecutionServer } = require("./runtime/execute-server");
 const { createHostedSessionStore, startHostedSessionBroker } = require("./hosted-session");
 const { startCredentialBroker } = require("./credential-broker");
+const { createDesktopSettingsStore, DESKTOP_SETTINGS_FILE_NAME } = require("./desktop-settings");
+const { createDesktopLifecycle } = require("./lifecycle");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -341,10 +343,39 @@ if (!singleInstance) {
     return false;
   }
 
-  async function createMainWindow() {
-    const iconPath = app.isPackaged
+  function desktopIconPath() {
+    return app.isPackaged
       ? path.join(process.resourcesPath, "icon.ico")
       : path.join(__dirname, "..", "assets", "icon.ico");
+  }
+
+  // Device-level lifecycle: settings live in the app-owned config directory
+  // (foundation root when active, the disposable dev state root otherwise).
+  // The lifecycle owns the tray, close-to-tray interception, the explicit
+  // quit latch, launch-minimized, and login-item state — all read from real
+  // state at decision time.
+  const desktopSettingsStore = createDesktopSettingsStore({
+    filePath: path.join(
+      foundationLayout ? foundationLayout.configDir : path.join(stateRoot(), "config"),
+      DESKTOP_SETTINGS_FILE_NAME,
+    ),
+  });
+  const desktopLifecycle = createDesktopLifecycle({
+    app,
+    Tray,
+    Menu,
+    nativeImage,
+    trayIconPath: desktopIconPath(),
+    settingsStore: desktopSettingsStore,
+    getWindow: () => mainWindow,
+    createWindow: async () => {
+      await createMainWindow();
+    },
+  });
+
+  async function createMainWindow() {
+    const iconPath = desktopIconPath();
+    const startMinimized = desktopLifecycle.shouldStartMinimized();
     mainWindow = new BrowserWindow({
       icon: iconPath,
       width: 1280,
@@ -352,6 +383,9 @@ if (!singleInstance) {
       minWidth: 960,
       minHeight: 640,
       autoHideMenuBar: true,
+      // Minimized launch: the window never flashes visible — it stays hidden
+      // until ready-to-show, then opens straight into the minimized state.
+      show: !startMinimized,
       // Windows controls-overlay titlebar: the renderer draws the bar itself
       // (preload marks documents data-desktop, DesktopTitleBar fills the
       // strip), while the OS keeps the native caption buttons so Snap
@@ -379,6 +413,7 @@ if (!singleInstance) {
         appIconPath: iconPath,
       });
     }
+    desktopLifecycle.attachWindow(mainWindow);
     const origin = `http://127.0.0.1:${backendPort}`;
     configureNavigation(mainWindow, origin);
     const unregisterResumePrint = registerResumePrintIpc({ ipcMain, BrowserWindow, window: mainWindow, origin });
@@ -395,10 +430,7 @@ if (!singleInstance) {
   }
 
   app.on("second-instance", () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
+    void desktopLifecycle.showMainWindow();
   });
 
   function readBuildInfo() {
@@ -417,6 +449,16 @@ if (!singleInstance) {
       // custom titlebar. Text-editing accelerators (Ctrl+C/V/X/A/Z/Y) are
       // native to Chromium edit controls and keep working without it.
       Menu.setApplicationMenu(null);
+      // Real tray surface from the first launch: restore + explicit quit are
+      // always reachable, and close-to-tray has somewhere to hide to the
+      // moment the user enables it.
+      desktopLifecycle.ensureTray();
+      // Device-level lifecycle IPC: the renderer reads real state (settings
+      // document + OS login items) and controls only booleans — no paths,
+      // commands, or credentials cross this bridge.
+      desktopLifecycle.registerIpc(ipcMain, () =>
+        backendPort ? `http://127.0.0.1:${backendPort}` : null,
+      );
       hostedSessionBroker = await startHostedSessionBroker({ token: internalToken,
         store: createHostedSessionStore({ directory: path.join(stateRoot(), "hosted-sessions"), safeStorage }),
       });
@@ -485,6 +527,10 @@ if (!singleInstance) {
   });
 
   app.on("before-quit", (event) => {
+    // A real quit latches FIRST: while Electron closes windows during
+    // teardown, each fires "close" and must not be re-intercepted into a
+    // tray hide. A hidden window is never a successful quit.
+    desktopLifecycle.beginQuit();
     const ownedMigrationChild = migrationChild && migrationChild.exitCode === null ? migrationChild : null;
     if ((!backend && !ownedMigrationChild) || shuttingDown) return;
     event.preventDefault();
@@ -504,6 +550,7 @@ if (!singleInstance) {
     } catch {
       // Closing the loopback listener must never block shutdown.
     }
+    desktopLifecycle.dispose();
     Promise.all([terminateChildTree(ownedMigrationChild), terminateChildTree(backend)]).finally(() => app.quit());
   });
 

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import runtime from "./runtime.js";
 import artifacts from "./artifacts.js";
@@ -13,6 +14,7 @@ const {
   isExternalHttpUrl,
   resolveNodeExecutable,
   startBackendWithRetry,
+  terminateChildTree,
   toPrismaFileUrl,
 } = runtime;
 const { scanForbiddenArtifacts } = artifacts;
@@ -198,4 +200,51 @@ describe("desktop runtime helpers", () => {
     expect(spawnCalls).toBe(3);
     expect(terminateCalls).toBe(3);
   });
+});
+
+// The quit path must terminate ONLY the process trees this instance spawned —
+// never a sibling worktree's backend, never a foreign node.exe. This spawns
+// two real children and proves termination is scoped to the owned PID tree.
+describe("owned-process termination isolation", () => {
+  function spawnSleeper() {
+    return spawn(process.execPath, ["-e", "setInterval(() => {}, 5000)"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+  }
+
+  function alive(pid) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("terminates the owned child tree and leaves foreign processes running", async () => {
+    const owned = spawnSleeper();
+    const foreign = spawnSleeper();
+    try {
+      await terminateChildTree(owned, 5_000);
+      expect(owned.exitCode !== null || owned.signalCode !== null).toBe(true);
+      expect(alive(owned.pid)).toBe(false);
+      // The sibling process the app does not own is untouched — no global
+      // taskkill on node.exe, no PID sweep.
+      expect(foreign.exitCode).toBeNull();
+      expect(foreign.signalCode).toBeNull();
+      expect(alive(foreign.pid)).toBe(true);
+    } finally {
+      await terminateChildTree(foreign, 5_000);
+    }
+    expect(alive(foreign.pid)).toBe(false);
+  }, 30_000);
+
+  it("is a no-op on missing or already-exited children", async () => {
+    await expect(terminateChildTree(null)).resolves.toBeUndefined();
+    const exited = spawnSleeper();
+    exited.kill();
+    await new Promise((resolve) => exited.once("exit", resolve));
+    await expect(terminateChildTree(exited, 1_000)).resolves.toBeUndefined();
+  }, 30_000);
 });
