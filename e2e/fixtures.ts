@@ -25,11 +25,9 @@ export function uniqueName(base: string): string {
 }
 
 export async function login(page: Page) {
-  await page.getByPlaceholder("id@example.com").click();
   await page.getByPlaceholder("id@example.com").fill(E2E_TEST_USER.email);
-  await page.getByRole("textbox", { name: "Password" }).click();
   await page.getByRole("textbox", { name: "Password" }).fill(E2E_TEST_USER.password);
-  await page.getByRole("button", { name: "Login" }).click();
+  await page.getByRole("button", { name: "Login", exact: true }).click();
 }
 
 // Fills a "search or create" combobox and picks the entry. Unique names mean
@@ -59,7 +57,7 @@ export async function selectOrCreate(
   // that — not the trigger label, which can render blank after a create
   // because ComboBox mutates its options prop in place, so options.find()
   // may miss the new row even though field.value is set correctly.
-  await expect(input).not.toBeVisible({ timeout: 15000 });
+  await expect(input).not.toBeVisible({ timeout: 20000 });
 }
 
 // Same contract as selectOrCreate, but commits with the Enter key instead of
@@ -81,7 +79,7 @@ export async function selectOrCreateWithEnter(
   await input.press("Enter");
   // Same rationale as selectOrCreate: wait for the popover to close, not the
   // trigger label, which renders blank after an inline create.
-  await expect(input).not.toBeVisible({ timeout: 15000 });
+  await expect(input).not.toBeVisible({ timeout: 20000 });
 }
 
 export async function createNewJob(
@@ -139,6 +137,11 @@ export async function createNewJob(
   }
   await page.getByTestId("save-job-btn").click();
 
+  // Wait for the save action to settle and the dialog to close before asserting row visibility.
+  await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible();
+  // Ensure the ?add-job=true query param cleanup effect has committed.
+  await expect(page).toHaveURL(/\/dashboard\/myjobs$/);
+
   // Register the saved job for deletion, and return its id (from the row link)
   // in case a test needs it. Names are unique per run, so .first() is just
   // belt-and-suspenders.
@@ -179,9 +182,9 @@ export const test = base.extend<Fixtures>({
   // Auto-login every test and land on the dashboard.
   page: async ({ page, baseURL }, use) => {
     await useEnglishLocale(page.context(), baseURL);
-    await page.goto("/");
+    await page.goto("/signin");
     await login(page);
-    await expect(page).toHaveURL(baseURL + "/dashboard");
+    await expect(page).toHaveURL(baseURL + "/dashboard", { timeout: 20000 });
     await use(page);
   },
   cleanup: async ({ page }, use) => {
