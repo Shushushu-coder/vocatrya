@@ -5,6 +5,7 @@ import { test, expect, uniqueName } from "./fixtures";
 import { E2E_TEST_USER } from "./support/testUser";
 import { configureE2EDatabase } from "./support/database";
 import {
+  ACCEPTANCE_SALARY,
   cleanupMyJobsAcceptanceFixture,
   seedMyJobsAcceptanceFixture,
   type SeededAcceptanceJobs,
@@ -69,9 +70,10 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
       const bytes = readFileSync((await download.path())!);
       expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
       const rows = Papa.parse<string[]>(bytes.toString("utf8").slice(1)).data;
-      expect(rows[0]).toHaveLength(11);
+      expect(rows[0]).toHaveLength(12);
       expect(rows[0][0]).toBe(locale === "en" ? "#" : "序号");
       expect(rows[0][4]).toBe(locale === "en" ? "Company" : "公司");
+      expect(rows[0][11]).toBe(locale === "en" ? "Salary" : "薪资待遇");
       const ownedRows = rows.slice(1).filter((row) => row[4] === company.label);
       expect(ownedRows).toHaveLength(28);
       expect(ownedRows.some((row) => row[2] === (locale === "en" ? "Yes" : "是"))).toBe(true);
@@ -83,6 +85,7 @@ test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", as
         expect(row[7]).toBe(locale === "en" ? "Remote" : "远程");
         expect(row[8]).toBe(location.label);
         expect(row[9]).toBe(source.label);
+        expect(row[11]).toBe(ACCEPTANCE_SALARY);
       }
     }
   } finally {
