@@ -19,6 +19,7 @@ import {
 import {
   useI18n,
   getLocalizedJobStatus,
+  getLocalizedJobSource,
   getLocalizedJobType,
   getLocalizedWorkplaceType,
 } from "@/i18n";
@@ -76,7 +77,9 @@ export function JobSummaryCard({
           </div>
           <div>
             <p className="text-sm text-muted-foreground">{t("jobs.jobSource")}</p>
-            <p className="mt-1 font-medium">{job.JobSource?.label ?? "-"}</p>
+            <p className="mt-1 font-medium">
+              {getLocalizedJobSource(job.JobSource, t) || "-"}
+            </p>
           </div>
           {showCampusFields && job.recruitmentCohort ? (
             <div>
@@ -156,7 +159,8 @@ export function JobSummaryCard({
               <span className="font-medium">
                 {job.createdAt ? formatDate(job.createdAt) : "-"}
               </span>
-              {job.createdVia && (
+              {/* "USER" is the manual-entry provenance — a badge adds no signal. */}
+              {job.createdVia && job.createdVia !== "USER" && (
                 <Badge className="gap-1 bg-violet-500 dark:bg-violet-400">
                   <Sparkles className="h-3.5 w-3.5" />
                   {t("jobs.viaSource", { source: job.createdVia })}

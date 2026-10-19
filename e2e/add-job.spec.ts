@@ -106,22 +106,26 @@ test.describe("Add New Job", () => {
     );
   });
 
-  test("should persist a typed salary range after saving", async ({
+  test("toggles applied off and on in a draft, then locks once saved", async ({
     page,
     cleanup,
   }) => {
-    const jobText = uniqueName("developer test title salary");
-    const salary = "$185k - $210k";
+    const jobText = uniqueName("developer test title draft toggle");
     await createNewJob(page, jobText, cleanup, {
       beforeSave: async (page) => {
-        await page.getByLabel("Salary Range").click();
-        const input = page.getByPlaceholder("Create or Search Salary Range");
-        await input.fill(salary);
-        // Same target as the shared selectOrCreate helper: CommandEmpty splits
-        // "Create: " and the typed text across two <p>s, so match the wrapper
-        // by text rather than by an option role it does not have.
-        await page.getByText(`Create: ${salary}`).click();
-        await expect(input).not.toBeVisible({ timeout: 15000 });
+        const appliedSwitch = page.getByRole("switch");
+        const statusSelect = page.getByLabel("Select Job Status");
+        const dateApplied = page.getByLabel("Date Applied");
+        // An unsaved draft is reversible: undo removes only the stage and
+        // date the switch itself generated.
+        await appliedSwitch.click();
+        await expect(appliedSwitch).toBeChecked();
+        await expect(statusSelect).toContainText("Applied");
+        await appliedSwitch.click();
+        await expect(appliedSwitch).not.toBeChecked();
+        await expect(statusSelect).toContainText("New");
+        await expect(dateApplied).toContainText("Pick a date");
+        await appliedSwitch.click();
       },
     });
     await expect(page.getByRole("row", { name: jobText }).first()).toBeVisible();
@@ -132,7 +136,44 @@ test.describe("Add New Job", () => {
       .first()
       .click();
     await page.getByRole("menuitem", { name: "Edit Job" }).click();
-    await expect(page.getByLabel("Salary Range")).toContainText(salary);
+    await expect(page.getByRole("switch")).toBeChecked();
+    await expect(page.getByRole("switch")).toBeDisabled();
+    await expect(page.getByLabel("Date Applied")).toContainText(
+      format(new Date(), "PP"),
+    );
+  });
+
+  test("should discard the draft when cancelled", async ({ page }) => {
+    // Nothing is submitted, so nothing is created and no cleanup is needed.
+    await page.getByRole("button", { name: "Job", exact: true }).click();
+    await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+    await page.getByRole("switch").click();
+    await expect(page.getByRole("switch")).toBeChecked();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible();
+  });
+
+  test("should persist a typed salary after saving", async ({
+    page,
+    cleanup,
+  }) => {
+    const jobText = uniqueName("developer test title salary");
+    const salary = "$185k - $210k";
+    await createNewJob(page, jobText, cleanup, {
+      beforeSave: async (page) => {
+        // Salary is a plain optional text field — any free text is kept.
+        await page.getByLabel("Salary (optional)").fill(salary);
+      },
+    });
+    await expect(page.getByRole("row", { name: jobText }).first()).toBeVisible();
+
+    await page
+      .getByRole("row", { name: jobText })
+      .getByTestId("job-actions-menu-btn")
+      .first()
+      .click();
+    await page.getByRole("menuitem", { name: "Edit Job" }).click();
+    await expect(page.getByLabel("Salary (optional)")).toHaveValue(salary);
   });
 
   test("should persist selected workplace type after saving", async ({

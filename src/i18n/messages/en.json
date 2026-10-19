@@ -434,6 +434,8 @@
     "recruitmentBatchPlaceholder": "e.g. Fall campus hiring",
     "rowNumber": "#",
     "salaryRange": "Salary Range",
+    "salaryOptional": "Salary (optional)",
+    "salaryPlaceholder": "e.g. $120k-$150k or negotiable",
     "resume": "Resume",
     "addNew": "Add New",
     "addSkill": "Add Skill",
@@ -563,7 +565,7 @@
     "interviewReflectionLoadFailed": "Failed to load the reflection. Please close and reopen the dialog.",
     "interviewReflectionQuestionIndex": "Question {number}",
     "interviewReflectionContext": "{label} · {company} / {title}",
-    "abUnsupportedFieldsHint": "Resume, cover letter, and tags are not available in A+B mode yet. Submit this job without those fields.",
+    "abUnsupportedFieldsHint": "Resume, cover letter, and tags aren't available here yet. You can still save this job.",
     "resumeVersionNumber": "Version {number}",
     "stepSources": {
       "USER": "Added manually",

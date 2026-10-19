@@ -434,6 +434,8 @@
     "recruitmentBatchPlaceholder": "例如：秋招",
     "rowNumber": "序号",
     "salaryRange": "薪资范围",
+    "salaryOptional": "薪资待遇（选填）",
+    "salaryPlaceholder": "例如：15k-25k/月、面议",
     "resume": "简历",
     "addNew": "新建",
     "addSkill": "添加技能",
@@ -563,7 +565,7 @@
     "interviewReflectionLoadFailed": "复盘加载失败，请关闭后重新打开。",
     "interviewReflectionQuestionIndex": "问题 {number}",
     "interviewReflectionContext": "{label} · {company} / {title}",
-    "abUnsupportedFieldsHint": "A+B 模式下暂不支持选择简历、求职信和技能标签。请先不填写这些字段后保存。",
+    "abUnsupportedFieldsHint": "暂不支持关联简历、求职信和技能标签，可先保存职位。",
     "resumeVersionNumber": "第 {number} 版",
     "stepSources": {
       "USER": "手动添加",
