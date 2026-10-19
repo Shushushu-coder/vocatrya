@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CalendarClock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,15 @@ type ApplicationTimelineTabProps = {
   roleTitle?: string | null;
 };
 
+const ATTEMPT_RESELECT_ERROR_KEYS: Record<string, string> = {
+  PROCESS_STEP_ATTEMPT_AMBIGUOUS: "jobs.attemptErrorAmbiguous",
+  PROCESS_STEP_ATTEMPT_STATE_CHANGED: "jobs.attemptErrorStateChanged",
+  ATTEMPT_ARCHIVED: "jobs.attemptErrorArchived",
+  ATTEMPT_NOT_FOUND: "jobs.attemptErrorUnavailable",
+  ATTEMPT_OPPORTUNITY_MISMATCH: "jobs.attemptErrorUnavailable",
+  INVALID_ID: "jobs.attemptErrorUnavailable",
+};
+
 function isCompleted(step: ApplicationProcessStepDTO): boolean {
   return (
     step.completedAt != null || step.status === PROCESS_STEP_STATUS.COMPLETED
@@ -59,6 +68,12 @@ export function ApplicationTimelineTab({
     useState<ApplicationProcessStepDTO | null>(null);
   const [completingId, startComplete] = useTransition();
   const [deletingId, startDelete] = useTransition();
+
+  // Mirrors the backend rule: only non-archived attempts may receive new steps.
+  const liveAttempts = useMemo(
+    () => (timeline?.attempts ?? []).filter((attempt) => attempt.archivedAt == null),
+    [timeline],
+  );
 
   const loadTimeline = useCallback(async () => {
     const result = await getApplicationTimeline(jobId);
@@ -101,6 +116,13 @@ export function ApplicationTimelineTab({
         })
       : await createApplicationProcessStep({
           jobOpportunityId: jobId,
+          // Zero live attempts means the user explicitly asked to create the
+          // draft together with this step; with one or more live attempts the
+          // picker's explicit id is the only accepted ownership signal. The
+          // two inputs are mutually exclusive on the server.
+          ...(liveAttempts.length === 0
+            ? { createDraftAttempt: true }
+            : { applicationAttemptId: values.applicationAttemptId || undefined }),
           category: values.category,
           label: values.label,
           scheduledAt: values.scheduledAt,
@@ -108,7 +130,14 @@ export function ApplicationTimelineTab({
           notes: values.notes || null,
         });
     if (!result.success) {
-      toastError(result.message);
+      const attemptErrorKey =
+        !editStep && result.code
+          ? ATTEMPT_RESELECT_ERROR_KEYS[result.code]
+          : undefined;
+      toastError(attemptErrorKey ? t(attemptErrorKey) : result.message);
+      if (attemptErrorKey) {
+        await loadTimeline();
+      }
       return false;
     }
     toastSuccess(editStep ? t("jobs.stepUpdated") : t("jobs.stepAdded"));
@@ -189,6 +218,42 @@ export function ApplicationTimelineTab({
     );
   }
 
+  // The dialogs render at a fixed position outside the attempt-count branch so
+  // the process-step form survives a zero→nonzero timeline flip: a refresh
+  // after PROCESS_STEP_ATTEMPT_STATE_CHANGED must keep the typed draft for an
+  // explicit re-selection instead of remounting and wiping it.
+  const dialogs = canMutate ? (
+    <>
+      <ProcessStepDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editStep={editStep}
+        restrictFields={restrictFields}
+        attempts={editStep ? undefined : liveAttempts}
+        onSubmit={onSave}
+      />
+      <InterviewReflectionDialog
+        open={reflectionStep != null}
+        onOpenChange={(open) => {
+          if (!open) setReflectionStep(null);
+        }}
+        step={reflectionStep}
+        companyName={companyName}
+        roleTitle={roleTitle}
+      />
+      <DeleteAlertDialog
+        pageTitle=""
+        open={stepToDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setStepToDelete(null);
+        }}
+        onDelete={onConfirmDelete}
+        alertTitle={t("jobs.deleteProcessStepTitle")}
+        alertDescription={t("jobs.deleteProcessStepDescription")}
+      />
+    </>
+  ) : null;
+
   if (timeline.attempts.length === 0) {
     return (
       <>
@@ -196,32 +261,33 @@ export function ApplicationTimelineTab({
           icon={CalendarClock}
           title={t("jobs.timelineEmptyTitle")}
           description={t("jobs.timelineEmptyDescription")}
-          actionLabel={canMutate ? t("jobs.addProcessStep") : undefined}
+          actionLabel={canMutate ? t("jobs.addProcessStepWithDraft") : undefined}
           onAction={canMutate ? openCreate : undefined}
         />
-        {canMutate && (
-          <ProcessStepDialog
-            open={dialogOpen}
-            onOpenChange={setDialogOpen}
-            onSubmit={onSave}
-          />
-        )}
+        {dialogs}
       </>
     );
   }
 
   return (
+    <>
     <div className="space-y-6" data-testid="application-timeline">
       {canMutate && (
         <div className="flex justify-end">
           <Button type="button" size="sm" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
-            {t("jobs.addProcessStep")}
+            {liveAttempts.length === 0
+              ? t("jobs.addProcessStepWithDraft")
+              : t("jobs.addProcessStep")}
           </Button>
         </div>
       )}
       {timeline.attempts.map((attempt) => (
-        <section key={attempt.id} className="space-y-4 rounded-lg border p-4">
+        <section
+          key={attempt.id}
+          className="space-y-4 rounded-lg border p-4"
+          data-attempt-id={attempt.id}
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-sm text-muted-foreground">
@@ -247,6 +313,11 @@ export function ApplicationTimelineTab({
               </p>
               <p className="mt-1 font-medium">
                 {stageLabel(attempt.currentStageCategory)}
+                {attempt.archivedAt ? (
+                  <Badge variant="outline" className="ml-2">
+                    {t("jobs.attemptArchived")}
+                  </Badge>
+                ) : null}
               </p>
             </div>
             <div>
@@ -424,38 +495,8 @@ export function ApplicationTimelineTab({
           )}
         </section>
       ))}
-      {canMutate && (
-        <ProcessStepDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          editStep={editStep}
-          restrictFields={restrictFields}
-          onSubmit={onSave}
-        />
-      )}
-      {canMutate && (
-        <InterviewReflectionDialog
-          open={reflectionStep != null}
-          onOpenChange={(open) => {
-            if (!open) setReflectionStep(null);
-          }}
-          step={reflectionStep}
-          companyName={companyName}
-          roleTitle={roleTitle}
-        />
-      )}
-      {canMutate && (
-        <DeleteAlertDialog
-          pageTitle=""
-          open={stepToDelete != null}
-          onOpenChange={(open) => {
-            if (!open) setStepToDelete(null);
-          }}
-          onDelete={onConfirmDelete}
-          alertTitle={t("jobs.deleteProcessStepTitle")}
-          alertDescription={t("jobs.deleteProcessStepDescription")}
-        />
-      )}
     </div>
+    {dialogs}
+    </>
   );
 }

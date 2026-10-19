@@ -407,8 +407,10 @@ describe("JobDetails – tabs", () => {
         attempts: [
           {
             id: "att-1",
+            channelLabel: "Careers page",
             submittedAt: "2024-01-01T00:00:00.000Z",
             createdAt: "2024-01-01T00:00:00.000Z",
+            archivedAt: null,
             currentStageCategory: "INTERVIEW",
             outcome: "ACTIVE",
             transferredFromAttemptId: null,
@@ -459,8 +461,10 @@ describe("JobDetails – tabs", () => {
         attempts: [
           {
             id: "att-2",
+            channelLabel: "Referral",
             submittedAt: "2024-01-01T00:00:00.000Z",
             createdAt: "2024-01-01T00:00:00.000Z",
+            archivedAt: null,
             currentStageCategory: "CLOSED",
             outcome: "TRANSFERRED",
             transferredFromAttemptId: "att-1",

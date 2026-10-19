@@ -27,10 +27,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
-import { useEffect, useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import { Loader } from "lucide-react";
 import { PROCESS_STEP_CATEGORY } from "@/lib/career/identities";
-import type { ApplicationProcessStepDTO } from "@/lib/career/applicationTimeline";
+import type {
+  ApplicationAttemptTimelineDTO,
+  ApplicationProcessStepDTO,
+} from "@/lib/career/applicationTimeline";
 import { useI18n } from "@/i18n";
 
 const CATEGORY_OPTIONS = [
@@ -43,6 +46,7 @@ const CATEGORY_OPTIONS = [
 ] as const;
 
 export type ProcessStepFormValues = {
+  applicationAttemptId: string;
   category: string;
   label: string;
   scheduledAt: Date | null;
@@ -56,6 +60,10 @@ type ProcessStepDialogProps = {
   onOpenChange: (open: boolean) => void;
   editStep?: ApplicationProcessStepDTO | null;
   restrictFields?: boolean;
+  // Live attempts the new step may be attached to. Undefined hides the
+  // picker entirely (edit mode); an empty array means saving creates an
+  // application draft first.
+  attempts?: ApplicationAttemptTimelineDTO[];
   onSubmit: (values: ProcessStepFormValues) => Promise<boolean>;
 };
 
@@ -64,12 +72,14 @@ export function ProcessStepDialog({
   onOpenChange,
   editStep,
   restrictFields = false,
+  attempts,
   onSubmit,
 }: ProcessStepDialogProps) {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const [isPending, startTransition] = useTransition();
   const form = useForm<ProcessStepFormValues>({
     defaultValues: {
+      applicationAttemptId: "",
       category: PROCESS_STEP_CATEGORY.INTERVIEW,
       label: "",
       scheduledAt: null,
@@ -79,9 +89,16 @@ export function ProcessStepDialog({
     },
   });
 
+  const attemptsRef = useRef(attempts);
+  useEffect(() => {
+    attemptsRef.current = attempts;
+  }, [attempts]);
+
   useEffect(() => {
     if (!open) return;
+    const options = attemptsRef.current;
     form.reset({
+      applicationAttemptId: options?.length === 1 ? options[0].id : "",
       category: editStep?.category ?? PROCESS_STEP_CATEGORY.INTERVIEW,
       label: editStep?.label ?? "",
       scheduledAt: editStep?.scheduledAt ? new Date(editStep.scheduledAt) : null,
@@ -91,12 +108,37 @@ export function ProcessStepDialog({
     });
   }, [editStep, form, open]);
 
+  // A refreshed attempt list can invalidate a selection made before the
+  // refresh: clear it so the user picks again instead of the step
+  // silently landing on another application.
+  useEffect(() => {
+    if (!open || !attempts) return;
+    const current = form.getValues("applicationAttemptId");
+    if (current && !attempts.some((attempt) => attempt.id === current)) {
+      form.setValue("applicationAttemptId", "");
+    }
+  }, [attempts, form, open]);
+
   function submit(values: ProcessStepFormValues) {
     startTransition(async () => {
       const ok = await onSubmit(values);
       if (ok) onOpenChange(false);
     });
   }
+
+  const attemptOptionLabel = (attempt: ApplicationAttemptTimelineDTO) => {
+    const stageKey = `jobs.attemptStages.${attempt.currentStageCategory}`;
+    const stage = t(stageKey);
+    const stageText = stage === stageKey ? attempt.currentStageCategory : stage;
+    const timing = attempt.submittedAt
+      ? t("jobs.attemptOptionSubmitted", {
+          date: formatDateTime(attempt.submittedAt),
+        })
+      : t("jobs.attemptOptionRecorded", {
+          date: formatDateTime(attempt.createdAt),
+        });
+    return `${attempt.channelLabel} · ${stageText} · ${timing}`;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,6 +155,43 @@ export function ProcessStepDialog({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
+            {attempts != null && attempts.length > 0 && (
+              <FormField
+                control={form.control}
+                name="applicationAttemptId"
+                rules={{ required: t("jobs.attemptSelectRequired") }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("jobs.attemptForStep")}</FormLabel>
+                    <FormControl>
+                      <select
+                        {...field}
+                        className="h-9 w-full max-w-full rounded-md border bg-background px-2 text-sm"
+                        data-testid="attempt-select"
+                      >
+                        <option value="">
+                          {t("jobs.attemptSelectPlaceholder")}
+                        </option>
+                        {attempts.map((attempt) => (
+                          <option key={attempt.id} value={attempt.id}>
+                            {attemptOptionLabel(attempt)}
+                          </option>
+                        ))}
+                      </select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+            {attempts != null && attempts.length === 0 && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="attempt-draft-notice"
+              >
+                {t("jobs.attemptDraftNotice")}
+              </p>
+            )}
             <FormField
               control={form.control}
               name="category"

@@ -55,8 +55,10 @@ function timeline(
     attempts: [
       {
         id: "att-1",
+        channelLabel: "Careers page",
         submittedAt: "2024-01-01T00:00:00.000Z",
         createdAt: "2024-01-01T00:00:00.000Z",
+        archivedAt: null,
         currentStageCategory: "SUBMITTED",
         outcome: "ACTIVE",
         transferredFromAttemptId: null,
