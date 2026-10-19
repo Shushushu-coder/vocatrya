@@ -20,6 +20,7 @@ export type JobCsvInput = {
   Location?: CsvLabel;
   JobSource?: CsvLabel;
   Status?: CsvLabel;
+  salaryRange?: string | null;
 };
 
 // Excel on Windows needs a UTF-8 BOM to detect encoding for CJK text.
@@ -37,6 +38,8 @@ export const JOB_CSV_FIELD_KEYS = [
   "Location",
   "JobSource",
   "Status",
+  // Appended last so every pre-existing column keeps its position.
+  "salaryRange",
 ] as const;
 
 export type JobCsvFieldKey = (typeof JOB_CSV_FIELD_KEYS)[number];
@@ -53,6 +56,7 @@ const HEADER_I18N: Record<JobCsvFieldKey, string> = {
   Location: "jobs.jobLocation",
   JobSource: "jobs.jobSourceLabel",
   Status: "jobs.jobStatus",
+  salaryRange: "jobs.salary",
 };
 
 const extractLabel = (field: CsvLabel | undefined): string => {
@@ -86,6 +90,9 @@ export function transformJobForCsv(
     Status: job.Status
       ? getLocalizedJobStatus(job.Status, t)
       : "N/A",
+    // User-entered raw text: never localized, never substituted — null stays
+    // an empty cell so "N/A" can't be mistaken for a real salary value.
+    salaryRange: job.salaryRange ?? "",
   };
 }
 

@@ -78,6 +78,7 @@ const JOB_EXPORT_SELECT = {
   dueDate: true,
   applied: true,
   appliedDate: true,
+  salaryRange: true,
 };
 
 const JOB_DETAILS_INCLUDE = {
