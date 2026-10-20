@@ -1,5 +1,13 @@
 import { addDays, format } from "date-fns";
 import { test, expect, createNewJob, uniqueName } from "./fixtures";
+import { PrismaClient } from "@prisma/client";
+import { configureE2EDatabase } from "./support/database";
+import { readE2ERuntimeContract } from "./support/runtimeContract";
+
+const prisma = new PrismaClient({ datasourceUrl: configureE2EDatabase().url });
+let runtime: Awaited<ReturnType<typeof readE2ERuntimeContract>>;
+test.beforeAll(async () => { runtime = await readE2ERuntimeContract(prisma); });
+test.afterAll(async () => { await prisma.$disconnect(); });
 
 test.describe("Add New Job", () => {
   test("should allow me to add a new job", async ({ page, cleanup }) => {
@@ -30,7 +38,9 @@ test.describe("Add New Job", () => {
       `location ${jobText.replace(/\s+/g, "-")}`,
     );
     await expect(page.getByLabel("Job Source")).toContainText("Indeed");
-    await expect(page.getByLabel("Select Job Status")).toContainText("New");
+    await expect(page.getByLabel("Select Job Status")).toContainText(
+      runtime.family === "ab" ? "Draft" : "New",
+    );
     await expect(
       page.getByLabel("Job Description").getByRole("paragraph"),
     ).toContainText("test description");
@@ -43,13 +53,17 @@ test.describe("Add New Job", () => {
     // Dialog closes only on a successful save; assert that instead of the
     // toast, which auto-dismisses and can vanish before the poll under load.
     await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible();
+    await page.getByRole("row", { name: jobText }).getByTestId("job-actions-menu-btn").first().click();
+    await page.getByRole("menuitem", { name: "Edit Job" }).click();
+    await expect(page.getByLabel("Job Description").getByRole("paragraph"))
+      .toContainText("test description edited");
   });
 
   test("should delete a job", async ({ page, cleanup }) => {
     const jobText = uniqueName("developer test title delete");
     // Registered as a safety net; the test deletes the job via the UI below
     // and the cleanup API is idempotent if the row is already gone.
-    await createNewJob(page, jobText, cleanup);
+    const jobId = await createNewJob(page, jobText, cleanup);
     await expect(page.getByRole("row", { name: jobText }).first()).toBeVisible();
 
     await page
@@ -58,9 +72,27 @@ test.describe("Add New Job", () => {
       .first()
       .click();
     await page.getByRole("menuitem", { name: "Delete" }).click();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", {
+      name: runtime.family === "ab" ? "Archive" : "Delete", exact: true,
+    }).click();
 
     await expect(page.getByRole("row", { name: jobText })).not.toBeVisible();
+    // The list removes the row optimistically while the archive/delete write
+    // commits asynchronously afterwards. Poll the durable row with a bounded,
+    // state-based wait instead of trusting the UI removal instant.
+    if (runtime.family === "ab") {
+      await expect(async () => {
+        const archived = await prisma.jobOpportunity.findUniqueOrThrow({
+          where: { id: jobId },
+        });
+        expect(archived.archivedAt).not.toBeNull();
+        expect(archived.title).toBe(jobText);
+      }).toPass({ timeout: 15_000, intervals: [250, 500, 1_000, 2_000] });
+    } else {
+      await expect(async () => {
+        expect(await prisma.job.findUnique({ where: { id: jobId } })).toBeNull();
+      }).toPass({ timeout: 15_000, intervals: [250, 500, 1_000, 2_000] });
+    }
   });
 
   test("should save a job without a job url", async ({ page, cleanup }) => {
@@ -345,7 +377,11 @@ test.describe("Add New Job", () => {
     await expect(page.getByRole("row", { name: jobText })).not.toBeVisible();
 
     await page.getByTestId("job-filter-select").click();
-    await page.getByRole("option", { name: "New", exact: true }).click();
+    // A fresh AB opportunity derives "draft"; "new" is only a legacy status.
+    // "new" is neither a derived UI status nor an AB-hidden filter, so the AB
+    // read path matches it against employmentType and returns nothing.
+    const positiveStatus = runtime.family === "ab" ? "Draft" : "New";
+    await page.getByRole("option", { name: positiveStatus, exact: true }).click();
     await expect(page.getByRole("row", { name: jobText }).first()).toBeVisible();
   });
 
@@ -536,7 +572,7 @@ test.describe("Add New Job", () => {
     await expect(page.getByText("Job title is required.")).not.toBeVisible();
   });
 
-  test("should add and persist a skill tag on a job", async ({
+  test("persists legacy skill tags or saves with explicit AB field limitations", async ({
     page,
     cleanup,
   }) => {
@@ -546,6 +582,13 @@ test.describe("Add New Job", () => {
 
     await createNewJob(page, jobText, cleanup, {
       beforeSave: async (page) => {
+        if (runtime.family === "ab") {
+          await expect(page.getByText("Resume, cover letter, and tags aren't available here yet. You can still save this job.", { exact: true })).toBeVisible();
+          await expect(page.getByRole("combobox", { name: "Search or add a skill..." })).toHaveCount(0);
+          await expect(page.getByLabel("Resume", { exact: true })).toHaveCount(0);
+          await expect(page.getByLabel("Cover Letter", { exact: true })).toHaveCount(0);
+          return;
+        }
         await page
           .getByRole("combobox", { name: "Search or add a skill..." })
           .click();
@@ -566,6 +609,12 @@ test.describe("Add New Job", () => {
       .click();
     await page.getByRole("menuitem", { name: "Edit Job" }).click();
     await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
-    await expect(page.getByText(tagText, { exact: true })).toBeVisible();
+    if (runtime.family === "ab") {
+      await expect(page.getByText("Resume, cover letter, and tags aren't available here yet. You can still save this job.", { exact: true })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Search or add a skill..." })).toHaveCount(0);
+      expect(await prisma.tag.count({ where: { label: tagText } })).toBe(0);
+    } else {
+      await expect(page.getByText(tagText, { exact: true })).toBeVisible();
+    }
   });
 });
