@@ -166,11 +166,38 @@ function resolveIsolatedProcessDatabase() {
       "Refusing to run process E2E: git worktree topology is unavailable, so protected checkout roots cannot be enumerated.",
     );
   }
-  // Protected locations are every checkout sharing this repository other
-  // than this one: the primary worktree and all linked siblings.
-  const protectedRoots = topology.all.filter(
-    (root) => normalizeCase(root) !== normalizeCase(thisRoot),
-  );
+  // This checkout's own databases are disposable only when it is a
+  // linked worktree: its .git is a file whose gitdir lives inside the
+  // common dir's worktrees/ area (<common>/.git/worktrees/<id>), and the
+  // topology names a different checkout as primary. Any other shape -- a
+  // .git directory, or a .git file pointing elsewhere such as a
+  // --separate-git-dir clone -- is a primary checkout and is never
+  // exempted: its prisma/ holds real development data that no evidence
+  // dir, database path, or file alias may re-admit.
+  const gitMarker = path.join(repoRoot, ".git");
+  let isLinkedWorktree = false;
+  try {
+    if (statSync(gitMarker).isFile()) {
+      const target = /^gitdir:\s*(.+)$/m.exec(readFileSync(gitMarker, "utf8"));
+      const gitDir = target ? path.resolve(repoRoot, target[1].trim()) : null;
+      isLinkedWorktree =
+        gitDir !== null &&
+        path.basename(path.dirname(gitDir)) === "worktrees" &&
+        normalizeCase(topology.primary) !== normalizeCase(thisRoot);
+    }
+  } catch {
+    isLinkedWorktree = false;
+  }
+  // Protected locations are every checkout sharing this repository
+  // plus this checkout itself: topology can name a --separate-git-dir
+  // primary by its gitdir, so this root cannot be assumed to appear in
+  // the list. A linked worktree alone may exempt itself; the primary
+  // checkout always stays in the protected set.
+  const protectedRoots = isLinkedWorktree
+    ? topology.all.filter(
+        (root) => normalizeCase(root) !== normalizeCase(thisRoot),
+      )
+    : [...new Set([...topology.all, thisRoot])];
 
   const allowedRoots: string[] = [];
   if (process.env.R3_EVIDENCE_DIR) {
@@ -217,8 +244,7 @@ function resolveIsolatedProcessDatabase() {
     }
     allowedRoots.push(evidenceDir);
   }
-  const gitMarker = path.join(repoRoot, ".git");
-  if (existsSync(gitMarker) && statSync(gitMarker).isFile()) {
+  if (isLinkedWorktree) {
     const prismaDir = realDirectory(path.join(repoRoot, "prisma"));
     if (prismaDir) allowedRoots.push(prismaDir);
   }
