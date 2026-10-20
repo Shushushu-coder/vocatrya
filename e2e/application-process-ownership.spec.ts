@@ -1,4 +1,12 @@
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { type Page } from "@playwright/test";
@@ -12,51 +20,202 @@ import { resolveE2EDatabase } from "./support/database";
 // is the product path that records a new submission.
 
 // Database isolation contract. The Playwright harness resolves
-// DATABASE_URL once (configureE2EDatabase -> webServer env -> global setup)
-// and this spec resolves it through the same function, so the checks below
-// compare canonical real paths, never URL substrings. The resolved file
-// must live inside an explicitly designated disposable root:
-//   - R3_EVIDENCE_DIR, when set: the harness's explicit synthetic run
-//     directory (Integration disposable SQLite, future CI sandboxes); or
-//   - this checkout's own prisma/ directory, but only when the checkout is
-//     a linked git worktree (its .git is a file). The primary checkout's
-//     prisma/ holds real development data and stays rejected.
-// Anything else -- the root repository, another worktree's database,
-// user-data directories, packaged installs, "../" escapes, junction
-// redirects -- resolves outside every allowed root and fails closed.
+// DATABASE_URL once (configureE2EDatabase -> webServer env -> global
+// setup) and this spec resolves it through the same function, so the
+// checks below compare canonical real paths, never URL substrings. The
+// resolved file must live inside an explicitly designated disposable
+// root:
+//   - R3_EVIDENCE_DIR, when set: an operator-provided directory trusted
+//     only after it proves narrow. It is rejected when it is, contains,
+//     or sits inside the primary checkout or any linked worktree root of
+//     this repository, when it is or contains the user profile or the OS
+//     temp/system roots, and when it fails to resolve to a real
+//     directory at all; or
+//   - this checkout's own prisma/ directory, but only when the checkout
+//     is a linked git worktree (its .git is a file). The primary
+//     checkout's prisma/ holds real development data and stays rejected.
+// Path checks alone cannot see aliases, so the main SQLite file must
+// additionally be a regular file with exactly one directory entry
+// (nlink === 1) and must not share volume + file-index identity with any
+// file under a protected checkout's prisma/ -- a hard link smuggling a
+// protected database into an allowed directory fails both. Anything
+// else -- the root repository, another worktree's database, user-data
+// directories, packaged installs, "../" escapes, junction redirects --
+// resolves outside every allowed root and fails closed.
 function realDirectory(dir: string): string | null {
   const resolved = path.resolve(dir);
   return existsSync(resolved) ? realpathSync(resolved) : null;
 }
 
+function canonicalPath(p: string): string {
+  const resolved = path.resolve(p);
+  return existsSync(resolved) ? realpathSync(resolved) : resolved;
+}
+
+function normalizeCase(p: string): string {
+  return process.platform === "win32" ? p.toLowerCase() : p;
+}
+
 function isInsideDir(child: string, root: string): boolean {
-  const normalize = (p: string) =>
-    process.platform === "win32" ? p.toLowerCase() : p;
-  const relative = path.relative(normalize(root), normalize(child));
+  const relative = path.relative(normalizeCase(root), normalizeCase(child));
   return (
     relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
   );
 }
 
+function isInsideOrEqual(child: string, root: string): boolean {
+  return normalizeCase(child) === normalizeCase(root) || isInsideDir(child, root);
+}
+
 function isSameFile(a: string, b: string): boolean {
   try {
-    const left = realpathSync(a);
-    const right = realpathSync(b);
-    return process.platform === "win32"
-      ? left.toLowerCase() === right.toLowerCase()
-      : left === right;
+    return normalizeCase(realpathSync(a)) === normalizeCase(realpathSync(b));
   } catch {
     return false;
+  }
+}
+
+function statOrNull(file: string) {
+  try {
+    return statSync(file);
+  } catch {
+    return null;
+  }
+}
+
+// Every checkout sharing this repository is a protected location: the
+// primary worktree's prisma/ holds real development data and any other
+// worktree's database is equally off-limits. `git worktree list
+// --porcelain` is authoritative; when no git binary is reachable the
+// same topology is rebuilt from .git metadata (worktree .git file ->
+// gitdir -> commondir -> worktrees/<name>/gitdir). Returning null means
+// ownership cannot be proven, which callers must fail closed on.
+function gitWorktreeRoots(
+  repoRoot: string,
+): { primary: string; all: string[] } | null {
+  try {
+    const out = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const roots = out
+      .split("\n")
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) =>
+        canonicalPath(
+          line
+            .slice("worktree ".length)
+            .trim()
+            .replace(/^"|"$/g, ""),
+        ),
+      );
+    if (roots.length > 0) return { primary: roots[0], all: roots };
+  } catch {
+    // No git binary or not a repository: fall back to .git metadata.
+  }
+  try {
+    const marker = path.join(repoRoot, ".git");
+    let gitDir = marker;
+    if (statSync(marker).isFile()) {
+      const target = /^gitdir:\s*(.+)$/m.exec(readFileSync(marker, "utf8"));
+      if (!target) return null;
+      gitDir = path.resolve(repoRoot, target[1].trim());
+    }
+    let commonDir = gitDir;
+    try {
+      commonDir = path.resolve(
+        gitDir,
+        readFileSync(path.join(gitDir, "commondir"), "utf8").trim(),
+      );
+    } catch {
+      // A primary checkout's .git is itself the common dir.
+    }
+    const primary = canonicalPath(
+      path.basename(commonDir) === ".git" ? path.dirname(commonDir) : commonDir,
+    );
+    const all = new Set<string>([primary, canonicalPath(repoRoot)]);
+    try {
+      for (const entry of readdirSync(path.join(commonDir, "worktrees"))) {
+        try {
+          const target = readFileSync(
+            path.join(commonDir, "worktrees", entry, "gitdir"),
+            "utf8",
+          ).trim();
+          if (target) all.add(canonicalPath(path.dirname(target)));
+        } catch {
+          // A half-removed worktree can leave partial metadata; skip it.
+        }
+      }
+    } catch {
+      // No linked worktrees recorded in the common dir.
+    }
+    return { primary, all: [...all] };
+  } catch {
+    return null;
   }
 }
 
 function resolveIsolatedProcessDatabase() {
   const database = resolveE2EDatabase(process.env.DATABASE_URL ?? "");
   const repoRoot = path.resolve(__dirname, "..");
+  const thisRoot = canonicalPath(repoRoot);
+  const topology = gitWorktreeRoots(repoRoot);
+  if (!topology) {
+    throw new Error(
+      "Refusing to run process E2E: git worktree topology is unavailable, so protected checkout roots cannot be enumerated.",
+    );
+  }
+  // Protected locations are every checkout sharing this repository other
+  // than this one: the primary worktree and all linked siblings.
+  const protectedRoots = topology.all.filter(
+    (root) => normalizeCase(root) !== normalizeCase(thisRoot),
+  );
+
   const allowedRoots: string[] = [];
   if (process.env.R3_EVIDENCE_DIR) {
     const evidenceDir = realDirectory(process.env.R3_EVIDENCE_DIR);
-    if (evidenceDir) allowedRoots.push(evidenceDir);
+    if (!evidenceDir) {
+      throw new Error(
+        `Refusing R3_EVIDENCE_DIR "${process.env.R3_EVIDENCE_DIR}": it does not resolve to a real directory, so its contents cannot be proven disposable.`,
+      );
+    }
+    // An env-provided root is admitted only after proving narrowness: as
+    // an allowed root it exposes everything beneath it, so it may not be,
+    // contain, or sit inside any checkout of this repository, and it may
+    // not be or contain a broad user/OS container.
+    for (const root of topology.all) {
+      if (isInsideOrEqual(root, evidenceDir)) {
+        throw new Error(
+          `Refusing R3_EVIDENCE_DIR "${evidenceDir}": it contains git worktree ${root}, which would re-admit that checkout's databases.`,
+        );
+      }
+    }
+    for (const root of protectedRoots) {
+      if (isInsideOrEqual(evidenceDir, root)) {
+        throw new Error(
+          `Refusing R3_EVIDENCE_DIR "${evidenceDir}": it lives inside protected checkout ${root}.`,
+        );
+      }
+    }
+    for (const container of [
+      os.homedir(),
+      os.tmpdir(),
+      process.env.USERPROFILE,
+      process.env.APPDATA,
+      process.env.LOCALAPPDATA,
+      process.env.SystemRoot,
+      process.env.windir,
+    ]) {
+      if (!container) continue;
+      const containerRoot = canonicalPath(container);
+      if (isInsideOrEqual(containerRoot, evidenceDir)) {
+        throw new Error(
+          `Refusing R3_EVIDENCE_DIR "${evidenceDir}": it contains user/OS directory ${containerRoot}; point it at a dedicated disposable directory.`,
+        );
+      }
+    }
+    allowedRoots.push(evidenceDir);
   }
   const gitMarker = path.join(repoRoot, ".git");
   if (existsSync(gitMarker) && statSync(gitMarker).isFile()) {
@@ -65,9 +224,50 @@ function resolveIsolatedProcessDatabase() {
   }
   if (!allowedRoots.some((root) => isInsideDir(database.path, root))) {
     throw new Error(
-      `Refusing to run process E2E against ${database.path}: the database file must live inside this linked worktree's prisma/ directory or R3_EVIDENCE_DIR.`,
+      `Refusing to run process E2E against ${database.path}: the database file must live inside this linked worktree's prisma/ directory or a narrowly-scoped R3_EVIDENCE_DIR.`,
     );
   }
+  // Even if an allowed root were broadened by accident, a database inside
+  // the primary checkout or another worktree never runs.
+  for (const root of protectedRoots) {
+    if (isInsideOrEqual(database.path, root)) {
+      throw new Error(
+        `Refusing to run process E2E against ${database.path}: the file lives inside protected checkout ${root}.`,
+      );
+    }
+  }
+
+  // File identity, not just the path: realpath resolves symlinks and
+  // junctions but cannot see a hard link, so the resolved file must be a
+  // regular file with exactly one directory entry and must not share
+  // volume + file-index identity with any file under a protected
+  // checkout's prisma/ directory.
+  const databaseStat = statOrNull(database.path);
+  if (!databaseStat?.isFile() || databaseStat.nlink !== 1) {
+    throw new Error(
+      `Refusing to run process E2E against ${database.path}: expected a regular file with exactly one directory entry (nlink=${databaseStat?.nlink ?? "unreadable"}); a second name could alias a protected database.`,
+    );
+  }
+  if (databaseStat.ino !== 0) {
+    for (const root of protectedRoots) {
+      const protectedPrisma = path.join(root, "prisma");
+      if (!existsSync(protectedPrisma)) continue;
+      for (const entry of readdirSync(protectedPrisma)) {
+        const stat = statOrNull(path.join(protectedPrisma, entry));
+        if (
+          stat?.isFile() &&
+          stat.ino !== 0 &&
+          stat.dev === databaseStat.dev &&
+          stat.ino === databaseStat.ino
+        ) {
+          throw new Error(
+            `Refusing to run process E2E against ${database.path}: it is another name for protected file ${path.join(protectedPrisma, entry)}.`,
+          );
+        }
+      }
+    }
+  }
+
   if (process.env.E2E_REUSE_EXISTING_SERVER === "1") {
     const serverUrl = process.env.E2E_SERVER_DATABASE_URL;
     const server = serverUrl ? resolveE2EDatabase(serverUrl) : null;
