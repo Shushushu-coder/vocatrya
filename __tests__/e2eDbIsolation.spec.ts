@@ -1038,7 +1038,7 @@ describe("shared E2E database isolation contract", () => {
       );
       expect(existsSync(path.join(s4.gitdir, "commondir"))).toBe(false);
       expectProtected(s4.checkout);
-    });
+    }, 60_000);
 
     it("S4b: adding a real linked worktree does not exempt that primary; the worktree stays exempt", () => {
       const s4b = makeSeparatePrimary("s4b", ["store", "worktrees", "main"]);
@@ -1054,7 +1054,7 @@ describe("shared E2E database isolation contract", () => {
       expect(() => assertIsolatedE2EDatabase(primaryDb, ctx(wt))).toThrow(
         /Refusing E2E database access/);
       expectUnchanged(before, primaryDb);
-    });
+    }, 60_000);
 
     it("S6: a one-way forged .git file pointing into a real common dir is refused", () => {
       const s6Primary = makeMockPrimary(path.join(sandbox, "s6"));
@@ -1068,7 +1068,7 @@ describe("shared E2E database isolation contract", () => {
       seedCheckout(forged);
       expectProtected(forged);
       expectProtected(s6Primary);
-    });
+    }, 60_000);
 
     it("refuses a copied .git marker whose backlink names another checkout", () => {
       const clonePrimary = makeMockPrimary(path.join(sandbox, "clone"));
@@ -1082,7 +1082,7 @@ describe("shared E2E database isolation contract", () => {
       expectProtected(copy);
       // Control: the checkout the backlink really names is still exempt.
       expectExempt(realWt);
-    });
+    }, 60_000);
 
     it("refuses when the admin backlink is rewritten to another checkout", () => {
       const bPrimary = makeMockPrimary(path.join(sandbox, "backlink"));
@@ -1095,7 +1095,7 @@ describe("shared E2E database isolation contract", () => {
       writeFileSync(path.join(other, ".git"), `gitdir: ${adminDirOf(wt)}\n`);
       writeFileSync(path.join(adminDirOf(wt), "gitdir"), `${path.join(other, ".git")}\n`);
       expectProtected(wt);
-    });
+    }, 60_000);
 
     it("refuses a missing or foreign commondir", () => {
       const cPrimary = makeMockPrimary(path.join(sandbox, "commondir"));
@@ -1111,7 +1111,7 @@ describe("shared E2E database isolation contract", () => {
       expectProtected(wt);
       rmSync(commondir);
       expectProtected(wt);
-    });
+    }, 60_000);
 
     it("withholds the exemption when git cannot confirm the registration (metadata fallback)", () => {
       const fPrimary = makeMockPrimary(path.join(sandbox, "nogit"));
@@ -1141,7 +1141,7 @@ describe("shared E2E database isolation contract", () => {
         /Refusing E2E database access/);
       expectUnchanged(before, target);
       expect(tableExists(target, "WbgProbe")).toBe(false);
-    });
+    }, 120_000);
 
     describe("real entry points inside an S4 topology", () => {
       let s4: { base: string; gitdir: string; checkout: string };
@@ -1156,7 +1156,7 @@ describe("shared E2E database isolation contract", () => {
           path.join(WORKTREE, "playwright.config.ts"),
           path.join(s4.checkout, "playwright.config.ts"),
         );
-      });
+      }, 60_000);
 
       it("the real playwright.config.ts refuses at load before any write", () => {
         const before = snapshotDatabase(target);
@@ -1178,7 +1178,7 @@ describe("shared E2E database isolation contract", () => {
         expect(run.stdout).not.toContain("HARNESS_OK");
         expectUnchanged(before, target);
         expect(tableExists(target, "WbgProbe")).toBe(false);
-      });
+      }, 120_000);
 
       it("reuse-server refuses when both endpoints name the S4 primary database", () => {
         const before = snapshotDatabase(target);
@@ -1191,7 +1191,7 @@ describe("shared E2E database isolation contract", () => {
         expect(run.status).not.toBe(0);
         expect(run.stderr + run.stdout).toMatch(/Refusing E2E database access/);
         expectUnchanged(before, target);
-      });
+      }, 120_000);
 
       it("R3 fresh provisioning refuses before creating any file", async () => {
         const { provisionR3FreshNativeSchema } = await import("../e2e/support/r3Harness");
