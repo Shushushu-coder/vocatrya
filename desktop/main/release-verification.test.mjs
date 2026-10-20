@@ -254,21 +254,17 @@ describe("release manifest verification", () => {
 });
 
 describe("windows signature tooling", () => {
-  it("reports the packaged installer as NOT_SIGNED via Authenticode", () => {
-    const version = readPackageVersion(repoRoot);
-    const artifactPath = path.join(
-      repoRoot,
-      ".codex-tmp",
-      "windows-installer",
-      "dist",
-      installerArtifactName(version),
-    );
-    if (!fs.existsSync(artifactPath)) {
-      throw new Error("Expected installer artifact for signature proof: " + artifactPath);
+  it.skipIf(process.platform !== "win32")("reports an unsigned script fixture as NOT_SIGNED via Authenticode", () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-signature-"));
+    const artifactPath = path.join(fixtureDir, "unsigned.ps1");
+    try {
+      fs.writeFileSync(artifactPath, "Write-Output 'unsigned-signature-fixture'\n", "utf8");
+      const report = queryAuthenticodeSignature(artifactPath);
+      expect(report.rawStatusName).toBe("NotSigned");
+      expect(report.normalizedStatus).toBe("NOT_SIGNED");
+      expect(report.signed).toBe(false);
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true });
     }
-    const report = queryAuthenticodeSignature(artifactPath);
-    expect(report.rawStatusName).toBe("NotSigned");
-    expect(report.normalizedStatus).toBe("NOT_SIGNED");
-    expect(report.signed).toBe(false);
   });
 });

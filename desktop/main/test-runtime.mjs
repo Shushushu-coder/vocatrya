@@ -14,7 +14,9 @@ export function assembledBackendRoot() {
   if (process.env.VOCATRYA_PACKAGED_TEST_APP_DIR) {
     return path.resolve(process.env.VOCATRYA_PACKAGED_TEST_APP_DIR, "resources", "backend");
   }
-  return path.join(REPO_ROOT, ".codex-tmp", "desktop-poc", "backend");
+  // Concurrent Vitest files must not delete/reassemble each other's runtime.
+  const worker = `${process.pid}-${process.env.VITEST_WORKER_ID || "main"}`;
+  return path.join(REPO_ROOT, ".codex-tmp", "desktop-test-runtime", worker, "backend");
 }
 
 export function repoMigrationNames() {
