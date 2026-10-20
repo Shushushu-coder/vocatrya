@@ -705,12 +705,17 @@ describe("shared E2E database isolation contract", () => {
   });
 
   describe("resolveIsolatedE2EDatabase (harness-level, this checkout)", () => {
-    it("admits this worktree's own migrated dev.db", () => {
-      const url = `file:${path.join(WORKTREE, "prisma", "dev.db").replace(/\\/g, "/")}`;
-      const resolved = resolveIsolatedE2EDatabase(url);
-      expect(isSameFile(resolved.path, path.join(WORKTREE, "prisma", "dev.db"))).toBe(
-        true,
-      );
+    it("admits an existing disposable SQLite file without a checkout dev.db", () => {
+      const evidence = path.join(root, "harness-positive");
+      const target = path.join(evidence, "synthetic.db");
+      makeWitnessDb(target);
+      const before = snapshotDatabase(target);
+      const url = `file:${target.replace(/\\/g, "/")}`;
+      const resolved = resolveIsolatedE2EDatabase(url, WORKTREE, {
+        R3_EVIDENCE_DIR: evidence,
+      });
+      expect(isSameFile(resolved.path, target)).toBe(true);
+      expectUnchanged(before, target);
     });
 
     it("rejects non-file URLs before any filesystem trust decision", () => {

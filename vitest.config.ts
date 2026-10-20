@@ -38,6 +38,10 @@ export default defineConfig({
     },
     setupFiles: ["./vitest.polyfills.ts", "./vitest.setup.ts"],
     clearMocks: true,
+    // Many suites launch SQLite/Prisma subprocesses. Bound CPU and disk load
+    // so the default Windows run does not starve async UI tests of their
+    // existing assertion deadlines.
+    maxWorkers: 4,
     coverage: {
       provider: "v8",
       reportsDirectory: "coverage",

@@ -2,6 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 import { configureE2EDatabase, resolveE2EDatabase } from "./e2e/support/database";
 
 const database = configureE2EDatabase();
+const port = Number(process.env.E2E_PORT ?? "3737");
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error("E2E_PORT must be an integer between 1 and 65535.");
+}
+const baseURL = `http://localhost:${port}`;
+process.env.TZ ??= "UTC";
 const reuseExistingServer = process.env.E2E_REUSE_EXISTING_SERVER === "1";
 if (reuseExistingServer) {
   const serverUrl = process.env.E2E_SERVER_DATABASE_URL;
@@ -45,7 +51,10 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: "http://localhost:3737",
+    baseURL,
+    // Date expectations run in Node. Keep browser and server on the same
+    // explicit timezone instead of inheriting the Windows profile timezone.
+    timezoneId: process.env.TZ || "UTC",
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: "on-first-retry",
@@ -91,10 +100,10 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3737",
+    command: `node node_modules/next/dist/bin/next dev --turbopack -p ${port}`,
+    url: baseURL,
     reuseExistingServer,
-    env: { DATABASE_URL: database.url },
+    env: { DATABASE_URL: database.url, NEXTAUTH_URL: baseURL, TZ: process.env.TZ || "UTC" },
     timeout: 120 * 1000,
   },
 });
