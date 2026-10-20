@@ -1,6 +1,7 @@
 import {
   test as base,
   expect,
+  type APIResponse,
   type BrowserContext,
   type Page,
 } from "@playwright/test";
@@ -178,6 +179,90 @@ type Fixtures = {
   cleanup: CleanupRegistry;
 };
 
+// A cleanup POST payload subset; the route defaults missing keys to [].
+type CleanupPayload = Record<string, string[]>;
+
+const CLEANUP_DETAIL_MAX = 240;
+
+// A failed cleanup response can carry request or environment fragments (the
+// dev server renders HTML error pages and upstream errors may echo values).
+// Only a short redacted excerpt may reach the test report - never a
+// connection string, credential, or the test user's identity.
+function redactCleanupDetail(text: string): string {
+  return text
+    .replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, "[url]")
+    .replace(/\bfile:[^\s"'<>]+/gi, "[file]")
+    .replace(
+      /\b(?:password|passwd|pwd|secret|token|api[-_]?key|auth[-_]?token|credential|database[-_]?url|db[-_]?url|connection[-_]?string)\b\s*[:=]\s*["']?[^\s"',;}]+/gi,
+      "[redacted]",
+    )
+    .replace(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g, "[email]")
+    .replace(/\bbearer\s+\S+/gi, "bearer [redacted]")
+    .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]*\b/g, "[jwt]")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clipCleanupDetail(text: string): string {
+  return text.length > CLEANUP_DETAIL_MAX
+    ? `${text.slice(0, CLEANUP_DETAIL_MAX)}...`
+    : text;
+}
+
+type CleanupOutcome = { ok: true } | { ok: false; summary: string };
+
+// Success is the route's contract {"success": true}, not merely a 2xx: a
+// request bounced by the auth middleware ends as a 200 on /signin without
+// touching any test data, and must not masquerade as a clean teardown.
+async function inspectCleanupResponse(
+  res: APIResponse,
+): Promise<CleanupOutcome> {
+  const status = `HTTP ${res.status()} ${res.statusText()}`.trim();
+  let body = "";
+  try {
+    body = await res.text();
+  } catch {
+    body = "";
+  }
+  let parsed: unknown = null;
+  if (body) {
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      parsed = null;
+    }
+  }
+  // The route's own error shape is {"error": "..."}; anything else (a
+  // dev-mode HTML error page, for example) is quoted raw-but-redacted.
+  const routeError =
+    parsed !== null &&
+    typeof parsed === "object" &&
+    typeof (parsed as { error?: unknown }).error === "string"
+      ? (parsed as { error: string }).error
+      : null;
+  const detail = clipCleanupDetail(redactCleanupDetail(routeError ?? body));
+  if (!res.ok()) {
+    return { ok: false, summary: detail ? `${status} - ${detail}` : status };
+  }
+  if (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    (parsed as { success?: unknown }).success === true
+  ) {
+    return { ok: true };
+  }
+  const location = new URL(res.url()).pathname;
+  return {
+    ok: false,
+    summary: `${status} from ${location}, unexpected body${detail ? ` - ${detail}` : ""}`,
+  };
+}
+
+function describeCleanupError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return `request error: ${clipCleanupDetail(redactCleanupDetail(message))}`;
+}
+
 export const test = base.extend<Fixtures>({
   // Auto-login every test and land on the dashboard.
   page: async ({ page, baseURL }, use) => {
@@ -220,27 +305,59 @@ export const test = base.extend<Fixtures>({
     });
     // page.request carries the session cookie; page is still alive here
     // because cleanup tears down before the page fixture.
-    const res = await page.request.post("/api/test/cleanup", {
-      data: {
-        jobIds,
-        resumes,
-        tasks,
-        questions,
-        titles,
-        companies,
-        locations,
-        activityTypes,
-        activities,
-        tags,
-        mcpTokens,
-        automations,
-        contacts,
-        contactRoles,
-      },
-    });
-    if (!res.ok()) {
-      console.warn(`Cleanup request failed: ${res.status()}`);
+    //
+    // A cleanup failure must fail the test, not just warn: warning-only
+    // teardown let a broken cleanup masquerade as a green run. The
+    // combined request is tried first, keeping the success path
+    // byte-identical; on failure every non-empty group is retried in the
+    // route's own delete order, so one stuck resource cannot block
+    // releasing the rest. All failures aggregate, then throw.
+    const groups: [string, CleanupPayload][] = [
+      ["automations", { automations }],
+      ["jobs", { jobIds }],
+      ["resumes", { resumes }],
+      ["tasks", { tasks }],
+      ["activities", { activities }],
+      ["questions", { questions }],
+      ["contacts", { contacts }],
+      ["job titles", { titles }],
+      ["companies", { companies }],
+      ["locations", { locations }],
+      ["activity types", { activityTypes }],
+      ["contact roles", { contactRoles }],
+      ["tags", { tags }],
+      ["mcp tokens", { mcpTokens }],
+    ];
+    const failures: string[] = [];
+    const attempt = async (label: string, data: CleanupPayload) => {
+      try {
+        const res = await page.request.post("/api/test/cleanup", { data });
+        const outcome = await inspectCleanupResponse(res);
+        if (!outcome.ok) {
+          failures.push(`[${label}] ${outcome.summary}`);
+        }
+        return outcome.ok;
+      } catch (error) {
+        failures.push(`[${label}] ${describeCleanupError(error)}`);
+        return false;
+      }
+    };
+    if (
+      await attempt(
+        "all resources",
+        Object.assign({}, ...groups.map(([, data]) => data)),
+      )
+    ) {
+      return;
     }
+    for (const [label, data] of groups) {
+      const [registered] = Object.values(data);
+      if (registered.length === 0) continue;
+      await attempt(`${label} x${registered.length}`, data);
+    }
+    throw new Error(
+      `E2E cleanup failed; test data may be left behind. ${failures.join(" | ")}`,
+    );
   },
 });
 
