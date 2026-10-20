@@ -1,6 +1,9 @@
+import { existsSync, realpathSync, statSync } from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { type Page } from "@playwright/test";
 import { expect, test, uniqueName, createNewJob } from "./fixtures";
+import { resolveE2EDatabase } from "./support/database";
 
 // Browser acceptance for explicit ApplicationAttempt ownership.
 // Attempts and steps are created only through the product UI. Prisma reads
@@ -8,8 +11,77 @@ import { expect, test, uniqueName, createNewJob } from "./fixtures";
 // the first application and then marking the job applied: that status menu
 // is the product path that records a new submission.
 
-const databaseUrl = process.env.DATABASE_URL ?? "";
-const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
+// Database isolation contract. The Playwright harness resolves
+// DATABASE_URL once (configureE2EDatabase -> webServer env -> global setup)
+// and this spec resolves it through the same function, so the checks below
+// compare canonical real paths, never URL substrings. The resolved file
+// must live inside an explicitly designated disposable root:
+//   - R3_EVIDENCE_DIR, when set: the harness's explicit synthetic run
+//     directory (Integration disposable SQLite, future CI sandboxes); or
+//   - this checkout's own prisma/ directory, but only when the checkout is
+//     a linked git worktree (its .git is a file). The primary checkout's
+//     prisma/ holds real development data and stays rejected.
+// Anything else -- the root repository, another worktree's database,
+// user-data directories, packaged installs, "../" escapes, junction
+// redirects -- resolves outside every allowed root and fails closed.
+function realDirectory(dir: string): string | null {
+  const resolved = path.resolve(dir);
+  return existsSync(resolved) ? realpathSync(resolved) : null;
+}
+
+function isInsideDir(child: string, root: string): boolean {
+  const normalize = (p: string) =>
+    process.platform === "win32" ? p.toLowerCase() : p;
+  const relative = path.relative(normalize(root), normalize(child));
+  return (
+    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+  );
+}
+
+function isSameFile(a: string, b: string): boolean {
+  try {
+    const left = realpathSync(a);
+    const right = realpathSync(b);
+    return process.platform === "win32"
+      ? left.toLowerCase() === right.toLowerCase()
+      : left === right;
+  } catch {
+    return false;
+  }
+}
+
+function resolveIsolatedProcessDatabase() {
+  const database = resolveE2EDatabase(process.env.DATABASE_URL ?? "");
+  const repoRoot = path.resolve(__dirname, "..");
+  const allowedRoots: string[] = [];
+  if (process.env.R3_EVIDENCE_DIR) {
+    const evidenceDir = realDirectory(process.env.R3_EVIDENCE_DIR);
+    if (evidenceDir) allowedRoots.push(evidenceDir);
+  }
+  const gitMarker = path.join(repoRoot, ".git");
+  if (existsSync(gitMarker) && statSync(gitMarker).isFile()) {
+    const prismaDir = realDirectory(path.join(repoRoot, "prisma"));
+    if (prismaDir) allowedRoots.push(prismaDir);
+  }
+  if (!allowedRoots.some((root) => isInsideDir(database.path, root))) {
+    throw new Error(
+      `Refusing to run process E2E against ${database.path}: the database file must live inside this linked worktree's prisma/ directory or R3_EVIDENCE_DIR.`,
+    );
+  }
+  if (process.env.E2E_REUSE_EXISTING_SERVER === "1") {
+    const serverUrl = process.env.E2E_SERVER_DATABASE_URL;
+    const server = serverUrl ? resolveE2EDatabase(serverUrl) : null;
+    if (!server || !isSameFile(server.path, database.path)) {
+      throw new Error(
+        "Reused server is bound to a different database: set E2E_SERVER_DATABASE_URL to the running server's DATABASE_URL.",
+      );
+    }
+  }
+  return database;
+}
+
+const database = resolveIsolatedProcessDatabase();
+const prisma = new PrismaClient({ datasourceUrl: database.url });
 
 type VisibleAttempt = {
   id: string;
@@ -23,10 +95,15 @@ type VisibleAttempt = {
 test.describe.configure({ mode: "serial" });
 test.setTimeout(180_000);
 
-test.beforeAll(() => {
-  if (!databaseUrl.includes("w1-process-e2e")) {
+test.beforeAll(async () => {
+  // Engine-level check: the file SQLite actually opened is the resolved one.
+  const attached = await prisma.$queryRawUnsafe<
+    { name: string; file: string }[]
+  >("PRAGMA database_list");
+  const main = attached.find((row) => row.name === "main");
+  if (!main || !isSameFile(main.file, database.path)) {
     throw new Error(
-      "Refusing to run process E2E against a database outside this worktree.",
+      `Prisma opened ${main?.file ?? "no database"}; expected the isolated database ${database.path}.`,
     );
   }
 });
@@ -43,7 +120,15 @@ async function stepsForJob(jobId: string) {
 
 async function openTimeline(page: Page, jobId: string) {
   await page.goto(`/dashboard/myjobs/${jobId}`);
-  await page.getByRole("tab", { name: "Timeline" }).click();
+  // Under a cold dev-server compile the click can land before hydration
+  // attaches the tab handler: retry until Radix reports the trigger active.
+  const timelineTab = page.getByRole("tab", { name: "Timeline" });
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await timelineTab.click();
+    if ((await timelineTab.getAttribute("data-state")) === "active") break;
+    await page.waitForTimeout(500);
+  }
+  await expect(timelineTab).toHaveAttribute("data-state", "active");
   await expect(
     page
       .getByText("No application timeline yet")
