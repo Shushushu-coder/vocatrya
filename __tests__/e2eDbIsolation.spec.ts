@@ -966,4 +966,253 @@ describe("shared E2E database isolation contract", () => {
       expectUnchanged(before, path.join(primary, "prisma", "dev.db"));
     });
   });
+
+  describe("linked-worktree exemption requires two-way git registration", () => {
+    let sandbox: string;
+    const lower = (p: string) => p.toLowerCase();
+
+    beforeAll(() => {
+      sandbox = path.join(root, "registration");
+      mkdirSync(sandbox, { recursive: true });
+    });
+
+    function seedCheckout(checkout: string) {
+      makeWitnessDb(path.join(checkout, "prisma", "dev.db"));
+      writeFileSync(path.join(checkout, ".env"), "DATABASE_URL=file:dev.db\n");
+    }
+
+    // A `git init --separate-git-dir` primary: its .git is a file, and the
+    // admin directory lives wherever the operator put it -- including a
+    // folder that happens to be named "worktrees".
+    function makeSeparatePrimary(name: string, gitdirParts: string[]) {
+      const base = path.join(sandbox, name);
+      const gitdir = path.join(base, ...gitdirParts);
+      mkdirSync(path.dirname(gitdir), { recursive: true });
+      const checkout = path.join(base, "primary");
+      git(["init", "--separate-git-dir", gitdir, checkout], base);
+      git(
+        ["-c", "user.email=mock@test", "-c", "user.name=mock", "commit", "--allow-empty", "-m", "init"],
+        checkout,
+      );
+      seedCheckout(checkout);
+      return { base, gitdir, checkout };
+    }
+
+    function adminDirOf(checkout: string) {
+      const marker = readFileSync(path.join(checkout, ".git"), "utf8");
+      return path.resolve(checkout, /^gitdir:\s*(.+)$/m.exec(marker)![1].trim());
+    }
+
+    function expectProtected(checkout: string) {
+      const target = path.join(checkout, "prisma", "dev.db");
+      const before = snapshotDatabase(target);
+      const context = ctx(checkout);
+      expect(context.linkedWorktree).toBe(false);
+      expect(context.allowedRoots).toHaveLength(0);
+      expect(context.protectedRoots.map(lower)).toContain(lower(realpathSync(checkout)));
+      expect(() => assertIsolatedE2EDatabase(target, context)).toThrow(
+        /Refusing E2E database access/);
+      expectUnchanged(before, target);
+    }
+
+    function expectExempt(checkout: string) {
+      const context = ctx(checkout);
+      expect(context.linkedWorktree).toBe(true);
+      expect(context.allowedRoots.map(lower)).toContain(
+        lower(realpathSync(path.join(checkout, "prisma"))),
+      );
+      expect(() =>
+        assertIsolatedE2EDatabase(path.join(checkout, "prisma", "dev.db"), context),
+      ).not.toThrow();
+    }
+
+    it("S4: a --separate-git-dir primary whose gitdir sits under a worktrees folder stays protected", () => {
+      const s4 = makeSeparatePrimary("s4", ["store", "worktrees", "main"]);
+      // The shape trap: git names this primary by its admin dir, so the
+      // topology's primary differs from the checkout path, and the admin
+      // dir's parent is literally "worktrees". It is still no worktree:
+      // there is no commondir and no backlink.
+      const listed = git(["worktree", "list", "--porcelain"], s4.checkout);
+      expect(lower(path.resolve(/^worktree (.+)$/m.exec(listed)![1].trim()))).toBe(
+        lower(realpathSync(s4.gitdir)),
+      );
+      expect(existsSync(path.join(s4.gitdir, "commondir"))).toBe(false);
+      expectProtected(s4.checkout);
+    });
+
+    it("S4b: adding a real linked worktree does not exempt that primary; the worktree stays exempt", () => {
+      const s4b = makeSeparatePrimary("s4b", ["store", "worktrees", "main"]);
+      const wt = path.join(s4b.base, "wt");
+      git(["worktree", "add", wt, "-b", "s4b-wt"], s4b.checkout);
+      seedCheckout(wt);
+      expectProtected(s4b.checkout);
+      // Control: the genuinely registered linked worktree keeps working,
+      // and the primary's database stays out of reach from it.
+      expectExempt(wt);
+      const primaryDb = path.join(s4b.checkout, "prisma", "dev.db");
+      const before = snapshotDatabase(primaryDb);
+      expect(() => assertIsolatedE2EDatabase(primaryDb, ctx(wt))).toThrow(
+        /Refusing E2E database access/);
+      expectUnchanged(before, primaryDb);
+    });
+
+    it("S6: a one-way forged .git file pointing into a real common dir is refused", () => {
+      const s6Primary = makeMockPrimary(path.join(sandbox, "s6"));
+      const fakeAdmin = path.join(s6Primary, ".git", "worktrees", "fake");
+      mkdirSync(fakeAdmin, { recursive: true });
+      writeFileSync(path.join(fakeAdmin, "commondir"), "../..\n");
+      writeFileSync(path.join(fakeAdmin, "HEAD"), "ref: refs/heads/master\n");
+      const forged = path.join(sandbox, "s6", "forged");
+      mkdirSync(forged, { recursive: true });
+      writeFileSync(path.join(forged, ".git"), `gitdir: ${fakeAdmin}\n`);
+      seedCheckout(forged);
+      expectProtected(forged);
+      expectProtected(s6Primary);
+    });
+
+    it("refuses a copied .git marker whose backlink names another checkout", () => {
+      const clonePrimary = makeMockPrimary(path.join(sandbox, "clone"));
+      const realWt = path.join(sandbox, "clone", "real-wt");
+      git(["worktree", "add", realWt, "-b", "clone-real"], clonePrimary);
+      seedCheckout(realWt);
+      const copy = path.join(sandbox, "clone", "copied");
+      mkdirSync(copy, { recursive: true });
+      copyFileSync(path.join(realWt, ".git"), path.join(copy, ".git"));
+      seedCheckout(copy);
+      expectProtected(copy);
+      // Control: the checkout the backlink really names is still exempt.
+      expectExempt(realWt);
+    });
+
+    it("refuses when the admin backlink is rewritten to another checkout", () => {
+      const bPrimary = makeMockPrimary(path.join(sandbox, "backlink"));
+      const wt = path.join(sandbox, "backlink", "wt");
+      git(["worktree", "add", wt, "-b", "backlink-wt"], bPrimary);
+      seedCheckout(wt);
+      expectExempt(wt);
+      const other = path.join(sandbox, "backlink", "other");
+      mkdirSync(other, { recursive: true });
+      writeFileSync(path.join(other, ".git"), `gitdir: ${adminDirOf(wt)}\n`);
+      writeFileSync(path.join(adminDirOf(wt), "gitdir"), `${path.join(other, ".git")}\n`);
+      expectProtected(wt);
+    });
+
+    it("refuses a missing or foreign commondir", () => {
+      const cPrimary = makeMockPrimary(path.join(sandbox, "commondir"));
+      const wt = path.join(sandbox, "commondir", "wt");
+      git(["worktree", "add", wt, "-b", "commondir-wt"], cPrimary);
+      seedCheckout(wt);
+      expectExempt(wt);
+      const commondir = path.join(adminDirOf(wt), "commondir");
+      writeFileSync(commondir, "../../does-not-exist\n");
+      expectProtected(wt);
+      const foreign = makeMockPrimary(path.join(sandbox, "commondir-foreign"));
+      writeFileSync(commondir, `${path.join(foreign, ".git")}\n`);
+      expectProtected(wt);
+      rmSync(commondir);
+      expectProtected(wt);
+    });
+
+    it("withholds the exemption when git cannot confirm the registration (metadata fallback)", () => {
+      const fPrimary = makeMockPrimary(path.join(sandbox, "nogit"));
+      const wt = path.join(sandbox, "nogit", "wt");
+      git(["worktree", "add", wt, "-b", "nogit-wt"], fPrimary);
+      seedCheckout(wt);
+      installHarness(wt);
+      installDriver(wt);
+      const control = runDriver(wt);
+      expect(control.status, control.stderr).toBe(0);
+      expect(control.stdout).toContain("HARNESS_OK");
+      const target = path.join(wt, "prisma", "dev.db");
+      const before = snapshotDatabase(target);
+      const emptyBin = path.join(sandbox, "nogit", "empty-bin");
+      mkdirSync(emptyBin, { recursive: true });
+      const env = childEnv({});
+      for (const key of Object.keys(env)) if (/^path$/i.test(key)) delete env[key];
+      env.PATH = emptyBin;
+      const result = spawnSync(
+        process.execPath,
+        [TS_NODE_BIN, "--transpile-only", "--project", path.join(wt, "tsconfig.json"),
+          path.join(wt, "driver.ts"), "--write"],
+        { cwd: wt, env, encoding: "utf8", timeout: 120_000 },
+      );
+      expect(result.status).not.toBe(0);
+      expect((result.stderr ?? "") + (result.stdout ?? "")).toMatch(
+        /Refusing E2E database access/);
+      expectUnchanged(before, target);
+      expect(tableExists(target, "WbgProbe")).toBe(false);
+    });
+
+    describe("real entry points inside an S4 topology", () => {
+      let s4: { base: string; gitdir: string; checkout: string };
+      let target: string;
+
+      beforeAll(() => {
+        s4 = makeSeparatePrimary("s4-entry", ["store", "worktrees", "main"]);
+        target = path.join(s4.checkout, "prisma", "dev.db");
+        installHarness(s4.checkout);
+        installDriver(s4.checkout);
+        copyFileSync(
+          path.join(WORKTREE, "playwright.config.ts"),
+          path.join(s4.checkout, "playwright.config.ts"),
+        );
+      });
+
+      it("the real playwright.config.ts refuses at load before any write", () => {
+        const before = snapshotDatabase(target);
+        const listingBefore = readdirSync(s4.checkout).sort();
+        const run = runPlaywright(s4.checkout);
+        expect(run.status).not.toBe(0);
+        expect(run.stderr + run.stdout).toMatch(/Refusing E2E database access/);
+        expectUnchanged(before, target);
+        expect(readdirSync(s4.checkout).sort()).toEqual(listingBefore);
+        expect(existsSync(path.join(s4.checkout, "test-results"))).toBe(false);
+        expect(existsSync(path.join(s4.checkout, "playwright-report"))).toBe(false);
+      }, 120_000);
+
+      it("the setup write path refuses before PrismaClient writes", () => {
+        const before = snapshotDatabase(target);
+        const run = runDriver(s4.checkout, {}, ["--write"]);
+        expect(run.status).not.toBe(0);
+        expect(run.stderr + run.stdout).toMatch(/Refusing E2E database access/);
+        expect(run.stdout).not.toContain("HARNESS_OK");
+        expectUnchanged(before, target);
+        expect(tableExists(target, "WbgProbe")).toBe(false);
+      });
+
+      it("reuse-server refuses when both endpoints name the S4 primary database", () => {
+        const before = snapshotDatabase(target);
+        const url = `file:${target.replace(/\\/g, "/")}`;
+        const run = runDriver(s4.checkout, {
+          DATABASE_URL: url,
+          E2E_REUSE_EXISTING_SERVER: "1",
+          E2E_SERVER_DATABASE_URL: url,
+        });
+        expect(run.status).not.toBe(0);
+        expect(run.stderr + run.stdout).toMatch(/Refusing E2E database access/);
+        expectUnchanged(before, target);
+      });
+
+      it("R3 fresh provisioning refuses before creating any file", async () => {
+        const { provisionR3FreshNativeSchema } = await import("../e2e/support/r3Harness");
+        const before = snapshotDatabase(target);
+        const freshDir = path.join(s4.checkout, "prisma", "r3-fresh");
+        const fresh = path.join(freshDir, "fresh-native.db");
+        expect(() =>
+          provisionR3FreshNativeSchema(
+            { path: fresh, url: `file:${fresh.replace(/\\/g, "/")}` },
+            s4.checkout,
+          ),
+        ).toThrow(/Refusing E2E database access/);
+        expect(existsSync(freshDir)).toBe(false);
+        expectUnchanged(before, target);
+        const evidence = path.join(s4.checkout, "evidence");
+        mkdirSync(evidence, { recursive: true });
+        expect(() =>
+          resolveE2EIsolationContext(s4.checkout, { R3_EVIDENCE_DIR: evidence }),
+        ).toThrow(/Refusing R3_EVIDENCE_DIR/);
+        expectUnchanged(before, target);
+      }, 60_000);
+    });
+  });
 });

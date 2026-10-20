@@ -25,10 +25,10 @@ import path from "node:path";
 //     this repository, when it is or contains the user profile or the OS
 //     temp/system roots, and when it fails to resolve to a real
 //     directory at all; or
-//   - this checkout's own prisma/ directory, but only when the checkout is
-//     a linked git worktree (its .git is a file whose gitdir lives
-//     under <common>/.git/worktrees/<id>). The primary checkout's
-//     prisma/ holds real development data and stays rejected.
+//   - this checkout's own prisma/ directory, but only when Git registers
+//     the checkout as a linked worktree in both directions (see
+//     isLinkedWorktreeCheckout). The primary checkout's prisma/ holds
+//     real development data and stays rejected.
 // Path checks alone cannot see aliases, so an existing target must also be
 // a regular file with exactly one directory entry (nlink === 1) and must
 // not share volume + file-index identity with any file under a protected
@@ -98,9 +98,12 @@ function lstatOrNull(file: string) {
 // same topology is rebuilt from .git metadata (worktree .git file ->
 // gitdir -> commondir -> worktrees/<name>/gitdir). Returning null means
 // ownership cannot be proven, which callers must fail closed on.
+// `fromGit` records whether git itself produced the list: the metadata
+// fallback is good enough to enumerate protected roots, but it is not a
+// registration record and can never grant the linked-worktree exemption.
 export function gitWorktreeRoots(
   repoRoot: string,
-): { primary: string; all: string[] } | null {
+): { primary: string; all: string[]; fromGit: boolean } | null {
   try {
     const out = execFileSync("git", ["worktree", "list", "--porcelain"], {
       cwd: repoRoot,
@@ -118,7 +121,7 @@ export function gitWorktreeRoots(
             .replace(/^"|"$/g, ""),
         ),
       );
-    if (roots.length > 0) return { primary: roots[0], all: roots };
+    if (roots.length > 0) return { primary: roots[0], all: roots, fromGit: true };
   } catch {
     // No git binary or not a repository: fall back to .git metadata.
   }
@@ -158,7 +161,7 @@ export function gitWorktreeRoots(
     } catch {
       // No linked worktrees recorded in the common dir.
     }
-    return { primary, all: [...all] };
+    return { primary, all: [...all], fromGit: false };
   } catch {
     return null;
   }
@@ -175,29 +178,52 @@ export type E2EDatabaseIsolationContext = {
   linkedWorktree: boolean;
 };
 
-// This checkout's own databases are disposable only when it is a linked
-// worktree: its .git is a file whose gitdir lives inside the common dir's
-// worktrees/ area (<common>/.git/worktrees/<id>), and the topology names a
-// different checkout as primary. Any other shape -- a .git directory, or a
-// .git file pointing elsewhere such as a --separate-git-dir clone -- is a
-// primary checkout and is never exempted: its prisma/ holds real
-// development data that no evidence dir, database path, or file alias may
-// re-admit.
+// This checkout's own databases are disposable only when Git itself
+// registers it as a linked worktree, proven in both directions and
+// compared as canonical real paths:
+//   - <checkout>/.git is a regular file naming an admin gitdir;
+//   - <gitdir>/commondir exists and resolves to a real common git dir;
+//   - the gitdir is exactly <common>/worktrees/<id>, one of the
+//     worktrees that common dir records;
+//   - the <gitdir>/gitdir backlink resolves to this checkout's .git file;
+//   - `git worktree list --porcelain` lists this checkout, and not as
+//     the primary entry.
+// Path shape is never evidence: a --separate-git-dir primary whose gitdir
+// happens to sit in a folder named "worktrees" has no commondir, and a
+// hand-written .git file has no matching backlink or registration. Any
+// read failure or mismatch fails closed and the checkout stays protected.
 function isLinkedWorktreeCheckout(
   repoRoot: string,
   thisRoot: string,
-  topology: { primary: string; all: string[] },
+  topology: { primary: string; all: string[]; fromGit: boolean },
 ): boolean {
-  const gitMarker = path.join(repoRoot, ".git");
+  const same = (a: string, b: string) => normalizeCase(a) === normalizeCase(b);
   try {
-    if (!statSync(gitMarker).isFile()) return false;
+    const gitMarker = path.join(repoRoot, ".git");
+    if (!lstatSync(gitMarker).isFile()) return false;
     const target = /^gitdir:\s*(.+)$/m.exec(readFileSync(gitMarker, "utf8"));
-    const gitDir = target ? path.resolve(repoRoot, target[1].trim()) : null;
-    return (
-      gitDir !== null &&
-      path.basename(path.dirname(gitDir)) === "worktrees" &&
-      normalizeCase(topology.primary) !== normalizeCase(thisRoot)
+    if (!target) return false;
+    const gitDir = realpathSync(path.resolve(repoRoot, target[1].trim()));
+    if (!statSync(gitDir).isDirectory()) return false;
+    const commonDir = realpathSync(
+      path.resolve(
+        gitDir,
+        readFileSync(path.join(gitDir, "commondir"), "utf8").trim(),
+      ),
     );
+    if (!statSync(commonDir).isDirectory()) return false;
+    const recorded = realpathSync(
+      path.join(commonDir, "worktrees", path.basename(gitDir)),
+    );
+    if (!same(recorded, gitDir)) return false;
+    const backlink = readFileSync(path.join(gitDir, "gitdir"), "utf8").trim();
+    if (!backlink) return false;
+    if (!same(realpathSync(path.resolve(gitDir, backlink)), realpathSync(gitMarker))) {
+      return false;
+    }
+    if (!topology.fromGit) return false;
+    const listed = topology.all.findIndex((root) => same(root, thisRoot));
+    return listed > 0 && !same(topology.primary, thisRoot);
   } catch {
     return false;
   }
