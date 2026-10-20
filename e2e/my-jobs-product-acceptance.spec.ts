@@ -6,6 +6,8 @@ import bcrypt from "bcryptjs";
 import Papa from "papaparse";
 import { uniqueName, useEnglishLocale } from "./fixtures";
 import { configureE2EDatabase } from "./support/database";
+import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
+import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import {
   ACCEPTANCE_SALARY,
   cleanupMyJobsAcceptanceFixture,
@@ -50,6 +52,75 @@ const test = base.extend<{ acceptanceUser: { id: string; email: string; password
     await expect(page).toHaveURL(baseURL + "/dashboard");
     await use(page);
   },
+});
+
+test("My Jobs edit, removal and deferred controls follow the selected data family", async ({ page, acceptanceUser }, testInfo) => {
+  const marker = uniqueName("runtime contract");
+  let seeded: SeededAcceptanceJobs | undefined;
+  try {
+    seeded = await seedMyJobsAcceptanceFixture(prisma, { userId: acceptanceUser.id, marker });
+    const ab = seeded.family === "ab";
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    console.log(`[my-jobs-contract] family=${seeded.family} mode=${runtime.mode} origin=${runtime.origin}`);
+    await testInfo.attach("runtime-contract", {
+      body: JSON.stringify({ family: seeded.family, mode: runtime.mode, origin: runtime.origin, scope: runtime.rolloutScope }),
+      contentType: "application/json",
+    });
+    const record = ab
+      ? await prisma.jobOpportunity.findFirstOrThrow({
+          where: { userId: acceptanceUser.id, companyId: seeded.catalog.company.id, applicationAttempts: { none: {} } },
+        })
+      : await prisma.job.findFirstOrThrow({
+          where: { userId: acceptanceUser.id, companyId: seeded.catalog.company.id, applied: false },
+        });
+
+    await page.goto("/dashboard/myjobs");
+    await page.getByTestId("job-filter-select").click();
+    await page.getByRole("option", { name: ab ? "Draft" : "New", exact: true }).click();
+    const row = page.getByRole("row", { name: seeded.catalog.title.label }).first();
+    await expect(page.getByTestId("job-row-number")).toHaveCount(1);
+    await row.getByTestId("job-actions-menu-btn").click();
+    await page.getByRole("menuitem", { name: "Edit Job" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Select Job Status")).toContainText(ab ? "Draft" : "New");
+    const skills = dialog.getByRole("combobox", { name: "Search or add a skill..." });
+    if (ab) {
+      await expect(skills).toHaveCount(0);
+      await expect(dialog.getByText("Resume, cover letter, and tags aren't available here yet. You can still save this job.", { exact: true })).toBeVisible();
+    } else {
+      await expect(skills).toBeVisible();
+    }
+    await page.screenshot({ path: testInfo.outputPath(`${seeded.family}-edit-contract.png`) });
+    const edited = `${marker} edited description`;
+    await dialog.getByLabel("Job Description").locator("div").fill(edited);
+    await dialog.getByTestId("save-job-btn").click();
+    await expect(dialog).not.toBeVisible();
+    await expect.poll(async () => {
+      if (!ab) return (await prisma.job.findUniqueOrThrow({ where: { id: record.id } })).description;
+      const opportunity = await prisma.jobOpportunity.findUniqueOrThrow({ where: { id: record.id }, include: { currentJdVersion: true } });
+      return opportunity.currentJdVersion?.rawContent;
+    }).toContain(edited);
+
+    await row.getByTestId("job-actions-menu-btn").click();
+    await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+    const confirmation = page.getByRole("alertdialog");
+    await expect(confirmation).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`${seeded.family}-removal-confirmation.png`) });
+    await confirmation.getByRole("button", { name: ab ? "Archive" : "Delete", exact: true }).click();
+    await expect(row).not.toBeVisible();
+    if (ab) {
+      await expect.poll(async () => (await prisma.jobOpportunity.findUnique({ where: { id: record.id } }))?.archivedAt != null).toBe(true);
+    } else {
+      await expect.poll(async () => prisma.job.findUnique({ where: { id: record.id } })).toBeNull();
+    }
+    await page.goto("/dashboard/settings");
+    await page.waitForLoadState("networkidle");
+    const mcp = page.locator("main nav").getByRole("button", { name: "MCP Access", exact: true });
+    if (isFreshNativeFullSurface(runtime)) await expect(mcp).toHaveCount(0);
+    else await expect(mcp).toBeVisible();
+  } finally {
+    if (seeded) await cleanupMyJobsAcceptanceFixture(prisma, seeded);
+  }
 });
 
 test("My Jobs zh-CN search/filter/pagination and locale-sensitive downloads", async ({ page, baseURL, acceptanceUser }) => {
