@@ -1,9 +1,22 @@
+import path from "node:path";
 import { configureE2EDatabase } from "./support/database";
+import {
+  assertIsolatedE2EDatabase,
+  resolveE2EIsolationContext,
+} from "./support/isolation";
 import { setupTestUser } from "./support/setupTestUser";
 
 export default async function globalSetup() {
   const database = configureE2EDatabase();
   console.log(`[E2E setup] SQLite file: ${database.path}`);
+  // Second gate immediately before the first write: this function is also
+  // reached directly via e2e/setup.ts (test:e2e:setup), and the isolation
+  // verdict must hold at the moment PrismaClient and setupTestUser write,
+  // not only at config load.
+  assertIsolatedE2EDatabase(
+    database.path,
+    resolveE2EIsolationContext(path.resolve(__dirname, "..")),
+  );
   // Prisma can load the env beside its generated client on import. Resolve
   // Next's env first so a shared node_modules cannot select another DB.
   const { PrismaClient, Prisma } = await import("@prisma/client");
