@@ -22,8 +22,16 @@ const libraryValue = (label: string) => label.trim().toLowerCase();
 
 test.describe.serial("cleanup failure propagation (W1-SHARED-E2E-R2)", () => {
   const releasedCompany = uniqueName("cleanup released company");
-  const stuckCompany = uniqueName("cleanup stuck company");
   const releasedLocation = uniqueName("cleanup released location");
+  const rejectedCompany = uniqueName("cleanup rejected company");
+  const rejectedTitle = uniqueName("cleanup rejected opportunity");
+  const rejectedVariant = uniqueName("cleanup rejected variant");
+  const blockedCompany = uniqueName("cleanup blocked company");
+  const blockedTitle = uniqueName("cleanup blocked opportunity");
+  const blockedVariant = uniqueName("cleanup blocked variant");
+  // The propagation test records the opportunity it seeds so the follow-up
+  // test can release that exact row once it is unblocked.
+  let blockedOpportunityId = "";
 
   test("successful cleanup still releases a registered row", async ({
     cleanup,
@@ -46,6 +54,62 @@ test.describe.serial("cleanup failure propagation (W1-SHARED-E2E-R2)", () => {
     ).toBeNull();
   });
 
+  test("the route rejects a resume-targeted opportunity as CLEANUP_BLOCKED", async ({
+    page,
+    cleanup,
+  }) => {
+    const createdBy = await testUserId();
+    const company = await prisma.company.create({
+      data: {
+        label: rejectedCompany,
+        value: libraryValue(rejectedCompany),
+        createdBy,
+      },
+    });
+    const opportunity = await prisma.jobOpportunity.create({
+      data: { userId: createdBy, companyId: company.id, title: rejectedTitle },
+    });
+    // deleteOwnedOpportunity refuses an opportunity a ResumeVariant still
+    // targets, so the route answers 500 with code CLEANUP_BLOCKED instead of
+    // partially deleting the request.
+    await prisma.resumeVariant.create({
+      data: {
+        userId: createdBy,
+        name: rejectedVariant,
+        targetJobOpportunityId: opportunity.id,
+      },
+    });
+    try {
+      const res = await page.request.post("/api/test/cleanup", {
+        data: { jobIds: [opportunity.id] },
+      });
+      const body = (await res.json()) as { error?: unknown; code?: unknown };
+      expect(res.status()).toBe(500);
+      expect(body.code).toBe("CLEANUP_BLOCKED");
+      expect(typeof body.error).toBe("string");
+      // The refusal happens inside the route's transaction, so nothing in
+      // the request - not even the company the opportunity references - is
+      // deleted.
+      expect(
+        await prisma.jobOpportunity.findUnique({
+          where: { id: opportunity.id },
+        }),
+      ).not.toBeNull();
+      expect(
+        await prisma.company.findUnique({ where: { id: company.id } }),
+      ).not.toBeNull();
+    } finally {
+      // Dropping the targeting variant unblocks the seed, so this test's own
+      // teardown can release both rows through the route like any other
+      // registration.
+      await prisma.resumeVariant.deleteMany({
+        where: { name: rejectedVariant, userId: createdBy },
+      });
+      cleanup.job(opportunity.id);
+      cleanup.company(rejectedCompany);
+    }
+  });
+
   test("a cleanup-route 500 fails the test without blocking other releases", async ({
     cleanup,
   }) => {
@@ -53,9 +117,23 @@ test.describe.serial("cleanup failure propagation (W1-SHARED-E2E-R2)", () => {
     const createdBy = await testUserId();
     const company = await prisma.company.create({
       data: {
-        label: stuckCompany,
-        value: libraryValue(stuckCompany),
+        label: blockedCompany,
+        value: libraryValue(blockedCompany),
         createdBy,
+      },
+    });
+    const opportunity = await prisma.jobOpportunity.create({
+      data: { userId: createdBy, companyId: company.id, title: blockedTitle },
+    });
+    blockedOpportunityId = opportunity.id;
+    // The variant targeting this opportunity makes the jobIds group fail
+    // with 500 CLEANUP_BLOCKED, and the combined request aborts inside the
+    // route's transaction before it ever reaches locations.
+    await prisma.resumeVariant.create({
+      data: {
+        userId: createdBy,
+        name: blockedVariant,
+        targetJobOpportunityId: opportunity.id,
       },
     });
     await prisma.location.create({
@@ -65,24 +143,31 @@ test.describe.serial("cleanup failure propagation (W1-SHARED-E2E-R2)", () => {
         createdBy,
       },
     });
-    // JobOpportunity.companyId is onDelete: Restrict and is not part of the
-    // route's reference count, so deleting this company is a real 500 - and
-    // the combined request aborts there before it ever reaches locations.
-    await prisma.jobOpportunity.create({
-      data: { userId: createdBy, companyId: company.id, title: stuckCompany },
-    });
-    cleanup.company(stuckCompany);
+    cleanup.job(opportunity.id);
     cleanup.location(releasedLocation);
   });
 
-  test("the failed group stayed while later groups were still released", async () => {
+  test("the blocked group stayed while later groups were still released", async ({
+    cleanup,
+  }) => {
+    const createdBy = await testUserId();
     try {
-      // The Restrict-guarded company could not be released; the location,
-      // which the combined 500 skipped, was still released by the per-group
-      // retry.
+      // The variant-targeted opportunity could not be released; the
+      // location, which the aborted combined request skipped, was still
+      // released by the per-group retry.
+      expect(
+        await prisma.jobOpportunity.findFirst({
+          where: { title: blockedTitle, userId: createdBy },
+        }),
+      ).not.toBeNull();
+      expect(
+        await prisma.resumeVariant.findFirst({
+          where: { name: blockedVariant, userId: createdBy },
+        }),
+      ).not.toBeNull();
       expect(
         await prisma.company.findFirst({
-          where: { value: libraryValue(stuckCompany) },
+          where: { value: libraryValue(blockedCompany) },
         }),
       ).not.toBeNull();
       expect(
@@ -91,15 +176,17 @@ test.describe.serial("cleanup failure propagation (W1-SHARED-E2E-R2)", () => {
         }),
       ).toBeNull();
     } finally {
-      // The Restrict-guarded rows can never be released through the cleanup
-      // route (that is exactly what made the 500 real); remove them directly
-      // so no A+B residue pollutes the shared e2e database.
-      await prisma.jobOpportunity.deleteMany({
-        where: { title: stuckCompany },
+      // Remove the targeting variant so the opportunity is no longer
+      // blocked, then let this test's teardown release the opportunity and
+      // its anchor company through the route - the same path a green test
+      // would take - so the failure vector leaves no residue behind.
+      await prisma.resumeVariant.deleteMany({
+        where: { name: blockedVariant, userId: createdBy },
       });
-      await prisma.company.deleteMany({
-        where: { value: libraryValue(stuckCompany) },
-      });
+      if (blockedOpportunityId) {
+        cleanup.job(blockedOpportunityId);
+      }
+      cleanup.company(blockedCompany);
     }
   });
 
