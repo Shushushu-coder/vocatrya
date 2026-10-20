@@ -2,6 +2,10 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
+import {
+  assertIsolatedE2EDatabase,
+  resolveE2EIsolationContext,
+} from "./isolation";
 import { activateFreshAbNative } from "@/lib/career/freshActivation";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 import { setupTestUser } from "./setupTestUser";
@@ -92,6 +96,14 @@ export function provisionR3FreshNativeSchema(
   fresh: { path: string; url: string },
   repoRoot: string,
 ) {
+  // Shared isolation gate at the harness's earliest write point: the file
+  // may not exist yet, so the contract validates the canonical parentage
+  // before any file creation or migration runs.
+  assertIsolatedE2EDatabase(
+    fresh.path,
+    resolveE2EIsolationContext(repoRoot),
+    { allowMissing: true },
+  );
   mkdirSync(path.dirname(fresh.path), { recursive: true });
   // Prisma's Windows schema engine requires the SQLite file to exist.
   if (!existsSync(fresh.path)) writeFileSync(fresh.path, "");
@@ -130,6 +142,12 @@ export async function provisionR3FreshNativeData(
   prisma: PrismaClient,
   freshPath: string,
 ) {
+  // The passed client is about to write through setupTestUser and the
+  // FRESH_READY activation; re-assert the resolved file before any of it.
+  assertIsolatedE2EDatabase(
+    freshPath,
+    resolveE2EIsolationContext(path.resolve(__dirname, "..", "..")),
+  );
   await setupTestUser(prisma);
   try {
     await activateFreshAbNative(prisma);
