@@ -77,12 +77,21 @@ test.describe("Add New Job", () => {
     }).click();
 
     await expect(page.getByRole("row", { name: jobText })).not.toBeVisible();
+    // The list removes the row optimistically while the archive/delete write
+    // commits asynchronously afterwards. Poll the durable row with a bounded,
+    // state-based wait instead of trusting the UI removal instant.
     if (runtime.family === "ab") {
-      const archived = await prisma.jobOpportunity.findUniqueOrThrow({ where: { id: jobId } });
-      expect(archived.archivedAt).not.toBeNull();
-      expect(archived.title).toBe(jobText);
+      await expect(async () => {
+        const archived = await prisma.jobOpportunity.findUniqueOrThrow({
+          where: { id: jobId },
+        });
+        expect(archived.archivedAt).not.toBeNull();
+        expect(archived.title).toBe(jobText);
+      }).toPass({ timeout: 15_000, intervals: [250, 500, 1_000, 2_000] });
     } else {
-      expect(await prisma.job.findUnique({ where: { id: jobId } })).toBeNull();
+      await expect(async () => {
+        expect(await prisma.job.findUnique({ where: { id: jobId } })).toBeNull();
+      }).toPass({ timeout: 15_000, intervals: [250, 500, 1_000, 2_000] });
     }
   });
 
@@ -368,7 +377,11 @@ test.describe("Add New Job", () => {
     await expect(page.getByRole("row", { name: jobText })).not.toBeVisible();
 
     await page.getByTestId("job-filter-select").click();
-    await page.getByRole("option", { name: "New", exact: true }).click();
+    // A fresh AB opportunity derives "draft"; "new" is only a legacy status.
+    // "new" is neither a derived UI status nor an AB-hidden filter, so the AB
+    // read path matches it against employmentType and returns nothing.
+    const positiveStatus = runtime.family === "ab" ? "Draft" : "New";
+    await page.getByRole("option", { name: positiveStatus, exact: true }).click();
     await expect(page.getByRole("row", { name: jobText }).first()).toBeVisible();
   });
 
