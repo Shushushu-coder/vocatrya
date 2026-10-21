@@ -1,9 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { PanelLeft, Briefcase } from "lucide-react";
+import {
+  PanelLeft,
+  Briefcase,
+  Plus,
+  ChevronDown,
+  Upload,
+} from "lucide-react";
 
 import { Button } from "./ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetClose,
@@ -23,6 +35,7 @@ export function getSidebarNavLabel(
   t: (key: string) => string
 ): string {
   if (route === "/dashboard") return t("nav.dashboard");
+  if (route.startsWith("/dashboard/analytics")) return t("nav.analytics");
   if (route.startsWith("/dashboard/myjobs")) return t("nav.jobs");
   if (route.startsWith("/dashboard/automations")) return t("nav.automations");
   if (route.startsWith("/dashboard/tasks")) return t("nav.tasks");
@@ -33,6 +46,64 @@ export function getSidebarNavLabel(
   if (route.startsWith("/dashboard/admin")) return t("nav.library");
   if (route.startsWith("/dashboard/developer")) return t("nav.developer");
   return fallbackLabel;
+}
+
+const CREATE_MENU_ITEMS = [
+  { key: "dashboard.job", href: "/dashboard/myjobs?add-job=true" },
+  { key: "nav.tasks", href: "/dashboard/tasks?add-task=true" },
+  { key: "nav.activities", href: "/dashboard/activities?add-activity=true" },
+  { key: "dashboard.question", href: "/dashboard/questions?add-question=true" },
+] as const;
+
+// The global creation entries live here rather than on the overview page:
+// every item deep-links into the target surface's own create flow, which
+// keeps that surface's permission checks (e.g. writeFamily gating on jobs).
+// Real Link hrefs keep native anchor semantics and let Next prefetch the
+// deep-link targets while the dashboard renders.
+function CreateMenu() {
+  const { t } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
+  const uploadHref = freshNativeFull
+    ? "/dashboard/profile/resumes"
+    : "/dashboard/profile";
+
+  return (
+    <div className="flex items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            data-testid="header-create-menu"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("dashboard.createNew")}</span>
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {CREATE_MENU_ITEMS.map((item) => (
+            <DropdownMenuItem key={item.href} asChild>
+              <Link href={item.href}>{t(item.key)}</Link>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Upload is its own toolbar entry, not a create-menu item: it lands on
+          the existing career-profile surface rather than opening a form. */}
+      <Button
+        variant="outline"
+        className="gap-1.5"
+        data-testid="header-upload"
+        asChild
+      >
+        <Link href={uploadHref}>
+          <Upload className="h-4 w-4" />
+          <span className="hidden sm:inline">{t("dashboard.upload")}</span>
+        </Link>
+      </Button>
+    </div>
+  );
 }
 
 function Header() {
@@ -83,8 +154,10 @@ function Header() {
           </nav>
         </SheetContent>
       </Sheet>
+      <CreateMenu />
       {/* The desktop titlebar carries the product identity, so the in-app
-          header only keeps the mobile nav trigger and the assistant entry. */}
+          header only keeps the mobile nav trigger, creation actions and the
+          assistant entry. */}
       <div className="relative ml-auto flex items-center gap-2">
         <AgentChatTrigger />
       </div>

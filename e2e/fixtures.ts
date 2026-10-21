@@ -99,13 +99,19 @@ export async function createNewJob(
   const companyText = options?.company ?? `company ${suffix}`;
   const locationText = options?.location ?? `location ${suffix}`;
 
-  // Matches either entry point: the dashboard quick-action card (labeled
+  // Matches either entry point: the header's "New" create menu (menuitem
   // "Job") when starting from /dashboard, or the myjobs page's own inline
   // trigger (labeled "New Job", from AddJob.tsx) when already on
   // /dashboard/myjobs — createNewJob is called from both contexts.
-  await page.getByRole("button", { name: /^(New )?Job$/ }).click();
-  await expect(page).toHaveURL(/\/dashboard\/myjobs/);
-  // Dashboard's "Job" button auto-opens the dialog via ?add-job=true.
+  const directTrigger = page.getByRole("button", { name: /^(New )?Job$/ });
+  if (await directTrigger.count()) {
+    await directTrigger.first().click();
+  } else {
+    await page.getByTestId("header-create-menu").click();
+    await page.getByRole("menuitem", { name: "Job" }).click();
+  }
+  await expect(page).toHaveURL(/\/dashboard\/myjobs/, { timeout: 30000 });
+  // The "Job" entry auto-opens the dialog via ?add-job=true.
   await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
   if (!options?.skipUrl) {
     await page
@@ -141,7 +147,7 @@ export async function createNewJob(
   // Wait for the save action to settle and the dialog to close before asserting row visibility.
   await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible();
   // Ensure the ?add-job=true query param cleanup effect has committed.
-  await expect(page).toHaveURL(/\/dashboard\/myjobs$/);
+  await expect(page).toHaveURL(/\/dashboard\/myjobs$/, { timeout: 30000 });
 
   // Register the saved job for deletion, and return its id (from the row link)
   // in case a test needs it. Names are unique per run, so .first() is just

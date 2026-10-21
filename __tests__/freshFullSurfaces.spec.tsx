@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 
 // ---------------------------------------------------------------------------
@@ -6,10 +7,11 @@ import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 // ---------------------------------------------------------------------------
 
 let searchParams = new URLSearchParams("");
+const routerPush = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn().mockReturnValue("/dashboard"),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push: routerPush, replace: vi.fn(), back: vi.fn() }),
   useSearchParams: () => searchParams,
 }));
 
@@ -124,7 +126,7 @@ vi.mock("@/actions/activity.actions", () => ({
 
 import Sidebar from "@/components/Sidebar";
 import { SidebarProvider } from "@/context/SidebarContext";
-import JobsAppliedCard from "@/components/dashboard/JobsAppliedCard";
+import Header from "@/components/Header";
 import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 import SettingsSidebar from "@/components/settings/SettingsSidebar";
 import { MatchJobButton } from "@/components/myjobs/MatchJobButton";
@@ -162,6 +164,7 @@ describe("fresh + full navigation", () => {
     ).not.toBeInTheDocument();
     for (const name of [
       "Dashboard",
+      "Analytics",
       "Jobs",
       "Tasks",
       "Activities",
@@ -183,22 +186,40 @@ describe("fresh + full navigation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Dashboard quick-create card
+// Header create menu + upload entry (replaces the removed quick-create card)
 // ---------------------------------------------------------------------------
 
-describe("JobsAppliedCard", () => {
-  it("hides the automation quick action under fresh + full", () => {
-    render(wrap(<JobsAppliedCard />));
-
-    expect(screen.queryByText("Automation")).not.toBeInTheDocument();
-    expect(screen.getByText("Job")).toBeInTheDocument();
-    expect(screen.getByText("Task")).toBeInTheDocument();
-    expect(screen.getByText("Question")).toBeInTheDocument();
+describe("Header global actions", () => {
+  beforeEach(() => {
+    routerPush.mockClear();
   });
 
-  it("keeps the automation quick action outside fresh + full", () => {
-    render(wrap(<JobsAppliedCard />, false));
-    expect(screen.getByText("Automation")).toBeInTheDocument();
+  it("offers the four canonical create flows and never automation", async () => {
+    const user = userEvent.setup();
+    render(wrap(<Header />));
+    await user.click(screen.getByTestId("header-create-menu"));
+
+    const menu = await screen.findByRole("menu");
+    for (const name of ["Job", "Tasks", "Activities", "Question"]) {
+      expect(within(menu).getByText(name)).toBeInTheDocument();
+    }
+    expect(within(menu).queryByText("Automation")).not.toBeInTheDocument();
+  });
+
+  it("routes upload to the resumes surface under fresh + full", () => {
+    render(wrap(<Header />));
+    expect(screen.getByTestId("header-upload")).toHaveAttribute(
+      "href",
+      "/dashboard/profile/resumes",
+    );
+  });
+
+  it("routes upload to the profile surface outside fresh + full", () => {
+    render(wrap(<Header />, false));
+    expect(screen.getByTestId("header-upload")).toHaveAttribute(
+      "href",
+      "/dashboard/profile",
+    );
   });
 });
 

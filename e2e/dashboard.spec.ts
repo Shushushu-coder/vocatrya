@@ -10,9 +10,12 @@ import {
 
 async function navigateToDashboard(page: Page) {
   await page.goto("/dashboard");
-  await expect(
-    page.getByRole("heading", { name: "Dashboard", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByTestId("overview-metric-inProgress")).toBeVisible();
+}
+
+async function navigateToAnalytics(page: Page) {
+  await page.goto("/dashboard/analytics");
+  await expect(page.getByTestId("analytics-panel")).toBeVisible();
 }
 
 // The running activity is a per-user singleton and specs run in parallel
@@ -115,8 +118,17 @@ async function createCompletedActivity(
   cleanup.activity(activityName);
 }
 
-test.describe("Dashboard page", () => {
-  test("should display all dashboard sections and reflect a newly applied job", async ({
+// The "New" dropdown in the header exposes the four create flows; picking
+// one deep-links to the target page which auto-opens its dialog.
+async function createViaMenu(page: Page, menuitemName: string) {
+  await page.getByTestId("header-create-menu").click();
+  await page
+    .getByRole("menuitem", { name: menuitemName, exact: true })
+    .click();
+}
+
+test.describe("Dashboard overview page", () => {
+  test("should display overview metrics and reflect a newly applied job", async ({
     page,
     cleanup,
   }) => {
@@ -130,36 +142,99 @@ test.describe("Dashboard page", () => {
 
     await navigateToDashboard(page);
 
+    for (const metric of [
+      "overview-metric-inProgress",
+      "overview-metric-applied7d",
+      "overview-metric-openTasks",
+      "overview-metric-upcomingActivities",
+    ]) {
+      await expect(page.getByTestId(metric)).toBeVisible();
+    }
+    // Specs share a user, so don't assert an exact count — the job above was
+    // applied today, so the 7d figure is at least one.
     await expect(
-      page.getByRole("button", { name: "Job", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Task", exact: true }),
-    ).toBeVisible();
-
-    await expect(
-      page.getByRole("heading", { name: "Jobs & Activity", exact: true }),
-    ).toBeVisible();
-    // The merged donut's center reports the applied-job count for the active
-    // period. The job created above is applied today, so the default 7d tab
-    // must show at least one. Specs share a user, so don't assert an exact
-    // count. Match the count's own span: the center stacks hours, jobs and
-    // trend with no separators, so asserting on the container would match
-    // against a concatenation like "17h8 jobs14%".
-    await expect(
-      page
-        .getByTestId("jobs-activity-total")
-        .getByText(/^[1-9]\d* jobs?$/),
+      page.getByTestId("overview-metric-applied7d").getByText(/^[1-9]\d*$/),
     ).toBeVisible();
 
     await expect(
-      page.getByRole("heading", { name: "Recent Applications", exact: true }),
+      page.getByRole("heading", { name: "Recent updates", exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: jobText })).toBeVisible();
-
     await expect(
-      page.getByRole("heading", { name: "Weekly Jobs", exact: true }),
+      page.getByTestId("recent-updates").getByRole("link", { name: jobText }),
     ).toBeVisible();
+  });
+
+  test("should navigate via the header create menu to each create flow", async ({
+    page,
+  }) => {
+    await createViaMenu(page, "Job");
+    await expect(page).toHaveURL(/\/dashboard\/myjobs/, { timeout: 30000 });
+    await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible();
+
+    await navigateToDashboard(page);
+    await createViaMenu(page, "Tasks");
+    await expect(page).toHaveURL(/\/dashboard\/tasks/, { timeout: 30000 });
+    await expect(page.getByTestId("task-form-dialog-title")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByTestId("task-form-dialog-title")).not.toBeVisible();
+
+    await navigateToDashboard(page);
+    await createViaMenu(page, "Question");
+    await expect(page).toHaveURL(/\/dashboard\/questions/, { timeout: 30000 });
+    await expect(page.getByTestId("question-form-dialog-title")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(
+      page.getByTestId("question-form-dialog-title"),
+    ).not.toBeVisible();
+
+    await navigateToDashboard(page);
+    await createViaMenu(page, "Activities");
+    await expect(page).toHaveURL(/\/dashboard\/activities/, { timeout: 30000 });
+    await expect(page.getByText("Add New Activity")).toBeVisible();
+    await page.keyboard.press("Escape");
+  });
+
+  test("upload entry lands on the career profile surface", async ({ page }) => {
+    await page.getByTestId("header-upload").click();
+    await expect(page).toHaveURL(/\/dashboard\/profile/, { timeout: 30000 });
+  });
+});
+
+test.describe("Analytics board", () => {
+  test("shows totals, tabbed analysis and the activity calendar", async ({
+    page,
+  }) => {
+    await navigateToAnalytics(page);
+
+    for (const total of [
+      "board-total-total",
+      "board-total-applied",
+      "board-total-interviews",
+      "board-total-offers",
+    ]) {
+      await expect(page.getByTestId(total)).toBeVisible();
+    }
+
+    const tabs = page.getByTestId("analytics-tabs");
+    await expect(
+      tabs.getByRole("tab", { name: "Application trend" }),
+    ).toBeVisible();
+    await tabs.getByRole("tab", { name: "Status breakdown" }).click();
+    await expect(
+      page.getByRole("tab", { name: "Status breakdown" }),
+    ).toHaveAttribute("data-state", "active");
+    await tabs.getByRole("tab", { name: "Activity breakdown" }).click();
+    await expect(
+      page.getByRole("tab", { name: "Activity breakdown" }),
+    ).toHaveAttribute("data-state", "active");
+
+    const windowToggle = page.getByTestId("analytics-window-toggle");
+    await windowToggle.getByRole("button", { name: "30 days" }).click();
+    await expect(
+      windowToggle.getByRole("button", { name: "30 days" }),
+    ).toHaveClass(/bg-primary/);
 
     await expect(
       page.getByRole("heading", { name: "Activity Calendar", exact: true }),
@@ -170,64 +245,10 @@ test.describe("Dashboard page", () => {
       page.getByRole("option", { name: currentYear, exact: true }),
     ).toBeVisible();
   });
+});
 
-  test("should navigate to create a new job, task, question, and automation from dashboard quick actions", async ({
-    page,
-  }) => {
-    await page.getByRole("button", { name: "Job", exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard\/myjobs/);
-    await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
-    await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible();
-
-    await navigateToDashboard(page);
-    await page.getByRole("button", { name: "Task", exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard\/tasks/);
-    await expect(page.getByTestId("task-form-dialog-title")).toBeVisible();
-    await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByTestId("task-form-dialog-title")).not.toBeVisible();
-
-    await navigateToDashboard(page);
-    await page.getByRole("button", { name: "Question", exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard\/questions/);
-    await expect(page.getByTestId("question-form-dialog-title")).toBeVisible();
-    await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(
-      page.getByTestId("question-form-dialog-title"),
-    ).not.toBeVisible();
-
-    await navigateToDashboard(page);
-    await page.getByRole("button", { name: "Automation", exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard\/automations/);
-    const wizard = page.getByRole("dialog");
-    await expect(wizard.getByText("Step 1 of 6")).toBeVisible();
-    await wizard.getByRole("button", { name: "Close" }).click();
-    await expect(wizard).not.toBeVisible();
-  });
-
-  test("should toggle the recent, weekly, jobs and activities cards", async ({
-    page,
-  }) => {
-    const jobsActivityToggle = page.getByTestId("jobs-activity-toggle-group");
-    await jobsActivityToggle.getByRole("button", { name: "30 days" }).click();
-    await expect(
-      jobsActivityToggle.getByRole("button", { name: "30 days" }),
-    ).toHaveClass(/bg-primary/);
-
-    const recentToggle = page.getByTestId("recent-card-toggle-group");
-    await recentToggle.getByRole("button", { name: "Activities" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Recent Activities", exact: true }),
-    ).toBeVisible();
-
-    const weeklyToggle = page.getByTestId("weekly-chart-toggle-group");
-    await weeklyToggle.getByRole("button", { name: "Activities" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Weekly Activities", exact: true }),
-    ).toBeVisible();
-  });
-
-  test("should discard a very short activity and not show it in the dashboard's recent activities list", async ({
+test.describe("Dashboard recent updates", () => {
+  test("should not surface a very short discarded activity", async ({
     page,
     cleanup,
   }) => {
@@ -261,53 +282,8 @@ test.describe("Dashboard page", () => {
     await stopRunningActivity(page);
 
     await navigateToDashboard(page);
-    await page
-      .getByTestId("recent-card-toggle-group")
-      .getByRole("button", { name: "Activities" })
-      .click();
-    await expect(page.getByText(taskTitle, { exact: true })).not.toBeVisible();
-  });
-
-  test("should start an activity from the dashboard's recent activities list", async ({
-    page,
-    cleanup,
-  }) => {
-    const activityName = uniqueName("E2E Recent Activity");
-    const activityType = uniqueName("E2E Recent Activity Type");
-    await createCompletedActivity(page, activityName, activityType, cleanup);
-
-    await navigateToDashboard(page);
-    await page
-      .getByTestId("recent-card-toggle-group")
-      .getByRole("button", { name: "Activities" })
-      .click();
-
-    const activityRow = page
-      .getByTestId("recent-activity-row")
-      .filter({ hasText: activityName });
-    await expect(activityRow).toBeVisible({ timeout: 10000 });
-
-    // The play button is hover-revealed (opacity-0 -> opacity-100 on
-    // group-hover), so hover the row before clicking it.
-    await activityRow.hover();
-    await activityRow
-      .getByTestId("recent-activity-start-btn")
-      .click({ force: true });
-
-    // If another activity was already running (e.g. from a concurrently
-    // running spec), confirm the switch instead of hanging on the dialog.
-    const confirmSwitchBtn = page.getByRole("button", { name: "Stop & Start" });
-    try {
-      await confirmSwitchBtn.waitFor({ state: "visible", timeout: 3000 });
-      await confirmSwitchBtn.click();
-    } catch {
-      // No conflicting activity, continue.
-    }
-
     await expect(
-      page.getByRole("button", { name: "Stop Activity", exact: true }),
-    ).toBeVisible({ timeout: 10000 });
-
-    await stopRunningActivity(page);
+      page.getByTestId("recent-updates").getByText(taskTitle, { exact: true }),
+    ).not.toBeVisible();
   });
 });

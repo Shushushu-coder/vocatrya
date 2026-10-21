@@ -9,6 +9,7 @@ import {
   Zap,
   BookOpen,
   MessagesSquare,
+  ChartColumn,
 } from "lucide-react";
 
 export const APP_CONSTANTS = {
@@ -43,6 +44,8 @@ export const APP_CONSTANTS = {
   DASHBOARD_WEEKLY_CHART_STORAGE_KEY: "dashboard-weekly-chart-tab",
   DASHBOARD_RECENT_CARD_STORAGE_KEY: "dashboard-recent-card-tab",
   DASHBOARD_JOBS_ACTIVITY_STORAGE_KEY: "dashboard-jobs-activity-tab",
+  DASHBOARD_ANALYTICS_TAB_STORAGE_KEY: "dashboard-analytics-tab",
+  DASHBOARD_ANALYTICS_WINDOW_STORAGE_KEY: "dashboard-analytics-window",
   LAST_JOB_LOCATION_STORAGE_KEY: "last-job-location",
   LAST_JOB_SOURCE_STORAGE_KEY: "last-job-source",
   JOBS_VIEW_MODE_STORAGE_KEY: "jobs-view-mode",
@@ -345,6 +348,11 @@ export const SIDEBAR_LINKS = [
     icon: LayoutDashboard,
     route: "/dashboard",
     label: "Dashboard",
+  },
+  {
+    icon: ChartColumn,
+    route: "/dashboard/analytics",
+    label: "Analytics",
   },
   {
     icon: BriefcaseBusiness,

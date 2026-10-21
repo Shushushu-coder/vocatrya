@@ -1,8 +1,10 @@
 import prisma from "@/lib/db";
-import { getLast7Days } from "@/lib/utils";
+import { getLast7Days, getLastNDays } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { OTHER_SLICE_ID } from "@/components/dashboard/jobsActivityChart";
 import { loadJobsAppliedDateCounts } from "@/lib/career/jobsReadDispatch";
+import { DEFAULT_LOCALE, type Locale } from "@/i18n/config";
+import { formatDate as formatLocaleDate } from "@/i18n/formatters";
 import { requireUser } from "../shared";
 import {
   getLocalDayRange,
@@ -112,16 +114,17 @@ export const getActivityDataForPeriod = async (): Promise<{
   }
 };
 
-export const getJobsActivityForPeriod = async (): Promise<
-  DashboardJobsReadResult<any[]>
-> => {
+export const getJobsActivityForPeriod = async (
+  days: number = 7,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<DashboardJobsReadResult<any[]>> => {
   try {
     const user = await requireUser();
-    // Use local time for date range to match grouping and getLast7Days
-    const { start: sevenDaysAgo, end: today } = getLocalDayRange(6);
+    // Use local time for date range to match grouping and getLastNDays
+    const { start: rangeStart, end: today } = getLocalDayRange(days - 1);
     const jobDataResult = await jobsReadOrBlocked(() =>
       loadJobsAppliedDateCounts(prisma, user.id, {
-        start: sevenDaysAgo,
+        start: rangeStart,
         end: today,
       }),
     );
@@ -135,11 +138,16 @@ export const getJobsActivityForPeriod = async (): Promise<
       acc[date] = (acc[date] || 0) + post.count;
       return acc;
     }, {});
-    // Get the last 7 days in local time
-    const last7Days = getLast7Days("yyyy-MM-dd");
-    // Map to ensure all dates are represented with a count of 0 if necessary
-    const result = last7Days.map((dateStr) => ({
-      day: format(parseISO(dateStr), "EEE, MMM d"),
+    // Every day in the window is represented, with a count of 0 if necessary.
+    // Day labels go through the locale-aware formatter so zh-CN reads
+    // naturally (e.g. "10月21日周二") instead of the old hardcoded English.
+    const lastNDays = getLastNDays(days, "yyyy-MM-dd");
+    const result = lastNDays.map((dateStr) => ({
+      day: formatLocaleDate(parseISO(dateStr), locale, {
+        month: "short",
+        day: "numeric",
+        weekday: "short",
+      }),
       value: groupedPosts[dateStr] || 0,
     }));
 

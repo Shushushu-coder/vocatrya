@@ -10,7 +10,19 @@ import {
 } from "./jobOpportunityAdapter";
 import { isAbJobReadMode } from "./jobsReadCapabilities";
 import { CAREER_DATA_ORIGIN, resolveCareerRuntimeMode } from "./runtimeMode";
-import { deriveUiStatus, isOfferUiStatus } from "./uiStatus";
+import {
+  deriveUiStatus,
+  isOfferUiStatus,
+  pickLatestAttempt,
+} from "./uiStatus";
+import {
+  isAppliedAttempt,
+  APPLIED_ATTEMPT_WHERE,
+} from "./applicationFact";
+import {
+  OPPORTUNITY_STATUS,
+  PROCESS_STEP_CATEGORY,
+} from "./identities";
 
 export type JobsReadFamily = "ab" | "legacy" | "blocked";
 
@@ -44,6 +56,61 @@ export type DashboardJobCounts = {
   jobsInterview?: number;
   jobsOffer?: number;
 };
+
+// All-time pipeline totals for the analytics board plus the overview's
+// in-progress count. Same position-level dedup rules as the windowed
+// reads: legacy counts Job rows, A+B counts JobOpportunity rows.
+export type JobsBoardTotals = {
+  total: number;
+  applied: number;
+  interviews: number;
+  offers: number;
+  inProgress: number;
+};
+
+export type JobStatusCount = { status: string; count: number };
+
+// Legacy statuses where the position is concluded: not part of
+// "in progress" and not where a deadline reminder should fire.
+const LEGACY_TERMINAL_STATUS_VALUES = [
+  "rejected",
+  "expired",
+  "archived",
+  "offer-accepted",
+  "offer-declined",
+] as const;
+
+// A+B derived uiStatus values where the position is concluded.
+const AB_TERMINAL_UI_STATUSES = new Set([
+  "archived",
+  "expired",
+  "rejected",
+  "offer-accepted",
+  "offer-declined",
+  "transferred",
+]);
+
+// Dismissed automation discoveries are hidden from every jobs surface;
+// the board counts match that contract.
+const NOT_DISMISSED_WHERE = {
+  OR: [{ discoveryStatus: null }, { discoveryStatus: { not: "dismissed" } }],
+};
+
+const OPPORTUNITY_DERIVE_SELECT = {
+  id: true,
+  status: true,
+  archivedAt: true,
+  applicationAttempts: {
+    where: { archivedAt: null },
+    select: {
+      id: true,
+      currentStageCategory: true,
+      outcome: true,
+      submittedAt: true,
+      createdAt: true,
+    },
+  },
+} as const;
 
 const JOB_LIST_SELECT = {
   id: true,
@@ -562,4 +629,181 @@ export async function loadRecentJobs(
     },
     take,
   });
+}
+
+function deriveOpportunityUiStatus(opportunity: {
+  status: string;
+  archivedAt: Date | null;
+  applicationAttempts: Array<{
+    id: string;
+    currentStageCategory: string;
+    outcome: string;
+    submittedAt: Date | null;
+    createdAt: Date;
+  }>;
+}): string {
+  return deriveUiStatus({
+    archivedAt: opportunity.archivedAt,
+    opportunityStatus: opportunity.status,
+    attempt: pickLatestAttempt(opportunity.applicationAttempts),
+  });
+}
+
+export async function loadJobsBoardTotals(
+  db: PrismaClient,
+  userId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<JobsBoardTotals> {
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
+  if (family === "ab") {
+    const [opportunities, interviews] = await Promise.all([
+      db.jobOpportunity.findMany({
+        where: { userId, archivedAt: null },
+        select: OPPORTUNITY_DERIVE_SELECT,
+      }),
+      // "Interview count" is the number of interview process steps on live
+      // attempts — the A+B unit that represents one interview event.
+      db.applicationProcessStep.count({
+        where: {
+          category: PROCESS_STEP_CATEGORY.INTERVIEW,
+          applicationAttempt: {
+            userId,
+            archivedAt: null,
+            jobOpportunity: { archivedAt: null },
+          },
+        },
+      }),
+    ]);
+
+    let applied = 0;
+    let offers = 0;
+    let inProgress = 0;
+    for (const opportunity of opportunities) {
+      if (opportunity.applicationAttempts.some(isAppliedAttempt)) applied += 1;
+      const uiStatus = deriveOpportunityUiStatus(opportunity);
+      if (isOfferUiStatus(uiStatus)) offers += 1;
+      if (!AB_TERMINAL_UI_STATUSES.has(uiStatus)) inProgress += 1;
+    }
+    return {
+      total: opportunities.length,
+      applied,
+      interviews,
+      offers,
+      inProgress,
+    };
+  }
+
+  const [total, applied, interviews, offers, inProgress] = await db.$transaction([
+    db.job.count({ where: { userId, ...NOT_DISMISSED_WHERE } }),
+    db.job.count({
+      where: { userId, applied: true, ...NOT_DISMISSED_WHERE },
+    }),
+    // The legacy Interview relation is a stub with no date; the honest
+    // countable unit is a position currently at interview stage.
+    db.job.count({
+      where: {
+        userId,
+        Status: { value: "interview" },
+        ...NOT_DISMISSED_WHERE,
+      },
+    }),
+    db.job.count({
+      where: {
+        userId,
+        Status: { value: { in: ["offer", "offer-accepted"] } },
+        ...NOT_DISMISSED_WHERE,
+      },
+    }),
+    db.job.count({
+      where: {
+        userId,
+        Status: { value: { notIn: [...LEGACY_TERMINAL_STATUS_VALUES] } },
+        ...NOT_DISMISSED_WHERE,
+      },
+    }),
+  ]);
+  return { total, applied, interviews, offers, inProgress };
+}
+
+export async function loadJobStatusDistribution(
+  db: PrismaClient,
+  userId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<JobStatusCount[]> {
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
+  if (family === "ab") {
+    const opportunities = await db.jobOpportunity.findMany({
+      where: { userId, archivedAt: null },
+      select: OPPORTUNITY_DERIVE_SELECT,
+    });
+    const counts = new Map<string, number>();
+    for (const opportunity of opportunities) {
+      const uiStatus = deriveOpportunityUiStatus(opportunity);
+      counts.set(uiStatus, (counts.get(uiStatus) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  const [groups, statuses] = await Promise.all([
+    db.job.groupBy({
+      by: "statusId",
+      _count: { _all: true },
+      where: { userId, ...NOT_DISMISSED_WHERE },
+    }),
+    db.jobStatus.findMany({ select: { id: true, value: true } }),
+  ]);
+  const valueById = new Map(statuses.map((row) => [row.id, row.value]));
+  return groups
+    .map((group) => ({
+      status: valueById.get(group.statusId) ?? "unknown",
+      count: group._count._all,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// Legacy positions whose application deadline falls inside the reminder
+// window — the legacy counterpart of the A+B upcoming-events read.
+export async function loadUpcomingJobDeadlines(
+  db: PrismaClient,
+  userId: string,
+  range: { start: Date; end: Date },
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Array<{ id: string; title: string; company: string | null; dueDate: Date }>> {
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
+  if (family === "ab") {
+    return [];
+  }
+  const jobs = await db.job.findMany({
+    where: {
+      userId,
+      dueDate: { lte: range.end },
+      Status: { value: { notIn: [...LEGACY_TERMINAL_STATUS_VALUES] } },
+      ...NOT_DISMISSED_WHERE,
+    },
+    select: {
+      id: true,
+      dueDate: true,
+      JobTitle: { select: { label: true } },
+      Company: { select: { label: true } },
+    },
+    orderBy: { dueDate: "asc" },
+    take: 5,
+  });
+  return jobs.flatMap((job) =>
+    job.dueDate
+      ? [
+          {
+            id: job.id,
+            title: job.JobTitle.label,
+            company: job.Company?.label ?? null,
+            dueDate: job.dueDate,
+          },
+        ]
+      : [],
+  );
 }

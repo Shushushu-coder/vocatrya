@@ -4,6 +4,7 @@ import { screen, render, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   getActivitiesList,
+  getAllActivityTypes,
   getCurrentActivity,
   startActivityById,
   stopActivityById,
@@ -37,6 +38,15 @@ vi.mock("next-auth/providers/credentials", () => ({
     name: "Credentials",
     type: "credentials",
   })),
+}));
+
+// The container reads ?add-activity=true to auto-open the form.
+let searchParams = new URLSearchParams("");
+const routerReplace = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
+  useSearchParams: () => searchParams,
+  usePathname: () => "/dashboard/activities",
 }));
 
 vi.mock("@/actions/activity.actions", () => ({
@@ -129,6 +139,7 @@ describe("ActivitiesContainer Search Functionality", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    searchParams = new URLSearchParams("");
     vi.useFakeTimers({ shouldAdvanceTime: true });
     (getCurrentActivity as any).mockResolvedValue({ success: false });
   });
@@ -650,5 +661,51 @@ describe("ActivitiesContainer Search Functionality", () => {
         expect(startActivityById).toHaveBeenCalledWith("1");
       });
     });
+  });
+});
+describe("ActivitiesContainer deep link", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    (getCurrentActivity as any).mockResolvedValue({ success: false });
+    (getActivitiesList as any).mockResolvedValue({
+      success: true,
+      data: [],
+      total: 0,
+    });
+    // The auto-opened form loads its type combobox options on mount.
+    (getAllActivityTypes as any).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("auto-opens the form for ?add-activity=true and strips the param", async () => {
+    searchParams = new URLSearchParams("add-activity=true");
+    render(
+      <ActivityProvider>
+        <ActivitiesContainer />
+      </ActivityProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Add New Activity")).toBeInTheDocument();
+    });
+    expect(routerReplace).toHaveBeenCalledWith("/dashboard/activities");
+  });
+
+  it("stays closed without the param", async () => {
+    searchParams = new URLSearchParams("");
+    render(
+      <ActivityProvider>
+        <ActivitiesContainer />
+      </ActivityProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getActivitiesList).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("Add New Activity")).not.toBeInTheDocument();
   });
 });

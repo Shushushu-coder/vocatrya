@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { Loader, PlusCircle } from "lucide-react";
 import { SearchInput } from "../SearchInput";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,10 @@ import { useI18n } from "@/i18n";
 
 function ActivitiesContainer() {
   const { t } = useI18n();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const autoOpenHandled = useRef(false);
   const [activityFormOpen, setActivityFormOpen] = useState<boolean>(false);
   const [activitiesList, setActivitiesList] = useState<Activity[]>([]);
   const [page, setPage] = useState<number>(1);
@@ -83,6 +88,21 @@ function ActivitiesContainer() {
       return success;
     });
   };
+
+  // Opens the activity form once when the page is reached via a
+  // `?add-activity=true` deep link, then strips the param so a refresh
+  // doesn't reopen it. Same contract as tasks/questions.
+  useEffect(() => {
+    if (autoOpenHandled.current) return;
+    if (searchParams.get("add-activity") === "true") {
+      autoOpenHandled.current = true;
+      setActivityFormOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("add-activity");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname);
+    }
+  }, [router, pathname, searchParams]);
 
   useEffect(() => {
     loadActivities(1, APP_CONSTANTS.RECORDS_PER_PAGE);
