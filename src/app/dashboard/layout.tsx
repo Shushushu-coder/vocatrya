@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import Header from "@/components/Header";
+import { TitleBarActions } from "@/components/desktop/TitleBarActions";
 import Sidebar from "@/components/Sidebar";
 import { ActivityProvider } from "@/context/ActivityContext";
 import { GlobalActivityBanner } from "@/components/activities/GlobalActivityBanner";
@@ -68,6 +69,10 @@ export default async function RootLayout({
             <div className="flex min-h-[calc(100vh-var(--desktop-titlebar-height,0px))] w-full bg-muted/40">
               <Sidebar user={user} signOutAction={signOutAction} />
               <SidebarInset>
+                {/* Renders only portals into DesktopTitleBar's slots; kept
+                    inside the provider tree so the agent-chat trigger and
+                    mode-aware upload href resolve correctly. */}
+                <TitleBarActions />
                 <Header />
                 <GlobalActivityBanner />
                 {/* Container, not viewport, queries: the docked chat panel

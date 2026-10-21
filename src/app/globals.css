@@ -22,6 +22,12 @@
 html[data-desktop="true"] .desktop-titlebar {
   display: flex;
 }
+/* The Electron shell presents the global actions inside DesktopTitleBar
+   (portaled by TitleBarActions), so the in-header fallback row must not
+   render a second toolbar there. Same data-desktop gate as the titlebar. */
+html[data-desktop="true"] .header-global-actions {
+  display: none;
+}
 
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif,

@@ -91,6 +91,20 @@ describe("DesktopTitleBar", () => {
     expect(nav.back).not.toHaveBeenCalled();
   });
 
+  it("exposes empty no-drag slots for dashboard actions", () => {
+    installDesktopShell();
+    render(<DesktopTitleBar />);
+
+    for (const id of [
+      "desktop-titlebar-actions-left",
+      "desktop-titlebar-actions-right",
+    ]) {
+      const slot = document.getElementById(id);
+      expect(slot).not.toBeNull();
+      expect(slot!.className).toContain("app-region-no-drag");
+    }
+  });
+
   it("opens the real shortcut list from the keyboard button", async () => {
     installDesktopShell();
     const user = userEvent.setup();

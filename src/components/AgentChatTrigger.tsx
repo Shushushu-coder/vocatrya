@@ -4,15 +4,22 @@ import { MessageSquare, PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { useI18n } from "@/i18n";
+import { cn } from "@/lib/utils";
 
-export function AgentChatTrigger() {
+export function AgentChatTrigger({
+  className,
+  variant = "outline",
+}: {
+  className?: string;
+  variant?: "outline" | "ghost";
+}) {
   const { isOpen, open, close, approvalPending } = useAgentChat();
   const { t } = useI18n();
 
   return (
     <Button
-      variant="outline"
-      className="relative gap-1.5"
+      variant={variant}
+      className={cn("relative gap-1.5", className)}
       aria-label={isOpen ? t("nav.closeAssistant") : t("nav.openAssistant")}
       onClick={() => (isOpen ? close() : open())}
     >

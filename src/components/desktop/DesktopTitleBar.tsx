@@ -198,7 +198,18 @@ export function DesktopTitleBar() {
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+      {/* Dashboard-scoped actions (create menu, upload) are portaled in by
+          TitleBarActions; their providers only exist under /dashboard, so the
+          slot stays empty on auth and other non-dashboard routes. */}
+      <div
+        id="desktop-titlebar-actions-left"
+        className="app-region-no-drag ml-1 flex items-center"
+      />
       <div className="min-w-0 flex-1" aria-hidden="true" />
+      <div
+        id="desktop-titlebar-actions-right"
+        className="app-region-no-drag mr-1 flex items-center"
+      />
       <div className="app-region-no-drag flex items-center">
         <ShortcutHelp />
       </div>
