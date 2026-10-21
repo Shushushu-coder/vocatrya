@@ -200,6 +200,20 @@ test.describe("Dashboard overview page", () => {
     await page.getByTestId("header-upload").click();
     await expect(page).toHaveURL(/\/dashboard\/profile/, { timeout: 30000 });
   });
+
+  // Web shell regression: the desktop titlebar's slots exist in the DOM on
+  // every build, so a portal that ignores the Electron gate duplicates every
+  // shared testid. The browser must expose exactly one set of global actions.
+  test("exposes exactly one set of global actions in the web shell", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await expect(page.getByTestId("header-create-menu")).toHaveCount(1);
+    await expect(page.getByTestId("header-upload")).toHaveCount(1);
+    await expect(
+      page.getByRole("button", { name: "Open assistant" }),
+    ).toHaveCount(1);
+  });
 });
 
 test.describe("Analytics board", () => {

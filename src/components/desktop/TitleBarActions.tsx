@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { CreateMenu } from "@/components/GlobalActions";
 import { AgentChatTrigger } from "@/components/AgentChatTrigger";
+import { isDesktopShell } from "@/components/desktop/desktopShell";
 
 // The desktop titlebar is mounted by the root layout, above the dashboard
 // layout that owns CareerSurfacesProvider/AgentChatProvider. Portaling keeps
@@ -16,6 +17,12 @@ export function TitleBarActions() {
   const [rightSlot, setRightSlot] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
+    // The titlebar's slot divs exist in the DOM on every build (the bar is
+    // display:none'd by CSS outside Electron). Portaling unconditionally
+    // would render a second copy of every global action — duplicate testids
+    // against the in-header fallback row — so only the real Electron shell
+    // takes this path; the web build keeps the header actions alone.
+    if (!isDesktopShell()) return;
     setLeftSlot(document.getElementById("desktop-titlebar-actions-left"));
     setRightSlot(document.getElementById("desktop-titlebar-actions-right"));
   }, []);

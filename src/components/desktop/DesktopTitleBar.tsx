@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { isDesktopShell } from "@/components/desktop/desktopShell";
 import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 
@@ -37,12 +38,6 @@ function appNavigation(): AppNavigation | null {
     return null;
   }
   return nav as AppNavigation;
-}
-
-// True only inside the Electron main window: the preload bridge exists there
-// and nowhere else (web build, hidden print window, jsdom).
-function isDesktopShell(): boolean {
-  return typeof window !== "undefined" && Boolean(window.vocatryaWindow);
 }
 
 // Back/forward state comes from window.navigation so it stays correct across
