@@ -3,6 +3,7 @@ import prisma from "@/lib/db";
 import {
   loadDashboardJobCounts,
   loadJobsBoardTotals,
+  loadJobsExistence,
   loadUpcomingJobDeadlines,
   resolveJobsReadFamily,
 } from "@/lib/career/jobsReadDispatch";
@@ -62,6 +63,45 @@ export const getOverviewStats = async (): Promise<OverviewStats> => {
     openTasks,
     upcomingActivities,
   };
+};
+
+// Adaptive overview state. "empty" is TRUE_EMPTY — the user provably holds
+// no personal business records in any tracked domain, so the page offers
+// the four starting points instead of an empty feed. "nonempty" is NORMAL.
+// "unknown" means emptiness could not be proven (the jobs read family is
+// blocked) and the page must degrade to the normal workbench rather than
+// guess. Loading and query failures never reach a value here: reads are
+// awaited before the page renders and errors propagate to the boundary, so
+// neither can masquerade as a fresh user.
+export type OverviewDataState = "empty" | "nonempty" | "unknown";
+
+// Existence checks mirror the overview's tracked domains (positions, tasks,
+// activities, interview questions and sessions) — not the four metrics.
+// History counts: an archived position, a completed task, a past activity or
+// a practice session all mean the user has started, even when every headline
+// metric reads 0. Question rows installed from preset banks carry
+// presetBankKey and are not the user's own records; soft-deleted questions
+// are no longer records either.
+export const getOverviewDataState = async (): Promise<OverviewDataState> => {
+  const user = await requireUser();
+  const [jobsResult, tasks, activities, questions, sessions] =
+    await Promise.all([
+      jobsReadOrBlocked(() => loadJobsExistence(prisma, user.id)),
+      prisma.task.count({ where: { userId: user.id } }),
+      prisma.activity.count({ where: { userId: user.id } }),
+      prisma.question.count({
+        where: { createdBy: user.id, presetBankKey: null, deletedAt: null },
+      }),
+      prisma.interviewSession.count({ where: { userId: user.id } }),
+    ]);
+
+  if (tasks > 0 || activities > 0 || questions > 0 || sessions > 0) {
+    return "nonempty";
+  }
+  if (jobsResult.blocked) {
+    return "unknown";
+  }
+  return jobsResult.data > 0 ? "nonempty" : "empty";
 };
 
 // A single lightweight reminder row. `kind` drives the icon/link target;

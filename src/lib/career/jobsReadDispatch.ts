@@ -726,6 +726,25 @@ export async function loadJobsBoardTotals(
   return { total, applied, interviews, offers, inProgress };
 }
 
+// "Does this user have any position records at all" — the jobs side of the
+// overview's empty-state decision. Unlike the board totals this deliberately
+// counts every row: archived, rejected, and dismissed positions are still
+// personal business records, so the overview must not offer the fresh-user
+// starting points to someone with history. A blocked family rejects through
+// the same JOBS_READ_UNAVAILABLE contract as the other reads.
+export async function loadJobsExistence(
+  db: PrismaClient,
+  userId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<number> {
+  const { family, reason } = await resolveJobsReadFamily(db, env);
+  rejectBlockedJobs(family, reason);
+  if (family === "ab") {
+    return db.jobOpportunity.count({ where: { userId } });
+  }
+  return db.job.count({ where: { userId } });
+}
+
 export async function loadJobStatusDistribution(
   db: PrismaClient,
   userId: string,

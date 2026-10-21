@@ -18,8 +18,13 @@ export {
 export {
   getOverviewStats,
   getOverviewReminders,
+  getOverviewDataState,
 } from "./dashboard/overview";
-export type { OverviewStats, OverviewReminder } from "./dashboard/overview";
+export type {
+  OverviewStats,
+  OverviewReminder,
+  OverviewDataState,
+} from "./dashboard/overview";
 
 export {
   getJobsBoardTotals,

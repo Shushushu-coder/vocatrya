@@ -7,7 +7,7 @@ import { useI18n, getLocalizedJobStatus } from "@/i18n";
 import type { DashboardJobsReadResult } from "@/actions/dashboard/shared";
 import JobsUnavailableNotice from "./JobsUnavailableNotice";
 
-const MAX_ROWS = 8;
+const MAX_ROWS = 5;
 
 type RecentJob = {
   id: string;

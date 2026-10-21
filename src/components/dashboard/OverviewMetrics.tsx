@@ -42,7 +42,7 @@ export default function OverviewMetrics({ stats }: { stats: OverviewStats }) {
       <div className="grid min-w-0 grid-cols-2 gap-4 xl:grid-cols-4">
         {items.map((item) => (
           <Card key={item.key} data-testid={`overview-metric-${item.key}`}>
-            <CardContent className="flex items-center gap-3 p-4">
+            <CardContent className="flex items-center gap-3 px-4 py-3">
               <item.icon className="h-5 w-5 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="truncate text-sm text-muted-foreground">
