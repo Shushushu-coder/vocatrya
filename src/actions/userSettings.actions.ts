@@ -11,9 +11,21 @@ import {
 } from "@/models/userSettings.model";
 import {
   getInterviewConfig,
-  mergeAiSettingsForUpdate,
   normalizeInterviewInput,
 } from "@/lib/interview/interviewSettings";
+import {
+  patchUserSettings,
+  SETTINGS_CONFLICT,
+  type UserSettingsStore,
+} from "@/lib/userSettings/patch";
+
+// Structural adapter so the patch primitive never imports @/lib/db itself —
+// the store is injected, keeping the CAS loop testable in isolation.
+const userSettingsStore: UserSettingsStore = {
+  findUnique: (args) => prisma.userSettings.findUnique(args),
+  updateMany: (args) => prisma.userSettings.updateMany(args),
+  create: (args) => prisma.userSettings.create(args),
+};
 
 export const getUserSettings = async (): Promise<any | undefined> => {
   try {
@@ -71,78 +83,29 @@ export const updateUserSettings = async (
   try {
     const user = await requireUser();
 
-    const existingSettings = await prisma.userSettings.findUnique({
-      where: { userId: user.id },
-    });
-
-    let mergedSettings: UserSettingsData;
-
-    if (existingSettings) {
-      const currentSettings: UserSettingsData = JSON.parse(
-        existingSettings.settings,
-      );
-      const currentAi: AiSettings = {
-        ...defaultUserSettings.ai,
-        ...currentSettings.ai,
-      };
-      const updateHasInterviewKey =
-        settings.ai !== undefined &&
-        Object.prototype.hasOwnProperty.call(settings.ai, "interview");
-      const mergedAi = mergeAiSettingsForUpdate(
-        currentAi,
-        (settings.ai ?? {}) as Partial<AiSettings> & {
-          interview?: InterviewAiSettings | undefined;
-        },
-        updateHasInterviewKey,
-      );
-      mergedSettings = {
-        ...defaultUserSettings,
-        ...currentSettings,
-        ...settings,
-        ai: mergedAi,
-        display: {
-          ...defaultUserSettings.display,
-          ...currentSettings.display,
-          ...settings.display,
-        },
-      };
-    } else {
-      const updateHasInterviewKey =
-        settings.ai !== undefined &&
-        Object.prototype.hasOwnProperty.call(settings.ai, "interview");
-      const mergedAi = mergeAiSettingsForUpdate(
-        { ...defaultUserSettings.ai },
-        (settings.ai ?? {}) as Partial<AiSettings> & {
-          interview?: InterviewAiSettings | undefined;
-        },
-        updateHasInterviewKey,
-      );
-      mergedSettings = {
-        ...defaultUserSettings,
-        ...settings,
-        ai: mergedAi,
-        display: { ...defaultUserSettings.display, ...settings.display },
+    // Atomic CAS patch: re-reads and re-merges on conflict instead of
+    // overwriting a concurrent writer's document with a stale snapshot.
+    const result = await patchUserSettings(
+      user.id,
+      settings,
+      userSettingsStore,
+    );
+    if (!result.success) {
+      return {
+        success: false,
+        code: result.code,
+        message:
+          result.code === SETTINGS_CONFLICT
+            ? "Settings changed while saving. Please retry."
+            : result.message,
       };
     }
-
-    const userSettings = await prisma.userSettings.upsert({
-      where: { userId: user.id },
-      update: {
-        settings: JSON.stringify(mergedSettings),
-      },
-      create: {
-        userId: user.id,
-        settings: JSON.stringify(mergedSettings),
-      },
-    });
-
-    const parsedSettings: UserSettingsData = JSON.parse(userSettings.settings);
 
     return {
       success: true,
       data: {
         userId: user.id,
-        settings: parsedSettings,
+        settings: result.settings,
       },
     };
   } catch (error) {
