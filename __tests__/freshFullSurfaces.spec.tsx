@@ -265,33 +265,50 @@ describe("AdminTabsContainer", () => {
 // ---------------------------------------------------------------------------
 
 describe("SettingsSidebar", () => {
-  it("hides the MCP access section under fresh + full", () => {
+  const NINE_ENTRY_IA = [
+    "General",
+    "Notifications",
+    "Appearance",
+    "AI Services",
+    "AI Assignments",
+    "Shortcuts",
+    "Audio",
+    "Data & Privacy",
+    "About",
+  ];
+
+  it("renders the frozen nine-entry IA under fresh + full, without an MCP nav entry", () => {
     render(
       wrap(
         <SettingsSidebar
-          activeSection="ai-provider"
+          activeSection="ai-services"
           onSectionChange={() => {}}
         />,
       ),
     );
 
+    for (const label of NINE_ENTRY_IA) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    // MCP is a compat sub-area inside Data & Privacy, never a nav entry.
     expect(screen.queryByText("MCP Access")).not.toBeInTheDocument();
-    expect(screen.getByText("AI Provider")).toBeInTheDocument();
-    expect(screen.getByText("Appearance")).toBeInTheDocument();
   });
 
-  it("keeps the MCP access section outside fresh + full", () => {
+  it("renders the identical IA outside fresh + full (nav is flag-independent)", () => {
     render(
       wrap(
         <SettingsSidebar
-          activeSection="ai-provider"
+          activeSection="ai-services"
           onSectionChange={() => {}}
         />,
         false,
       ),
     );
 
-    expect(screen.getByText("MCP Access")).toBeInTheDocument();
+    for (const label of NINE_ENTRY_IA) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("MCP Access")).not.toBeInTheDocument();
   });
 });
 

@@ -61,7 +61,8 @@ function shows(overviewData: ManagedAiOverview) {
 
 describe("ManagedAiCard", () => {
   it("ships the Coming Soon copy in en and zh-CN", () => {
-    const copy = (messages: typeof en) => messages.settings as Record<string, string>;
+    const copy = (messages: typeof en) =>
+      messages.settings as Record<string, unknown>;
     expect(copy(en).managedComingSoon).toBe("Coming Soon");
     expect(copy(zhCN).managedComingSoon).toBe("即将推出");
     for (const messages of [en, zhCN]) {

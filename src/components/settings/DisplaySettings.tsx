@@ -1,91 +1,169 @@
 "use client";
-import { useEffect, useState } from "react";
-import { z } from "zod";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "../ui/form";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { toastSuccess, toastError } from "@/lib/toast";
-import { Button } from "../ui/button";
+import { toastError } from "@/lib/toast";
 import { useTheme } from "next-themes";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import {
   getUserSettings,
   updateDisplaySettings,
 } from "@/actions/userSettings.actions";
 import { useI18n } from "@/i18n";
+import {
+  SaveStatusProvider,
+  useSaveStatus,
+} from "@/context/SaveStatusContext";
+import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
+import { cn } from "@/lib/utils";
+import type { DisplaySettings as DisplaySettingsData } from "@/models/userSettings.model";
 
-const appearanceFormSchema = z.object({
-  theme: z.enum(["light", "dark", "system"], {
-    error: "Please select a theme.",
-  }),
-});
+type ThemeValue = DisplaySettingsData["theme"];
 
-type AppearanceFormValues = z.infer<typeof appearanceFormSchema>;
+const THEME_OPTIONS: { value: ThemeValue; labelKey: string }[] = [
+  { value: "light", labelKey: "settings.themeLight" },
+  { value: "dark", labelKey: "settings.themeDark" },
+  { value: "system", labelKey: "settings.themeSystem" },
+];
 
-function DisplaySettings() {
+function isThemeValue(value: unknown): value is ThemeValue {
+  return (
+    value === "light" || value === "dark" || value === "system"
+  );
+}
+
+// The page-scoped provider keeps this card's save status independent from the
+// dashboard-wide SaveStatusContext used by the resume workspace — the same
+// semantics (stale completions never downgrade a newer in-flight save, "saved"
+// fades on its own, failures stay visible) without cross-surface bleed.
+export default function DisplaySettings() {
+  return (
+    <SaveStatusProvider>
+      <DisplaySettingsPanel />
+    </SaveStatusProvider>
+  );
+}
+
+function DisplaySettingsPanel() {
   const { t } = useI18n();
   const { setTheme, theme, systemTheme } = useTheme();
+  const { begin, finish } = useSaveStatus();
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [selected, setSelected] = useState<ThemeValue>("system");
 
-  const form = useForm<AppearanceFormValues>({
-    resolver: zodResolver(appearanceFormSchema),
-    defaultValues: {
-      theme: "system",
+  // `confirmed` is the last value the server actually persisted; `selection`
+  // is what is applied right now. They diverge while a save is in flight and
+  // again after a failed save rolls back to the confirmed value.
+  const confirmedRef = useRef<ThemeValue>("system");
+  const selectionRef = useRef<ThemeValue>("system");
+  const pendingIntentRef = useRef<ThemeValue | null>(null);
+  const pumpingRef = useRef(false);
+  const setThemeRef = useRef(setTheme);
+  setThemeRef.current = setTheme;
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  const applyTheme = useCallback((value: ThemeValue) => {
+    selectionRef.current = value;
+    setSelected(value);
+    setThemeRef.current(value);
+  }, []);
+
+  // Saves run strictly serial and coalesce to the latest intent: a parallel
+  // fire-and-forget could let an older request be the last write the DB
+  // completes, leaving persisted state behind the user's actual choice.
+  const queueSave = useCallback(() => {
+    if (pumpingRef.current) return;
+    pumpingRef.current = true;
+    void (async () => {
+      try {
+        while (pendingIntentRef.current !== null) {
+          const intent = pendingIntentRef.current;
+          pendingIntentRef.current = null;
+          const seq = begin();
+          let persisted = false;
+          try {
+            const result = await updateDisplaySettings({ theme: intent });
+            // "Saved" requires the persisted document to echo the intent back —
+            // a local state change or a bare success flag alone is not proof.
+            persisted =
+              result?.success === true &&
+              result?.data?.settings?.display?.theme === intent;
+          } catch (error) {
+            console.error("Error saving display settings:", error);
+          }
+          finish(seq, persisted);
+          if (persisted) {
+            confirmedRef.current = intent;
+          } else {
+            toastError(tRef.current("settings.saveDisplayFailed"));
+            // Roll back only when the failed intent is still what the user is
+            // looking at. A newer queued selection wins over this stale
+            // failure and must not be reverted underneath them. Restoring the
+            // confirmed value through setTheme also rolls the native window
+            // theme back via the provider's existing bridge sync.
+            if (
+              pendingIntentRef.current === null &&
+              selectionRef.current === intent
+            ) {
+              applyTheme(confirmedRef.current);
+            }
+          }
+        }
+      } finally {
+        pumpingRef.current = false;
+      }
+    })();
+  }, [applyTheme, begin, finish]);
+
+  const handleSelect = useCallback(
+    (value: string) => {
+      if (!isThemeValue(value)) return;
+      // Re-selecting what is already applied needs no write: the value is
+      // either confirmed or its save is already in flight.
+      if (value === selectionRef.current && pendingIntentRef.current === null) {
+        return;
+      }
+      applyTheme(value);
+      pendingIntentRef.current = value;
+      queueSave();
     },
-  });
+    [applyTheme, queueSave],
+  );
 
   useEffect(() => {
+    let cancelled = false;
     const fetchSettings = async () => {
       setIsLoading(true);
       try {
         const result = await getUserSettings();
-        if (result.success && result.data?.settings?.display?.theme) {
-          const savedTheme = result.data.settings.display.theme;
-          form.reset({ theme: savedTheme });
-          setTheme(savedTheme);
-        } else if (theme) {
-          form.reset({ theme: theme as "light" | "dark" | "system" });
+        const savedTheme = result?.data?.settings?.display?.theme;
+        // display.theme is the only authority: when the read yields a valid
+        // value it overrides whatever next-themes cached locally.
+        if (result?.success && isThemeValue(savedTheme)) {
+          if (cancelled) return;
+          confirmedRef.current = savedTheme;
+          applyTheme(savedTheme);
+        } else if (isThemeValue(theme)) {
+          if (cancelled) return;
+          confirmedRef.current = theme;
+          applyTheme(theme);
         }
       } catch (error) {
         console.error("Error fetching display settings:", error);
-        if (theme) {
-          form.reset({ theme: theme as "light" | "dark" | "system" });
+        if (!cancelled && isThemeValue(theme)) {
+          confirmedRef.current = theme;
+          applyTheme(theme);
         }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     fetchSettings();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function onSubmit(data: AppearanceFormValues) {
-    setIsSaving(true);
-    try {
-      const result = await updateDisplaySettings({ theme: data.theme });
-      if (result.success) {
-        setTheme(data.theme);
-        toastSuccess(t("settings.themeSaved"));
-      } else {
-        toastError(result.message || t("settings.saveDisplayFailed"));
-      }
-    } catch (error) {
-      console.error("Error saving display settings:", error);
-      toastError(t("settings.saveDisplayFailed"));
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   if (isLoading) {
     return (
@@ -106,84 +184,70 @@ function DisplaySettings() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium">{t("settings.appearance")}</h3>
-        <p className="text-sm text-muted-foreground">
-          {t("settings.appearanceDescription")}
-        </p>
+      <div className="flex items-center gap-2">
+        <div>
+          <h3 className="text-lg font-medium">{t("settings.appearance")}</h3>
+          <p className="text-sm text-muted-foreground">
+            {t("settings.appearanceDescription")}
+          </p>
+        </div>
+        <SaveStatusIndicator />
       </div>
       <div className="@container">
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <FormField
-              control={form.control}
-              name="theme"
-              render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel>{t("settings.theme")}</FormLabel>
-                  <FormDescription>
-                    {t("settings.selectThemeDescription")}
-                  </FormDescription>
-                  <FormMessage />
-                  <RadioGroup
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    className="grid max-w-lg @md:grid-cols-3 gap-8 pt-2"
+        <div className="space-y-1">
+          <p className="text-sm font-medium leading-none">
+            {t("settings.theme")}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {t("settings.selectThemeDescription")}
+          </p>
+          <RadioGroup
+            value={selected}
+            onValueChange={handleSelect}
+            className="grid max-w-lg @md:grid-cols-3 gap-8 pt-2"
+          >
+            {THEME_OPTIONS.map(({ value, labelKey }) => (
+              <label
+                key={value}
+                className="relative block cursor-pointer font-normal [&:has([data-state=checked])>div]:border-primary"
+              >
+                <RadioGroupItem
+                  value={value}
+                  aria-label={t(labelKey)}
+                  className="sr-only"
+                />
+                {value === "system" ? (
+                  systemTheme === "dark" ? (
+                    <DarkThemeElement />
+                  ) : (
+                    <LightThemeElement />
+                  )
+                ) : value === "dark" ? (
+                  <DarkThemeElement />
+                ) : (
+                  <LightThemeElement />
+                )}
+                <span className="block w-full p-2 text-center">
+                  {t(labelKey)}
+                </span>
+                {selected === value && (
+                  <span
+                    className={cn(
+                      "absolute right-2 top-2 flex h-5 w-5 items-center justify-center",
+                      "rounded-full bg-primary text-primary-foreground shadow-sm",
+                    )}
                   >
-                    <FormItem>
-                      <FormLabel className="[&:has([data-state=checked])>div]:border-primary">
-                        <FormControl>
-                          <RadioGroupItem value="light" className="sr-only" />
-                        </FormControl>
-                        <LightThemeElement />
-                        <span className="block w-full p-2 text-center font-normal">
-                          {t("settings.themeLight")}
-                        </span>
-                      </FormLabel>
-                    </FormItem>
-                    <FormItem>
-                      <FormLabel className="[&:has([data-state=checked])>div]:border-primary">
-                        <FormControl>
-                          <RadioGroupItem value="dark" className="sr-only" />
-                        </FormControl>
-                        <DarkThemeElement />
-                        <span className="block w-full p-2 text-center font-normal">
-                          {t("settings.themeDark")}
-                        </span>
-                      </FormLabel>
-                    </FormItem>
-                    <FormItem>
-                      <FormLabel className="[&:has([data-state=checked])>div]:border-primary">
-                        <FormControl>
-                          <RadioGroupItem value="system" className="sr-only" />
-                        </FormControl>
-                        {systemTheme === "dark" ? (
-                          <DarkThemeElement />
-                        ) : (
-                          <LightThemeElement />
-                        )}
-                        <span className="block w-full p-2 text-center font-normal">
-                          {t("settings.themeSystem")}
-                        </span>
-                      </FormLabel>
-                    </FormItem>
-                  </RadioGroup>
-                </FormItem>
-              )}
-            />
-
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {t("common.save")}
-            </Button>
-          </form>
-        </Form>
+                    <Check className="h-3 w-3" aria-hidden="true" />
+                  </span>
+                )}
+              </label>
+            ))}
+          </RadioGroup>
+        </div>
       </div>
     </div>
   );
 }
-
-export default DisplaySettings;
 
 function LightThemeElement() {
   return (
