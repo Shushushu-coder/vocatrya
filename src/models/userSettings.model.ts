@@ -1,4 +1,5 @@
 import { AiProvider } from "./ai.model";
+import type { Locale } from "@/i18n/config";
 
 /**
  * Phase 2 interview adapter contract.
@@ -23,9 +24,21 @@ export interface DisplaySettings {
   theme: "light" | "dark" | "system";
 }
 
+/**
+ * Account-level general preferences under the `settings` document
+ * namespace. `locale` is the only implemented field (SET-02 contract);
+ * users with no persisted language preference simply lack the subtree.
+ */
+export interface GeneralSettings {
+  locale?: Locale;
+}
+
 export interface UserSettingsData {
   ai: AiSettings;
   display: DisplaySettings;
+  settings?: {
+    general?: GeneralSettings;
+  };
 }
 
 export interface UserSettings {

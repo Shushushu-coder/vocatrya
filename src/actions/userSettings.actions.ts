@@ -18,6 +18,7 @@ import {
   SETTINGS_CONFLICT,
   type UserSettingsStore,
 } from "@/lib/userSettings/patch";
+import { isValidLocale, type Locale } from "@/i18n/config";
 
 // Structural adapter so the patch primitive never imports @/lib/db itself —
 // the store is injected, keeping the CAS loop testable in isolation.
@@ -153,4 +154,22 @@ export const updateDisplaySettings = async (
   displaySettings: DisplaySettings,
 ): Promise<any | undefined> => {
   return updateUserSettings({ display: displaySettings });
+};
+
+/**
+ * SET-02 write entry: persist the account-level language preference at
+ * `settings.general.locale` via the atomic patch path. The value is
+ * validated at runtime so non-Locale inputs are honestly rejected before
+ * any database write.
+ */
+export const updateSettingsLocale = async (
+  locale: Locale,
+): Promise<any | undefined> => {
+  if (!isValidLocale(locale)) {
+    return {
+      success: false,
+      message: "Locale must be zh-CN or en.",
+    };
+  }
+  return updateUserSettings({ settings: { general: { locale } } });
 };
