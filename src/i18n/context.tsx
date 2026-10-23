@@ -6,13 +6,16 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { getUserSettings } from "@/actions/userSettings.actions";
 import {
   DEFAULT_LOCALE,
   LOCALE_COOKIE_NAME,
   LOCALE_STORAGE_KEY,
+  isValidLocale,
   type Locale,
   normalizeLocale,
 } from "./config";
@@ -30,14 +33,40 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 export interface I18nProviderProps {
   children: React.ReactNode;
   initialLocale?: Locale;
+  /**
+   * SET-02: one-shot reader for the persisted account locale
+   * (`settings.general.locale`). Production uses the default, which calls
+   * the real `getUserSettings` server action once after mount; tests inject
+   * a stub so rendering the provider never reaches the actions/db chain.
+   */
+  loadPersistedLocale?: () => Promise<Locale | null>;
 }
+
+// Signed-in authority read: extract `settings.general.locale` from the
+// persisted document. Anything unusable (no row, no key, invalid value,
+// signed-out failure) resolves to null — the caller keeps the current
+// locale. Never writes back: restore failure is not a user-facing error.
+const defaultLoadPersistedLocale = async (): Promise<Locale | null> => {
+  const result = await getUserSettings();
+  const persisted = result?.data?.settings?.settings?.general?.locale;
+  return result?.success === true && isValidLocale(persisted)
+    ? persisted
+    : null;
+};
 
 export function I18nProvider({
   children,
   initialLocale = DEFAULT_LOCALE,
+  loadPersistedLocale,
 }: I18nProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
   const router = useRouter();
+  // Synchronous mirror of `locale`: the async account reconcile reads it to
+  // detect whether the visible value is still the one the read observed.
+  const localeRef = useRef<Locale>(initialLocale);
+  // Latched by the first post-mount user pick: a late account-preference read
+  // must never overwrite a fresher user choice.
+  const userSelectedRef = useRef(false);
 
   // Cookie is the SSR source of truth. localStorage only fills in when the
   // cookie is missing so the first paint does not flash from default zh-CN.
@@ -50,6 +79,7 @@ export function I18nProvider({
       const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
       if (stored && normalizeLocale(stored) !== locale) {
         const nextLocale = normalizeLocale(stored);
+        localeRef.current = nextLocale;
         setLocaleState(nextLocale);
         document.documentElement.lang = nextLocale;
         document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; path=/; max-age=31536000; SameSite=Lax`;
@@ -61,9 +91,10 @@ export function I18nProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setLocale = useCallback(
+  const applyLocale = useCallback(
     (newLocale: Locale) => {
       const validated = normalizeLocale(newLocale);
+      localeRef.current = validated;
       setLocaleState(validated);
 
       try {
@@ -86,6 +117,49 @@ export function I18nProvider({
     },
     [router]
   );
+
+  const setLocale = useCallback(
+    (newLocale: Locale) => {
+      userSelectedRef.current = true;
+      applyLocale(newLocale);
+    },
+    [applyLocale]
+  );
+
+  // Account-level restore (SET-02): for a signed-in user the persisted
+  // settings.general.locale is authoritative, so a fresh device or a cleared
+  // cookie still lands on the saved language. The read runs once after
+  // mount; the local cookie/localStorage cache stays a render cache — only
+  // the account document is authoritative. Under NODE_ENV=test the default
+  // is skipped so bare-provider unit tests never touch the real
+  // actions/db chain; production and injected loaders run normally.
+  useEffect(() => {
+    const loader =
+      loadPersistedLocale ??
+      (process.env.NODE_ENV === "test"
+        ? undefined
+        : defaultLoadPersistedLocale);
+    if (!loader) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const persisted = await loader();
+        if (cancelled || userSelectedRef.current) return;
+        if (isValidLocale(persisted) && persisted !== localeRef.current) {
+          // Reuses the normal switch path so cookie, localStorage and the
+          // next SSR pass converge on the account value.
+          applyLocale(persisted);
+        }
+      } catch {
+        // Restore failure keeps the current locale silently.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only reconciliation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const t = useCallback(
     (key: string, params?: TranslationParams) => translate(locale, key, params),
