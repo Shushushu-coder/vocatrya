@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 
-const { createDesktopLifecycle, createLoginItemsAdapter } = createRequire(import.meta.url)("./lifecycle.js");
+const { createDesktopLifecycle, createLoginItemsAdapter, shouldQuitWhenAllWindowsClosed } = createRequire(import.meta.url)("./lifecycle.js");
 const { createDesktopSettingsStore } = createRequire(import.meta.url)("./desktop-settings.js");
 
 const ORIGIN = "http://127.0.0.1:3737";
@@ -526,5 +526,23 @@ describe("lifecycle IPC boundary", () => {
     unregister();
     expect(ipcMain.removeHandler).toHaveBeenCalledTimes(6);
     cleanup();
+  });
+});
+
+describe("window-all-closed policy", () => {
+  it("quits on Windows when close-to-tray is off", () => {
+    expect(shouldQuitWhenAllWindowsClosed({ platform: "win32", closeToTrayActive: false, isQuitting: false })).toBe(true);
+  });
+
+  it("stays running when the window was hidden to the tray", () => {
+    expect(shouldQuitWhenAllWindowsClosed({ platform: "win32", closeToTrayActive: true, isQuitting: false })).toBe(false);
+  });
+
+  it("finishes a real quit even if close-to-tray is active", () => {
+    expect(shouldQuitWhenAllWindowsClosed({ platform: "win32", closeToTrayActive: true, isQuitting: true })).toBe(true);
+  });
+
+  it("keeps the macOS convention of not quitting from the last window", () => {
+    expect(shouldQuitWhenAllWindowsClosed({ platform: "darwin", closeToTrayActive: false, isQuitting: false })).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, nativeImage, Menu, Tray } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, nativeImage, Menu, Tray, session } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DESKTOP_APP_ID } = require("./installer-identity");
@@ -31,7 +31,9 @@ const { startExecutionServer } = require("./runtime/execute-server");
 const { createHostedSessionStore, startHostedSessionBroker } = require("./hosted-session");
 const { startCredentialBroker } = require("./credential-broker");
 const { createDesktopSettingsStore, DESKTOP_SETTINGS_FILE_NAME } = require("./desktop-settings");
-const { createDesktopLifecycle } = require("./lifecycle");
+const { createDesktopLifecycle, shouldQuitWhenAllWindowsClosed } = require("./lifecycle");
+const { resolveColdStartEntry } = require("./cold-start");
+const { createQuitCoordinator, flushDefaultSession, runRegisteredReleaseHooks } = require("./shutdown");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
 // single-instance lock and before app ready so the Chromium singleton lock,
@@ -431,7 +433,7 @@ if (!singleInstance) {
       // A stale "closed" must never detach the window that replaced this one.
       if (mainWindow === createdWindow) mainWindow = undefined;
     });
-    await createdWindow.loadURL(`${origin}/signin`);
+    await createdWindow.loadURL(resolveColdStartEntry(origin));
   }
 
   app.on("second-instance", () => {
@@ -531,35 +533,54 @@ if (!singleInstance) {
     }
   });
 
-  app.on("before-quit", (event) => {
+  const quitCoordinator = createQuitCoordinator({
     // A real quit latches FIRST: while Electron closes windows during
     // teardown, each fires "close" and must not be re-intercepted into a
     // tray hide. A hidden window is never a successful quit.
-    desktopLifecycle.beginQuit();
-    const ownedMigrationChild = migrationChild && migrationChild.exitCode === null ? migrationChild : null;
-    if ((!backend && !ownedMigrationChild) || shuttingDown) return;
-    event.preventDefault();
-    shuttingDown = true;
-    backendExpectedExit = true;
-    // Only owned startup children are terminated here; unrelated
-    // Node/Prisma processes are never touched.
-    try {
-      connectionOps?.dispose?.();
-    } catch {
-      // Persistent Codex children are best-effort on shutdown.
-    }
-    try {
-      execServer?.close();
-      hostedSessionBroker?.server.close();
-      credentialBroker?.server.close();
-    } catch {
-      // Closing the loopback listener must never block shutdown.
-    }
-    desktopLifecycle.dispose();
-    Promise.all([terminateChildTree(ownedMigrationChild), terminateChildTree(backend)]).finally(() => app.quit());
+    beginQuit: () => desktopLifecycle.beginQuit(),
+    markShuttingDown: () => {
+      shuttingDown = true;
+      backendExpectedExit = true;
+    },
+    runReleaseHooks: () => runRegisteredReleaseHooks(),
+    releaseResources: async () => {
+      const ownedMigrationChild = migrationChild && migrationChild.exitCode === null ? migrationChild : null;
+      // Only owned startup children are terminated here; unrelated
+      // Node/Prisma processes are never touched. Process exit releases the
+      // backend's SQLite connection. A hidden window does not reach here.
+      try {
+        connectionOps?.dispose?.();
+      } catch {
+        // Persistent Codex children are best-effort on shutdown.
+      }
+      try {
+        execServer?.close();
+        hostedSessionBroker?.server.close();
+        credentialBroker?.server.close();
+      } catch {
+        // Closing the loopback listener must never block shutdown.
+      }
+      desktopLifecycle.dispose();
+      await Promise.all([
+        terminateChildTree(ownedMigrationChild),
+        terminateChildTree(backend),
+      ]);
+    },
+    flushSession: () => flushDefaultSession(session.defaultSession),
+    requestQuit: () => app.quit(),
+  });
+
+  app.on("before-quit", (event) => {
+    quitCoordinator.onBeforeQuit(event);
   });
 
   app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") app.quit();
+    const state = desktopLifecycle.getState();
+    if (!shouldQuitWhenAllWindowsClosed({
+      platform: process.platform,
+      closeToTrayActive: state.closeToTrayActive,
+      isQuitting: desktopLifecycle.isQuitting(),
+    })) return;
+    app.quit();
   });
 }

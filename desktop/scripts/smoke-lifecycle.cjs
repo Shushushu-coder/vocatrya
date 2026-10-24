@@ -45,6 +45,8 @@ if (!dir) {
   console.error("VOCATRYA_LIFECYCLE_SMOKE_DIR is required");
   app.exit(2);
 } else {
+  // Keep Chromium profile data inside the disposable smoke directory.
+  app.setPath("userData", path.join(dir, "user-data"));
   const tick = () => new Promise((resolve) => setTimeout(resolve, 400));
 
   app.whenReady().then(async () => {

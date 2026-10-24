@@ -55,6 +55,18 @@ function createLoginItemsAdapter({ app, platform = process.platform }) {
   };
 }
 
+function shouldQuitWhenAllWindowsClosed({
+  platform = process.platform,
+  closeToTrayActive = false,
+  isQuitting = false,
+} = {}) {
+  if (platform === "darwin") return false;
+  // A window hidden by close-to-tray is still the running app. Once a real
+  // quit has latched, the last window closing is allowed to finish.
+  if (closeToTrayActive && !isQuitting) return false;
+  return true;
+}
+
 function readEnabledArgument(payload) {
   const enabled =
     payload && typeof payload === "object" && !Array.isArray(payload)
@@ -334,4 +346,5 @@ module.exports = {
   LIFECYCLE_IPC_CHANNELS,
   createDesktopLifecycle,
   createLoginItemsAdapter,
+  shouldQuitWhenAllWindowsClosed,
 };
