@@ -6,6 +6,7 @@ import { PrismaClient } from "@prisma/client";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { buildBackupZip } from "@/lib/backup/export";
 import { importBackup } from "@/lib/backup/import";
+import { writeSnapshot } from "@/lib/backup/snapshot";
 import { BackupError } from "@/lib/backup/schema";
 import { emptyStandardBackupData } from "@/lib/backup/compat";
 import { BackupDataSchema } from "@/lib/backup/schema";
@@ -121,6 +122,28 @@ describe("sensitive restore policy", () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0].idNumber).toBe("old-id");
     expect(await prisma.candidateFamilyMember.count()).toBe(2);
+  }, 60_000);
+
+  it("the pre-import snapshot carries sensitive rows so rollback undoes a sensitive import", async () => {
+    await seedSensitive("keep", 1);
+    const snapPath = await writeSnapshot(userId, EMAIL);
+    const bytes = await fs.promises.readFile(snapPath);
+    const zip = await JSZip.loadAsync(bytes);
+    const manifest = JSON.parse(await zip.file("manifest.json")!.async("string"));
+    const data = JSON.parse(await zip.file("data.json")!.async("string"));
+    expect(manifest.containsSensitiveData).toBe(true);
+    expect(data.CandidateSensitiveInfo).toHaveLength(1);
+
+    // A sensitive import wipes and replaces these rows; the snapshot is what
+    // makes that undoable.
+    await prisma.candidateFamilyMember.deleteMany();
+    await prisma.candidateSensitiveInfo.deleteMany();
+    await seedSensitive("imported", 1);
+
+    await importBackup(bytes, userId, EMAIL, true);
+    const info = await prisma.candidateSensitiveInfo.findFirstOrThrow();
+    expect(info.idNumber).toBe("keep-id");
+    expect(await prisma.candidateFamilyMember.count()).toBe(1);
   }, 60_000);
 
   it("C: a sensitive backup with empty arrays clears current sensitive rows", async () => {

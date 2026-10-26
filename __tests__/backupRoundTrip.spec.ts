@@ -476,6 +476,28 @@ describe("backup round trip", () => {
     ).toBe(false);
   }, 120_000);
 
+  it("wipes the File rows of replaced resumes instead of leaking one per import", async () => {
+    const { buffer } = await buildBackupZip(userId, "owner@example.com");
+
+    await prisma.automationRun.updateMany({
+      where: { status: { in: ["running", "cancelling"] } },
+      data: { status: "failed", completedAt: new Date() },
+    });
+
+    await importBackup(buffer, userId, "owner@example.com", true);
+    await importBackup(buffer, userId, "owner@example.com", true);
+
+    // File/Summary ownership travels through back-relations (Resume.FileId,
+    // ResumeSection.summaryId); once those rows are wiped the scope filter
+    // matches nothing, so orphans are how a broken wipe actually shows up.
+    const files = await prisma.file.findMany({ include: { Resume: true } });
+    expect(files.filter((f) => f.Resume === null)).toEqual([]);
+    const summaries = await prisma.summary.findMany({
+      include: { ResumeSection: true },
+    });
+    expect(summaries.filter((s) => s.ResumeSection === null)).toEqual([]);
+  }, 120_000);
+
   it("refuses before any write when the target has an active run", async () => {
     const automation = await prisma.automation.findFirstOrThrow({ where: { userId } });
     await prisma.automationRun.create({

@@ -347,12 +347,38 @@ async function wipe(
     });
   }
 
+  // File and Summary are scoped through back-relations (Resume points at
+  // File, ResumeSection points at Summary), and DELETE_ORDER removes those
+  // rows first — resolving the scope at delete time would match nothing.
+  // Capture the ids up front, then delete by id after the generic pass.
+  const backRelationScoped: BackupModel[] = ["File", "Summary"];
+  const pendingWipeIds = new Map<string, string[]>();
+  for (const model of backRelationScoped) {
+    const spec = MODEL_SPECS[model];
+    const rows = (await tx[spec.delegate].findMany({
+      where: spec.scope(userId),
+      select: { id: true },
+    })) as { id: string }[];
+    pendingWipeIds.set(
+      model,
+      rows.map((row) => row.id),
+    );
+  }
+
   for (const model of modelsForWipe(containsSensitiveData)) {
     // QuestionBank has MODEL_SPECS.wipeMode "none" so it never appears here
     // (spec v1 §15: QuestionBank ∉ per-user wipe; unrelated canonical banks
     // survive). There is intentionally no deleteMany QuestionBank in this flow.
     const spec = MODEL_SPECS[model];
     await tx[spec.delegate].deleteMany({ where: spec.scope(userId) });
+  }
+
+  for (const model of backRelationScoped) {
+    const spec = MODEL_SPECS[model];
+    const ids = pendingWipeIds.get(model)!;
+    if (ids.length > 0) {
+      await tx[spec.delegate].deleteMany({ where: { id: { in: ids } } });
+    }
   }
 }
 
