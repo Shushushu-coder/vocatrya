@@ -123,20 +123,54 @@ export function buildSkillsSectionText(items: MaterialLike[]): string {
   return items.map(buildMaterialItemText).filter(Boolean).join("\n\n");
 }
 
+/**
+ * Explicit whitelist for the personal-info group copy, in display order.
+ * Sensitive keys (证件号、紧急联系人、证明人) are never listed here: they are
+ * only copied through their own explicit per-field path.
+ */
+export const PERSONAL_INFO_COPY_FIELDS = [
+  { key: "fullName", label: "姓名" },
+  { key: "email", label: "邮箱" },
+  { key: "phone", label: "电话" },
+  { key: "address", label: "地址" },
+  { key: "gender", label: "性别" },
+  { key: "birthDate", label: "出生日期" },
+  { key: "ethnicity", label: "民族" },
+  { key: "politicalStatus", label: "政治面貌" },
+  { key: "nativePlace", label: "籍贯" },
+  { key: "householdRegistration", label: "户口所在地" },
+  { key: "graduationCohort", label: "毕业届别" },
+] as const;
+
+export type PersonalInfoLike = Partial<
+  Record<(typeof PERSONAL_INFO_COPY_FIELDS)[number]["key"], string | null>
+> | null;
+
+/** Bare values in whitelist order — the 基本资料 block body of the projection. */
+export function buildBasicsSectionText(profile: PersonalInfoLike): string {
+  if (!profile) return "";
+  return PERSONAL_INFO_COPY_FIELDS.map(({ key }) => profile[key]?.trim())
+    .filter((v): v is string => !!v)
+    .join("\n");
+}
+
+/**
+ * Labeled personal-info block (`label：value` per non-empty whitelisted
+ * field). Self-describing for standalone pastes; sensitive fields are
+ * unreachable by construction.
+ */
+export function buildPersonalInfoText(profile: PersonalInfoLike): string {
+  if (!profile) return "";
+  return PERSONAL_INFO_COPY_FIELDS.map(({ key, label }) => {
+    const value = profile[key]?.trim();
+    return value ? `${label}：${value}` : null;
+  })
+    .filter((v): v is string => !!v)
+    .join("\n");
+}
+
 export type ApplicationProjectionInput = {
-  profile: {
-    fullName?: string | null;
-    email?: string | null;
-    phone?: string | null;
-    address?: string | null;
-    gender?: string | null;
-    birthDate?: string | null;
-    ethnicity?: string | null;
-    politicalStatus?: string | null;
-    nativePlace?: string | null;
-    householdRegistration?: string | null;
-    graduationCohort?: string | null;
-  } | null;
+  profile: PersonalInfoLike;
   preference: {
     targetRoles?: string | null;
     preferredCities?: string | null;
@@ -149,32 +183,30 @@ export type ApplicationProjectionInput = {
   skills: MaterialLike[];
 };
 
+export type ApplicationProjectionSectionId =
+  | "basics"
+  | "preference"
+  | "education"
+  | "experience"
+  | "skills";
+
+export type ApplicationProjectionSection = {
+  id: ApplicationProjectionSectionId;
+  /** Section text including its fixed Chinese header line. */
+  text: string;
+};
+
 /**
- * READ-ONLY projection for the 网申资料 tab. Excludes hardConstraints,
- * softPreferences, and all sensitive fields by construction (callers do not
- * pass them in).
+ * Ordered non-empty projection sections. Selecting a subset and joining the
+ * texts with "\n\n" yields exactly the corresponding slice of the full
+ * application summary.
  */
-export function buildApplicationProjectionText(input: ApplicationProjectionInput): string {
-  const sections: string[] = [];
-  const p = input.profile;
-  if (p) {
-    const basics = [
-      p.fullName,
-      p.email,
-      p.phone,
-      p.address,
-      p.gender,
-      p.birthDate,
-      p.ethnicity,
-      p.politicalStatus,
-      p.nativePlace,
-      p.householdRegistration,
-      p.graduationCohort,
-    ]
-      .filter((v): v is string => !!v?.trim())
-      .map((v) => v.trim());
-    if (basics.length > 0) sections.push(`基本资料\n${basics.join("\n")}`);
-  }
+export function buildApplicationProjectionSections(
+  input: ApplicationProjectionInput,
+): ApplicationProjectionSection[] {
+  const sections: ApplicationProjectionSection[] = [];
+  const basics = buildBasicsSectionText(input.profile);
+  if (basics) sections.push({ id: "basics", text: `基本资料\n${basics}` });
   const pref = input.preference;
   if (pref) {
     const lines = [
@@ -186,13 +218,25 @@ export function buildApplicationProjectionText(input: ApplicationProjectionInput
     ]
       .filter((v): v is string => !!v?.trim())
       .map((v) => v.trim());
-    if (lines.length > 0) sections.push(`求职意向\n${lines.join("\n")}`);
+    if (lines.length > 0)
+      sections.push({ id: "preference", text: `求职意向\n${lines.join("\n")}` });
   }
   const edu = buildEducationSectionText(input.education);
-  if (edu) sections.push(`教育经历\n${edu}`);
+  if (edu) sections.push({ id: "education", text: `教育经历\n${edu}` });
   const exp = buildExperienceSectionText(input.experience);
-  if (exp) sections.push(`经历素材\n${exp}`);
+  if (exp) sections.push({ id: "experience", text: `经历素材\n${exp}` });
   const skills = buildSkillsSectionText(input.skills);
-  if (skills) sections.push(`技能证书\n${skills}`);
-  return sections.join("\n\n");
+  if (skills) sections.push({ id: "skills", text: `技能证书\n${skills}` });
+  return sections;
+}
+
+/**
+ * READ-ONLY projection for the 网申资料 tab. Excludes hardConstraints,
+ * softPreferences, and all sensitive fields by construction (callers do not
+ * pass them in).
+ */
+export function buildApplicationProjectionText(input: ApplicationProjectionInput): string {
+  return buildApplicationProjectionSections(input)
+    .map((s) => s.text)
+    .join("\n\n");
 }

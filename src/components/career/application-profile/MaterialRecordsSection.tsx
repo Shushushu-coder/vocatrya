@@ -414,8 +414,22 @@ export function MaterialRecordsSection({
       </Card>
       {readonlyItems.length > 0 && readonlyTitle && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">{readonlyTitle}</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="readonly-copy-section"
+              onClick={() =>
+                copyText(
+                  buildExperienceSectionText(readonlyItems),
+                  t("common.copied"),
+                  t("applicationProfile.copyFailed"),
+                )
+              }
+            >
+              {t("applicationProfile.copySection")}
+            </Button>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {readonlyItems.map((item) => (

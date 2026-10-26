@@ -147,12 +147,19 @@ export {
   buildEducationSectionText,
   buildExperienceSectionText,
   buildSkillsSectionText,
+  buildBasicsSectionText,
+  buildPersonalInfoText,
   buildApplicationProjectionText,
+  buildApplicationProjectionSections,
+  PERSONAL_INFO_COPY_FIELDS,
 } from "./applicationCopy";
 export type {
   EvidenceLike,
   MaterialLike,
+  PersonalInfoLike,
   ApplicationProjectionInput,
+  ApplicationProjectionSection,
+  ApplicationProjectionSectionId,
 } from "./applicationCopy";
 export {
   CandidateProfileService,
