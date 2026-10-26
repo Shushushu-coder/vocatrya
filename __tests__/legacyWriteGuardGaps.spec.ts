@@ -255,7 +255,7 @@ it.each(noteActions)("preserves disabled A+B note $operation rejection", async (
   mocks.mode = "AB_READY_DISABLED";
   mocks.origin = CAREER_DATA_ORIGIN.migrated;
   expect(await call()).toEqual({
-    success: false, message: "Opportunity notes cannot be mutated in AB_READY_DISABLED",
+    success: false, message: "Career profile and application editing is not enabled for this app yet. Changes to jobs and resumes through the previous version's editors are also unavailable.",
   });
   Object.values(mocks.db.note).forEach((write) => expect(write).not.toHaveBeenCalled());
   [mocks.db.jobOpportunityNote.create, mocks.db.jobOpportunityNote.update, mocks.db.jobOpportunityNote.delete]

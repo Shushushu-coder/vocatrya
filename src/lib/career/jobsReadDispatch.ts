@@ -4,6 +4,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { JOB_TYPES } from "@/models/job.model";
 import { CAREER_RUNTIME_MODE } from "./identities";
 import { CareerRuntimeError } from "./errors";
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "./userMessages";
 import {
   getOpportunityAsJob,
   listOpportunitiesAsJobs,
@@ -223,11 +224,11 @@ export function isJobsReadUnavailableError(
   );
 }
 
-function rejectBlockedJobs(family: JobsReadFamily, reason: string): void {
+function rejectBlockedJobs(family: JobsReadFamily, _reason: string): void {
   if (family !== "blocked") return;
   throw new CareerRuntimeError(
     JOBS_READ_UNAVAILABLE_CODE,
-    `Career jobs are unavailable (${reason})`,
+    CAREER_JOBS_UNAVAILABLE_MESSAGE,
   );
 }
 
@@ -314,11 +315,11 @@ export async function listJobs(
   options: JobsListFilters = {},
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  const { family, reason } = await resolveJobsReadFamily(db, env);
+  const { family } = await resolveJobsReadFamily(db, env);
   if (family === "blocked") {
     return {
       blocked: true as const,
-      message: `Career runtime is blocked (${reason})`,
+      message: CAREER_JOBS_UNAVAILABLE_MESSAGE,
     };
   }
   // The "applied" list filter means *ever applied* (the applied flag), not the
@@ -371,11 +372,11 @@ export async function getJob(
   jobId: string,
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  const { family, reason } = await resolveJobsReadFamily(db, env);
+  const { family } = await resolveJobsReadFamily(db, env);
   if (family === "blocked") {
     return {
       blocked: true as const,
-      message: `Career runtime is blocked (${reason})`,
+      message: CAREER_JOBS_UNAVAILABLE_MESSAGE,
       job: null,
     };
   }

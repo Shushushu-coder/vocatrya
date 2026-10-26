@@ -12,6 +12,11 @@ import {
   updateOpportunityFromJobForm,
 } from "@/lib/career/jobOpportunityAdapter";
 import { CareerRuntimeError } from "@/lib/career/errors";
+import {
+  CAREER_COVER_LETTER_UNSUPPORTED_MESSAGE,
+  CAREER_TAGS_UNSUPPORTED_MESSAGE,
+  careerMutationDeniedMessage,
+} from "@/lib/career/userMessages";
 import { AddJobFormValues } from "@/models/addJobForm.schema";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "../shared";
@@ -53,7 +58,7 @@ function assertJobMutationsAllowed(mode: string): void {
     mode === CAREER_RUNTIME_MODE.BLOCKED
       ? "CAREER_RUNTIME_BLOCKED"
       : "JOB_MUTATIONS_DISABLED",
-    `Job mutations are not allowed in ${mode}`,
+    careerMutationDeniedMessage(mode),
   );
 }
 
@@ -148,13 +153,13 @@ export const addJob = async (
       if (coverLetter) {
         throw new CareerRuntimeError(
           "LEGACY_COVER_LETTER_UNSUPPORTED",
-          "Legacy CoverLetter cannot be mapped in A+B mode; re-select or submit without it.",
+          CAREER_COVER_LETTER_UNSUPPORTED_MESSAGE,
         );
       }
       if (tags && tags.length > 0) {
         throw new CareerRuntimeError(
           "LEGACY_TAGS_UNSUPPORTED",
-          "Legacy Job tags have no A+B mapping yet; submit without tags.",
+          CAREER_TAGS_UNSUPPORTED_MESSAGE,
         );
       }
       await assertJobRefsOwned(user.id, {
@@ -271,13 +276,13 @@ export const updateJob = async (
       if (coverLetter) {
         throw new CareerRuntimeError(
           "LEGACY_COVER_LETTER_UNSUPPORTED",
-          "Legacy CoverLetter cannot be mapped in A+B mode; re-select or submit without it.",
+          CAREER_COVER_LETTER_UNSUPPORTED_MESSAGE,
         );
       }
       if (tagIds.length > 0) {
         throw new CareerRuntimeError(
           "LEGACY_TAGS_UNSUPPORTED",
-          "Legacy Job tags have no A+B mapping yet; submit without tags.",
+          CAREER_TAGS_UNSUPPORTED_MESSAGE,
         );
       }
       await assertJobRefsOwned(user.id, {

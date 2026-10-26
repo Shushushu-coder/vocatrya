@@ -208,7 +208,7 @@ describe("Tag Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Career jobs are unavailable (migration-incomplete)",
+        message: "Job application data cannot be read in the current instance state.",
       });
       // A blocked runtime must never masquerade as a normal empty list.
       expect(prisma.tag.findMany).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@ import prisma from "@/lib/db";
 import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { CareerRuntimeError } from "@/lib/career/errors";
+import { careerMutationDeniedMessage } from "@/lib/career/userMessages";
 import { syncApplicationFromUiStatus } from "@/lib/career/jobOpportunityAdapter";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
@@ -51,7 +52,7 @@ export const updateJobStatus = async (
         runtime.mode === CAREER_RUNTIME_MODE.BLOCKED
           ? "CAREER_RUNTIME_BLOCKED"
           : "JOB_MUTATIONS_DISABLED",
-        `Job mutations are not allowed in ${runtime.mode}`,
+        careerMutationDeniedMessage(runtime.mode),
       );
     }
     if (isFullAbCapabilityEnabled(runtime.mode, runtime.rolloutScope)) {

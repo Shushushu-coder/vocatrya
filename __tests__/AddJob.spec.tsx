@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/utils/user.utils";
 import userEvent from "@testing-library/user-event";
 import { format } from "date-fns";
 import { addJob, updateJob } from "@/actions/job.actions";
+import { addCompany } from "@/actions/company.actions";
+import { createTag } from "@/actions/tag.actions";
 import { toastActionResult } from "@/lib/toast";
 import type { JobResponse } from "@/models/job.model";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -19,6 +21,14 @@ vi.mock("@/utils/user.utils", () => ({
 vi.mock("@/actions/job.actions", () => ({
   addJob: vi.fn().mockResolvedValue({ success: true }),
   updateJob: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/actions/company.actions", () => ({
+  addCompany: vi.fn(),
+}));
+
+vi.mock("@/actions/tag.actions", () => ({
+  createTag: vi.fn(),
 }));
 
 vi.mock("@/actions/note.actions", () => ({
@@ -955,4 +965,150 @@ describe("AddJob Component - Localized validation (zh-CN)", () => {
     await user.click(screen.getByLabelText("职位名称"));
     expect(screen.getByPlaceholderText("创建或搜索职位名称")).toBeInTheDocument();
   });
+});
+
+describe("AddJob inline basic-data creation (BD-INLINE)", () => {
+  const mockJobStatuses = JOB_STATUSES;
+  const mockJobSources = JOB_SOURCES;
+  const mockResetEditJob = vi.fn();
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+
+  async function renderAddJob() {
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+        initialOpen={true}
+      />,
+    );
+    return { mockCompanies };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("saves a job against an inline-created company and shows it on reopen", async () => {
+    const newCompany = { id: "co-new", label: "NewCo", value: "newco" };
+    (addCompany as any).mockResolvedValue({ success: true, data: newCompany });
+    const user = userEvent.setup({ skipHover: true });
+    const { mockCompanies } = await renderAddJob();
+
+    // Inline-create and immediately select the new company
+    await user.click(screen.getByRole("combobox", { name: /company/i }));
+    await user.type(
+      screen.getByPlaceholderText("Create or Search Company"),
+      "NewCo{Enter}",
+    );
+    await waitFor(() =>
+      expect(addCompany).toHaveBeenCalledWith({ company: "NewCo" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: /company/i }),
+      ).toHaveTextContent("NewCo"),
+    );
+
+    // Fill the remaining required fields from existing options
+    await user.click(screen.getByRole("combobox", { name: /job title/i }));
+    await user.click(
+      screen.getByRole("option", { name: "Full Stack Developer" }),
+    );
+    await user.click(
+      screen.getByRole("combobox", { name: /job location/i }),
+    );
+    await user.click(screen.getByRole("option", { name: "Remote" }));
+    await user.click(
+      screen.getByRole("combobox", { name: /job source/i }),
+    );
+    await user.click(screen.getByRole("option", { name: "Indeed" }));
+
+    await user.click(screen.getByTestId("save-job-btn"));
+
+    await waitFor(() =>
+      expect(addJob).toHaveBeenCalledWith(
+        expect.objectContaining({ company: "co-new" }),
+      ),
+    );
+
+    // Reopen as an edit once the saved job comes back with the new company —
+    // the association must resolve to its label, not a dangling id.
+    const savedJob = {
+      id: "job-saved-1",
+      userId: "user-id",
+      JobTitle: { id: "1xx", label: "Full Stack Developer", value: "full stack developer" },
+      Company: newCompany,
+      Location: { id: "1yy", label: "Remote", value: "remote" },
+      JobSource: { id: "1359dac4-a397-4461-b747-382706dcbe79", label: "Indeed", value: "indeed" },
+      Status: { id: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", label: "New", value: "new" },
+      jobType: "FT",
+      createdAt: new Date("2024-06-01"),
+      appliedDate: null,
+      dueDate: null,
+      salaryRange: null,
+      description: "<p>desc</p>",
+      jobUrl: "",
+      applied: false,
+    } as unknown as JobResponse;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={[...mockCompanies, newCompany]}
+        jobTitles={(await getMockList(1, 10, "jobTitles")).data}
+        locations={(await getMockList(1, 10, "locations")).data}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={savedJob}
+        resetEditJob={mockResetEditJob}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Company")).toHaveTextContent("NewCo"),
+    );
+  }, 15000);
+
+  it("keeps an inline-created tag in the pool across dialog reopen", async () => {
+    const newTag = {
+      id: "tag-new",
+      label: "GraphQL",
+      value: "graphql",
+      createdBy: "user-1",
+    };
+    (createTag as any).mockResolvedValue({ success: true, data: newTag });
+    const user = userEvent.setup({ skipHover: true });
+    await renderAddJob();
+
+    await user.click(
+      screen.getByRole("combobox", { name: /search or add a skill/i }),
+    );
+    await user.type(screen.getByPlaceholderText("Type a skill..."), "GraphQL");
+    await user.click(await screen.findByText(/Create "GraphQL"/i));
+
+    await waitFor(() => expect(createTag).toHaveBeenCalledWith("GraphQL"));
+    expect(
+      screen.getByRole("button", { name: /remove graphql/i }),
+    ).toBeInTheDocument();
+
+    // Close and reopen the dialog: the created tag must stay selectable.
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await user.click(screen.getByTestId("add-job-btn"));
+    await user.click(
+      screen.getByRole("combobox", { name: /search or add a skill/i }),
+    );
+    expect(
+      await screen.findByRole("option", { name: "GraphQL" }),
+    ).toBeInTheDocument();
+  }, 15000);
 });

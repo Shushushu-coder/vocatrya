@@ -4,6 +4,7 @@ import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import { AB_APPLIED_OPPORTUNITY_WHERE } from "@/lib/career/jobOpportunityAdapter";
 import { getReferenceEntityList } from "./referenceList";
 
@@ -18,11 +19,11 @@ export const getJobSourceList = async (
 
     // The job stats columns must follow the active read family; a blocked
     // runtime must not silently fall back to frozen legacy Job rows.
-    const { family, reason } = await resolveJobsReadFamily(prisma);
+    const { family } = await resolveJobsReadFamily(prisma);
     if (family === "blocked") {
       return {
         success: false,
-        message: `Career jobs are unavailable (${reason})`,
+        message: CAREER_JOBS_UNAVAILABLE_MESSAGE,
       };
     }
     const ab = family === "ab";

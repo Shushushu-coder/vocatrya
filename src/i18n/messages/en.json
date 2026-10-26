@@ -2163,7 +2163,7 @@
     "title": "Application Profile",
     "subtitle": "Maintain, review, and copy campus-hiring application data.",
     "entryTitle": "Application materials",
-    "entryDescription": "Maintain B-side profile, preferences, and materials for campus applications.",
+    "entryDescription": "Maintain your basic profile, job preferences, and materials for campus applications.",
     "openApplicationProfile": "Open application profile",
     "tabsBasics": "Basics",
     "tabsIntent": "Job intent",
@@ -2172,7 +2172,7 @@
     "legacyIndependentNotice": "This data is independent from resume management. Editing here does not update contact details or experience in your existing resumes.",
     "emptyValue": "Not filled",
     "emptySection": "Nothing here yet.",
-    "legacyNoSyncHint": "B-side is empty and legacy resume data is not synced automatically. You can enter it manually or view your existing resume.",
+    "legacyNoSyncHint": "Application profile data is empty, and existing resume data is not synced automatically. You can enter it manually or view your existing resume.",
     "viewExistingResume": "View existing resume",
     "reveal": "Show",
     "hide": "Hide",
@@ -2282,7 +2282,7 @@
     "title": "Resume Variants",
     "subtitle": "Build draft resumes from career facts, freeze immutable versions, and preview them in the browser.",
     "entryTitle": "Resume variants",
-    "entryDescription": "Create B-side resume versions from career materials. Editing here does not change legacy resumes or your application profile.",
+    "entryDescription": "Create resume versions from career materials. Editing here does not change existing resumes or your application profile.",
     "openResumeVariants": "Open resume variants",
     "create": "Create resume",
     "createTitle": "Create resume variant",
@@ -2471,5 +2471,23 @@
     "coach": "Coach",
     "aiUnavailable": "The interview AI is unavailable — check settings and retry.",
     "jobNeedsJd": "This job has no saved JD version. Add one on the job page first."
+  },
+  "careerProfileTabs": {
+    "personal": "Personal info",
+    "education": "Education",
+    "internship": "Internships",
+    "project": "Projects",
+    "awards": "Awards",
+    "other": "Other",
+    "application": "Application materials",
+    "manage": "Manage tabs",
+    "manageTitle": "Manage tab visibility",
+    "manageDescription": "Choose which tabs appear in your career profile. Hiding a tab never deletes data and does not change what gets copied into application materials.",
+    "lastTabHint": "At least one tab stays visible.",
+    "visibilitySaveFailed": "Failed to save tab settings. Please try again."
+  },
+  "basicDataInline": {
+    "createFailed": "Failed to create {name}.",
+    "createUnsupported": "Creating {name} here isn't supported."
   }
 }

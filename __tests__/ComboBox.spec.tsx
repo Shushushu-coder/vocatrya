@@ -128,6 +128,30 @@ beforeEach(() => {
 });
 
 describe("Combobox Enter key", () => {
+  it("shows a company created by a sibling picker sharing the same options array", async () => {
+    const options = [...companies];
+    const created = { id: "sibling-company", value: "zebra", label: "Zebra" };
+    vi.mocked(addCompany).mockResolvedValue({ success: true, data: created } as never);
+    function SharedPickers() {
+      const form = useForm({ defaultValues: { company: "", workedAtCompany: "" } });
+      return <Form {...form}>{(["company", "workedAtCompany"] as const).map((name) => (
+        <FormField key={name} control={form.control} name={name} render={({ field }) => (
+          <FormItem><Combobox options={options} field={field} creatable /></FormItem>
+        )} />
+      ))}</Form>;
+    }
+    const user = userEvent.setup();
+    render(<SharedPickers />);
+    await user.click(screen.getAllByRole("combobox")[0]);
+    await user.type(screen.getByPlaceholderText(/Search company/i), "Zebra{Enter}");
+    await waitFor(() => expect(screen.getAllByRole("combobox")[0]).toHaveTextContent("Zebra"));
+    await user.click(screen.getAllByRole("combobox")[1]);
+    await user.type(screen.getByPlaceholderText(/Search workedAtCompany/i), "Zebra");
+    await user.click(await screen.findByRole("option", { name: "Zebra" }));
+    expect(screen.getAllByRole("combobox")[1]).toHaveTextContent("Zebra");
+    expect(addCompany).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves a created custom source through rerenders and locale changes", async () => {
     const options = [{ id: "system", value: "careerpage", label: "Company Career page" }];
     const custom = { id: "custom", value: "学校就业群", label: "学校就业群" };
@@ -385,6 +409,65 @@ describe("Combobox Enter key", () => {
     });
   });
 
+  describe("duplicate resolution", () => {
+    it("selects the existing company instead of creating a legal-suffix duplicate", async () => {
+      const options = [{ id: "acme-id", value: "acme", label: "Acme" }];
+      const { user, input, onChange } = await openCombobox({ options });
+
+      // "Acme Inc" canonicalizes to "acme" — the same row addCompany would hit
+      await user.type(input, "Acme Inc{Enter}");
+
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith("acme-id"));
+      expect(addCompany).not.toHaveBeenCalled();
+      expect(toastError).not.toHaveBeenCalled();
+    });
+
+    it("selects the seeded system source an alias resolves to", async () => {
+      const options = [
+        { id: "careerpage-id", value: "careerpage", label: "Company Career page" },
+      ];
+      const { user, input, onChange } = await openCombobox({
+        name: "source",
+        options,
+      });
+
+      await user.type(input, "官网{Enter}");
+
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith("careerpage-id"));
+      expect(createJobSource).not.toHaveBeenCalled();
+    });
+
+    it("does not insert a second row when the server resolves to an existing record", async () => {
+      const existing = { id: "t-existing", value: "staff engineer", label: "Staff Engineer" };
+      // e.g. a concurrent tab already created it — the action returns that row
+      vi.mocked(createJobTitle).mockResolvedValue(existing as never);
+      const options = [{ id: "t-existing", value: "staff engineer", label: "Staff Engineer" }];
+      const { user, input, onChange } = await openCombobox({
+        name: "title",
+        options,
+      });
+
+      await user.type(input, "Staff Engineer II{Enter}");
+
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith("t-existing"));
+      await user.click(screen.getByRole("combobox"));
+      expect(
+        screen.getAllByRole("option", { name: "Staff Engineer" }),
+      ).toHaveLength(1);
+    });
+
+    it("trims the CommandEmpty click-path input before creating", async () => {
+      const { user, input } = await openCombobox({ options: [] });
+
+      await user.type(input, "  Zebra  ");
+      await user.click(screen.getByText("Zebra", { selector: "p" }));
+
+      await waitFor(() =>
+        expect(addCompany).toHaveBeenCalledWith({ company: "Zebra" })
+      );
+    });
+  });
+
   describe("creation failures", () => {
     it("surfaces an error toast when location creation fails", async () => {
       vi.mocked(createLocation).mockResolvedValue({
@@ -431,6 +514,66 @@ describe("Combobox Enter key", () => {
       });
 
       await user.type(input, "Referral{Enter}");
+
+      await waitFor(() => expect(toastError).toHaveBeenCalled());
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("surfaces an error toast when company creation fails", async () => {
+      vi.mocked(addCompany).mockResolvedValue({
+        success: false,
+        message: "Company already exists!",
+      } as never);
+      const { user, input, onChange } = await openCombobox({ options: [] });
+
+      await user.type(input, "Zebra{Enter}");
+
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith("Company already exists!")
+      );
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("surfaces an error toast when job title creation fails", async () => {
+      vi.mocked(createJobTitle).mockResolvedValue({
+        success: false,
+        message: "Failed to create job title. ",
+      } as never);
+      const { user, input, onChange } = await openCombobox({
+        name: "title",
+        options: [],
+      });
+
+      await user.type(input, "Nope{Enter}");
+
+      await waitFor(() => expect(toastError).toHaveBeenCalled());
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("surfaces an error toast when activity type creation throws", async () => {
+      vi.mocked(createActivityType).mockRejectedValue(
+        new Error("Failed to create activity type. ")
+      );
+      const { user, input, onChange } = await openCombobox({
+        name: "activityType",
+        options: [],
+      });
+
+      await user.type(input, "Nope{Enter}");
+
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith("Failed to create activity type. ")
+      );
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("reports instead of silently ignoring an unwired creatable field", async () => {
+      const { user, input, onChange } = await openCombobox({
+        name: "mysteryField",
+        options: [],
+      });
+
+      await user.type(input, "Zebra{Enter}");
 
       await waitFor(() => expect(toastError).toHaveBeenCalled());
       expect(onChange).not.toHaveBeenCalled();
@@ -516,18 +659,19 @@ describe("Combobox freeText", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("Negotiable"));
   });
 
-  it("still renders blank for an unknown value without freeText", async () => {
+  it("keeps the created label on the trigger after a prop-array rebuild", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
+    // Harness re-creates the options array each render, so the unshift into
+    // the prop is lost — the local created-options copy must keep the label.
     render(<Harness onChange={onChange} options={companies} />);
 
     await user.click(screen.getByRole("combobox"));
     const input = screen.getByPlaceholderText(/Search company/i);
     await user.type(input, "Zebra{Enter}");
 
-    // options.unshift doesn't survive the re-render, so the created entry has
-    // no label to find — the trigger must stay blank, never show the raw id.
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("new-id"));
+    expect(screen.getByRole("combobox")).toHaveTextContent("acme");
     expect(screen.getByRole("combobox")).not.toHaveTextContent("new-id");
   });
 });

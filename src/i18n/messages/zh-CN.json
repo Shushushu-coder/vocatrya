@@ -2163,7 +2163,7 @@
     "title": "网申资料",
     "subtitle": "维护、查看并一键复制校招网申资料。",
     "entryTitle": "网申资料",
-    "entryDescription": "维护 B 侧基本资料、求职意向与经历素材，用于校招网申。",
+    "entryDescription": "维护校招网申所需的基本资料、求职意向与经历素材。",
     "openApplicationProfile": "打开网申资料",
     "tabsBasics": "基本资料",
     "tabsIntent": "求职意向",
@@ -2172,7 +2172,7 @@
     "legacyIndependentNotice": "这里的资料独立于现有简历管理。在这里修改内容不会自动修改现有简历中的联系方式或经历。",
     "emptyValue": "未填写",
     "emptySection": "暂无内容。",
-    "legacyNoSyncHint": "B 侧暂无数据，现有简历资料不会自动同步。可手动录入，或查看现有简历。",
+    "legacyNoSyncHint": "网申资料暂无内容，现有简历资料不会自动同步。可手动录入，或查看现有简历。",
     "viewExistingResume": "查看现有简历",
     "reveal": "显示",
     "hide": "隐藏",
@@ -2282,7 +2282,7 @@
     "title": "简历版本",
     "subtitle": "从职业素材编写草稿简历，冻结不可变版本，并在浏览器中预览。",
     "entryTitle": "简历版本",
-    "entryDescription": "用职业素材创建 B 侧简历版本。这里的编辑不会改动旧版简历或网申资料。",
+    "entryDescription": "用职业素材创建简历版本。这里的编辑不会改动旧版简历或网申资料。",
     "openResumeVariants": "打开简历版本",
     "create": "创建简历",
     "createTitle": "创建简历版本",
@@ -2471,5 +2471,23 @@
     "coach": "教练",
     "aiUnavailable": "面试 AI 暂不可用，请检查设置后重试。",
     "jobNeedsJd": "该岗位还没有职位描述（JD）版本，请先在岗位页添加。"
+  },
+  "careerProfileTabs": {
+    "personal": "个人信息",
+    "education": "教育经历",
+    "internship": "实习经历",
+    "project": "项目经历",
+    "awards": "获奖经历",
+    "other": "其他",
+    "application": "网申资料",
+    "manage": "管理 Tab",
+    "manageTitle": "管理 Tab 显示",
+    "manageDescription": "选择职业资料中显示的 Tab。隐藏不会删除数据，也不影响网申汇总复制的内容。",
+    "lastTabHint": "至少保留一个显示的 Tab。",
+    "visibilitySaveFailed": "Tab 显示设置保存失败，请重试。"
+  },
+  "basicDataInline": {
+    "createFailed": "创建{name}失败。",
+    "createUnsupported": "此处不支持创建{name}。"
   }
 }

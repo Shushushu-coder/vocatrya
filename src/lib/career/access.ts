@@ -4,6 +4,7 @@ import {
   type AbRolloutScope,
 } from "./capabilities";
 import { CareerRuntimeError } from "./errors";
+import { CAREER_READ_DENIED_MESSAGE, CAREER_WRITE_DENIED_MESSAGE } from "./userMessages";
 import { type CareerRuntimeMode } from "./identities";
 import { resolveCareerRuntimeMode } from "./runtimeMode";
 
@@ -57,7 +58,7 @@ export async function assertCareerDataReadable(
   if (!canReadCareerData(resolved.mode, resolved.rolloutScope)) {
     throw new CareerRuntimeError(
       "CAREER_READ_NOT_ENABLED",
-      `Career data is only readable when A+B is enabled; current mode is ${resolved.mode}`,
+      CAREER_READ_DENIED_MESSAGE,
     );
   }
   return resolved.mode;
@@ -71,7 +72,7 @@ export async function assertCareerDataWritable(
   if (!canWriteCareerData(resolved.mode, resolved.rolloutScope)) {
     throw new CareerRuntimeError(
       "CAREER_WRITE_NOT_ENABLED",
-      `Career data is only writable when A+B is enabled; current mode is ${resolved.mode}`,
+      CAREER_WRITE_DENIED_MESSAGE,
     );
   }
   return resolved.mode;

@@ -1,6 +1,7 @@
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getJob, listJobs, resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import type { AgentGetJobResult, AgentJobSummary, AgentListJobsResult } from "@/models/agent.model";
 
 const AGENT_JOB_LIST_CAP = 40;
@@ -68,7 +69,7 @@ export async function getJobForAgent(
     if (family.family === "blocked") {
       return {
         status: "unavailable",
-        reason: `Career runtime is blocked (${family.reason})`,
+        reason: CAREER_JOBS_UNAVAILABLE_MESSAGE,
       };
     }
     return { status: "no_job" };

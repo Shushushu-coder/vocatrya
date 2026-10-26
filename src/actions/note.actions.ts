@@ -8,6 +8,10 @@ import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import {
+  CAREER_NOTES_UNAVAILABLE_MESSAGE,
+  careerMutationDeniedMessage,
+} from "@/lib/career/userMessages";
+import {
   CAREER_DATA_ORIGIN,
   resolveCareerRuntimeMode,
   type CareerRuntimeResolution,
@@ -23,7 +27,7 @@ function assertAbNoteWrites(runtime: CareerRuntimeResolution): void {
   if (isFullAbCapabilityEnabled(runtime.mode, runtime.rolloutScope)) return;
   throw new CareerRuntimeError(
     "JOB_MUTATIONS_DISABLED",
-    `Opportunity notes cannot be mutated in ${runtime.mode}`,
+    careerMutationDeniedMessage(runtime.mode),
   );
 }
 
@@ -31,7 +35,7 @@ function assertFreshNotesDoNotUseLegacy(runtime: CareerRuntimeResolution): void 
   if (runtime.origin !== CAREER_DATA_ORIGIN.fresh) return;
   throw new CareerRuntimeError(
     "JOBS_READ_UNAVAILABLE",
-    "Fresh-native origin does not read or write legacy notes",
+    CAREER_NOTES_UNAVAILABLE_MESSAGE,
   );
 }
 

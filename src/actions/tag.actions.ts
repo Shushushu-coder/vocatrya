@@ -5,6 +5,7 @@ import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { resolveTag as resolveTagCore } from "@/lib/jobs/resolve";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 
 export const getAllTags = async (): Promise<any | undefined> => {
   try {
@@ -31,11 +32,11 @@ export const getTagList = async (
     // The Total Jobs column only exists under the legacy read family: A+B
     // has no Tag→JobOpportunity relation, and a blocked runtime must not
     // silently fall back to frozen legacy Job rows.
-    const { family, reason } = await resolveJobsReadFamily(prisma);
+    const { family } = await resolveJobsReadFamily(prisma);
     if (family === "blocked") {
       return {
         success: false,
-        message: `Career jobs are unavailable (${reason})`,
+        message: CAREER_JOBS_UNAVAILABLE_MESSAGE,
       };
     }
     const ab = family === "ab";

@@ -29,6 +29,9 @@ import { createActivityType } from "@/actions/activity.actions";
 import { createJobSource } from "@/actions/job.actions";
 import { createContactRole } from "@/actions/contactRole.actions";
 import { useI18n } from "@/i18n";
+import { APP_CONSTANTS } from "@/lib/constants";
+import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
+import { resolveJobSourceIdentity } from "@/lib/jobs/jobSources";
 
 interface ComboboxProps {
   options: any[];
@@ -62,9 +65,25 @@ export function Combobox({
     : `Select ${field.name}`;
   const [newOption, setNewOption] = useState<string>("");
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
+  // Records created through this picker. `options` is a prop — the unshift
+  // into it below only survives while the parent keeps the same array, so
+  // the local copy is what guarantees the new entry stays visible/selected.
+  const [createdOptions, setCreatedOptions] = useState<any[]>([]);
 
   const [isPending, startTransition] = useTransition();
-  const selectedOption = options.find((option) => option.id === field.value);
+  // Sibling pickers can add to the same options array without replacing it.
+  // Recompute on render so reopening a picker includes those new records.
+  const allOptions = (() => {
+    const seen = new Set<string>();
+    const merged: any[] = [];
+    for (const option of [...createdOptions, ...options]) {
+      if (!option?.id || seen.has(option.id)) continue;
+      seen.add(option.id);
+      merged.push(option);
+    }
+    return merged;
+  })();
+  const selectedOption = allOptions.find((option) => option.id === field.value);
   const handleEnterKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
 
@@ -84,62 +103,124 @@ export function Combobox({
     onCreateOption(label);
     setNewOption("");
   };
-  const onCreateOption = (label: string) => {
-    if (!label || isPending || field.disabled) return;
+  // Mirrors the server-side match key per field, so a typed label that would
+  // resolve to an existing row selects it instead of creating a duplicate.
+  // Stored `value` columns are the canonical identity; when a row's value is
+  // not derivable (legacy/seeded data), the server remains authoritative.
+  const canonicalInputForField = (label: string): string => {
+    switch (field.name) {
+      case "company":
+      case "workedAtCompany":
+        return canonicalizeEntityValue(label, { stripLegalSuffix: true });
+      case "source": {
+        const identity = resolveJobSourceIdentity(
+          label,
+          APP_CONSTANTS.MAX_JOB_SOURCE_LABEL_LENGTH,
+        );
+        return "error" in identity ? "" : identity.value;
+      }
+      case "activityType":
+        // createActivityType keys on label.trim().toLowerCase(), not the
+        // shared canonicalizer used by the other entities.
+        return label.toLowerCase();
+      default:
+        return canonicalizeEntityValue(label);
+    }
+  };
+
+  const onCreateOption = (rawLabel: string) => {
+    const label = rawLabel.trim();
+    // CommandEmpty's click path reaches here even without `creatable`.
+    if (!creatable || !label || isPending || field.disabled) return;
     // A free-text field has no reference record behind it — the typed text is
     // itself the stored value, so there is nothing to create server-side.
     if (freeText) {
-      // CommandEmpty's onClick passes the raw input; only Enter pre-trims
-      field.onChange(label.trim());
+      field.onChange(label);
+      setIsPopoverOpen(false);
+      return;
+    }
+    const canonical = canonicalInputForField(label);
+    const resolved = canonical
+      ? allOptions.find((option) => option.value === canonical)
+      : undefined;
+    if (resolved) {
+      field.onChange(resolved.id);
       setIsPopoverOpen(false);
       return;
     }
     startTransition(async () => {
-      let response;
-      switch (field.name) {
-        case "company":
-          const res = await addCompany({ company: label });
-          response = res.data;
-          break;
-        case "title":
-          response = await createJobTitle(label);
-          break;
-        case "location":
-          const { data, success, message } = await createLocation(label);
-          if (!success) {
-            toastError(message);
+      // The six create actions return four different shapes — normalize them
+      // all to a record-or-message pair before touching the form value.
+      let record: any;
+      let message: string | undefined;
+      let supported = true;
+      try {
+        switch (field.name) {
+          case "company":
+          case "workedAtCompany": {
+            const res = await addCompany({ company: label });
+            if (res?.success) record = res.data;
+            else message = res?.message;
+            break;
           }
-          response = data;
-          break;
-        case "source":
-          const sourceRes = await createJobSource(label);
-          if (!sourceRes.success) {
-            toastError(sourceRes.message);
+          case "title": {
+            const res = await createJobTitle(label);
+            if (res?.id) record = res;
+            else message = res?.message;
+            break;
           }
-          response = sourceRes.data;
-          if (!sourceRes.success) return;
-          break;
-        case "workedAtCompany":
-          const workedRes = await addCompany({ company: label });
-          response = workedRes.data;
-          break;
-        case "contactRole":
-          const roleRes = await createContactRole(label);
-          if (!roleRes.success) {
-            toastError(roleRes.message);
-            return;
+          case "location": {
+            const res = await createLocation(label);
+            if (res?.success) record = res.data;
+            else message = res?.message;
+            break;
           }
-          response = roleRes.data;
-          break;
-        case "activityType":
-          response = await createActivityType(label);
-          break;
-        default:
-          break;
+          case "source": {
+            const res = await createJobSource(label);
+            if (res?.success) record = res.data;
+            else message = res?.message;
+            break;
+          }
+          case "contactRole": {
+            const res = await createContactRole(label);
+            if (res?.success) record = res.data;
+            else message = res?.message;
+            break;
+          }
+          case "activityType": {
+            // Unlike the others this action throws rather than returning a
+            // failure object — the surrounding catch turns it into a toast.
+            const res = await createActivityType(label);
+            if (res?.id) record = res;
+            break;
+          }
+          default:
+            supported = false;
+        }
+      } catch (err) {
+        message = err instanceof Error ? err.message : undefined;
       }
-      if (!response?.id) return;
-      options.unshift(response);
-      field.onChange(response.id);
+      if (!supported) {
+        toastError(
+          t("basicDataInline.createUnsupported", { name: displayName }),
+        );
+        return;
+      }
+      if (!record?.id) {
+        toastError(
+          message ?? t("basicDataInline.createFailed", { name: displayName }),
+        );
+        return;
+      }
+      setCreatedOptions((prev) =>
+        prev.some((option) => option.id === record.id) ? prev : [record, ...prev],
+      );
+      // Sibling pickers share the parent's options array; keep them in sync
+      // too, but never insert a second copy of the resolved record.
+      if (!options.some((option) => option.id === record.id)) {
+        options.unshift(record);
+      }
+      field.onChange(record.id);
       setIsPopoverOpen(false);
     });
   };
@@ -227,7 +308,7 @@ export function Combobox({
               )}
             </CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {allOptions.map((option) => (
                 <CommandItem
                   disabled={isPending || field.disabled}
                   value={`${getOptionLabel(option)} ${option.value}`}

@@ -2,6 +2,11 @@ import type { PrismaClient } from "@prisma/client";
 import { isFullAbCapabilityEnabled } from "./capabilities";
 import { CareerRuntimeError } from "./errors";
 import {
+  CAREER_LEGACY_EDITOR_UNAVAILABLE_MESSAGE,
+  CAREER_WRITE_DENIED_MESSAGE,
+  careerMutationDeniedMessage,
+} from "./userMessages";
+import {
   CAREER_RUNTIME_MODE,
   CAREER_WRITE_FAMILY,
 } from "./identities";
@@ -15,7 +20,7 @@ export async function assertAbWritesAllowed(
   if (resolved.mode !== CAREER_RUNTIME_MODE.AB_ENABLED) {
     throw new CareerRuntimeError(
       "AB_WRITES_NOT_ENABLED",
-      `A+B writes require AB_ENABLED; current mode is ${resolved.mode} (${resolved.reason})`,
+      careerMutationDeniedMessage(resolved.mode),
     );
   }
 }
@@ -28,19 +33,19 @@ export async function assertLegacyCareerWriteAllowed(
   if (resolved.mode === CAREER_RUNTIME_MODE.BLOCKED) {
     throw new CareerRuntimeError(
       "CAREER_RUNTIME_BLOCKED",
-      `Career writes are blocked: ${resolved.reason}`,
+      careerMutationDeniedMessage(resolved.mode),
     );
   }
   if (resolved.origin === CAREER_DATA_ORIGIN.fresh) {
     throw new CareerRuntimeError(
       "LEGACY_WRITE_BLOCKED",
-      "Fresh-native origin never authorizes legacy career writes",
+      CAREER_LEGACY_EDITOR_UNAVAILABLE_MESSAGE,
     );
   }
   if (resolved.mode === CAREER_RUNTIME_MODE.AB_READY_DISABLED) {
     throw new CareerRuntimeError(
       "LEGACY_WRITE_BLOCKED",
-      "AB_READY_DISABLED: legacy Job/Resume writes would drift a ready A+B instance",
+      careerMutationDeniedMessage(resolved.mode),
     );
   }
   if (
@@ -49,13 +54,13 @@ export async function assertLegacyCareerWriteAllowed(
   ) {
     throw new CareerRuntimeError(
       "LEGACY_WRITE_BLOCKED",
-      "AB_ENABLED: write Job/Resume through OpportunityService / ResumeVariantService, not legacy Prisma",
+      CAREER_WRITE_DENIED_MESSAGE,
     );
   }
   if (resolved.writeFamily === CAREER_WRITE_FAMILY.blocked) {
     throw new CareerRuntimeError(
       "CAREER_RUNTIME_BLOCKED",
-      `Career writes are blocked: ${resolved.reason}`,
+      careerMutationDeniedMessage(resolved.mode),
     );
   }
 }

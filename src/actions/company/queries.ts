@@ -3,6 +3,7 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import {
   AB_APPLIED_OPPORTUNITY_WHERE,
   listOpportunitiesAsJobs,
@@ -24,11 +25,11 @@ export const getCompanyList = async (
 
     // The job stats columns must follow the active read family; a blocked
     // runtime must not silently fall back to frozen legacy Job rows.
-    const { family, reason } = await resolveJobsReadFamily(prisma);
+    const { family } = await resolveJobsReadFamily(prisma);
     if (family === "blocked") {
       return {
         success: false,
-        message: `Career jobs are unavailable (${reason})`,
+        message: CAREER_JOBS_UNAVAILABLE_MESSAGE,
       };
     }
     const ab = family === "ab";
@@ -159,13 +160,13 @@ export const getCompanyDetails = async (
     });
     if (!company) return null;
 
-    const { family, reason } = await resolveJobsReadFamily(prisma);
+    const { family } = await resolveJobsReadFamily(prisma);
     // A blocked family must not masquerade as an empty Jobs tab; an error
     // result keeps "no jobs" and "jobs unreadable" distinguishable.
     if (family === "blocked") {
       return {
         success: false,
-        message: `Career jobs are unavailable (${reason})`,
+        message: CAREER_JOBS_UNAVAILABLE_MESSAGE,
       };
     }
     const ab = family === "ab";

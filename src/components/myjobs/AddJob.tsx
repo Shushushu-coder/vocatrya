@@ -784,6 +784,13 @@ export function AddJob({
                                 availableTags={availableTags}
                                 selectedTagIds={field.value ?? []}
                                 onChange={(ids) => field.onChange(ids)}
+                                onTagCreated={(tag) =>
+                                  setAvailableTags((prev) =>
+                                    prev.some((t) => t.id === tag.id)
+                                      ? prev
+                                      : [...prev, tag],
+                                  )
+                                }
                               />
                             </FormControl>
                             <FormMessage />

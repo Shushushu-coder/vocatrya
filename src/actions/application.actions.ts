@@ -21,6 +21,12 @@ import {
 import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import {
+  CAREER_REFLECTION_UNAVAILABLE_MESSAGE,
+  CAREER_TIMELINE_UNAVAILABLE_MESSAGE,
+  CAREER_UPCOMING_UNAVAILABLE_MESSAGE,
+  careerMutationDeniedMessage,
+} from "@/lib/career/userMessages";
+import {
   resolveCareerRuntimeMode,
   type CareerRuntimeResolution,
 } from "@/lib/career/runtimeMode";
@@ -39,7 +45,7 @@ function assertAbApplicationWrites(runtime: CareerRuntimeResolution): void {
   if (isFullAbCapabilityEnabled(runtime.mode, runtime.rolloutScope)) return;
   throw new CareerRuntimeError(
     "JOB_MUTATIONS_DISABLED",
-    `Application process steps cannot be mutated in ${runtime.mode}`,
+    careerMutationDeniedMessage(runtime.mode),
   );
 }
 
@@ -75,7 +81,7 @@ export async function getInterviewReflection(
     if (!isFullAbReadSurface(runtime)) {
       throw new CareerRuntimeError(
         "APPLICATION_TIMELINE_UNAVAILABLE",
-        `Interview reflection is not available in ${runtime.mode}`,
+        CAREER_REFLECTION_UNAVAILABLE_MESSAGE,
       );
     }
     const data = await applicationsFor(user.id).getInterviewReflection(stepId);
@@ -131,7 +137,7 @@ export async function getApplicationTimeline(
     if (!isFullAbReadSurface(runtime)) {
       throw new CareerRuntimeError(
         "APPLICATION_TIMELINE_UNAVAILABLE",
-        `Application timeline is not available in ${runtime.mode}`,
+        CAREER_TIMELINE_UNAVAILABLE_MESSAGE,
       );
     }
     const data = await applicationsFor(user.id).getTimeline(jobOpportunityId);
@@ -150,7 +156,7 @@ export async function listUpcomingApplicationEvents(): Promise<
     if (!isFullAbReadSurface(runtime)) {
       throw new CareerRuntimeError(
         "UPCOMING_UNAVAILABLE",
-        `Upcoming events are not available in ${runtime.mode}`,
+        CAREER_UPCOMING_UNAVAILABLE_MESSAGE,
       );
     }
     const data = await queryUpcomingApplicationEvents(prisma, user.id);

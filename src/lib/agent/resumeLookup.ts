@@ -4,6 +4,7 @@ import {
   readAbResumeVariant,
   resolveResumeReadFamily,
 } from "@/lib/career/resumeReadDispatch";
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import { resumeDetailInclude } from "@/lib/jobs/resumeDetailInclude";
 import type { AgentResumeSource } from "@/models/agent.model";
 import type { Resume } from "@/models/profile.model";
@@ -159,7 +160,7 @@ export async function resolveCanonicalResumeForAgent(
   if (resolved.family === "blocked") {
     return {
       status: "unavailable",
-      reason: `Career runtime is blocked (${resolved.reason})`,
+      reason: CAREER_JOBS_UNAVAILABLE_MESSAGE,
     };
   }
   if (resolved.family === "legacy") {
