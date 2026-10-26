@@ -4,6 +4,7 @@ import { ApplicationService } from "@/lib/career/applicationService";
 import type {
   ApplicationTimelineDTO,
   SubmittedResumeBindingsDTO,
+  TransferTargetPageDTO,
 } from "@/lib/career/applicationTimeline";
 import type {
   InterviewReflectionDTO,
@@ -13,6 +14,7 @@ import {
   listUpcomingApplicationEvents as queryUpcomingApplicationEvents,
   type UpcomingApplicationEvent,
 } from "@/lib/career/upcomingReadModel";
+import { listJobs } from "@/lib/career/jobsReadDispatch";
 import {
   assertResumeV1Readable,
   assertResumeV1Writable,
@@ -147,6 +149,62 @@ export async function getApplicationTimeline(
   }
 }
 
+// Transfer targets come from the same read path as the jobs list so the
+// picker shows exactly the positions the user owns in the current runtime
+// family. Rows the picker offers must stay transfer-legal: the source
+// opportunity is excluded and the service still re-validates everything.
+const TRANSFER_TARGET_LIMIT = 200;
+
+export async function listTransferTargetOpportunities(
+  excludeJobOpportunityId?: string,
+  offset = 0,
+): Promise<ActionResult<TransferTargetPageDTO>> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    if (!isFullAbReadSurface(runtime)) {
+      throw new CareerRuntimeError(
+        "APPLICATION_TIMELINE_UNAVAILABLE",
+        CAREER_TIMELINE_UNAVAILABLE_MESSAGE,
+      );
+    }
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new CareerRuntimeError("INVALID_OFFSET", "Invalid page offset");
+    }
+    const result = await listJobs(prisma, user.id, {
+      skip: offset,
+      take: TRANSFER_TARGET_LIMIT,
+    });
+    if (result.blocked) {
+      return { success: false, message: result.message };
+    }
+    const rows = result.data as Array<{
+      id?: string | null;
+      JobTitle?: { label?: string | null } | null;
+      Company?: { label?: string | null } | null;
+    }>;
+    const data = rows
+      .filter(
+        (job) =>
+          typeof job?.id === "string" &&
+          job.id !== "" &&
+          job.id !== excludeJobOpportunityId,
+      )
+      .map((job) => ({
+        id: job.id as string,
+        title: job.JobTitle?.label ?? "",
+        company: job.Company?.label ?? "",
+      }));
+    const nextOffset = offset + rows.length;
+    return {
+      success: true,
+      data: { items: data, nextOffset: nextOffset < result.total ? nextOffset : null },
+    };
+  } catch (error) {
+    return handleError(error, "Failed to load transfer targets.");
+  }
+}
+
 export async function listUpcomingApplicationEvents(): Promise<
   ActionResult<UpcomingApplicationEvent[]>
 > {
@@ -241,6 +299,51 @@ export async function updateApplicationProcessStep(input: {
   }
 }
 
+export async function createApplicationAttempt(input: {
+  jobOpportunityId: string;
+  channelLabel: string;
+  channelCategory?: string | null;
+  sourceUrl?: string | null;
+  notes?: string | null;
+}): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertAbApplicationWrites(runtime);
+    if (
+      typeof input?.jobOpportunityId !== "string" ||
+      input.jobOpportunityId.trim() === ""
+    ) {
+      throw new CareerRuntimeError("INVALID_ID", "Invalid job id");
+    }
+    if (
+      typeof input?.channelLabel !== "string" ||
+      input.channelLabel.trim() === ""
+    ) {
+      throw new CareerRuntimeError(
+        "ATTEMPT_CHANNEL_REQUIRED",
+        "Application channel is required",
+      );
+    }
+    const data = await applicationsFor(user.id).createAttempt({
+      jobOpportunityId: input.jobOpportunityId.trim(),
+      channelLabel: input.channelLabel.trim(),
+      channelCategory: input.channelCategory ?? null,
+      sourceUrl: input.sourceUrl ?? null,
+      notes: input.notes ?? null,
+      createdVia: "USER",
+    });
+    revalidatePath("/dashboard");
+    return { success: true, data: { id: data.id } };
+  } catch (error) {
+    const result = handleError(error, "Failed to create application.");
+    if (error instanceof CareerRuntimeError) {
+      return { success: false, code: error.code, message: result.message };
+    }
+    return result;
+  }
+}
+
 export async function createTransferredAttempt(input: {
   sourceAttemptId: string;
   targetJobOpportunityId: string;
@@ -256,7 +359,11 @@ export async function createTransferredAttempt(input: {
     revalidatePath("/dashboard");
     return { success: true, data: { id: data.id } };
   } catch (error) {
-    return handleError(error, "Failed to transfer application.");
+    const result = handleError(error, "Failed to transfer application.");
+    if (error instanceof CareerRuntimeError) {
+      return { success: false, code: error.code, message: result.message };
+    }
+    return result;
   }
 }
 
