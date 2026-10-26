@@ -109,6 +109,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "任务隔离浏览器验收通过：legacy 与 canonical full 家族的已投递草稿撤销仅回滚开关自动值，已保存投递事实编辑后不被清除。Windows Electron 实机验收待完成，passes 保持 false。",
       "description": "未保存的“已投递”草稿可撤销，已保存的真实投递事实不被抹除。",
       "steps": [
         "在新增职位表单打开“已投递”后再撤销，仅移除该开关自动填写的状态和日期。",
@@ -122,6 +123,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "任务隔离浏览器验收通过：含逗号、引号及中英文的薪资原文在 legacy/canonical 保存、刷新重开、详情与 CSV 解析后逐字一致。Windows Electron 实机验收待完成，passes 保持 false。",
       "description": "使用现有自由文本薪资字段，在职位页面及 CSV 导出中准确保留原文。",
       "steps": [
         "填写包含任意合法文本形式的薪资并保存、重新打开，展示值不改变。",
@@ -135,6 +137,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "任务隔离浏览器核对列表、详情的薪资和渠道来源与数据库一致，缺失值显示中性占位；Agent canonical 读取由相关定向测试覆盖。Windows Electron 实机验收待完成，passes 保持 false。",
       "description": "职位薪资、渠道与来源按实际数据展示，缺失值不造假。",
       "steps": [
         "列表和详情显示已保存的薪资、渠道、来源，与 legacy/canonical 读取结果一致。",
@@ -147,7 +150,8 @@
       "category": "Job UX",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "UNVERIFIED",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "已核实列表与详情来源为纯文本，任务浏览器断言无链接或按钮；本来已满足，无需重复清理。Windows Electron 实机验收待完成，passes 保持 false。",
       "description": "职位来源不再出现无用途的装饰性交互。",
       "steps": [
         "检查当前职位列表和详情中的来源呈现；不存在没有实际功能的可点击控件。",
@@ -161,7 +165,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "用户可见内部术语及相关错误提示已改写，中英文词条已同步，原有保护条件与错误码保留。定向测试通过，实际界面提示验收待完成。",
+      "implementationNotes": "已集成职位 action 与 blocked 读取的中英文错误映射，保留既有保护逻辑；任务浏览器在 legacy/full/resume-only/disabled 四类隔离环境验证受限提示及内部术语过滤通过，相关定向测试通过。迁移态 resume_v1 详情受限面板及 Windows Electron 实机验收未执行，passes 保持 false。",
       "description": "用户界面不暴露 A+B、运行时环境变量等内部实验术语。",
       "steps": [
         "中英文职位相关运行提示和简历提示中不出现“A+B”或 VOCATRYA_AB_RUNTIME_ENABLED 等内部术语。",
@@ -367,6 +371,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。",
       "description": "已实现的数据备份、预检和恢复入口可用于本地数据管理。",
       "steps": [
         "用户可从 Settings 找到备份和恢复入口，在隔离数据环境完成备份、预检与恢复。",
