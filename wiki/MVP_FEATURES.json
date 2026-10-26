@@ -172,7 +172,8 @@
       "category": "Application Process",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "已集成同职位独立新建投递轮次、转投至其他所属职位的入口及 Timeline 刷新，保留服务层权限、runtime 门控与历史事实；转投目标支持分页，提交期间禁止关闭对话框以保护草稿。入口/action 定向测试及既有隔离 DB 转投契约回归通过；浏览器/Electron 跨职位操作、关闭重开及事件归属的完整真实用户路径验收待完成。",
       "description": "用户可在同一职位独立建立多个 Application Attempt 并执行转投。",
       "steps": [
         "在职位详情中显式创建第二个 Attempt，能查看和选择各自记录。",

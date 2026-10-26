@@ -8,24 +8,44 @@ import { JobTabEmptyState } from "./JobTabEmptyState";
 import { ProcessStepDialog, type ProcessStepFormValues } from "./ProcessStepDialog";
 import { InterviewReflectionDialog } from "./InterviewReflectionDialog";
 import {
+  CreateAttemptDialog,
+  type CreateAttemptFormValues,
+} from "./CreateAttemptDialog";
+import { TransferAttemptDialog } from "./TransferAttemptDialog";
+import {
   completeApplicationProcessStep,
+  createApplicationAttempt,
   createApplicationProcessStep,
+  createTransferredAttempt,
   deleteApplicationProcessStep,
   getApplicationTimeline,
   updateApplicationProcessStep,
 } from "@/actions/application.actions";
 import { SubmittedResumePanel } from "@/components/career/resume-variant/SubmittedResumePanel";
 import type {
+  ApplicationAttemptTimelineDTO,
   ApplicationProcessStepDTO,
   ApplicationTimelineDTO,
 } from "@/lib/career/applicationTimeline";
 import {
+  isTerminalAttemptOutcome,
   PROCESS_STEP_CATEGORY,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_STATUS,
 } from "@/lib/career/identities";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { useI18n } from "@/i18n";
+import type { Locale } from "@/i18n";
+
+// INT-01 owns the shared message bundles; until the declared keys land,
+// t() echoes the key and the paired fallback keeps the page readable.
+function useCopy() {
+  const { t, locale } = useI18n();
+  return (key: string, fallback: Record<Locale, string>) => {
+    const translated = t(key);
+    return translated === key ? fallback[locale] : translated;
+  };
+}
 
 type ApplicationTimelineTabProps = {
   jobId: string;
@@ -44,6 +64,43 @@ const ATTEMPT_RESELECT_ERROR_KEYS: Record<string, string> = {
   INVALID_ID: "jobs.attemptErrorUnavailable",
 };
 
+// Codes the transfer contract can surface; anything unmapped falls back to
+// the server message. All of these mean the timeline is stale, so the tab
+// reloads after showing the toast.
+const TRANSFER_ERROR_COPY: Record<
+  string,
+  { key: string; fallback: Record<Locale, string> }
+> = {
+  TRANSFER_SAME_OPPORTUNITY: {
+    key: "jobs.transferErrorSame",
+    fallback: {
+      "zh-CN": "不能转投到当前职位。",
+      en: "Cannot transfer to the same position.",
+    },
+  },
+  TRANSFER_SOURCE_TERMINAL: {
+    key: "jobs.transferErrorTerminal",
+    fallback: {
+      "zh-CN": "该轮次已结束，无法转投。",
+      en: "This application has ended and cannot be transferred.",
+    },
+  },
+  ATTEMPT_NOT_FOUND: {
+    key: "jobs.transferErrorUnavailable",
+    fallback: {
+      "zh-CN": "所选轮次或职位已不可用，列表已刷新。",
+      en: "The application or position is no longer available. The list was refreshed.",
+    },
+  },
+  OPPORTUNITY_NOT_FOUND: {
+    key: "jobs.transferErrorUnavailable",
+    fallback: {
+      "zh-CN": "所选轮次或职位已不可用，列表已刷新。",
+      en: "The application or position is no longer available. The list was refreshed.",
+    },
+  },
+};
+
 function isCompleted(step: ApplicationProcessStepDTO): boolean {
   return (
     step.completedAt != null || step.status === PROCESS_STEP_STATUS.COMPLETED
@@ -58,8 +115,12 @@ export function ApplicationTimelineTab({
   roleTitle,
 }: ApplicationTimelineTabProps) {
   const { t, formatDate, formatDateTime } = useI18n();
+  const copy = useCopy();
   const [timeline, setTimeline] = useState<ApplicationTimelineDTO | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [attemptDialogOpen, setAttemptDialogOpen] = useState(false);
+  const [transferAttempt, setTransferAttempt] =
+    useState<ApplicationAttemptTimelineDTO | null>(null);
   const [editStep, setEditStep] = useState<ApplicationProcessStepDTO | null>(null);
   const [stepToDelete, setStepToDelete] = useState<ApplicationProcessStepDTO | null>(
     null,
@@ -141,6 +202,62 @@ export function ApplicationTimelineTab({
       return false;
     }
     toastSuccess(editStep ? t("jobs.stepUpdated") : t("jobs.stepAdded"));
+    await loadTimeline();
+    return true;
+  };
+
+  const onCreateAttempt = async (values: CreateAttemptFormValues) => {
+    const result = await createApplicationAttempt({
+      jobOpportunityId: jobId,
+      channelLabel: values.channelLabel,
+      channelCategory: values.channelCategory,
+      sourceUrl: values.sourceUrl,
+      notes: values.notes,
+    });
+    if (!result.success) {
+      const stale =
+        result.code === "OPPORTUNITY_NOT_FOUND" || result.code === "INVALID_ID";
+      toastError(
+        stale
+          ? copy("jobs.attemptOpportunityUnavailable", {
+              "zh-CN": "该职位已不可用，列表已刷新。",
+              en: "This position is no longer available. The list was refreshed.",
+            })
+          : result.message,
+      );
+      if (stale) {
+        await loadTimeline();
+      }
+      return false;
+    }
+    toastSuccess(
+      copy("jobs.attemptCreated", {
+        "zh-CN": "已新建投递轮次",
+        en: "Application round created",
+      }),
+    );
+    await loadTimeline();
+    return true;
+  };
+
+  const onTransferAttempt = async (targetJobOpportunityId: string) => {
+    if (!transferAttempt) return false;
+    const result = await createTransferredAttempt({
+      sourceAttemptId: transferAttempt.id,
+      targetJobOpportunityId,
+    });
+    if (!result.success) {
+      const entry = result.code ? TRANSFER_ERROR_COPY[result.code] : undefined;
+      toastError(entry ? copy(entry.key, entry.fallback) : result.message);
+      await loadTimeline();
+      return false;
+    }
+    toastSuccess(
+      copy("jobs.transferSuccess", {
+        "zh-CN": "已转投到新职位",
+        en: "Application transferred",
+      }),
+    );
     await loadTimeline();
     return true;
   };
@@ -232,6 +349,20 @@ export function ApplicationTimelineTab({
         attempts={editStep ? undefined : liveAttempts}
         onSubmit={onSave}
       />
+      <CreateAttemptDialog
+        open={attemptDialogOpen}
+        onOpenChange={setAttemptDialogOpen}
+        onSubmit={onCreateAttempt}
+      />
+      <TransferAttemptDialog
+        open={transferAttempt != null}
+        onOpenChange={(open) => {
+          if (!open) setTransferAttempt(null);
+        }}
+        sourceAttempt={transferAttempt}
+        excludeJobOpportunityId={jobId}
+        onSubmit={onTransferAttempt}
+      />
       <InterviewReflectionDialog
         open={reflectionStep != null}
         onOpenChange={(open) => {
@@ -264,7 +395,24 @@ export function ApplicationTimelineTab({
           actionLabel={canMutate ? t("jobs.addProcessStepWithDraft") : undefined}
           onAction={canMutate ? openCreate : undefined}
         />
+        {/* Keep the fixed dialog position (see `dialogs` above): siblings go after it. */}
         {dialogs}
+        {canMutate && (
+          <div className="-mt-4 flex justify-center pb-4">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setAttemptDialogOpen(true)}
+              data-testid="add-attempt"
+            >
+              {copy("jobs.addAttempt", {
+                "zh-CN": "新建投递轮次",
+                en: "New application",
+              })}
+            </Button>
+          </div>
+        )}
       </>
     );
   }
@@ -273,7 +421,20 @@ export function ApplicationTimelineTab({
     <>
     <div className="space-y-6" data-testid="application-timeline">
       {canMutate && (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setAttemptDialogOpen(true)}
+            data-testid="add-attempt"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {copy("jobs.addAttempt", {
+              "zh-CN": "新建投递轮次",
+              en: "New application",
+            })}
+          </Button>
           <Button type="button" size="sm" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             {liveAttempts.length === 0
@@ -288,6 +449,27 @@ export function ApplicationTimelineTab({
           className="space-y-4 rounded-lg border p-4"
           data-attempt-id={attempt.id}
         >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium" data-testid="attempt-channel">
+              {attempt.channelLabel}
+            </p>
+            {canMutate &&
+            attempt.archivedAt == null &&
+            !isTerminalAttemptOutcome(attempt.outcome) ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setTransferAttempt(attempt)}
+                data-testid="transfer-attempt"
+              >
+                {copy("jobs.transferAttempt", {
+                  "zh-CN": "转投",
+                  en: "Transfer",
+                })}
+              </Button>
+            ) : null}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-sm text-muted-foreground">

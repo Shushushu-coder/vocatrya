@@ -45,6 +45,17 @@ export type ApplicationTimelineDTO = {
   attempts: ApplicationAttemptTimelineDTO[];
 };
 
+export type TransferTargetOpportunityDTO = {
+  id: string;
+  title: string;
+  company: string;
+};
+
+export type TransferTargetPageDTO = {
+  items: TransferTargetOpportunityDTO[];
+  nextOffset: number | null;
+};
+
 export type SubmittedResumeBindingAttemptDTO = {
   id: string;
   channelLabel: string;
