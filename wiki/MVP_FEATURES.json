@@ -346,7 +346,8 @@
       "category": "Settings / Desktop",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "Settings 已接通自启、最小化启动和关闭至托盘 IPC，包含权威状态回填、串行合流保存及失败回读反馈。定向测试通过；任务隔离 Electron 冒烟记录覆盖托盘、最小化、还原、退出及独立进程偏好读回。系统自启写入/重启及完整 Settings 渲染端到端实机验收待完成，未改真实系统自启配置。",
       "description": "Settings UI 接通现有桌面自启、最小化启动与关闭到托盘 IPC。",
       "steps": [
         "在 Windows 桌面端设置自启、最小化启动及关闭至托盘，选项反馈实际底层状态。",

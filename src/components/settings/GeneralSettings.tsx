@@ -20,6 +20,7 @@ import {
   useSaveStatus,
 } from "@/context/SaveStatusContext";
 import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
+import DesktopPreferencesSettings from "@/components/settings/DesktopPreferencesSettings";
 
 // Application-level preferences. Selecting a language applies instantly
 // through I18nContext (state + cookie + localStorage + refresh) and, for
@@ -221,6 +222,10 @@ function GeneralSettingsPanel() {
           </SelectContent>
         </Select>
       </div>
+      {/* Device-scope desktop lifecycle preferences live in the Electron
+          bridge, not the account settings document — the component renders
+          its own availability state outside the desktop shell. */}
+      <DesktopPreferencesSettings />
     </div>
   );
 }

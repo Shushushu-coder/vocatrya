@@ -144,6 +144,41 @@ interface VocatryaAiBridge {
   onOAuthUrl(callback: (url: string) => void): () => void;
 }
 
+/**
+ * Device-level lifecycle surface exposed by desktop/main/preload.js as
+ * window.vocatryaDesktop. Every read and every write resolves to the main
+ * process's authoritative snapshot: closeToTray/startMinimized come from the
+ * app-owned device settings document, openAtLogin is verified against the
+ * OS login item, and the *Active/*Available flags report what is actually
+ * in effect right now.
+ */
+interface VocatryaDesktopLifecycleState {
+  closeToTray: boolean;
+  /** closeToTray only intercepts the close button while a tray exists. */
+  closeToTrayActive: boolean;
+  startMinimized: boolean;
+  openAtLogin: boolean;
+  /** False on platforms with no login-item support — the toggle is inert. */
+  openAtLoginSupported: boolean;
+  /** Non-null when the OS login-item state could not be read. */
+  openAtLoginError: string | null;
+  trayAvailable: boolean;
+}
+
+interface VocatryaDesktopBridge {
+  getState(): Promise<VocatryaDesktopLifecycleState>;
+  /** Resolve to the post-write authoritative state. */
+  setCloseToTray(enabled: boolean): Promise<VocatryaDesktopLifecycleState>;
+  setStartMinimized(enabled: boolean): Promise<VocatryaDesktopLifecycleState>;
+  /**
+   * Resolves to the verified post-write state; rejects when the OS write
+   * does not take effect or login items are unsupported on this platform.
+   */
+  setOpenAtLogin(enabled: boolean): Promise<VocatryaDesktopLifecycleState>;
+  showWindow(): Promise<void>;
+  quit(): Promise<void>;
+}
+
 interface Window {
   vocatryaResume?: {
     printToPDF(versionId: string): Promise<
@@ -154,4 +189,5 @@ interface Window {
   vocatryaWindow?: { setTheme(theme: "light" | "dark", preference: "light" | "dark" | "system"): Promise<void> };
   vocatryaRuntime?: VocatryaRuntimeBridge;
   vocatryaAi?: VocatryaAiBridge;
+  vocatryaDesktop?: VocatryaDesktopBridge;
 }
