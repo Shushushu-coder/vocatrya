@@ -7,12 +7,22 @@ import { DeleteAlertDialog } from "@/components/DeleteAlertDialog";
 import { JobTabEmptyState } from "./JobTabEmptyState";
 import { ProcessStepDialog, type ProcessStepFormValues } from "./ProcessStepDialog";
 import { InterviewReflectionDialog } from "./InterviewReflectionDialog";
+import { ProcessStepsTable } from "./ProcessStepsTable";
+import {
+  QuickAddProcessStep,
+  type QuickAddStepValues,
+} from "./QuickAddProcessStep";
+import {
+  RescheduleStepDialog,
+  type RescheduleStepValues,
+} from "./RescheduleStepDialog";
 import {
   CreateAttemptDialog,
   type CreateAttemptFormValues,
 } from "./CreateAttemptDialog";
 import { TransferAttemptDialog } from "./TransferAttemptDialog";
 import {
+  cancelApplicationProcessStep,
   completeApplicationProcessStep,
   createApplicationAttempt,
   createApplicationProcessStep,
@@ -29,7 +39,6 @@ import type {
 } from "@/lib/career/applicationTimeline";
 import {
   isTerminalAttemptOutcome,
-  PROCESS_STEP_CATEGORY,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_STATUS,
 } from "@/lib/career/identities";
@@ -103,7 +112,9 @@ const TRANSFER_ERROR_COPY: Record<
 
 function isCompleted(step: ApplicationProcessStepDTO): boolean {
   return (
-    step.completedAt != null || step.status === PROCESS_STEP_STATUS.COMPLETED
+    step.completedAt != null ||
+    step.status === PROCESS_STEP_STATUS.COMPLETED ||
+    step.status === PROCESS_STEP_STATUS.CANCELLED
   );
 }
 
@@ -114,7 +125,7 @@ export function ApplicationTimelineTab({
   companyName,
   roleTitle,
 }: ApplicationTimelineTabProps) {
-  const { t, formatDate, formatDateTime } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const copy = useCopy();
   const [timeline, setTimeline] = useState<ApplicationTimelineDTO | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -122,13 +133,20 @@ export function ApplicationTimelineTab({
   const [transferAttempt, setTransferAttempt] =
     useState<ApplicationAttemptTimelineDTO | null>(null);
   const [editStep, setEditStep] = useState<ApplicationProcessStepDTO | null>(null);
+  const [rescheduleStep, setRescheduleStep] =
+    useState<ApplicationProcessStepDTO | null>(null);
+  const [stepToCancel, setStepToCancel] =
+    useState<ApplicationProcessStepDTO | null>(null);
   const [stepToDelete, setStepToDelete] = useState<ApplicationProcessStepDTO | null>(
     null,
   );
   const [reflectionStep, setReflectionStep] =
     useState<ApplicationProcessStepDTO | null>(null);
   const [completingId, startComplete] = useTransition();
+  const [cancellingId, startCancel] = useTransition();
   const [deletingId, startDelete] = useTransition();
+
+  const rowActionBusy = Boolean(completingId || cancellingId || deletingId);
 
   // Mirrors the backend rule: only non-archived attempts may receive new steps.
   const liveAttempts = useMemo(
@@ -274,6 +292,64 @@ export function ApplicationTimelineTab({
     });
   };
 
+  const onRescheduleSave = async (values: RescheduleStepValues) => {
+    if (!rescheduleStep) return false;
+    const result = await updateApplicationProcessStep({
+      stepId: rescheduleStep.id,
+      scheduledAt: values.scheduledAt,
+      deadlineAt: values.deadlineAt,
+    });
+    if (!result.success) {
+      toastError(result.message);
+      return false;
+    }
+    toastSuccess(t("jobs.stepRescheduled"));
+    await loadTimeline();
+    return true;
+  };
+
+  const onQuickAdd = async (
+    attemptId: string,
+    values: QuickAddStepValues,
+  ) => {
+    const result = await createApplicationProcessStep({
+      jobOpportunityId: jobId,
+      applicationAttemptId: attemptId,
+      category: values.category,
+      label: values.label,
+      scheduledAt: values.scheduledAt,
+      deadlineAt: values.deadlineAt,
+    });
+    if (!result.success) {
+      const attemptErrorKey = result.code
+        ? ATTEMPT_RESELECT_ERROR_KEYS[result.code]
+        : undefined;
+      toastError(attemptErrorKey ? t(attemptErrorKey) : result.message);
+      if (attemptErrorKey) {
+        await loadTimeline();
+      }
+      return false;
+    }
+    toastSuccess(t("jobs.stepAdded"));
+    await loadTimeline();
+    return true;
+  };
+
+  const onConfirmCancel = () => {
+    if (!stepToCancel) return;
+    const stepId = stepToCancel.id;
+    startCancel(async () => {
+      const result = await cancelApplicationProcessStep(stepId);
+      if (!result.success) {
+        toastError(result.message);
+        return;
+      }
+      toastSuccess(t("jobs.stepCancelled"));
+      setStepToCancel(null);
+      await loadTimeline();
+    });
+  };
+
   const onConfirmDelete = () => {
     if (!stepToDelete) return;
     const stepId = stepToDelete.id;
@@ -289,12 +365,6 @@ export function ApplicationTimelineTab({
     });
   };
 
-  const categoryLabel = (category: string) => {
-    const key = `jobs.stepCategories.${category}`;
-    const translated = t(key);
-    return translated === key ? category : translated;
-  };
-
   const stageLabel = (stage: string) => {
     const key = `jobs.attemptStages.${stage}`;
     const translated = t(key);
@@ -305,28 +375,6 @@ export function ApplicationTimelineTab({
     const key = `jobs.attemptOutcomes.${outcome}`;
     const translated = t(key);
     return translated === key ? outcome : translated;
-  };
-
-  const statusLabel = (status: string) => {
-    const key = `jobs.stepStatuses.${status}`;
-    const translated = t(key);
-    return translated === key ? status : translated;
-  };
-
-  const sourceLabel = (source: string) => {
-    const key = `jobs.stepSources.${source}`;
-    const translated = t(key);
-    return translated === key ? null : translated;
-  };
-
-  const displayLabel = (step: ApplicationProcessStepDTO) => {
-    if (
-      step.source === PROCESS_STEP_SOURCE.SYSTEM &&
-      t(`jobs.stepCategories.${step.category}`) !== `jobs.stepCategories.${step.category}`
-    ) {
-      return t(`jobs.stepCategories.${step.category}`);
-    }
-    return step.label;
   };
 
   if (!timeline) {
@@ -363,6 +411,14 @@ export function ApplicationTimelineTab({
         excludeJobOpportunityId={jobId}
         onSubmit={onTransferAttempt}
       />
+      <RescheduleStepDialog
+        open={rescheduleStep != null}
+        onOpenChange={(open) => {
+          if (!open) setRescheduleStep(null);
+        }}
+        step={rescheduleStep}
+        onSubmit={onRescheduleSave}
+      />
       <InterviewReflectionDialog
         open={reflectionStep != null}
         onOpenChange={(open) => {
@@ -381,6 +437,18 @@ export function ApplicationTimelineTab({
         onDelete={onConfirmDelete}
         alertTitle={t("jobs.deleteProcessStepTitle")}
         alertDescription={t("jobs.deleteProcessStepDescription")}
+      />
+      <DeleteAlertDialog
+        pageTitle=""
+        open={stepToCancel != null}
+        onOpenChange={(open) => {
+          if (!open) setStepToCancel(null);
+        }}
+        onDelete={onConfirmCancel}
+        actionLabel={t("jobs.cancelProcessStepConfirm")}
+        actionVariant="default"
+        alertTitle={t("jobs.cancelProcessStepTitle")}
+        alertDescription={t("jobs.cancelProcessStepDescription")}
       />
     </>
   ) : null;
@@ -544,136 +612,22 @@ export function ApplicationTimelineTab({
               {t("jobs.timelineStepsEmpty")}
             </p>
           ) : (
-          <ol className="space-y-3">
-            {attempt.steps.map((step) => {
-              const source = sourceLabel(step.source);
-              const isUserStep = step.source === PROCESS_STEP_SOURCE.USER;
-              const canComplete =
-                canMutate &&
-                !isCompleted(step) &&
-                isUserStep;
-              const canDelete = canMutate && isUserStep;
-              const canOpenReflection =
-                canMutate && step.category === PROCESS_STEP_CATEGORY.INTERVIEW;
-              return (
-                <li
-                  key={step.id}
-                  className="rounded-md border bg-muted/30 p-3"
-                  data-testid="application-process-step"
-                  data-step-source={step.source}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium">{displayLabel(step)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {categoryLabel(step.category)}
-                        {source ? ` · ${source}` : ""}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={
-                        isCompleted(step)
-                          ? "default"
-                          : step.status === PROCESS_STEP_STATUS.IN_PROGRESS
-                            ? "secondary"
-                            : "outline"
-                      }
-                    >
-                      {statusLabel(step.status)}
-                    </Badge>
-                  </div>
-                  <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                    {step.scheduledAt && (
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("jobs.stepScheduledAt")}
-                        </dt>
-                        <dd>{formatDate(step.scheduledAt)}</dd>
-                      </div>
-                    )}
-                    {step.deadlineAt && (
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("jobs.stepDeadlineAt")}
-                        </dt>
-                        <dd>{formatDate(step.deadlineAt)}</dd>
-                      </div>
-                    )}
-                    {step.completedAt && (
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("jobs.stepCompletedAt")}
-                        </dt>
-                        <dd>{formatDateTime(step.completedAt)}</dd>
-                      </div>
-                    )}
-                    {step.notes && (
-                      <div className="sm:col-span-2">
-                        <dt className="text-muted-foreground">
-                          {t("jobs.stepNotes")}
-                        </dt>
-                        <dd className="whitespace-pre-wrap">{step.notes}</dd>
-                      </div>
-                    )}
-                    {step.result && (
-                      <div className="sm:col-span-2">
-                        <dt className="text-muted-foreground">
-                          {t("jobs.stepResult")}
-                        </dt>
-                        <dd>{step.result}</dd>
-                      </div>
-                    )}
-                  </dl>
-                  {canMutate && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openEdit(step)}
-                      >
-                        {t("common.edit")}
-                      </Button>
-                      {canOpenReflection && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setReflectionStep(step)}
-                          data-testid="interview-reflection-entry"
-                        >
-                          {t("jobs.interviewReflection")}
-                        </Button>
-                      )}
-                      {canComplete && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => onComplete(step.id)}
-                          disabled={completingId}
-                        >
-                          {t("jobs.markStepComplete")}
-                        </Button>
-                      )}
-                      {canDelete && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-muted-foreground"
-                          onClick={() => setStepToDelete(step)}
-                          disabled={deletingId}
-                          data-testid="delete-process-step"
-                        >
-                          {t("common.delete")}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
+            <ProcessStepsTable
+              steps={attempt.steps}
+              canMutate={canMutate}
+              busy={rowActionBusy}
+              onEdit={openEdit}
+              onReschedule={setRescheduleStep}
+              onComplete={(step) => onComplete(step.id)}
+              onCancel={setStepToCancel}
+              onDelete={setStepToDelete}
+              onReflect={setReflectionStep}
+            />
+          )}
+          {canMutate && attempt.archivedAt == null && (
+            <QuickAddProcessStep
+              onSubmit={(values) => onQuickAdd(attempt.id, values)}
+            />
           )}
         </section>
       ))}

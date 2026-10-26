@@ -600,6 +600,17 @@
     "stepUpdated": "流程步骤已更新",
     "stepCompleted": "流程步骤已标记完成",
     "stepDeleted": "流程步骤已删除",
+    "stepRescheduled": "事件已改期",
+    "stepCancelled": "事件已取消",
+    "stepCancelledAt": "取消于",
+    "stepActions": "操作",
+    "rescheduleStep": "改期",
+    "rescheduleStepTitle": "事件改期",
+    "cancelProcessStep": "取消",
+    "cancelProcessStepConfirm": "取消事件",
+    "cancelProcessStepTitle": "取消此事件？",
+    "cancelProcessStepDescription": "事件将标记为已取消并退出待办列表，记录仍会保留在时间线中。",
+    "quickAddStep": "添加",
     "interviewReflection": "面试复盘",
     "interviewQuestion": "面试问题",
     "interviewAnswerNotes": "我的回答要点",
@@ -623,7 +634,8 @@
     "stepStatuses": {
       "PENDING": "待开始",
       "IN_PROGRESS": "进行中",
-      "COMPLETED": "已完成"
+      "COMPLETED": "已完成",
+      "CANCELLED": "已取消"
     },
     "stepCategories": {
       "SCREENING": "筛选",
@@ -631,6 +643,14 @@
       "INTERVIEW": "面试",
       "OFFER": "Offer",
       "ONBOARDING": "入职",
+      "OTHER": "其他"
+    },
+    "stepLabelPresets": {
+      "SCREENING": "简历筛选|HR 初筛|电话筛选",
+      "ASSESSMENT": "笔试|测评|行测|AI 测评",
+      "INTERVIEW": "一面|二面|三面|群面|HR 面|终面",
+      "OFFER": "Offer|Offer 沟通|Offer 答复",
+      "ONBOARDING": "背调|体检|入职",
       "OTHER": "其他"
     },
     "attemptStages": {

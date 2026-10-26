@@ -600,6 +600,17 @@
     "stepUpdated": "Process step updated",
     "stepCompleted": "Process step marked complete",
     "stepDeleted": "Process step deleted",
+    "stepRescheduled": "Event rescheduled",
+    "stepCancelled": "Event cancelled",
+    "stepCancelledAt": "Cancelled",
+    "stepActions": "Actions",
+    "rescheduleStep": "Reschedule",
+    "rescheduleStepTitle": "Reschedule event",
+    "cancelProcessStep": "Cancel",
+    "cancelProcessStepConfirm": "Cancel event",
+    "cancelProcessStepTitle": "Cancel this event?",
+    "cancelProcessStepDescription": "The event will be marked as cancelled and leave the upcoming list. The record stays on the timeline.",
+    "quickAddStep": "Add",
     "interviewReflection": "Interview reflection",
     "interviewQuestion": "Interview question",
     "interviewAnswerNotes": "My answer notes",
@@ -623,7 +634,8 @@
     "stepStatuses": {
       "PENDING": "Pending",
       "IN_PROGRESS": "In progress",
-      "COMPLETED": "Completed"
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
     },
     "stepCategories": {
       "SCREENING": "Screening",
@@ -631,6 +643,14 @@
       "INTERVIEW": "Interview",
       "OFFER": "Offer",
       "ONBOARDING": "Onboarding",
+      "OTHER": "Other"
+    },
+    "stepLabelPresets": {
+      "SCREENING": "Resume screening|HR screen|Phone screen",
+      "ASSESSMENT": "Written test|Online assessment|Aptitude test",
+      "INTERVIEW": "Round 1|Round 2|Round 3|Group interview|HR interview|Final round",
+      "OFFER": "Offer|Offer call|Offer reply",
+      "ONBOARDING": "Background check|Medical check|Onboarding",
       "OTHER": "Other"
     },
     "attemptStages": {
