@@ -11,13 +11,18 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 3;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3] as const;
+export const BACKUP_FORMAT_VERSION = 4;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
 export const ManifestSchema = z.object({
-  formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  formatVersion: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+  ]),
   appVersion: z.string(),
   appName: z.string().optional(),
   exportedAt: z.string(),
@@ -286,6 +291,12 @@ const Task = z.object({
   priority: int,
   percentComplete: int,
   dueDate: optDt,
+  // DateTime V1 sidecar columns (format 4). Optional as well as nullable: a
+  // pre-v4 backup has no such keys, and undefined leaves Prisma on the column
+  // default (NULL = unknown precision). DateOnly stays a plain string — never
+  // z.coerce.date(), which would silently turn YYYY-MM-DD into an instant.
+  dueOn: optStr.optional(),
+  duePrecision: optStr.optional(),
   activityTypeId: optId,
   createdAt: dt,
   updatedAt: dt,
@@ -432,6 +443,10 @@ const JobOpportunity = z.object({
   sourceUrl: optStr,
   externalSourceKey: optStr,
   deadline: optDt,
+  // DateTime V1 sidecar columns (format 4): DateOnly carrier plus its
+  // precision. Optional for pre-v4 backups — undefined restores as NULL.
+  deadlineOn: optStr.optional(),
+  deadlinePrecision: optStr.optional(),
   recruitmentCohort: optStr.optional(),
   recruitmentBatch: optStr.optional(),
   salaryText: optStr,
@@ -517,6 +532,15 @@ const ApplicationProcessStep = z.object({
   scheduledAt: optDt,
   deadlineAt: optDt.optional(),
   completedAt: optDt,
+  // DateTime V1 sidecar columns (format 4). Optional for pre-v4 backups —
+  // undefined restores as NULL. A contradictory row (both an instant carrier
+  // and its *On populated) is preserved verbatim for audit, never repaired.
+  scheduledAtPrecision: optStr.optional(),
+  scheduledAtZone: optStr.optional(),
+  deadlineOn: optStr.optional(),
+  deadlinePrecision: optStr.optional(),
+  deadlineZone: optStr.optional(),
+  completedAtPrecision: optStr.optional(),
   result: optStr,
   source: str,
   notes: optStr,

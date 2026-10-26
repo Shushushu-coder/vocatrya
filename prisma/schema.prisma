@@ -523,6 +523,8 @@ model Task {
   priority        Int       @default(5)
   percentComplete Int       @default(0)
   dueDate         DateTime?
+  dueOn           String?
+  duePrecision    String?
 
   activityTypeId String?
   activityType   ActivityType? @relation(fields: [activityTypeId], references: [id])
@@ -807,6 +809,8 @@ model JobOpportunity {
   externalSourceKey String?
 
   deadline          DateTime?
+  deadlineOn        String?
+  deadlinePrecision String?
   recruitmentCohort String?
   recruitmentBatch  String?
   salaryText        String?
@@ -975,9 +979,15 @@ model ApplicationProcessStep {
   label       String
   status      String    @default("PENDING")
   sortOrder   Int
-  scheduledAt DateTime?
-  deadlineAt  DateTime?
-  completedAt DateTime?
+  scheduledAt          DateTime?
+  scheduledAtPrecision String?
+  scheduledAtZone      String?
+  deadlineAt           DateTime?
+  deadlineOn           String?
+  deadlinePrecision    String?
+  deadlineZone         String?
+  completedAt          DateTime?
+  completedAtPrecision String?
   result      String?
   source      String    @default("USER")
   notes       String?

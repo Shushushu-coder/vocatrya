@@ -192,6 +192,9 @@ describe("Vocatrya A+B phase 1 schema", () => {
         "add_managed_ai_core_contracts",
         // Resume items exist only after the foundation upgrade wave.
         RESUME_TITLE_SNAPSHOT_MIGRATION,
+        // DateTime V1 ALTERs ApplicationProcessStep/JobOpportunity, which are
+        // created by the A+B foundation, so it joins the upgrade wave.
+        "datetime_v1_additive_columns",
       ],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -275,6 +278,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
       copyMigrationBySuffix(ctx.dir, ACCOUNT_LOGIN_FOUNDATION_MIGRATION);
       copyMigrationBySuffix(ctx.dir, RESUME_TITLE_SNAPSHOT_MIGRATION);
       copyMigrationBySuffix(ctx.dir, "add_managed_ai_core_contracts");
+      copyMigrationBySuffix(ctx.dir, "datetime_v1_additive_columns");
       migrateDeploy(ctx.url, schemaPath);
 
       expect(await prisma.job.count()).toBe(before.jobs);

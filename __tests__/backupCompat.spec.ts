@@ -103,10 +103,10 @@ describe("backup v3 compatibility", () => {
     await expect(readManifest(zip)).rejects.toBeInstanceOf(BackupError);
   });
 
-  it("writes v3 standard backups without sensitive groups or flag true", () => {
+  it("writes v4 standard backups without sensitive groups or flag true", () => {
     const data = emptyStandardBackupData();
     const manifest = buildManifest(data, "a@b.com");
-    expect(manifest.formatVersion).toBe(3);
+    expect(manifest.formatVersion).toBe(4);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(manifest.counts).not.toHaveProperty("CandidateSensitiveInfo");
     expect(JSON.stringify(data)).not.toContain("CandidateSensitiveInfo");

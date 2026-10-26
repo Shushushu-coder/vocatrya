@@ -48,15 +48,21 @@ export function normalizeManifest(manifest: BackupManifest): BackupManifest & {
   containsSensitiveData: boolean;
 } {
   const counts = remapCountKey(manifest.counts);
-  if (manifest.formatVersion === 3) {
+  // ManifestSchema only admits literal versions 1-4 before this runs, so an
+  // explicit 3-or-4 check can never wave through an unknown future format.
+  // Both v3 and v4 manifests carry a required containsSensitiveData flag whose
+  // original value must be preserved — a false normalization would make every
+  // sensitive v4 backup unrestorable and a true one would smuggle sensitive
+  // groups past assertNoSensitiveKeysWhenStandard.
+  if (manifest.formatVersion === 3 || manifest.formatVersion === 4) {
     if (typeof manifest.containsSensitiveData !== "boolean") {
       throw new BackupError(
-        "v3 backup manifest is missing containsSensitiveData.",
+        `v${manifest.formatVersion} backup manifest is missing containsSensitiveData.`,
       );
     }
     if (hasOwn(manifest.counts, LEGACY_BACKUP_PROFILE_KEY)) {
       throw new BackupError(
-        "v3 backups must use CandidateProfile, not ResumeContactProfile.",
+        `v${manifest.formatVersion} backups must use CandidateProfile, not ResumeContactProfile.`,
       );
     }
     return {

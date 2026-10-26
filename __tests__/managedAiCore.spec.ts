@@ -83,7 +83,7 @@ describe("Strict versioned historical provenance", () => {
 
 describe("Additive backup contract", () => {
   it("keeps the existing backup version and old payloads", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(3);
+    expect(BACKUP_FORMAT_VERSION).toBe(4);
     expect(BackupDataSchema.parse({}).AIConnection).toEqual([]);
   });
   it("preserves provenance for all six owners when a restore nulls or preserves dangling ids", () => {

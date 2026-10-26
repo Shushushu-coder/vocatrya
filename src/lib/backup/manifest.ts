@@ -10,6 +10,7 @@ import {
   SUPPORTED_BACKUP_FORMAT_VERSIONS,
   type BackupData,
   type BackupManifest,
+  type SupportedBackupFormatVersion,
 } from "./schema";
 import { normalizeManifest } from "./compat";
 
@@ -100,10 +101,13 @@ export async function readManifest(zip: JSZip): Promise<BackupManifest> {
   if (!parsed.success) {
     if (
       found !== undefined &&
-      !SUPPORTED_BACKUP_FORMAT_VERSIONS.includes(found as 1 | 2 | 3)
+      !SUPPORTED_BACKUP_FORMAT_VERSIONS.includes(
+        found as SupportedBackupFormatVersion,
+      )
     ) {
+      const supported = SUPPORTED_BACKUP_FORMAT_VERSIONS.slice(0, -1).join(", ");
       throw new BackupError(
-        `This backup was made by a different version of Vocatrya. Expected format version 1, 2 or ${BACKUP_FORMAT_VERSION}, found ${String(found)}.`,
+        `This backup was made by a different version of Vocatrya. Expected format version ${supported} or ${BACKUP_FORMAT_VERSION}, found ${String(found)}.`,
       );
     }
     throw new BackupError("manifest.json is missing required fields.");

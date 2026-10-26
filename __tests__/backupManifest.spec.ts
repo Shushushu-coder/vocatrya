@@ -26,7 +26,7 @@ describe("buildManifest", () => {
       ],
     });
     const manifest = buildManifest(data, "me@example.com");
-    expect(manifest.formatVersion).toBe(3);
+    expect(manifest.formatVersion).toBe(4);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(manifest.counts).not.toHaveProperty("CandidateSensitiveInfo");
     expect(manifest.sourceEmail).toBe("me@example.com");

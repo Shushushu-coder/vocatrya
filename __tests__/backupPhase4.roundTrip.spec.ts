@@ -451,12 +451,12 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     }
   }, 120_000);
 
-  it("writes formatVersion 3 and omits DataMigrationRun", async () => {
+  it("writes formatVersion 4 and omits DataMigrationRun", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
     const manifest = JSON.parse(await zip.file("manifest.json")!.async("string"));
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
-    expect(manifest.formatVersion).toBe(3);
+    expect(manifest.formatVersion).toBe(4);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(data).not.toHaveProperty("CandidateSensitiveInfo");
     expect(data).not.toHaveProperty("ResumeContactProfile");
