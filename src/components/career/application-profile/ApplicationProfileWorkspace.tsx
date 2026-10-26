@@ -7,9 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/i18n";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
-  buildApplicationProjectionText,
+  buildApplicationProjectionSections,
   buildEducationSectionText,
   buildExperienceSectionText,
+  buildPersonalInfoText,
   buildSkillsSectionText,
 } from "@/lib/career/applicationCopy";
 import {
@@ -101,6 +102,23 @@ const PROFILE_FIELD_KEYS = [
 
 type ProfileFieldKey = (typeof PROFILE_FIELD_KEYS)[number];
 
+// CP-COPY: on-demand 网申汇总 selection. `preference` never reaches the UI
+// (the workspace always passes null), so only these four rendered sections
+// are selectable.
+const PROJECTION_UI_SECTION_IDS = [
+  "basics",
+  "education",
+  "experience",
+  "skills",
+] as const;
+type ProjectionUiSectionId = (typeof PROJECTION_UI_SECTION_IDS)[number];
+const ALL_SECTIONS_SELECTED: Record<ProjectionUiSectionId, boolean> = {
+  basics: true,
+  education: true,
+  experience: true,
+  skills: true,
+};
+
 export function ApplicationProfileWorkspace() {
   const { t } = useI18n();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -108,6 +126,9 @@ export function ApplicationProfileWorkspace() {
   const [tabVisibility, setTabVisibility] =
     useState<CareerProfileTabVisibility>(DEFAULT_VISIBILITY);
   const [activeTab, setActiveTab] = useState<CareerProfileTabId>("personal");
+  const [sectionSelection, setSectionSelection] = useState<
+    Record<ProjectionUiSectionId, boolean>
+  >(ALL_SECTIONS_SELECTED);
 
   const load = useCallback(async () => {
     const [p, mats, visibility] = await Promise.all([
@@ -180,23 +201,9 @@ export function ApplicationProfileWorkspace() {
     return true;
   }
 
-  const projection = useMemo(() => {
-    return buildApplicationProjectionText({
-      profile: profile
-        ? {
-            fullName: profile.fullName,
-            email: profile.email,
-            phone: profile.phone,
-            address: profile.address,
-            gender: profile.gender,
-            birthDate: profile.birthDate,
-            ethnicity: profile.ethnicity,
-            politicalStatus: profile.politicalStatus,
-            nativePlace: profile.nativePlace,
-            householdRegistration: profile.householdRegistration,
-            graduationCohort: profile.graduationCohort,
-          }
-        : null,
+  const projectionSections = useMemo(() => {
+    return buildApplicationProjectionSections({
+      profile,
       // Global job intent is no longer part of the workspace; historical
       // JobSearchPreference rows stay in the database untouched.
       preference: null,
@@ -205,6 +212,36 @@ export function ApplicationProfileWorkspace() {
       skills: skillItems,
     });
   }, [profile, educationItems, experienceItems, skillItems]);
+
+  const sectionText = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of projectionSections) map.set(s.id, s.text);
+    return map;
+  }, [projectionSections]);
+
+  const availableSectionIds = PROJECTION_UI_SECTION_IDS.filter((id) =>
+    sectionText.has(id),
+  );
+  const allSectionsSelected = availableSectionIds.every(
+    (id) => sectionSelection[id],
+  );
+  const selectedProjectionText = projectionSections
+    .filter((s) => sectionSelection[s.id as ProjectionUiSectionId])
+    .map((s) => s.text)
+    .join("\n\n");
+
+  function toggleProjectionSection(id: ProjectionUiSectionId) {
+    setSectionSelection((s) => ({ ...s, [id]: !s[id] }));
+  }
+
+  function toggleAllProjectionSections() {
+    const next = !allSectionsSelected;
+    setSectionSelection((s) => {
+      const copy = { ...s };
+      for (const id of availableSectionIds) copy[id] = next;
+      return copy;
+    });
+  }
 
   const visibleTabs = visibleCareerProfileTabs(tabVisibility);
 
@@ -244,10 +281,26 @@ export function ApplicationProfileWorkspace() {
 
         <TabsContent value="personal" forceMount hidden={activeTab !== "personal"}>
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">
                 {t("careerProfileTabs.personal")}
               </CardTitle>
+              {!isProfileEmpty && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-testid="personal-copy-group"
+                  onClick={() =>
+                    copyText(
+                      buildPersonalInfoText(profile),
+                      t("common.copied"),
+                      t("applicationProfile.copyFailed"),
+                    )
+                  }
+                >
+                  {t("applicationProfile.copyGroup")}
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               <div className="flex flex-col divide-y">
@@ -312,34 +365,83 @@ export function ApplicationProfileWorkspace() {
               <CardTitle className="text-base">
                 {t("careerProfileTabs.application")}
               </CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  copyText(
-                    projection,
-                    t("common.copied"),
-                    t("applicationProfile.copyFailed"),
-                  )
-                }
-              >
-                {t("common.copy")}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="projection-select-toggle"
+                  disabled={availableSectionIds.length === 0}
+                  onClick={toggleAllProjectionSections}
+                >
+                  {allSectionsSelected
+                    ? t("applicationProfile.copySelectNone")
+                    : t("applicationProfile.copySelectAll")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-testid="projection-copy-selected"
+                  disabled={!selectedProjectionText}
+                  onClick={() =>
+                    copyText(
+                      selectedProjectionText,
+                      t("common.copied"),
+                      t("applicationProfile.copyFailed"),
+                    )
+                  }
+                >
+                  {t("applicationProfile.copySelected")}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 text-sm">
               <div>
-                <div className="font-medium">
+                <label className="flex items-center gap-1 font-medium">
+                  <input
+                    type="checkbox"
+                    data-testid="projection-select-basics"
+                    disabled={!sectionText.has("basics")}
+                    checked={
+                      sectionText.has("basics") && sectionSelection.basics
+                    }
+                    onChange={() => toggleProjectionSection("basics")}
+                  />
                   {t("applicationProfile.overviewBasics")}
-                </div>
+                </label>
                 <div className="whitespace-pre-wrap text-muted-foreground">
-                  {projection.split("\n\n")[0] ??
+                  {sectionText.get("basics") ??
                     t("applicationProfile.emptySection")}
                 </div>
+                {sectionText.has("basics") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1 w-fit"
+                    onClick={() =>
+                      copyText(
+                        sectionText.get("basics") ?? "",
+                        t("common.copied"),
+                        t("applicationProfile.copyFailed"),
+                      )
+                    }
+                  >
+                    {t("applicationProfile.copySection")}
+                  </Button>
+                )}
               </div>
               <div>
-                <div className="font-medium">
+                <label className="flex items-center gap-1 font-medium">
+                  <input
+                    type="checkbox"
+                    data-testid="projection-select-education"
+                    disabled={!sectionText.has("education")}
+                    checked={
+                      sectionText.has("education") && sectionSelection.education
+                    }
+                    onChange={() => toggleProjectionSection("education")}
+                  />
                   {t("applicationProfile.overviewEducation")}
-                </div>
+                </label>
                 <div className="whitespace-pre-wrap">
                   {buildEducationSectionText(educationItems) ||
                     t("applicationProfile.emptySection")}
@@ -362,9 +464,19 @@ export function ApplicationProfileWorkspace() {
                 )}
               </div>
               <div>
-                <div className="font-medium">
+                <label className="flex items-center gap-1 font-medium">
+                  <input
+                    type="checkbox"
+                    data-testid="projection-select-experience"
+                    disabled={!sectionText.has("experience")}
+                    checked={
+                      sectionText.has("experience") &&
+                      sectionSelection.experience
+                    }
+                    onChange={() => toggleProjectionSection("experience")}
+                  />
                   {t("applicationProfile.overviewExperience")}
-                </div>
+                </label>
                 <div className="whitespace-pre-wrap">
                   {buildExperienceSectionText(experienceItems) ||
                     t("applicationProfile.emptySection")}
@@ -387,13 +499,38 @@ export function ApplicationProfileWorkspace() {
                 )}
               </div>
               <div>
-                <div className="font-medium">
+                <label className="flex items-center gap-1 font-medium">
+                  <input
+                    type="checkbox"
+                    data-testid="projection-select-skills"
+                    disabled={!sectionText.has("skills")}
+                    checked={
+                      sectionText.has("skills") && sectionSelection.skills
+                    }
+                    onChange={() => toggleProjectionSection("skills")}
+                  />
                   {t("applicationProfile.overviewSkills")}
-                </div>
+                </label>
                 <div className="whitespace-pre-wrap">
                   {buildSkillsSectionText(skillItems) ||
                     t("applicationProfile.emptySection")}
                 </div>
+                {skillItems.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1 w-fit"
+                    onClick={() =>
+                      copyText(
+                        buildSkillsSectionText(skillItems),
+                        t("common.copied"),
+                        t("applicationProfile.copyFailed"),
+                      )
+                    }
+                  >
+                    {t("applicationProfile.copySection")}
+                  </Button>
+                )}
               </div>
               <div className="text-xs text-muted-foreground">
                 {t("applicationProfile.languageTestUnsupported")}
