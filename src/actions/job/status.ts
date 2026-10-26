@@ -9,6 +9,7 @@ import { syncApplicationFromUiStatus } from "@/lib/career/jobOpportunityAdapter"
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import { handleError } from "@/lib/utils";
+import { localizedJobError } from "./mutations";
 import { JobStatus } from "@/models/job.model";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "../shared";
@@ -81,7 +82,7 @@ export const updateJobStatus = async (
     return { job, success: true };
   } catch (error) {
     const msg = "Failed to update job status.";
-    return handleError(error, msg);
+    return localizedJobError(error, msg);
   }
 };
 

@@ -15,6 +15,7 @@ import { CareerRuntimeError } from "@/lib/career/errors";
 import {
   CAREER_COVER_LETTER_UNSUPPORTED_MESSAGE,
   CAREER_TAGS_UNSUPPORTED_MESSAGE,
+  CAREER_WRITE_DENIED_MESSAGE,
   careerMutationDeniedMessage,
 } from "@/lib/career/userMessages";
 import { AddJobFormValues } from "@/models/addJobForm.schema";
@@ -27,8 +28,28 @@ const SESSION_INVALID_MESSAGE =
 const RELATED_RECORD_MISSING_MESSAGE =
   "Could not save because a related record is missing.";
 
-async function localizedJobError(error: unknown, fallback: string) {
+const CAREER_ERROR_I18N_KEYS: Record<string, string> = {
+  CAREER_RUNTIME_BLOCKED: "errors.careerEditsBlocked",
+  JOB_MUTATIONS_DISABLED: "errors.careerEditsDisabled",
+  LEGACY_COVER_LETTER_UNSUPPORTED: "errors.careerCoverLetterUnsupported",
+  LEGACY_TAGS_UNSUPPORTED: "errors.careerTagsUnsupported",
+  CAREER_READ_NOT_ENABLED: "errors.careerReadDenied",
+  CAREER_WRITE_NOT_ENABLED: "errors.careerWriteDenied",
+  AB_WRITES_NOT_ENABLED: "errors.careerWriteDenied",
+};
+
+export async function localizedJobError(error: unknown, fallback: string) {
   const result = handleError(error, fallback);
+  if (error instanceof CareerRuntimeError) {
+    const { t } = await getServerI18n();
+    const key =
+      error.code === "LEGACY_WRITE_BLOCKED"
+        ? error.message === CAREER_WRITE_DENIED_MESSAGE
+          ? "errors.careerWriteDenied"
+          : "errors.careerEditorUnavailable"
+        : (CAREER_ERROR_I18N_KEYS[error.code] ?? "errors.careerWriteDenied");
+    return { success: false as const, message: t(key) };
+  }
   if (
     result.message !== SESSION_INVALID_MESSAGE &&
     result.message !== RELATED_RECORD_MISSING_MESSAGE

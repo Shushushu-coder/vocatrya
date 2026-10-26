@@ -2070,7 +2070,15 @@
     "networkError": "网络连接异常",
     "rateLimitExceeded": "操作过于频繁，请稍后再试",
     "relatedRecordMissing": "无法保存，因为缺少关联记录。",
-    "validationFailed": "数据校验失败，请检查输入项"
+    "validationFailed": "数据校验失败，请检查输入项",
+    "careerEditsBlocked": "数据完整性检查通过前，无法修改职业档案与求职数据。",
+    "careerEditsDisabled": "本应用尚未启用职业档案与求职编辑功能，旧版编辑器中的职位和简历修改同样不可用。",
+    "careerReadDenied": "当前应用状态下无法读取职业数据。",
+    "careerWriteDenied": "当前应用状态下无法修改职业数据。",
+    "careerEditorUnavailable": "当前应用状态下，此编辑器无法修改职位或简历。",
+    "careerJobsUnavailable": "当前实例状态下无法读取职位申请数据。",
+    "careerCoverLetterUnsupported": "暂时无法随职位保存求职信，请移除求职信后重试。",
+    "careerTagsUnsupported": "暂时无法随职位保存技能标签，请移除标签后重试。"
   },
   "library": {
     "title": "基础字典",

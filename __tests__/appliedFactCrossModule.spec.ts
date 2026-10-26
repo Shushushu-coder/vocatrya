@@ -49,6 +49,8 @@ import { getJobTitleList } from "@/actions/jobtitle.actions";
 import { getJobLocationsList } from "@/actions/jobLocation.actions";
 import { getJobSourceList } from "@/actions/jobSource.actions";
 import { getJobsList } from "@/actions/job/queries";
+import { DEFAULT_LOCALE } from "@/i18n/config";
+import { translate } from "@/i18n/translate";
 import { listOpportunitiesAsJobs } from "@/lib/career/jobOpportunityAdapter";
 import {
   listJobs,
@@ -735,11 +737,16 @@ describe("B. shared fixture — every module reads the same fact", () => {
       await getJobTitleList(1, 10, "applied"),
       await getJobLocationsList(1, 10, "applied"),
       await getJobSourceList(1, 20, "applied"),
-      await getJobsList(1, 100),
     ]) {
       expect(res?.success).toBe(false);
-      expect(res?.message).toMatch(/unavailable|blocked/i);
+      expect(res?.message).toMatch(/cannot be read/i);
       expect(res?.data).toBeUndefined();
     }
+    const jobsRes = await getJobsList(1, 100);
+    expect(jobsRes?.success).toBe(false);
+    expect(jobsRes?.message).toBe(
+      translate(DEFAULT_LOCALE, "errors.careerJobsUnavailable"),
+    );
+    expect(jobsRes?.data).toBeUndefined();
   });
 });
