@@ -2152,12 +2152,12 @@
     "jobsCountUnavailable": "暂不支持"
   },
   "career": {
-    "runtimeReadyTitle": "A+B 已就绪但未启用",
-    "runtimeReadyDescription": "当前实例已按 A+B 原生模式初始化。在打开 VOCATRYA_AB_RUNTIME_ENABLED 之前，职业与申请数据不可写入，也不允许继续写入旧版 Job/Resume。",
-    "runtimeBlockedTitle": "职业运行时已封锁",
-    "runtimeBlockedDescription": "在实例完整性恢复之前，不能修改职业或申请数据。",
-    "resumeReadOnlyTitle": "旧版简历编辑器为只读",
-    "resumeReadOnlyDescription": "A+B 模式下暂不改写简历与职业材料，待后续 Resume cutover。现有简历仍可查看。"
+    "runtimeReadyTitle": "编辑功能尚未启用",
+    "runtimeReadyDescription": "当前应用尚未启用职业资料与投递数据的编辑功能，也无法通过旧版编辑器修改职位和简历。",
+    "runtimeBlockedTitle": "编辑功能暂不可用",
+    "runtimeBlockedDescription": "数据完整性检查通过前，暂时无法修改职业资料与投递数据。",
+    "resumeReadOnlyTitle": "现有简历仅供查看",
+    "resumeReadOnlyDescription": "当前编辑器暂不支持修改简历与职业素材，现有简历仍可查看。"
   },
   "applicationProfile": {
     "title": "网申资料",

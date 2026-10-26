@@ -5,8 +5,7 @@
 <p align="center">
   <a href="#quick-start">Quick Start</a> ·
   <a href="#ai-assistant-in-app-chat">AI Assistant</a> ·
-  <a href="#mcp-server-ai-agent-integration">MCP Setup</a> ·
-  <a href="https://github.com/Shushushu-coder/vocatrya/wiki">Help</a>
+  <a href="#mcp-server-ai-agent-integration">MCP Setup</a>
 </p>
 
 <p align="center">
@@ -206,10 +205,6 @@ Clients that support `streamable-http` natively can connect directly without `mc
 
 > **Self-hosting on a home network?** If your Vocatrya URL is a plain `http://` LAN address (not `localhost` or HTTPS), add `--allow-http` to the `mcp-remote` args — it refuses non-HTTPS URLs by default. The Settings page adds this flag automatically when it detects a non-localhost HTTP URL.
 
-
-## Help
-
-In-app usage guides — getting started, jobs, automations, and MCP access — live in the [GitHub Wiki](https://github.com/Shushushu-coder/vocatrya/wiki).
 
 ## Contributing
 

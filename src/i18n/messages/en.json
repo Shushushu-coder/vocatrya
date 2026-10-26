@@ -2152,12 +2152,12 @@
     "jobsCountUnavailable": "Not supported"
   },
   "career": {
-    "runtimeReadyTitle": "A+B is ready but disabled",
-    "runtimeReadyDescription": "This instance is initialized for A+B. Career and application edits stay blocked until VOCATRYA_AB_RUNTIME_ENABLED is turned on. Legacy Job/Resume writes are not allowed.",
-    "runtimeBlockedTitle": "Career runtime is blocked",
-    "runtimeBlockedDescription": "Career and application data cannot be changed until instance integrity is restored.",
-    "resumeReadOnlyTitle": "Legacy resume editor is read-only",
-    "resumeReadOnlyDescription": "Resume and career-material editing is disabled in A+B mode until the Resume cutover lands. Existing resumes can still be viewed."
+    "runtimeReadyTitle": "Editing is not enabled yet",
+    "runtimeReadyDescription": "Career profile and application editing is not enabled for this app yet. Changes to jobs and resumes through the previous version's editors are also unavailable.",
+    "runtimeBlockedTitle": "Editing is temporarily unavailable",
+    "runtimeBlockedDescription": "Career profile and application data cannot be changed until the data integrity check passes.",
+    "resumeReadOnlyTitle": "Existing resumes are read-only",
+    "resumeReadOnlyDescription": "Resume and career-material editing is currently unavailable in this editor. You can still view existing resumes."
   },
   "applicationProfile": {
     "title": "Application Profile",

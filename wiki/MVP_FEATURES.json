@@ -1,0 +1,433 @@
+{
+  "schemaVersion": 1,
+  "project": "Vocatrya",
+  "baseline": {
+    "source": "MVP_IMPLEMENTATION_REVISED.md",
+    "gitRef": "8ff63dfbbbba785ad39559537e3610a3c46cbac6",
+    "date": "2026-10-26"
+  },
+  "definitions": {
+    "implementationStatus": "Main code assessment from the reviewed plan; not equivalent to end-user acceptance.",
+    "passes": "Set true only after the specified real user-facing acceptance steps pass; source-code presence or tests alone do not set this flag.",
+    "scope": {
+      "IN_SCOPE": "Current MVP work or verification",
+      "OWNER_DECISION": "Requires Owner scope decision before implementation",
+      "DEFERRED": "Not a first-candidate blocker"
+    }
+  },
+  "features": [
+    {
+      "id": "CP-UI",
+      "category": "Career Profile",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "职业资料采用七 Tab，允许用户管理 Tab 显示，保留历史求职意向数据但不提供独立全局求职意向 Tab。",
+      "steps": [
+        "打开职业资料，能访问个人信息、教育经历、实习经历、项目经历、获奖经历、其他、网申资料七个 Tab。",
+        "隐藏并重新显示指定 Tab，刷新和重启后保持显隐设置，原记录未丢失。",
+        "全局求职意向不出现在七 Tab 中，但已有 JobSearchPreference 数据保留。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "CP-EDIT",
+      "category": "Career Profile",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "职业资料字段可直接编辑、自动保存，并在失败时保留输入供重试。",
+      "steps": [
+        "编辑一项资料字段，无需整页保存即可完成持久化；重新打开仍显示修改后的值。",
+        "保存中、成功和失败状态准确；模拟保存失败后输入不丢失，可重试。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "CP-RECORDS",
+      "category": "Career Profile",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "复用现有 CareerMaterialItem 与教育 GPA/排名字段，维护多条教育、实习、项目、获奖、科研、论文、语言及其他经历。",
+      "steps": [
+        "对教育、实习、项目、获奖和其他信息各创建多条记录并完成编辑、读取、删除。",
+        "已有 GPA、评分制、排名可正确回填；按冻结合同维护新增科研、论文、语言多条目。",
+        "关闭并重开后记录与字段保持一致；涉及新增字段时使用获批的 M1/M2 Schema。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "CP-COPY",
+      "category": "Career Profile",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "在现有“复制本条”基础上提供字段、分组、记录、Tab、网申汇总的分级复制。",
+      "steps": [
+        "字段、分组、记录、Tab 和按需网申汇总均能复制正确文本。",
+        "默认批量复制不包含证件、紧急联系人、证明人等敏感信息。",
+        "记录级复制沿用已有能力，不重复生成与现有记录矛盾的内容。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "CP-PRIVACY",
+      "category": "Career Profile",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "职业资料中的证件、紧急联系人、证明人及附件等敏感内容默认受保护。",
+      "steps": [
+        "默认视图隐藏敏感字段；查看或单字段复制需明确操作。",
+        "证明人、附件及证件照等新增敏感对象遵循相同保护要求。",
+        "非敏感导出和网申汇总不意外包含受保护信息。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "CP-LEGACY",
+      "category": "Career Profile",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "七 Tab 可正确呈现既有候选人资料与职业素材，不破坏历史求职意向。",
+      "steps": [
+        "用旧版本已存在的数据打开新版七 Tab，原个人信息和经历可读取与继续修改。",
+        "升级前求职意向数据仍存在，不因导航调整被清除。",
+        "重新打开后数据一致。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "JOB-01",
+      "category": "Job UX",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "未保存的“已投递”草稿可撤销，已保存的真实投递事实不被抹除。",
+      "steps": [
+        "在新增职位表单打开“已投递”后再撤销，仅移除该开关自动填写的状态和日期。",
+        "保存真实投递后重新打开，关闭草稿开关或其他编辑操作不会删除既有投递事实。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "JOB-02",
+      "category": "Job UX",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "使用现有自由文本薪资字段，在职位页面及 CSV 导出中准确保留原文。",
+      "steps": [
+        "填写包含任意合法文本形式的薪资并保存、重新打开，展示值不改变。",
+        "导出 CSV，薪资字段与保存值一致，不自行推断或格式化为虚假区间。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "JOB-03",
+      "category": "Job UX",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "职位薪资、渠道与来源按实际数据展示，缺失值不造假。",
+      "steps": [
+        "列表和详情显示已保存的薪资、渠道、来源，与 legacy/canonical 读取结果一致。",
+        "字段缺失时显示中性缺失状态，不编造值；Agent 读取不改变同一事实。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "JOB-04",
+      "category": "Job UX",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "UNVERIFIED",
+      "description": "职位来源不再出现无用途的装饰性交互。",
+      "steps": [
+        "检查当前职位列表和详情中的来源呈现；不存在没有实际功能的可点击控件。",
+        "如果本来只有文本标签，则直接记为通过，不实施重复清理。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "JOB-05",
+      "category": "Job UX",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "用户界面不暴露 A+B、运行时环境变量等内部实验术语。",
+      "steps": [
+        "中英文职位相关运行提示和简历提示中不出现“A+B”或 VOCATRYA_AB_RUNTIME_ENABLED 等内部术语。",
+        "提示文字准确表达真实能力与受限状态，不掩盖未实现功能。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "PROC-ATTEMPT",
+      "category": "Application Process",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "用户可在同一职位独立建立多个 Application Attempt 并执行转投。",
+      "steps": [
+        "在职位详情中显式创建第二个 Attempt，能查看和选择各自记录。",
+        "通过用户界面执行转投，新 Attempt 与原 Attempt 的事实分别保存。",
+        "重开后 Attempt 与流程事件归属正确。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "PROC-UX",
+      "category": "Application Process",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "流程详情支持笔试、多轮面试、Offer 等事件的表格展示、快捷新增和更新。",
+      "steps": [
+        "在同一职位详情页依次新增笔试、一面、二面、Offer，并可选择对应 Attempt。",
+        "对事件进行改期、完成和取消，Timeline 状态及顺序同步更新。",
+        "窄窗口下和键盘操作可用，重新打开后状态一致。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "PROC-UPCOMING",
+      "category": "Application Process",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "流程事件与 Upcoming 能真实联动显示待办事项，不遗漏 canonical 流程。",
+      "steps": [
+        "新增或改期面试、笔试及 Offer 事件后 Upcoming 与相关 Dashboard 提示更新。",
+        "完成或取消事件后待办反映实际状态，不保留虚假待办。",
+        "按已批准的精度及用户时区显示事件时间。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "P-TZ",
+      "category": "DateTime / Task",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "用户可以设置 IANA 时区；相关日期显示按冻结后的时区合同执行。",
+      "steps": [
+        "在 Settings 选择并保存合法时区，刷新与重启后仍保留。",
+        "有时区语义的流程事件在不同用户时区下按已批准合同呈现，DateOnly 不因转换漂移。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "P-PROC",
+      "category": "DateTime / Task",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "ProcessStep 使用新增精度和时区字段读取、编辑并显示日期时间。",
+      "steps": [
+        "新建 DateOnly 与有明确时间/时区的笔试或面试，保存后精度和时间不改变。",
+        "历史 unknown 精度的数据按旧事实显示；只读打开不触发悄然重写。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "P-JO",
+      "category": "DateTime / Task",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "JobOpportunity 岗位截止日期使用 canonical deadlineOn/deadlinePrecision，并贯通详情、编辑、CSV、Agent 和 Upcoming。",
+      "steps": [
+        "新增、编辑有截止日期的职位，重新打开后 canonical 日期与精度一致。",
+        "列表/详情/CSV/Agent 读取和 Upcoming 对同一截止日表达一致。",
+        "历史 unknown 精度不被擅自转换或改写。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "P-TASK",
+      "category": "DateTime / Task",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "Task 使用 canonical dueOn/duePrecision，并正确处理 DateOnly/Instant 混合排序与分页。",
+      "steps": [
+        "创建和修改 DateOnly 与 Instant 类型任务，重新打开后到期值和精度一致。",
+        "混合排序遵守获批的 NULL 规则，分页不漏项、不重复、不误导。",
+        "在合同规定的数据规模上保持可用；历史时间数据不被自动改写。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "BD-CORE",
+      "category": "Basic Data",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "用户可维护并选择公司、职位名称、地点、投递渠道、标签和活动类型等高频基础数据。",
+      "steps": [
+        "新增、编辑主要基础数据，表单可选并在保存后正确关联。",
+        "重新打开表单及关联记录后，选择结果保持正确。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "BD-INLINE",
+      "category": "Basic Data",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "需要基础数据的高频表单可在原位置创建并立即选择对应项目。",
+      "steps": [
+        "在新增职位等相关表单中就地创建允许的基础数据，并立即可选。",
+        "不会产生无效重复项或破坏已有关联。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "BD-LINKS",
+      "category": "Basic Data",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "标签和技能等基础数据与职业素材及业务表单保持正确的引用关系。",
+      "steps": [
+        "新增或编辑标签、技能后，可在相关职业素材或职位表单复用。",
+        "已关联记录重新打开显示真实值，不出现悬空或错误引用。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "BD-ARCHIVE",
+      "category": "Basic Data",
+      "priority": "P1",
+      "scope": "DEFERRED",
+      "implementationStatus": "MISSING",
+      "description": "全品类基础数据归档暂缓，不把物理删除当作归档。",
+      "steps": [
+        "若未来启用归档，先确认各类数据的隐藏、引用与恢复语义，再由 Schema Owner 评估相应实现。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "SET-LOCALE",
+      "category": "Settings / Desktop",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "语言选择可以保存并跨刷新及重新打开持续生效。",
+      "steps": [
+        "切换简体中文/英文，刷新和重启后仍为已选语言。",
+        "失败时反馈真实状态，不显示假成功。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "SET-APPEARANCE",
+      "category": "Settings / Desktop",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "UNVERIFIED",
+      "description": "已开放的外观设置真实生效、可持久保存，并处理保存失败。",
+      "steps": [
+        "调整已开放的外观选项后即时生效，重新打开应用仍保持该设置。",
+        "模拟保存失败时状态和反馈符合实际，不出现仅展示未接线的开关。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "SET-DESKTOP",
+      "category": "Settings / Desktop",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "Settings UI 接通现有桌面自启、最小化启动与关闭到托盘 IPC。",
+      "steps": [
+        "在 Windows 桌面端设置自启、最小化启动及关闭至托盘，选项反馈实际底层状态。",
+        "保存失败显示错误；关闭到托盘默认关闭时正常退出，开启后可从托盘显式退出。",
+        "重启应用后设置持续生效，退出不损坏数据。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "SET-DATA-PRIVACY",
+      "category": "Settings / Desktop",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "已实现的数据备份、预检和恢复入口可用于本地数据管理。",
+      "steps": [
+        "用户可从 Settings 找到备份和恢复入口，在隔离数据环境完成备份、预检与恢复。",
+        "错误输入或失败路径有明确反馈，不对真实用户数据库做测试操作。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "SET-AI-SERVICES",
+      "category": "Settings / Desktop",
+      "priority": "P1",
+      "scope": "OWNER_DECISION",
+      "implementationStatus": "PARTIAL",
+      "description": "AI Services 现存待接线内容只在确认属于本期范围时交付，不能展示虚假连接状态。",
+      "steps": [
+        "若纳入本期：已支持的 AI Connection/Model Assignment 选择与连接状态与实际业务能力一致。",
+        "未实现的能力明确不可用，不伪装成已接通，也不破坏已有账号登录和 BYOK 隔离。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "RM-RESUME",
+      "category": "Resume / Match",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "用户可创建、复用、编辑并冻结简历版本，预览和导出内容。",
+      "steps": [
+        "基于既有职业素材创建或复用 Resume Variant，并可预览和导出。",
+        "冻结版本后历史内容稳定，重新打开仍能查看。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "RM-BIND",
+      "category": "Resume / Match",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "简历版本可以绑定独立投递 Attempt，并保持投递时版本可追溯。",
+      "steps": [
+        "选择具体 Attempt 绑定已冻结简历版本，重新打开可查看投递使用的对应版本。",
+        "后续编辑简历草稿不会悄然改写已有投递历史。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "RM-MATCH",
+      "category": "Resume / Match",
+      "priority": "P1",
+      "scope": "OWNER_DECISION",
+      "implementationStatus": "MISSING",
+      "description": "canonical fresh-native 的 Match 用户入口和生产执行链路尚未交付，由 Owner 决定本期最小接线或延期。",
+      "steps": [
+        "若纳入本期：从 canonical 职位详情启动匹配，调用实际生产服务并保存、展示与重新读取结果。",
+        "不将方法定义、Schema 或仅 legacy 可用的按钮视为通过；不要求完整 Deep Match 扩展。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "REM-V1",
+      "category": "Reminder",
+      "priority": "CONDITIONAL",
+      "scope": "DEFERRED",
+      "implementationStatus": "MISSING",
+      "description": "Windows 本地持久提醒当前未实现，不阻塞首版内部 MVP。",
+      "steps": [
+        "若未来启用：提醒需可持久化、在 Windows 端真实调度与送达，关闭重开后规则仍有效。",
+        "无真实送达链路时不向用户展示伪提醒。"
+      ],
+      "passes": false
+    }
+  ]
+}
