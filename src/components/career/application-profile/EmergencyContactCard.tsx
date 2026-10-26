@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,10 @@ type Revealed = {
   phone: string | null;
 };
 
+type Draft = { name: string; relation: string; phone: string };
+
+const EMPTY_DRAFT: Draft = { name: "", relation: "", phone: "" };
+
 export function EmergencyContactCard() {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -33,14 +37,22 @@ export function EmergencyContactCard() {
   const [revealed, setRevealed] = useState<Revealed | null>(null);
   const [revealing, setRevealing] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: "", relation: "", phone: "" });
+  const [editLoading, setEditLoading] = useState(false);
+  const [baseline, setBaseline] = useState<Draft | null>(null);
+  const [form, setForm] = useState<Draft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [storagePath, setStoragePath] = useState<
     { status: "loading" } | { status: "known"; path: string } | { status: "unavailable" }
   >({ status: "loading" });
+  // Latest plaintext read wins: collapsing or starting a newer read invalidates
+  // in-flight reveal/edit reads so a late response cannot repopulate plaintext.
+  const readSeq = useRef(0);
+  const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     const res = await getEmergencyContactOverview();
+    if (loadSeq.current !== seq) return;
     if (res.success && res.data) {
       setOverview(res.data as Overview);
     } else {
@@ -54,9 +66,11 @@ export function EmergencyContactCard() {
 
   useEffect(() => {
     if (!open) return;
+    let stale = false;
     setStoragePath({ status: "loading" });
     void (async () => {
       const res = await getLocalDbPathDisplay();
+      if (stale) return;
       if (!res.success || !res.data) {
         setStoragePath({ status: "unavailable" });
         return;
@@ -67,16 +81,38 @@ export function EmergencyContactCard() {
       }
       setStoragePath({ status: "unavailable" });
     })();
+    return () => {
+      stale = true;
+    };
   }, [open]);
+
+  function toggleOpen() {
+    if (!open) {
+      setOpen(true);
+      return;
+    }
+    readSeq.current += 1;
+    setOpen(false);
+    setRevealed(null);
+    // A save already in flight keeps its draft so a failure can still be
+    // retried; every other collapse drops plaintext draft state entirely.
+    if (!saving) {
+      setEditing(false);
+      setBaseline(null);
+      setForm(EMPTY_DRAFT);
+    }
+  }
 
   async function handleReveal() {
     if (revealed) {
       setRevealed(null);
       return;
     }
+    const seq = ++readSeq.current;
     setRevealing(true);
     try {
       const res = await revealEmergencyContact();
+      if (readSeq.current !== seq) return;
       if (res.success && res.data) {
         setRevealed(res.data as Revealed);
       } else {
@@ -103,26 +139,72 @@ export function EmergencyContactCard() {
     }
   }
 
-  function startEdit() {
-    setForm({
-      name: revealed?.name ?? "",
-      relation: revealed?.relation ?? overview?.relation ?? "",
-      phone: revealed?.phone ?? "",
-    });
-    setEditing(true);
+  async function startEdit() {
+    const seq = ++readSeq.current;
+    setEditLoading(true);
+    try {
+      const res = await revealEmergencyContact();
+      if (readSeq.current !== seq) return;
+      if (!res.success || !res.data) {
+        toastError(t("applicationProfile.editLoadFailed"));
+        return;
+      }
+      const data = res.data as Revealed;
+      setBaseline({
+        name: (data.name ?? "").trim(),
+        relation: (data.relation ?? "").trim(),
+        phone: (data.phone ?? "").trim(),
+      });
+      setForm({
+        name: data.name ?? "",
+        relation: data.relation ?? "",
+        phone: data.phone ?? "",
+      });
+      setEditing(true);
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setBaseline(null);
+    setForm(EMPTY_DRAFT);
   }
 
   async function handleSave() {
+    if (!baseline) return;
+    const next: Draft = {
+      name: form.name.trim(),
+      relation: form.relation.trim(),
+      phone: form.phone.trim(),
+    };
+    const payload: {
+      emergencyContactName?: string | null;
+      emergencyContactRelation?: string | null;
+      emergencyContactPhone?: string | null;
+    } = {};
+    if (next.name !== baseline.name) {
+      payload.emergencyContactName = next.name || null;
+    }
+    if (next.relation !== baseline.relation) {
+      payload.emergencyContactRelation = next.relation || null;
+    }
+    if (next.phone !== baseline.phone) {
+      payload.emergencyContactPhone = next.phone || null;
+    }
+    if (Object.keys(payload).length === 0) {
+      cancelEdit();
+      return;
+    }
     setSaving(true);
     try {
-      const res = await updateEmergencyContact({
-        emergencyContactName: form.name.trim() ? form.name.trim() : null,
-        emergencyContactRelation: form.relation.trim() ? form.relation.trim() : null,
-        emergencyContactPhone: form.phone.trim() ? form.phone.trim() : null,
-      });
+      const res = await updateEmergencyContact(payload);
       if (res.success) {
         toastSuccess(t("applicationProfile.saveSuccess"));
         setEditing(false);
+        setBaseline(null);
+        setForm(EMPTY_DRAFT);
         setRevealed(null);
         await load();
       } else {
@@ -144,7 +226,7 @@ export function EmergencyContactCard() {
           <CardTitle className="text-base">{t("applicationProfile.emergencyContactTitle")}</CardTitle>
           <p className="text-xs text-muted-foreground">{t("applicationProfile.emergencyContactHint")}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
+        <Button variant="outline" size="sm" onClick={toggleOpen}>
           {open ? t("applicationProfile.hide") : t("applicationProfile.reveal")}
         </Button>
       </CardHeader>
@@ -220,24 +302,39 @@ export function EmergencyContactCard() {
                 </div>
               </div>
               <div className="pt-2">
-                <Button variant="outline" size="sm" onClick={startEdit}>
-                  {t("common.edit")}
+                <Button variant="outline" size="sm" onClick={startEdit} disabled={editLoading}>
+                  {editLoading ? t("common.loading") : t("common.edit")}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">{t("applicationProfile.emergencyContactName")}</label>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+              <Input
+                value={form.name}
+                disabled={saving}
+                data-testid="emergency-input-name"
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
               <label className="text-sm font-medium">{t("applicationProfile.emergencyContactRelation")}</label>
-              <Input value={form.relation} onChange={(e) => setForm((f) => ({ ...f, relation: e.target.value }))} />
+              <Input
+                value={form.relation}
+                disabled={saving}
+                data-testid="emergency-input-relation"
+                onChange={(e) => setForm((f) => ({ ...f, relation: e.target.value }))}
+              />
               <label className="text-sm font-medium">{t("applicationProfile.emergencyContactPhone")}</label>
-              <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+              <Input
+                value={form.phone}
+                disabled={saving}
+                data-testid="emergency-input-phone"
+                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              />
               <div className="flex gap-2 pt-1">
                 <Button size="sm" onClick={handleSave} disabled={saving}>
                   {saving ? t("common.saving") : t("common.save")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={saving}>
+                <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saving}>
                   {t("common.cancel")}
                 </Button>
               </div>
