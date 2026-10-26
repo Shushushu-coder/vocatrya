@@ -405,13 +405,14 @@
       "category": "Resume / Match",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "现有实现已完成隔离验收，无需源码修改。任务记录：绑定定向测试 54 项通过，浏览器真实路径 26 步及 Windows Electron 真实窗口/后端 18 步通过，覆盖独立 Attempt 绑定、冻结版本保护、失败反馈及退出重启后回看。Main 集成 Owner 已核对两端隔离 SQLite 的 A→v1/B→v2 绑定、SUBMITTED 状态、v1 原始 headerSnapshot，以及浏览器/Electron 重开只读历史截图；基线之后 Main 未修改绑定相关源码。冲突绑定提示仍为技术性英文文案，作为非阻塞体验观察保留。",
       "description": "简历版本可以绑定独立投递 Attempt，并保持投递时版本可追溯。",
       "steps": [
         "选择具体 Attempt 绑定已冻结简历版本，重新打开可查看投递使用的对应版本。",
         "后续编辑简历草稿不会悄然改写已有投递历史。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "RM-MATCH",
