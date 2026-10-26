@@ -138,6 +138,19 @@ describe("ApplicationProfileWorkspace tiered copy", () => {
     expect(text).not.toContain("Summer Intern");
   });
 
+  it("copies the whole internship tab including read-only employment", async () => {
+    render(<ApplicationProfileWorkspace />);
+    await screen.findByTestId("personal-copy-group");
+    await activateTab("career-profile-tab-internship");
+    fireEvent.click(await screen.findByTestId("copy-tab-internship"));
+    await waitFor(() => expect(writeTextMock()).toHaveBeenCalled());
+    const text = writeTextMock().mock.calls.at(-1)![0] as string;
+    expect(text).toContain("Summer Intern");
+    expect(text).toContain("Legacy Job");
+    expect(text).not.toContain("Fudan University");
+    expect(text).not.toContain(SENTINEL);
+  });
+
   it("copies the full projection by default and honors deselected sections", async () => {
     render(<ApplicationProfileWorkspace />);
     await screen.findByTestId("personal-copy-group");

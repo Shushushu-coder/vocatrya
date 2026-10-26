@@ -337,6 +337,25 @@ export function ApplicationProfileWorkspace() {
         {CAREER_PROFILE_RECORD_TAB_IDS.map((tabId) => (
           <TabsContent key={tabId} value={tabId}>
             <div className="flex flex-col gap-4">
+              <Button
+                size="sm"
+                variant="outline"
+                className="self-end"
+                data-testid={`copy-tab-${tabId}`}
+                onClick={() =>
+                  copyText(
+                    buildExperienceSectionText([
+                      ...itemsForRecordTab(materials, tabId),
+                      ...(CAREER_PROFILE_TAB_READONLY_TYPES[tabId] ?? [])
+                        .flatMap((type) => materials.filter((m) => m.type === type)),
+                    ]),
+                    t("common.copied"),
+                    t("applicationProfile.copyFailed"),
+                  )
+                }
+              >
+                {t("applicationProfile.copyTab")}
+              </Button>
               <MaterialRecordsSection
                 title={t(`careerProfileTabs.${tabId}`)}
                 items={itemsForRecordTab(materials, tabId)}

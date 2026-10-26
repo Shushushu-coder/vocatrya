@@ -64,7 +64,8 @@
       "category": "Career Profile",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "已集成当前字段与记录范围内的个人分组、素材 Tab（含只读任职记录）、分区及按需网申汇总复制，复用已有字段和记录复制；批量复制以字段白名单排除敏感对象，剪贴板失败反馈保留。定向组件与文本测试通过；真实浏览器/Electron 剪贴板完整验收待完成，未新增 Schema 或未来敏感对象。",
       "description": "在现有“复制本条”基础上提供字段、分组、记录、Tab、网申汇总的分级复制。",
       "steps": [
         "字段、分组、记录、Tab 和按需网申汇总均能复制正确文本。",
@@ -187,7 +188,8 @@
       "category": "Application Process",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "已集成流程事件表格、按 Attempt 快捷新增、改期、完成和取消；取消保留记录并从 Upcoming 排除，完成/取消采用条件写入保护终态。补齐中文输入法 Enter 保护及保存期间草稿/对话框保护。组件与隔离 SQLite 定向测试通过；窄窗口、键盘、重开及 Dashboard/Upcoming 实际用户联动验收待完成，日期精度/时区消费者仍由 P-PROC 等任务维护。",
       "description": "流程详情支持笔试、多轮面试、Offer 等事件的表格展示、快捷新增和更新。",
       "steps": [
         "在同一职位详情页依次新增笔试、一面、二面、Offer，并可选择对应 Attempt。",
@@ -334,7 +336,8 @@
       "category": "Settings / Desktop",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "UNVERIFIED",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "核实已有主题设置具备即时生效、串行保存、权威回填及失败回滚，无需重复开发。任务隔离浏览器四项验证记录通过，覆盖即时切换、刷新持久化、连续切换及保存失败；Windows Electron 主题桥接冒烟记录通过。完整 Settings 渲染端到端与应用退出/重开验收仍待完成，passes 保持 false。",
       "description": "已开放的外观设置真实生效、可持久保存，并处理保存失败。",
       "steps": [
         "调整已开放的外观选项后即时生效，重新打开应用仍保持该设置。",
