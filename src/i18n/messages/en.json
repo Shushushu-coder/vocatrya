@@ -2206,6 +2206,7 @@
     "saveSuccess": "Saved",
     "saveFailed": "Save failed. Please try again.",
     "loadFailed": "Failed to load application data.",
+    "editLoadFailed": "Failed to load the saved values. Please try again.",
     "copyFailed": "Copy failed. Please try again.",
     "fieldFullName": "Full name",
     "fieldEmail": "Email",
