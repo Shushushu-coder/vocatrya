@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/i18n";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -84,13 +83,28 @@ async function copyText(
 
 const DEFAULT_VISIBILITY = normalizeTabVisibility(undefined);
 
+// CP-EDIT: the personal-info rows in display order; each row writes exactly
+// its own key through `saveProfileField`, never a whole-profile form.
+const PROFILE_FIELD_KEYS = [
+  "fullName",
+  "email",
+  "phone",
+  "address",
+  "gender",
+  "birthDate",
+  "ethnicity",
+  "politicalStatus",
+  "nativePlace",
+  "householdRegistration",
+  "graduationCohort",
+] as const;
+
+type ProfileFieldKey = (typeof PROFILE_FIELD_KEYS)[number];
+
 export function ApplicationProfileWorkspace() {
   const { t } = useI18n();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
-  const [editingBasics, setEditingBasics] = useState(false);
-  const [basicsForm, setBasicsForm] = useState<Profile>({});
-  const [savingBasics, setSavingBasics] = useState(false);
   const [tabVisibility, setTabVisibility] =
     useState<CareerProfileTabVisibility>(DEFAULT_VISIBILITY);
   const [activeTab, setActiveTab] = useState<CareerProfileTabId>("personal");
@@ -151,39 +165,19 @@ export function ApplicationProfileWorkspace() {
   const isProfileEmpty =
     !profile || !Object.values(profile).some((v) => v?.trim());
 
-  function startEditBasics() {
-    setBasicsForm({ ...(profile ?? {}) });
-    setEditingBasics(true);
-  }
-
-  async function saveBasics() {
-    setSavingBasics(true);
-    try {
-      const res = await updateApplicationCandidateProfile({
-        fullName: basicsForm.fullName ?? null,
-        email: basicsForm.email ?? null,
-        phone: basicsForm.phone ?? null,
-        address: basicsForm.address ?? null,
-        gender: basicsForm.gender ?? null,
-        birthDate: basicsForm.birthDate ?? null,
-        ethnicity: basicsForm.ethnicity ?? null,
-        politicalStatus: basicsForm.politicalStatus ?? null,
-        nativePlace: basicsForm.nativePlace ?? null,
-        householdRegistration: basicsForm.householdRegistration ?? null,
-        graduationCohort: basicsForm.graduationCohort ?? null,
-      });
-      if (res.success) {
-        toastSuccess(t("applicationProfile.saveSuccess"));
-        setEditingBasics(false);
-        await load();
-      } else {
-        toastError(t("applicationProfile.saveFailed"), undefined, {
-          sticky: true,
-        });
-      }
-    } finally {
-      setSavingBasics(false);
-    }
+  // A single-field commit sends only that key: the action treats omitted
+  // fields as "unchanged", so concurrent row saves can never overwrite each
+  // other. Merging only the saved key keeps this row correct even if a
+  // slower sibling save resolves afterwards.
+  async function saveProfileField(
+    key: ProfileFieldKey,
+    value: string | null,
+  ): Promise<boolean> {
+    const res = await updateApplicationCandidateProfile({ [key]: value });
+    if (!res.success) return false;
+    const saved = ((res.data as Profile | null | undefined) ?? null)?.[key] ?? null;
+    setProfile((p) => ({ ...(p ?? {}), [key]: saved }));
+    return true;
   }
 
   const projection = useMemo(() => {
@@ -248,130 +242,38 @@ export function ApplicationProfileWorkspace() {
           />
         </div>
 
-        <TabsContent value="personal">
+        <TabsContent value="personal" forceMount hidden={activeTab !== "personal"}>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="text-base">
                 {t("careerProfileTabs.personal")}
               </CardTitle>
-              {!editingBasics ? (
-                <Button size="sm" variant="outline" onClick={startEditBasics}>
-                  {t("common.edit")}
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={saveBasics}
-                    disabled={savingBasics}
-                  >
-                    {savingBasics ? t("common.saving") : t("common.save")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setEditingBasics(false)}
-                  >
-                    {t("common.cancel")}
-                  </Button>
-                </div>
-              )}
             </CardHeader>
             <CardContent>
-              {!editingBasics ? (
-                <div className="flex flex-col divide-y">
+              <div className="flex flex-col divide-y">
+                {PROFILE_FIELD_KEYS.map((key) => (
                   <ApplicationProfileField
-                    label={t("applicationProfile.fieldFullName")}
-                    value={profile?.fullName}
+                    key={key}
+                    testId={`profile-field-${key}`}
+                    label={t(
+                      `applicationProfile.field${key.charAt(0).toUpperCase()}${key.slice(1)}`,
+                    )}
+                    value={profile?.[key]}
+                    onSave={(v) => saveProfileField(key, v)}
                   />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldEmail")}
-                    value={profile?.email}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldPhone")}
-                    value={profile?.phone}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldAddress")}
-                    value={profile?.address}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldGender")}
-                    value={profile?.gender}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldBirthDate")}
-                    value={profile?.birthDate}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldEthnicity")}
-                    value={profile?.ethnicity}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldPoliticalStatus")}
-                    value={profile?.politicalStatus}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldNativePlace")}
-                    value={profile?.nativePlace}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldHouseholdRegistration")}
-                    value={profile?.householdRegistration}
-                  />
-                  <ApplicationProfileField
-                    label={t("applicationProfile.fieldGraduationCohort")}
-                    value={profile?.graduationCohort}
-                  />
-                  {isProfileEmpty && (
-                    <div className="flex flex-col gap-2 py-3 text-sm text-muted-foreground">
-                      <span>{t("applicationProfile.legacyNoSyncHint")}</span>
-                      <Link
-                        className="text-primary underline"
-                        href="/dashboard/profile"
-                      >
-                        {t("applicationProfile.viewExistingResume")}
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {(
-                    [
-                      "fullName",
-                      "email",
-                      "phone",
-                      "address",
-                      "gender",
-                      "birthDate",
-                      "ethnicity",
-                      "politicalStatus",
-                      "nativePlace",
-                      "householdRegistration",
-                      "graduationCohort",
-                    ] as const
-                  ).map((key) => (
-                    <div key={key} className="flex flex-col gap-1">
-                      <label className="text-sm font-medium">
-                        {t(
-                          `applicationProfile.field${key.charAt(0).toUpperCase()}${key.slice(1)}`,
-                        )}
-                      </label>
-                      <Input
-                        value={(basicsForm[key] as string) ?? ""}
-                        onChange={(e) =>
-                          setBasicsForm((f) => ({
-                            ...f,
-                            [key]: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+                ))}
+                {isProfileEmpty && (
+                  <div className="flex flex-col gap-2 py-3 text-sm text-muted-foreground">
+                    <span>{t("applicationProfile.legacyNoSyncHint")}</span>
+                    <Link
+                      className="text-primary underline"
+                      href="/dashboard/profile"
+                    >
+                      {t("applicationProfile.viewExistingResume")}
+                    </Link>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
           <div className="mt-4">

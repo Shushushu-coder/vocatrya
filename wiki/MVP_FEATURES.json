@@ -37,6 +37,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
+      "implementationNotes": "个人信息现有 11 字段已集成逐字段直接编辑与自动保存，包含串行写入、失败草稿保留与重试、切换 Tab 保留草稿及 IME Enter 保护；定向测试与隔离 SQLite 单字段持久化验证通过。素材及敏感字段编辑尚未纳入，真实浏览器/Electron 与中文输入法验收待完成。",
       "description": "职业资料字段可直接编辑、自动保存，并在失败时保留输入供重试。",
       "steps": [
         "编辑一项资料字段，无需整页保存即可完成持久化；重新打开仍显示修改后的值。",
