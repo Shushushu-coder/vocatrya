@@ -17,6 +17,19 @@ import {
   createApplicationMaterial,
   updateApplicationMaterial,
 } from "@/actions/applicationProfile.actions";
+import {
+  MaterialCurrentCheckbox,
+  MaterialDateField,
+  MaterialNotesField,
+  MaterialTextField,
+} from "./MaterialAutosaveField";
+import {
+  detailFieldDraft,
+  detailFieldWire,
+  isEditableMaterialType,
+  MATERIAL_DETAIL_FIELDS,
+  toDateInput,
+} from "./materialFields";
 
 export type MaterialItem = MaterialLike & {
   id: string;
@@ -57,13 +70,6 @@ const EMPTY_MATERIAL_FORM: MaterialFormState = {
   rankText: "",
 };
 
-function toDateInput(value: unknown): string {
-  if (!value) return "";
-  const d = value instanceof Date ? value : new Date(value as string);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
-}
-
 async function copyText(text: string, copiedLabel: string, failedLabel: string) {
   const trimmed = text.trim();
   if (!trimmed) return;
@@ -90,10 +96,10 @@ type MaterialRecordsSectionProps = {
 };
 
 /**
- * One record tab's content: item cards with evidence, a section-level copy
- * action, and the create/edit form restricted to this tab's types. All
- * record CRUD is local to the section so every tab keeps an independent
- * edit session.
+ * One record tab's content: every item card edits its own fields inline and
+ * each field auto-saves through a single-key patch, so a commit can never
+ * clear sibling fields, undisplayed detail columns, or history. Evidence,
+ * copy actions, the read-only block and the create form stay unchanged.
  */
 export function MaterialRecordsSection({
   title,
@@ -109,7 +115,6 @@ export function MaterialRecordsSection({
   );
   const [materialForm, setMaterialForm] =
     useState<MaterialFormState>(EMPTY_MATERIAL_FORM);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [savingMaterial, setSavingMaterial] = useState(false);
   const [evidenceForms, setEvidenceForms] = useState<
     Record<string, { content: string; metric: string }>
@@ -158,9 +163,10 @@ export function MaterialRecordsSection({
         isCurrent: materialForm.isCurrent,
         detail: detailForSubmit(materialType),
       };
-      const res = editingId
-        ? await updateApplicationMaterial({ id: editingId, ...payload })
-        : await createApplicationMaterial({ type: materialType, ...payload });
+      const res = await createApplicationMaterial({
+        type: materialType,
+        ...payload,
+      });
       if (!res.success) {
         toastError(t("applicationProfile.saveFailed"), undefined, {
           sticky: true,
@@ -168,7 +174,6 @@ export function MaterialRecordsSection({
         return;
       }
       toastSuccess(t("applicationProfile.saveSuccess"));
-      setEditingId(null);
       setMaterialForm(EMPTY_MATERIAL_FORM);
       await onChanged();
     } finally {
@@ -176,71 +181,26 @@ export function MaterialRecordsSection({
     }
   }
 
-  function startEditMaterial(item: MaterialItem) {
-    setMaterialType(item.type);
-    setEditingId(item.id);
-    const anyItem = item as unknown as Record<
-      string,
-      Record<string, string | number | null> | undefined
-    >;
-    const edu = anyItem.educationDetail;
-    const intern = anyItem.internshipDetail;
-    const project = anyItem.projectDetail;
-    const campus = anyItem.campusActivityDetail;
-    const research = anyItem.researchDetail;
-    const publication = anyItem.publicationDetail;
-    const competition = anyItem.competitionDetail;
-    const award = anyItem.awardDetail;
-    const skill = anyItem.skillDetail;
-    const certification = anyItem.certificationDetail;
-    setMaterialForm({
-      title: item.title ?? "",
-      organization:
-        (edu?.institution as string) ??
-        (intern?.organizationName as string) ??
-        (project?.organizationName as string) ??
-        (campus?.organizationName as string) ??
-        (research?.institution as string) ??
-        (publication?.venue as string) ??
-        (competition?.organizer as string) ??
-        (award?.issuer as string) ??
-        (certification?.organization as string) ??
-        "",
-      role:
-        (intern?.roleTitle as string) ??
-        (project?.roleTitle as string) ??
-        (campus?.roleTitle as string) ??
-        (research?.roleTitle as string) ??
-        (publication?.authors as string) ??
-        (competition?.result as string) ??
-        (skill?.proficiency as string) ??
-        "",
-      notes: (item.notes as string) ?? "",
-      startDate: toDateInput(
-        (item as unknown as { startDate?: unknown }).startDate,
-      ),
-      endDate: toDateInput((item as unknown as { endDate?: unknown }).endDate),
-      isCurrent: Boolean(
-        (item as unknown as { isCurrent?: boolean }).isCurrent,
-      ),
-      institution: (edu?.institution as string) ?? "",
-      degree: (edu?.degree as string) ?? "",
-      fieldOfStudy: (edu?.fieldOfStudy as string) ?? "",
-      gpaValue:
-        edu?.gpaValue !== null && edu?.gpaValue !== undefined
-          ? String(edu.gpaValue)
-          : "",
-      gpaScale:
-        edu?.gpaScale !== null && edu?.gpaScale !== undefined
-          ? String(edu.gpaScale)
-          : "",
-      rankText: (edu?.rankText as string) ?? "",
-    });
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setMaterialForm(EMPTY_MATERIAL_FORM);
+  /**
+   * Single-field incremental write: the patch carries exactly one edited key
+   * (one base column, or one key inside `detail`), so untouched fields are
+   * never sent and cannot be cleared by the update.
+   */
+  async function saveMaterialPatch(
+    item: MaterialItem,
+    patch: {
+      title?: string;
+      notes?: string | null;
+      startDate?: string | null;
+      endDate?: string | null;
+      isCurrent?: boolean;
+      detail?: Record<string, unknown>;
+    },
+  ): Promise<boolean> {
+    const res = await updateApplicationMaterial({ id: item.id, ...patch });
+    if (!res.success) return false;
+    await onChanged();
+    return true;
   }
 
   async function archiveMaterial(id: string) {
@@ -278,16 +238,121 @@ export function MaterialRecordsSection({
     }
   }
 
-  function renderMaterialCard(item: MaterialItem) {
+  function renderEvidenceBlock(item: MaterialItem) {
     const evidence = (
       (item as unknown as {
         evidence?: { content?: string | null; metricText?: string | null }[];
       }).evidence ?? []
     ).filter((e) => e.content?.trim());
     return (
+      <div>
+        <div className="text-xs font-medium text-muted-foreground">
+          {t("applicationProfile.evidenceTitle")}
+        </div>
+        {evidence.length === 0 ? (
+          <div className="text-xs text-muted-foreground">
+            {t("applicationProfile.emptySection")}
+          </div>
+        ) : (
+          evidence.map((e, idx) => (
+            <div key={idx} className="text-sm">
+              - {e.content}
+              {e.metricText ? ` (${e.metricText})` : ""}
+            </div>
+          ))
+        )}
+        <div className="mt-2 flex flex-col gap-1">
+          <Input
+            placeholder={t("applicationProfile.evidenceContent")}
+            value={evidenceForms[item.id]?.content ?? ""}
+            onChange={(e) =>
+              setEvidenceForms((prev) => ({
+                ...prev,
+                [item.id]: {
+                  content: e.target.value,
+                  metric: prev[item.id]?.metric ?? "",
+                },
+              }))
+            }
+          />
+          <div className="flex gap-1">
+            <Input
+              placeholder={t("applicationProfile.evidenceMetric")}
+              value={evidenceForms[item.id]?.metric ?? ""}
+              onChange={(e) =>
+                setEvidenceForms((prev) => ({
+                  ...prev,
+                  [item.id]: {
+                    content: prev[item.id]?.content ?? "",
+                    metric: e.target.value,
+                  },
+                }))
+              }
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => addEvidence(item.id)}
+            >
+              {t("applicationProfile.evidenceAdd")}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderMaterialCard(item: MaterialItem) {
+    if (!isEditableMaterialType(item.type)) {
+      // Legacy/non-allowlist records (EMPLOYMENT, CUSTOM, unknown types)
+      // stay read-only, same as before.
+      return (
+        <Card key={item.id}>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-sm">{item.title}</CardTitle>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  copyText(
+                    buildMaterialItemText(item),
+                    t("common.copied"),
+                    t("applicationProfile.copyFailed"),
+                  )
+                }
+              >
+                {t("applicationProfile.copyItem")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => archiveMaterial(item.id)}
+              >
+                {t("applicationProfile.archiveMaterial")}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 text-sm">
+            {item.notes?.trim() && (
+              <div className="text-muted-foreground">{item.notes}</div>
+            )}
+            {renderEvidenceBlock(item)}
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const fieldPrefix = `material-${item.id}`;
+    return (
       <Card key={item.id}>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-sm">{item.title}</CardTitle>
+          <CardTitle className="text-sm">
+            <span className="mr-2 font-normal text-muted-foreground">
+              {t(`applicationProfile.materialType${item.type}`)}
+            </span>
+            <span>{item.title}</span>
+          </CardTitle>
           <div className="flex gap-1">
             <Button
               variant="ghost"
@@ -305,13 +370,6 @@ export function MaterialRecordsSection({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => startEditMaterial(item)}
-            >
-              {t("common.edit")}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
               onClick={() => archiveMaterial(item.id)}
             >
               {t("applicationProfile.archiveMaterial")}
@@ -319,63 +377,73 @@ export function MaterialRecordsSection({
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm">
-          {item.notes?.trim() && (
-            <div className="text-muted-foreground">{item.notes}</div>
-          )}
-          <div>
-            <div className="text-xs font-medium text-muted-foreground">
-              {t("applicationProfile.evidenceTitle")}
-            </div>
-            {evidence.length === 0 ? (
-              <div className="text-xs text-muted-foreground">
-                {t("applicationProfile.emptySection")}
-              </div>
-            ) : (
-              evidence.map((e, idx) => (
-                <div key={idx} className="text-sm">
-                  - {e.content}
-                  {e.metricText ? ` (${e.metricText})` : ""}
-                </div>
-              ))
-            )}
-            <div className="mt-2 flex flex-col gap-1">
-              <Input
-                placeholder={t("applicationProfile.evidenceContent")}
-                value={evidenceForms[item.id]?.content ?? ""}
-                onChange={(e) =>
-                  setEvidenceForms((prev) => ({
-                    ...prev,
-                    [item.id]: {
-                      content: e.target.value,
-                      metric: prev[item.id]?.metric ?? "",
-                    },
-                  }))
-                }
-              />
-              <div className="flex gap-1">
-                <Input
-                  placeholder={t("applicationProfile.evidenceMetric")}
-                  value={evidenceForms[item.id]?.metric ?? ""}
-                  onChange={(e) =>
-                    setEvidenceForms((prev) => ({
-                      ...prev,
-                      [item.id]: {
-                        content: prev[item.id]?.content ?? "",
-                        metric: e.target.value,
-                      },
-                    }))
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <MaterialTextField
+              label={t("applicationProfile.materialTitle")}
+              committed={item.title?.trim() ?? ""}
+              required
+              onSave={(v) => saveMaterialPatch(item, { title: v })}
+              testId={`${fieldPrefix}-title`}
+            />
+            {MATERIAL_DETAIL_FIELDS[item.type].map((def) =>
+              def.kind === "date" ? (
+                <MaterialDateField
+                  key={def.key}
+                  label={t(`applicationProfile.${def.labelKey}`)}
+                  committed={detailFieldDraft(item, def)}
+                  onSave={(v) =>
+                    saveMaterialPatch(item, {
+                      detail: { [def.key]: detailFieldWire(def, v) },
+                    })
                   }
+                  testId={`${fieldPrefix}-${def.key}`}
                 />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => addEvidence(item.id)}
-                >
-                  {t("applicationProfile.evidenceAdd")}
-                </Button>
-              </div>
-            </div>
+              ) : (
+                <MaterialTextField
+                  key={def.key}
+                  label={t(`applicationProfile.${def.labelKey}`)}
+                  committed={detailFieldDraft(item, def)}
+                  onSave={(v) =>
+                    saveMaterialPatch(item, {
+                      detail: { [def.key]: detailFieldWire(def, v) },
+                    })
+                  }
+                  testId={`${fieldPrefix}-${def.key}`}
+                />
+              ),
+            )}
           </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            <MaterialDateField
+              label={t("applicationProfile.materialStartDate")}
+              committed={toDateInput(item.startDate)}
+              onSave={(v) =>
+                saveMaterialPatch(item, { startDate: v || null })
+              }
+              testId={`${fieldPrefix}-startDate`}
+            />
+            <MaterialDateField
+              label={t("applicationProfile.materialEndDate")}
+              committed={toDateInput(item.endDate)}
+              onSave={(v) => saveMaterialPatch(item, { endDate: v || null })}
+              testId={`${fieldPrefix}-endDate`}
+            />
+            <MaterialCurrentCheckbox
+              label={t("applicationProfile.materialIsCurrent")}
+              committed={Boolean(item.isCurrent)}
+              onSave={(v) => saveMaterialPatch(item, { isCurrent: v })}
+              testId={`${fieldPrefix}-isCurrent`}
+            />
+          </div>
+          <MaterialNotesField
+            label={t("applicationProfile.materialNotes")}
+            committed={item.notes?.trim() ?? ""}
+            onSave={(v) =>
+              saveMaterialPatch(item, { notes: v === "" ? null : v })
+            }
+            testId={`${fieldPrefix}-notes`}
+          />
+          {renderEvidenceBlock(item)}
         </CardContent>
       </Card>
     );
@@ -443,9 +511,7 @@ export function MaterialRecordsSection({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            {editingId
-              ? t("applicationProfile.editMaterial")
-              : t("applicationProfile.addMaterial")}
+            {t("applicationProfile.addMaterial")}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -632,11 +698,6 @@ export function MaterialRecordsSection({
             >
               {savingMaterial ? t("common.saving") : t("common.save")}
             </Button>
-            {editingId && (
-              <Button size="sm" variant="outline" onClick={cancelEdit}>
-                {t("common.cancel")}
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>

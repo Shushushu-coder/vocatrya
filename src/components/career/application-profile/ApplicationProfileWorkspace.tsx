@@ -334,8 +334,17 @@ export function ApplicationProfileWorkspace() {
           </div>
         </TabsContent>
 
+        {/* Record panels stay mounted like `personal`: MaterialRecordsSection
+            owns per-tab edit drafts, in-flight saves and failure-retry state,
+            so a tab switch must hide the panel instead of unmounting it. */}
         {CAREER_PROFILE_RECORD_TAB_IDS.map((tabId) => (
-          <TabsContent key={tabId} value={tabId}>
+          <TabsContent
+            key={tabId}
+            value={tabId}
+            forceMount
+            hidden={activeTab !== tabId}
+            data-testid={`record-panel-${tabId}`}
+          >
             <div className="flex flex-col gap-4">
               <Button
                 size="sm"
