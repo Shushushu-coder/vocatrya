@@ -2070,7 +2070,15 @@
     "networkError": "Network connection error.",
     "rateLimitExceeded": "Rate limit exceeded. Please try again later.",
     "relatedRecordMissing": "Could not save because a related record is missing.",
-    "validationFailed": "Validation failed. Please check your inputs."
+    "validationFailed": "Validation failed. Please check your inputs.",
+    "careerEditsBlocked": "Career profile and application data cannot be changed until the data integrity check passes.",
+    "careerEditsDisabled": "Career profile and application editing is not enabled for this app yet. Changes to jobs and resumes through the previous version's editors are also unavailable.",
+    "careerReadDenied": "Career data cannot be read in the current app state.",
+    "careerWriteDenied": "Career data cannot be changed in the current app state.",
+    "careerEditorUnavailable": "This editor cannot change jobs or resumes in the current app state.",
+    "careerJobsUnavailable": "Job application data cannot be read in the current instance state.",
+    "careerCoverLetterUnsupported": "A cover letter cannot be saved with this job yet. Remove the cover letter and try again.",
+    "careerTagsUnsupported": "Tags cannot be saved with this job yet. Remove the tags and try again."
   },
   "library": {
     "title": "Library",

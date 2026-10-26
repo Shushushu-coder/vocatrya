@@ -8,6 +8,7 @@ import {
   listJobs,
 } from "@/lib/career/jobsReadDispatch";
 import { requireUser } from "../shared";
+import { getServerI18n } from "@/i18n/server";
 
 export const getJobsList = async (
   page: number = 1,
@@ -35,7 +36,8 @@ export const getJobsList = async (
       sourceValue,
     });
     if (result.blocked) {
-      return { success: false, message: result.message };
+      const { t } = await getServerI18n();
+      return { success: false, message: t("errors.careerJobsUnavailable") };
     }
     return { success: true, data: result.data, total: result.total };
   } catch (error) {
@@ -59,7 +61,8 @@ export const getJobDetails = async (
     const user = await requireUser();
     const result = await getJob(prisma, user.id, jobId);
     if (result.blocked) {
-      return { success: false, message: result.message };
+      const { t } = await getServerI18n();
+      return { success: false, message: t("errors.careerJobsUnavailable") };
     }
     return { job: result.job, success: true };
   } catch (error) {
