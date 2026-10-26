@@ -21,7 +21,8 @@
       "category": "Career Profile",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "七 Tab、显隐管理与 UserSettings 原子持久化接口已集成；包含并发保存防护。组件测试通过，真实保存、刷新、重启及历史数据验收待完成。",
       "description": "职业资料采用七 Tab，允许用户管理 Tab 显示，保留历史求职意向数据但不提供独立全局求职意向 Tab。",
       "steps": [
         "打开职业资料，能访问个人信息、教育经历、实习经历、项目经历、获奖经历、其他、网申资料七个 Tab。",
@@ -156,7 +157,8 @@
       "category": "Job UX",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "用户可见内部术语及相关错误提示已改写，中英文词条已同步，原有保护条件与错误码保留。定向测试通过，实际界面提示验收待完成。",
       "description": "用户界面不暴露 A+B、运行时环境变量等内部实验术语。",
       "steps": [
         "中英文职位相关运行提示和简历提示中不出现“A+B”或 VOCATRYA_AB_RUNTIME_ENABLED 等内部术语。",
@@ -278,7 +280,8 @@
       "category": "Basic Data",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "已集成就地创建后的立即选中、去重、失败反馈及共享选择器选项同步。定向测试通过，隔离数据库下保存和重开验收待完成。",
       "description": "需要基础数据的高频表单可在原位置创建并立即选择对应项目。",
       "steps": [
         "在新增职位等相关表单中就地创建允许的基础数据，并立即可选。",
