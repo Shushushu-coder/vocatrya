@@ -717,13 +717,50 @@ export class ApplicationService {
     if (this.isCompletedStep(existing)) {
       return existing;
     }
-    return this.db.applicationProcessStep.update({
-      where: { id: existing.id },
+    await this.db.applicationProcessStep.updateMany({
+      where: {
+        id: existing.id,
+        completedAt: null,
+        status: { notIn: [PROCESS_STEP_STATUS.COMPLETED, PROCESS_STEP_STATUS.CANCELLED] },
+      },
       data: {
         status: PROCESS_STEP_STATUS.COMPLETED,
         completedAt: new Date(),
       },
     });
+    return this.db.applicationProcessStep.findUniqueOrThrow({ where: { id: existing.id } });
+  }
+
+  async cancelProcessStep(stepId: string) {
+    await this.gate();
+    const existing = await this.requireOwnedStep(stepId);
+    if (existing.source !== PROCESS_STEP_SOURCE.USER) {
+      throw new CareerRuntimeError(
+        "PROCESS_STEP_CANCEL_NOT_ALLOWED",
+        "Only user-created process steps can be cancelled",
+      );
+    }
+    // Terminal rows are idempotent: a completed step cannot be cancelled and a
+    // cancelled step stays cancelled. completedAt doubles as the "closed at"
+    // marker so the Upcoming read model drops the row without a new contract.
+    if (
+      this.isCompletedStep(existing) ||
+      existing.status === PROCESS_STEP_STATUS.CANCELLED
+    ) {
+      return existing;
+    }
+    await this.db.applicationProcessStep.updateMany({
+      where: {
+        id: existing.id,
+        completedAt: null,
+        status: { notIn: [PROCESS_STEP_STATUS.COMPLETED, PROCESS_STEP_STATUS.CANCELLED] },
+      },
+      data: {
+        status: PROCESS_STEP_STATUS.CANCELLED,
+        completedAt: new Date(),
+      },
+    });
+    return this.db.applicationProcessStep.findUniqueOrThrow({ where: { id: existing.id } });
   }
 
   async deleteUserProcessStep(stepId: string) {

@@ -382,6 +382,25 @@ export async function completeApplicationProcessStep(
   }
 }
 
+export async function cancelApplicationProcessStep(
+  stepId: string,
+): Promise<ActionResult<ApplicationProcessStep>> {
+  try {
+    const user = await requireUser();
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    assertAbApplicationWrites(runtime);
+    const data = await applicationsFor(user.id).cancelProcessStep(stepId);
+    revalidatePath("/dashboard");
+    return { success: true, data };
+  } catch (error) {
+    const result = handleError(error, "Failed to cancel process step.");
+    if (error instanceof CareerRuntimeError) {
+      return { success: false, code: error.code, message: result.message };
+    }
+    return result;
+  }
+}
+
 export async function attachAttemptResumeVersion(input: {
   attemptId: string;
   submittedResumeVersionId: string;
