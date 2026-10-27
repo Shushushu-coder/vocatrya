@@ -48,9 +48,9 @@ export function normalizeManifest(manifest: BackupManifest): BackupManifest & {
   containsSensitiveData: boolean;
 } {
   const counts = remapCountKey(manifest.counts);
-  // ManifestSchema only admits literal versions 1-5 before this runs, so an
+  // ManifestSchema only admits literal versions 1-6 before this runs, so an
   // explicit >=3 check can never wave through an unknown future format.
-  // v3, v4 and v5 manifests carry a required containsSensitiveData flag whose
+  // v3+ manifests carry a required containsSensitiveData flag whose
   // original value must be preserved — a false normalization would make every
   // sensitive backup unrestorable and a true one would smuggle sensitive
   // groups past assertNoSensitiveKeysWhenStandard.

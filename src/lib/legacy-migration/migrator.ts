@@ -1112,6 +1112,10 @@ async function migrateCareerMaterials(
             skillDetail: {
               create: {
                 skillName: row.Tag.label,
+                // Keep the real tag reference only when the Tag still belongs
+                // to this user; a cross-user or missing row falls back to the
+                // text snapshot rather than fabricating a link (BD-LINKS).
+                tagId: row.Tag.createdBy === userId ? row.Tag.id : null,
                 structuredData: JSON.stringify({
                   skillOrder: row.order,
                   category: row.category,

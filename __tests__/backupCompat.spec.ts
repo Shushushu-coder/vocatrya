@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { z } from "zod";
 import {
   emptyStandardBackupData,
   normalizeBackupData,
@@ -103,12 +104,37 @@ describe("backup v3 compatibility", () => {
     await expect(readManifest(zip)).rejects.toBeInstanceOf(BackupError);
   });
 
-  it("writes v5 standard backups without sensitive groups or flag true", () => {
+  it("writes v6 standard backups without sensitive groups or flag true", () => {
     const data = emptyStandardBackupData();
     const manifest = buildManifest(data, "a@b.com");
-    expect(manifest.formatVersion).toBe(5);
+    expect(manifest.formatVersion).toBe(6);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(manifest.counts).not.toHaveProperty("CandidateSensitiveInfo");
     expect(JSON.stringify(data)).not.toContain("CandidateSensitiveInfo");
+  });
+
+  it("a v5-era reader rejects the v6 wire format instead of degrading", async () => {
+    // The shipped v5 ManifestSchema is the literal union 1-5. If a v6 backup
+    // parsed there, the tagId keys it cannot restore would be silently
+    // dropped — fail-closed is the contract (BD-LINKS §6).
+    const v5EraManifestSchema = z.object({
+      formatVersion: z.union([
+        z.literal(1),
+        z.literal(2),
+        z.literal(3),
+        z.literal(4),
+        z.literal(5),
+      ]),
+    });
+    const manifest = { ...buildManifest(emptyStandardBackupData(), "a@b.com") };
+    expect(manifest.formatVersion).toBe(6);
+    expect(v5EraManifestSchema.safeParse(manifest).success).toBe(false);
+
+    const zip = new JSZip();
+    zip.file("manifest.json", JSON.stringify(manifest));
+    // ...and this build reads the same file fine.
+    await expect(readManifest(zip)).resolves.toMatchObject({
+      formatVersion: 6,
+    });
   });
 });

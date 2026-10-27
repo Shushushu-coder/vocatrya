@@ -35,6 +35,9 @@ const OPTIONAL_FKS = new Set<string>([
   "ApplicationAttempt.transferredFromAttemptId",
   "CareerInternshipDetail.companyId",
   "CareerEmploymentDetail.companyId",
+  // SetNull FK: a v1-v5 backup has no tagId, and a v6 row whose Tag was never
+  // exported (or pruned) degrades to null — the skillName snapshot carries on.
+  "CareerSkillDetail.tagId",
   // SetNull FK: an attachment whose material row is absent from the backup
   // (or a standard-only restore) degrades to null instead of aborting.
   "CandidateAttachment.materialItemId",

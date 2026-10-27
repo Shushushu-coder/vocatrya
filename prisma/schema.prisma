@@ -621,14 +621,15 @@ model Note {
 }
 
 model Tag {
-  id        String     @id @default(uuid())
-  label     String
-  value     String
-  createdBy String
-  user      User       @relation(fields: [createdBy], references: [id])
-  jobs      Job[]
-  questions Question[]
-  skills    Skill[]
+  id                 String              @id @default(uuid())
+  label              String
+  value              String
+  createdBy          String
+  user               User                @relation(fields: [createdBy], references: [id])
+  jobs               Job[]
+  questions          Question[]
+  skills             Skill[]
+  careerSkillDetails CareerSkillDetail[]
 
   @@unique([value, createdBy])
 }
@@ -1290,11 +1291,15 @@ model CareerSkillDetail {
   materialItemId String   @unique
   skillName      String?
   proficiency    String?
+  tagId          String?
   structuredData String   @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+  tag          Tag?               @relation(fields: [tagId], references: [id], onDelete: SetNull)
+
+  @@index([tagId])
 }
 
 model CareerCertificationDetail {

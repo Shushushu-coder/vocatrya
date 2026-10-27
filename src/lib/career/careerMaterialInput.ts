@@ -21,6 +21,10 @@ const FORBIDDEN_DETAIL_KEYS = new Set([
   "companyId",
   "company",
   "materialItem",
+  // The skill↔Tag link only moves through the dedicated setSkillTag path —
+  // a generic detail patch must never create or remove the reference.
+  "tagId",
+  "tag",
 ]);
 
 /**

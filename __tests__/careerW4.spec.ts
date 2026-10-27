@@ -238,16 +238,16 @@ describe("sensitive masking", () => {
   });
 });
 
-describe("backup V5 schema surface", () => {
+describe("backup V6 schema surface", () => {
   it("rejects PDF bytes for ID photos during restore", () => {
     const pdf = Buffer.from("%PDF-1.4\n");
     expect(checkImportedAttachment(pdf, "ID_PHOTO")).toBeNull();
     expect(checkImportedAttachment(pdf, "AWARD_PROOF")?.kind).toBe("pdf");
     expect(checkImportedAttachment(PNG_BYTES, "UNKNOWN")).toBeNull();
   });
-  it("declares version 5 and supports 1..5", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(5);
-    for (const v of [1, 2, 3, 4, 5]) {
+  it("declares version 6 and supports 1..6", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(6);
+    for (const v of [1, 2, 3, 4, 5, 6]) {
       expect(SUPPORTED_BACKUP_FORMAT_VERSIONS).toContain(v);
     }
   });
@@ -322,7 +322,7 @@ describe("referee + attachment services (isolated db)", () => {
   });
 });
 
-describe("backup V5 round trip", () => {
+describe("backup round trip", () => {
   async function seedCareerData() {
     await prisma.candidateProfile.create({
       data: { userId, fullName: "张三", wechatId: "wx-1", countryOrRegion: "中国" },
@@ -369,7 +369,7 @@ describe("backup V5 round trip", () => {
     const stdManifest = JSON.parse(
       await stdZip.file("manifest.json")!.async("string"),
     );
-    expect(stdManifest.formatVersion).toBe(5);
+    expect(stdManifest.formatVersion).toBe(6);
     expect(stdManifest.containsSensitiveData).toBe(false);
     expect(stdData.CandidateReferee).toBeUndefined();
     expect(stdData.CandidateAttachment).toBeUndefined();
@@ -420,5 +420,97 @@ describe("backup V5 round trip", () => {
       where: { userId: freshId },
     });
     expect(profile.wechatId).toBe("wx-1");
+  });
+
+  async function zipBytes(
+    manifest: Record<string, unknown>,
+    data: Record<string, unknown>,
+  ): Promise<Buffer> {
+    const zip = new JSZip();
+    zip.file("manifest.json", JSON.stringify(manifest));
+    zip.file("data.json", JSON.stringify(data));
+    return zip.generateAsync({ type: "nodebuffer" });
+  }
+
+  it("v6 remaps skill tagId through the idmap; dangling and pre-v6 rows degrade to null", async () => {
+    const tag = await prisma.tag.create({
+      data: { label: "React", value: "react", createdBy: userId },
+    });
+    const item = await prisma.careerMaterialItem.create({
+      data: { userId, type: "SKILL", title: "React" },
+    });
+    await prisma.careerSkillDetail.create({
+      data: {
+        materialItemId: item.id,
+        skillName: "React",
+        proficiency: "advanced",
+        tagId: tag.id,
+      },
+    });
+
+    const { buffer } = await buildBackupZip(userId, "w4@example.com");
+    const zip = await JSZip.loadAsync(buffer);
+    const manifest = JSON.parse(
+      await zip.file("manifest.json")!.async("string"),
+    );
+    const data = JSON.parse(await zip.file("data.json")!.async("string"));
+    expect(manifest.formatVersion).toBe(6);
+    expect(data.CareerSkillDetail[0].tagId).toBe(tag.id);
+
+    await resetDisposableDb(prisma);
+    const freshId = await seedAccount(prisma, "fresh@example.com");
+    await importBackup(buffer, freshId, "fresh@example.com", false);
+
+    const restoredTag = await prisma.tag.findFirstOrThrow({
+      where: { createdBy: freshId, value: "react" },
+    });
+    const detail = await prisma.careerSkillDetail.findFirstOrThrow({
+      where: { materialItem: { userId: freshId } },
+    });
+    // Lookup restore mints fresh ids — the FK must follow the idmap, not the
+    // original id, and the text snapshot rides along untouched.
+    expect(restoredTag.id).not.toBe(tag.id);
+    expect(detail.tagId).toBe(restoredTag.id);
+    expect(detail.skillName).toBe("React");
+
+    // A v6 row whose Tag never made the backup degrades to null — the
+    // OPTIONAL_FKS path, same as the database SetNull fallback.
+    await resetDisposableDb(prisma);
+    const secondId = await seedAccount(prisma, "second@example.com");
+    await importBackup(
+      await zipBytes(manifest, { ...data, Tag: [] }),
+      secondId,
+      "second@example.com",
+      false,
+    );
+    const orphan = await prisma.careerSkillDetail.findFirstOrThrow({
+      where: { materialItem: { userId: secondId } },
+    });
+    expect(orphan.tagId).toBeNull();
+    expect(orphan.skillName).toBe("React");
+
+    // A pre-v6 row has no tagId key at all — missing parses and restores NULL.
+    await resetDisposableDb(prisma);
+    const thirdId = await seedAccount(prisma, "third@example.com");
+    const v5Data = {
+      ...data,
+      CareerSkillDetail: data.CareerSkillDetail.map(
+        (row: Record<string, unknown>) => {
+          const { tagId: _drop, ...rest } = row;
+          return rest;
+        },
+      ),
+    };
+    await importBackup(
+      await zipBytes({ ...manifest, formatVersion: 5 }, v5Data),
+      thirdId,
+      "third@example.com",
+      false,
+    );
+    const legacy = await prisma.careerSkillDetail.findFirstOrThrow({
+      where: { materialItem: { userId: thirdId } },
+    });
+    expect(legacy.tagId).toBeNull();
+    expect(legacy.skillName).toBe("React");
   });
 });

@@ -15,8 +15,8 @@ const validManifest = {
 };
 
 describe("manifest schema", () => {
-  it("pins new backups at format version 5", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(5);
+  it("pins new backups at format version 6", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(6);
   });
 
   it("accepts a well-formed v3 manifest", () => {
@@ -116,5 +116,25 @@ describe("data schema", () => {
       jobStatuses: [{ label: "New", value: "new" }],
     });
     expect(parsed.jobStatuses[0].value).toBe("new");
+  });
+
+  it("keeps CareerSkillDetail.tagId optional and nullable for pre-v6 rows", () => {
+    const row = {
+      id: "d1",
+      materialItemId: "m1",
+      skillName: "TS",
+      proficiency: null,
+      structuredData: "{}",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    // A v1-v5 row has no tagId key at all; a v6 row may carry null or an id.
+    expect(BackupDataSchema.parse({ CareerSkillDetail: [row] })
+      .CareerSkillDetail[0].tagId).toBeUndefined();
+    const parsed = BackupDataSchema.parse({
+      CareerSkillDetail: [{ ...row, tagId: null }, { ...row, id: "d2", tagId: "t9" }],
+    });
+    expect(parsed.CareerSkillDetail[0].tagId).toBeNull();
+    expect(parsed.CareerSkillDetail[1].tagId).toBe("t9");
   });
 });

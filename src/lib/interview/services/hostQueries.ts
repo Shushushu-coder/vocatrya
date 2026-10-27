@@ -301,7 +301,13 @@ export class VocatryaInterviewQueries {
           select: { institution: true, degree: true, fieldOfStudy: true },
         },
         awardDetail: { select: { issuer: true } },
-        skillDetail: { select: { skillName: true, proficiency: true } },
+        skillDetail: {
+          select: {
+            skillName: true,
+            proficiency: true,
+            tag: { select: { label: true } },
+          },
+        },
         certificationDetail: { select: { organization: true } },
         competitionDetail: {
           select: { organizer: true, awardLevel: true },
@@ -338,7 +344,7 @@ export class VocatryaInterviewQueries {
       }
       if (!detailExtra && row.skillDetail) {
         detailExtra =
-          [row.skillDetail.skillName, row.skillDetail.proficiency]
+          [row.skillDetail.tag?.label ?? row.skillDetail.skillName, row.skillDetail.proficiency]
             .filter(Boolean)
             .join(" ") || null;
       }

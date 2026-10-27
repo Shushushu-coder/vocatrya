@@ -11,18 +11,21 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 5;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5] as const;
+export const BACKUP_FORMAT_VERSION = 6;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
 export const ManifestSchema = z.object({
+  // Literal union on purpose: a v5-era binary parses the same key with
+  // literals 1-5, so a v6 file fails there instead of degrading silently.
   formatVersion: z.union([
     z.literal(1),
     z.literal(2),
     z.literal(3),
     z.literal(4),
     z.literal(5),
+    z.literal(6),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -756,6 +759,9 @@ const CareerSkillDetail = z.object({
   materialItemId: id,
   skillName: optStr,
   proficiency: optStr,
+  // Format-6 skill↔Tag link. Optional as well as nullable: a v1-v5 backup
+  // has no such key, and undefined restores as NULL (no name matching, ever).
+  tagId: optId.optional(),
   structuredData: str,
   createdAt: dt,
   updatedAt: dt,

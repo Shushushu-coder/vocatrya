@@ -407,7 +407,7 @@ describe("format 4 manifest compat", () => {
   });
 
   it("rejects unknown future formats before normalization", () => {
-    for (const formatVersion of [6, 99]) {
+    for (const formatVersion of [7, 99]) {
       expect(
         ManifestSchema.safeParse({ ...base, formatVersion }).success,
       ).toBe(false);
@@ -428,6 +428,27 @@ describe("format 4 manifest compat", () => {
       ManifestSchema.safeParse({ ...base, formatVersion: 4 }).success,
     ).toBe(true);
   });
+
+  it("lets a v5-era consumer reject format 6 instead of silently dropping tagId", () => {
+    // Same literal-union contract one version later: the v5 build only admits
+    // literals 1-5, so a v6 manifest fails before CareerSkillDetail.tagId can
+    // be silently stripped from the data payload (BD-LINKS §6).
+    const v5ConsumerSchema = z.object({
+      formatVersion: z.union([
+        z.literal(1),
+        z.literal(2),
+        z.literal(3),
+        z.literal(4),
+        z.literal(5),
+      ]),
+    });
+    expect(
+      v5ConsumerSchema.safeParse({ ...base, formatVersion: 6 }).success,
+    ).toBe(false);
+    expect(
+      ManifestSchema.safeParse({ ...base, formatVersion: 6 }).success,
+    ).toBe(true);
+  });
 });
 
 describe("DateTime V1 backup round-trip", () => {
@@ -436,7 +457,7 @@ describe("DateTime V1 backup round-trip", () => {
     const { buffer } = await buildBackupZip(userId, EMAIL);
     const { manifest, data } = await readZip(buffer);
 
-    expect(manifest.formatVersion).toBe(5);
+    expect(manifest.formatVersion).toBe(6);
     expect(manifest.containsSensitiveData).toBe(false);
 
     const exportedStep = data.ApplicationProcessStep.find(
@@ -579,7 +600,7 @@ describe("DateTime V1 backup round-trip", () => {
       includeSensitiveData: true,
     });
     const { manifest } = await readZip(buffer);
-    expect(manifest.formatVersion).toBe(5);
+    expect(manifest.formatVersion).toBe(6);
     expect(manifest.containsSensitiveData).toBe(true);
 
     await prisma.candidateSensitiveInfo.deleteMany();
@@ -625,11 +646,11 @@ describe("DateTime V1 backup round-trip", () => {
     );
   }, 60_000);
 
-  it("rejects an unknown format 6 manifest", async () => {
+  it("rejects an unknown format 7 manifest", async () => {
     const buffer = await zipOf(
       {
         ...buildManifest(BackupDataSchema.parse({}), EMAIL),
-        formatVersion: 6,
+        formatVersion: 7,
       },
       BackupDataSchema.parse({}),
     );

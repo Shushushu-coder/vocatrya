@@ -60,8 +60,13 @@ export const getTagList = async (
           value: true,
           _count: {
             select: ab
-              ? { questions: true, skills: true }
-              : { jobs: true, questions: true, skills: true },
+              ? { questions: true, skills: true, careerSkillDetails: true }
+              : {
+                  jobs: true,
+                  questions: true,
+                  skills: true,
+                  careerSkillDetails: true,
+                },
           },
         },
         // A+B cannot sort on a frozen legacy count; label order stays
@@ -151,29 +156,47 @@ export const deleteTagById = async (
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
-
-    const [jobs, questions, skills] = await Promise.all([
-      prisma.job.count({ where: { tags: { some: { id: tagId } } } }),
-      prisma.question.count({ where: { tags: { some: { id: tagId } } } }),
-      prisma.skill.count({ where: { tagId } }),
-    ]);
-
-    if (jobs > 0 || questions > 0 || skills > 0) {
-      const links = [
-        jobs > 0 ? `${jobs} job(s)` : "",
-        questions > 0 ? `${questions} question(s)` : "",
-        skills > 0 ? `${skills} skill(s)` : "",
-      ]
-        .filter(Boolean)
-        .join(" and ");
-
-      throw new Error(
-        `Skill tag cannot be deleted because it is linked to ${links}.`,
-      );
+    if (typeof tagId !== "string" || !tagId.trim()) {
+      throw new Error("Skill tag not found.");
     }
 
-    const res = await prisma.tag.delete({
-      where: { id: tagId, createdBy: user.id },
+    // careerSkillDetails counts live AND archived material rows: archiving a
+    // skill record must not free the Tag for deletion (BD-LINKS contract).
+    // Counts and delete run in one transaction so a reference created
+    // concurrently cannot slip between the check and the delete.
+    const res = await prisma.$transaction(async (tx) => {
+      const owned = await tx.tag.findFirst({
+        where: { id: tagId, createdBy: user.id },
+        select: { id: true },
+      });
+      if (!owned) throw new Error("Skill tag not found.");
+      const [jobs, questions, skills, careerSkillDetails] = await Promise.all([
+        tx.job.count({ where: { tags: { some: { id: tagId } } } }),
+        tx.question.count({ where: { tags: { some: { id: tagId } } } }),
+        tx.skill.count({ where: { tagId } }),
+        tx.careerSkillDetail.count({ where: { tagId } }),
+      ]);
+
+      if (jobs > 0 || questions > 0 || skills > 0 || careerSkillDetails > 0) {
+        const links = [
+          jobs > 0 ? `${jobs} job(s)` : "",
+          questions > 0 ? `${questions} question(s)` : "",
+          skills > 0 ? `${skills} skill(s)` : "",
+          careerSkillDetails > 0
+            ? `${careerSkillDetails} career skill record(s)`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" and ");
+
+        throw new Error(
+          `Skill tag cannot be deleted because it is linked to ${links}.`,
+        );
+      }
+
+      return tx.tag.delete({
+        where: { id: tagId, createdBy: user.id },
+      });
     });
 
     return { res, success: true };

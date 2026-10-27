@@ -806,10 +806,10 @@ export const FIELD_MAPPING_MATRIX: FieldMappingRow[] = [
   },
   {
     legacyField: "Skill + Tag.label",
-    destination: "CareerMaterialItem type=SKILL + CareerSkillDetail.skillName",
+    destination: "CareerMaterialItem type=SKILL + CareerSkillDetail.skillName (+ tagId when same-user)",
     classification: "SAFE",
-    notes: "skillName = Tag.label. Duplicate candidates by normalized name. Preserve Skill.order only inside a variant expression, not as identity.",
-    codeEvidence: "schema Skill.order / Tag",
+    notes: "skillName = Tag.label text snapshot always written. tagId retained only when the referenced Tag exists and Tag.createdBy equals the target user — no backfill, no name matching, no re-run of migrated rows. Duplicate candidates by normalized name. Preserve Skill.order only inside a variant expression, not as identity.",
+    codeEvidence: "schema Skill.order / Tag; migrator.ts SKILL branch",
   },
   {
     legacyField: "Summary.content",

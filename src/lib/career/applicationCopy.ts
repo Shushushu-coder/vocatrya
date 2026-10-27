@@ -29,7 +29,11 @@ export type MaterialLike = {
   campusActivityDetail?: { organizationName?: string | null; roleTitle?: string | null } | null;
   educationDetail?: { institution?: string | null; degree?: string | null; fieldOfStudy?: string | null } | null;
   awardDetail?: { issuer?: string | null } | null;
-  skillDetail?: { skillName?: string | null; proficiency?: string | null } | null;
+  skillDetail?: {
+    skillName?: string | null;
+    proficiency?: string | null;
+    tag?: { id?: string | null; label?: string | null } | null;
+  } | null;
   certificationDetail?: { organization?: string | null } | null;
   languageDetail?: { language?: string | null; examOrLevel?: string | null; score?: string | null } | null;
   customDetail?: unknown;
@@ -79,10 +83,11 @@ function materialOrgRole(item: MaterialLike): string | null {
   if (item.publicationDetail?.venue) return item.publicationDetail.venue;
   if (item.competitionDetail?.organizer) return item.competitionDetail.organizer;
   if (item.awardDetail?.issuer) return item.awardDetail.issuer;
-  if (item.skillDetail?.skillName) {
-    return item.skillDetail.proficiency
-      ? `${item.skillDetail.skillName} (${item.skillDetail.proficiency})`
-      : item.skillDetail.skillName;
+  const skillName = item.skillDetail?.tag?.label ?? item.skillDetail?.skillName;
+  if (skillName) {
+    return item.skillDetail?.proficiency
+      ? `${skillName} (${item.skillDetail.proficiency})`
+      : skillName;
   }
   if (item.certificationDetail?.organization) return item.certificationDetail.organization;
   if (item.languageDetail) {
