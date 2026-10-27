@@ -18,11 +18,15 @@ import {
   TableRow,
 } from "../ui/table";
 import { JobTitle } from "@/models/job.model";
-import { Briefcase, MoreVertical, Trash } from "lucide-react";
+import { Briefcase, MoreVertical, Pencil, Trash } from "lucide-react";
 import Link from "next/link";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
-import { deleteJobTitleById } from "@/actions/jobtitle.actions";
+import DictionaryLabelDialog from "./DictionaryLabelDialog";
+import {
+  deleteJobTitleById,
+  updateJobTitle,
+} from "@/actions/jobtitle.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 
@@ -37,6 +41,7 @@ function JobTitlesTable({ jobTitles, reloadJobTitles }: JobTitlesTableProps) {
     openState: false,
     deleteAction: false,
   });
+  const [editTarget, setEditTarget] = useState<JobTitle | null>(null);
 
   const onDeleteJobTitle = (title: JobTitle) => {
     const totalJobs = title._count?.jobsTotal ?? 0;
@@ -151,6 +156,13 @@ function JobTitlesTable({ jobTitles, reloadJobTitles }: JobTitlesTableProps) {
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => setEditTarget(title)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        {t("common.edit")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         className="cursor-pointer text-destructive-text focus:text-destructive-text"
                         onClick={() => onDeleteJobTitle(title)}
                       >
@@ -165,6 +177,17 @@ function JobTitlesTable({ jobTitles, reloadJobTitles }: JobTitlesTableProps) {
           })}
         </TableBody>
       </Table>
+      <DictionaryLabelDialog
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        title={`${t("common.edit")} ${t("library.jobTitleItem")}`}
+        fieldLabel={t("common.name")}
+        initialLabel={editTarget?.label ?? ""}
+        submit={(label) => updateJobTitle(editTarget!.id, label)}
+        onSaved={reloadJobTitles}
+      />
       <DeleteAlertDialog
         pageTitle="title"
         open={alert.openState}

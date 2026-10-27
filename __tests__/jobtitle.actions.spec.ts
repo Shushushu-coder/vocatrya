@@ -1,7 +1,9 @@
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import {
   getAllJobTitles,
   getJobTitleList,
   createJobTitle,
+  updateJobTitle,
   deleteJobTitleById,
 } from "@/actions/jobtitle.actions";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -17,6 +19,8 @@ vi.mock("@prisma/client", () => {
       findMany: vi.fn(),
       count: vi.fn(),
       upsert: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
     workExperience: {
@@ -26,11 +30,13 @@ vi.mock("@prisma/client", () => {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
+    $transaction: vi.fn(),
     jobOpportunity: {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
   };
+  mPrismaClient.$transaction.mockImplementation(async (run) => run(mPrismaClient));
   return { PrismaClient: vi.fn(function() { return mPrismaClient; }) };
 });
 
@@ -58,6 +64,7 @@ describe("Job Title Actions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.jobOpportunity.count as any).mockResolvedValue(0);
   });
 
   describe("getAllJobTitles", () => {
@@ -295,7 +302,7 @@ describe("Job Title Actions", () => {
       const result = await getJobTitleList(1, 10, "applied");
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/unavailable/i);
+      expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
       expect(prisma.jobTitle.findMany).not.toHaveBeenCalled();
       expect(prisma.job.groupBy).not.toHaveBeenCalled();
     });
@@ -317,7 +324,7 @@ describe("Job Title Actions", () => {
       expect(result).toEqual(mockTitle);
       expect(prisma.jobTitle.upsert).toHaveBeenCalledWith({
         where: { value_createdBy: { value: "senior developer", createdBy: mockUser.id } },
-        update: { label: "Senior Developer" },
+        update: {},
         create: {
           label: "Senior Developer",
           value: "senior developer",
@@ -332,6 +339,18 @@ describe("Job Title Actions", () => {
       const result = await createJobTitle("Developer");
 
       expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.jobTitle.upsert).not.toHaveBeenCalled();
+    });
+
+    it("should reject an empty label before touching the database", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+
+      const result = await createJobTitle("   ");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job title label cannot be empty.",
+      });
       expect(prisma.jobTitle.upsert).not.toHaveBeenCalled();
     });
 
@@ -364,7 +383,7 @@ describe("Job Title Actions", () => {
             createdBy: mockUser.id,
           },
         },
-        update: { label: "Ingénieur Logiciel" },
+        update: {},
         create: {
           label: "Ingénieur Logiciel",
           value: "ingenieur logiciel",
@@ -372,6 +391,132 @@ describe("Job Title Actions", () => {
         },
       });
       expect(result.value).toBe("ingenieur logiciel");
+    });
+  });
+
+  describe("updateJobTitle", () => {
+    const existing = {
+      id: "title-1",
+      label: "Developer",
+      value: "developer",
+      createdBy: "user-id",
+    };
+
+    it("should rename the label and recompute the canonical value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(null);
+      const updated = { ...existing, label: "Senior Dev", value: "senior dev" };
+      (prisma.jobTitle.update as any).mockResolvedValue(updated);
+
+      const result = await updateJobTitle("title-1", "  Senior Dev  ");
+
+      expect(result).toEqual({ success: true, data: updated });
+      expect(prisma.jobTitle.findFirst).toHaveBeenNthCalledWith(2, {
+        where: { value: "senior dev", createdBy: mockUser.id },
+      });
+      expect(prisma.jobTitle.update).toHaveBeenCalledWith({
+        where: { id: "title-1", createdBy: mockUser.id },
+        data: { label: "Senior Dev", value: "senior dev" },
+      });
+    });
+
+    it("should keep the stored value when the label is unchanged", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as any).mockResolvedValue(existing);
+      (prisma.jobTitle.update as any).mockResolvedValue(existing);
+
+      const result = await updateJobTitle("title-1", " Developer ");
+
+      expect(result.success).toBe(true);
+      // Only the ownership lookup ran — no conflict probe for a no-op rename.
+      expect(prisma.jobTitle.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.jobTitle.update).toHaveBeenCalledWith({
+        where: { id: "title-1", createdBy: mockUser.id },
+        data: { label: "Developer", value: "developer" },
+      });
+    });
+
+    it("should reject a rename that collides with another row's value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce({ id: "title-2", value: "designer" });
+
+      const result = await updateJobTitle("title-1", "Designer");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job title already exists!",
+      });
+      expect(prisma.jobTitle.update).not.toHaveBeenCalled();
+    });
+
+    it("should allow keeping the same canonical value on a casing change", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(existing); // the conflict probe finds only itself
+      (prisma.jobTitle.update as any).mockResolvedValue(existing);
+
+      const result = await updateJobTitle("title-1", "DEVELOPER");
+
+      expect(result.success).toBe(true);
+      expect(prisma.jobTitle.update).toHaveBeenCalledWith({
+        where: { id: "title-1", createdBy: mockUser.id },
+        data: { label: "DEVELOPER", value: "developer" },
+      });
+    });
+
+    it("should return error when the row does not belong to the user", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as any).mockResolvedValue(null);
+
+      const result = await updateJobTitle("title-1", "New Label");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job title not found",
+      });
+      expect(prisma.jobTitle.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for an empty label", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as any).mockResolvedValue(existing);
+
+      const result = await updateJobTitle("title-1", "   ");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job title label cannot be empty.",
+      });
+      expect(prisma.jobTitle.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for unauthenticated user", async () => {
+      (getCurrentUser as any).mockResolvedValue(null);
+
+      const result = await updateJobTitle("title-1", "New Label");
+
+      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.jobTitle.findFirst).not.toHaveBeenCalled();
+      expect(prisma.jobTitle.update).not.toHaveBeenCalled();
+    });
+
+    it("should handle unexpected errors", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(null);
+      (prisma.jobTitle.update as any).mockRejectedValue(
+        new Error("Update failed")
+      );
+
+      const result = await updateJobTitle("title-1", "New Label");
+
+      expect(result).toEqual({ success: false, message: "Update failed" });
     });
   });
 

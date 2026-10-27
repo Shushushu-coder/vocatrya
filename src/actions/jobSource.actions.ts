@@ -3,6 +3,10 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
+import {
+  resolveJobSourceIdentity,
+  SYSTEM_JOB_SOURCE_VALUES,
+} from "@/lib/jobs/jobSources";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import { AB_APPLIED_OPPORTUNITY_WHERE } from "@/lib/career/jobOpportunityAdapter";
@@ -59,6 +63,76 @@ export const getJobSourceList = async (
     });
   } catch (error) {
     const msg = "Failed to fetch job source list. ";
+    return handleError(error, msg);
+  }
+};
+
+export const updateJobSource = async (
+  jobSourceId: string,
+  label: string
+): Promise<any | undefined> => {
+  try {
+    const user = await requireUser();
+
+    const res = await prisma.$transaction(async (tx) => {
+      const existing = await tx.jobSource.findFirst({
+        where: { id: jobSourceId, createdBy: user.id },
+      });
+      if (!existing) {
+        throw new Error("Job source not found");
+      }
+
+      // Seeded channels display localized names keyed by `value`; renaming the
+      // English seed label would only diverge the library row from every
+      // consumer, so built-in rows are not editable.
+      if (SYSTEM_JOB_SOURCE_VALUES.includes(existing.value)) {
+        throw new Error("Built-in job sources cannot be renamed.");
+      }
+
+      const identity = label.trim() === existing.label
+        ? { label: existing.label, value: existing.value }
+        : resolveJobSourceIdentity(
+            label,
+            APP_CONSTANTS.MAX_JOB_SOURCE_LABEL_LENGTH,
+          );
+      if ("error" in identity) {
+        throw new Error(
+          identity.error === "too-long"
+            ? "Job source name is too long"
+            : "Please provide job source name",
+        );
+      }
+
+      // Adopt the resolved identity (custom text or a re-seeded system row);
+      // another row already holding that value blocks the rename.
+      if (
+        identity.label !== existing.label ||
+        identity.value !== existing.value
+      ) {
+        if (identity.label !== existing.label) {
+          const used = await tx.jobOpportunity.count({
+            where: { userId: user.id, sourceLabel: existing.label },
+          });
+          if (used > 0) {
+            throw new Error("Job sources used by saved opportunities cannot be renamed.");
+          }
+        }
+        const conflict = await tx.jobSource.findFirst({
+          where: { value: identity.value, createdBy: user.id },
+        });
+        if (conflict && conflict.id !== jobSourceId) {
+          throw new Error("Job source already exists!");
+        }
+      }
+
+      return tx.jobSource.update({
+        where: { id: jobSourceId, createdBy: user.id },
+        data: { label: identity.label, value: identity.value },
+      });
+    });
+    return { success: true, data: res };
+  } catch (error) {
+    const msg = "Failed to update job source.";
     return handleError(error, msg);
   }
 };

@@ -3,6 +3,7 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import { AB_APPLIED_OPPORTUNITY_WHERE } from "@/lib/career/jobOpportunityAdapter";
@@ -72,6 +73,61 @@ export const getJobLocationsList = async (
     });
   } catch (error) {
     const msg = "Failed to fetch job location list. ";
+    return handleError(error, msg);
+  }
+};
+
+export const updateJobLocation = async (
+  locationId: string,
+  label: string
+): Promise<any | undefined> => {
+  try {
+    const user = await requireUser();
+
+    const res = await prisma.$transaction(async (tx) => {
+      const existing = await tx.location.findFirst({
+        where: { id: locationId, createdBy: user.id },
+      });
+      if (!existing) {
+        throw new Error("Job location not found");
+      }
+
+      const trimmedLabel = label.trim();
+      if (!trimmedLabel) {
+        throw new Error("Job location label cannot be empty.");
+      }
+
+      // Recompute the match key only when the label actually changed, so rows
+      // holding a non-derivable value keep it on unrelated saves.
+      let value = existing.value;
+      if (trimmedLabel !== existing.label) {
+        // Keep text-snapshot identity intact; archived history also counts.
+        const used = await tx.jobOpportunity.count({
+          where: { userId: user.id, locationText: existing.label },
+        });
+        if (used > 0) {
+          throw new Error("Job locations used by saved opportunities cannot be renamed.");
+        }
+        value = canonicalizeEntityValue(trimmedLabel);
+        if (!value) {
+          throw new Error("Job location label cannot be empty.");
+        }
+        const conflict = await tx.location.findFirst({
+          where: { value, createdBy: user.id },
+        });
+        if (conflict && conflict.id !== locationId) {
+          throw new Error("Job location already exists!");
+        }
+      }
+
+      return tx.location.update({
+        where: { id: locationId, createdBy: user.id },
+        data: { label: trimmedLabel, value },
+      });
+    });
+    return { success: true, data: res };
+  } catch (error) {
+    const msg = "Failed to update job location.";
     return handleError(error, msg);
   }
 };

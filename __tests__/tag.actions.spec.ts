@@ -2,6 +2,7 @@ import {
   getAllTags,
   getTagList,
   createTag,
+  updateTag,
   deleteTagById,
 } from "@/actions/tag.actions";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -27,7 +28,9 @@ vi.mock("@prisma/client", () => {
       findMany: vi.fn(),
       count: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
     job: {
@@ -309,6 +312,90 @@ describe("Tag Actions", () => {
       const result = await createTag("React");
 
       expect(result).toEqual({ success: false, message: "DB error" });
+    });
+  });
+
+  // updateTag
+  describe("updateTag", () => {
+    it("should rename the label and recompute the canonical value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.tag.findFirst as any)
+        .mockResolvedValueOnce(mockTag)
+        .mockResolvedValueOnce(null);
+      const updated = { ...mockTag, label: "React 19", value: "react 19" };
+      (prisma.tag.update as any).mockResolvedValue(updated);
+
+      const result = await updateTag("tag-1", " React 19 ");
+
+      expect(result).toEqual({ success: true, data: updated });
+      expect(prisma.tag.findFirst).toHaveBeenNthCalledWith(2, {
+        where: { value: "react 19", createdBy: mockUser.id },
+      });
+      expect(prisma.tag.update).toHaveBeenCalledWith({
+        where: { id: "tag-1", createdBy: mockUser.id },
+        data: { label: "React 19", value: "react 19" },
+      });
+    });
+
+    it("should keep the stored value when the label is unchanged", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.tag.findFirst as any).mockResolvedValue(mockTag);
+      (prisma.tag.update as any).mockResolvedValue(mockTag);
+
+      const result = await updateTag("tag-1", "React");
+
+      expect(result.success).toBe(true);
+      expect(prisma.tag.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it("should reject a rename that collides with another row's value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.tag.findFirst as any)
+        .mockResolvedValueOnce(mockTag)
+        .mockResolvedValueOnce({ id: "tag-2", value: "typescript" });
+
+      const result = await updateTag("tag-1", "TypeScript");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Skill tag already exists!",
+      });
+      expect(prisma.tag.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error when the row does not belong to the user", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.tag.findFirst as any).mockResolvedValue(null);
+
+      const result = await updateTag("tag-1", "TypeScript");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Skill tag not found",
+      });
+      expect(prisma.tag.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for an empty label", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.tag.findFirst as any).mockResolvedValue(mockTag);
+
+      const result = await updateTag("tag-1", "   ");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Tag label cannot be empty.",
+      });
+      expect(prisma.tag.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for unauthenticated user", async () => {
+      (getCurrentUser as any).mockResolvedValue(null);
+
+      const result = await updateTag("tag-1", "TypeScript");
+
+      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.tag.update).not.toHaveBeenCalled();
     });
   });
 

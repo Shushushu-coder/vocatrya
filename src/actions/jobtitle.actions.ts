@@ -84,16 +84,77 @@ export const createJobTitle = async (
     const user = await requireUser();
 
     const value = canonicalizeEntityValue(label.trim());
+    if (!value) {
+      throw new Error("Job title label cannot be empty.");
+    }
 
     const upsertedTitle = await prisma.jobTitle.upsert({
       where: { value_createdBy: { value, createdBy: user.id } },
-      update: { label },
+      // Resolving an existing key must not implicitly rename a dictionary
+      // used by canonical opportunity text snapshots.
+      update: {},
       create: { label, value, createdBy: user.id },
     });
 
     return upsertedTitle;
   } catch (error) {
     const msg = "Failed to create job title. ";
+    return handleError(error, msg);
+  }
+};
+
+export const updateJobTitle = async (
+  jobTitleId: string,
+  label: string
+): Promise<any | undefined> => {
+  try {
+    const user = await requireUser();
+
+    const res = await prisma.$transaction(async (tx) => {
+      const existing = await tx.jobTitle.findFirst({
+        where: { id: jobTitleId, createdBy: user.id },
+      });
+      if (!existing) {
+        throw new Error("Job title not found");
+      }
+
+      const trimmedLabel = label.trim();
+      if (!trimmedLabel) {
+        throw new Error("Job title label cannot be empty.");
+      }
+
+      // Recompute the match key only when the label actually changed, so rows
+      // holding a non-derivable value keep it on unrelated saves.
+      let value = existing.value;
+      if (trimmedLabel !== existing.label) {
+        // Canonical opportunities retain their original text, not a dictionary
+        // FK. Preserve that identity, including archived opportunities.
+        const used = await tx.jobOpportunity.count({
+          where: { userId: user.id, title: existing.label },
+        });
+        if (used > 0) {
+          throw new Error("Job titles used by saved opportunities cannot be renamed.");
+        }
+        value = canonicalizeEntityValue(trimmedLabel);
+        if (!value) {
+          throw new Error("Job title label cannot be empty.");
+        }
+        const conflict = await tx.jobTitle.findFirst({
+          where: { value, createdBy: user.id },
+        });
+        if (conflict && conflict.id !== jobTitleId) {
+          throw new Error("Job title already exists!");
+        }
+      }
+
+      return tx.jobTitle.update({
+        where: { id: jobTitleId, createdBy: user.id },
+        data: { label: trimmedLabel, value },
+      });
+    });
+    return { success: true, data: res };
+  } catch (error) {
+    const msg = "Failed to update job title.";
     return handleError(error, msg);
   }
 };

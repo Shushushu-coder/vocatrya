@@ -1,6 +1,8 @@
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import {
   getAllJobLocations,
   getJobLocationsList,
+  updateJobLocation,
   deleteJobLocationById,
 } from "@/actions/jobLocation.actions";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -15,6 +17,8 @@ vi.mock("@prisma/client", () => {
     location: {
       findMany: vi.fn(),
       count: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
     workExperience: {
@@ -30,11 +34,13 @@ vi.mock("@prisma/client", () => {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
+    $transaction: vi.fn(),
     jobOpportunity: {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
   };
+  mPrismaClient.$transaction.mockImplementation(async (run) => run(mPrismaClient));
   return { PrismaClient: vi.fn(function() { return mPrismaClient; }) };
 });
 
@@ -62,6 +68,7 @@ describe("Job Location Actions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.jobOpportunity.count as any).mockResolvedValue(0);
   });
 
   describe("getAllJobLocations", () => {
@@ -295,9 +302,113 @@ describe("Job Location Actions", () => {
       const result = await getJobLocationsList(1, 10, "applied");
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/unavailable/i);
+      expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
       expect(prisma.location.findMany).not.toHaveBeenCalled();
       expect(prisma.job.groupBy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateJobLocation", () => {
+    const existing = {
+      id: "loc-1",
+      label: "New York",
+      value: "new york",
+      createdBy: "user-id",
+    };
+
+    it("should rename the label and recompute the canonical value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.location.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(null);
+      const updated = { ...existing, label: "Remote US", value: "remote us" };
+      (prisma.location.update as any).mockResolvedValue(updated);
+
+      const result = await updateJobLocation("loc-1", "  Remote US  ");
+
+      expect(result).toEqual({ success: true, data: updated });
+      expect(prisma.location.findFirst).toHaveBeenNthCalledWith(2, {
+        where: { value: "remote us", createdBy: mockUser.id },
+      });
+      expect(prisma.location.update).toHaveBeenCalledWith({
+        where: { id: "loc-1", createdBy: mockUser.id },
+        data: { label: "Remote US", value: "remote us" },
+      });
+    });
+
+    it("should keep the stored value when the label is unchanged", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.location.findFirst as any).mockResolvedValue(existing);
+      (prisma.location.update as any).mockResolvedValue(existing);
+
+      const result = await updateJobLocation("loc-1", "New York");
+
+      expect(result.success).toBe(true);
+      expect(prisma.location.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it("should reject a rename that collides with another row's value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.location.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce({ id: "loc-2", value: "remote" });
+
+      const result = await updateJobLocation("loc-1", "Remote");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job location already exists!",
+      });
+      expect(prisma.location.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error when the row does not belong to the user", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.location.findFirst as any).mockResolvedValue(null);
+
+      const result = await updateJobLocation("loc-1", "Remote");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job location not found",
+      });
+      expect(prisma.location.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for an empty label", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.location.findFirst as any).mockResolvedValue(existing);
+
+      const result = await updateJobLocation("loc-1", "   ");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job location label cannot be empty.",
+      });
+      expect(prisma.location.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for unauthenticated user", async () => {
+      (getCurrentUser as any).mockResolvedValue(null);
+
+      const result = await updateJobLocation("loc-1", "Remote");
+
+      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.location.update).not.toHaveBeenCalled();
+    });
+
+    it("should handle unexpected errors", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.location.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(null);
+      (prisma.location.update as any).mockRejectedValue(
+        new Error("Update failed")
+      );
+
+      const result = await updateJobLocation("loc-1", "Remote");
+
+      expect(result).toEqual({ success: false, message: "Update failed" });
     });
   });
 

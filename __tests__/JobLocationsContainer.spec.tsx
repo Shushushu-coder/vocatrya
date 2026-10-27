@@ -1,11 +1,20 @@
 import JobLocationsContainer from "@/components/admin/JobLocationsContainer";
 import { screen, render, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { getJobLocationsList } from "@/actions/jobLocation.actions";
+import {
+  getJobLocationsList,
+  updateJobLocation,
+} from "@/actions/jobLocation.actions";
+import { createLocation } from "@/actions/job.actions";
 
 vi.mock("@/actions/jobLocation.actions", () => ({
   getJobLocationsList: vi.fn(),
   deleteJobLocationById: vi.fn(),
+  updateJobLocation: vi.fn(),
+}));
+
+vi.mock("@/actions/job.actions", () => ({
+  createLocation: vi.fn(),
 }));
 
 let intersectionCallback: IntersectionObserverCallback | undefined;
@@ -296,6 +305,80 @@ describe("JobLocationsContainer", () => {
       });
       expect(getJobLocationsList).toHaveBeenCalledTimes(2);
       expect(getJobLocationsList).toHaveBeenLastCalledWith(1, 25, "applied", undefined);
+    });
+  });
+
+  describe("Add and edit", () => {
+    it("opens the add dialog, creates a location and reloads the list", async () => {
+      const user = userEvent.setup({ delay: null });
+      (getJobLocationsList as any).mockResolvedValue({
+        data: mockLocations,
+        total: 2,
+      });
+      (createLocation as any).mockResolvedValue({ success: true, data: {} });
+
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Remote")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(screen.getByTestId("add-job-location-btn"));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      await act(async () => {
+        await user.type(input, "Shanghai");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(createLocation).toHaveBeenCalledWith("Shanghai");
+        expect(getJobLocationsList).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it("prefills the edit dialog from the row menu and saves the rename", async () => {
+      const user = userEvent.setup({ delay: null });
+      (getJobLocationsList as any).mockResolvedValue({
+        data: mockLocations,
+        total: 2,
+      });
+      (updateJobLocation as any).mockResolvedValue({ success: true, data: {} });
+
+      render(<JobLocationsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Remote")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(
+          screen.getAllByRole("button", { name: /toggle menu/i })[0],
+        );
+      });
+      await act(async () => {
+        await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      expect(input).toHaveValue("Remote");
+
+      await act(async () => {
+        await user.clear(input);
+        await user.type(input, "Remote US");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(updateJobLocation).toHaveBeenCalledWith("1", "Remote US");
+        expect(getJobLocationsList).toHaveBeenCalledTimes(2);
+      });
     });
   });
 });

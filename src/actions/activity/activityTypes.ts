@@ -27,6 +27,9 @@ export const createActivityType = async (
     const user = await requireUser();
 
     const value = label.trim().toLowerCase();
+    if (!value) {
+      throw new Error("Activity type label cannot be empty.");
+    }
 
     const upsertedActivityType = await prisma.activityType.upsert({
       where: { value_createdBy: { value, createdBy: user.id } },
@@ -39,6 +42,49 @@ export const createActivityType = async (
     const msg = "Failed to create activity type. ";
     console.error(msg, error);
     throw new Error(msg);
+  }
+};
+
+export const updateActivityType = async (
+  activityTypeId: string,
+  label: string,
+): Promise<any | undefined> => {
+  try {
+    const user = await requireUser();
+
+    const existing = await prisma.activityType.findFirst({
+      where: { id: activityTypeId, createdBy: user.id },
+    });
+    if (!existing) {
+      throw new Error("Activity type not found");
+    }
+
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel) {
+      throw new Error("Activity type label cannot be empty.");
+    }
+
+    // Keep the create path's key rule: label.trim().toLowerCase(), not the
+    // shared canonicalizer other dictionaries use.
+    let value = existing.value;
+    if (trimmedLabel !== existing.label) {
+      value = trimmedLabel.toLowerCase();
+      const conflict = await prisma.activityType.findFirst({
+        where: { value, createdBy: user.id },
+      });
+      if (conflict && conflict.id !== activityTypeId) {
+        throw new Error("Activity type already exists!");
+      }
+    }
+
+    const res = await prisma.activityType.update({
+      where: { id: activityTypeId, createdBy: user.id },
+      data: { label: trimmedLabel, value },
+    });
+    return { success: true, data: res };
+  } catch (error) {
+    const msg = "Failed to update activity type.";
+    return handleError(error, msg);
   }
 };
 

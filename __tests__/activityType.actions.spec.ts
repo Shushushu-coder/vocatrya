@@ -1,5 +1,6 @@
 import {
   getActivityTypeList,
+  updateActivityType,
   deleteActivityTypeById,
 } from "@/actions/activity.actions";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -12,6 +13,8 @@ vi.mock("@prisma/client", () => {
     activityType: {
       findMany: vi.fn(),
       count: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
     activity: {
@@ -158,6 +161,98 @@ describe("Activity Type Actions", () => {
       const result = await getActivityTypeList(1, 10);
 
       expect(result).toEqual({ success: false, message: "DB error" });
+    });
+  });
+
+  describe("updateActivityType", () => {
+    const existing = {
+      id: "at-1",
+      label: "Learning",
+      value: "learning",
+      createdBy: "user-id",
+    };
+
+    it("should rename the label and keep the trim-lowercase key rule", async () => {
+      // The create path keys rows with label.trim().toLowerCase() (not the
+      // shared canonicalizer), so the update must keep that same rule.
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(null);
+      const updated = { ...existing, label: "Deep Work", value: "deep work" };
+      (prisma.activityType.update as any).mockResolvedValue(updated);
+
+      const result = await updateActivityType("at-1", " Deep Work ");
+
+      expect(result).toEqual({ success: true, data: updated });
+      expect(prisma.activityType.findFirst).toHaveBeenNthCalledWith(2, {
+        where: { value: "deep work", createdBy: mockUser.id },
+      });
+      expect(prisma.activityType.update).toHaveBeenCalledWith({
+        where: { id: "at-1", createdBy: mockUser.id },
+        data: { label: "Deep Work", value: "deep work" },
+      });
+    });
+
+    it("should keep the stored value when the label is unchanged", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findFirst as any).mockResolvedValue(existing);
+      (prisma.activityType.update as any).mockResolvedValue(existing);
+
+      const result = await updateActivityType("at-1", "Learning");
+
+      expect(result.success).toBe(true);
+      expect(prisma.activityType.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it("should reject a rename that collides with another row's value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findFirst as any)
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce({ id: "at-2", value: "networking" });
+
+      const result = await updateActivityType("at-1", "Networking");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Activity type already exists!",
+      });
+      expect(prisma.activityType.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error when the row does not belong to the user", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findFirst as any).mockResolvedValue(null);
+
+      const result = await updateActivityType("at-1", "Networking");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Activity type not found",
+      });
+      expect(prisma.activityType.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for an empty label", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findFirst as any).mockResolvedValue(existing);
+
+      const result = await updateActivityType("at-1", "   ");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Activity type label cannot be empty.",
+      });
+      expect(prisma.activityType.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for unauthenticated user", async () => {
+      (getCurrentUser as any).mockResolvedValue(null);
+
+      const result = await updateActivityType("at-1", "Networking");
+
+      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.activityType.update).not.toHaveBeenCalled();
     });
   });
 

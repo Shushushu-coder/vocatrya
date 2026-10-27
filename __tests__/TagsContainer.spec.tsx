@@ -1,12 +1,13 @@
 import TagsContainer from "@/components/admin/TagsContainer";
 import { screen, render, waitFor, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { getTagList, deleteTagById } from "@/actions/tag.actions";
+import { getTagList, deleteTagById, updateTag } from "@/actions/tag.actions";
 
 vi.mock("@/actions/tag.actions", () => ({
   getTagList: vi.fn(),
   deleteTagById: vi.fn(),
   createTag: vi.fn(),
+  updateTag: vi.fn(),
 }));
 
 let intersectionCallback: IntersectionObserverCallback | undefined;
@@ -368,6 +369,90 @@ describe("TagsContainer Search Functionality", () => {
       // inside the row and proves the jobs cell carries a real number).
       const row = screen.getByText("React").closest("tr")!;
       expect(within(row).getByText("1")).toBeInTheDocument();
+    });
+  });
+
+  describe("Edit", () => {
+    it("prefills the edit dialog from the row menu and saves the rename", async () => {
+      (getTagList as any).mockResolvedValue({
+        data: mockTags,
+        total: 2,
+        jobsCountAvailable: true,
+      });
+      (updateTag as any).mockResolvedValue({ success: true, data: {} });
+
+      render(<TagsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("React")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(
+          screen.getAllByRole("button", { name: /toggle menu/i })[0],
+        );
+      });
+      await act(async () => {
+        await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      expect(input).toHaveValue("React");
+
+      await act(async () => {
+        await user.clear(input);
+        await user.type(input, "React 19");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(updateTag).toHaveBeenCalledWith("1", "React 19");
+        expect(getTagList).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it("keeps the draft when the rename is rejected", async () => {
+      (getTagList as any).mockResolvedValue({
+        data: mockTags,
+        total: 2,
+        jobsCountAvailable: true,
+      });
+      (updateTag as any).mockResolvedValue({
+        success: false,
+        message: "Skill tag already exists!",
+      });
+
+      render(<TagsContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("React")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(
+          screen.getAllByRole("button", { name: /toggle menu/i })[0],
+        );
+      });
+      await act(async () => {
+        await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      await act(async () => {
+        await user.clear(input);
+        await user.type(input, "Python");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(updateTag).toHaveBeenCalledWith("1", "Python");
+      });
+      expect(screen.getByLabelText("Name")).toHaveValue("Python");
+      expect(getTagList).toHaveBeenCalledTimes(1);
     });
   });
 });

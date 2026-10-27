@@ -16,11 +16,12 @@ import {
   TableRow,
 } from "../ui/table";
 import { Tag } from "@/models/job.model";
-import { MoreVertical, Trash } from "lucide-react";
+import { MoreVertical, Pencil, Trash } from "lucide-react";
 import { useState } from "react";
-import { deleteTagById } from "@/actions/tag.actions";
+import { deleteTagById, updateTag } from "@/actions/tag.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
+import DictionaryLabelDialog from "./DictionaryLabelDialog";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { useI18n } from "@/i18n";
 
@@ -39,6 +40,7 @@ function TagsTable({ tags, reloadTags, jobsCountAvailable }: TagsTableProps) {
     openState: false,
     deleteAction: false,
   });
+  const [editTarget, setEditTarget] = useState<Tag | null>(null);
 
   const onDeleteTag = (tag: Tag) => {
     // An unavailable count is not a zero — it contributes no link claim to
@@ -152,6 +154,13 @@ function TagsTable({ tags, reloadTags, jobsCountAvailable }: TagsTableProps) {
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                     <DropdownMenuItem
+                      className="cursor-pointer"
+                      onClick={() => setEditTarget(tag)}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      {t("common.edit")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
                       className="text-red-600 cursor-pointer"
                       onClick={() => onDeleteTag(tag)}
                     >
@@ -165,6 +174,17 @@ function TagsTable({ tags, reloadTags, jobsCountAvailable }: TagsTableProps) {
           ))}
         </TableBody>
       </Table>
+      <DictionaryLabelDialog
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        title={`${t("common.edit")} ${t("library.skillItem")}`}
+        fieldLabel={t("common.name")}
+        initialLabel={editTarget?.label ?? ""}
+        submit={(label) => updateTag(editTarget!.id, label)}
+        onSaved={reloadTags}
+      />
       <DeleteAlertDialog
         pageTitle="skill"
         open={alert.openState}

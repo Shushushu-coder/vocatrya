@@ -7,6 +7,7 @@ import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { JobLocation } from "@/models/job.model";
 import JobLocationsTable from "./JobLocationsTable";
+import AddJobLocation from "./AddJobLocation";
 import { getJobLocationsList } from "@/actions/jobLocation.actions";
 import Loading from "../Loading";
 import { Loader } from "lucide-react";
@@ -124,6 +125,7 @@ function JobLocationsContainer() {
                 onChange={setSearchTerm}
                 placeholder={t("library.searchLocations")}
               />
+              <AddJobLocation reloadJobLocations={reloadJobLocations} />
             </div>
           </ResponsiveCardHeader>
           <CardContent>

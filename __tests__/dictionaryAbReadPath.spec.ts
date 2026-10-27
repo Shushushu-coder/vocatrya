@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
@@ -37,9 +38,9 @@ vi.mock("@/utils/user.utils", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { getCurrentUser } from "@/utils/user.utils";
-import { getJobTitleList } from "@/actions/jobtitle.actions";
-import { getJobLocationsList } from "@/actions/jobLocation.actions";
-import { getJobSourceList } from "@/actions/jobSource.actions";
+import { createJobTitle, getJobTitleList, updateJobTitle } from "@/actions/jobtitle.actions";
+import { getJobLocationsList, updateJobLocation } from "@/actions/jobLocation.actions";
+import { getJobSourceList, updateJobSource } from "@/actions/jobSource.actions";
 import { getTagList } from "@/actions/tag.actions";
 import { listJobs } from "@/lib/career/jobsReadDispatch";
 
@@ -155,6 +156,89 @@ async function createOpportunity(
     },
   });
 }
+
+describe("dictionary renames preserve canonical text identities", () => {
+  const cases = [
+    {
+      name: "job title", field: "title" as const,
+      create: (label: string) => createTitle(label),
+      update: updateJobTitle, list: getJobTitleList,
+    },
+    {
+      name: "location", field: "locationText" as const,
+      create: (label: string) => createLocation(label),
+      update: updateJobLocation, list: getJobLocationsList,
+    },
+    {
+      name: "source", field: "sourceLabel" as const,
+      create: (label: string) => prisma.jobSource.create({
+        data: { label, value: `custom-${randomUUID()}`, createdBy: userId },
+      }),
+      update: updateJobSource, list: getJobSourceList,
+    },
+  ];
+
+  describe.each(cases)("$name", ({ create, update, list, field }) => {
+    it.each([false, true])("rejects renaming a used label without changing the opportunity (archived=%s)", async (archived) => {
+      await freshAb();
+      const entity = await create("Original label");
+      const company = await createCompany();
+      const opportunity = await createOpportunity(company.id, {
+        [field]: entity.label, archived,
+      });
+      const before = await list(1, 100, "all");
+      const result = await update(entity.id, "Renamed label");
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("used by saved opportunities cannot be renamed");
+      expect(await prisma.jobOpportunity.findUnique({ where: { id: opportunity.id } })).toEqual(opportunity);
+      const after = await list(1, 100, "all");
+      expect(after.data.find((r: { id: string }) => r.id === entity.id)).toEqual(
+        before.data.find((r: { id: string }) => r.id === entity.id),
+      );
+    });
+
+    it("allows an unused rename despite another account's matching snapshot", async () => {
+      const entity = await create("Original label");
+      const company = await createCompany({ createdBy: otherUserId });
+      const opportunity = await createOpportunity(company.id, {
+        userId: otherUserId, [field]: entity.label,
+      });
+      const result = await update(entity.id, "Renamed label");
+      expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({ id: entity.id, label: "Renamed label" });
+      expect(await prisma.jobOpportunity.findUnique({ where: { id: opportunity.id } })).toEqual(opportunity);
+    });
+
+    it("keeps an unchanged used label and its stored identity intact", async () => {
+      const entity = await create("Original label");
+      const company = await createCompany();
+      await createOpportunity(company.id, { [field]: entity.label });
+      const result = await update(entity.id, entity.label);
+      expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({
+        id: entity.id, label: entity.label, value: entity.value,
+      });
+    });
+
+    it("rejects editing another account's row", async () => {
+      const entity = await create("Original label");
+      (getCurrentUser as any).mockResolvedValue({ id: otherUserId });
+      expect((await update(entity.id, "Renamed label")).success).toBe(false);
+      (getCurrentUser as any).mockResolvedValue({ id: userId });
+      expect((await update(entity.id, "Renamed label")).success).toBe(true);
+    });
+  });
+
+  it("resolves an existing title without using create to bypass rename protection", async () => {
+    const title = await prisma.jobTitle.create({
+      data: { label: "Developer", value: "developer", createdBy: userId },
+    });
+    const company = await createCompany();
+    const opportunity = await createOpportunity(company.id, { title: title.label });
+    expect(await createJobTitle("DEVELOPER")).toEqual(title);
+    expect(await prisma.jobOpportunity.findUnique({ where: { id: opportunity.id } })).toEqual(opportunity);
+  });
+});
 
 async function createAttempt(
   jobOpportunityId: string,
@@ -492,7 +576,7 @@ describe("job titles — A+B read family", () => {
     const result = await getJobTitleList(1, 10, "applied");
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/unavailable/i);
+    expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
     expect(result.data).toBeUndefined();
   });
 });
@@ -617,7 +701,7 @@ describe("job locations — A+B read family", () => {
     const result = await getJobLocationsList(1, 10, "applied");
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/unavailable/i);
+    expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
     expect(result.data).toBeUndefined();
   });
 });
@@ -744,7 +828,7 @@ describe("job sources — A+B read family", () => {
     const result = await getJobSourceList(1, 20, "applied");
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/unavailable/i);
+    expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
     expect(result.data).toBeUndefined();
   });
 });
@@ -1031,7 +1115,7 @@ describe("skill tags — read-family count availability", () => {
     const result = await getTagList(1, 10);
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/unavailable/i);
+    expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
     expect(result.data).toBeUndefined();
   });
 });
