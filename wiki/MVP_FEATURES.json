@@ -415,7 +415,7 @@
         "冻结版本后历史内容稳定，重新打开仍能查看。"
       ],
       "passes": false,
-      "implementationNotes": "2026-10-27 W7 阶段交付（codex/mvp-w7-resume，基线 f4f0727d）：已核对隔离 fresh-native 服务级检查点和 Web 11 步记录均通过；本轮未独立复跑。新增服务级 spec 未提交；服务层使用合成 PDF 字节验证 artifact 保存/hash/路径，不是真实 PDF 渲染导出。Windows Electron fresh-native 完整路径、真实 PDF 导出及真正退出重开未执行，受另一窗口桌面入口交付阻塞；桌面脚本尚需动态 CDP 端口与每轮唯一数据根准备。RM-BIND 未受影响，不重复回归；passes false。"
+      "implementationNotes": "2026-10-27 W7 服务级 spec 已整合 Main：本轮在当前源码实际复跑通过，覆盖隔离 fresh-native 素材/简历编辑、冻结拒写、新草稿隔离、artifact 存储和新连接重开；合成 PDF 字节不证明真实 PDF 渲染导出。检查点 allPassed 仅在全部断言完成后为 true。此前 Web 11 步证据保留，本轮未复跑 Web。认证入口修复与桌面测试基础设施已集成，但 Windows Electron 完整路径、真实 PDF 导出和真正退出重开仍未最终验收；E2E 按新规则等待用户明确启动，原 W1/W4/W7 E2E 接续安排暂停。RM-BIND 未受影响；passes false。"
     },
     {
       "id": "RM-BIND",

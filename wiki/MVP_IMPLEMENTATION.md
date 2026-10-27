@@ -4,7 +4,15 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## BD-LINKS / Backup V6 已集成 Main（2026-10-27，当前状态）
+## 桌面入口与剩余修改集成收尾（2026-10-27，当前执行口径）
+
+- 用户已授权将认证入口修复、桌面测试基础设施/规则和 W7 服务级测试整合 Main。认证修复提交 ff5f091f：dashboard 未登录跳转移至服务端 layout，保留相对 /signin 和既有 API 鉴权，不放宽 Electron origin 白名单。
+- 桌面测试入口补齐隔离环境、动态 CDP、磁盘检查和所属进程清理；复审补上首次/重开导航加载等待，避免测试抢占应用初始 loadURL。失败截图/trace、taskkill 和 CDP 关闭增加超时边界。基础设施单测不能替代真实 Electron 验收，启动链路尚未最终验收。
+- W7 服务级测试纳入仓库，使用隔离 fresh-native SQLite 和合成 PDF 字节验证素材、简历版本、冻结保护、artifact 存储及重新连接一致性；修正中途断言失败仍可能记录 allPassed 的问题。
+- 执行策略调整：普通开发只做必要定向验证；E2E 仅在用户明确启动最终验收、发布前验证或批准提前定位时执行。W1/W4/W7 原 E2E 接续安排暂停，不自动恢复；同机桌面构建/装配/E2E 串行，由原负责人接续任务收尾。
+- 本轮定向组合 37 项、桌面基础设施单测 29 项、主进程 runtime 单测 13 项通过；完整 tsc、改动源码 ESLint 和差异检查通过。未启动生产构建、装配或真实 E2E。所有 Feature passes 保持原值。旧 Worktree 的副本和临时证据保留，不重复集成，不清理或 Push。
+
+## BD-LINKS / Backup V6 已集成 Main（2026-10-27）
 
 用户已明确授权复审、必要修复、提交和 Main 合并。本轮源码提交 `3490cdaa`，合并点 `18c0d482`，追加并发删除与活标签复制回归 `c4c5f1af`；后文未提交/待集成描述均为历史阶段记录。
 
