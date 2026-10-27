@@ -19,6 +19,7 @@ import {
   type UserSettingsStore,
 } from "@/lib/userSettings/patch";
 import { isValidLocale, type Locale } from "@/i18n/config";
+import { isSupportedTimeZone } from "@/lib/userSettings/timeZone";
 
 // Structural adapter so the patch primitive never imports @/lib/db itself —
 // the store is injected, keeping the CAS loop testable in isolation.
@@ -172,4 +173,25 @@ export const updateSettingsLocale = async (
     };
   }
   return updateUserSettings({ settings: { general: { locale } } });
+};
+
+/**
+ * P-TZ write entry: persist the account-level IANA time zone at
+ * `settings.general.timeZone` via the atomic patch path. Passing
+ * `undefined` deletes the key — the account then follows the runtime
+ * zone (no "system" literal is ever stored). Validation rejects
+ * anything that is not an IANA Area/Location identifier or "UTC"
+ * (see isSupportedTimeZone) before any write, so invalid input
+ * leaves the stored value untouched.
+ */
+export const updateSettingsTimeZone = async (
+  timeZone: string | undefined,
+): Promise<any | undefined> => {
+  if (timeZone !== undefined && !isSupportedTimeZone(timeZone)) {
+    return {
+      success: false,
+      message: "Time zone must be a valid IANA time zone.",
+    };
+  }
+  return updateUserSettings({ settings: { general: { timeZone } } });
 };

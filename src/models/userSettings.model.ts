@@ -26,11 +26,13 @@ export interface DisplaySettings {
 
 /**
  * Account-level general preferences under the `settings` document
- * namespace. `locale` is the only implemented field (SET-02 contract);
- * users with no persisted language preference simply lack the subtree.
+ * namespace. `locale` is the SET-02 field; `timeZone` is the P-TZ
+ * account-level IANA zone — absent means "follow the runtime zone" and
+ * the resolved value is never persisted back.
  */
 export interface GeneralSettings {
   locale?: Locale;
+  timeZone?: string;
 }
 
 export interface UserSettingsData {

@@ -222,7 +222,8 @@
       "category": "DateTime / Task",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "PARTIAL",
+      "implementationNotes": "已集成 Settings 可搜索 IANA 时区选择、跟随系统、原子持久化及客户端/服务端统一读取接口；拒绝缩写与裸 offset，脏设置安全回退且不回写。语言与时区按字段合流串行保存，失败独立回滚，避免跨字段丢失待保存修改。定向组件、action、隔离 SQLite 持久化及连接重开验证通过；真实浏览器/Electron 界面与进程退出重开未验收，流程等时间消费者尚待 P-PROC/P-JO/P-TASK 接线，passes 保持 false。",
       "description": "用户可以设置 IANA 时区；相关日期显示按冻结后的时区合同执行。",
       "steps": [
         "在 Settings 选择并保存合法时区，刷新与重启后仍保留。",
