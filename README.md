@@ -1,6 +1,12 @@
 # Vocatrya
 
-<p align="center"><strong>The self-hosted career companion with AI-powered resume review, job matching, and automated discovery</strong></p>
+<p align="center"><strong>面向中国求职市场的 local-first Windows 桌面职业与求职管理软件</strong></p>
+
+Vocatrya 当前主要交付形态是 **Windows Electron 桌面应用**，Next.js 提供内部界面和本地后端。浏览器与 Docker 路径保留用于 Web 开发和兼容验证，不代表当前桌面产品的完整体验。
+
+源码启动：Windows 安装依赖后，按 [桌面开发与 E2E](desktop/E2E.md) 在独立 Worktree 设置隔离数据目录、构建并启动开发桌面壳。这是源码开发路径，不会安装或发布应用。
+
+测试入口：`npm run test:e2e:desktop` 验证真实 Electron 窗口；`npm run test:e2e:web` 仅验证浏览器页面。新用户桌面使用 fresh-native 模式，自动化巡检等 Legacy 入口不属于该模式；桌面的新建、上传操作位于最顶部标题栏。下方自托管功能说明保留为 Web/Legacy 兼容参考。
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> ·
@@ -47,6 +53,8 @@ Vocatrya is a free, open-source companion for your job search: track application
 - **AI Agent Integration (MCP):** Connect AI agents like Claude Desktop via a built-in MCP server to add job applications and Question Bank entries directly from your chat, with your approval. When a job description is substantial enough, the agent can also analyze it against your default resume and save a job match score right from the chat.
 
 ## Quick Start
+
+Windows 桌面源码启动与验收请先阅读 [桌面开发与 E2E](desktop/E2E.md)。以下步骤仅适用于 **Web / Docker 兼容运行**。
 
 Make sure [Docker](https://www.docker.com) is installed and running, then:
 
