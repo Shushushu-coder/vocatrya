@@ -35,6 +35,9 @@ const OPTIONAL_FKS = new Set<string>([
   "ApplicationAttempt.transferredFromAttemptId",
   "CareerInternshipDetail.companyId",
   "CareerEmploymentDetail.companyId",
+  // SetNull FK: an attachment whose material row is absent from the backup
+  // (or a standard-only restore) degrades to null instead of aborting.
+  "CandidateAttachment.materialItemId",
   "ResumeVariant.targetJobOpportunityId",
   "ResumeVariantVersion.targetJdVersionId",
   "ResumeVariantSectionItem.careerMaterialItemId",

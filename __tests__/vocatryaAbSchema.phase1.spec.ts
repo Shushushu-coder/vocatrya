@@ -195,6 +195,9 @@ describe("Vocatrya A+B phase 1 schema", () => {
         // DateTime V1 ALTERs ApplicationProcessStep/JobOpportunity, which are
         // created by the A+B foundation, so it joins the upgrade wave.
         "datetime_v1_additive_columns",
+        // The career contract migration depends on the campus career tables
+        // and the CandidateProfile rename, so it joins the upgrade wave.
+        "career_v1_schema_contract",
       ],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
@@ -279,6 +282,7 @@ describe("Vocatrya A+B phase 1 schema", () => {
       copyMigrationBySuffix(ctx.dir, RESUME_TITLE_SNAPSHOT_MIGRATION);
       copyMigrationBySuffix(ctx.dir, "add_managed_ai_core_contracts");
       copyMigrationBySuffix(ctx.dir, "datetime_v1_additive_columns");
+      copyMigrationBySuffix(ctx.dir, "career_v1_schema_contract");
       migrateDeploy(ctx.url, schemaPath);
 
       expect(await prisma.job.count()).toBe(before.jobs);

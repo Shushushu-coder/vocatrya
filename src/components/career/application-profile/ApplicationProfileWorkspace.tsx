@@ -24,7 +24,11 @@ import {
   setCareerProfileTabVisible,
 } from "@/actions/careerProfileTabs.actions";
 import { ApplicationProfileField } from "./ApplicationProfileField";
+import { AttachmentCard } from "./AttachmentCard";
 import { EmergencyContactCard } from "./EmergencyContactCard";
+import { IdDocumentCard } from "./IdDocumentCard";
+import { RefereeCard } from "./RefereeCard";
+import { deriveEducationSummary } from "@/lib/career/educationDerivation";
 import {
   MaterialRecordsSection,
   type MaterialItem,
@@ -54,6 +58,14 @@ type Profile = {
   nativePlace?: string | null;
   householdRegistration?: string | null;
   graduationCohort?: string | null;
+  phoneCountryCode?: string | null;
+  wechatId?: string | null;
+  qqNumber?: string | null;
+  countryOrRegion?: string | null;
+  currentCity?: string | null;
+  homeCity?: string | null;
+  homeAddress?: string | null;
+  linksData?: string | null;
 };
 
 const EXPERIENCE_TYPES = new Set([
@@ -97,7 +109,14 @@ const PROFILE_FIELD_KEYS = [
   "politicalStatus",
   "nativePlace",
   "householdRegistration",
-  "graduationCohort",
+  "countryOrRegion",
+  "currentCity",
+  "homeCity",
+  "homeAddress",
+  "phoneCountryCode",
+  "wechatId",
+  "qqNumber",
+  "linksData",
 ] as const;
 
 type ProfileFieldKey = (typeof PROFILE_FIELD_KEYS)[number];
@@ -183,6 +202,18 @@ export function ApplicationProfileWorkspace() {
     [materials],
   );
 
+  // Read-time derivation (§4): highest education/degree come only from
+  // explicitly obtained facts; the manual cohort field stays editable only
+  // as a fallback when nothing can be derived.
+  const derived = useMemo(
+    () =>
+      deriveEducationSummary(
+        educationItems as never,
+        profile?.graduationCohort,
+      ),
+    [educationItems, profile?.graduationCohort],
+  );
+
   const isProfileEmpty =
     !profile || !Object.values(profile).some((v) => v?.trim());
 
@@ -191,7 +222,7 @@ export function ApplicationProfileWorkspace() {
   // other. Merging only the saved key keeps this row correct even if a
   // slower sibling save resolves afterwards.
   async function saveProfileField(
-    key: ProfileFieldKey,
+    key: ProfileFieldKey | "graduationCohort",
     value: string | null,
   ): Promise<boolean> {
     const res = await updateApplicationCandidateProfile({ [key]: value });
@@ -201,9 +232,19 @@ export function ApplicationProfileWorkspace() {
     return true;
   }
 
+  const profileForCopy = useMemo(
+    () => ({
+      ...(profile ?? {}),
+      graduationCohort: derived.graduationCohort ?? profile?.graduationCohort ?? null,
+      highestEducation: derived.highestEducation,
+      schoolCity: derived.schoolCity,
+    }),
+    [profile, derived],
+  );
+
   const projectionSections = useMemo(() => {
     return buildApplicationProjectionSections({
-      profile,
+      profile: profileForCopy,
       // Global job intent is no longer part of the workspace; historical
       // JobSearchPreference rows stay in the database untouched.
       preference: null,
@@ -211,7 +252,7 @@ export function ApplicationProfileWorkspace() {
       experience: experienceItems,
       skills: skillItems,
     });
-  }, [profile, educationItems, experienceItems, skillItems]);
+  }, [profileForCopy, educationItems, experienceItems, skillItems]);
 
   const sectionText = useMemo(() => {
     const map = new Map<string, string>();
@@ -292,7 +333,7 @@ export function ApplicationProfileWorkspace() {
                   data-testid="personal-copy-group"
                   onClick={() =>
                     copyText(
-                      buildPersonalInfoText(profile),
+                      buildPersonalInfoText(profileForCopy),
                       t("common.copied"),
                       t("applicationProfile.copyFailed"),
                     )
@@ -315,6 +356,41 @@ export function ApplicationProfileWorkspace() {
                     onSave={(v) => saveProfileField(key, v)}
                   />
                 ))}
+                {/* Derived education summary (§4): read-only, assembled at
+                    read time from explicit obtained facts only. */}
+                <div className="flex flex-col gap-1 py-2" data-testid="derived-education">
+                  <div className="text-sm font-medium">
+                    {t("applicationProfile.derivedEducationTitle")}
+                  </div>
+                  <div className="text-sm">
+                    {t("applicationProfile.fieldHighestEducation")}：
+                    {derived.highestEducation ?? t("applicationProfile.derivedUnknown")}
+                  </div>
+                  <div className="text-sm">
+                    {t("applicationProfile.fieldSchoolCity")}：
+                    {derived.schoolCity ?? t("applicationProfile.derivedUnknown")}
+                  </div>
+                  <div className="text-sm">
+                    {t("applicationProfile.fieldGraduationCohort")}：
+                    {derived.graduationCohort ?? t("applicationProfile.derivedUnknown")}
+                  </div>
+                  {derived.inProgressDegree && (
+                    <div className="text-xs text-muted-foreground">
+                      {t("applicationProfile.derivedInProgress")}：
+                      {derived.inProgressDegree}
+                    </div>
+                  )}
+                </div>
+                {/* graduationCohort stays editable only as the manual
+                    fallback while no explicit obtained facts can derive it. */}
+                {derived.cohortSource !== "derived" && (
+                  <ApplicationProfileField
+                    testId="profile-field-graduationCohort"
+                    label={t("applicationProfile.fieldGraduationCohort")}
+                    value={profile?.graduationCohort}
+                    onSave={(v) => saveProfileField("graduationCohort", v)}
+                  />
+                )}
                 {isProfileEmpty && (
                   <div className="flex flex-col gap-2 py-3 text-sm text-muted-foreground">
                     <span>{t("applicationProfile.legacyNoSyncHint")}</span>
@@ -329,8 +405,13 @@ export function ApplicationProfileWorkspace() {
               </div>
             </CardContent>
           </Card>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-col gap-4">
+            <IdDocumentCard />
             <EmergencyContactCard />
+            <AttachmentCard
+              category="ID_PHOTO"
+              titleKey="applicationProfile.idPhotoTitle"
+            />
           </div>
         </TabsContent>
 
@@ -378,11 +459,7 @@ export function ApplicationProfileWorkspace() {
                 }
                 onChanged={load}
               />
-              {tabId === "education" && (
-                <div className="text-xs text-muted-foreground">
-                  {t("applicationProfile.languageTestUnsupported")}
-                </div>
-              )}
+              {tabId === "other" && <RefereeCard />}
             </div>
           </TabsContent>
         ))}
@@ -559,9 +636,6 @@ export function ApplicationProfileWorkspace() {
                     {t("applicationProfile.copySection")}
                   </Button>
                 )}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {t("applicationProfile.languageTestUnsupported")}
               </div>
             </CardContent>
           </Card>

@@ -22,7 +22,7 @@ export type MaterialLike = {
   evidence?: EvidenceLike[] | null;
   internshipDetail?: { organizationName?: string | null; roleTitle?: string | null } | null;
   employmentDetail?: { organizationName?: string | null; roleTitle?: string | null } | null;
-  projectDetail?: { organizationName?: string | null; roleTitle?: string | null } | null;
+  projectDetail?: { organizationName?: string | null; roleTitle?: string | null; techStack?: string | null } | null;
   researchDetail?: { institution?: string | null; roleTitle?: string | null } | null;
   publicationDetail?: { venue?: string | null } | null;
   competitionDetail?: { organizer?: string | null } | null;
@@ -31,6 +31,7 @@ export type MaterialLike = {
   awardDetail?: { issuer?: string | null } | null;
   skillDetail?: { skillName?: string | null; proficiency?: string | null } | null;
   certificationDetail?: { organization?: string | null } | null;
+  languageDetail?: { language?: string | null; examOrLevel?: string | null; score?: string | null } | null;
   customDetail?: unknown;
 };
 
@@ -84,6 +85,13 @@ function materialOrgRole(item: MaterialLike): string | null {
       : item.skillDetail.skillName;
   }
   if (item.certificationDetail?.organization) return item.certificationDetail.organization;
+  if (item.languageDetail) {
+    const parts = [item.languageDetail.language, item.languageDetail.examOrLevel].filter(Boolean);
+    if (parts.length > 0) {
+      const base = parts.join(" · ");
+      return item.languageDetail.score ? `${base} (${item.languageDetail.score})` : base;
+    }
+  }
   return null;
 }
 
@@ -96,6 +104,9 @@ export function buildMaterialItemText(item: MaterialLike): string {
   if (item.title) lines.push(item.title.trim());
   const orgRole = materialOrgRole(item);
   if (orgRole) lines.push(orgRole);
+  if (item.projectDetail?.techStack?.trim()) {
+    lines.push(`技术栈：${item.projectDetail.techStack.trim()}`);
+  }
   const range = formatDateRange(item.startDate, item.endDate, item.isCurrent);
   if (range) lines.push(range);
   if (item.notes?.trim()) lines.push(item.notes.trim());
@@ -131,8 +142,15 @@ export function buildSkillsSectionText(items: MaterialLike[]): string {
 export const PERSONAL_INFO_COPY_FIELDS = [
   { key: "fullName", label: "姓名" },
   { key: "email", label: "邮箱" },
+  { key: "phoneCountryCode", label: "电话区号" },
   { key: "phone", label: "电话" },
   { key: "address", label: "地址" },
+  { key: "countryOrRegion", label: "国家/地区" },
+  { key: "wechatId", label: "微信号" },
+  { key: "qqNumber", label: "QQ号" },
+  { key: "currentCity", label: "当前所在地" },
+  { key: "homeCity", label: "家庭所在城市" },
+  { key: "homeAddress", label: "家庭常驻地址" },
   { key: "gender", label: "性别" },
   { key: "birthDate", label: "出生日期" },
   { key: "ethnicity", label: "民族" },
@@ -140,6 +158,9 @@ export const PERSONAL_INFO_COPY_FIELDS = [
   { key: "nativePlace", label: "籍贯" },
   { key: "householdRegistration", label: "户口所在地" },
   { key: "graduationCohort", label: "毕业届别" },
+  { key: "highestEducation", label: "最高学历" },
+  { key: "schoolCity", label: "学校城市" },
+  { key: "linksData", label: "个人主页" },
 ] as const;
 
 export type PersonalInfoLike = Partial<

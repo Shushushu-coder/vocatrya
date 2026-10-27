@@ -28,6 +28,18 @@ export function sniffFileType(buf: Buffer): "pdf" | "docx" | null {
   return null;
 }
 
+// Career attachments accept images and PDFs. Kept separate from sniffFileType
+// so resume uploads stay pdf/docx-only.
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff]);
+
+export function sniffAttachmentFileType(buf: Buffer): "png" | "jpg" | "pdf" | null {
+  if (buf.subarray(0, 4).equals(PDF_MAGIC)) return "pdf";
+  if (buf.subarray(0, 4).equals(PNG_MAGIC)) return "png";
+  if (buf.subarray(0, 3).equals(JPEG_MAGIC)) return "jpg";
+  return null;
+}
+
 // Parse ZIP Central Directory to sum uncompressed sizes and count entries
 export function preflightZip(buf: Buffer): { entries: number; uncompressedBytes: number } {
   const EOCD_SIG = 0x06054b50;

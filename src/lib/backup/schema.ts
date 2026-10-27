@@ -11,8 +11,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 4;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4] as const;
+export const BACKUP_FORMAT_VERSION = 5;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -22,6 +22,7 @@ export const ManifestSchema = z.object({
     z.literal(2),
     z.literal(3),
     z.literal(4),
+    z.literal(5),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -631,6 +632,7 @@ const CareerInternshipDetail = z.object({
   organizationName: optStr,
   roleTitle: optStr,
   locationText: optStr,
+  department: optStr.optional(),
   structuredData: str,
   createdAt: dt,
   updatedAt: dt,
@@ -655,6 +657,8 @@ const CareerProjectDetail = z.object({
   roleTitle: optStr,
   projectUrl: optStr,
   organizationName: optStr,
+  projectType: optStr.optional(),
+  techStack: optStr.optional(),
   structuredData: str,
   createdAt: dt,
   updatedAt: dt,
@@ -677,6 +681,8 @@ const CareerPublicationDetail = z.object({
   venue: optStr,
   authors: optStr,
   url: optStr,
+  venueLevel: optStr.optional(),
+  authorRole: optStr.optional(),
   publishedAt: optDt,
   structuredData: str,
   createdAt: dt,
@@ -714,6 +720,19 @@ const CareerEducationDetail = z.object({
   gpaValue: z.number().nullable().optional(),
   gpaScale: z.number().nullable().optional(),
   rankText: optStr.optional(),
+  currentStudyLocation: optStr.optional(),
+  department: optStr.optional(),
+  majorCategory: optStr.optional(),
+  studyMode: optStr.optional(),
+  isExchange: z.boolean().optional(),
+  graduationOn: optStr.optional(),
+  graduationExpected: z.boolean().optional(),
+  rankClassText: optStr.optional(),
+  rankMajorText: optStr.optional(),
+  hasNationalScholarship: z.boolean().optional(),
+  advisorName: optStr.optional(),
+  labName: optStr.optional(),
+  researchDirection: optStr.optional(),
   structuredData: str,
   createdAt: dt,
   updatedAt: dt,
@@ -724,6 +743,9 @@ const CareerAwardDetail = z.object({
   materialItemId: id,
   issuer: optStr,
   awardedAt: optDt,
+  awardType: optStr.optional(),
+  awardLevel: optStr.optional(),
+  awardScope: optStr.optional(),
   structuredData: str,
   createdAt: dt,
   updatedAt: dt,
@@ -744,6 +766,7 @@ const CareerCertificationDetail = z.object({
   materialItemId: id,
   organization: optStr,
   credentialUrl: optStr,
+  credentialId: optStr.optional(),
   issueDate: optDt,
   expirationDate: optDt,
   structuredData: str,
@@ -754,6 +777,18 @@ const CareerCertificationDetail = z.object({
 const CareerCustomDetail = z.object({
   id,
   materialItemId: id,
+  structuredData: str,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const CareerLanguageDetail = z.object({
+  id,
+  materialItemId: id,
+  language: optStr,
+  examOrLevel: optStr,
+  score: optStr,
+  obtainedOn: optStr,
   structuredData: str,
   createdAt: dt,
   updatedAt: dt,
@@ -791,12 +826,20 @@ const CandidateProfile = z.object({
   nativePlace: optStr.optional(),
   householdRegistration: optStr.optional(),
   graduationCohort: optStr.optional(),
+  countryOrRegion: optStr.optional(),
+  wechatId: optStr.optional(),
+  qqNumber: optStr.optional(),
+  currentCity: optStr.optional(),
+  homeCity: optStr.optional(),
+  homeAddress: optStr.optional(),
+  phoneCountryCode: optStr.optional(),
   createdAt: dt,
   updatedAt: dt,
 });
 
 const CandidateSensitiveInfo = z.object({
   id,
+  idType: optStr.optional(),
   idNumber: optStr,
   emergencyContactName: optStr,
   emergencyContactRelation: optStr,
@@ -816,6 +859,39 @@ const CandidateFamilyMember = z.object({
   sortOrder: int,
   createdAt: dt,
   updatedAt: dt,
+});
+
+const CandidateReferee = z.object({
+  id,
+  sensitiveInfoId: id,
+  name: optStr,
+  organization: optStr,
+  position: optStr,
+  relationship: optStr,
+  phone: optStr,
+  email: optStr,
+  note: optStr,
+  sortOrder: int,
+  archivedAt: optDt,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+// bytesMissing marks that attachment bytes are not in the zip. storageKey is a
+// logical key; restore rebuilds it and never persists a source-machine path.
+const CandidateAttachment = z.object({
+  id,
+  materialItemId: optId,
+  category: str,
+  fileName: str,
+  mimeType: str,
+  sizeBytes: optInt,
+  storageKey: str,
+  origin: str,
+  archivedAt: optDt,
+  createdAt: dt,
+  updatedAt: dt,
+  bytesMissing: z.boolean().optional(),
 });
 
 const ResumeVariant = z.object({
@@ -1251,10 +1327,13 @@ export const BackupDataSchema = z.object({
   CareerSkillDetail: group(CareerSkillDetail),
   CareerCertificationDetail: group(CareerCertificationDetail),
   CareerCustomDetail: group(CareerCustomDetail),
+  CareerLanguageDetail: group(CareerLanguageDetail),
   CareerEvidence: group(CareerEvidence),
   CandidateProfile: group(CandidateProfile),
   CandidateSensitiveInfo: group(CandidateSensitiveInfo),
   CandidateFamilyMember: group(CandidateFamilyMember),
+  CandidateReferee: group(CandidateReferee),
+  CandidateAttachment: group(CandidateAttachment),
   ResumeVariant: group(ResumeVariant),
   ResumeVariantVersion: group(ResumeVariantVersion),
   ResumeVariantSection: group(ResumeVariantSection),

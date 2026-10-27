@@ -32,6 +32,8 @@ function detailCreateKey(
       return "skillDetail";
     case "CERTIFICATION":
       return "certificationDetail";
+    case "LANGUAGE":
+      return "languageDetail";
     case "CUSTOM":
       return "customDetail";
     default: {
@@ -222,6 +224,7 @@ const fullDetailInclude: Prisma.CareerMaterialItemInclude = {
   skillDetail: true,
   certificationDetail: true,
   customDetail: true,
+  languageDetail: true,
   evidence: {
     where: { archivedAt: null },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

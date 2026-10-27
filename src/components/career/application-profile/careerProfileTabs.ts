@@ -68,7 +68,7 @@ export function visibleCareerProfileTabs(
  * campus activities and custom entries live under 其他.
  */
 export const CAREER_PROFILE_RECORD_TAB_TYPES = {
-  education: ["EDUCATION", "RESEARCH", "PUBLICATION"],
+  education: ["EDUCATION", "RESEARCH", "PUBLICATION", "LANGUAGE"],
   internship: ["INTERNSHIP"],
   project: ["PROJECT"],
   awards: ["AWARD", "COMPETITION"],
@@ -91,7 +91,7 @@ export const CAREER_PROFILE_TAB_CREATABLE_TYPES: Record<
   CareerProfileRecordTabId,
   readonly string[]
 > = {
-  education: ["EDUCATION", "RESEARCH", "PUBLICATION"],
+  education: ["EDUCATION", "RESEARCH", "PUBLICATION", "LANGUAGE"],
   internship: ["INTERNSHIP"],
   project: ["PROJECT"],
   awards: ["AWARD", "COMPETITION"],

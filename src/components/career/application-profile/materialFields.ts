@@ -9,7 +9,7 @@
  * Pure module: no React, safe to import anywhere.
  */
 
-export type MaterialDetailFieldKind = "text" | "float" | "date";
+export type MaterialDetailFieldKind = "text" | "float" | "date" | "boolean";
 
 export type MaterialDetailFieldDef = {
   /** Prisma detail column; also the key sent inside `detail` patches. */
@@ -28,15 +28,31 @@ export const MATERIAL_DETAIL_FIELDS = {
     { key: "gpaValue", labelKey: "materialGpa", kind: "float" },
     { key: "gpaScale", labelKey: "materialGpaScale", kind: "float" },
     { key: "rankText", labelKey: "materialRank", kind: "text" },
+    { key: "rankClassText", labelKey: "materialRankClass", kind: "text" },
+    { key: "rankMajorText", labelKey: "materialRankMajor", kind: "text" },
+    { key: "hasNationalScholarship", labelKey: "materialNationalScholarship", kind: "boolean" },
+    { key: "currentStudyLocation", labelKey: "materialCurrentStudyLocation", kind: "text" },
+    { key: "department", labelKey: "materialDepartment", kind: "text" },
+    { key: "majorCategory", labelKey: "materialMajorCategory", kind: "text" },
+    { key: "studyMode", labelKey: "materialStudyMode", kind: "text" },
+    { key: "isExchange", labelKey: "materialIsExchange", kind: "boolean" },
+    { key: "graduationOn", labelKey: "materialGraduationOn", kind: "date" },
+    { key: "graduationExpected", labelKey: "materialGraduationExpected", kind: "boolean" },
+    { key: "advisorName", labelKey: "materialAdvisorName", kind: "text" },
+    { key: "labName", labelKey: "materialLabName", kind: "text" },
+    { key: "researchDirection", labelKey: "materialResearchDirection", kind: "text" },
   ],
   INTERNSHIP: [
     { key: "organizationName", labelKey: "materialOrganization", kind: "text" },
+    { key: "department", labelKey: "materialDepartment", kind: "text" },
     { key: "roleTitle", labelKey: "materialRole", kind: "text" },
     { key: "locationText", labelKey: "materialLocation", kind: "text" },
   ],
   PROJECT: [
     { key: "organizationName", labelKey: "materialOrganization", kind: "text" },
+    { key: "projectType", labelKey: "materialProjectType", kind: "text" },
     { key: "roleTitle", labelKey: "materialRole", kind: "text" },
+    { key: "techStack", labelKey: "materialTechStack", kind: "text" },
     { key: "projectUrl", labelKey: "materialProjectUrl", kind: "text" },
   ],
   RESEARCH: [
@@ -47,6 +63,8 @@ export const MATERIAL_DETAIL_FIELDS = {
   PUBLICATION: [
     { key: "venue", labelKey: "materialVenue", kind: "text" },
     { key: "authors", labelKey: "materialAuthors", kind: "text" },
+    { key: "venueLevel", labelKey: "materialVenueLevel", kind: "text" },
+    { key: "authorRole", labelKey: "materialAuthorRole", kind: "text" },
     { key: "url", labelKey: "materialUrl", kind: "text" },
     { key: "publishedAt", labelKey: "materialPublishedAt", kind: "date" },
   ],
@@ -60,6 +78,9 @@ export const MATERIAL_DETAIL_FIELDS = {
     { key: "roleTitle", labelKey: "materialRole", kind: "text" },
   ],
   AWARD: [
+    { key: "awardType", labelKey: "materialAwardType", kind: "text" },
+    { key: "awardLevel", labelKey: "materialAwardLevel", kind: "text" },
+    { key: "awardScope", labelKey: "materialAwardScope", kind: "text" },
     { key: "issuer", labelKey: "materialIssuer", kind: "text" },
     { key: "awardedAt", labelKey: "materialAwardedAt", kind: "date" },
   ],
@@ -69,9 +90,16 @@ export const MATERIAL_DETAIL_FIELDS = {
   ],
   CERTIFICATION: [
     { key: "organization", labelKey: "materialCertOrg", kind: "text" },
+    { key: "credentialId", labelKey: "materialCredentialId", kind: "text" },
     { key: "credentialUrl", labelKey: "materialCredentialUrl", kind: "text" },
     { key: "issueDate", labelKey: "materialIssueDate", kind: "date" },
     { key: "expirationDate", labelKey: "materialExpirationDate", kind: "date" },
+  ],
+  LANGUAGE: [
+    { key: "language", labelKey: "materialLanguage", kind: "text" },
+    { key: "examOrLevel", labelKey: "materialLanguageExam", kind: "text" },
+    { key: "score", labelKey: "materialLanguageScore", kind: "text" },
+    { key: "obtainedOn", labelKey: "materialLanguageObtainedOn", kind: "date" },
   ],
 } as const satisfies Record<string, readonly MaterialDetailFieldDef[]>;
 
@@ -88,6 +116,7 @@ const DETAIL_RELATION: Record<EditableMaterialType, string> = {
   AWARD: "awardDetail",
   SKILL: "skillDetail",
   CERTIFICATION: "certificationDetail",
+  LANGUAGE: "languageDetail",
 };
 
 /**
@@ -121,6 +150,7 @@ export function detailFieldDraft(
     | undefined;
   const value = detail?.[def.key];
   if (value === null || value === undefined) return "";
+  if (def.kind === "boolean") return value === true ? "true" : "false";
   if (def.kind === "date") return toDateInput(value);
   if (def.kind === "float")
     return typeof value === "number" && Number.isFinite(value)
@@ -137,8 +167,9 @@ export function detailFieldDraft(
 export function detailFieldWire(
   def: MaterialDetailFieldDef,
   draft: string,
-): string | number | null {
+): string | number | boolean | null {
   const trimmed = draft.trim();
+  if (def.kind === "boolean") return draft === "true";
   if (def.kind === "float") return trimmed === "" ? null : Number(trimmed);
   return trimmed === "" ? null : trimmed;
 }

@@ -98,16 +98,29 @@ describe("application profile legacy no-regression", () => {
     }
   });
 
-  it("does not open idNumber/family management or LANGUAGE_TEST", () => {
+  it("keeps sensitive values inside their dedicated actions only", () => {
     const action = read("src/actions/applicationProfile.actions.ts");
-    // Deferred means no editor input accepts them; comments documenting the
-    // deferral are allowed.
-    expect(action).not.toMatch(/input:\s*\{[^}]*idNumber/);
+    // W4 opens idNumber/referee/attachment through their own explicit
+    // actions; the broad profile + emergency-contact writers must still not
+    // accept them.
+    const profileInput = action.match(
+      /updateApplicationCandidateProfile\(input:\s*\{([\s\S]*?)\}\):/,
+    );
+    expect(profileInput?.[1]).toBeTruthy();
+    expect(profileInput?.[1]).not.toContain("idNumber");
+    const emergencyInput = action.match(
+      /updateEmergencyContact\(input:\s*\{([\s\S]*?)\}\):/,
+    );
+    expect(emergencyInput?.[1]).toBeTruthy();
+    expect(emergencyInput?.[1]).not.toContain("idNumber");
+    // Family members stay deferred; LANGUAGE uses the LANGUAGE material
+    // type, never a LANGUAGE_TEST type string.
     expect(action).not.toMatch(/replaceCandidateFamilyMembers|CandidateFamilyMember/);
     expect(action).not.toContain("LANGUAGE_TEST");
     const workspace = read("src/components/career/application-profile/ApplicationProfileWorkspace.tsx");
     expect(workspace).not.toMatch(/idNumber\s*:/);
     expect(workspace).not.toContain("LANGUAGE_TEST");
-    expect(workspace).toContain("languageTestUnsupported");
+    // LANGUAGE is a real material type now; the old unsupported hint is gone.
+    expect(workspace).not.toContain("languageTestUnsupported");
   });
 });

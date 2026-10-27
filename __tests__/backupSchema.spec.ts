@@ -15,8 +15,8 @@ const validManifest = {
 };
 
 describe("manifest schema", () => {
-  it("pins new backups at format version 4", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(4);
+  it("pins new backups at format version 5", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(5);
   });
 
   it("accepts a well-formed v3 manifest", () => {

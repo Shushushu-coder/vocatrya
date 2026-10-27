@@ -7,14 +7,18 @@ import { IdMap, buildCreateData } from "./idmap";
 import { BackupError, openBackupZip, readManifest } from "./manifest";
 import { normalizeBackupData } from "./compat";
 import {
+  checkImportedAttachment,
   checkImportedFile,
+  importedAttachmentPath,
   importedFilePath,
+  logicalCareerAttachmentStorageKey,
   logicalResumeArtifactStorageKey,
   normalizeAIConnection,
   normalizeAutomation,
   normalizeAutomationRun,
   safeEntryName,
 } from "./normalize";
+import { resolveCareerAttachmentStorageKey } from "@/lib/career/candidateAttachmentService";
 import {
   DEFERRED_FKS,
   EMPTINESS_MODELS,
@@ -532,6 +536,62 @@ export async function importBackup(
     });
   }
 
+  // CandidateAttachment bytes ride in the zip only inside a sensitive backup,
+  // so this loop is a no-op for standard restores. Same shape as the resume
+  // file pass above: bytes are written before the transaction, mimeType and
+  // storageKey are rebuilt server-side and never trusted from the payload,
+  // and a row whose bytes are absent or rejected keeps its metadata.
+  const newAttachmentKeys = new Map<string, string>();
+  const newAttachmentMimes = new Map<string, string>();
+  const newAttachmentSizes = new Map<string, number>();
+  const rejectedAttachments: string[] = [];
+
+  for (const attachment of data.CandidateAttachment) {
+    const newId = idMap.get(attachment.id)!;
+    const prefix = `career-attachments/${attachment.id}/`;
+    const entry =
+      zip.file(`${prefix}${safeEntryName(attachment.fileName)}`) ??
+      Object.keys(zip.files)
+        .filter((name) => name.startsWith(prefix) && !zip.files[name].dir)
+        .map((name) => zip.files[name])[0] ??
+      null;
+    const fallbackKey = logicalCareerAttachmentStorageKey(
+      newId,
+      attachment.fileName,
+    );
+
+    if (!entry || attachment.bytesMissing) {
+      newAttachmentKeys.set(attachment.id, fallbackKey);
+      continue;
+    }
+
+    const bytes = await entry.async("nodebuffer");
+    const checked = checkImportedAttachment(bytes, attachment.category);
+    if (!checked) {
+      rejectedAttachments.push(attachment.fileName);
+      newAttachmentKeys.set(attachment.id, fallbackKey);
+      continue;
+    }
+
+    const target = importedAttachmentPath(newId, entry.name, checked.kind);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, bytes);
+    writtenPaths.push(target);
+    newAttachmentKeys.set(
+      attachment.id,
+      logicalCareerAttachmentStorageKey(newId, path.basename(target)),
+    );
+    newAttachmentMimes.set(attachment.id, checked.mimeType);
+    newAttachmentSizes.set(attachment.id, bytes.length);
+  }
+
+  if (rejectedAttachments.length > 0) {
+    log.warn("[Backup] Dropped attachment entries that failed validation", {
+      "backup.rejected_attachment_count": rejectedAttachments.length,
+      "backup.rejected_attachment_names": rejectedAttachments.join(", "),
+    });
+  }
+
   // Captured before the wipe so the old bytes can be unlinked after it commits.
   const oldFilePaths = (
     await db.file.findMany({
@@ -539,6 +599,25 @@ export async function importBackup(
       select: { filePath: true },
     })
   ).map((f) => f.filePath);
+
+  // Attachment rows are only wiped on a sensitive restore; on a standard
+  // restore they keep their files and this list stays empty.
+  const oldAttachmentPaths = containsSensitiveData
+    ? (
+        await db.candidateAttachment.findMany({
+          where: { userId },
+          select: { storageKey: true },
+        })
+      )
+        .map((a) => {
+          try {
+            return resolveCareerAttachmentStorageKey(a.storageKey);
+          } catch {
+            return null;
+          }
+        })
+        .filter((p): p is string => p !== null)
+    : [];
 
   const counts: Record<string, number> = {};
 
@@ -643,6 +722,26 @@ export async function importBackup(
                 ),
               };
             }
+            if (model === "CandidateAttachment") {
+              const {
+                bytesMissing: _marker,
+                storageKey: _ignored,
+                mimeType: _payloadMime,
+                ...rest
+              } = payload;
+              payload = {
+                ...rest,
+                storageKey: newAttachmentKeys.get(row.id as string)!,
+                // From the sniff, never the payload; falls back to the carried
+                // value only for rows whose bytes never landed.
+                mimeType:
+                  newAttachmentMimes.get(row.id as string) ??
+                  (row.mimeType as string),
+                sizeBytes:
+                  newAttachmentSizes.get(row.id as string) ??
+                  (row.sizeBytes as number | null),
+              };
+            }
             if (model === "LegacyMigrationMap") {
               try {
                 const remapped = remapLegacyMigrationMapIds(
@@ -721,6 +820,19 @@ export async function importBackup(
     await fs.unlink(filePath).catch((error) => {
       log.warn("[Backup] Could not remove replaced file", {
         "file.path": filePath,
+        error: String(error),
+      });
+    });
+  }
+
+  // Same orphan cleanup for replaced attachment bytes. Paths were resolved
+  // through the storage-key gate at capture time, so only keys that already
+  // validated under files/career-attachments reach unlink here.
+  for (const attachmentPath of oldAttachmentPaths) {
+    if (writtenPaths.includes(attachmentPath)) continue;
+    await fs.unlink(attachmentPath).catch((error) => {
+      log.warn("[Backup] Could not remove replaced attachment", {
+        "file.path": attachmentPath,
         error: String(error),
       });
     });
