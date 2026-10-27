@@ -277,7 +277,8 @@
       "category": "Basic Data",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "implementationNotes": "任务隔离浏览器验收覆盖公司新增/编辑及六类基础数据创建、选择、业务保存、刷新重开与关联一致性。职位名称、地点、渠道未提供独立 admin 新增/编辑 UI，标签和活动类型未提供编辑 UI；主要基础数据编辑验收尚未完整满足，不扩项补做。Windows Electron 未执行，passes 保持 false。",
       "description": "用户可维护并选择公司、职位名称、地点、投递渠道、标签和活动类型等高频基础数据。",
       "steps": [
         "新增、编辑主要基础数据，表单可选并在保存后正确关联。",
@@ -291,7 +292,7 @@
       "priority": "P1",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成就地创建后的立即选中、去重、失败反馈及共享选择器选项同步。定向测试通过，隔离数据库下保存和重开验收待完成。",
+      "implementationNotes": "已集成就地创建后的立即选中、去重、失败反馈及共享选择器选项同步，并修复 ComboBox 创建失败时清空搜索草稿的问题。任务隔离 SQLite/浏览器验收覆盖 AddJob 公司、职位名称、地点、渠道、标签及 TaskForm 活动类型的就地创建、立即选中、去重、保存、刷新重开与跨模块可见性；超长渠道名失败后保留输入和原选择。ComboBox/TagInput/AddJob 定向测试通过；Windows Electron 未执行，passes 保持 false。",
       "description": "需要基础数据的高频表单可在原位置创建并立即选择对应项目。",
       "steps": [
         "在新增职位等相关表单中就地创建允许的基础数据，并立即可选。",

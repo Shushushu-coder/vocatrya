@@ -469,6 +469,22 @@ describe("Combobox Enter key", () => {
   });
 
   describe("creation failures", () => {
+    it.each(["Enter", "click"])("retains the draft after creation fails via %s", async (trigger) => {
+      vi.mocked(createJobSource).mockResolvedValue({
+        success: false,
+        message: "Job source name is too long",
+      } as never);
+      const { user, input, onChange } = await openCombobox({ name: "source", options: [] });
+      const draft = "x".repeat(90);
+      await user.type(input, draft);
+      if (trigger === "Enter") await user.keyboard("{Enter}");
+      else await user.click(screen.getByText(draft, { selector: "p" }));
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith("Job source name is too long"));
+      expect(input).toBeVisible();
+      expect(input).toHaveValue(draft);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
     it("surfaces an error toast when location creation fails", async () => {
       vi.mocked(createLocation).mockResolvedValue({
         success: false,

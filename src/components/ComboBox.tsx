@@ -101,7 +101,6 @@ export function Combobox({
 
     e.preventDefault();
     onCreateOption(label);
-    setNewOption("");
   };
   // Mirrors the server-side match key per field, so a typed label that would
   // resolve to an existing row selects it instead of creating a duplicate.
@@ -136,6 +135,7 @@ export function Combobox({
     // itself the stored value, so there is nothing to create server-side.
     if (freeText) {
       field.onChange(label);
+      setNewOption("");
       setIsPopoverOpen(false);
       return;
     }
@@ -145,6 +145,7 @@ export function Combobox({
       : undefined;
     if (resolved) {
       field.onChange(resolved.id);
+      setNewOption("");
       setIsPopoverOpen(false);
       return;
     }
@@ -221,6 +222,7 @@ export function Combobox({
         options.unshift(record);
       }
       field.onChange(record.id);
+      setNewOption("");
       setIsPopoverOpen(false);
     });
   };
@@ -288,7 +290,6 @@ export function Combobox({
             <CommandEmpty
               onClick={() => {
                 onCreateOption(newOption);
-                setNewOption("");
               }}
               className={cn(
                 "flex cursor-pointer items-center justify-center gap-1 italic mt-2",
