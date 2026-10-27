@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import { TitleBarActions } from "@/components/desktop/TitleBarActions";
 import Sidebar from "@/components/Sidebar";
@@ -18,13 +19,20 @@ import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
 import StaleSessionSignOut from "@/components/StaleSessionSignOut";
-import { signOut } from "@/auth";
+import { auth, signOut } from "@/auth";
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // The sign-in redirect lives here, not in middleware (see auth.config.ts):
+  // `redirect()` emits a relative Location resolved against the request
+  // origin, keeping the desktop runtime on 127.0.0.1:<dynamic-port>.
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/signin");
+  }
   const cookieStore = await cookies();
   const sidebarCookie = cookieStore.get(APP_CONSTANTS.SIDEBAR_STORAGE_KEY);
   const initialExpanded = sidebarCookie ? sidebarCookie.value === "true" : true;

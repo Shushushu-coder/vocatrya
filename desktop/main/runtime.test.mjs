@@ -100,7 +100,15 @@ describe("desktop runtime helpers", () => {
   it("allows only the selected loopback origin", () => {
     const origin = "http://127.0.0.1:45678";
     expect(isAllowedNavigation(`${origin}/signin`, origin)).toBe(true);
+    expect(isAllowedNavigation(`${origin}/dashboard`, origin)).toBe(true);
     expect(isAllowedNavigation("http://127.0.0.1:45679/", origin)).toBe(false);
+    // `localhost` must never substitute for the bound loopback address —
+    // a localhost redirect is exactly the defect this guards against.
+    expect(isAllowedNavigation("http://localhost:45678/signin", origin)).toBe(false);
+    expect(isAllowedNavigation("http://[::1]:45678/signin", origin)).toBe(false);
+    expect(isAllowedNavigation("http://0.0.0.0:45678/signin", origin)).toBe(false);
+    expect(isAllowedNavigation("https://127.0.0.1:45678/signin", origin)).toBe(false);
+    expect(isAllowedNavigation("http://127.0.0.1/signin", origin)).toBe(false);
     expect(isAllowedNavigation("https://example.com/", origin)).toBe(false);
     expect(isAllowedNavigation("file:///tmp/test", origin)).toBe(false);
     expect(isExternalHttpUrl("https://example.com/path")).toBe(true);
