@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/DatePicker";
+import { TimePicker } from "@/components/TimePicker";
 import {
   Form,
   FormControl,
@@ -33,7 +34,13 @@ import { PROCESS_STEP_CATEGORY } from "@/lib/career/identities";
 import type {
   ApplicationAttemptTimelineDTO,
   ApplicationProcessStepDTO,
+  StepTimeInput,
 } from "@/lib/career/applicationTimeline";
+import {
+  stepTimeFieldFromStored,
+  stepTimeInputFromField,
+  type StepTimeFieldValue,
+} from "./stepTimeFields";
 import { useI18n } from "@/i18n";
 
 const CATEGORY_OPTIONS = [
@@ -45,12 +52,28 @@ const CATEGORY_OPTIONS = [
   PROCESS_STEP_CATEGORY.OTHER,
 ] as const;
 
+/** Values handed to the caller: `scheduledAt`/`deadlineAt` arrive already in
+ *  the wire contract — `undefined` means the field was never touched in edit
+ *  mode, so the server leaves every stored column (and any historical
+ *  unknown precision) exactly as it was. */
 export type ProcessStepFormValues = {
   applicationAttemptId: string;
   category: string;
   label: string;
-  scheduledAt: Date | null;
-  deadlineAt: Date | null;
+  scheduledAt: StepTimeInput | undefined;
+  deadlineAt: StepTimeInput | undefined;
+  notes: string;
+  result: string;
+};
+
+type ProcessStepFormFields = {
+  applicationAttemptId: string;
+  category: string;
+  label: string;
+  scheduledDate: Date | null;
+  scheduledTime: string;
+  deadlineDate: Date | null;
+  deadlineTime: string;
   notes: string;
   result: string;
 };
@@ -60,6 +83,8 @@ type ProcessStepDialogProps = {
   onOpenChange: (open: boolean) => void;
   editStep?: ApplicationProcessStepDTO | null;
   restrictFields?: boolean;
+  /** Account zone used to backfill wall times and resolve new input. */
+  timeZone: string;
   // Live attempts the new step may be attached to. Undefined hides the
   // picker entirely (edit mode); an empty array means saving creates an
   // application draft first.
@@ -72,18 +97,21 @@ export function ProcessStepDialog({
   onOpenChange,
   editStep,
   restrictFields = false,
+  timeZone,
   attempts,
   onSubmit,
 }: ProcessStepDialogProps) {
-  const { t, formatDateTime } = useI18n();
+  const { t, locale, formatDateTime } = useI18n();
   const [isPending, startTransition] = useTransition();
-  const form = useForm<ProcessStepFormValues>({
+  const form = useForm<ProcessStepFormFields>({
     defaultValues: {
       applicationAttemptId: "",
       category: PROCESS_STEP_CATEGORY.INTERVIEW,
       label: "",
-      scheduledAt: null,
-      deadlineAt: null,
+      scheduledDate: null,
+      scheduledTime: "",
+      deadlineDate: null,
+      deadlineTime: "",
       notes: "",
       result: "",
     },
@@ -97,16 +125,40 @@ export function ProcessStepDialog({
   useEffect(() => {
     if (!open) return;
     const options = attemptsRef.current;
+    const scheduled: StepTimeFieldValue = editStep
+      ? stepTimeFieldFromStored(
+          {
+            iso: editStep.scheduledAt,
+            precision: editStep.scheduledAtPrecision,
+            dateOnly: null,
+            zone: editStep.scheduledAtZone,
+          },
+          timeZone,
+        )
+      : { date: null, time: "" };
+    const deadline: StepTimeFieldValue = editStep
+      ? stepTimeFieldFromStored(
+          {
+            iso: editStep.deadlineAt,
+            precision: editStep.deadlinePrecision,
+            dateOnly: editStep.deadlineOn,
+            zone: editStep.deadlineZone,
+          },
+          timeZone,
+        )
+      : { date: null, time: "" };
     form.reset({
       applicationAttemptId: options?.length === 1 ? options[0].id : "",
       category: editStep?.category ?? PROCESS_STEP_CATEGORY.INTERVIEW,
       label: editStep?.label ?? "",
-      scheduledAt: editStep?.scheduledAt ? new Date(editStep.scheduledAt) : null,
-      deadlineAt: editStep?.deadlineAt ? new Date(editStep.deadlineAt) : null,
+      scheduledDate: scheduled.date,
+      scheduledTime: scheduled.time,
+      deadlineDate: deadline.date,
+      deadlineTime: deadline.time,
       notes: editStep?.notes ?? "",
       result: editStep?.result ?? "",
     });
-  }, [editStep, form, open]);
+  }, [editStep, form, open, timeZone]);
 
   // A refreshed attempt list can invalidate a selection made before the
   // refresh: clear it so the user picks again instead of the step
@@ -119,9 +171,66 @@ export function ProcessStepDialog({
     }
   }, [attempts, form, open]);
 
-  function submit(values: ProcessStepFormValues) {
+  function submit(values: ProcessStepFormFields) {
+    const dirty = form.formState.dirtyFields;
+    const scheduledTouched = Boolean(
+      dirty.scheduledDate || dirty.scheduledTime,
+    );
+    const deadlineTouched = Boolean(dirty.deadlineDate || dirty.deadlineTime);
+
+    const scheduled = stepTimeInputFromField("scheduledAt", {
+      date: values.scheduledDate,
+      time: values.scheduledTime,
+    });
+    const deadline = stepTimeInputFromField("deadlineAt", {
+      date: values.deadlineDate,
+      time: values.deadlineTime,
+    });
+    const timeFieldMessage = (
+      reason: "time-required" | "date-required" | "invalid-time",
+    ) =>
+      reason === "date-required"
+        ? locale === "zh-CN"
+          ? "请先选择日期"
+          : "Pick a date first"
+        : reason === "invalid-time"
+          ? locale === "zh-CN"
+            ? "时间格式无效"
+            : "Invalid time"
+          : locale === "zh-CN"
+            ? "请选择具体时间"
+            : "Pick a time";
+    if (scheduledTouched && !scheduled.ok) {
+      form.setError("scheduledTime", {
+        message: timeFieldMessage(scheduled.reason),
+      });
+      return;
+    }
+    if (deadlineTouched && !deadline.ok) {
+      form.setError("deadlineTime", {
+        message: timeFieldMessage(deadline.reason),
+      });
+      return;
+    }
+
     startTransition(async () => {
-      const ok = await onSubmit(values);
+      const ok = await onSubmit({
+        applicationAttemptId: values.applicationAttemptId,
+        category: values.category,
+        label: values.label,
+        scheduledAt: scheduledTouched
+          ? scheduled.ok
+            ? scheduled.value
+            : undefined
+          : undefined,
+        deadlineAt: deadlineTouched
+          ? deadline.ok
+            ? deadline.value
+            : undefined
+          : undefined,
+        notes: values.notes,
+        result: values.result,
+      });
       if (ok) onOpenChange(false);
     });
   }
@@ -235,38 +344,64 @@ export function ProcessStepDialog({
             />
             {!restrictFields && (
               <>
-                <FormField
-                  control={form.control}
-                  name="scheduledAt"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t("jobs.stepScheduledAt")}</FormLabel>
-                      <DatePicker
-                        field={field}
-                        presets={false}
-                        isEnabled
-                        fullWidth
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="deadlineAt"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t("jobs.stepDeadlineAt")}</FormLabel>
-                      <DatePicker
-                        field={field}
-                        presets={false}
-                        isEnabled
-                        fullWidth
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField
+                    control={form.control}
+                    name="scheduledDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>{t("jobs.stepScheduledAt")}</FormLabel>
+                        <DatePicker
+                          field={field}
+                          presets={false}
+                          isEnabled
+                          fullWidth
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="scheduledTime"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>{t("common.pickTime")}</FormLabel>
+                        <TimePicker field={field} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField
+                    control={form.control}
+                    name="deadlineDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>{t("jobs.stepDeadlineAt")}</FormLabel>
+                        <DatePicker
+                          field={field}
+                          presets={false}
+                          isEnabled
+                          fullWidth
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="deadlineTime"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>{t("common.pickTime")}</FormLabel>
+                        <TimePicker field={field} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </>
             )}
             <FormField

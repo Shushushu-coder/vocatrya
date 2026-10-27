@@ -417,6 +417,7 @@ describe("Resume Variant V1 product polish UI", () => {
   it("keeps the archived historical timeline link pointing at the submitted version", async () => {
     const data: ApplicationTimelineDTO = {
       opportunityId: "job-1",
+      timeZone: "Asia/Shanghai",
       attempts: [
         {
           id: "att-1",

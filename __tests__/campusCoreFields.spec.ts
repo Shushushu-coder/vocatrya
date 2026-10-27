@@ -19,6 +19,7 @@ import {
   planUiStatusWrite,
   resolveCareerRuntimeMode,
 } from "@/lib/career";
+import { runtimeTimeZone } from "@/lib/datetime";
 import {
   createOpportunityFromJobForm,
   getOpportunityAsJob,
@@ -276,7 +277,7 @@ describe("TRANSFERRED identity", () => {
       scheduledAt: new Date("2026-10-20T00:00:00.000Z"),
     });
     await apps.recordOutcome(attempt.id, ATTEMPT_OUTCOME.TRANSFERRED);
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     expect(events.map((row) => row.label)).not.toContain(
       "Should vanish after transfer",
     );

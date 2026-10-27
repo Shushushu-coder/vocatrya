@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarClock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -127,6 +128,7 @@ export function ApplicationTimelineTab({
 }: ApplicationTimelineTabProps) {
   const { t, formatDateTime } = useI18n();
   const copy = useCopy();
+  const router = useRouter();
   const [timeline, setTimeline] = useState<ApplicationTimelineDTO | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [attemptDialogOpen, setAttemptDialogOpen] = useState(false);
@@ -162,6 +164,18 @@ export function ApplicationTimelineTab({
       toastError(result.message);
     }
   }, [jobId]);
+
+  // Every mutation refreshes the current route's server data as well, so any
+  // dashboard/upcoming surface mounted alongside the tab re-reads its model.
+  const reloadAfterMutation = useCallback(async () => {
+    router.refresh();
+    const result = await getApplicationTimeline(jobId);
+    if (result.success) {
+      setTimeline(result.data ?? null);
+    } else {
+      toastError(result.message);
+    }
+  }, [router, jobId]);
 
   useEffect(() => {
     void loadTimeline();
@@ -215,12 +229,12 @@ export function ApplicationTimelineTab({
           : undefined;
       toastError(attemptErrorKey ? t(attemptErrorKey) : result.message);
       if (attemptErrorKey) {
-        await loadTimeline();
+        await reloadAfterMutation();
       }
       return false;
     }
     toastSuccess(editStep ? t("jobs.stepUpdated") : t("jobs.stepAdded"));
-    await loadTimeline();
+    await reloadAfterMutation();
     return true;
   };
 
@@ -244,7 +258,7 @@ export function ApplicationTimelineTab({
           : result.message,
       );
       if (stale) {
-        await loadTimeline();
+        await reloadAfterMutation();
       }
       return false;
     }
@@ -254,7 +268,7 @@ export function ApplicationTimelineTab({
         en: "Application round created",
       }),
     );
-    await loadTimeline();
+    await reloadAfterMutation();
     return true;
   };
 
@@ -267,7 +281,7 @@ export function ApplicationTimelineTab({
     if (!result.success) {
       const entry = result.code ? TRANSFER_ERROR_COPY[result.code] : undefined;
       toastError(entry ? copy(entry.key, entry.fallback) : result.message);
-      await loadTimeline();
+      await reloadAfterMutation();
       return false;
     }
     toastSuccess(
@@ -276,7 +290,7 @@ export function ApplicationTimelineTab({
         en: "Application transferred",
       }),
     );
-    await loadTimeline();
+    await reloadAfterMutation();
     return true;
   };
 
@@ -288,7 +302,7 @@ export function ApplicationTimelineTab({
         return;
       }
       toastSuccess(t("jobs.stepCompleted"));
-      await loadTimeline();
+      await reloadAfterMutation();
     });
   };
 
@@ -304,7 +318,7 @@ export function ApplicationTimelineTab({
       return false;
     }
     toastSuccess(t("jobs.stepRescheduled"));
-    await loadTimeline();
+    await reloadAfterMutation();
     return true;
   };
 
@@ -326,12 +340,12 @@ export function ApplicationTimelineTab({
         : undefined;
       toastError(attemptErrorKey ? t(attemptErrorKey) : result.message);
       if (attemptErrorKey) {
-        await loadTimeline();
+        await reloadAfterMutation();
       }
       return false;
     }
     toastSuccess(t("jobs.stepAdded"));
-    await loadTimeline();
+    await reloadAfterMutation();
     return true;
   };
 
@@ -346,7 +360,7 @@ export function ApplicationTimelineTab({
       }
       toastSuccess(t("jobs.stepCancelled"));
       setStepToCancel(null);
-      await loadTimeline();
+      await reloadAfterMutation();
     });
   };
 
@@ -361,7 +375,7 @@ export function ApplicationTimelineTab({
       }
       toastSuccess(t("jobs.stepDeleted"));
       setStepToDelete(null);
-      await loadTimeline();
+      await reloadAfterMutation();
     });
   };
 
@@ -394,6 +408,7 @@ export function ApplicationTimelineTab({
         onOpenChange={setDialogOpen}
         editStep={editStep}
         restrictFields={restrictFields}
+        timeZone={timeline.timeZone}
         attempts={editStep ? undefined : liveAttempts}
         onSubmit={onSave}
       />
@@ -417,6 +432,7 @@ export function ApplicationTimelineTab({
           if (!open) setRescheduleStep(null);
         }}
         step={rescheduleStep}
+        timeZone={timeline.timeZone}
         onSubmit={onRescheduleSave}
       />
       <InterviewReflectionDialog
@@ -616,6 +632,7 @@ export function ApplicationTimelineTab({
               steps={attempt.steps}
               canMutate={canMutate}
               busy={rowActionBusy}
+              timeZone={timeline.timeZone}
               onEdit={openEdit}
               onReschedule={setRescheduleStep}
               onComplete={(step) => onComplete(step.id)}

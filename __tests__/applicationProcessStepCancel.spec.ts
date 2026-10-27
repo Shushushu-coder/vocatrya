@@ -12,6 +12,7 @@ import {
   activateFreshAbNative,
   listUpcomingApplicationEvents,
 } from "@/lib/career";
+import { runtimeTimeZone } from "@/lib/datetime";
 import {
   makeTestDbUrl,
   pushSchema,
@@ -134,7 +135,7 @@ describe("cancelProcessStep", () => {
       scheduledAt: new Date("2026-11-01T00:00:00.000Z"),
     });
     expect(
-      (await listUpcomingApplicationEvents(prisma, userId)).some(
+      (await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone())).events.some(
         (row) => row.processStepId === step.id,
       ),
     ).toBe(true);
@@ -149,7 +150,7 @@ describe("cancelProcessStep", () => {
     expect(reread.status).toBe(PROCESS_STEP_STATUS.CANCELLED);
     expect(reread.completedAt).toBeInstanceOf(Date);
     expect(
-      (await listUpcomingApplicationEvents(prisma, userId)).some(
+      (await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone())).events.some(
         (row) => row.processStepId === step.id,
       ),
     ).toBe(false);

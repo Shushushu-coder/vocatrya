@@ -64,8 +64,14 @@ function step(overrides: Partial<StepDTO> = {}): StepDTO {
     status: "PENDING",
     source: "USER",
     scheduledAt: null,
+    scheduledAtPrecision: null,
+    scheduledAtZone: null,
+    deadlineOn: null,
     deadlineAt: null,
+    deadlinePrecision: null,
+    deadlineZone: null,
     completedAt: null,
+    completedAtPrecision: null,
     result: null,
     notes: null,
     ...overrides,
@@ -73,7 +79,7 @@ function step(overrides: Partial<StepDTO> = {}): StepDTO {
 }
 
 function timeline(attempts: AttemptDTO[]): ApplicationTimelineDTO {
-  return { opportunityId: "job-1", attempts };
+  return { opportunityId: "job-1", timeZone: "Asia/Shanghai", attempts };
 }
 
 function twoAttempts(): ApplicationTimelineDTO {

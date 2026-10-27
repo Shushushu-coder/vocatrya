@@ -106,11 +106,13 @@ export type {
   ApplicationTimelineDTO,
   ApplicationAttemptTimelineDTO,
   ApplicationProcessStepDTO,
+  StepTimeInput,
   SubmittedResumeDTO,
   SubmittedResumeBindingAttemptDTO,
   SubmittedResumeBindingsDTO,
   TransferredFromDTO,
 } from "./applicationTimeline";
+export { declaredStepPrecision } from "./applicationTimeline";
 export {
   assertInterviewReflectionStep,
   emptyInterviewReflection,
@@ -133,6 +135,7 @@ export {
 export type {
   UpcomingEventKind,
   UpcomingApplicationEvent,
+  UpcomingApplicationEventsEnvelope,
   UpcomingBucketId,
   UpcomingBucket,
 } from "./upcomingReadModel";

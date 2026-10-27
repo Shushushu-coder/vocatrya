@@ -23,6 +23,7 @@ import {
   loadRecentJobs,
 } from "@/lib/career/jobsReadDispatch";
 import { listUpcomingApplicationEvents } from "@/lib/career/upcomingReadModel";
+import { runtimeTimeZone } from "@/lib/datetime";
 import {
   makeTestDbUrl,
   pushSchema,
@@ -135,7 +136,7 @@ async function createAttempt(
 }
 
 async function upcomingDeadlineTitles(uid = userId) {
-  const events = await listUpcomingApplicationEvents(prisma, uid);
+  const { events } = await listUpcomingApplicationEvents(prisma, uid, runtimeTimeZone());
   return events
     .filter((row) => row.kind === UPCOMING_EVENT_KIND.APPLICATION_DEADLINE)
     .map((row) => row.roleTitle);

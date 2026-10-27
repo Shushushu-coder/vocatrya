@@ -4,16 +4,25 @@ import Link from "next/link";
 import { CalendarClock, SquareCheckBig } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/i18n";
+import { formatDateOnly, formatInstant } from "@/lib/datetime";
 import type { OverviewReminder } from "@/actions/dashboard.actions";
+
+const REMINDER_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  weekday: "short",
+};
 
 // Lightweight strip rendered only when something concrete is due; the whole
 // section disappears on a clean week rather than holding empty space.
 export default function OverviewReminders({
   reminders,
+  timeZone,
 }: {
   reminders: OverviewReminder[];
+  timeZone: string;
 }) {
-  const { t, formatDate } = useI18n();
+  const { t, locale } = useI18n();
   if (reminders.length === 0) return null;
 
   return (
@@ -49,11 +58,14 @@ export default function OverviewReminders({
                     : "shrink-0 text-xs text-muted-foreground"
                 }
               >
-                {formatDate(reminder.at, {
-                  month: "short",
-                  day: "numeric",
-                  weekday: "short",
-                })}
+                {reminder.dateOn
+                  ? formatDateOnly(reminder.dateOn, locale, REMINDER_DATE_OPTIONS)
+                  : formatInstant(
+                      reminder.at,
+                      locale,
+                      timeZone,
+                      REMINDER_DATE_OPTIONS,
+                    )}
                 {reminder.overdue ? ` · ${t("dashboard.overdue")}` : ""}
               </span>
             </Link>

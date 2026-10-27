@@ -17,7 +17,7 @@ export async function generateMetadata() {
 }
 
 export default async function Dashboard() {
-  const [stats, reminders, recentJobs, recentActivities, dataState] =
+  const [stats, remindersData, recentJobs, recentActivities, dataState] =
     await Promise.all([
       getOverviewStats(),
       getOverviewReminders(),
@@ -28,7 +28,10 @@ export default async function Dashboard() {
   return (
     <div className="col-span-3 mx-auto grid w-full max-w-[1400px] min-w-0 auto-rows-max gap-4">
       <OverviewMetrics stats={stats} />
-      <OverviewReminders reminders={reminders} />
+      <OverviewReminders
+        reminders={remindersData.reminders}
+        timeZone={remindersData.timeZone}
+      />
       {/* The starter entries replace the empty feed only on a proven-empty
           account; "unknown" keeps the normal workbench (and its degraded
           notices) rather than offering starters on an unverifiable read. */}
