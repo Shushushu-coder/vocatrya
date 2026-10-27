@@ -4,7 +4,22 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## 桌面入口与剩余修改集成收尾（2026-10-27，当前执行口径）
+## 最终验收结果（2026-10-27，当前状态）
+
+用户明确启动最终验收后，由主窗口单独串行执行。28 项 IN_SCOPE 中当前 23 项 passes=true（含此前已通过且未受影响的 RM-BIND），5 项保留 false；这不是全项发布放行。
+
+- 构建来源：基线 Main 1dec57fc，已有生产快照的 1,100 个源码/构建输入逐项与 Main 相同，先复用该构建，独立隔离数据根验证各组。实际宿主为 Windows Electron，fresh-native 激活与日志 FRESH_READY/AB_ENABLED/full 均核对，系统代理保持原样，未使用 direct 诊断冒充通过。
+- 流程/时间：多轮次与转投、步骤新增/改期/完成/取消、Job/Task/Upcoming/Dashboard 的上海/纽约账户时区联动、历史 unknown 保护及完整 quit IPC 退出重开通过。补测 Electron 960px 渲染视口的对话框与键盘、Task 历史 instant 无关编辑保留通过；不把原生窗口驱动失败记为成功。
+- 职业资料：修正旧验收脚本选择器、异步等待与不完整 fixture 后，24/24 检查点通过，含七 Tab、多记录/教育派生、真实剪贴板、遮罩/迟到响应/失败草稿、证件/证明人/附件、技能 Tag 活引用及退出重开。真实中文 IME 未测；合成 composition 事件不替代人工证据。
+- 简历：真实素材→编辑/预览→冻结→新草稿隔离→Electron PDF 导出通过；约 77KB/1页，存储字节/hash/认证下载一致，PDF 解析含姓名与 TypeScript。初次重开因测试抢导航失败，补启动请求等待后针对同一 root 复测 3/3 通过，不重新运行已通过的编辑流程，不抹去原失败记录。
+- 设置/备份：任务日期创建编辑清空、字典维护、语言与主题保存/失败回滚、隔离桌面偏好、Backup V6 标准/敏感导出、损坏文件拒绝、预检取消、真实 UI 恢复及重开通过。确认标准恢复保留敏感、技能 Tag ID 重映射、敏感恢复还原附件字节；其他字典维护和被引用改名守卫补测通过。
+- 实际产品缺陷：JOB-03 的表格/卡片遗漏薪资，现已在 Main e1879aca 补原文/缺失占位并统一渠道本地化；53 项相关 UI 测试、8 项 harness 单测和改动文件 ESLint 通过。该提交重新生产构建（含类型检查/27 页生成）并装配一次，源码摘要 c6e807d81e9e9512ac60235288f4ac24f4bbcd4f059a1aec9af03f3783a6cfa8；新产物的表格/卡片与真正退出重开定向回归通过，不重跑无关业务。构建有既有 unpdf import.meta warning，未阻塞；本轮真实 PDF 已解析验证。
+- 未通过项：CP-EDIT（真实 IME）、CP-LEGACY（旧库原生升级）、JOB-05（受限/迁移模式多语言提示）、SET-DESKTOP（真实系统自启/系统重启及完整托盘路径）、SET-AI-SERVICES（真实连接/BYOK/模型业务）。不把未测项设 true；系统配置/真实凭据仍需对应授权或环境。
+- Task 性能仍 avg 309.0ms/max 549.2ms，略超 300ms 参考预算的非阻塞观察保留；RM-MATCH/BD-ARCHIVE/REM-V1 延期不变。未发布、未 Push、未操作真实库/安装版/系统自启，未清理旧 Worktree 或证据。
+
+本轮脚本、运行日志与隔离库保留于 .tmp/final-acceptance：流程 root 6aee0d1a-ae0c-49c5-b96e-907a2845523d；职业资料 root b4748ec0-4a82-4594-a64d-7f6f75ca26b3（汇总 electron-results.json 24/24）；简历 root eb59646f-f7f2-4d5e-8050-aa7ab1c9d4bc（checks.json 含原失败，reopen-retest.json 为针对性通过）；设置 root fa647f43-c689-4450-b903-2805d834d7ba；职位 root 1b2b6846-84fb-45b2-92c4-eaa876a0ce11；新构建 builds/1a1c67a5-5c4e-434c-8a9c-76efd9ee714e（初次卡片选择器歧义保留，list-retest.json 为修正后定向结果）。这些是临时证据，不作为待合并产品文件。
+
+## 桌面入口与剩余修改集成收尾（2026-10-27，历史集成记录）
 
 - 用户已授权将认证入口修复、桌面测试基础设施/规则和 W7 服务级测试整合 Main。认证修复提交 ff5f091f：dashboard 未登录跳转移至服务端 layout，保留相对 /signin 和既有 API 鉴权，不放宽 Electron origin 白名单。
 - 桌面测试入口补齐隔离环境、动态 CDP、磁盘检查和所属进程清理；复审补上首次/重开导航加载等待，避免测试抢占应用初始 loadURL。失败截图/trace、taskkill 和 CDP 关闭增加超时边界。基础设施单测不能替代真实 Electron 验收，启动链路尚未最终验收。

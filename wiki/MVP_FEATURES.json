@@ -22,22 +22,22 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "任务隔离浏览器七 Tab、显隐保存、刷新、服务重启重开与记录保留验收通过；Windows Electron 完整退出重开结果未核实，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 七 Tab、显隐/刷新、完整 quit IPC 退出重开与历史求职意向保留通过。",
       "description": "职业资料采用七 Tab，允许用户管理 Tab 显示，保留历史求职意向数据但不提供独立全局求职意向 Tab。",
       "steps": [
         "打开职业资料，能访问个人信息、教育经历、实习经历、项目经历、获奖经历、其他、网申资料七个 Tab。",
         "隐藏并重新显示指定 Tab，刷新和重启后保持显隐设置，原记录未丢失。",
         "全局求职意向不出现在七 Tab 中，但已有 JobSearchPreference 数据保留。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-EDIT",
       "category": "Career Profile",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
-      "implementationNotes": "任务隔离浏览器验证个人/素材自动保存、快速输入、切换 Tab、失败草稿重试、刷新及服务重启重开；中文输入法仅通过合成 composition 事件验证，实机输入法与 Windows Electron 完整退出重开未核实，敏感字段仍沿用显式编辑，passes 保持 false。",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-10-27 最终验收：Main 自动保存代码已实现；Windows Electron fresh-native 个人/素材连续输入、切 Tab、保存失败保草稿/重试、刷新及完整退出重开通过。中文输入法仅有合成 composition 事件覆盖，真实 IME 仍需人工确认，passes 保持 false。敏感字段按合同保留显式编辑。",
       "description": "职业资料字段可直接编辑、自动保存，并在失败时保留输入供重试。",
       "steps": [
         "编辑一项资料字段，无需整页保存即可完成持久化；重新打开仍显示修改后的值。",
@@ -57,8 +57,8 @@
         "已有 GPA、评分制、排名可正确回填；按冻结合同维护新增科研、论文、语言多条目。",
         "关闭并重开后记录与字段保持一致；涉及新增字段时使用获批的 M1/M2 Schema。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 W4 已集成 main：按冻结合同补齐字段、语言明细、教育派生与多条素材维护，新增 Migration 和 Backup V5。合并前修复 MBA/未知学历误派生；组合定向验证通过。完整 Windows Electron 多记录与退出重开验收仍未完成，passes 保持 false。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 多条教育/实习/项目/获奖/其他记录及科研/论文/语言维护、编辑/归档、GPA/排名回填、明确毕业事实派生、完整退出重开通过。"
     },
     {
       "id": "CP-COPY",
@@ -66,14 +66,14 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "任务隔离浏览器字段、分组、记录、Tab、网申汇总复制与敏感过滤路径通过；Windows Electron 剪贴板完整验收未核实，passes 保持 false。 2026-10-27 W4 新字段/语言复制与敏感过滤及双语词条已集成，完整桌面剪贴板验收仍待完成。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 实际剪贴板核对字段/分组/记录/Tab/网申汇总文本通过，默认复制排除敏感与不应进入汇总的旧偏好；技能活名改名复制通过。",
       "description": "在现有“复制本条”基础上提供字段、分组、记录、Tab、网申汇总的分级复制。",
       "steps": [
         "字段、分组、记录、Tab 和按需网申汇总均能复制正确文本。",
         "默认批量复制不包含证件、紧急联系人、证明人等敏感信息。",
         "记录级复制沿用已有能力，不重复生成与现有记录矛盾的内容。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-PRIVACY",
@@ -81,14 +81,14 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-27 W4 已集成 main：证件、证明人和附件服务/UI、敏感备份与复制过滤已接线；修复收起/迟到响应的明文残留、恢复时证件照类型绕过，上传入口支持服务层 5MB 上限。隐私与隔离备份定向验证通过，Windows Electron 完整验收未完成，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 遮罩/显式查看复制、迟到响应丢弃、收起清草稿、失败保输入、证件/证明人/附件上传下载及归档通过；默认复制和标准 V6 导出排除敏感，敏感恢复还原附件字节通过。",
       "description": "职业资料中的证件、紧急联系人、证明人及附件等敏感内容默认受保护。",
       "steps": [
         "默认视图隐藏敏感字段；查看或单字段复制需明确操作。",
         "证明人、附件及证件照等新增敏感对象遵循相同保护要求。",
         "非敏感导出和网申汇总不意外包含受保护信息。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-LEGACY",
@@ -96,7 +96,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
-      "implementationNotes": "任务隔离浏览器使用合成旧资料验证个人信息与素材可读写、历史求职意向和证件值保留，并覆盖刷新与服务重启重开；Windows Electron 完整退出重开未核实，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：本轮 Windows Electron fresh-native 用合成旧形状资料核对读取/修改、旧求职意向与证件保留、完整退出重开通过。这不等于从旧版本数据库启动新版并升级；旧库原生升级路径未实测，保留 PARTIAL/false，不操作真实用户旧库。",
       "description": "七 Tab 可正确呈现既有候选人资料与职业素材，不破坏历史求职意向。",
       "steps": [
         "用旧版本已存在的数据打开新版七 Tab，原个人信息和经历可读取与继续修改。",
@@ -111,13 +111,13 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "任务隔离浏览器验收通过：legacy 与 canonical full 家族的已投递草稿撤销仅回滚开关自动值，已保存投递事实编辑后不被清除。Windows Electron 实机验收待完成，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 新增草稿已投递 ON/OFF 仅撤销自动值通过；保存已投递事实后编辑开关锁定、保存不删除原 Attempt/submittedAt，通过实际隔离数据库核对。",
       "description": "未保存的“已投递”草稿可撤销，已保存的真实投递事实不被抹除。",
       "steps": [
         "在新增职位表单打开“已投递”后再撤销，仅移除该开关自动填写的状态和日期。",
         "保存真实投递后重新打开，关闭草稿开关或其他编辑操作不会删除既有投递事实。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "JOB-02",
@@ -125,13 +125,13 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "任务隔离浏览器验收通过：含逗号、引号及中英文的薪资原文在 legacy/canonical 保存、刷新重开、详情与 CSV 解析后逐字一致。Windows Electron 实机验收待完成，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 含逗号/引号/中英文的薪资原文保存、编辑回填、详情、CSV 解析、完整退出重开通过。",
       "description": "使用现有自由文本薪资字段，在职位页面及 CSV 导出中准确保留原文。",
       "steps": [
         "填写包含任意合法文本形式的薪资并保存、重新打开，展示值不改变。",
         "导出 CSV，薪资字段与保存值一致，不自行推断或格式化为虚假区间。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "JOB-03",
@@ -139,13 +139,13 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "任务隔离浏览器核对列表、详情的薪资和渠道来源与数据库一致，缺失值显示中性占位；Agent canonical 读取由相关定向测试覆盖。Windows Electron 实机验收待完成，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：最终验收发现列表遗漏薪资，已由 e1879aca 补齐表格/卡片原文和缺失占位，并复用既有渠道本地化 helper。新生产构建的真实 Electron 表格/卡片原值、缺失值及重开回归通过；详情/CSV/隔离 DB 已核对。复用先前 legacy/canonical/Agent 定向证据，不声称本轮调用了真实外部 AI。",
       "description": "职位薪资、渠道与来源按实际数据展示，缺失值不造假。",
       "steps": [
         "列表和详情显示已保存的薪资、渠道、来源，与 legacy/canonical 读取结果一致。",
         "字段缺失时显示中性缺失状态，不编造值；Agent 读取不改变同一事实。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "JOB-04",
@@ -153,13 +153,13 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已核实列表与详情来源为纯文本，任务浏览器断言无链接或按钮；本来已满足，无需重复清理。Windows Electron 实机验收待完成，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 列表/卡片/详情渠道为文本，无伪链接；薪资补丁后的新构建再次核对表格/卡片文本与缺失占位通过。",
       "description": "职位来源不再出现无用途的装饰性交互。",
       "steps": [
         "检查当前职位列表和详情中的来源呈现；不存在没有实际功能的可点击控件。",
         "如果本来只有文本标签，则直接记为通过，不实施重复清理。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "JOB-05",
@@ -167,7 +167,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成职位 action 与 blocked 读取的中英文错误映射，保留既有保护逻辑；任务浏览器在 legacy/full/resume-only/disabled 四类隔离环境验证受限提示及内部术语过滤通过，相关定向测试通过。迁移态 resume_v1 详情受限面板及 Windows Electron 实机验收未执行，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：此前 Web/定向证据保留。本轮仅覆盖 Windows Electron fresh-native full 正常路径，未逐一运行迁移态 resume_v1、resume-only、disabled 等受限模式的中英文提示；passes 保持 false。",
       "description": "用户界面不暴露 A+B、运行时环境变量等内部实验术语。",
       "steps": [
         "中英文职位相关运行提示和简历提示中不出现“A+B”或 VOCATRYA_AB_RUNTIME_ENABLED 等内部术语。",
@@ -181,14 +181,14 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成同职位独立新建投递轮次、转投至其他所属职位的入口及 Timeline 刷新，保留服务层权限、runtime 门控与历史事实；转投目标支持分页，提交期间禁止关闭对话框以保护草稿。入口/action 定向测试及既有隔离 DB 转投契约回归通过；浏览器/Electron 跨职位操作、关闭重开及事件归属的完整真实用户路径验收待完成。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 显式创建多个轮次、分轮次事件归属、UI 转投来源终态与目标 provenance、完整退出重开通过。",
       "description": "用户可在同一职位独立建立多个 Application Attempt 并执行转投。",
       "steps": [
         "在职位详情中显式创建第二个 Attempt，能查看和选择各自记录。",
         "通过用户界面执行转投，新 Attempt 与原 Attempt 的事实分别保存。",
         "重开后 Attempt 与流程事件归属正确。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "PROC-UX",
@@ -196,14 +196,14 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成流程事件表格、按 Attempt 快捷新增、改期、完成和取消；取消保留记录并从 Upcoming 排除，完成/取消采用条件写入保护终态。补齐中文输入法 Enter 保护及保存期间草稿/对话框保护。组件与隔离 SQLite 定向测试通过；窄窗口、键盘、重开及 Dashboard/Upcoming 实际用户联动验收待完成，日期精度/时区消费者仍由 P-PROC 等任务维护。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 按轮次新增笔试/一面/二面/Offer，改期/完成/取消、键盘 Enter 提交和重开通过；补测真实 Electron 中 960px 渲染视口的时间线对话框边界和 Escape 关闭通过，不把 CDP/Win32 原生窗口尺寸驱动失败算为成功。",
       "description": "流程详情支持笔试、多轮面试、Offer 等事件的表格展示、快捷新增和更新。",
       "steps": [
         "在同一职位详情页依次新增笔试、一面、二面、Offer，并可选择对应 Attempt。",
         "对事件进行改期、完成和取消，Timeline 状态及顺序同步更新。",
         "窄窗口下和键盘操作可用，重新打开后状态一致。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "PROC-UPCOMING",
@@ -217,22 +217,22 @@
         "完成或取消事件后待办反映实际状态，不保留虚假待办。",
         "按已批准的精度及用户时区显示事件时间。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 W1 已集成 main：Upcoming/Dashboard 消费流程 sidecar、Task dueOn 和 Job deadlineOn，按账户时区计算关注/逾期/分桶；完成与取消排除。修复混合任务提前截断、首次加载失败永久 loading 和关注日期载体不一致。组合定向验证通过；W3 已集成，隔离 SQLite 写入到 Upcoming 的定向联动通过；完整跨模块用户路径与 Windows Electron 实际联动仍待完成，passes 保持 false。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 流程新增/改期/完成/取消与 Job/Task、Upcoming/Dashboard 的实际联动通过；上海/纽约账户时区分桶、关注排序、逾期和退出重开一致。"
     },
     {
       "id": "P-TZ",
       "category": "DateTime / Task",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
-      "implementationNotes": "已集成 Settings 可搜索 IANA 时区选择、跟随系统、原子持久化及客户端/服务端统一读取接口；拒绝缩写与裸 offset，脏设置安全回退且不回写。语言与时区按字段合流串行保存，失败独立回滚，避免跨字段丢失待保存修改。定向组件、action、隔离 SQLite 持久化及连接重开验证通过；真实浏览器/Electron 界面与进程退出重开未验收，P-PROC/P-TASK 消费者已集成，P-JO 已集成，隔离数据库联动回归通过，最终桌面跨模块验收未完成，passes 保持 false。",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native Settings 保存 America/New_York、刷新和完整退出重开通过；上海/纽约事件时刻转换与 DateOnly 不漂移通过，Main 消费者代码已实现。",
       "description": "用户可以设置 IANA 时区；相关日期显示按冻结后的时区合同执行。",
       "steps": [
         "在 Settings 选择并保存合法时区，刷新与重启后仍保留。",
         "有时区语义的流程事件在不同用户时区下按已批准合同呈现，DateOnly 不因转换漂移。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "P-PROC",
@@ -245,8 +245,8 @@
         "新建 DateOnly 与有明确时间/时区的笔试或面试，保存后精度和时间不改变。",
         "历史 unknown 精度的数据按旧事实显示；只读打开不触发悄然重写。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 W1 已集成 main：流程时间结构化输入、precision/zone 读写、DTO/时间线显示及 unknown 未修改不重写；修复切换账户时区后的改期回填漂移。组合定向验证通过；Windows Electron 验收及 W3 接入后的最终跨模块验证待完成，passes 保持 false。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native minute/DateOnly 写入、改期/清空、显示与持久化通过；unknown 回填不伪造时间、无关编辑不重写通过。scheduledAt 按冻结合同只声明 minute/unknown，非法 fullInstant sidecar 保守读 unknown。"
     },
     {
       "id": "P-JO",
@@ -260,8 +260,8 @@
         "列表/详情/CSV/Agent 读取和 Upcoming 对同一截止日表达一致。",
         "历史 unknown 精度不被擅自转换或改写。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 W3 已提交并集成 main（b2579202）：deadlineOn/deadlinePrecision 贯通表单、服务、DTO、列表/详情、CSV、Agent 与账户时区；jobs.deadline 双语词条已补。复审移除 Legacy Agent 纯日期伪午夜转换（Legacy 拒绝新 DateOnly 字段，旧 offset Instant 保留）、修复跨区快捷日期与 dirty 读取；新裸 Instant 一律 fullInstant，不按整分猜精度。隔离 SQLite Job 写入→Upcoming 的时区/逾期/重读联动回归及组合定向验证通过。Windows Electron fresh-native 未完成，passes false。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 日期 picker 写 deadlineOn/dateOnly、编辑/重开、详情与 CSV 原文、Upcoming 分桶通过；合成历史 unknown 行补齐表单所需基础事实后，无关编辑保留原 instant/precision。Agent 与 Legacy DateOnly 拒绝边界复用已通过定向契约证据。"
     },
     {
       "id": "P-TASK",
@@ -275,8 +275,8 @@
         "混合排序遵守获批的 NULL 规则，分页不漏项、不重复、不误导。",
         "在合同规定的数据规模上保持可用；历史时间数据不被自动改写。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 W2 已集成 main：dueOn/duePrecision 读写、账户时区、列表分组及全量必要字段先排序后分页；修复跨区快捷日期。W2 隔离 SQLite 5k/200 页报告无漏无重，avg 547.6ms/max 1615.8ms 高于 300ms 参考预算；本次组合定向验证通过，未重复性能实测。Windows Electron 验收未完成，passes 保持 false。 后续 main 修复：排序内复用相同日期的时区边界，跨时区回归通过；重跑 5k/200 页 avg 309.0ms、max 549.2ms，平均仍略高于 300ms 参考预算，不宣称全部性能指标达标。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 日期创建/编辑/清空、活动类型就地创建、刷新重开及分组展示通过；纽约账户时区下历史 minute instant 无关编辑不改写。复用既有隔离 SQLite 5k/200 页无漏无重/NULL 排尾/全序证据；性能仍 avg 309.0ms/max 549.2ms，略超 300ms 参考预算，保留非阻塞观察，不冒充预算达标。"
     },
     {
       "id": "BD-CORE",
@@ -284,13 +284,13 @@
       "priority": "P1",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-27 W5 已提交并集成 main（c1465700）：职位名称/地点/渠道新增入口、主要字典编辑、失败保草稿、系统渠道禁改已接线。为保护 canonical 文本快照，使用中（含归档引用）的职位名称/地点/渠道拒绝改名；未引用项可编辑，Tag/Activity 真 FK 路径保留。新增同 key 标题不覆盖已有 label，保存期间禁止关闭/编辑，异常有反馈。7 处旧文案断言已修正，组合定向验证通过；职业素材 SKILL 引用另见 BD-LINKS。Windows Electron 未完成，passes false。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 公司/职位名称/地点/渠道/技能/活动类型主要字典新增、编辑与刷新保持通过；职位引用的名称拒绝改名且快照不被重写，技能活 FK 改名正常传播。",
       "description": "用户可维护并选择公司、职位名称、地点、投递渠道、标签和活动类型等高频基础数据。",
       "steps": [
         "新增、编辑主要基础数据，表单可选并在保存后正确关联。",
         "重新打开表单及关联记录后，选择结果保持正确。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "BD-INLINE",
@@ -298,13 +298,13 @@
       "priority": "P1",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成就地创建后的立即选中、去重、失败反馈及共享选择器选项同步，并修复 ComboBox 创建失败时清空搜索草稿的问题。任务隔离 SQLite/浏览器验收覆盖 AddJob 公司、职位名称、地点、渠道、标签及 TaskForm 活动类型的就地创建、立即选中、去重、保存、刷新重开与跨模块可见性；超长渠道名失败后保留输入和原选择。ComboBox/TagInput/AddJob 定向测试通过；Windows Electron 未执行，passes 保持 false。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native Job 表单职位名称/公司/地点/渠道创建和选中、复用已有选项，Task 活动类型创建及保存关联、职业素材 Tag 创建/关联通过；去重/失败保草稿复用既有定向与隔离浏览器证据。",
       "description": "需要基础数据的高频表单可在原位置创建并立即选择对应项目。",
       "steps": [
         "在新增职位等相关表单中就地创建允许的基础数据，并立即可选。",
         "不会产生无效重复项或破坏已有关联。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "BD-LINKS",
@@ -317,8 +317,8 @@
         "新增或编辑标签、技能后，可在相关职业素材或职位表单复用。",
         "已关联记录重新打开显示真实值，不出现悬空或错误引用。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 已提交并集成 Main：3490cdaa 实现真实 CareerSkillDetail.tagId FK/SetNull/索引、专用同用户关联/解除、活 Tag 单一名源、复制及面试读取、含归档引用的删除守卫、Backup V6 与未来 legacy 同用户 FK 保留。复审修复运行时缺失ID的查询条件忽略、服务读查写竞态、跨用户删除引用信息暴露、UI网络异常/失败重试/重复提交与编辑保护，以及重建迁移中途失败不可回滚的问题；新迁移加入显式事务。真实隔离迁移升级/原行约束保留/注入失败回滚/不变量通过；组合37文件410项、追加关联并发/复制/冻结写边界18项通过，Tag actions两次单独31项均通过，未复现此前count错误、不认定生成竞态。tsc/lint/词条/差异检查通过。Windows Electron fresh-native 未执行，passes false。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Main 真实 CareerSkillDetail.tagId FK、专用同用户通道、通用 patch 保护、活名投影及 SetNull/删除守卫已实现。Windows Electron fresh-native 选择/就地创建、改名活显示与复制、被引用拒删、解除快照及重开通过；V6 桌面恢复重映射后的技能 Tag 关联通过。"
     },
     {
       "id": "BD-ARCHIVE",
@@ -343,8 +343,8 @@
         "切换简体中文/英文，刷新和重启后仍为已选语言。",
         "失败时反馈真实状态，不显示假成功。"
       ],
-      "passes": false,
-      "implementationNotes": " 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 简中/英文切换、刷新和完整退出重开通过；定向网络失败后 picker 回滚、DB 保留原语言且显示真实失败反馈通过。"
     },
     {
       "id": "SET-APPEARANCE",
@@ -352,13 +352,13 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "核实已有主题设置具备即时生效、串行保存、权威回填及失败回滚，无需重复开发。任务隔离浏览器四项验证记录通过，覆盖即时切换、刷新持久化、连续切换及保存失败；Windows Electron 主题桥接冒烟记录通过。完整 Settings 渲染端到端与应用退出/重开验收仍待完成，passes 保持 false。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 主题即时生效、保存失败回滚、成功保存深色模式、完整退出重开保持通过。",
       "description": "已开放的外观设置真实生效、可持久保存，并处理保存失败。",
       "steps": [
         "调整已开放的外观选项后即时生效，重新打开应用仍保持该设置。",
         "模拟保存失败时状态和反馈符合实际，不出现仅展示未接线的开关。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "SET-DESKTOP",
@@ -366,7 +366,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "Settings 已接通自启、最小化启动和关闭至托盘 IPC，包含权威状态回填、串行合流保存及失败回读反馈。定向测试通过；任务隔离 Electron 冒烟记录覆盖托盘、最小化、还原、退出及独立进程偏好读回。系统自启写入/重启及完整 Settings 渲染端到端实机验收待完成，未改真实系统自启配置。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 隔离 root 的关闭到托盘偏好保存/重开读回与 quit IPC 真退出通过，既有托盘/最小化冒烟证据保留。真实系统自启配置与系统重启、完整托盘退出路径本轮未验收；不因最终 E2E 授权擅自改系统自启，passes false。",
       "description": "Settings UI 接通现有桌面自启、最小化启动与关闭到托盘 IPC。",
       "steps": [
         "在 Windows 桌面端设置自启、最小化启动及关闭至托盘，选项反馈实际底层状态。",
@@ -381,13 +381,13 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。 2026-10-27 W4 Backup V5、语言/证明人/附件组与敏感附件字节已集成；新格式完整桌面备份恢复仍待完成。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。 2026-10-27 Backup V6 已集成 Main，技能引用重映射、旧V1–V5兼容、旧V5拒V6和备份回归通过；完整桌面备份恢复仍未验收。",
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native Settings V6 标准/敏感导出、损坏 ZIP 拒绝、预检/取消、真实 UI 恢复通过；标准恢复保留敏感、Tag ID 重映射，敏感恢复替换敏感并还原附件字节；完整退出重开一致。旧 V1–V5 与失败回滚复用既有隔离数据库定向证据；无真实数据操作。",
       "description": "已实现的数据备份、预检和恢复入口可用于本地数据管理。",
       "steps": [
         "用户可从 Settings 找到备份和恢复入口，在隔离数据环境完成备份、预检与恢复。",
         "错误输入或失败路径有明确反馈，不对真实用户数据库做测试操作。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "SET-AI-SERVICES",
@@ -401,7 +401,7 @@
         "未实现的能力明确不可用，不伪装成已接通，也不破坏已有账号登录和 BYOK 隔离。"
       ],
       "passes": false,
-      "implementationNotes": "2026-10-27 W6 已提交并集成 main（3702f87f）：无生产消费者的 CAREER_REFLECTION 不提供编辑，fresh-native full 下 MATCH_ANALYSIS 显示不可用，已有分配不清除；Legacy 可用入口、其他业务配置、readiness/BYOK/权限保留。补充模式切换和异步加载回归，组合定向验证通过；Windows Electron 保存/失败/退出重开仍未执行，passes false。"
+      "implementationNotes": "2026-10-27 最终验收：Main 的诚实可用状态与接线保持。本轮 Windows Electron fresh-native 核对未提供分配项，但未使用真实 Connection/BYOK/模型完成业务调用，缺少对应实际环境证据；passes 保持 false，不调用或泄露真实凭据。"
     },
     {
       "id": "RM-RESUME",
@@ -414,8 +414,8 @@
         "基于既有职业素材创建或复用 Resume Variant，并可预览和导出。",
         "冻结版本后历史内容稳定，重新打开仍能查看。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 W7 服务级 spec 已整合 Main：本轮在当前源码实际复跑通过，覆盖隔离 fresh-native 素材/简历编辑、冻结拒写、新草稿隔离、artifact 存储和新连接重开；合成 PDF 字节不证明真实 PDF 渲染导出。检查点 allPassed 仅在全部断言完成后为 true。此前 Web 11 步证据保留，本轮未复跑 Web。认证入口修复与桌面测试基础设施已集成，但 Windows Electron 完整路径、真实 PDF 导出和真正退出重开仍未最终验收；E2E 按新规则等待用户明确启动，原 W1/W4/W7 E2E 接续安排暂停。RM-BIND 未受影响；passes false。"
+      "passes": true,
+      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 素材复用、头部预填、编辑/刷新、预览、冻结拒写、新草稿隔离通过；真实 Electron PDF 导出约 77KB/1页，文件/hash/存储/认证下载一致，unpdf 解析含姓名和 TypeScript 正文。完整 quit IPC 退出、同隔离 root 重开后的版本/内容/artifact 一致通过。首次重开受测试导航竞态影响，补启动请求等待后仅针对该步复测通过；保留初次失败和复测记录。"
     },
     {
       "id": "RM-BIND",
