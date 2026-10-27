@@ -40,6 +40,7 @@ function TasksContainer({
   const {
     tasks,
     totalTasks,
+    timeZone,
     initialLoading,
     loadingMore,
     groupBy,
@@ -119,6 +120,7 @@ function TasksContainer({
                 onChangeTaskStatus={onChangeTaskStatus}
                 onStartActivity={onStartActivity}
                 groupBy={groupBy}
+                timeZone={timeZone}
               />
             </>
           )}
@@ -145,6 +147,7 @@ function TasksContainer({
         dialogOpen={dialogOpen}
         setDialogOpen={setDialogOpen}
         onSaveAndStart={onStartActivity}
+        timeZone={timeZone}
       />
       {confirmDialog}
     </>

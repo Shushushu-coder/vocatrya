@@ -31,6 +31,9 @@ vi.mock("@prisma/client", () => {
     activityType: {
       findMany: vi.fn(),
     },
+    userSettings: {
+      findUnique: vi.fn(),
+    },
   };
   return { PrismaClient: vi.fn(function() { return mPrismaClient; }) };
 });
@@ -61,8 +64,16 @@ describe("taskActions", () => {
     activities: [],
   };
 
+  // The action layer normalizes precision at the DTO boundary: this mock's
+  // stored precision is absent on a dueDate carrier → DTO reads "unknown".
+  const mockTaskDto = { ...mockTask, duePrecision: "unknown" };
+  const mockTasksDto = [mockTaskDto];
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // No stored account zone in most tests → resolveUserTimeZone falls back
+    // to the runtime zone.
+    (prisma.userSettings.findUnique as any).mockResolvedValue(null);
   });
 
   describe("getTasksList", () => {
@@ -77,8 +88,9 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTasks,
+        data: mockTasksDto,
         total: 1,
+        timeZone: expect.any(String),
       });
       expect(prisma.task.findMany).toHaveBeenCalledWith({
         where: { userId: mockUser.id },
@@ -88,7 +100,12 @@ describe("taskActions", () => {
             select: { id: true },
           },
         },
-        orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { updatedAt: "desc" }],
+        orderBy: [
+          { priority: "desc" },
+          { createdAt: "desc" },
+          { updatedAt: "desc" },
+          { id: "asc" },
+        ],
         skip: 0,
         take: 25,
       });
@@ -108,8 +125,9 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTasks,
+        data: mockTasksDto,
         total: 25,
+        timeZone: expect.any(String),
       });
       expect(prisma.task.findMany).toHaveBeenCalledWith({
         where: { userId: mockUser.id },
@@ -119,7 +137,12 @@ describe("taskActions", () => {
             select: { id: true },
           },
         },
-        orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { updatedAt: "desc" }],
+        orderBy: [
+          { priority: "desc" },
+          { createdAt: "desc" },
+          { updatedAt: "desc" },
+          { id: "asc" },
+        ],
         skip: 10,
         take: 10,
       });
@@ -136,8 +159,9 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTasks,
+        data: mockTasksDto,
         total: 1,
+        timeZone: expect.any(String),
       });
       expect(prisma.task.findMany).toHaveBeenCalledWith({
         where: {
@@ -150,7 +174,12 @@ describe("taskActions", () => {
             select: { id: true },
           },
         },
-        orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { updatedAt: "desc" }],
+        orderBy: [
+          { priority: "desc" },
+          { createdAt: "desc" },
+          { updatedAt: "desc" },
+          { id: "asc" },
+        ],
         skip: 0,
         take: 10,
       });
@@ -170,8 +199,9 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTasks,
+        data: mockTasksDto,
         total: 1,
+        timeZone: expect.any(String),
       });
       expect(prisma.task.findMany).toHaveBeenCalledWith({
         where: {
@@ -184,36 +214,66 @@ describe("taskActions", () => {
             select: { id: true },
           },
         },
-        orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { updatedAt: "desc" }],
+        orderBy: [
+          { priority: "desc" },
+          { createdAt: "desc" },
+          { updatedAt: "desc" },
+          { id: "asc" },
+        ],
         skip: 0,
         take: 10,
       });
     });
 
-    it("should order by dueDate when grouping by due date", async () => {
+    it("should sort the whole matching set by due key before paginating", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
 
-      const mockTasks = [mockTask];
-      (prisma.task.findMany as any).mockResolvedValue(mockTasks);
-      (prisma.task.count as any).mockResolvedValue(1);
+      const sortRow = {
+        id: "task-id",
+        dueOn: null,
+        dueDate: new Date("2026-12-31T10:00:00.000Z"),
+        duePrecision: null,
+        priority: 5,
+      };
+      (prisma.task.findMany as any)
+        .mockResolvedValueOnce([sortRow])
+        .mockResolvedValueOnce([mockTask]);
 
-      await getTasksList(1, 25, undefined, undefined, undefined, "dueDate");
+      const result = await getTasksList(
+        1,
+        25,
+        undefined,
+        undefined,
+        undefined,
+        "dueDate",
+      );
 
-      expect(prisma.task.findMany).toHaveBeenCalledWith({
+      // First pass reads only the sort fields for the whole matching set…
+      expect(prisma.task.findMany).toHaveBeenNthCalledWith(1, {
         where: { userId: mockUser.id },
+        select: {
+          id: true,
+          dueOn: true,
+          dueDate: true,
+          duePrecision: true,
+          priority: true,
+        },
+      });
+      // …then only this page's ids are hydrated.
+      expect(prisma.task.findMany).toHaveBeenNthCalledWith(2, {
+        where: { id: { in: ["task-id"] }, userId: mockUser.id },
         include: {
           activityType: true,
           activities: {
             select: { id: true },
           },
         },
-        orderBy: [
-          { dueDate: "asc" },
-          { priority: "desc" },
-          { createdAt: "desc" },
-        ],
-        skip: 0,
-        take: 25,
+      });
+      expect(result).toEqual({
+        success: true,
+        data: [mockTaskDto],
+        total: 1,
+        timeZone: expect.any(String),
       });
     });
 
@@ -245,6 +305,7 @@ describe("taskActions", () => {
           { activityType: { label: "asc" } },
           { priority: "desc" },
           { createdAt: "desc" },
+          { id: "asc" },
         ],
         skip: 0,
         take: 25,
@@ -286,7 +347,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTask,
+        data: mockTaskDto,
       });
       expect(prisma.task.findFirst).toHaveBeenCalledWith({
         where: {
@@ -347,11 +408,11 @@ describe("taskActions", () => {
       status: "in-progress" as const,
       priority: 5,
       percentComplete: 0,
-      dueDate: new Date("2026-12-31"),
+      dueOn: "2026-12-31",
       activityTypeId: "activity-type-id",
     };
 
-    it("should create a task successfully", async () => {
+    it("should create a task with a dateOnly due", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
       (prisma.task.create as any).mockResolvedValue(mockTask);
 
@@ -359,7 +420,38 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTask,
+        data: mockTaskDto,
+      });
+      // §5.1: a picked calendar day persists as dueOn + "dateOnly"; the
+      // instant carrier stays NULL — no fabricated boundary instant.
+      expect(prisma.task.create).toHaveBeenCalledWith({
+        data: {
+          title: taskData.title,
+          description: taskData.description,
+          status: taskData.status,
+          priority: taskData.priority,
+          percentComplete: taskData.percentComplete,
+          dueOn: "2026-12-31",
+          duePrecision: "dateOnly",
+          dueDate: null,
+          activityTypeId: taskData.activityTypeId,
+          userId: mockUser.id,
+        },
+        include: {
+          activityType: true,
+        },
+      });
+    });
+
+    it("should create a task with no due", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.task.create as any).mockResolvedValue(mockTask);
+
+      const result = await createTask({ ...taskData, dueOn: null });
+
+      expect(result).toEqual({
+        success: true,
+        data: mockTaskDto,
       });
       expect(prisma.task.create).toHaveBeenCalledWith({
         data: {
@@ -368,7 +460,9 @@ describe("taskActions", () => {
           status: taskData.status,
           priority: taskData.priority,
           percentComplete: taskData.percentComplete,
-          dueDate: taskData.dueDate,
+          dueOn: null,
+          duePrecision: null,
+          dueDate: null,
           activityTypeId: taskData.activityTypeId,
           userId: mockUser.id,
         },
@@ -376,6 +470,18 @@ describe("taskActions", () => {
           activityType: true,
         },
       });
+    });
+
+    it("should reject a due date earlier than today in the account zone", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+
+      const result = await createTask({ ...taskData, dueOn: "2020-01-01" });
+
+      expect(result).toEqual({
+        success: false,
+        message: "Due date cannot be in the past.",
+      });
+      expect(prisma.task.create).not.toHaveBeenCalled();
     });
 
     it("should return error when user is not authenticated", async () => {
@@ -426,11 +532,10 @@ describe("taskActions", () => {
       status: "complete" as const,
       priority: 8,
       percentComplete: 100,
-      dueDate: new Date("2026-12-31"),
       activityTypeId: "activity-type-id",
     };
 
-    it("should update a task successfully", async () => {
+    it("should leave due columns untouched when dueOn is absent", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
       const updatedTask = { ...mockTask, ...updateData };
       (prisma.task.update as any).mockResolvedValue(updatedTask);
@@ -439,26 +544,60 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: updatedTask,
+        data: { ...updatedTask, duePrecision: "unknown" },
       });
-      expect(prisma.task.update).toHaveBeenCalledWith({
-        where: {
-          id: updateData.id,
-          userId: mockUser.id,
-        },
-        data: {
-          title: updateData.title,
-          description: updateData.description,
-          status: updateData.status,
-          priority: updateData.priority,
-          percentComplete: updateData.percentComplete,
-          dueDate: updateData.dueDate,
-          activityTypeId: updateData.activityTypeId,
-        },
-        include: {
-          activityType: true,
-        },
+      // "未修改不重写": without a dueOn key the update must not touch any of
+      // the three due columns, so a historical instant/unknown survives.
+      const call = (prisma.task.update as any).mock.calls[0][0];
+      expect(call.where).toEqual({ id: updateData.id, userId: mockUser.id });
+      expect(call.data).toMatchObject({
+        title: updateData.title,
+        status: updateData.status,
+        priority: updateData.priority,
+        percentComplete: updateData.percentComplete,
+        activityTypeId: updateData.activityTypeId,
       });
+      expect(call.data).not.toHaveProperty("dueOn");
+      expect(call.data).not.toHaveProperty("duePrecision");
+      expect(call.data).not.toHaveProperty("dueDate");
+    });
+
+    it("should write a dateOnly due when dueOn is supplied", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const updatedTask = { ...mockTask, ...updateData };
+      (prisma.task.update as any).mockResolvedValue(updatedTask);
+
+      const result = await updateTask({ ...updateData, dueOn: "2026-12-31" });
+
+      expect(result).toEqual({ success: true, data: { ...updatedTask, duePrecision: "unknown" } });
+      expect(prisma.task.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            dueOn: "2026-12-31",
+            duePrecision: "dateOnly",
+            dueDate: null,
+          }),
+        }),
+      );
+    });
+
+    it("should clear all due columns when dueOn is null", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const updatedTask = { ...mockTask, ...updateData };
+      (prisma.task.update as any).mockResolvedValue(updatedTask);
+
+      const result = await updateTask({ ...updateData, dueOn: null });
+
+      expect(result).toEqual({ success: true, data: { ...updatedTask, duePrecision: "unknown" } });
+      expect(prisma.task.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            dueOn: null,
+            duePrecision: null,
+            dueDate: null,
+          }),
+        }),
+      );
     });
 
     it("should return error when task ID is missing", async () => {
@@ -511,7 +650,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: true,
-        data: updatedTask,
+        data: { ...updatedTask, duePrecision: "unknown" },
       });
       expect(prisma.task.update).toHaveBeenCalledWith({
         where: {

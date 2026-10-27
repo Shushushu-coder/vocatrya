@@ -33,6 +33,13 @@ import { Combobox } from "../ComboBox";
 import { Slider } from "../ui/slider";
 import { ActivityType } from "@/models/activity.model";
 import { useI18n, getLocalizedTaskStatus } from "@/i18n";
+import {
+  compareDateOnly,
+  dateOnlyFromPickerDate,
+  runtimeTimeZone,
+  todayDateOnly,
+} from "@/lib/datetime";
+import { taskDuePickerDate } from "@/lib/tasks/dueTime";
 
 type TaskFormProps = {
   activityTypes: ActivityType[];
@@ -42,6 +49,7 @@ type TaskFormProps = {
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
   onSaveAndStart?: (taskId: string) => void;
+  timeZone?: string;
 };
 
 
@@ -54,6 +62,7 @@ export function TaskForm({
   dialogOpen,
   setDialogOpen,
   onSaveAndStart,
+  timeZone = runtimeTimeZone(),
 }: TaskFormProps) {
   const { t, formatDateTime } = useI18n();
   const [isPending, startTransition] = useTransition();
@@ -84,6 +93,14 @@ export function TaskForm({
 
   useEffect(() => {
     if (editTask) {
+      let dueDate: Date | undefined;
+      try {
+        // DateOnly -> its calendar day; unknown instant -> its account-zone
+        // wall date. A corrupt stored value never blocks the edit dialog.
+        dueDate = taskDuePickerDate(editTask, timeZone) ?? undefined;
+      } catch {
+        dueDate = undefined;
+      }
       reset({
         id: editTask.id,
         userId: editTask.userId,
@@ -92,7 +109,7 @@ export function TaskForm({
         status: editTask.status,
         priority: editTask.priority,
         percentComplete: editTask.percentComplete,
-        dueDate: editTask.dueDate ? new Date(editTask.dueDate) : undefined,
+        dueDate,
         activityTypeId: editTask.activityTypeId || undefined,
       });
     } else {
@@ -106,14 +123,35 @@ export function TaskForm({
         activityTypeId: undefined,
       });
     }
-  }, [editTask, reset]);
+  }, [editTask, reset, timeZone]);
 
   function onSubmit(
     data: z.infer<typeof AddTaskFormSchema>,
     startAfterSave = false,
   ) {
+    // dueOn is the write contract: undefined keeps stored values on edit,
+    // null clears, a YYYY-MM-DD string sets a calendar-day due.
+    const dueDateTouched = form.formState.dirtyFields.dueDate === true;
+    const dueOn =
+      editTask && !dueDateTouched
+        ? undefined
+        : data.dueDate
+          ? dateOnlyFromPickerDate(data.dueDate)
+          : null;
+    if (
+      typeof dueOn === "string" &&
+      compareDateOnly(dueOn, todayDateOnly(timeZone)) < 0
+    ) {
+      form.setError("dueDate", {
+        type: "manual",
+        message: "Due date cannot be in the past.",
+      });
+      return;
+    }
     startTransition(async () => {
-      const result = editTask ? await updateTask(data) : await createTask(data);
+      const result = editTask
+        ? await updateTask({ ...data, dueOn })
+        : await createTask({ ...data, dueOn });
       toastActionResult<Task>(result, {
         success: editTask
           ? t("tasks.taskUpdated")
@@ -296,7 +334,9 @@ export function TaskForm({
                       <FormLabel>{t("tasks.dueDate")}</FormLabel>
                       <DatePicker
                         field={field}
-                        presets={true}
+                        // Shared presets use the host calendar. Keep them only
+                        // when it matches the account; manual days stay usable.
+                        presets={timeZone === runtimeTimeZone()}
                         isEnabled={true}
                       />
                       <FormMessage />

@@ -5,6 +5,7 @@ import { toastActionResult, toastError } from "@/lib/toast";
 import { Task, TaskGroupBy, TaskStatus } from "@/models/task.model";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { useI18n } from "@/i18n";
+import { runtimeTimeZone } from "@/lib/datetime";
 
 const DEFAULT_STATUS_FILTER: TaskStatus[] = ["in-progress", "needs-attention"];
 
@@ -21,6 +22,7 @@ export function useTasksList({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
+  const [timeZone, setTimeZone] = useState<string>(() => runtimeTimeZone());
   const [initialLoading, setInitialLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [groupBy, setGroupBy] = useState<TaskGroupBy>("none");
@@ -43,18 +45,20 @@ export function useTasksList({
     ) => {
       if (pageNum === 1) setInitialLoading(true);
       else setLoadingMore(true);
-      const { success, data, total, message } = await getTasksList(
-        pageNum,
-        tasksPerPage,
-        filter,
-        statuses,
-        search,
-        group,
-      );
+      const { success, data, total, message, timeZone: zone } =
+        await getTasksList(
+          pageNum,
+          tasksPerPage,
+          filter,
+          statuses,
+          search,
+          group,
+        );
       if (success && data) {
         setTasks((prev) => (pageNum === 1 ? data : [...prev, ...data]));
         setTotalTasks(total);
         setPage(pageNum);
+        if (typeof zone === "string") setTimeZone(zone);
       } else {
         toastError(message);
       }
@@ -171,6 +175,7 @@ export function useTasksList({
   return {
     tasks,
     totalTasks,
+    timeZone,
     initialLoading,
     loadingMore,
     groupBy,
