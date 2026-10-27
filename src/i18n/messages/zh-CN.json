@@ -672,7 +672,8 @@
     },
     "transferredFrom": "调剂来源",
     "transferredFromGeneric": "由其他岗位调剂而来",
-    "transferredFromDetail": "由 {company} · {title} 调剂而来"
+    "transferredFromDetail": "由 {company} · {title} 调剂而来",
+    "deadline": "截止日期"
   },
   "automations": {
     "title": "自动化巡检",

@@ -672,7 +672,8 @@
     },
     "transferredFrom": "Transfer source",
     "transferredFromGeneric": "Transferred from another application",
-    "transferredFromDetail": "Transferred from {title} at {company}"
+    "transferredFromDetail": "Transferred from {title} at {company}",
+    "deadline": "Deadline"
   },
   "automations": {
     "title": "Automations",
