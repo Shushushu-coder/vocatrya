@@ -50,14 +50,15 @@
       "category": "Career Profile",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "复用现有 CareerMaterialItem 与教育 GPA/排名字段，维护多条教育、实习、项目、获奖、科研、论文、语言及其他经历。",
       "steps": [
         "对教育、实习、项目、获奖和其他信息各创建多条记录并完成编辑、读取、删除。",
         "已有 GPA、评分制、排名可正确回填；按冻结合同维护新增科研、论文、语言多条目。",
         "关闭并重开后记录与字段保持一致；涉及新增字段时使用获批的 M1/M2 Schema。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W4 已集成 main：按冻结合同补齐字段、语言明细、教育派生与多条素材维护，新增 Migration 和 Backup V5。合并前修复 MBA/未知学历误派生；组合定向验证通过。完整 Windows Electron 多记录与退出重开验收仍未完成，passes 保持 false。"
     },
     {
       "id": "CP-COPY",
@@ -65,7 +66,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "任务隔离浏览器字段、分组、记录、Tab、网申汇总复制与敏感过滤路径通过；Windows Electron 剪贴板完整验收未核实，passes 保持 false。",
+      "implementationNotes": "任务隔离浏览器字段、分组、记录、Tab、网申汇总复制与敏感过滤路径通过；Windows Electron 剪贴板完整验收未核实，passes 保持 false。 2026-10-27 W4 新字段/语言复制与敏感过滤及双语词条已集成，完整桌面剪贴板验收仍待完成。",
       "description": "在现有“复制本条”基础上提供字段、分组、记录、Tab、网申汇总的分级复制。",
       "steps": [
         "字段、分组、记录、Tab 和按需网申汇总均能复制正确文本。",
@@ -79,8 +80,8 @@
       "category": "Career Profile",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
-      "implementationNotes": "已集成保存请求抛异常时保留紧急联系人草稿并提示失败的修复。任务隔离浏览器验证默认掩码、显式揭示/收起、迟到响应失效、差量编辑、清空及失败重试；组件与隔离 SQLite 定向验证通过。证明人/附件等新增敏感对象尚缺，Windows Electron 完整验收未核实，passes 保持 false。",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-10-27 W4 已集成 main：证件、证明人和附件服务/UI、敏感备份与复制过滤已接线；修复收起/迟到响应的明文残留、恢复时证件照类型绕过，上传入口支持服务层 5MB 上限。隐私与隔离备份定向验证通过，Windows Electron 完整验收未完成，passes 保持 false。",
       "description": "职业资料中的证件、紧急联系人、证明人及附件等敏感内容默认受保护。",
       "steps": [
         "默认视图隐藏敏感字段；查看或单字段复制需明确操作。",
@@ -209,14 +210,15 @@
       "category": "Application Process",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "流程事件与 Upcoming 能真实联动显示待办事项，不遗漏 canonical 流程。",
       "steps": [
         "新增或改期面试、笔试及 Offer 事件后 Upcoming 与相关 Dashboard 提示更新。",
         "完成或取消事件后待办反映实际状态，不保留虚假待办。",
         "按已批准的精度及用户时区显示事件时间。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W1 已集成 main：Upcoming/Dashboard 消费流程 sidecar、Task dueOn 和 Job deadlineOn，按账户时区计算关注/逾期/分桶；完成与取消排除。修复混合任务提前截断、首次加载失败永久 loading 和关注日期载体不一致。组合定向验证通过；W3 尚未交付，跨模块最终验收及 Windows Electron 实际联动待完成，passes 保持 false。"
     },
     {
       "id": "P-TZ",
@@ -237,13 +239,14 @@
       "category": "DateTime / Task",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "IMPLEMENTED",
       "description": "ProcessStep 使用新增精度和时区字段读取、编辑并显示日期时间。",
       "steps": [
         "新建 DateOnly 与有明确时间/时区的笔试或面试，保存后精度和时间不改变。",
         "历史 unknown 精度的数据按旧事实显示；只读打开不触发悄然重写。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W1 已集成 main：流程时间结构化输入、precision/zone 读写、DTO/时间线显示及 unknown 未修改不重写；修复切换账户时区后的改期回填漂移。组合定向验证通过；Windows Electron 验收及 W3 接入后的最终跨模块验证待完成，passes 保持 false。"
     },
     {
       "id": "P-JO",
@@ -264,14 +267,15 @@
       "category": "DateTime / Task",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "IMPLEMENTED",
       "description": "Task 使用 canonical dueOn/duePrecision，并正确处理 DateOnly/Instant 混合排序与分页。",
       "steps": [
         "创建和修改 DateOnly 与 Instant 类型任务，重新打开后到期值和精度一致。",
         "混合排序遵守获批的 NULL 规则，分页不漏项、不重复、不误导。",
         "在合同规定的数据规模上保持可用；历史时间数据不被自动改写。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W2 已集成 main：dueOn/duePrecision 读写、账户时区、列表分组及全量必要字段先排序后分页；修复跨区快捷日期。W2 隔离 SQLite 5k/200 页报告无漏无重，avg 547.6ms/max 1615.8ms 高于 300ms 参考预算；本次组合定向验证通过，未重复性能实测。Windows Electron 验收未完成，passes 保持 false。"
     },
     {
       "id": "BD-CORE",
@@ -374,7 +378,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。",
+      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。 2026-10-27 W4 Backup V5、语言/证明人/附件组与敏感附件字节已集成；新格式完整桌面备份恢复仍待完成。",
       "description": "已实现的数据备份、预检和恢复入口可用于本地数据管理。",
       "steps": [
         "用户可从 Settings 找到备份和恢复入口，在隔离数据环境完成备份、预检与恢复。",
@@ -386,11 +390,11 @@
       "id": "SET-AI-SERVICES",
       "category": "Settings / Desktop",
       "priority": "P1",
-      "scope": "OWNER_DECISION",
+      "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
-      "description": "AI Services 现存待接线内容只在确认属于本期范围时交付，不能展示虚假连接状态。",
+      "description": "2026-10-27 已批准：仅交付现有业务必需的 AI 连接与模型分配配置，其余明确不可用，不能展示虚假连接状态。",
       "steps": [
-        "若纳入本期：已支持的 AI Connection/Model Assignment 选择与连接状态与实际业务能力一致。",
+        "本期仅接通已有业务必需的 AI Connection/Model Assignment；选择与连接状态须与实际业务能力一致。",
         "未实现的能力明确不可用，不伪装成已接通，也不破坏已有账号登录和 BYOK 隔离。"
       ],
       "passes": false
@@ -426,9 +430,9 @@
       "id": "RM-MATCH",
       "category": "Resume / Match",
       "priority": "P1",
-      "scope": "OWNER_DECISION",
+      "scope": "DEFERRED",
       "implementationStatus": "MISSING",
-      "description": "canonical fresh-native 的 Match 用户入口和生产执行链路尚未交付，由 Owner 决定本期最小接线或延期。",
+      "description": "2026-10-27 已批准延期：canonical fresh-native 的 Match 用户入口和生产执行链路尚未交付，先完成 P0 求职闭环，不计为已实现或通过。",
       "steps": [
         "若纳入本期：从 canonical 职位详情启动匹配，调用实际生产服务并保存、展示与重新读取结果。",
         "不将方法定义、Schema 或仅 legacy 可用的按钮视为通过；不要求完整 Deep Match 扩展。"

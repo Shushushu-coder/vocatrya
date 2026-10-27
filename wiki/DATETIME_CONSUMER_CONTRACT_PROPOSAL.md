@@ -1,12 +1,39 @@
 # DateTime 消费者合同提案（P-TZ / P-PROC / P-JO / P-TASK 前置）
 
-本文档是 DateTime 消费者开发前的合同收口方案，供冻结后作为 `P-TZ`、`P-PROC`、`P-JO`、`P-TASK` 四个工作包的实现依据。本文档不修改任何运行时代码、Schema 或 Migration。
+> **冻结记录：2026-10-27，用户已批准。** §9 D1–D9 全部采用 A，另批准下列执行边界与文件归属。本记录优先于正文保留的提案背景和旧状态；冻结不代表消费者已实现或验收通过，不授权提交、合并或真实数据操作。
+
+### 本次冻结与当前实现
+
+- P-TZ 的账户 IANA 时区存储、设置 UI、原子保存和客户端/服务端读取入口已实现，复用 `src/lib/userSettings/timeZone.ts` 与 `timeZone.server.ts`，不重复开发。清除键即跟随系统，脏值安全回退且不回写。完整桌面验收仍未完成。
+- 计划时间必须含日期与时间；纯日期截止写 `*On`，不制造边界 instant 作为持久化事实。时区切换后日期文字与真实 instant 均不变，展示与 DateOnly 逾期边界使用当前账户时区，存储 zone 仅保留输入溯源。
+- 历史 unknown 只显示日期；查看、编辑其他字段、原样保存均不重写原时间和 sidecar。Job/Task 本期表单仅日期输入，保留既有 Instant 数据和接口能力。
+- Task 到期排序使用 DateOnly 的 `endIsoExclusive`，无到期值排尾，同值按 `priority desc → id asc`；全体匹配行先排序后分页，只 hydrate 本页。Upcoming 的 DateOnly 关注时间使用 `startIso`，当天即可提示，次日开始才逾期。两者用途不同，不共用一个隐含边界的排序 helper。
+- 分页无重无漏以筛选条件、时区和数据集不变为前提；新增、改期或切换时区后重置并刷新列表，不承诺跨修改的分页快照。两阶段查询不得把阶段间数据变化误报为静态数据正确性证据。
+- CSV 在现有列末尾追加单列 Deadline：DateOnly 原文、Instant 带 offset 的 ISO、无值为空；不将历史 unknown 推断成已知精度。
+- Task 使用 §5.4 的 5,000 条合成数据验证全序、分页和 NULL 排尾；记录实际性能，300ms/页仅为参考预算，未实测不得宣称达标。
+
+### 2026-10-27 合并窗口后的 Owner 补充
+
+按用户要求合并同类工作，执行窗口以 `MVP_IMPLEMENTATION.md` 文首 W1–W7 为准。W1 同时承担 Process 与时间联动：流程源码、upcomingReadModel.ts、UpcomingContainer.tsx、overview.ts、datetime 共享工具由 W1 唯一写入；W2(Task)/W3(Job) 仅交接输入输出合同。当前主协调窗口保留双语词条、wiki 与获授权后的 Git 集成。下表的原主集成源码职责据此交接给 W1，不新增独立集成或通用验收窗口；时间语义不变。
+
+### 批准的单一文件 Owner 与交接顺序
+
+| Owner | 唯一写入范围 |
+| --- | --- |
+| Process 开发负责人 | 流程 action/service、DTO、ProcessStepDialog、QuickAdd、Reschedule、ProcessStepsTable、Timeline |
+| Task 开发负责人 | Task 模型、表单、读写、排序分页与列表展示 |
+| 主集成负责人 | `src/lib/career/upcomingReadModel.ts`、`src/components/myjobs/UpcomingContainer.tsx`、`src/actions/dashboard/overview.ts`、`src/lib/datetime/*`、双语词条、功能状态清单及合同文档 |
+| 后续 Job 开发负责人 | Job 截止日期表单、服务、适配器、读取投影、详情、CSV、Agent；不写 Upcoming 和 Dashboard |
+
+执行顺序：主集成负责人先提供缺失的共享接口与 DTO 合同（已有接口直接复用）→ P-PROC 与 P-TASK 在独立 Worktree/隔离数据中并行 → 主集成负责人接入 Upcoming/Dashboard 与词条 → 定向跨模块验证。P-JO 后续接入，不自动启动。负责人是文件职责角色，具体执行者在分配任务时指定；分支或 Worktree 隔离不改变同一文件单 Owner 约束。
+
+本文档已于 2026-10-27 冻结，作为 `P-TZ`、`P-PROC`、`P-JO`、`P-TASK` 四个工作包的实现依据。本文档不修改任何运行时代码、Schema 或 Migration。
 
 **标注约定**
 
 - 【已有合同】：代码、Migration 或 wiki 文档中已经存在并核实的事实，消费者必须遵守。
 - 【建议方案】：本文档提出的待冻结方案，给出具体字段、读写规则和实现建议。
-- 【待决策】：需要用户明确选择的开放项，已收敛为 §9 的 D1–D9，每项给出推荐及理由。
+- 【已决策】：§9 D1–D9 已获用户批准，全部采用 A；其余建议按文首冻结记录执行。
 
 ## 0. 目的与范围
 
@@ -21,7 +48,7 @@ DateTime V1 的基础库（`src/lib/datetime`）与 Schema 附加列已就绪，
 
 非目标：不重新规划 MVP；不新增 Schema 列或 Migration；不实现代码。
 
-## 1. 现状证据核对
+## 1. 提案形成时的历史证据（当前状态见文首冻结记录）
 
 ### 1.1 已有合同（事实，禁止推翻）
 
@@ -39,7 +66,7 @@ DateTime V1 的基础库（`src/lib/datetime`）与 Schema 附加列已就绪，
 - `isDeadlineOverdue(value, now, timeZone?)`：`dateOnly` 在其时区 `[local midnight, next local midnight)` 结束（`endIsoExclusive`）后才 overdue；`instant` 到达后即 overdue；未设置永不 overdue。`timeZone` 缺省回退 `runtimeTimeZone()`——这是 TZ 合同落地前的唯一时区来源，账户合同落地后消费者必须显式传 zone。
 - `dateOnlyUtcWindow(date, tz)`：`DateOnly` 在用户时区内的 `[startIso, endIsoExclusive)` 区间；不制造代表性 `23:59:59.999`。
 - `wallTimeToInstant`：DST gap 默认拒绝（可选 `shiftForward`），fold 默认取 earlier（可选 later），返回 `disambiguation` 信息。
-- `assertValidTimeZone`：以 `Intl.DateTimeFormat` 验证 IANA 时区；空值、非法值抛 `DATETIME_INVALID_TIMEZONE`。`runtimeTimeZone()` 读取运行时 zone，**不得作为账户级时区的持久化替代**。
+- `assertValidTimeZone`：以 `Intl.DateTimeFormat` 验证运行时可解析时区；空值、非法值抛 `DATETIME_INVALID_TIMEZONE`。`runtimeTimeZone()` 读取运行时 zone，**不得作为账户级时区的持久化替代**。
 - `formatDateOnly`：固定 UTC anchor + `timeZone: "UTC"` 渲染，查看者时区不会导致日期漂移。`formatInstant(iso, locale, timeZone?)` 支持显式 zone，未传时用运行时 zone。
 - `serializeBusinessTime` / `parseBusinessTimeValue`：序列化 envelope `{ value, precision }`，往返保留 precision。
 - UI 桥接：`dateOnlyFromPickerDate`（picker 的本地 `Date` → `DateOnly`）、`parseTimeOfDay12h`（`"hh:mm AM"` → `{hour, minute}`）。
@@ -95,11 +122,11 @@ DateTime V1 的基础库（`src/lib/datetime`）与 Schema 附加列已就绪，
 ### 2.2 合法性校验
 
 - 【已有合同】`assertValidTimeZone`（`src/lib/datetime/zoneMath.ts`）是唯一校验入口，基于 `Intl` 验证 IANA ID。写入 action 在 patch 之前调用，非法值直接返回错误、旧值不变。
-- 【建议方案】拒绝固定 offset（`+08:00`）、地区别名缩写（`CST`、`PST`）等非 IANA 字符串——`assertValidTimeZone` 本身只认 `Intl` 可解析的 IANA ID，无需额外黑名单。
+- 【建议方案】拒绝固定 offset（`+08:00`）、地区别名缩写（`CST`、`PST`）等非 IANA 字符串——账户写入须复用已实现的 `isSupportedTimeZone`：仅用 `Intl` 校验不足以拒绝缩写和裸 offset。
 
 ### 2.3 未设置时的默认行为
 
-- 【待决策 D2】推荐：未设置 = 跟随系统运行时 zone（`runtimeTimeZone()`）。理由：本应用是 local-first 单机应用，server/渲染宿主即用户机器，系统时区即用户所处时区；行为与现状完全一致、零迁移。备选：固定 `Asia/Shanghai`——对中国求职市场用户更"确定"，但对任何不在东八区的用户静默错误，且与现状行为不一致。
+- 【已决策 D2】推荐：未设置 = 跟随系统运行时 zone（`runtimeTimeZone()`）。理由：本应用是 local-first 单机应用，server/渲染宿主即用户机器，系统时区即用户所处时区；行为与现状完全一致、零迁移。备选：固定 `Asia/Shanghai`——对中国求职市场用户更"确定"，但对任何不在东八区的用户静默错误，且与现状行为不一致。
 
 ### 2.4 客户端 / 服务端读取方式
 
@@ -139,7 +166,7 @@ getUserTimeZone(userId)                  // 未设置 → runtimeTimeZone()，se
 | 字段 | 输入形态 | 写入列 | 规则 |
 | --- | --- | --- | --- |
 | `scheduledAt` | `{date, hour, minute}` + 输入时区 | `scheduledAt` = UTC instant；`scheduledAtPrecision` = `"minute"`；`scheduledAtZone` = 输入时区 | 【已有合同】`parseScheduledAtInput` 拒绝裸日期，输入精度 minute。【建议方案】UI 必须提供日期+时间输入；纯日期语义归属 `deadlineOn` |
-| `deadlineAt`（dateOnly 分支） | `"YYYY-MM-DD"` + 当前用户时区 | `deadlineOn` = `"YYYY-MM-DD"`；`deadlinePrecision` = `"dateOnly"`；`deadlineAt` = `NULL`；`deadlineZone` = 写入时用户时区 | 【已有合同】`parseDeadlineAtInput` 保留 dateOnly，不造 `23:59` 伪 instant。【待决策 D4】zone 的解释语义 |
+| `deadlineAt`（dateOnly 分支） | `"YYYY-MM-DD"` + 当前用户时区 | `deadlineOn` = `"YYYY-MM-DD"`；`deadlinePrecision` = `"dateOnly"`；`deadlineAt` = `NULL`；`deadlineZone` = 写入时用户时区 | 【已有合同】`parseDeadlineAtInput` 保留 dateOnly，不造 `23:59` 伪 instant。【已决策 D4】zone 的解释语义 |
 | `deadlineAt`（timed 分支） | `{date, hour, minute}` + 输入时区 | `deadlineAt` = UTC instant；`deadlineOn` = `NULL`；`deadlinePrecision` = `"minute"`；`deadlineZone` = 输入时区 | 【已有合同】`wallTimeToInstant`；DST gap 拒绝/fold earlier |
 | `completedAt` | 无输入，服务端完成动作 | `completedAt` = `completedAtNow()`；`completedAtPrecision` = `"fullInstant"` | 【已有合同】仅服务端时钟；不接受客户端伪造/截断。Schema 无 `completedAtZone`，**不新增** |
 | 清空任一字段 | `null` | 对应 value 与全部 sidecar 同时置 `NULL` | 【建议方案】不留矛盾组合（如 `deadlineOn` 有值但 `deadlinePrecision` 为 `NULL`） |
@@ -183,7 +210,7 @@ completedAtPrecision: "fullInstant" | "unknown" | null;
 ### 3.3 历史 `unknown` 展示与"只读不改写"
 
 - 【已有合同】历史 instant（precision `NULL`）= `unknown`；禁止用 `utcMidnight`/`onMinuteBoundary` 反推。
-- 【待决策 D7】推荐：unknown instant 沿用现状渲染——`formatDate(iso, { timeZone: userTz })` 只显示日期，不新增"伪时刻"；编辑弹窗把原 instant 按用户时区的 wall date 回填 picker；**未修改即保存时不得重写 precision/zone**（`update` 仅写入用户实际改动的字段）。备选：始终显示日期+时间——会把历史零点值渲染成"00:00"，暗示不存在的时刻精度，不推荐。
+- 【已决策 D7】推荐：unknown instant 沿用现状渲染——`formatDate(iso, { timeZone: userTz })` 只显示日期，不新增"伪时刻"；编辑弹窗把原 instant 按用户时区的 wall date 回填 picker；**未修改即保存时不得重写 precision/zone**（`update` 仅写入用户实际改动的字段）。备选：始终显示日期+时间——会把历史零点值渲染成"00:00"，暗示不存在的时刻精度，不推荐。
 - 【建议方案】"只读不改写"条款：
   - 任何读路径、列表、timeline、upcoming 不写 precision/zone。
   - 编辑表单未触碰该字段 → 更新语句不包含对应列。
@@ -205,12 +232,12 @@ completedAtPrecision: "fullInstant" | "unknown" | null;
 ### 4.2 各消费者一致表达
 
 - **表单（`AddJob.tsx` / `addJobForm.schema.ts` / `jobOpportunityAdapter.ts` / `opportunityService.ts`）**【建议方案】：
-  - picker 产出日历日期 → `dateOnlyFromPickerDate` → 写 `deadlineOn` + `"dateOnly"`，`deadline = NULL`。【待决策 D8】推荐 MVP 不提供时间输入。
+  - picker 产出日历日期 → `dateOnlyFromPickerDate` → 写 `deadlineOn` + `"dateOnly"`，`deadline = NULL`。【已决策 D8】推荐 MVP 不提供时间输入。
   - 日期不再输入"带时刻的 `Date`"：默认推荐值（3 天后）改为 `addDaysToDateOnly(todayDateOnly(userTz), 3)`。
   - 编辑回填：dateOnly → 用本地年月日部件构造 picker `Date`（`new Date(y, m-1, d)`，**不得 `Date.parse("YYYY-MM-DD")`**——UTC 解析在负 offset 时区会回退一天）；历史 unknown instant → 按用户时区取 wall date 回填。
   - 未修改即保存 → 不写 deadline 三列（保留 unknown instant 事实），同 §3.3。
 - **详情（`JobSummaryCard.tsx`、`JobStatusBadge.tsx`）**【建议方案】：dateOnly → `formatDateOnly`；instant → `formatDate(iso, { timeZone: userTz })`；expired 判定统一 `isDeadlineOverdue(value, now, userTz)`——dateOnly 在该日于用户时区结束后才过期（相比现状 instant 比较是行为变化：同一天内不再提前过期）。
-- **CSV（`exportJobsCsv.ts`、`jobsReadDispatch.ts` 的 `JOB_EXPORT_SELECT`、`getJobsIterator`）**【待决策 D9】推荐：在 `salaryRange` 后追加一列 `Deadline`（i18n key `jobs.deadline`），单元格为 canonical 原文——dateOnly → `"2026-10-25"`；instant → `"2026-10-25T09:00:00.000Z"`（ISO 带 Z）；无 → 空。**不本地化、不截断到日期**——localized `yyyy-MM-dd` 会把 instant 悄悄降精度。备选：再追加 `Deadline Precision` 列；或导出用户时区表达（会丢语义）。
+- **CSV（`exportJobsCsv.ts`、`jobsReadDispatch.ts` 的 `JOB_EXPORT_SELECT`、`getJobsIterator`）**【已决策 D9】推荐：在 `salaryRange` 后追加一列 `Deadline`（i18n key `jobs.deadline`），单元格为 canonical 原文——dateOnly → `"2026-10-25"`；instant → `"2026-10-25T09:00:00.000Z"`（ISO 带 Z）；无 → 空。**不本地化、不截断到日期**——localized `yyyy-MM-dd` 会把 instant 悄悄降精度。备选：再追加 `Deadline Precision` 列；或导出用户时区表达（会丢语义）。
 - **Agent（`canonicalJobRead.ts`、`agent.model.ts`、`tools/addJob.ts`、`agent.schema.ts`、`createAgentOpportunity.ts`）**【建议方案】：
   - `get_job` 返回 `deadlineOn`、`deadlinePrecision`，并保留 `dueDate`（= `deadline` instant ISO 或 `null`）。unknown 必须如实标注精度，不得把旧 instant 说成准确 DateOnly。
   - `add_job` 输入合同：`deadlineOn?: "YYYY-MM-DD"`（→ dateOnly）与 `dueDate?: ISO datetime`（→ instant；精度按 `isOnMinuteBoundary` 判定 `"minute"/"fullInstant"`）二选一；两者同传时拒绝或 `deadlineOn` 优先——推荐拒绝以避免歧义。
@@ -223,7 +250,7 @@ completedAtPrecision: "fullInstant" | "unknown" | null;
 ### 5.1 读写表达
 
 - 【建议方案】与 §4 同构：`dueOn` XOR `dueDate`，`duePrecision ∈ {"dateOnly","minute","fullInstant",NULL→unknown}`。
-  - 表单（`TaskForm.tsx` / `addTaskForm.schema.ts` / `task.model.ts` / `mutations.ts`）：picker → `dueOn` + `"dateOnly"`，`dueDate = NULL`。【待决策 D8】推荐 MVP 不做时间输入。
+  - 表单（`TaskForm.tsx` / `addTaskForm.schema.ts` / `task.model.ts` / `mutations.ts`）：picker → `dueOn` + `"dateOnly"`，`dueDate = NULL`。【已决策 D8】推荐 MVP 不做时间输入。
   - "不得早于今天"校验改为 `dueOn < todayDateOnly(userTz)` 拒绝（语义与现状"本地零点"一致，时区来源换成账户时区）。
   - 编辑回填与未修改不改写规则同 §4.2。
   - `Task` DTO 增加 `dueOn`、`duePrecision`；`dueDate` 保留兼容投影。
@@ -232,8 +259,8 @@ completedAtPrecision: "fullInstant" | "unknown" | null;
 
 - 【建议方案】排序键：把每行的 due 语义映射为单个排序 instant——
   - instant → 该 instant；
-  - dateOnly → 该日 `endIsoExclusive`（用户时区内该日结束的 instant）。【待决策 D6】推荐 end-of-day：与 overdue 边界一致（"due 当天有效至日终"），同日 timed instant（如 10:00）排在 dateOnly 行之前，符合直觉。
-  - NULL（`dueOn`、`dueDate` 皆空）→ **排尾**。【待决策 D5】推荐排尾，与 `MVP_IMPLEMENTATION.md` 中 OD-B 既定方向一致；不能依赖 SQLite 对 `NULL` 的默认排序，必须在排序逻辑中显式。
+  - dateOnly → 该日 `endIsoExclusive`（用户时区内该日结束的 instant）。【已决策 D6】推荐 end-of-day：与 overdue 边界一致（"due 当天有效至日终"），同日 timed instant（如 10:00）排在 dateOnly 行之前，符合直觉。
+  - NULL（`dueOn`、`dueDate` 皆空）→ **排尾**。【已决策 D5】推荐排尾，与 `MVP_IMPLEMENTATION.md` 中 OD-B 既定方向一致；不能依赖 SQLite 对 `NULL` 的默认排序，必须在排序逻辑中显式。
 - 【建议方案】确定性全序：`sortKey asc → priority desc → id asc`。`id` 为唯一最终 tie-break——现有 `createdAt` 不保证唯一，没有它 offset 分页会出现跨页重复/漏行。
 - 【建议方案】同日混排示例（`userTz = Asia/Shanghai`）：
   - T1 `dueDate = 2026-10-25T02:00Z`（= 本地 10:00，minute）→ key `02:00Z`
@@ -259,7 +286,7 @@ completedAtPrecision: "fullInstant" | "unknown" | null;
   2. 全序性质全局成立（任取相邻两页交接行满足顺序关系）；
   3. `NULL` 全部位于尾部；
   4. 同一查询多次执行返回完全一致顺序（确定性）；
-  5. 单页响应时间实测记录（建议预算 ≤300ms/页，5k 规模下 JS 排序为 O(N log N)，实测远低于预算）。
+  5. 单页响应时间实测记录（建议预算 ≤300ms/页，5k 规模下 JS 排序为 O(N log N)，须记录实测结果，不预先承诺达标）。
 - 若未来单用户 task 数远超该规模，再评估 raw SQL / 物化键方案——属于后续优化，不在本合同冻结范围。
 
 ## 6. Upcoming DTO 与日期显示接口
@@ -296,36 +323,36 @@ type UpcomingApplicationEvent = {
   - `Instant` → `formatInstant(iso, locale, userTz)` 或 i18n `formatDate/formatDateTime(iso, { timeZone: userTz })`。
   - `unknown` → 按 instant 渲染日期部分（§3.3 D7）。
   - **禁止**：`new Date(dateOnlyStr)`、`toLocaleDateString`、裸 `date-fns format`、把 DateOnly 塞进需要 instant 的接口。
-- 【建议方案】如缺则向 `src/lib/datetime` 只增不改地补充两个 helper（DateTime Owner）：`businessTimeDueSortKey(value, tz): InstantIso | null`（§5.2/§6.1 共用）、`formatBusinessTime(value, locale, tz)`（统一分派 dateOnly/instant/unknown 的显示）。若已存在等价实现则复用，不重造。
+- 【建议方案】如缺则向 `src/lib/datetime` 只增不改地补充两个 helper（主集成负责人）：`businessTimeDueSortKey(value, tz): InstantIso | null`（仅 §5.2 到期排序；§6.1 关注排序单独使用 startIso）、`formatBusinessTime(value, locale, tz)`（统一分派 dateOnly/instant/unknown 的显示）。若已存在等价实现则复用，不重造。
 
 ### 6.3 Dashboard overview 汇合
 
 - 【建议方案】`src/actions/dashboard/overview.ts` `getOverviewReminders`：
   - task 分支 `dueDate lte next7End` → 改为"due 区间与 `[now, next7End]` 相交"：`dueOn` 行按当日窗口参与，`dueDate` 行按 instant 参与；`NULL` 不入选。overdue 标记走 `isDeadlineOverdue`。
   - upcoming 分支复用 §6.1 DTO，`at` 字段沿用 `attentionAt` 语义。
-  - 该文件在 Task 与 Upcoming 之间汇合，Owner 必须在开工前冻结指定（建议 Process Owner，理由见 §7）。
+  - 该文件在 Task 与 Upcoming 之间汇合，由主集成负责人独占写入。
 
 ## 7. 消费者文件矩阵与单一 Owner
 
 | 文件 | 工作包 | Owner | 改动性质 |
 | --- | --- | --- | --- |
-| `src/lib/datetime/*` | 全部 | DateTime Owner | **只增不改**：如需新增 `businessTimeDueSortKey`/`formatBusinessTime` helper |
+| `src/lib/datetime/*` | 全部 | 主集成负责人 | **只增不改**：如需新增 `businessTimeDueSortKey`/`formatBusinessTime` helper |
 | `src/models/userSettings.model.ts` | P-TZ | TZ Owner | `GeneralSettings.timeZone` 类型 |
 | `src/actions/userSettings.actions.ts` | P-TZ | TZ Owner | `updateSettingsTimeZone` + 读取透传 |
-| `src/lib/userSettings/timeZone.ts`（新增） | P-TZ | TZ Owner | `getUserTimeZone` 解析 helper |
+| `src/lib/userSettings/timeZone.ts`、`timeZone.server.ts`（已实现） | P-TZ | TZ Owner | 客户端解析与服务端 `getUserTimeZone` 入口 |
 | `src/components/settings/GeneralSettings.tsx` | P-TZ | Settings Owner | 时区选择 UI（IANA 搜索，OD-C） |
 | `src/app/dashboard/settings/page.tsx`、`SettingsSidebar.tsx` | P-TZ | Settings Owner | 如需挂接（预计仅复用现有卡片结构） |
 | `src/lib/career/applicationService.ts` | P-PROC | Process Owner | step 三字段读写、DTO 映射、complete/cancel 写 `completedAtPrecision` |
 | `src/lib/career/applicationTimeline.ts` | P-PROC | Process Owner | `ApplicationProcessStepDTO` 扩展 |
-| `src/actions/application.actions.ts` | P-PROC | Process Owner | step 时间入参结构化（§3.1）+ upcoming action envelope |
+| `src/actions/application.actions.ts` | P-PROC | Process Owner | step 时间入参结构化（§3.1）；upcoming action envelope 由集成负责人提供合同，Process Owner 在本文件接入 |
 | `src/components/myjobs/job-details/ProcessStepDialog.tsx` | P-PROC | Process Owner | 日期+时间输入、unknown 回填不改写 |
 | `src/components/myjobs/job-details/QuickAddProcessStep.tsx` | P-PROC | Process Owner | 同上 |
 | `src/components/myjobs/job-details/RescheduleStepDialog.tsx` | P-PROC | Process Owner | 同上 |
 | `src/components/myjobs/job-details/ProcessStepsTable.tsx` | P-PROC | Process Owner | 精度感知显示 |
 | `src/components/myjobs/job-details/ApplicationTimelineTab.tsx` | P-PROC | Process Owner | action payload 结构化 |
-| `src/lib/career/upcomingReadModel.ts` | P-PROC | **Process Owner**（P-JO 仅消费合同） | 读 `deadlineOn`/`deadlinePrecision`/step sidecar、`attentionAt`/overdue/bucket 合同 |
-| `src/components/myjobs/UpcomingContainer.tsx` | P-PROC | Process Owner | envelope 取 zone、显示按 §6.2 |
-| `src/actions/dashboard/overview.ts` | P-PROC（建议） | 开工前冻结指派 | task dueOn 汇合 + upcoming 合同对齐 |
+| `src/lib/career/upcomingReadModel.ts` | P-PROC | **主集成负责人**（Process/Job 交接输入合同） | 读 `deadlineOn`/`deadlinePrecision`/step sidecar、`attentionAt`/overdue/bucket 合同 |
+| `src/components/myjobs/UpcomingContainer.tsx` | 集成 | 主集成负责人 | envelope 取 zone、显示按 §6.2 |
+| `src/actions/dashboard/overview.ts` | 集成 | 主集成负责人 | task dueOn 汇合 + upcoming 合同对齐 |
 | `src/models/addJobForm.schema.ts` | P-JO | Job UX Owner | dueDate → DateOnly 表达 |
 | `src/components/myjobs/AddJob.tsx` | P-JO | Job UX Owner | picker → dateOnly；unknown 保留 |
 | `src/actions/job/mutations.ts`（含 `job.actions.ts` 透传） | P-JO | Job UX Owner | 结构化 deadline 透传 |
@@ -343,23 +370,23 @@ type UpcomingApplicationEvent = {
 | `src/components/tasks/TasksContainer.tsx`、`tasks-container/useTasksList.ts`、`TasksToolbar.tsx` | P-TASK | Task Owner | 分页/分组调用点按需 |
 | `src/actions/task/queries.ts` | P-TASK | Task Owner | 混合全序 + NULL 排尾 + 两阶段分页 |
 | `src/actions/task/mutations.ts` | P-TASK | Task Owner | 写 `dueOn`/`duePrecision` |
-| `src/actions/dashboard/overview.ts` | 见上 | 建议 Process Owner | 共享文件，跨包协调 |
-| `src/i18n/messages/en.json`、`zh-CN.json` | 全部 | **i18n Owner**（统一批量追加） | 时区标签、CSV 表头、精度标注文案 |
+| `src/actions/dashboard/overview.ts` | 见上 | 主集成负责人 | 共享文件，跨包协调 |
+| `src/i18n/messages/en.json`、`zh-CN.json` | 全部 | **主集成负责人**（分批追加） | 时区标签、CSV 表头、精度标注文案 |
 
-原则重申：两个 Agent 不得同时写同一物理文件；`upcomingReadModel.ts` 由 Process Owner 独占，P-JO 通过 DTO 合同消费；`src/lib/datetime` 任何人不得修改已有导出语义。
+原则重申：两个 Agent 不得同时写同一物理文件；`upcomingReadModel.ts` 由主集成负责人独占，P-JO 通过 DTO 合同消费；`src/lib/datetime` 任何人不得修改已有导出语义。
 
 ## 8. 并行工作包与依赖顺序
 
-1. **Phase 0（本提案冻结）**：用户确认 §9 决策 → 本文档成为合同。
-2. **P-TZ 合同层**（先行）：`GeneralSettings.timeZone` 类型 + `updateSettingsTimeZone` + `getUserTimeZone`。Settings UI 选择器可随后续排期，不阻塞其他消费者——它们依赖的是读取合同而非 UI。
+1. **Phase 0（本提案冻结，已完成）**：2026-10-27 用户批准 §9 全部 A 及文首执行边界。
+2. **P-TZ 合同层**（已实现，复用）：`GeneralSettings.timeZone` 类型 + `updateSettingsTimeZone` + `getUserTimeZone`。Settings UI 选择器可随后续排期，不阻塞其他消费者——它们依赖的是读取合同而非 UI。
 3. **并行层**（任一顺序，文件不相交）：
-   - `P-PROC`：§7 中 Process Owner 全部文件（含 `upcomingReadModel.ts`、`overview.ts`）。
+   - `P-PROC`：§7 中流程表单、action/service、DTO、Timeline；Upcoming/overview 按文首批准归属交由主集成负责人。
    - `P-JO`：Job UX Owner 全部文件（不触碰 `upcomingReadModel.ts`，依赖其 DTO 形状——已在本合同冻结）。
    - `P-TASK`：Task Owner 全部文件（不触碰 Process 共享文件；`overview.ts` 由单一 Owner 处理）。
 4. **P-INT**：跨模块回归（Upcoming 三种事件 + task 混排 + settings 时区切换后的展示/overdue 一致性）。
-5. i18n 文案由 i18n Owner 在各包接口冻结后一次性追加。
+5. i18n 文案由主集成负责人在各包接口冻结后分批追加。
 
-## 9. 待决策清单（含推荐）
+## 9. 已冻结决策清单（2026-10-27 全部采用 A）
 
 | # | 决策点 | 选项 | 推荐 | 理由 |
 | --- | --- | --- | --- | --- |

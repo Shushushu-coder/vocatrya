@@ -4,7 +4,107 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## 本次集成进度（2026-10-26）
+## W1/W2/W4 Main 集成记录（2026-10-27）
+
+用户授权先合并、由另一窗口排查桌面验收。代码已于本轮集成至 main：W1 `e9a57b00`、W2 `fa672934`、W4 `0c524a37`，组合合并点 `fe8713d0`；职业资料双语补齐提交 `6aaab974`。
+
+- W1/W2：P-PROC、P-TASK 和 Upcoming/Dashboard 消费者已实现；W1 仍待 W3 的截止日期写入接线及最终跨模块验收。P-JO 仍未开发，不提前核销。
+- W4：Schema、新 Migration、Backup V5、服务/UI/复制与敏感保护已集成。职业资料继续补完整桌面用户路径证据；现有代码不重复开发。
+- 合并前定向复审修复了时区改期漂移、Dashboard 混排遗漏、Upcoming 加载失败、unknown 精度推断、Task 跨区快捷日期、学历误派生、敏感明文迟到响应、5MB 上传入口与恢复类型校验。
+- 隔离集成 Worktree 的组合验证：18 个测试文件、264 项全部通过；双语新增 literal/detail label 键检查、Git 差异检查通过。组合 tsc 仍只有 `applicationProfile.materialPartialWrite.spec.ts` 54/106/169/191 的 4 处既有 ActionResult 窄化错误，未修改这些无关测试；不宣称全量类型检查通过。
+- W2 原报告 5k 分页 avg 547.6ms、max 1615.8ms/页，高于 300ms 参考预算；本轮未重复性能测试，不扩项优化。
+- Windows Electron fresh-native 完整验收仍未通过，由另一窗口排查；本轮不启动桌面 E2E，不将代理作为已证实的唯一根因。全部未验收 passes 仍为 false。
+- Main 已重新生成 Prisma Client，仅生成客户端，未对真实数据库执行 Migration。认证/桌面 E2E 的既有 Dirty 不纳入本轮提交；源 Worktree、运行目录和进程均保留，不擅自清理。
+
+当前后续执行：W3 职位；W5 基础数据；W6 设置；W7 简历；W1/W2/W4 仅余实际缺口修复、交接与验收收尾。G-A 和相关 Worktree 状态在实际集成前核对。
+
+## 合并执行方案（2026-10-27，当前调度口径）
+
+按用户要求合并同类工作：原 9 个开发/集成工作包与 7 组验收合并为 **7 个执行单元**，另保留当前主协调窗口。以下为窗口分配，优先于后文分包和旧 Owner 表；功能范围、时间语义与验收条件不变。7 是计划任务数，不是同时运行数或完成时间承诺，真实阻塞可能影响安排。
+
+| 单元 | 同一窗口负责的范围 | 完成标准与依赖 |
+| --- | --- | --- |
+| W1 流程与时间联动 | P-PROC、PROC-UPCOMING、共享时间工具、Upcoming/Dashboard；PROC-ATTEMPT/PROC-UX 真实路径验收 | 先交付缺失的共享接口；完成 Task/Job 交接后的跨模块时间验证与流程桌面验收，未接入前不提前结项 |
+| W2 任务 | P-TASK 开发、列表排序分页、5k 数据验证和任务桌面验收 | 依赖 W1 提供必要共享接口；向 W1 交接 Task DTO/读取合同，不写 overview |
+| W3 职位 | P-JO 开发及 JOB-01～05 桌面验收 | 同时核对新增/编辑、CSV、Agent、历史保护；向 W1 交接 Job 截止日期合同 |
+| W4 职业资料 | Schema/Migration、Backup V5、服务、UI、复制/隐私及 CP 全组验收 | 同一负责人按底层→服务→UI/复制顺序实施，保护旧资料；W7 新素材引用验收依赖此单元完成 |
+| W5 基础数据 | BD-CORE、BD-LINKS 缺口及 BD-INLINE 桌面验收 | 合并维护、引用和就地创建，复用现有 CRUD；职业素材引用与 W4 顺序交接共享文件 |
+| W6 设置 | AI 设置最小接线；语言/时区/外观/桌面偏好/备份恢复验收 | 备份新格式验收在 W4 交付后完成；不改 W4 的备份源文件。真实系统配置操作另获授权 |
+| W7 简历 | RM-RESUME 完整桌面验收、素材复用检查 | 复用已通过的 RM-BIND 证据，仅受影响时回归；新增素材闭环待 W4 完成 |
+
+- 每个窗口负责实现、必要定向验证、真实桌面验收与本任务缺陷修复，不再独立开 7 个通用验收窗口。已有实现只补缺失证据。范围外问题记录，不扩项。
+- W1 唯一写入流程 action/service/DTO/表单/Timeline，以及 upcomingReadModel.ts、UpcomingContainer.tsx、overview.ts 和 datetime 共享工具；W2/W3 只交接各自合同。旧表中的主集成负责人对这些源码的职责交给 W1。
+- W4 唯一写入 Schema/Migration、备份和职业资料源码；W5 若需修改职业素材组件/服务，先交给 W4 接入或等其明确交接，不能同时改。W6 仅消费备份，不改其实现。
+- 当前主窗口负责协调、双语词条、wiki 状态和获授权后的 Git 集成；执行者提交词条需求，由主窗口分批写入。验收使用含当轮词条和共享接口的构建；不要求另开协调/Review 窗口。
+- 建议最多同时运行 3 个执行窗口。第一批 W1/W2/W4，W2 所需新增共享接口未就绪时先处理独立部分；第二批按空位安排 W3/W5/W6，W7 最后完成新增素材闭环。不为并行数拆出额外任务。
+- 各单元可在不同批次继续同一任务，依赖等待不计新窗口。W1/W6 的跨包验收在依赖代码可用后继续；当前未经授权的提交/合并不因依赖自动发生。
+- 旧版兼容证据和旧 Worktree 状态核实由主窗口在相关集成前处理，不单独计执行单元。本次仅更新调度计划，不启动任何开发窗口。
+
+## 2026-10-27 时间合同与并行归属冻结
+
+用户已批准 `DATETIME_CONSUMER_CONTRACT_PROPOSAL.md` §9 D1–D9 全部采用 A，以及该文档文首执行边界；以下为当前执行口径，优先于后文历史基线。
+
+- P-TZ 存储、设置 UI、原子保存及客户端/服务端读取已实现，消费者直接复用；完整桌面验收待完成，不重新开发设置。
+- 时间语义：纯日期写 *On，不制造 instant；计划时间须含时刻；unknown 原样保留且未修改不重写。Job/Task 本期表单仅日期输入，保留 Instant 数据和接口能力。
+- Task 纯日期按用户时区日终排序、NULL 排尾、同值 priority desc/id asc；全量必要字段排序后分页。Upcoming 纯日期从当天开始提示、当天结束才逾期，两种排序边界不得混用。
+- 静态条件下验证分页不漏不重，新增/改期/时区切换后重置列表。5,000 条合成数据记录实际性能，300ms/页为参考预算。
+- 首批 P-PROC 与 P-TASK 两线并行；主集成负责人先补必要共享接口，再统一接入 Upcoming/Dashboard 和词条并定向验证。P-JO 后续接入，不自动启动。
+- Process Owner：流程 action/service、DTO、各日期表单及 Timeline；Task Owner：任务类型、表单、读写、排序分页和展示。
+- 主集成负责人：upcomingReadModel.ts、UpcomingContainer.tsx、overview.ts、datetime 共享工具、双语词条、功能状态清单；Process/Task/Job 不并行写这些文件。
+- 各开发线使用独立 Worktree 和隔离数据；具体执行者在任务分配时指定。文档冻结不等于功能实现、Main 集成或验收通过，不授权 Git 提交/合并或真实数据操作。
+
+## 2026-10-27 职业资料与本期范围决策（已批准）
+
+用户已批准职业资料推荐方案，详细合同见 `CAREER_SCHEMA_CONTRACT_PROPOSAL.md` 文首及 §10。
+
+- CP-SCHEMA：以合同逐字段清单为准，取消“精确 35 列”数量约束；新增语言明细、证明人、附件模型；新 Migration 与 Backup V5 同步，保留旧数据与兼容边界。
+- 基础字段增加“保密”、独立手机号区号和家庭地址；毕业日期/预计标记与排名分项独立；科研信息关联教育，独立科研经历继续保留。
+- 最高学历/学位只按明确已取得事实分别派生：博士后是经历，非在读不代表已毕业，MBA 名称不自动证明学历。信息不足保持未知，在读单独标注，历史毕业届次保留兜底；派生不回写。
+- 主页复用 linksData；叙述内容复用 notes/evidence；techStack 独立字段；AI 应用技能复用 SKILL；本期不做教育与奖项的记录级关联。
+- 证明人单条维护并归档；附件证件照限 JPG/PNG，证明材料另支持 PDF，单文件 5MB；证明人和附件统一敏感保护并纳入恢复非空检查。
+- SET-AI-SERVICES 纳入本期 P1 的最小范围：仅交付已有业务必需的连接与模型分配配置，其余明确不可用，不扩展新 AI 能力，保留登录和 BYOK 隔离。具体必需项按现有生产消费者确认，属于实施核对。
+- RM-MATCH 明确延期；与已延期的 BD-ARCHIVE、REM-V1 一并不阻塞本期 MVP，未实现/未验收状态不变。
+- 本轮只更新计划、合同和 Feature 范围，不启动功能开发，不标记任何新增 passes，不授权提交、合并、发布或真实数据操作。
+
+## 当前完整待办清单（2026-10-27）
+
+统计按 `MVP_FEATURES.json` 的 Feature ID：共 31 项，本期 28 项（1 项已验收、27 项未完成验收），延期 3 项。Feature 与执行工作包不是一一对应，以下合并共享实现，避免重复开发。
+
+### 工作包进度（W1/W2/W4 已集成，其余待开发）
+
+| 工作包 | 对应 Feature | 剩余范围 |
+| --- | --- | --- |
+| 职业资料 Schema/备份/服务 | CP-RECORDS、CP-PRIVACY | W4 已集成字段/三模型、新 Migration、Backup V5、权限与敏感边界；剩余完整桌面验收 |
+| 职业资料 UI 与复制 | CP-EDIT、CP-RECORDS、CP-PRIVACY、CP-COPY、CP-LEGACY | W4 已集成新字段/对象、教育派生和复制保护；剩余实际路径验收，发现缺口再修复 |
+| 流程时间消费者 P-PROC | P-PROC | W1 已集成时间/精度/zone 的读写与展示；待最终跨模块和桌面验收 |
+| 任务时间消费者 P-TASK | P-TASK | W2 已集成；5k 正确性通过，性能实测高于参考预算；待桌面验收 |
+| 职位时间消费者 P-JO | P-JO | 截止日期表单、读写、详情、CSV、Agent，保留 Legacy 合同 |
+| 共享时间集成 | PROC-UPCOMING、P-TZ、P-PROC、P-TASK、P-JO | W1 共享接口及 Upcoming/Dashboard 已集成；待 W3 交付和最终联动验收 |
+| 基础数据维护 | BD-CORE | 补齐职位名称/地点/渠道独立维护及标签/活动类型编辑的实际缺口，复用现有 CRUD |
+| 基础数据引用 | BD-LINKS | 核对并补齐标签/技能与职业素材及业务表单的复用和引用，仅修实际缺口 |
+| AI 设置最小接线 | SET-AI-SERVICES | 已有生产业务必需的连接/模型配置、真实状态与失败反馈；不扩项 |
+
+### 已有实现，安排缺失的验收
+
+- 职业资料：CP-UI、CP-EDIT、CP-RECORDS、CP-COPY、CP-PRIVACY、CP-LEGACY。已有 Web 证据继续复用；补新能力与 Windows Electron 持久化/退出重开、剪贴板及真实输入法等缺失证据，不重做已实现功能。
+- 职位：JOB-01～05。Windows Electron 验证草稿撤销、真实投递保护、薪资/渠道/来源、CSV、受限提示；JOB-05 迁移态详情提示仍需补测。
+- 流程：PROC-ATTEMPT、PROC-UX、PROC-UPCOMING。验证多 Attempt、跨职位转投、事件新增/改期/完成/取消、窄窗口/键盘、归属与 Upcoming 联动及重开。
+- 日期时区：P-TZ、P-PROC、P-JO、P-TASK。验证切换时区、DateOnly 不漂移、unknown 不重写、混排分页及跨模块一致性。
+- 基础数据：BD-CORE、BD-INLINE、BD-LINKS。补维护/引用缺口后的桌面保存重开与跨模块复用验收；就地创建不重复开发。
+- 设置：SET-LOCALE、SET-APPEARANCE、SET-DESKTOP、SET-DATA-PRIVACY、SET-AI-SERVICES。补完整 Settings 桌面路径、失败反馈、退出重开及备份恢复；系统自启涉及真实配置的操作另获授权，不能用模拟证据代替。
+- 简历：RM-RESUME。素材→创建/复用→编辑→冻结→预览/导出→重开；RM-BIND 已通过，本轮不重复开发，仅受影响时回归。
+
+默认功能验收使用隔离 Windows Electron fresh-native；Legacy/迁移态另建隔离场景。Web 与定向测试证据不冒充完整桌面验收，桌面 E2E 基础入口不等于全部业务已通过。
+
+### 技术核实与延期
+
+- G-A：核实旧版兼容/真实环境启用的必要证据，不阻塞隔离开发；不是待用户重新选择的产品范围。
+- 旧 Worktree：仅在相关接续或集成前核对独有提交、Dirty 和进程；未获清理授权不移除。
+- 延期 3 项：RM-MATCH（匹配）、BD-ARCHIVE（全品类归档）、REM-V1（本地持久提醒）。
+
+执行顺序：首批共享接口 + P-PROC/P-TASK 两线；随后 P-JO 与跨模块集成。职业资料可在独立文件归属下另行排期，先 Schema，再服务/UI/复制；基础数据和 AI 设置按 P1 排期。所有功能开工仍等待明确任务授权。
+
+## 本次集成进度（2026-10-26，历史记录）
 
 以下为基线之后的代码集成状态；后文基线记录保留为历史背景，不代表这些功能仍需重复开发。
 
@@ -96,7 +196,7 @@
 **Match：**
 
 - `MatchAnalysis` 存储/展示模型、`MatchJobButton`、FastScreening/DeepMatch 方法定义存在，**但不能据此判定 canonical Match 可用**：fresh 默认 Job 界面隐藏 Match，现有服务方法未发现生产调用链，缺少 canonical fresh-native 的用户入口和实际执行接线（见 `JobDetails.tsx`、`MatchJobButton.tsx`、`matchAnalysisService.ts`）。
-- 该缺口不得写成“只需复用验收”；P1 是否接通最小 canonical Match 或延期，由 Owner 在 B7 明确选择，不将完整 Deep Match 当作首版 P0 前提。
+- 该缺口不得写成“只需复用验收”；P1 是否接通最小 canonical Match 或延期，已于 2026-10-27 批准延期，不将完整 Deep Match 当作首版 P0 前提。
 
 ### A8. Reminder — MISSING（条件纳入）
 
@@ -105,7 +205,7 @@
 ### A9. i18n / 其他横切
 
 - `en.json` + `zh-CN.json` 双语完整（各 ~124K 行级词条）；中文界面已是默认交付物。残留工程术语见 JOB-05。
-- Dashboard V2 概览/分析板、GettingStarted、ActivityCalendar 已并入 Main；`overview.ts` Owner 待冻结。
+- Dashboard V2 概览/分析板、GettingStarted、ActivityCalendar 已并入 Main；`overview.ts` 当前由主集成负责人负责（2026-10-27 冻结）。
 
 ---
 
@@ -117,7 +217,7 @@
 
 - 可复用：`CandidateProfile`/`CandidateSensitiveInfo`/`CareerMaterialItem`+Detail/`JobSearchPreference`、`sensitiveMask`、`applicationCopy`、现有四 Tab 工作区与“复制本条”、教育 `gpaValue/gpaScale/rankText`、userSettings patch（Tab 显隐持久化可挂 settings JSON）。
 - 最小范围：
-  1. **CP-SCHEMA（单 Owner + 单独 Gate）**：M1 精确 35 列 diff + M2 三模型；Synthetic Migration、Backup V5、敏感字段安全审查；不动真实 DB。
+  1. **CP-SCHEMA（单 Owner）**：按 2026-10-27 冻结的逐字段清单与 M2 三模型；Synthetic Migration、Backup V5、敏感字段安全审查；不动真实 DB。
   2. **CP-UI**：七 Tab 壳 + 「管理 Tab」显隐持久化；Tab 顺序与命名按冻结合同。
   3. **CP-EDIT**：字段行式直接编辑 + 自动保存（保存中/已保存/失败三态，失败保留输入可重试）；无全页编辑模式与保存按钮；Ctrl+Z 不劫持。
   4. **CP-RECORDS**：复用现有教育 GPA/排名与多条素材 CRUD，差量补齐科研、论文、语言多条及实习、项目、获奖、其他（证书/AI 技能/主页/证明人/补充）的七 Tab 呈现与所缺字段。
@@ -127,7 +227,7 @@
 
 ### B2. DT-CONSUMERS DateTime 消费者（P0，与 B1 并行）
 
-- 前置：DT-11 R1 定向复审关闭 F-01～03；OD-A/B/C 决策；冻结 Settings 时区合同、Upcoming DTO、精度显示合同、Task 排序合同。
+- 前置：时间合同及 Owner 已于 2026-10-27 冻结（见文首及合同文档）；P-TZ 已实现，复用现有接口。历史 DT-11 R1 记录不作为未经核实的当前阻塞，遇到实际相关缺陷再处理。
 - **P-TZ**：UserSettings 时区字段（走 patch.ts）+ Settings 选择器（OD-C：IANA 搜索）。验收：设置持久化，消费者按用户时区解释 DateOnly/Zoned。
 - **P-PROC**：ProcessStepDialog/时间线读写 precision/zone；笔试/面试/Offer 排期以真实精度保存。验收：DateOnly 步骤不产生 UTC 漂移；旧行按 unknown 精度显示不改写。
 - **P-JO**：JobOpportunity deadlineOn/deadlinePrecision 写入（AddJob/编辑/CSV/详情），canonicalJobRead 与 Upcoming 岗位截止读取合同统一。
@@ -163,7 +263,7 @@
 ### B7. RM-V1 Resume 复用收口 + Match 决策（P1）
 
 - **Resume（明确施工）**：复用 ResumeVariant、版本冻结、导出与 Attempt 绑定机制；Career V1 落地后核销素材→简历引用、`SubmitResumePicker/attachAttemptResumeVersion`、冻结版本与历史查询的真实用户路径。验收：简历版本可创建/复用、绑定投递、冻结、导出并回看历史。
-- **Match（未交付，待 Owner 选择）**：canonical fresh 用户入口和生产执行链路缺失。若纳入本阶段 P1，则只实现最小 canonical Job → Match 入口、现有匹配服务调用与结果呈现/持久化，并做真实路径验证；不重构整个 AI 或承诺完整 Deep Match。若不纳入，则明确延期，并禁止在 Feature List 中标记为已通过。
+- **Match（未交付，2026-10-27 已批准延期）**：canonical fresh 用户入口和生产执行链路缺失，本期不开发，也不标记通过。未来重新纳入时另行授权最小链路范围；完整 Deep Match 不属于当前任务。
 - **首版 P0 边界**：完整 Match/Deep Match 不自动阻塞职业资料—职位—投递—流程—时间—简历复用闭环。
 
 ### B8. REM-V1 提醒（条件纳入）
@@ -178,7 +278,7 @@
 
 | 依赖                                    | 影响面                                                       | 处理                                                         |
 | --------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| DT-11 R1 复审 + OD-A/B/C + 接口冻结     | P-TZ/PROC/JO/TASK 的写入合同                                 | Phase 0 关闭；冻结后即可并行                                 |
+| DT-11 R1 复审 + OD-A/B/C + 接口冻结     | P-TZ/PROC/JO/TASK 的写入合同                                 | 合同与 Owner 已冻结；共享接口按需补齐后两线并行                                 |
 | CP-SCHEMA Gate（M1/M2 + Backup + 安全） | 仅 CP-V1 的 Schema 部分                                      | CP-UI 原型与复制层可先施工，落库前合并                       |
 | Settings 宿主归属裁定                   | SET-MVP、P-TZ 设置项、桌面偏好 UI                            | 先处置 wave1-set01/03/08 未提交改动；保留现有 IPC            |
 | P-PROC/PROC-UX 共享文件归属             | 两项任务的 ProcessStepDialog、Timeline、application action/service | 同一 Process Owner 控制共享文件的实施/交接，不并行改同一文件 |
@@ -186,10 +286,10 @@
 
 ### C2. 可并行轨道（接口冻结后）
 
-- 轨道 A（DateTime）：先冻结 P-TZ 时区合同，再让 P-PROC/P-JO/P-TASK 在不冲突文件上并行 → P-INT；完整 P-TZ 设置 UI 不阻塞其他消费者在隔离环境开发。
+- 轨道 A（DateTime）：合同已冻结且 P-TZ 已实现；主集成负责人先补必要共享接口 → P-PROC/P-TASK 两线并行 → 集成与 P-INT；P-JO 后续接入，不自动启动。
 - 轨道 B（Career）：CP-SCHEMA（单 Owner）∥ CP-UI/EDIT/RECORDS/COPY（Schema 冻结前可基于现有模型开发壳与非新增字段）。
 - 轨道 C（Job UX）：JOB-04/05 + 一致性复核，独立小批量。
-- 轨道 D（Process UX）：PROC-UX（含独立 Attempt/转投入口）可并行处理独立组件；`ProcessStepDialog`、Timeline 与 application action/service 必须与 P-PROC 由同一 Process Owner 修改或明确顺序交接，不允许两个 Agent 同时改这些文件。
+- 轨道 D（Process UX）：PROC-UX/PROC-ATTEMPT 已实现，安排缺失验收，不重复开发；`ProcessStepDialog`、Timeline 与 application action/service 必须与 P-PROC 由同一 Process Owner 修改或明确顺序交接，不允许两个 Agent 同时改这些文件。
 - 轨道 E（Settings/BasicData/Resume 收口）：SET-MVP、BD-V1、Resume 收口按真实文件所有权并行；Match 是否进入本期由 Owner 选择。
 
 ### C3. 共享文件单一 Owner（必须显式指派）
@@ -197,13 +297,13 @@
 | 文件/区域                                                    | 建议 Owner                                      | 现存冲突                                                     |
 | ------------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------ |
 | `prisma/schema.prisma` + migrations + `src/lib/backup/`      | Schema/Integration Owner                        | CP-SCHEMA 唯一写入口                                         |
-| `src/lib/career/upcomingReadModel.ts`                        | Process Owner（含岗位截止读取合同）             | P-JO/P-PROC 经由此合同，不直接改                             |
+| `src/lib/career/upcomingReadModel.ts`                        | 主集成负责人（含岗位截止读取合同）             | P-JO/P-PROC 经由此合同，不直接改                             |
 | `ProcessStepDialog.tsx`、`ApplicationTimelineTab.tsx`、关联 application action/service | **Process Owner**（同时协调 P-PROC 与 PROC-UX） | 共享 UI/写路径只允许单 Owner 修改；其他 Agent 通过接口或明确交接接入 |
-| `src/actions/dashboard/overview.ts`                          | 开工前冻结指派                                  | Dashboard/Upcoming/Task 三路交汇                             |
+| `src/actions/dashboard/overview.ts`                          | 主集成负责人                                      | Dashboard/Upcoming/Task 三路交汇                             |
 | `src/app/dashboard/settings/page.tsx` + `SettingsSidebar.tsx` + 各 Settings 卡片 | Settings Owner                                  | **wave1-set01/03/08 未提交改动必须先裁定**                   |
-| `src/i18n/messages/{en,zh-CN}.json`                          | i18n Owner 分批集成                             | JOB-05/CP/DT/PROC 文案统一汇入                               |
+| `src/i18n/messages/{en,zh-CN}.json`                          | 主集成负责人分批集成                             | JOB-05/CP/DT/PROC 文案统一汇入                               |
 | `src/actions/job/*`、`jobOpportunityAdapter.ts`              | Job UX Owner                                    | P-JO 写入共享，需协调                                        |
-| `src/lib/datetime/*`                                         | DateTime Owner                                  | 只增不改，消费者各自落位                                     |
+| `src/lib/datetime/*`                                         | 主集成负责人                                  | 复用原语，必要新增接口由单一 Owner 实施                                     |
 
 ### C4. 明确不授权项
 
@@ -230,9 +330,9 @@
 ## 附：无法确认/需 Owner 澄清
 
 1. `next-datetime-01` worktree 干净停在基线 —— DT-11 R1 的修订工作未见落盘，需确认实际位置。
-2. OD-A/B/C 决策、G-A 门禁结论不在代码内，需 Owner 状态。
+2. 时间决策以 2026-10-27 冻结合同为准；G-A 旧版本兼容门禁仍需技术证据核对，仅影响真实环境启用。
 3. 桌面托盘/最小化行为未逐文件核验（标记 UNVERIFIED）。
 4. wave1-set01/03/08 未提交改动与 Main 的关系需归属裁定（疑似部分已被后续集成取代）。
-5. Career M1"精确 35 列"清单与 16 包准备方案未在仓库 docs 中定位（仅检索到产品冻结文档），实施前需 Owner 提供或确认以冻结合同字段表为准。
-6. Match：Owner 需选择本期最小 canonical 接线（P1）或正式延期；选择不阻塞其他 MVP P0 Coding。
+5. Career M1/M2：2026-10-27 已批准按职业资料合同逐字段实施，取消 35 列数量约束。
+6. Match：2026-10-27 已批准延期，不阻塞其他 MVP P0 Coding。
 7. 2026-10-26 独立复审 Git 状态未见此前 7 个已跟踪删除文件；历史差异原因无证据，不据此判断当前产品状态。

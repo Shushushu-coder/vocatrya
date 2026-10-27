@@ -1,18 +1,28 @@
 # 职业资料 Schema 合同提案（CP-SCHEMA / CP-RECORDS / CP-PRIVACY 前置）
 
+> **冻结记录：2026-10-27，用户批准推荐方案。** D1–D18 按 §10 推荐执行，并采用本记录对 D5/D10 的修订。本合同仅确定计划与范围，不代表已实现、集成或验收，不授权提交、合并或真实数据操作。
+>
+> - D1：以本文 §2/§3/§5 逐字段清单为冻结基线，取消“必须精确 35 列”的数量约束；历史引用仅作来源记录。
+> - D5：最高学历/学位仅从明确已取得的教育事实派生；非在读不等于已毕业，不能仅据 `isCurrent=false` 推断。博士后是经历，不参与学历/学位等级。学历与学位分别表达，不由 MBA 等名称自动推断学历。信息不足则不推断；在读单独标注，历史毕业届次仅作缺失时兜底。
+> - D10：实习职责、项目背景等复用 notes/evidence；`techStack` 采用独立字段，本期不保留可选决策。
+> - D16：证件照仅 JPG/PNG；证明材料 JPG/PNG/PDF；单文件上限 5MB。
+> - D17/D18：证明人和附件统一敏感保护；两者计入恢复非空检查，敏感备份包含必要元数据与附件字节，标准备份排除。
+> - D2–D4、D6–D9、D11–D15：采用 §10 推荐。新 Migration 与 Backup V5 由单一 Schema/Integration Owner 负责，新增字段必须同步备份格式；不改写历史数据。
+> - 派生仅在读取层完成。可用事实的字段映射、校验及稳定排序由开发负责人落实；不得新增未经批准的“已取得”推断规则。若现有字段不足以表达确认事实，先保持未知，不擅自补造数据。
+
 本文档是职业资料新增字段与模型开发前的合同收口方案，供冻结后作为 `CP-SCHEMA`、`CP-RECORDS`、`CP-PRIVACY` 及后续 UI/复制工作包的实现依据。本文档**不修改任何运行时代码、Schema、Migration 或备份代码**。
 
 **标注约定**
 
 - 【已有事实】：代码、Migration、规格文档或 wiki 中已存在并核实的内容，施工必须遵守。
 - 【建议方案】：本文档提出的待冻结方案，给出具体字段、关系、校验与实现建议。
-- 【待决策 D#】：需要 Owner 明确选择的开放项，汇总于 §10，每项给出推荐及理由。
+- 【已决策 D#】：§10 推荐方案已获批准，D5/D10 以文首修订为准。
 
 **重要声明（M1/M2 清单状态）**
 
 `wiki/MVP_IMPLEMENTATION.md` 引用"M1 精确 35 列 diff + M2 三模型（`CareerLanguageDetail` / `CandidateReferee` / `CandidateAttachment`）"作为 CP-SCHEMA 的输入，并在附录第 5 条明确指出**该 35 列清单未在仓库 docs 中定位**。本次对 `docs/`、wiki、源码的检索同样未找到逐字段的 M1/M2 冻结清单；`docs/` 目录本身未纳入 Git。因此：
 
-- 本文档 §2 的字段映射与 §5 的候选列清单是**建议方案基线**，不是已批准的"35 列"合同。
+- 本文档 §2 的字段映射与 §5 的候选列清单是**建议方案基线**，现已按文首记录冻结，不受"35 列"数量约束。
 - M2 三个模型名（`CareerLanguageDetail` / `CandidateReferee` / `CandidateAttachment`）已确认**不存在于** `prisma/schema.prisma`；本文档 §3 给出其建议定义。
 - 若 Owner 持有外部 M1/M2 清单，以清单为准逐项核对本提案；否则建议以本文档为候选冻结基线（D1）。
 
@@ -122,7 +132,7 @@
 | QQ号 | — | 缺口 | 新列 `qqNumber` |
 | 当前所在地 | — | 缺口 | 新列 `currentCity`；**不复用 address**（规格禁止语义混用） |
 | 家庭所在城市 | — | 缺口 | 新列 `homeCity` |
-| 家庭常驻地址 | `address`（语义笼统，历史值=简历联系地址） | 可复用 | 建议新列 `homeAddress`，`address` 保留为既有语义待 D4 |
+| 家庭常驻地址 | `address`（语义笼统，历史值=简历联系地址） | 可复用 | 已批准新列 `homeAddress`，`address` 保留为既有语义待 D4 |
 | 户籍所在地 | `householdRegistration` | 已有 | — |
 | 籍贯 | `nativePlace` | 已有 | — |
 | 政治面貌 | `politicalStatus` | 已有 | 规格未列；保留不删 |
@@ -171,7 +181,7 @@
 | 项目类型 | — | 缺口 | `projectType` |
 | 担任角色 | `roleTitle` | 已有 | — |
 | 起止时间 | `item.startDate/endDate` | 已有 | — |
-| 项目背景/目标/个人职责/所用技术/成果/相关链接 | `notes`+`evidence`+`projectUrl` | 部分 | 同 D10；技术栈如需结构化可加 `techStack`，否则 evidence |
+| 项目背景/目标/个人职责/所用技术/成果/相关链接 | `notes`+`evidence`+`projectUrl` | 部分 | 同 D10；技术栈按已批准 D10 新增 `techStack`，叙述仍用 notes/evidence |
 
 ### 2.5 获奖经历（Tab：awards → `CareerAwardDetail` + `CareerCompetitionDetail`）
 
@@ -205,7 +215,7 @@
 
 ### 3.1 语言能力 —— `CareerLanguageDetail`
 
-【待决策 D13：载体】
+【已决策 D13：载体】
 - **推荐 A**：新增 material type `LANGUAGE` + 1:1 `CareerLanguageDetail`，与既有 12 类同构。
   - 理由：语言是"可多条"记录，直接复用归档（archivedAt）、排序、evidence 挂载、复制本条、备份 scope（byMaterial）与类型白名单机制；M2 计划名即为 `CareerLanguageDetail`；教育 Tab 占位文案已预留。
   - 备选 B：`CandidateProfile` 下挂独立 `CandidateLanguage` 表——不享材料机制，需自建归档/复制/备份 scope，无理由分叉。
@@ -245,7 +255,7 @@
 
 【已有事实】规格 3.6：字段为"姓名、单位、职务、与用户的关系、联系方式等"；**涉及第三方个人信息，默认保护，不自动进入批量复制**（§3.6、§4.3）。
 
-【待决策 D14：归属】
+【已决策 D14：归属】
 - **推荐 A**：挂 `CandidateSensitiveInfo` 下（`sensitiveInfoId` FK，`onDelete: Cascade`，与 `CandidateFamilyMember` 并列）。
   - 理由：证明人与家庭成员同为"第三方个人信息"；挂敏感聚合使敏感边界**单点成立**：备份 `dataset: "sensitive"` 自动继承、wipe/emptiness 边界一致、遮蔽模式统一（参照 EmergencyContactCard）。
   - 备选 B：顶层 `userId` scope（参照 CareerMaterialItem）。生命周期更独立，但需自建敏感边界挂接；备份 scope 需 `dataset: "sensitive"` 手工标注，可行但分散。
@@ -264,7 +274,7 @@
   | `archivedAt` | DateTime? | 是 | 归档而非物理删除（见下） |
   | `createdAt/updatedAt` | DateTime | 否 | — |
 
-- 【待决策 D15：编辑语义】推荐**单条 CRUD + archivedAt 归档**（与材料记录一致：多条独立记录、可单独隐藏不再展示），备选为 `replaceCandidateFamilyMembers` 式整组替换。理由：证明人是独立记录实体，单条语义与 CP-RECORDS"创建多条记录并完成编辑、读取、删除"验收一致；"删除"在代码中等同归档。
+- 【已决策 D15：编辑语义】推荐**单条 CRUD + archivedAt 归档**（与材料记录一致：多条独立记录、可单独隐藏不再展示），备选为 `replaceCandidateFamilyMembers` 式整组替换。理由：证明人是独立记录实体，单条语义与 CP-RECORDS"创建多条记录并完成编辑、读取、删除"验收一致；"删除"在代码中等同归档。
 - 【建议方案】敏感行为：默认掩码（maskName/maskPhone 复用，relation/organization 可明文——参照紧急联系人 relation 不掩码的先例）；`reveal`/`copyField`/差量保存模式复用紧急联系人 action 形态；写响应不回明文。
 
 ### 3.3 附件 —— `CandidateAttachment`
@@ -282,8 +292,8 @@
 | `origin` / `archivedAt` / 时间戳 | — | — | 沿用材料惯例 |
 
 - 【建议方案】字节存储：新目录 `UPLOADS_DIR/files/career-attachments/<id>-<safeName>`，不复用 `files/resumes`（`isResumeFilePath` 约束保持原义）；下载/读取走服务端路由，按 `assertCareerDataReadable` 闸门。
-- 【待决策 D16：校验与体积】推荐：证件照接受 png/jpg（需扩展 `sniffFileType` 当前仅 pdf/docx），证明材料接受 pdf/jpg/png；单文件上限建议 5MB 对齐 `MAX_RESUME_FILE_SIZE_BYTES`，或由 Owner 定。
-- 【待决策 D17：敏感分级】推荐**整表 `dataset: "sensitive"`**：证件照与证明人同级敏感；获奖证明虽敏感度较低，但同表分级复杂且收益小——统一敏感边界最简单（标准备份不含，敏感备份含）。
+- 【已决策 D16：校验与体积】推荐：证件照接受 png/jpg（需扩展 `sniffFileType` 当前仅 pdf/docx），证明材料接受 pdf/jpg/png；单文件上限建议 5MB 对齐 `MAX_RESUME_FILE_SIZE_BYTES`，按本次冻结值执行。
+- 【已决策 D17：敏感分级】推荐**整表 `dataset: "sensitive"`**：证件照与证明人同级敏感；获奖证明虽敏感度较低，但同表分级复杂且收益小——统一敏感边界最简单（标准备份不含，敏感备份含）。
 - 【建议方案】删除语义：`archivedAt` 归档（行可恢复）；字节清理为后续任务，本合同不要求物理删除文件（与 File/backup `fileMissing` 模式一致：行在、文件可缺）。
 
 示例（证件照）：
@@ -307,27 +317,27 @@
 
 【建议方案】选记录规则（多记录 → 单条"主学历"）：
 
-1. 候选按学位等级权重降序；权重相等按毕业时间（`graduationOn ?? endDate`）降序；再按 `updatedAt` 降序保证确定性。
-2. 学位权重依赖受控词表（D5）：建议 `博士后(6) > 博士(5) > 硕士/MBA(4) > 本科(3) > 大专(2) > 其他/未知(0)`；非词表历史值按 0 处理，**不做字符串模糊匹配推断**。
-3. 【待决策 D5 附项：在读处理】推荐 A：仅 `isCurrent=false`（已毕业）记录参与"最高学历"；无已毕业记录时展示最高学位的在读记录并在网申侧标注"在读"。备选 B：在读直接参与排序（在读博士 > 已毕业硕士，可能高估）。推荐 A 理由：网申"最高学历"通常指已获得学历。
+1. 仅明确已取得的学历/学位事实参与对应最高值派生，分别使用受控词表；同级按明确毕业时间降序、updatedAt 降序、id 升序，保证确定性。不明值不做模糊推断。
+2. 博士后作为经历，不属于学历/学位等级；MBA 等名称不自动证明学历，须有明确取得的对应事实。
+3. `isCurrent=false` 不证明已毕业或取得学历/学位。在读单独标注，不能填入“最高已取得”结果；无明确已取得记录时保持未知，不用在读记录代替。历史毕业届次按第 5/6 条兜底。
 4. 学校城市 = 选中记录的 `locationText` **原样透出**，不做城市归一化/翻译。
 5. 毕业届次 = 选中记录的毕业年份（`graduationOn` 年份；缺省回退 `endDate` 年份；再缺回退 `CandidateProfile.graduationCohort` 手工列兜底）。
-6. `graduationCohort` 手工列【建议方案】：**保留列与历史值，作为无教育记录时的兜底**；派生值存在时一律优先；UI 从 11 个直接编辑字段中改为只读"派生"展示（或保留手工编辑仅当无教育记录 → D5 附项）。不建议删列或 UPDATE 重写历史值。
+6. `graduationCohort` 手工列【建议方案】：**保留列与历史值，作为无教育记录时的兜底**；派生值存在时一律优先；UI 从 11 个直接编辑字段中改为只读"派生"展示（仅缺乏可派生事实时允许维护历史兜底值）。不建议删列或 UPDATE 重写历史值。
 7. 派生结果**只在读取层组装**（service/projection DTO），不回写任何列——避免双份事实。
 
 示例：
 
 ```text
-教育记录：本科(2020-2024, isCurrent=false, locationText="武汉", graduationOn="2024-06-30")
+教育记录：本科(明确已取得, 2020-2024, isCurrent=false, locationText="武汉", graduationOn="2024-06-30")
           硕士(2024-2027, isCurrent=true,  locationText="北京")
 派生：最高学历=本科（已毕业最高学位）；学校城市=武汉；毕业届次=2024
 ```
 
 ## 5. 既有模型增量列提案（M1 候选基线）
 
-**以下为本提案建议基线（非已批准的"35 列"清单，见文首声明）。** 逐列均为 `NULL`/`default` 增量，不 backfill。
+**以下按文首冻结记录执行，不以 35 列作为数量约束。** 逐列均为 `NULL`/`default` 增量，不 backfill。
 
-| 目标模型 | 建议新列 | 类型 | 依据 |
+| 目标模型 | 已批准新列 | 类型 | 依据 |
 | --- | --- | --- | --- |
 | CandidateProfile | `countryOrRegion` | String? | 规格：国家/地区 |
 | CandidateProfile | `wechatId` | String? | 规格：微信号 |
@@ -349,7 +359,7 @@
 | CareerEducationDetail | `advisorName` / `labName` / `researchDirection` | String? | 科研信息内嵌（仅当 D8 选 A） |
 | CareerInternshipDetail | `department` | String? | 部门 |
 | CareerProjectDetail | `projectType` | String? | 项目类型 |
-| CareerProjectDetail | `techStack` | String? | 所用技术（仅当 D10 需要结构化列） |
+| CareerProjectDetail | `techStack` | String? | 所用技术（D10 已批准独立字段） |
 | CareerPublicationDetail | `venueLevel` | String? | 等级（会议/期刊级别） |
 | CareerPublicationDetail | `authorRole` | String? | 作者身份（第一/第二/通讯…） |
 | CareerAwardDetail | `awardType` | String? | 奖项类型 |
@@ -389,7 +399,7 @@
 | `backup/schema.ts` | `BACKUP_FORMAT_VERSION=5`；`SUPPORTED`+`literal(5)`；新增 3 个 row schema 与 group；既有 row schema 补新列（`.optional()`） | 新列必须进 row schema，否则导出被 zod 剥离（静默丢数据） |
 | `backup/ordering.ts` | `BackupModel` union +3；`MODEL_SPECS`：`CareerLanguageDetail{scope: byMaterial}`、`CandidateReferee{scope: bySensitiveInfo（D14 A）或 byUser, dataset:"sensitive"}`、`CandidateAttachment{scope: byUser, dataset:"sensitive"}`；`INSERT_ORDER` 按父先子后插入 | 覆盖守护测试要求显式分类 |
 | `backup/compat.ts` | `normalizeManifest` v5 分支同 v3/v4（要求 `containsSensitiveData`）；敏感 key 集由 ordering 派生自动覆盖 | 标准备份出现敏感组即报错 |
-| `backup/export.ts` | 附件字节：参照 File，条目 `career-attachments/<id>/<safeName>` + `bytesMissing` 标记；**仅敏感备份内嵌** | D16/D17 决策后落地 |
+| `backup/export.ts` | 附件字节：参照 File，条目 `career-attachments/<id>/<safeName>` + `bytesMissing` 标记；**仅敏感备份内嵌** | 按已批准 D16/D17 落地 |
 | `backup/import.ts` | 无需结构改动：mint ids 遍历 INSERT_ORDER、dataset 过滤自动生效；新对象是否入 `EMPTINESS_MODELS` → D18 | 建议 referee/attachment 计入非空判定 |
 | `backup/coverage.ts` | 无需改（新模型必须有分类，否则 guard 失败） | — |
 
@@ -436,20 +446,20 @@
 
 【建议方案】共享文件约束：PKG-4 与 PKG-5 触及相同 UI/复制文件，按 AGENTS 单一 Owner 规则指派一人或顺序交接；`sensitiveMask.ts`/`applicationCopy.ts` 由 PKG-5 先落地接口，UI 包消费。
 
-## 10. 待决策汇总
+## 10. 已冻结决策汇总（2026-10-27）
 
 | # | 决策项 | 推荐 | 理由 |
 | --- | --- | --- | --- |
-| D1 | M1/M2 精确清单来源 | 以本提案 §2/§3/§5 为候选冻结基线，Owner 确认或提供外部清单逐项替换 | 仓库未定位"35 列"清单，不能把推测写成已批准合同 |
+| D1 | M1/M2 精确清单来源 | 以本提案 §2/§3/§5 逐字段冻结，不再要求凑齐 35 列 | 仓库未定位"35 列"清单，不能把推测写成已批准合同 |
 | D2 | 性别枚举 | 扩枚举接受"保密"，保留"其他"兼容历史值（规格 男/女/保密 与现有 男/女/其他 取并集） | 不改写历史数据；与校验集共存 |
 | D3 | 手机区号 | 新增 `phoneCountryCode` 独立列，phone 存号码主体；紧急联系人电话保留单列 | 规格分控件；紧急电话"按需"不强制拆分 |
 | D4 | 地址语义 | 新增 `homeAddress`；`address` 保留为历史简历联系地址语义，不迁移语义 | 规格禁止地点语义互相替代 |
-| D5 | 学位词表与派生 | 受控词表 + §4 排序规则；在读不参与"最高学历"；`graduationCohort` 保留作兜底 | 派生必须可重现；不改写历史 |
+| D5 | 学位词表与派生 | 按明确已取得事实分别派生学历/学位；博士后作经历，非在读不等于已毕业；未知不推断，毕业届次保留兜底 | 派生必须可重现；不改写历史 |
 | D6 | 毕业时间字段 | 新列 `graduationOn`(DateOnly TEXT) + `graduationExpected`；不复用 endDate | 规格区分结束时间与毕业时间；DateOnly 无时区歧义 |
 | D7 | 排名 | 保留 `rankText`（成绩排名），新增 `rankClassText`/`rankMajorText` | 规格明确三类排名；不动已有列 |
 | D8 | 科研信息归属 | EducationDetail 内嵌 `advisorName/labName/researchDirection`；RESEARCH 类型保留为独立科研经历 | 规格按"关联教育记录"建模；两者语义不冲突 |
 | D9 | 作品/主页 | 复用 `CandidateProfile.linksData`（JSON）接 UI，不新建类型 | 已有列就是为链接集合预留；避免新表 |
-| D10 | 叙述字段 | 实习职责/项目背景等走 `notes`+`CareerEvidence`，不新增大文本列；仅 `techStack` 可选列 | evidence 已承载量化/事实点，列留给结构化字段 |
+| D10 | 叙述字段 | 实习职责/项目背景等走 `notes`+`CareerEvidence`，不新增大文本列；`techStack` 独立列 | evidence 已承载量化/事实点，列留给结构化字段 |
 | D11 | 教育关联奖项 | 不做记录级关联，获奖独立录入；文档提示用户避免冲突录入 | 规格明示留待实现设计；关联模型本轮不冻结 |
 | D12 | AI 应用技能 | 复用 SKILL 类型 + `skillName/proficiency`；"应用场景/经验"入 notes/evidence | 不新增平行类型；语义可承载 |
 | D13 | 语言载体 | 新 type `LANGUAGE` + `CareerLanguageDetail` | §3.1 |
