@@ -47,7 +47,10 @@ function TagsTable({ tags, reloadTags, jobsCountAvailable }: TagsTableProps) {
     // the in-use dialog; the server-side guard still owns the final answer.
     const jobCount = jobsCountAvailable ? (tag._count?.jobs ?? 0) : 0;
     const questionCount = tag._count?.questions ?? 0;
-    const skillCount = tag._count?.skills ?? 0;
+    // Legacy Skill rows and career skill records are both "skill" usages of
+    // the same dictionary entry — one honest count, one message.
+    const skillCount =
+      (tag._count?.skills ?? 0) + (tag._count?.careerSkillDetails ?? 0);
 
     if (jobCount > 0 || questionCount > 0 || skillCount > 0) {
       const links = [

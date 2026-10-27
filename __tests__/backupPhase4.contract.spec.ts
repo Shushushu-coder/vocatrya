@@ -28,9 +28,9 @@ import { LEGACY, TARGET } from "@/lib/legacy-migration/identities";
 const SCHEMA_PATH = path.resolve(__dirname, "../prisma/schema.prisma");
 
 describe("Phase 4 backup contract", () => {
-  it("writes formatVersion 4 and still reads v1, v2 and v3", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(4);
-    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2, 3, 4]);
+  it("writes formatVersion 6 and still reads v1-v5", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(6);
+    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2, 3, 4, 5, 6]);
     expect(ManifestSchema.parse({
       formatVersion: 1,
       appVersion: "1.0.0",
@@ -88,10 +88,10 @@ describe("Phase 4 backup contract", () => {
   it("keeps QuestionBank as covered reference data without a format bump", () => {
     // Spec v1 §14–§16, §20–§21, §30: QuestionBank stays in the payload as
     // REFERENCE_DATA_SNAPSHOT (present in export, used during restore, never
-    // user-wiped) — still BACKED_UP, never INTENTIONALLY_EXCLUDED. The
-    // format-4 bump comes from the DateTime V1 sidecar columns, not from any
-    // QuestionBank payload change.
-    expect(BACKUP_FORMAT_VERSION).toBe(4);
+    // user-wiped) — still BACKED_UP, never INTENTIONALLY_EXCLUDED. Later
+    // format bumps came from DateTime V1 sidecars, the career contract and
+    // the skill↔Tag link, not from any QuestionBank payload change.
+    expect(BACKUP_FORMAT_VERSION).toBe(6);
     expect(backupCoverageStatus("QuestionBank")).toBe(
       BACKUP_COVERAGE_STATUS.BACKED_UP,
     );

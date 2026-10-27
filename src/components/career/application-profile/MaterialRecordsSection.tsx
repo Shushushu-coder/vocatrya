@@ -30,6 +30,7 @@ import {
   MATERIAL_DETAIL_FIELDS,
   toDateInput,
 } from "./materialFields";
+import { SkillTagField } from "./SkillTagField";
 import { AttachmentInlineList } from "./AttachmentCard";
 
 export type MaterialItem = MaterialLike & {
@@ -396,7 +397,24 @@ export function MaterialRecordsSection({
               testId={`${fieldPrefix}-title`}
             />
             {MATERIAL_DETAIL_FIELDS[item.type].map((def) =>
-              def.kind === "boolean" ? (
+              item.type === "SKILL" && def.key === "skillName" ? (
+                // Linked skill records take their name from the live Tag —
+                // the text editor must not coexist as a second source.
+                <SkillTagField
+                  key={def.key}
+                  materialId={item.id}
+                  tag={item.skillDetail?.tag}
+                  skillName={detailFieldDraft(item, def)}
+                  label={t(`applicationProfile.${def.labelKey}`)}
+                  onSaveSkillName={(v) =>
+                    saveMaterialPatch(item, {
+                      detail: { [def.key]: detailFieldWire(def, v) },
+                    })
+                  }
+                  onChanged={onChanged}
+                  testId={`${fieldPrefix}-${def.key}`}
+                />
+              ) : def.kind === "boolean" ? (
                 <MaterialCurrentCheckbox
                   key={def.key}
                   label={t(`applicationProfile.${def.labelKey}`)}

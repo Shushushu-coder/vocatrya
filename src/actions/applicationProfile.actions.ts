@@ -359,6 +359,28 @@ export async function updateApplicationMaterial(input: {
   }
 }
 
+/**
+ * Dedicated skill↔Tag link channel (BD-LINKS): the only write path allowed to
+ * change CareerSkillDetail.tagId. Generic detail patches reject tagId/tag.
+ */
+export async function setApplicationSkillTag(input: {
+  id: string;
+  tagId: string | null;
+}): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertCareerDataWritable(prisma as never);
+    const data = await materialService(user.id).setSkillTag({
+      id: input.id,
+      tagId: input.tagId,
+    });
+    revalidatePath(APPLICATION_PATH);
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to update skill tag.");
+  }
+}
+
 export async function archiveApplicationMaterial(id: string): Promise<ActionResult> {
   try {
     const user = await requireUser();

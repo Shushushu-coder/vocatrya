@@ -470,7 +470,7 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
   },
   CareerSkillDetail: {
     delegate: "careerSkillDetail",
-    fks: { materialItemId: "CareerMaterialItem" },
+    fks: { materialItemId: "CareerMaterialItem", tagId: "Tag" },
     scope: byMaterial,
   },
   CareerCertificationDetail: {

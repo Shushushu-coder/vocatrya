@@ -591,6 +591,11 @@ describe("Phase 3 disposable SQLite backfill", () => {
       expect(materials.some((m) => m.type === "CERTIFICATION")).toBe(true);
       const skill = materials.find((m) => m.type === "SKILL");
       expect(skill?.skillDetail?.structuredData).toMatch(/"skillOrder":3/);
+      const ownTag = await verify.tag.findFirstOrThrow({
+        where: { value: "typescript-phase3" },
+      });
+      expect(skill?.skillDetail?.skillName).toBe(ownTag.label);
+      expect(skill?.skillDetail?.tagId).toBe(ownTag.id);
 
       const profile = await verify.candidateProfile.findUnique({
         where: { userId: ids.userId },
@@ -729,6 +734,76 @@ describe("Phase 3 disposable SQLite backfill", () => {
       expect(completedState.verifiedAt).not.toBeNull();
     } finally {
       await partialPrisma.$disconnect();
+    }
+  }, 180_000);
+
+  it("keeps a real tagId only for same-user tags; cross-user degrades to text", async () => {
+    const tagCtx = makeTestDbUrl();
+    const tagDbPath = path.join(tagCtx.dir, "test.db");
+    const seedPrisma = new PrismaClient({
+      datasources: { db: { url: tagCtx.url } },
+    });
+    try {
+      pushSchema(tagCtx.url);
+      const uid = await seedAccount(seedPrisma, "skill-tag@example.com");
+      const otherUid = await seedAccount(seedPrisma, "skill-other@example.com");
+      const profile = await seedPrisma.profile.create({
+        data: { userId: uid },
+      });
+      const resume = await seedPrisma.resume.create({
+        data: { profileId: profile.id, title: "R" },
+      });
+      const section = await seedPrisma.resumeSection.create({
+        data: {
+          resumeId: resume.id,
+          sectionTitle: "Skills",
+          sectionType: SectionType.SKILLS,
+        },
+      });
+      const ownTag = await seedPrisma.tag.create({
+        data: { label: "Own Skill", value: "own-skill-x", createdBy: uid },
+      });
+      const foreignTag = await seedPrisma.tag.create({
+        data: {
+          label: "Foreign Skill",
+          value: "foreign-skill-x",
+          createdBy: otherUid,
+        },
+      });
+      await seedPrisma.skill.create({
+        data: { tagId: ownTag.id, resumeSectionId: section.id, order: 1 },
+      });
+      await seedPrisma.skill.create({
+        data: { tagId: foreignTag.id, resumeSectionId: section.id, order: 2 },
+      });
+      await seedPrisma.$disconnect();
+
+      const report = await runLegacyMigration(migrateOpts(tagDbPath));
+      expect(report.phaseResult).toBe("PASS");
+
+      const verify = new PrismaClient({
+        datasources: { db: { url: tagCtx.url } },
+      });
+      try {
+        const details = await verify.careerSkillDetail.findMany();
+        const own = details.find((d) => d.skillName === "Own Skill");
+        const foreign = details.find((d) => d.skillName === "Foreign Skill");
+        // Same-user Tag: the real reference survives migration.
+        expect(own?.tagId).toBe(ownTag.id);
+        // Cross-user Tag: keep the label as a text snapshot, no fabricated link.
+        expect(foreign?.tagId).toBeNull();
+        expect(foreign?.skillName).toBe("Foreign Skill");
+      } finally {
+        await verify.$disconnect();
+      }
+    } finally {
+      await seedPrisma.$disconnect();
+      try {
+        fs.rmSync(tagCtx.dir, { recursive: true, force: true });
+      } catch (err: unknown) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code !== "EPERM" && code !== "EBUSY") throw err;
+      }
     }
   }, 180_000);
 });

@@ -103,28 +103,47 @@ export class CareerMaterialService {
     detail?: Record<string, unknown>;
   }) {
     await this.gate();
-    const item = await this.requireOwned(input.id);
-    const type = assertType(item.type);
-    const nestedKey = detailCreateKey(type);
+    return this.db.$transaction(async (tx) => {
+      const item = await this.requireOwned(input.id, tx);
+      const type = assertType(item.type);
+      const nestedKey = detailCreateKey(type);
 
-    return this.db.careerMaterialItem.update({
-      where: { id: item.id },
-      data: {
-        title: input.title ?? item.title,
-        startDate: input.startDate === undefined ? item.startDate : input.startDate,
-        endDate: input.endDate === undefined ? item.endDate : input.endDate,
-        isCurrent: input.isCurrent ?? item.isCurrent,
-        notes: input.notes === undefined ? item.notes : input.notes,
-        origin: "USER",
-        ...(input.detail
-          ? {
-              [nestedKey]: {
-                update: input.detail,
-              },
-            }
-          : {}),
-      },
-      include: detailInclude(type),
+      // A linked SKILL row takes its display name from the live Tag; letting a
+      // generic detail patch rewrite skillName at the same time would create a
+      // second name source. The dedicated setSkillTag path owns that column
+      // while tagId is set (unlink snapshots the last visible label itself).
+      if (type === "SKILL" && input.detail && "skillName" in input.detail) {
+        const skill = await tx.careerSkillDetail.findUnique({
+          where: { materialItemId: item.id },
+          select: { tagId: true },
+        });
+        if (skill?.tagId) {
+          throw new CareerRuntimeError(
+            "INVALID_MATERIAL_DETAIL",
+            "Skill name follows the linked tag; unlink it to edit text.",
+          );
+        }
+      }
+
+      return tx.careerMaterialItem.update({
+        where: { id: item.id },
+        data: {
+          title: input.title ?? item.title,
+          startDate: input.startDate === undefined ? item.startDate : input.startDate,
+          endDate: input.endDate === undefined ? item.endDate : input.endDate,
+          isCurrent: input.isCurrent ?? item.isCurrent,
+          notes: input.notes === undefined ? item.notes : input.notes,
+          origin: "USER",
+          ...(input.detail
+            ? {
+                [nestedKey]: {
+                  update: input.detail,
+                },
+              }
+            : {}),
+        },
+        include: detailInclude(type),
+      });
     });
   }
 
@@ -172,6 +191,68 @@ export class CareerMaterialService {
     });
   }
 
+  /**
+   * Dedicated skill↔Tag link channel (BD-LINKS contract). `tagId: null`
+   * unlinks; both directions snapshot skillName so the row is still readable
+   * if the reference disappears later — on link the current label, on unlink
+   * the label the user last saw (falling back to the stored text snapshot).
+   * item.title is never touched.
+   */
+  async setSkillTag(input: { id: string; tagId: string | null }) {
+    if (!input || typeof input.id !== "string" || !input.id.trim()) {
+      throw new CareerRuntimeError("MATERIAL_NOT_FOUND", "Career material not found");
+    }
+    if (input.tagId !== null && (typeof input.tagId !== "string" || !input.tagId.trim())) {
+      throw new CareerRuntimeError("SKILL_TAG_NOT_FOUND", "Skill tag not found.");
+    }
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      const item = await this.requireOwned(input.id, tx);
+      if (item.type !== "SKILL") {
+        throw new CareerRuntimeError(
+          "INVALID_MATERIAL_TYPE",
+          "Only SKILL materials can link a skill tag.",
+        );
+      }
+      const detail = await tx.careerSkillDetail.findUnique({
+        where: { materialItemId: item.id },
+        include: { tag: true },
+      });
+      if (!detail) {
+        throw new CareerRuntimeError(
+          "MATERIAL_NOT_FOUND",
+          "Career material not found",
+        );
+      }
+
+      if (input.tagId === null) {
+        return tx.careerSkillDetail.update({
+          where: { id: detail.id },
+          data: {
+            tagId: null,
+            skillName: detail.tag?.label ?? detail.skillName,
+          },
+          include: { tag: true },
+        });
+      }
+
+      const tag = await tx.tag.findFirst({
+        where: { id: input.tagId, createdBy: this.userId },
+      });
+      if (!tag) {
+        throw new CareerRuntimeError(
+          "SKILL_TAG_NOT_FOUND",
+          "Skill tag not found.",
+        );
+      }
+      return tx.careerSkillDetail.update({
+        where: { id: detail.id },
+        data: { tagId: tag.id, skillName: tag.label },
+        include: { tag: true },
+      });
+    });
+  }
+
   async addEvidence(input: {
     materialItemId: string;
     kind: string;
@@ -196,8 +277,8 @@ export class CareerMaterialService {
     });
   }
 
-  private async requireOwned(id: string) {
-    const item = await this.db.careerMaterialItem.findFirst({
+  private async requireOwned(id: string, db: PrismaClient | Prisma.TransactionClient = this.db) {
+    const item = await db.careerMaterialItem.findFirst({
       where: { id, userId: this.userId },
     });
     if (!item) {
@@ -208,6 +289,9 @@ export class CareerMaterialService {
 }
 
 function detailInclude(type: CareerMaterialType): Prisma.CareerMaterialItemInclude {
+  if (type === "SKILL") {
+    return { skillDetail: { include: { tag: true } } };
+  }
   return { [detailCreateKey(type)]: true } as Prisma.CareerMaterialItemInclude;
 }
 
@@ -221,7 +305,7 @@ const fullDetailInclude: Prisma.CareerMaterialItemInclude = {
   campusActivityDetail: true,
   educationDetail: true,
   awardDetail: true,
-  skillDetail: true,
+  skillDetail: { include: { tag: true } },
   certificationDetail: true,
   customDetail: true,
   languageDetail: true,

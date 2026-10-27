@@ -33,6 +33,8 @@ export interface Tag {
     jobs?: number;
     questions: number;
     skills: number;
+    // CareerSkillDetail.tagId references, including archived material rows.
+    careerSkillDetails?: number;
   };
 }
 
