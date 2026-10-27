@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -44,12 +45,16 @@ import {
   BYOK_BACKEND_KIND,
 } from "@/lib/ai/connections";
 import { PROVIDER_REGISTRY } from "@/lib/ai/provider-registry";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
-// Purposes editable this phase. INTERVIEW is editable now that interview
-// execution runs through the locked account runtime (TEXT_ONLY one-shot);
-// a legacy `settings.ai.interview` config still outranks GLOBAL_DEFAULT
-// for users who have not saved an INTERVIEW assignment.
-const EDITABLE_PURPOSES = [
+// Purpose rows render in registry order. INTERVIEW is editable now that
+// interview execution runs through the locked account runtime (TEXT_ONLY
+// one-shot); a legacy `settings.ai.interview` config still outranks
+// GLOBAL_DEFAULT for users who have not saved an INTERVIEW assignment.
+// A purpose is editable only when a real production consumer resolves it:
+// rows without one render as honest "Not provided" states instead of
+// saveable assignments for capability that does not exist in this build.
+const PURPOSE_ROWS = [
   "GLOBAL_DEFAULT",
   "RESUME",
   "MATCH_ANALYSIS",
@@ -57,6 +62,21 @@ const EDITABLE_PURPOSES = [
   "CAREER_DIALOGUE",
   "INTERVIEW",
 ] as const;
+
+// CAREER_REFLECTION is declared in the purpose registry but nothing in the
+// product resolves it in any runtime mode — never offer it as assignable.
+const ALWAYS_UNAVAILABLE_PURPOSES = new Set<string>(["CAREER_REFLECTION"]);
+
+// MATCH_ANALYSIS is consumed only by the legacy automation/match surfaces;
+// those are gated off on the fresh-native full surface, where the
+// assignment could never execute. Other modes keep the real consumer, so
+// the row stays editable there.
+function isPurposeUnavailable(purpose: string, freshNativeFull: boolean) {
+  return (
+    ALWAYS_UNAVAILABLE_PURPOSES.has(purpose) ||
+    (purpose === "MATCH_ANALYSIS" && freshNativeFull)
+  );
+}
 
 const PURPOSE_LABEL_KEY: Record<string, string> = {
   GLOBAL_DEFAULT: "settings.aiAssignPurposeGlobalDefault",
@@ -137,6 +157,7 @@ function connectionLabel(connection: ConnectionSummary): string {
  */
 function AiAssignmentsCard() {
   const { t } = useI18n();
+  const { freshNativeFull } = useCareerSurfaces();
   const [loading, setLoading] = useState(true);
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [assignments, setAssignments] = useState<
@@ -505,6 +526,22 @@ function AiAssignmentsCard() {
   const managedAvailable = managed?.connection?.status === "CONNECTED";
 
   const renderPurposeRow = (purpose: string) => {
+    if (isPurposeUnavailable(purpose, freshNativeFull)) {
+      return (
+        <section
+          key={purpose}
+          className="rounded-md border border-dashed p-3"
+          data-testid={`ai-assign-unavailable-${purpose}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="font-medium">{t(PURPOSE_LABEL_KEY[purpose])}</h4>
+            <Badge variant="secondary">
+              {t("settings.capabilityNotProvided")}
+            </Badge>
+          </div>
+        </section>
+      );
+    }
     const draft = draftFor(purpose);
     const saved = assignments[purpose];
     const selectedConnection = connections.find(
@@ -729,7 +766,7 @@ function AiAssignmentsCard() {
         </p>
       )}
 
-      {EDITABLE_PURPOSES.map(renderPurposeRow)}
+      {PURPOSE_ROWS.map(renderPurposeRow)}
     </div>
   );
 }
