@@ -4,7 +4,9 @@ import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
 // Stable `value` keys for the seeded-per-user JobSource rows. Display is
 // localized from these keys; the stored label is English seed text so a
 // locale switch never rewrites the row.
-export const SYSTEM_JOB_SOURCE_VALUES = JOB_SOURCES.map((source) => source.value);
+export const SYSTEM_JOB_SOURCE_VALUES: readonly string[] = JOB_SOURCES.map(
+  (source) => source.value,
+);
 
 const SYSTEM_JOB_SOURCE_BY_VALUE = new Map<string, { label: string; value: string }>(
   JOB_SOURCES.map((source) => [source.value, { label: source.label, value: source.value }]),

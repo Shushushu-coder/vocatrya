@@ -19,6 +19,7 @@ export { startBreak, endBreak, updateBreakLength } from "./activity/breaks";
 export {
   getAllActivityTypes,
   createActivityType,
+  updateActivityType,
   getActivityTypeList,
   deleteActivityTypeById,
 } from "./activity/activityTypes";

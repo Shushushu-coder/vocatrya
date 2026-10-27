@@ -18,11 +18,17 @@ import {
   TableRow,
 } from "../ui/table";
 import { JobSource } from "@/models/job.model";
-import { Briefcase, MoreVertical, Trash } from "lucide-react";
+import { Briefcase, MoreVertical, Pencil, Trash } from "lucide-react";
 import Link from "next/link";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
-import { deleteJobSourceById } from "@/actions/jobSource.actions";
+import DictionaryLabelDialog from "./DictionaryLabelDialog";
+import { SYSTEM_JOB_SOURCE_VALUES } from "@/lib/jobs/jobSources";
+import { APP_CONSTANTS } from "@/lib/constants";
+import {
+  deleteJobSourceById,
+  updateJobSource,
+} from "@/actions/jobSource.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 
@@ -40,6 +46,7 @@ function JobSourcesTable({
     openState: false,
     deleteAction: false,
   });
+  const [editTarget, setEditTarget] = useState<JobSource | null>(null);
 
   const onDeleteJobSource = (source: JobSource) => {
     const totalJobs = source._count?.jobsTotal ?? 0;
@@ -154,6 +161,15 @@ function JobSourcesTable({
                           </Link>
                         </DropdownMenuItem>
                       ) : null}
+                      {SYSTEM_JOB_SOURCE_VALUES.includes(source.value) ? null : (
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onClick={() => setEditTarget(source)}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          {t("common.edit")}
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive-text focus:text-destructive-text"
                         onClick={() => onDeleteJobSource(source)}
@@ -169,6 +185,18 @@ function JobSourcesTable({
           })}
         </TableBody>
       </Table>
+      <DictionaryLabelDialog
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        title={`${t("common.edit")} ${t("library.jobSourceItem")}`}
+        fieldLabel={t("common.name")}
+        initialLabel={editTarget?.label ?? ""}
+        maxLength={APP_CONSTANTS.MAX_JOB_SOURCE_LABEL_LENGTH}
+        submit={(label) => updateJobSource(editTarget!.id, label)}
+        onSaved={reloadJobSources}
+      />
       <DeleteAlertDialog
         pageTitle="source"
         open={alert.openState}

@@ -19,11 +19,14 @@ vi.mock("@/actions/company.actions", () => ({
 
 vi.mock("@/actions/jobtitle.actions", () => ({
   getJobTitleList: vi.fn().mockResolvedValue({ data: [], total: 0 }),
+  createJobTitle: vi.fn(),
+  updateJobTitle: vi.fn(),
 }));
 
 vi.mock("@/actions/jobLocation.actions", () => ({
   getJobLocationsList: vi.fn().mockResolvedValue({ data: [], total: 0 }),
   getAllJobLocations: vi.fn().mockResolvedValue([]),
+  updateJobLocation: vi.fn(),
 }));
 
 vi.mock("@/actions/contact.actions", () => ({
@@ -37,6 +40,7 @@ vi.mock("@/actions/contact.actions", () => ({
 vi.mock("@/actions/activity.actions", () => ({
   getActivityTypeList: vi.fn().mockResolvedValue({ data: [], total: 0 }),
   createActivityType: vi.fn(),
+  updateActivityType: vi.fn(),
 }));
 
 vi.mock("@/actions/contactRole.actions", () => ({

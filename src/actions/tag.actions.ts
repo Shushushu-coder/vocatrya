@@ -3,6 +3,7 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
 import { resolveTag as resolveTagCore } from "@/lib/jobs/resolve";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
@@ -95,6 +96,52 @@ export const createTag = async (label: string): Promise<any | undefined> => {
     return { data: tag, success: true };
   } catch (error) {
     const msg = "Failed to create tag. ";
+    return handleError(error, msg);
+  }
+};
+
+export const updateTag = async (
+  tagId: string,
+  label: string,
+): Promise<any | undefined> => {
+  try {
+    const user = await requireUser();
+
+    const existing = await prisma.tag.findFirst({
+      where: { id: tagId, createdBy: user.id },
+    });
+    if (!existing) {
+      throw new Error("Skill tag not found");
+    }
+
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel) {
+      throw new Error("Tag label cannot be empty.");
+    }
+
+    // Recompute the match key only when the label actually changed, so rows
+    // holding a non-derivable value keep it on unrelated saves.
+    let value = existing.value;
+    if (trimmedLabel !== existing.label) {
+      value = canonicalizeEntityValue(trimmedLabel);
+      if (!value) {
+        throw new Error("Tag label cannot be empty.");
+      }
+      const conflict = await prisma.tag.findFirst({
+        where: { value, createdBy: user.id },
+      });
+      if (conflict && conflict.id !== tagId) {
+        throw new Error("Skill tag already exists!");
+      }
+    }
+
+    const res = await prisma.tag.update({
+      where: { id: tagId, createdBy: user.id },
+      data: { label: trimmedLabel, value },
+    });
+    return { success: true, data: res };
+  } catch (error) {
+    const msg = "Failed to update tag.";
     return handleError(error, msg);
   }
 };

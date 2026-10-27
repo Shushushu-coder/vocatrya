@@ -1,11 +1,20 @@
 import JobSourcesContainer from "@/components/admin/JobSourcesContainer";
 import { screen, render, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { getJobSourceList } from "@/actions/jobSource.actions";
+import {
+  getJobSourceList,
+  updateJobSource,
+} from "@/actions/jobSource.actions";
+import { createJobSource } from "@/actions/job.actions";
 
 vi.mock("@/actions/jobSource.actions", () => ({
   getJobSourceList: vi.fn(),
   deleteJobSourceById: vi.fn(),
+  updateJobSource: vi.fn(),
+}));
+
+vi.mock("@/actions/job.actions", () => ({
+  createJobSource: vi.fn(),
 }));
 
 let intersectionCallback: IntersectionObserverCallback | undefined;
@@ -258,6 +267,137 @@ describe("JobSourcesContainer", () => {
       });
       expect(getJobSourceList).toHaveBeenCalledTimes(3);
       expect(getJobSourceList).toHaveBeenLastCalledWith(1, 25, "applied", undefined);
+    });
+  });
+
+  describe("Add and edit", () => {
+    it("opens the add dialog, creates a source and reloads the list", async () => {
+      (getJobSourceList as any).mockResolvedValue({
+        data: mockSources,
+        total: 2,
+      });
+      (createJobSource as any).mockResolvedValue({ success: true, data: {} });
+
+      render(<JobSourcesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Indeed")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(screen.getByTestId("add-job-source-btn"));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      await act(async () => {
+        await user.type(input, "Meetup");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(createJobSource).toHaveBeenCalledWith("Meetup");
+        expect(getJobSourceList).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it("offers Edit only on custom sources, not seeded system rows", async () => {
+      (getJobSourceList as any).mockResolvedValue({
+        data: [
+          { id: "1", label: "Indeed", value: "indeed", createdBy: "user-1" },
+          {
+            id: "9",
+            label: "Alumni Board",
+            value: "alumni board",
+            createdBy: "user-1",
+          },
+        ],
+        total: 2,
+      });
+
+      render(<JobSourcesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Alumni Board")).toBeInTheDocument();
+      });
+
+      const menuButtons = screen.getAllByRole("button", {
+        name: /toggle menu/i,
+      });
+
+      await act(async () => {
+        await user.click(menuButtons[0]);
+      });
+      // Seeded rows keep a stable value for localized display, so the menu
+      // only offers deletion.
+      expect(
+        await screen.findByRole("menuitem", { name: "Delete" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("menuitem", { name: "Edit" }),
+      ).not.toBeInTheDocument();
+
+      await act(async () => {
+        await user.keyboard("{Escape}");
+      });
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("menuitem", { name: "Delete" }),
+        ).not.toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(menuButtons[1]);
+      });
+      expect(
+        await screen.findByRole("menuitem", { name: "Edit" }),
+      ).toBeInTheDocument();
+    });
+
+    it("saves a custom source rename through the edit dialog", async () => {
+      const customSource = {
+        id: "9",
+        label: "Alumni Board",
+        value: "alumni board",
+        createdBy: "user-1",
+      };
+      (getJobSourceList as any).mockResolvedValue({
+        data: [customSource],
+        total: 1,
+      });
+      (updateJobSource as any).mockResolvedValue({ success: true, data: {} });
+
+      render(<JobSourcesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Alumni Board")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(
+          screen.getByRole("button", { name: /toggle menu/i }),
+        );
+      });
+      await act(async () => {
+        await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      expect(input).toHaveValue("Alumni Board");
+
+      await act(async () => {
+        await user.clear(input);
+        await user.type(input, "Meetup");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(updateJobSource).toHaveBeenCalledWith("9", "Meetup");
+        expect(getJobSourceList).toHaveBeenCalledTimes(2);
+      });
     });
   });
 });

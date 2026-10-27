@@ -15,11 +15,15 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import { MoreVertical, Trash } from "lucide-react";
+import { MoreVertical, Pencil, Trash } from "lucide-react";
 import { useState } from "react";
-import { deleteActivityTypeById } from "@/actions/activity.actions";
+import {
+  deleteActivityTypeById,
+  updateActivityType,
+} from "@/actions/activity.actions";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
+import DictionaryLabelDialog from "./DictionaryLabelDialog";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { useI18n } from "@/i18n";
 
@@ -45,6 +49,7 @@ function ActivityTypesTable({
     openState: false,
     deleteAction: false,
   });
+  const [editTarget, setEditTarget] = useState<ActivityTypeRow | null>(null);
 
   const onDelete = (at: ActivityTypeRow) => {
     const activityCount = at._count?.Activities ?? 0;
@@ -149,6 +154,13 @@ function ActivityTypesTable({
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                     <DropdownMenuItem
+                      className="cursor-pointer"
+                      onClick={() => setEditTarget(at)}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      {t("common.edit")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
                       className="text-red-600 cursor-pointer"
                       onClick={() => onDelete(at)}
                     >
@@ -162,6 +174,17 @@ function ActivityTypesTable({
           ))}
         </TableBody>
       </Table>
+      <DictionaryLabelDialog
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        title={`${t("common.edit")} ${t("library.activityTypeItem")}`}
+        fieldLabel={t("common.name")}
+        initialLabel={editTarget?.label ?? ""}
+        submit={(label) => updateActivityType(editTarget!.id, label)}
+        onSaved={reloadActivityTypes}
+      />
       <DeleteAlertDialog
         pageTitle="activity type"
         open={alert.openState}

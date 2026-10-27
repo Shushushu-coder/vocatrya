@@ -1,11 +1,18 @@
 import JobTitlesContainer from "@/components/admin/JobTitlesContainer";
 import { screen, render, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { getJobTitleList, deleteJobTitleById } from "@/actions/jobtitle.actions";
+import {
+  getJobTitleList,
+  deleteJobTitleById,
+  createJobTitle,
+  updateJobTitle,
+} from "@/actions/jobtitle.actions";
 
 vi.mock("@/actions/jobtitle.actions", () => ({
   getJobTitleList: vi.fn(),
   deleteJobTitleById: vi.fn(),
+  createJobTitle: vi.fn(),
+  updateJobTitle: vi.fn(),
 }));
 
 let intersectionCallback: IntersectionObserverCallback | undefined;
@@ -393,6 +400,118 @@ describe("JobTitlesContainer Search Functionality", () => {
         "applied",
         undefined,
       );
+    });
+  });
+
+  describe("Add and edit", () => {
+    it("opens the add dialog, creates a job title and reloads the list", async () => {
+      (getJobTitleList as any).mockResolvedValue({
+        data: mockTitles,
+        total: 2,
+      });
+      (createJobTitle as any).mockResolvedValue({
+        id: "9",
+        label: "QA Engineer",
+        value: "qa engineer",
+      });
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Software Engineer")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(screen.getByTestId("add-job-title-btn"));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      await act(async () => {
+        await user.type(input, "QA Engineer");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(createJobTitle).toHaveBeenCalledWith("QA Engineer");
+        expect(getJobTitleList).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it("keeps the add dialog open with the draft when create fails", async () => {
+      (getJobTitleList as any).mockResolvedValue({
+        data: mockTitles,
+        total: 2,
+      });
+      (createJobTitle as any).mockResolvedValue({
+        success: false,
+        message: "Failed to create job title.",
+      });
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Software Engineer")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(screen.getByTestId("add-job-title-btn"));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      await act(async () => {
+        await user.type(input, "QA Engineer");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(createJobTitle).toHaveBeenCalledWith("QA Engineer");
+      });
+      // The draft survives the failure so the user can fix and retry.
+      expect(screen.getByLabelText("Name")).toHaveValue("QA Engineer");
+      expect(getJobTitleList).toHaveBeenCalledTimes(1);
+    });
+
+    it("prefills the edit dialog from the row menu and saves the rename", async () => {
+      (getJobTitleList as any).mockResolvedValue({
+        data: mockTitles,
+        total: 2,
+      });
+      (updateJobTitle as any).mockResolvedValue({ success: true, data: {} });
+
+      render(<JobTitlesContainer />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Software Engineer")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await user.click(
+          screen.getAllByRole("button", { name: /toggle menu/i })[0],
+        );
+      });
+      await act(async () => {
+        await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+      });
+
+      const input = await screen.findByLabelText("Name");
+      expect(input).toHaveValue("Software Engineer");
+
+      await act(async () => {
+        await user.clear(input);
+        await user.type(input, "Staff Engineer");
+      });
+      await act(async () => {
+        await user.click(screen.getByRole("button", { name: "Save" }));
+      });
+
+      await waitFor(() => {
+        expect(updateJobTitle).toHaveBeenCalledWith("1", "Staff Engineer");
+        expect(getJobTitleList).toHaveBeenCalledTimes(2);
+      });
     });
   });
 });

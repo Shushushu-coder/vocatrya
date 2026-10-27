@@ -19,11 +19,15 @@ import {
   TableRow,
 } from "../ui/table";
 import { JobLocation } from "@/models/job.model";
-import { Briefcase, MoreVertical, Trash } from "lucide-react";
+import { Briefcase, MoreVertical, Pencil, Trash } from "lucide-react";
 import Link from "next/link";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { toastSuccess, toastError } from "@/lib/toast";
-import { deleteJobLocationById } from "@/actions/jobLocation.actions";
+import DictionaryLabelDialog from "./DictionaryLabelDialog";
+import {
+  deleteJobLocationById,
+  updateJobLocation,
+} from "@/actions/jobLocation.actions";
 import { useI18n } from "@/i18n";
 
 type JobLocationsTableProps = {
@@ -40,6 +44,7 @@ function JobLocationsTable({
     openState: false,
     deleteAction: false,
   });
+  const [editTarget, setEditTarget] = useState<JobLocation | null>(null);
   const onDeleteJobLocation = (location: JobLocation) => {
     const totalJobs = location._count?.jobsTotal ?? 0;
     if (totalJobs > 0) {
@@ -152,6 +157,13 @@ function JobLocationsTable({
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => setEditTarget(location)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        {t("common.edit")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         className="cursor-pointer text-destructive-text focus:text-destructive-text"
                         onClick={() => onDeleteJobLocation(location)}
                       >
@@ -166,6 +178,17 @@ function JobLocationsTable({
           })}
         </TableBody>
       </Table>
+      <DictionaryLabelDialog
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        title={`${t("common.edit")} ${t("library.jobLocationItem")}`}
+        fieldLabel={t("common.name")}
+        initialLabel={editTarget?.label ?? ""}
+        submit={(label) => updateJobLocation(editTarget!.id, label)}
+        onSaved={reloadJobLocations}
+      />
       <DeleteAlertDialog
         pageTitle="location"
         open={alert.openState}

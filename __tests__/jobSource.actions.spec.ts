@@ -1,7 +1,9 @@
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 // Covers the paginated list in jobSource.actions.ts — not the same-named
 // bare-array getJobSourceList in job/references.ts (see job.actions.spec.ts).
 import {
   getJobSourceList,
+  updateJobSource,
   deleteJobSourceById,
 } from "@/actions/jobSource.actions";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -16,17 +18,21 @@ vi.mock("@prisma/client", () => {
     jobSource: {
       findMany: vi.fn(),
       count: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
     job: {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
+    $transaction: vi.fn(),
     jobOpportunity: {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
   };
+  mPrismaClient.$transaction.mockImplementation(async (run) => run(mPrismaClient));
   return {
     PrismaClient: vi.fn(function () {
       return mPrismaClient;
@@ -58,6 +64,7 @@ describe("Job Source Actions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.jobOpportunity.count as any).mockResolvedValue(0);
   });
 
   describe("getJobSourceList", () => {
@@ -251,9 +258,121 @@ describe("Job Source Actions", () => {
       const result = await getJobSourceList(1, 10, "applied");
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/unavailable/i);
+      expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
       expect(prisma.jobSource.findMany).not.toHaveBeenCalled();
       expect(prisma.job.groupBy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateJobSource", () => {
+    const customSource = {
+      id: "src-9",
+      label: "Alumni Board",
+      value: "alumni board",
+      createdBy: "user-id",
+    };
+    const seededSource = {
+      id: "src-1",
+      label: "Indeed",
+      value: "indeed",
+      createdBy: "user-id",
+    };
+
+    it("should rename a custom source and recompute its value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobSource.findFirst as any)
+        .mockResolvedValueOnce(customSource)
+        .mockResolvedValueOnce(null);
+      const updated = { ...customSource, label: "Meetup", value: "meetup" };
+      (prisma.jobSource.update as any).mockResolvedValue(updated);
+
+      const result = await updateJobSource("src-9", "Meetup");
+
+      expect(result).toEqual({ success: true, data: updated });
+      expect(prisma.jobSource.update).toHaveBeenCalledWith({
+        where: { id: "src-9", createdBy: mockUser.id },
+        data: { label: "Meetup", value: "meetup" },
+      });
+    });
+
+    it("should refuse to rename a seeded system source", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobSource.findFirst as any).mockResolvedValue(seededSource);
+
+      const result = await updateJobSource("src-1", "Indeed Pro");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Built-in job sources cannot be renamed.",
+      });
+      expect(prisma.jobSource.update).not.toHaveBeenCalled();
+    });
+
+    it("should reject a rename that resolves to an existing alias target", async () => {
+      // Renaming a custom row to "BOSS直聘" resolves to the seeded
+      // "boss zhipin" identity; the seeded row already holds that value.
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobSource.findFirst as any)
+        .mockResolvedValueOnce(customSource)
+        .mockResolvedValueOnce({ id: "src-2", value: "boss zhipin" });
+
+      const result = await updateJobSource("src-9", "BOSS直聘");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job source already exists!",
+      });
+      expect(prisma.jobSource.update).not.toHaveBeenCalled();
+    });
+
+    it("should adopt the seeded identity when no row holds the alias value", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobSource.findFirst as any)
+        .mockResolvedValueOnce(customSource)
+        .mockResolvedValueOnce(null);
+      (prisma.jobSource.update as any).mockResolvedValue({});
+
+      await updateJobSource("src-9", " 官网 ");
+
+      expect(prisma.jobSource.update).toHaveBeenCalledWith({
+        where: { id: "src-9", createdBy: mockUser.id },
+        data: { label: "Company Career page", value: "careerpage" },
+      });
+    });
+
+    it("should return error when the row does not belong to the user", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobSource.findFirst as any).mockResolvedValue(null);
+
+      const result = await updateJobSource("src-9", "Meetup");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Job source not found",
+      });
+      expect(prisma.jobSource.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for an empty label", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobSource.findFirst as any).mockResolvedValue(customSource);
+
+      const result = await updateJobSource("src-9", "   ");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Please provide job source name",
+      });
+      expect(prisma.jobSource.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error for unauthenticated user", async () => {
+      (getCurrentUser as any).mockResolvedValue(null);
+
+      const result = await updateJobSource("src-9", "Meetup");
+
+      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.jobSource.update).not.toHaveBeenCalled();
     });
   });
 

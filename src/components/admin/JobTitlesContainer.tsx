@@ -7,6 +7,7 @@ import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { JobTitle } from "@/models/job.model";
 import JobTitlesTable from "./JobTitlesTable";
+import AddJobTitle from "./AddJobTitle";
 import { getJobTitleList } from "@/actions/jobtitle.actions";
 import Loading from "../Loading";
 import { Loader } from "lucide-react";
@@ -123,7 +124,7 @@ function JobTitlesContainer() {
                 onChange={setSearchTerm}
                 placeholder={t("library.searchJobTitles")}
               />
-              {/* <AddCompany reloadCompanies={reloadJobTitles} /> */}
+              <AddJobTitle reloadJobTitles={reloadJobTitles} />
             </div>
           </ResponsiveCardHeader>
           <CardContent>
