@@ -68,7 +68,7 @@ function attempt(overrides: Partial<AttemptDTO> = {}): AttemptDTO {
 }
 
 function timeline(attempts: AttemptDTO[]): ApplicationTimelineDTO {
-  return { opportunityId: "job-1", attempts };
+  return { opportunityId: "job-1", timeZone: "Asia/Shanghai", attempts };
 }
 
 function attemptSection(id: string): HTMLElement {

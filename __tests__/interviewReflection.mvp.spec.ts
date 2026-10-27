@@ -15,6 +15,7 @@ import {
   PROCESS_STEP_STATUS,
   writeInstanceMigrationState,
 } from "@/lib/career";
+import { runtimeTimeZone } from "@/lib/datetime";
 import {
   makeTestDbUrl,
   pushSchema,
@@ -492,7 +493,11 @@ describe("interview reflection isolation", () => {
       scheduledAt: new Date("2026-10-08T00:00:00.000Z"),
       deadlineAt: new Date("2026-10-09T00:00:00.000Z"),
     });
-    const before = await listUpcomingApplicationEvents(prisma, userId);
+    const { events: before } = await listUpcomingApplicationEvents(
+      prisma,
+      userId,
+      runtimeTimeZone(),
+    );
     const beforeEvent = before.find((event) => event.processStepId === step.id);
     expect(beforeEvent).toBeTruthy();
 
@@ -502,7 +507,11 @@ describe("interview reflection isolation", () => {
       items: [{ questionText: "介绍一下你的推荐系统项目" }],
     });
 
-    const after = await listUpcomingApplicationEvents(prisma, userId);
+    const { events: after } = await listUpcomingApplicationEvents(
+      prisma,
+      userId,
+      runtimeTimeZone(),
+    );
     const afterEvent = after.find((event) => event.processStepId === step.id);
     expect(afterEvent).toEqual(beforeEvent);
   });

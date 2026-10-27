@@ -107,17 +107,22 @@ describe("OverviewReminders", () => {
     kind: "task",
     title: "Follow up",
     at: new Date(Date.now() - 86_400_000).toISOString(),
+    dateOn: null,
     href: "/dashboard/tasks",
     overdue: true,
   };
 
   it("renders nothing when there is nothing due", () => {
-    const { container } = render(<OverviewReminders reminders={[]} />);
+    const { container } = render(
+      <OverviewReminders reminders={[]} timeZone="Asia/Shanghai" />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
   it("lists due items and flags overdue ones", () => {
-    render(<OverviewReminders reminders={[reminder]} />);
+    render(
+      <OverviewReminders reminders={[reminder]} timeZone="Asia/Shanghai" />,
+    );
     expect(screen.getByTestId("overview-reminders")).toBeInTheDocument();
     expect(screen.getByText("Follow up")).toBeInTheDocument();
     expect(screen.getByText(/Overdue/)).toBeInTheDocument();

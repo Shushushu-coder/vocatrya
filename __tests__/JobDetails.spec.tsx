@@ -88,7 +88,7 @@ vi.mock("@/actions/resumeVariant.actions", () => ({
 vi.mock("@/actions/application.actions", () => ({
   getApplicationTimeline: vi.fn().mockResolvedValue({
     success: true,
-    data: { opportunityId: "job-1", attempts: [] },
+    data: { opportunityId: "job-1", timeZone: "Asia/Shanghai", attempts: [] },
   }),
   getSubmittedResumeBindings: vi.fn().mockResolvedValue({
     success: true,
@@ -403,7 +403,7 @@ describe("JobDetails – tabs", () => {
     vi.mocked(getApplicationTimeline).mockResolvedValue({
       success: true,
       data: {
-        opportunityId: "job-1",
+        opportunityId: "job-1", timeZone: "Asia/Shanghai",
         attempts: [
           {
             id: "att-1",
@@ -424,8 +424,14 @@ describe("JobDetails – tabs", () => {
                 status: "IN_PROGRESS",
                 source: "SYSTEM",
                 scheduledAt: null,
+                scheduledAtPrecision: null,
+                scheduledAtZone: null,
+                deadlineOn: null,
                 deadlineAt: null,
+                deadlinePrecision: null,
+                deadlineZone: null,
                 completedAt: null,
+                completedAtPrecision: null,
                 result: null,
                 notes: null,
               },
@@ -457,7 +463,7 @@ describe("JobDetails – tabs", () => {
     vi.mocked(getApplicationTimeline).mockResolvedValue({
       success: true,
       data: {
-        opportunityId: "job-1",
+        opportunityId: "job-1", timeZone: "Asia/Shanghai",
         attempts: [
           {
             id: "att-2",
@@ -751,7 +757,7 @@ describe("JobDetails – restricted submitted resume surface", () => {
     });
     vi.mocked(getApplicationTimeline).mockResolvedValue({
       success: true,
-      data: { opportunityId: "job-1", attempts: [] },
+      data: { opportunityId: "job-1", timeZone: "Asia/Shanghai", attempts: [] },
     });
   });
 

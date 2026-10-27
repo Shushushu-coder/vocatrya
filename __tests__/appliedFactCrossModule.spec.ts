@@ -58,6 +58,7 @@ import {
   loadJobsAppliedDateCounts,
 } from "@/lib/career/jobsReadDispatch";
 import { listUpcomingApplicationEvents } from "@/lib/career/upcomingReadModel";
+import { runtimeTimeZone } from "@/lib/datetime";
 
 let prisma: PrismaClient;
 let userId: string;
@@ -666,8 +667,8 @@ describe("B. shared fixture — every module reads the same fact", () => {
     await createAttempt(draft.id, { submittedAt: null });
 
     const titles = (
-      await listUpcomingApplicationEvents(prisma, userId)
-    )
+      await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone())
+    ).events
       .filter((e) => e.kind === UPCOMING_EVENT_KIND.APPLICATION_DEADLINE)
       .map((e) => e.roleTitle);
     expect(titles).toContain("Pending");

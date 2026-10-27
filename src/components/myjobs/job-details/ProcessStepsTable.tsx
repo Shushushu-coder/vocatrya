@@ -15,7 +15,8 @@ import {
   PROCESS_STEP_STATUS,
 } from "@/lib/career/identities";
 import type { ApplicationProcessStepDTO } from "@/lib/career/applicationTimeline";
-import { useI18n } from "@/i18n";
+import { businessTimeFromColumns, formatBusinessTime } from "@/lib/datetime";
+import { useI18n, type Locale } from "@/i18n";
 
 function isClosed(step: ApplicationProcessStepDTO): boolean {
   return (
@@ -29,6 +30,8 @@ export type ProcessStepsTableProps = {
   steps: ApplicationProcessStepDTO[];
   canMutate: boolean;
   busy?: boolean;
+  /** Account zone every instant renders in — comes from the timeline DTO. */
+  timeZone: string;
   onEdit: (step: ApplicationProcessStepDTO) => void;
   onReschedule: (step: ApplicationProcessStepDTO) => void;
   onComplete: (step: ApplicationProcessStepDTO) => void;
@@ -37,10 +40,59 @@ export type ProcessStepsTableProps = {
   onReflect: (step: ApplicationProcessStepDTO) => void;
 };
 
+function scheduledDisplay(
+  step: ApplicationProcessStepDTO,
+  locale: Locale,
+  timeZone: string,
+): string {
+  return formatBusinessTime(
+    businessTimeFromColumns({
+      dateOnly: null,
+      instant: step.scheduledAt,
+      precision: step.scheduledAtPrecision,
+    }),
+    locale,
+    timeZone,
+  );
+}
+
+function deadlineDisplay(
+  step: ApplicationProcessStepDTO,
+  locale: Locale,
+  timeZone: string,
+): string {
+  return formatBusinessTime(
+    businessTimeFromColumns({
+      dateOnly: step.deadlineOn,
+      instant: step.deadlineAt,
+      precision: step.deadlinePrecision,
+    }),
+    locale,
+    timeZone,
+  );
+}
+
+function completedDisplay(
+  step: ApplicationProcessStepDTO,
+  locale: Locale,
+  timeZone: string,
+): string {
+  return formatBusinessTime(
+    businessTimeFromColumns({
+      dateOnly: null,
+      instant: step.completedAt,
+      precision: step.completedAtPrecision,
+    }),
+    locale,
+    timeZone,
+  );
+}
+
 export function ProcessStepsTable({
   steps,
   canMutate,
   busy = false,
+  timeZone,
   onEdit,
   onReschedule,
   onComplete,
@@ -48,7 +100,7 @@ export function ProcessStepsTable({
   onDelete,
   onReflect,
 }: ProcessStepsTableProps) {
-  const { t, formatDate, formatDateTime } = useI18n();
+  const { t, locale } = useI18n();
 
   const categoryLabel = (category: string) => {
     const key = `jobs.stepCategories.${category}`;
@@ -139,10 +191,10 @@ export function ProcessStepsTable({
                 )}
               </TableCell>
               <TableCell className="whitespace-nowrap">
-                {step.scheduledAt ? formatDate(step.scheduledAt) : "—"}
+                {scheduledDisplay(step, locale, timeZone) || "—"}
               </TableCell>
               <TableCell className="whitespace-nowrap">
-                {step.deadlineAt ? formatDate(step.deadlineAt) : "—"}
+                {deadlineDisplay(step, locale, timeZone) || "—"}
               </TableCell>
               <TableCell>
                 <Badge variant={statusVariant(step)}>
@@ -150,7 +202,8 @@ export function ProcessStepsTable({
                 </Badge>
                 {step.completedAt && (
                   <p className="mt-1 whitespace-nowrap text-xs text-muted-foreground">
-                    {closedAtLabel(step)} {formatDateTime(step.completedAt)}
+                    {closedAtLabel(step)}{" "}
+                    {completedDisplay(step, locale, timeZone)}
                   </p>
                 )}
               </TableCell>

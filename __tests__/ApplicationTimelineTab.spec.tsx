@@ -25,6 +25,10 @@ vi.mock("@/actions/application.actions", () => ({
   attachAttemptResumeVersion: vi.fn(),
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+
 vi.mock("@/lib/toast", () => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -46,8 +50,14 @@ function step(overrides: Partial<ApplicationTimelineDTO["attempts"][number]["ste
     status: "PENDING",
     source: "USER",
     scheduledAt: null,
+    scheduledAtPrecision: null,
+    scheduledAtZone: null,
+    deadlineOn: null,
     deadlineAt: "2026-10-08T00:00:00.000Z",
+    deadlinePrecision: null,
+    deadlineZone: null,
     completedAt: null,
+    completedAtPrecision: null,
     result: null,
     notes: null,
     ...overrides,
@@ -59,6 +69,7 @@ function timeline(
 ): ApplicationTimelineDTO {
   return {
     opportunityId: "job-1",
+    timeZone: "Asia/Shanghai",
     attempts: [
       {
         id: "att-1",
@@ -464,8 +475,8 @@ describe("ApplicationTimelineTab process step actions", () => {
       expect(updateStep).toHaveBeenCalledWith(
         expect.objectContaining({
           stepId: "step-user",
-          scheduledAt: null,
-          deadlineAt: new Date("2026-10-08T00:00:00.000Z"),
+          scheduledAt: undefined,
+          deadlineAt: undefined,
         }),
       ),
     );

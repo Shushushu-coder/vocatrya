@@ -23,6 +23,7 @@ export {
 export type {
   OverviewStats,
   OverviewReminder,
+  OverviewRemindersData,
   OverviewDataState,
 } from "./dashboard/overview";
 

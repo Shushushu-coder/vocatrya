@@ -3,6 +3,7 @@ import prisma from "@/lib/db";
 import { ApplicationService } from "@/lib/career/applicationService";
 import type {
   ApplicationTimelineDTO,
+  StepTimeInput,
   SubmittedResumeBindingsDTO,
   TransferTargetPageDTO,
 } from "@/lib/career/applicationTimeline";
@@ -12,7 +13,7 @@ import type {
 } from "@/lib/career/interviewReflection";
 import {
   listUpcomingApplicationEvents as queryUpcomingApplicationEvents,
-  type UpcomingApplicationEvent,
+  type UpcomingApplicationEventsEnvelope,
 } from "@/lib/career/upcomingReadModel";
 import { listJobs } from "@/lib/career/jobsReadDispatch";
 import {
@@ -33,6 +34,8 @@ import {
   type CareerRuntimeResolution,
 } from "@/lib/career/runtimeMode";
 import { handleError } from "@/lib/utils";
+import { isDateOnly } from "@/lib/datetime";
+import { getUserTimeZone } from "@/lib/userSettings/timeZone.server";
 import type { ActionResult } from "@/models/action.model";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./shared";
@@ -51,23 +54,56 @@ function assertAbApplicationWrites(runtime: CareerRuntimeResolution): void {
   );
 }
 
-function parseOptionalDate(
-  value: Date | string | null | undefined,
-  field: string,
-): Date | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
-  if (value instanceof Date) return value;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new CareerRuntimeError(
+/**
+ * Wire input for a step time field: the structured `StepTimeInput` contract
+ * (dateOnly / wallTime in the account zone) plus legacy `Date`/ISO-string
+ * instant facts for existing callers. `undefined` leaves the field
+ * untouched, `null`/`""` clears it.
+ */
+type StepTimeWireInput = StepTimeInput | Date | string | null | undefined;
+
+function parseStepTime(
+  value: StepTimeWireInput,
+  field: "scheduledAt" | "deadlineAt",
+): StepTimeInput | Date | null | undefined {
+  const invalid = () =>
+    new CareerRuntimeError(
       field === "deadlineAt"
         ? "PROCESS_STEP_DEADLINE_INVALID"
         : "PROCESS_STEP_SCHEDULE_INVALID",
       `${field} is invalid`,
     );
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw invalid();
+    return value;
   }
-  return parsed;
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) throw invalid();
+    return parsed;
+  }
+  if (typeof value === "object" && value.kind === "dateOnly") {
+    if (field === "scheduledAt" || !isDateOnly(value.date)) throw invalid();
+    return { kind: "dateOnly", date: value.date };
+  }
+  if (typeof value === "object" && value.kind === "wallTime") {
+    const { date, hour, minute } = value;
+    if (
+      !isDateOnly(date) ||
+      !Number.isInteger(hour) ||
+      hour < 0 ||
+      hour > 23 ||
+      !Number.isInteger(minute) ||
+      minute < 0 ||
+      minute > 59
+    ) {
+      throw invalid();
+    }
+    return { kind: "wallTime", date, hour, minute };
+  }
+  throw invalid();
 }
 
 function applicationsFor(userId: string) {
@@ -142,7 +178,11 @@ export async function getApplicationTimeline(
         CAREER_TIMELINE_UNAVAILABLE_MESSAGE,
       );
     }
-    const data = await applicationsFor(user.id).getTimeline(jobOpportunityId);
+    const timeZone = await getUserTimeZone(user.id);
+    const data = await applicationsFor(user.id).getTimeline(
+      jobOpportunityId,
+      timeZone,
+    );
     return { success: true, data };
   } catch (error) {
     return handleError(error, "Failed to load application timeline.");
@@ -206,7 +246,7 @@ export async function listTransferTargetOpportunities(
 }
 
 export async function listUpcomingApplicationEvents(): Promise<
-  ActionResult<UpcomingApplicationEvent[]>
+  ActionResult<UpcomingApplicationEventsEnvelope>
 > {
   try {
     const user = await requireUser();
@@ -217,7 +257,12 @@ export async function listUpcomingApplicationEvents(): Promise<
         CAREER_UPCOMING_UNAVAILABLE_MESSAGE,
       );
     }
-    const data = await queryUpcomingApplicationEvents(prisma, user.id);
+    const timeZone = await getUserTimeZone(user.id);
+    const data = await queryUpcomingApplicationEvents(
+      prisma,
+      user.id,
+      timeZone,
+    );
     return { success: true, data };
   } catch (error) {
     return handleError(error, "Failed to load upcoming events.");
@@ -230,14 +275,15 @@ export async function createApplicationProcessStep(input: {
   createDraftAttempt?: boolean;
   category: string;
   label: string;
-  scheduledAt?: Date | string | null;
-  deadlineAt?: Date | string | null;
+  scheduledAt?: StepTimeWireInput;
+  deadlineAt?: StepTimeWireInput;
   notes?: string | null;
 }): Promise<ActionResult<ApplicationProcessStep>> {
   try {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertAbApplicationWrites(runtime);
+    const timeZone = await getUserTimeZone(user.id);
     const applicationAttemptId = input.applicationAttemptId ?? undefined;
     if (
       applicationAttemptId !== undefined &&
@@ -255,9 +301,10 @@ export async function createApplicationProcessStep(input: {
       createDraftAttempt: input.createDraftAttempt === true,
       category: input.category,
       label: input.label,
-      scheduledAt: parseOptionalDate(input.scheduledAt, "scheduledAt") ?? null,
-      deadlineAt: parseOptionalDate(input.deadlineAt, "deadlineAt") ?? null,
+      scheduledAt: parseStepTime(input.scheduledAt, "scheduledAt") ?? null,
+      deadlineAt: parseStepTime(input.deadlineAt, "deadlineAt") ?? null,
       notes: input.notes ?? null,
+      timeZone,
     });
     revalidatePath("/dashboard");
     return { success: true, data };
@@ -274,8 +321,8 @@ export async function updateApplicationProcessStep(input: {
   stepId: string;
   category?: string;
   label?: string;
-  scheduledAt?: Date | string | null;
-  deadlineAt?: Date | string | null;
+  scheduledAt?: StepTimeWireInput;
+  deadlineAt?: StepTimeWireInput;
   notes?: string | null;
   result?: string | null;
 }): Promise<ActionResult<ApplicationProcessStep>> {
@@ -283,14 +330,16 @@ export async function updateApplicationProcessStep(input: {
     const user = await requireUser();
     const runtime = await resolveCareerRuntimeMode(prisma);
     assertAbApplicationWrites(runtime);
+    const timeZone = await getUserTimeZone(user.id);
     const data = await applicationsFor(user.id).updateUserProcessStep({
       stepId: input.stepId,
       category: input.category,
       label: input.label,
-      scheduledAt: parseOptionalDate(input.scheduledAt, "scheduledAt"),
-      deadlineAt: parseOptionalDate(input.deadlineAt, "deadlineAt"),
+      scheduledAt: parseStepTime(input.scheduledAt, "scheduledAt"),
+      deadlineAt: parseStepTime(input.deadlineAt, "deadlineAt"),
       notes: input.notes,
       result: input.result,
+      timeZone,
     });
     revalidatePath("/dashboard");
     return { success: true, data };

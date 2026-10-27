@@ -1,4 +1,10 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import {
+  DateTimeContractError,
+  parseDeadlineAtInput,
+  parseScheduledAtInput,
+  runtimeTimeZone,
+} from "@/lib/datetime";
 import { CareerRuntimeError } from "./errors";
 import {
   ATTEMPT_OUTCOME,
@@ -11,6 +17,8 @@ import {
 } from "./identities";
 import {
   type ApplicationTimelineDTO,
+  declaredStepPrecision,
+  type StepTimeInput,
   type SubmittedResumeBindingsDTO,
   type SubmittedResumeDTO,
   attemptSortKey,
@@ -393,7 +401,92 @@ export class ApplicationService {
     };
   }
 
-  async getTimeline(jobOpportunityId: string): Promise<ApplicationTimelineDTO> {
+  /**
+   * Maps one structured/legacy time input onto the field's column triple.
+   * - Date: a bare instant fact, sidecars cleared (the historical "unknown"
+   *   write shape; internal/import callers keep today's semantics).
+   * - null: clears value and every sidecar — never leaves a contradictory
+   *   `*On` + instant pair behind.
+   * - dateOnly: deadline-only input, stores `*On` with the writer's zone.
+   * - wallTime: resolves against the account zone into a minute instant.
+   */
+  private stepTimeWrite(
+    field: "scheduledAt" | "deadlineAt",
+    input: StepTimeInput | Date | null,
+    timeZone: string,
+  ): Record<string, Date | string | null> {
+    const at = field === "scheduledAt" ? "scheduledAt" : "deadlineAt";
+    const on = field === "deadlineAt" ? "deadlineOn" : null;
+    const precision =
+      field === "scheduledAt" ? "scheduledAtPrecision" : "deadlinePrecision";
+    const zone = field === "scheduledAt" ? "scheduledAtZone" : "deadlineZone";
+    const cleared: Record<string, Date | string | null> = {
+      [at]: null,
+      ...(on ? { [on]: null } : {}),
+      [precision]: null,
+      [zone]: null,
+    };
+
+    if (input === null || input === undefined) return cleared;
+    if (input instanceof Date) {
+      return { ...cleared, [at]: input };
+    }
+
+    try {
+      if (input.kind === "dateOnly") {
+        if (field === "scheduledAt") {
+          throw new CareerRuntimeError(
+            "PROCESS_STEP_SCHEDULE_INVALID",
+            "A scheduled time needs both a date and a time of day",
+          );
+        }
+        const value = parseDeadlineAtInput(input.date, timeZone);
+        if (value.kind !== "dateOnly") {
+          throw new Error("unexpected deadline parse result");
+        }
+        return {
+          ...cleared,
+          deadlineOn: value.date,
+          deadlinePrecision: "dateOnly",
+          deadlineZone: timeZone,
+        };
+      }
+      const value =
+        field === "scheduledAt"
+          ? parseScheduledAtInput(
+              { date: input.date, hour: input.hour, minute: input.minute },
+              timeZone,
+            )
+          : parseDeadlineAtInput(
+              { date: input.date, hour: input.hour, minute: input.minute },
+              timeZone,
+            );
+      if (value.kind !== "instant") {
+        throw new Error("unexpected time parse result");
+      }
+      return {
+        ...cleared,
+        [at]: new Date(value.iso),
+        [precision]: value.precision,
+        [zone]: timeZone,
+      };
+    } catch (error) {
+      if (error instanceof DateTimeContractError) {
+        throw new CareerRuntimeError(
+          field === "deadlineAt"
+            ? "PROCESS_STEP_DEADLINE_INVALID"
+            : "PROCESS_STEP_SCHEDULE_INVALID",
+          error.message,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async getTimeline(
+    jobOpportunityId: string,
+    timeZone: string = runtimeTimeZone(),
+  ): Promise<ApplicationTimelineDTO> {
     const opportunity = await this.db.jobOpportunity.findFirst({
       where: { id: jobOpportunityId, userId: this.userId },
       select: { id: true },
@@ -436,6 +529,7 @@ export class ApplicationService {
 
     return {
       opportunityId: opportunity.id,
+      timeZone,
       attempts: orderedAttempts.map((attempt) => ({
         id: attempt.id,
         channelLabel: attempt.channelLabel,
@@ -461,8 +555,26 @@ export class ApplicationService {
           status: step.status,
           source: step.source,
           scheduledAt: toIso(step.scheduledAt),
+          scheduledAtPrecision: declaredStepPrecision(
+            step.scheduledAtPrecision,
+            step.scheduledAt !== null,
+            ["minute"],
+          ),
+          scheduledAtZone: step.scheduledAtZone,
+          deadlineOn: step.deadlineOn,
           deadlineAt: toIso(step.deadlineAt),
+          deadlinePrecision: declaredStepPrecision(
+            step.deadlinePrecision,
+            step.deadlineOn !== null || step.deadlineAt !== null,
+            ["dateOnly", "minute", "fullInstant"],
+          ),
+          deadlineZone: step.deadlineZone,
           completedAt: toIso(step.completedAt),
+          completedAtPrecision: declaredStepPrecision(
+            step.completedAtPrecision,
+            step.completedAt !== null,
+            ["fullInstant"],
+          ),
           result: step.result,
           notes: step.notes,
         })),
@@ -603,9 +715,12 @@ export class ApplicationService {
     createDraftAttempt?: boolean;
     category: string;
     label: string;
-    scheduledAt?: Date | null;
-    deadlineAt?: Date | null;
+    scheduledAt?: StepTimeInput | Date | null;
+    deadlineAt?: StepTimeInput | Date | null;
     notes?: string | null;
+    /** Account zone resolving wall-time inputs; defaults to the runtime
+     *  zone, matching the unset-account fallback. */
+    timeZone?: string;
   }) {
     await this.gate();
     this.assertUserStepCategory(input.category);
@@ -649,6 +764,7 @@ export class ApplicationService {
         where: { applicationAttemptId: attempt.id },
         _max: { sortOrder: true },
       });
+      const timeZone = input.timeZone ?? runtimeTimeZone();
       return tx.applicationProcessStep.create({
         data: {
           applicationAttemptId: attempt.id,
@@ -656,8 +772,16 @@ export class ApplicationService {
           label,
           sortOrder: allocateUserSortOrder(max._max.sortOrder),
           status: PROCESS_STEP_STATUS.PENDING,
-          scheduledAt: input.scheduledAt ?? null,
-          deadlineAt: input.deadlineAt ?? null,
+          ...this.stepTimeWrite(
+            "scheduledAt",
+            input.scheduledAt ?? null,
+            timeZone,
+          ),
+          ...this.stepTimeWrite(
+            "deadlineAt",
+            input.deadlineAt ?? null,
+            timeZone,
+          ),
           notes: input.notes ?? null,
           source: PROCESS_STEP_SOURCE.USER,
         },
@@ -669,10 +793,11 @@ export class ApplicationService {
     stepId: string;
     category?: string;
     label?: string;
-    scheduledAt?: Date | null;
-    deadlineAt?: Date | null;
+    scheduledAt?: StepTimeInput | Date | null;
+    deadlineAt?: StepTimeInput | Date | null;
     notes?: string | null;
     result?: string | null;
+    timeZone?: string;
   }) {
     await this.gate();
     const existing = await this.requireOwnedStep(input.stepId);
@@ -696,15 +821,20 @@ export class ApplicationService {
       });
     }
 
+    // `undefined` leaves the column triple untouched — a save that never
+    // touched the field cannot rewrite a historical unknown precision.
+    const timeZone = input.timeZone ?? runtimeTimeZone();
     return this.db.applicationProcessStep.update({
       where: { id: existing.id },
       data: {
         category: input.category ?? existing.category,
         label: input.label === undefined ? existing.label : input.label.trim(),
-        scheduledAt:
-          input.scheduledAt === undefined ? existing.scheduledAt : input.scheduledAt,
-        deadlineAt:
-          input.deadlineAt === undefined ? existing.deadlineAt : input.deadlineAt,
+        ...(input.scheduledAt === undefined
+          ? {}
+          : this.stepTimeWrite("scheduledAt", input.scheduledAt, timeZone)),
+        ...(input.deadlineAt === undefined
+          ? {}
+          : this.stepTimeWrite("deadlineAt", input.deadlineAt, timeZone)),
         notes: input.notes === undefined ? existing.notes : input.notes,
         result: input.result === undefined ? existing.result : input.result,
       },
@@ -726,6 +856,7 @@ export class ApplicationService {
       data: {
         status: PROCESS_STEP_STATUS.COMPLETED,
         completedAt: new Date(),
+        completedAtPrecision: "fullInstant",
       },
     });
     return this.db.applicationProcessStep.findUniqueOrThrow({ where: { id: existing.id } });
@@ -758,6 +889,7 @@ export class ApplicationService {
       data: {
         status: PROCESS_STEP_STATUS.CANCELLED,
         completedAt: new Date(),
+        completedAtPrecision: "fullInstant",
       },
     });
     return this.db.applicationProcessStep.findUniqueOrThrow({ where: { id: existing.id } });
@@ -802,6 +934,7 @@ export class ApplicationService {
           status: input.status,
           source: PROCESS_STEP_SOURCE.SYSTEM,
           completedAt: completing ? existing.completedAt ?? new Date() : existing.completedAt,
+          completedAtPrecision: completing ? "fullInstant" : existing.completedAtPrecision,
         },
       });
     }
@@ -816,6 +949,7 @@ export class ApplicationService {
         status: input.status,
         source: PROCESS_STEP_SOURCE.SYSTEM,
         completedAt: completing ? new Date() : null,
+        completedAtPrecision: completing ? "fullInstant" : null,
       },
     });
   }
@@ -837,6 +971,9 @@ export class ApplicationService {
     await this.gate();
     const attempt = await this.requireOwnedAttempt(input.attemptId);
     const status = input.status ?? PROCESS_STEP_STATUS.PENDING;
+    // Internal instant-only writes carry no declared precision: time sidecars
+    // are cleared (the "unknown" shape) except completedAt, which is always a
+    // full-instant close marker when present.
     const data: Prisma.ApplicationProcessStepUncheckedCreateInput = {
       applicationAttemptId: attempt.id,
       category: input.category,
@@ -844,7 +981,12 @@ export class ApplicationService {
       sortOrder: input.sortOrder,
       status,
       scheduledAt: input.scheduledAt ?? null,
+      scheduledAtPrecision: null,
+      scheduledAtZone: null,
+      deadlineOn: null,
       deadlineAt: input.deadlineAt ?? null,
+      deadlinePrecision: null,
+      deadlineZone: null,
       completedAt:
         input.completedAt ??
         (status === PROCESS_STEP_STATUS.COMPLETED ? new Date() : null),
@@ -852,6 +994,7 @@ export class ApplicationService {
       notes: input.notes ?? null,
       source: input.source ?? PROCESS_STEP_SOURCE.USER,
     };
+    data.completedAtPrecision = data.completedAt ? "fullInstant" : null;
 
     if (input.stepId) {
       const existing = await this.db.applicationProcessStep.findFirst({
@@ -877,8 +1020,14 @@ export class ApplicationService {
           sortOrder: data.sortOrder,
           status: data.status,
           scheduledAt: data.scheduledAt,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
           deadlineAt: data.deadlineAt,
+          deadlinePrecision: null,
+          deadlineZone: null,
           completedAt: data.completedAt,
+          completedAtPrecision: data.completedAtPrecision,
           result: data.result,
           notes: data.notes,
         },

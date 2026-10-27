@@ -1,5 +1,13 @@
-import { addDays, endOfDay } from "date-fns";
 import prisma from "@/lib/db";
+import {
+  addDaysToDateOnly,
+  businessTimeAttentionIso,
+  businessTimeFromColumns,
+  dateOnlyUtcWindow,
+  isDeadlineOverdue,
+  todayDateOnly,
+} from "@/lib/datetime";
+import { getUserTimeZone } from "@/lib/userSettings/timeZone.server";
 import {
   loadDashboardJobCounts,
   loadJobsBoardTotals,
@@ -8,6 +16,7 @@ import {
   resolveJobsReadFamily,
 } from "@/lib/career/jobsReadDispatch";
 import {
+  isUpcomingOverdue,
   listUpcomingApplicationEvents as queryUpcomingApplicationEvents,
   UPCOMING_EVENT_KIND,
 } from "@/lib/career/upcomingReadModel";
@@ -32,7 +41,8 @@ export const getOverviewStats = async (): Promise<OverviewStats> => {
   const { start, end } = getLocalDayRange(6);
   const { start: priorStart } = getLocalDayRange(13);
   const now = new Date();
-  const next7End = endOfDay(addDays(now, 7));
+  const timeZone = await getUserTimeZone(user.id);
+  const next7End = new Date(next7EndIso(now, timeZone));
 
   const [jobsResult, openTasks, upcomingActivities] = await Promise.all([
     jobsReadOrBlocked(async () => {
@@ -105,69 +115,110 @@ export const getOverviewDataState = async (): Promise<OverviewDataState> => {
 };
 
 // A single lightweight reminder row. `kind` drives the icon/link target;
-// `at` is ISO so the client formats it with the active locale.
+// `at` is the attention instant (a DateOnly fact carries its day-start ISO
+// for sorting) and `dateOn` marks a calendar-day fact the client renders
+// with formatDateOnly — never as an instant.
 export type OverviewReminder = {
   id: string;
   kind: "task" | "deadline" | "step";
   title: string;
   detail?: string;
   at: string;
+  dateOn: string | null;
   href: string;
   overdue: boolean;
 };
 
+export type OverviewRemindersData = {
+  reminders: OverviewReminder[];
+  timeZone: string;
+};
+
 const REMINDER_LIMIT = 6;
+
+/** Exclusive end of the account-zone "next 7 days" window as an ISO. */
+function next7EndIso(now: Date, timeZone: string): string {
+  return dateOnlyUtcWindow(
+    addDaysToDateOnly(todayDateOnly(timeZone, now), 7),
+    timeZone,
+  ).endIsoExclusive;
+}
 
 // Conditional strip shown only when something concrete is due: soon-due
 // tasks in every mode, plus application deadlines (legacy Job.dueDate) or
-// upcoming process steps (A+B) inside the same window.
-export const getOverviewReminders = async (): Promise<OverviewReminder[]> => {
+// upcoming process steps (A+B) inside the same window. DateOnly facts join
+// by intersection with [now, next7End) — a due date still inside today is
+// due, and yesterday's stays visible as overdue.
+export const getOverviewReminders = async (): Promise<OverviewRemindersData> => {
   const user = await requireUser();
   const now = new Date();
-  const next7End = endOfDay(addDays(now, 7));
+  const timeZone = await getUserTimeZone(user.id);
+  const next7EndIsoValue = next7EndIso(now, timeZone);
+  const next7End = new Date(next7EndIsoValue);
+  const next7EndOn = addDaysToDateOnly(todayDateOnly(timeZone, now), 7);
 
   const [dueTasks, familyResult] = await Promise.all([
     prisma.task.findMany({
       where: {
         userId: user.id,
         status: { notIn: OPEN_TASK_STATUSES },
-        dueDate: { not: null, lte: next7End },
+        OR: [
+          { dueDate: { not: null, lte: next7End } },
+          { dueOn: { not: null, lte: next7EndOn } },
+        ],
       },
-      select: { id: true, title: true, dueDate: true },
-      orderBy: { dueDate: "asc" },
-      take: REMINDER_LIMIT,
+      select: { id: true, title: true, dueDate: true, dueOn: true, duePrecision: true },
+      // Both DateOnly and instant tasks must participate before the shared
+      // attention sort and limit below; dueDate alone puts every DateOnly
+      // ahead of timed tasks regardless of their actual due day.
     }),
     resolveJobsReadFamily(prisma),
   ]);
 
-  const reminders: OverviewReminder[] = dueTasks.flatMap((task) =>
-    task.dueDate
-      ? [
-          {
-            id: `task:${task.id}`,
-            kind: "task" as const,
-            title: task.title,
-            at: task.dueDate.toISOString(),
-            href: "/dashboard/tasks",
-            overdue: task.dueDate < now,
-          },
-        ]
-      : [],
-  );
+  const reminders: OverviewReminder[] = dueTasks.flatMap((task) => {
+    const value = businessTimeFromColumns({
+      dateOnly: task.dueOn,
+      instant: task.dueDate,
+      precision: task.duePrecision,
+    });
+    const attention = businessTimeAttentionIso(value, timeZone);
+    if (value === null || attention === null) return [];
+    return [
+      {
+        id: `task:${task.id}`,
+        kind: "task" as const,
+        title: task.title,
+        at: attention,
+        dateOn: value.kind === "dateOnly" ? value.date : null,
+        href: "/dashboard/tasks",
+        overdue: isDeadlineOverdue(value, now, timeZone),
+      },
+    ];
+  });
 
   if (familyResult.family === "ab") {
-    const events = await queryUpcomingApplicationEvents(prisma, user.id);
+    const { events } = await queryUpcomingApplicationEvents(
+      prisma,
+      user.id,
+      timeZone,
+    );
     for (const event of events) {
-      const attention = new Date(event.attentionAt);
-      if (attention > next7End) continue;
+      if (event.attentionAt >= next7EndIsoValue) continue;
       reminders.push({
         id: `event:${event.processStepId ?? event.jobOpportunityId}`,
         kind: event.kind === UPCOMING_EVENT_KIND.APPLICATION_DEADLINE ? "deadline" : "step",
         title: event.roleTitle,
         detail: event.companyName ?? undefined,
         at: event.attentionAt,
+        // A step can have both a scheduled instant and a DateOnly deadline.
+        // Label the same carrier that supplied attentionAt, not a later date.
+        dateOn:
+          event.deadlineOn &&
+          dateOnlyUtcWindow(event.deadlineOn, timeZone).startIso === event.attentionAt
+            ? event.deadlineOn
+            : null,
         href: `/dashboard/myjobs/${event.jobOpportunityId}`,
-        overdue: attention < now,
+        overdue: isUpcomingOverdue(event, now, timeZone),
       });
     }
   } else if (familyResult.family === "legacy") {
@@ -182,13 +233,13 @@ export const getOverviewReminders = async (): Promise<OverviewReminder[]> => {
         title: job.title,
         detail: job.company ?? undefined,
         at: job.dueDate.toISOString(),
+        dateOn: null,
         href: `/dashboard/myjobs/${job.id}`,
         overdue: job.dueDate < now,
       });
     }
   }
 
-  return reminders
-    .sort((a, b) => a.at.localeCompare(b.at))
-    .slice(0, REMINDER_LIMIT);
+  reminders.sort((a, b) => a.at.localeCompare(b.at));
+  return { reminders: reminders.slice(0, REMINDER_LIMIT), timeZone };
 };

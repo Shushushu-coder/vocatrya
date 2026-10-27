@@ -5,12 +5,16 @@ import { Loader, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/DatePicker";
+import { TimePicker } from "@/components/TimePicker";
 import {
   Form,
   FormField,
   FormItem,
 } from "@/components/ui/form";
 import { PROCESS_STEP_CATEGORY } from "@/lib/career/identities";
+import type { StepTimeInput } from "@/lib/career/applicationTimeline";
+import { stepTimeInputFromField } from "./stepTimeFields";
+import { toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 
 const CATEGORY_OPTIONS = [
@@ -25,8 +29,8 @@ const CATEGORY_OPTIONS = [
 export type QuickAddStepValues = {
   category: string;
   label: string;
-  scheduledAt: Date | null;
-  deadlineAt: Date | null;
+  scheduledAt: StepTimeInput;
+  deadlineAt: StepTimeInput;
 };
 
 type QuickAddProcessStepProps = {
@@ -34,21 +38,22 @@ type QuickAddProcessStepProps = {
 };
 
 type QuickAddDates = {
-  scheduledAt: Date | null;
-  deadlineAt: Date | null;
+  scheduledDate: Date | null;
+  scheduledTime: string;
+  deadlineDate: Date | null;
 };
 
 export function QuickAddProcessStep({ onSubmit }: QuickAddProcessStepProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const listId = useId();
   const [category, setCategory] = useState<string>(
     PROCESS_STEP_CATEGORY.INTERVIEW,
   );
   const [label, setLabel] = useState("");
-  // DatePicker's FormControl needs a form context; only the two dates live in
-  // this form — category and label stay plain controlled inputs.
+  // DatePicker's FormControl needs a form context; only the date/time inputs
+  // live in this form — category and label stay plain controlled inputs.
   const form = useForm<QuickAddDates>({
-    defaultValues: { scheduledAt: null, deadlineAt: null },
+    defaultValues: { scheduledDate: null, scheduledTime: "", deadlineDate: null },
   });
   const [isPending, startTransition] = useTransition();
 
@@ -70,17 +75,33 @@ export function QuickAddProcessStep({ onSubmit }: QuickAddProcessStepProps) {
 
   const submit = () => {
     if (isPending) return;
-    const { scheduledAt, deadlineAt } = form.getValues();
+    const { scheduledDate, scheduledTime, deadlineDate } = form.getValues();
+    const scheduled = stepTimeInputFromField("scheduledAt", {
+      date: scheduledDate,
+      time: scheduledTime,
+    });
+    if (!scheduled.ok) {
+      toastError(
+        locale === "zh-CN"
+          ? "安排时间需要同时选择日期和具体时间"
+          : "A scheduled step needs both a date and a time",
+      );
+      return;
+    }
+    const deadline = stepTimeInputFromField("deadlineAt", {
+      date: deadlineDate,
+      time: "",
+    });
     startTransition(async () => {
       const ok = await onSubmit({
         category,
         label: label.trim() || labelPresets(category)[0] || categoryLabel(category),
-        scheduledAt,
-        deadlineAt,
+        scheduledAt: scheduled.value,
+        deadlineAt: deadline.ok ? deadline.value : null,
       });
       if (ok) {
         setLabel("");
-        form.reset({ scheduledAt: null, deadlineAt: null });
+        form.reset({ scheduledDate: null, scheduledTime: "", deadlineDate: null });
       }
     });
   };
@@ -143,21 +164,35 @@ export function QuickAddProcessStep({ onSubmit }: QuickAddProcessStepProps) {
             ))}
           </datalist>
         </div>
+        <div className="flex items-end gap-1">
+          <FormField
+            control={form.control}
+            name="scheduledDate"
+            render={({ field }) => (
+              <FormItem className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">
+                  {t("jobs.stepScheduledAt")}
+                </span>
+                <DatePicker field={field} presets={false} isEnabled />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="scheduledTime"
+            render={({ field }) => (
+              <FormItem className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">
+                  {t("common.pickTime")}
+                </span>
+                <TimePicker field={field} />
+              </FormItem>
+            )}
+          />
+        </div>
         <FormField
           control={form.control}
-          name="scheduledAt"
-          render={({ field }) => (
-            <FormItem className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">
-                {t("jobs.stepScheduledAt")}
-              </span>
-              <DatePicker field={field} presets={false} isEnabled />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="deadlineAt"
+          name="deadlineDate"
           render={({ field }) => (
             <FormItem className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">

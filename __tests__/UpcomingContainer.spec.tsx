@@ -14,8 +14,18 @@ vi.mock("@/lib/toast", () => ({
 const listMock = vi.mocked(listUpcomingApplicationEvents);
 
 describe("UpcomingContainer", () => {
+  it("settles a failed initial load into an error instead of loading forever", async () => {
+    listMock.mockResolvedValue({ success: false, message: "Upcoming unavailable" });
+    render(<UpcomingContainer />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Upcoming unavailable");
+    expect(screen.queryByText("Nothing upcoming")).not.toBeInTheDocument();
+  });
+
   it("renders an empty state when there are no events", async () => {
-    listMock.mockResolvedValue({ success: true, data: [] });
+    listMock.mockResolvedValue({
+      success: true,
+      data: { events: [], timeZone: "Asia/Shanghai" },
+    });
     render(<UpcomingContainer />);
     expect(await screen.findByText("Nothing upcoming")).toBeInTheDocument();
   });
@@ -23,7 +33,9 @@ describe("UpcomingContainer", () => {
   it("groups events, distinguishes application deadlines, and links to job detail", async () => {
     listMock.mockResolvedValue({
       success: true,
-      data: [
+      data: {
+        timeZone: "Asia/Shanghai",
+        events: [
         {
           kind: UPCOMING_EVENT_KIND.PROCESS_STEP,
           jobOpportunityId: "job-overdue",
@@ -35,7 +47,12 @@ describe("UpcomingContainer", () => {
           label: "Online test",
           stepStatus: "PENDING",
           scheduledAt: "2020-01-01T00:00:00.000Z",
+          scheduledAtPrecision: "minute",
+          scheduledAtZone: "Asia/Shanghai",
+          deadlineOn: null,
           deadlineAt: "2020-01-03T00:00:00.000Z",
+          deadlinePrecision: "minute",
+          deadlineZone: "Asia/Shanghai",
           attentionAt: "2020-01-01T00:00:00.000Z",
         },
         {
@@ -49,10 +66,16 @@ describe("UpcomingContainer", () => {
           label: UPCOMING_EVENT_KIND.APPLICATION_DEADLINE,
           stepStatus: null,
           scheduledAt: null,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
           deadlineAt: "2099-12-01T00:00:00.000Z",
+          deadlinePrecision: "minute",
+          deadlineZone: null,
           attentionAt: "2099-12-01T00:00:00.000Z",
         },
-      ],
+        ],
+      },
     });
     render(<UpcomingContainer />);
     expect(await screen.findByText("Overdue")).toBeInTheDocument();

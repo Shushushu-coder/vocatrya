@@ -17,6 +17,7 @@ import {
   UPCOMING_EVENT_KIND,
   writeInstanceMigrationState,
 } from "@/lib/career";
+import { runtimeTimeZone } from "@/lib/datetime";
 import {
   makeTestDbUrl,
   pushSchema,
@@ -104,7 +105,7 @@ describe("Upcoming job deadlines", () => {
       title: "Staff Engineer",
       deadline,
     });
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       kind: UPCOMING_EVENT_KIND.APPLICATION_DEADLINE,
@@ -129,13 +130,13 @@ describe("Upcoming job deadlines", () => {
       channelLabel: "Careers page",
     });
     await applications.markSubmitted({ attemptId: attempt.id });
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     expect(events.filter((row) => row.kind === UPCOMING_EVENT_KIND.APPLICATION_DEADLINE)).toEqual([]);
   });
 
   it("does not invent an upcoming event when deadline is null", async () => {
     await createOpportunity({ title: "No deadline" });
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     expect(events).toEqual([]);
   });
 
@@ -155,7 +156,7 @@ describe("Upcoming job deadlines", () => {
       deadline: new Date("2026-10-20T00:00:00.000Z"),
       status: OPPORTUNITY_STATUS.EXPIRED,
     });
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     expect(events).toEqual([]);
   });
 });
@@ -247,7 +248,7 @@ describe("Upcoming process steps", () => {
     });
     await applications.completeProcessStep(completed.id);
 
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     const stepEvents = events.filter(
       (row) => row.kind === UPCOMING_EVENT_KIND.PROCESS_STEP,
     );
@@ -287,7 +288,7 @@ describe("Upcoming process steps", () => {
       category: PROCESS_STEP_CATEGORY.OTHER,
       label: "No time",
     });
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     expect(events.map((row) => row.label).sort()).toEqual([
       "Deadline only",
       "Scheduled only",
@@ -310,6 +311,11 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
           category: PROCESS_STEP_CATEGORY.ASSESSMENT,
           label: "Past deadline",
           stepStatus: PROCESS_STEP_STATUS.PENDING,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
+          deadlinePrecision: null,
+          deadlineZone: null,
           scheduledAt: null,
           deadlineAt: "2026-09-17T00:00:00.000Z",
           attentionAt: "2026-09-17T00:00:00.000Z",
@@ -324,6 +330,11 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
           category: PROCESS_STEP_CATEGORY.INTERVIEW,
           label: "Past scheduled",
           stepStatus: PROCESS_STEP_STATUS.PENDING,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
+          deadlinePrecision: null,
+          deadlineZone: null,
           scheduledAt: "2026-09-16T00:00:00.000Z",
           deadlineAt: null,
           attentionAt: "2026-09-16T00:00:00.000Z",
@@ -338,12 +349,18 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
           category: null,
           label: UPCOMING_EVENT_KIND.APPLICATION_DEADLINE,
           stepStatus: null,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
+          deadlinePrecision: null,
+          deadlineZone: null,
           scheduledAt: null,
           deadlineAt: "2026-09-10T00:00:00.000Z",
           attentionAt: "2026-09-10T00:00:00.000Z",
         },
       ],
       now,
+      runtimeTimeZone(),
     );
     expect(buckets.map((row) => row.id)).toEqual([UPCOMING_BUCKET_ID.overdue]);
     expect(buckets[0].events).toHaveLength(3);
@@ -366,6 +383,11 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
           category: null,
           label: UPCOMING_EVENT_KIND.APPLICATION_DEADLINE,
           stepStatus: null,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
+          deadlinePrecision: null,
+          deadlineZone: null,
           scheduledAt: null,
           deadlineAt: today.toISOString(),
           attentionAt: today.toISOString(),
@@ -380,6 +402,11 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
           category: PROCESS_STEP_CATEGORY.INTERVIEW,
           label: "Soon interview",
           stepStatus: PROCESS_STEP_STATUS.PENDING,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
+          deadlinePrecision: null,
+          deadlineZone: null,
           scheduledAt: next7.toISOString(),
           deadlineAt: null,
           attentionAt: next7.toISOString(),
@@ -394,12 +421,18 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
           category: PROCESS_STEP_CATEGORY.OFFER,
           label: "Later offer",
           stepStatus: PROCESS_STEP_STATUS.PENDING,
+          scheduledAtPrecision: null,
+          scheduledAtZone: null,
+          deadlineOn: null,
+          deadlinePrecision: null,
+          deadlineZone: null,
           scheduledAt: later.toISOString(),
           deadlineAt: null,
           attentionAt: later.toISOString(),
         },
       ],
       now,
+      runtimeTimeZone(),
     );
     expect(buckets.map((row) => row.id)).toEqual([
       UPCOMING_BUCKET_ID.today,
@@ -435,7 +468,7 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
       label: "Ace",
       deadlineAt: new Date("2026-11-01T00:00:00.000Z"),
     });
-    const events = await listUpcomingApplicationEvents(prisma, userId);
+    const { events } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
     expect(events[0].jobOpportunityId).toBe(second.id);
     expect(events[0].kind).toBe(UPCOMING_EVENT_KIND.APPLICATION_DEADLINE);
     const sameAttention = events.filter(
@@ -467,8 +500,12 @@ describe("Upcoming overdue buckets, sort, and ownership", () => {
       title: "Mine",
       deadline: new Date("2026-10-21T00:00:00.000Z"),
     });
-    const mine = await listUpcomingApplicationEvents(prisma, userId);
-    const theirs = await listUpcomingApplicationEvents(prisma, otherUserId);
+    const { events: mine } = await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone());
+    const { events: theirs } = await listUpcomingApplicationEvents(
+      prisma,
+      otherUserId,
+      runtimeTimeZone(),
+    );
     expect(mine.map((row) => row.roleTitle)).toEqual(["Mine"]);
     expect(theirs.map((row) => row.roleTitle)).toEqual(["Secret"]);
   });
@@ -488,12 +525,20 @@ describe("Upcoming after ProcessStep delete", () => {
       label: "Future interview",
       deadlineAt: new Date("2026-11-01T00:00:00.000Z"),
     });
-    const before = await listUpcomingApplicationEvents(prisma, userId);
+    const { events: before } = await listUpcomingApplicationEvents(
+      prisma,
+      userId,
+      runtimeTimeZone(),
+    );
     expect(
       before.some((row) => row.processStepId === step.id),
     ).toBe(true);
     await applications.deleteUserProcessStep(step.id);
-    const after = await listUpcomingApplicationEvents(prisma, userId);
+    const { events: after } = await listUpcomingApplicationEvents(
+      prisma,
+      userId,
+      runtimeTimeZone(),
+    );
     expect(after.some((row) => row.processStepId === step.id)).toBe(false);
   });
 
@@ -512,7 +557,7 @@ describe("Upcoming after ProcessStep delete", () => {
     });
     await applications.recordOutcome(attempt.id, ATTEMPT_OUTCOME.TRANSFERRED);
     expect(
-      (await listUpcomingApplicationEvents(prisma, userId)).some(
+      (await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone())).events.some(
         (row) => row.processStepId === step.id,
       ),
     ).toBe(false);
@@ -522,7 +567,7 @@ describe("Upcoming after ProcessStep delete", () => {
     });
     expect(after.outcome).toBe(ATTEMPT_OUTCOME.TRANSFERRED);
     expect(
-      (await listUpcomingApplicationEvents(prisma, userId)).some(
+      (await listUpcomingApplicationEvents(prisma, userId, runtimeTimeZone())).events.some(
         (row) => row.jobOpportunityId === opportunity.id,
       ),
     ).toBe(false);

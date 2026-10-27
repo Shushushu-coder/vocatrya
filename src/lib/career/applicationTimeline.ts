@@ -6,6 +6,19 @@ export type SubmittedResumeDTO = {
   resumeVariantVersionId: string;
 } | null;
 
+/**
+ * Structured time input for process-step fields (frozen DateTime consumer
+ * contract): `scheduledAt` accepts only a wall time (a bare date is not a
+ * schedule), `deadlineAt` accepts a calendar day or a wall time. The server
+ * resolves both against the account time zone. `null` clears the field;
+ * `undefined` (update inputs only) leaves every stored column untouched so
+ * historical unknown precision is never rewritten silently.
+ */
+export type StepTimeInput =
+  | { kind: "dateOnly"; date: string }
+  | { kind: "wallTime"; date: string; hour: number; minute: number }
+  | null;
+
 export type ApplicationProcessStepDTO = {
   id: string;
   category: string;
@@ -13,8 +26,14 @@ export type ApplicationProcessStepDTO = {
   status: string;
   source: string;
   scheduledAt: string | null;
+  scheduledAtPrecision: "minute" | "unknown" | null;
+  scheduledAtZone: string | null;
+  deadlineOn: string | null;
   deadlineAt: string | null;
+  deadlinePrecision: "dateOnly" | "minute" | "fullInstant" | "unknown" | null;
+  deadlineZone: string | null;
   completedAt: string | null;
+  completedAtPrecision: "fullInstant" | "unknown" | null;
   result: string | null;
   notes: string | null;
 };
@@ -42,6 +61,9 @@ export type ApplicationAttemptTimelineDTO = {
 
 export type ApplicationTimelineDTO = {
   opportunityId: string;
+  /** Account time zone resolved at request time; consumers display and
+   *  backfill wall times in this zone, never the host zone. */
+  timeZone: string;
   attempts: ApplicationAttemptTimelineDTO[];
 };
 
@@ -71,6 +93,23 @@ export type SubmittedResumeBindingsDTO = {
 
 export function toIso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
+}
+
+/**
+ * Maps a stored precision sidecar onto the DTO vocabulary: NULL when the
+ * value itself is absent, the declared precision when it is one of the
+ * field's legal values, "unknown" for anything else (hand-edited rows,
+ * pre-contract writes). Never inferred from the value.
+ */
+export function declaredStepPrecision<T extends string>(
+  stored: string | null,
+  hasValue: boolean,
+  allowed: readonly T[],
+): T | "unknown" | null {
+  if (!hasValue) return null;
+  return stored !== null && (allowed as readonly string[]).includes(stored)
+    ? (stored as T)
+    : "unknown";
 }
 
 export function attemptSortKey(attempt: {

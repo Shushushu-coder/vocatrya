@@ -15,8 +15,13 @@ import {
   type UpcomingApplicationEvent,
   type UpcomingBucketId,
 } from "@/lib/career/upcomingReadModel";
+import {
+  businessTimeFromColumns,
+  formatBusinessTime,
+  type BusinessTimeValue,
+} from "@/lib/datetime";
 import { toastError } from "@/lib/toast";
-import { useI18n } from "@/i18n";
+import { useI18n, type Locale } from "@/i18n";
 
 function bucketTitle(id: UpcomingBucketId, t: (key: string) => string): string {
   if (id === UPCOMING_BUCKET_ID.overdue) return t("jobs.upcomingOverdue");
@@ -26,17 +31,22 @@ function bucketTitle(id: UpcomingBucketId, t: (key: string) => string): string {
 }
 
 export function UpcomingContainer() {
-  const { t, formatDate } = useI18n();
+  const { t, locale } = useI18n();
   const [events, setEvents] = useState<UpcomingApplicationEvent[] | null>(null);
+  const [timeZone, setTimeZone] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const result = await listUpcomingApplicationEvents();
     if (!result.success) {
       toastError(result.message);
+      setLoadError(result.message);
       setEvents([]);
       return;
     }
-    setEvents(result.data ?? []);
+    setLoadError(null);
+    setEvents(result.data?.events ?? []);
+    setTimeZone(result.data?.timeZone ?? null);
   }, []);
 
   useEffect(() => {
@@ -44,11 +54,18 @@ export function UpcomingContainer() {
   }, [load]);
 
   const buckets = useMemo(
-    () => (events ? bucketUpcomingApplicationEvents(events) : []),
-    [events],
+    () =>
+      events && timeZone
+        ? bucketUpcomingApplicationEvents(events, new Date(), timeZone)
+        : [],
+    [events, timeZone],
   );
 
-  if (events === null) {
+  if (loadError !== null) {
+    return <p role="alert" className="text-sm text-destructive">{loadError}</p>;
+  }
+
+  if (events === null || timeZone === null) {
     return <Loading />;
   }
 
@@ -81,7 +98,8 @@ export function UpcomingContainer() {
                     <UpcomingEventItem
                       key={event.processStepId ?? `${event.kind}:${event.jobOpportunityId}`}
                       event={event}
-                      formatDate={formatDate}
+                      locale={locale}
+                      timeZone={timeZone}
                       t={t}
                     />
                   ))}
@@ -95,13 +113,42 @@ export function UpcomingContainer() {
   );
 }
 
+function scheduledTimeValue(event: UpcomingApplicationEvent) {
+  return event.scheduledAt
+    ? businessTimeFromColumns({
+        dateOnly: null,
+        instant: event.scheduledAt,
+        precision: event.scheduledAtPrecision,
+      })
+    : null;
+}
+
+function deadlineTimeValue(event: UpcomingApplicationEvent) {
+  return businessTimeFromColumns({
+    dateOnly: event.deadlineOn,
+    instant: event.deadlineAt,
+    precision: event.deadlinePrecision,
+  });
+}
+
+function renderTime(
+  value: BusinessTimeValue | null,
+  locale: Locale,
+  timeZone: string,
+): string | null {
+  if (value === null) return null;
+  return formatBusinessTime(value, locale, timeZone);
+}
+
 function UpcomingEventItem({
   event,
-  formatDate,
+  locale,
+  timeZone,
   t,
 }: {
   event: UpcomingApplicationEvent;
-  formatDate: (value: Date | string | number | null | undefined) => string;
+  locale: Locale;
+  timeZone: string;
   t: (key: string) => string;
 }) {
   const isDeadline = event.kind === UPCOMING_EVENT_KIND.APPLICATION_DEADLINE;
@@ -112,6 +159,8 @@ function UpcomingEventItem({
     categoryLabel && categoryLabel !== `jobs.stepCategories.${event.category}`
       ? categoryLabel
       : event.category;
+  const scheduledText = renderTime(scheduledTimeValue(event), locale, timeZone);
+  const deadlineText = renderTime(deadlineTimeValue(event), locale, timeZone);
 
   return (
     <li
@@ -144,16 +193,16 @@ function UpcomingEventItem({
         <p className="text-sm text-muted-foreground">{categoryText}</p>
       )}
       <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-        {event.scheduledAt && (
+        {scheduledText && (
           <div>
             <dt className="text-muted-foreground">{t("jobs.stepScheduledAt")}</dt>
-            <dd>{formatDate(event.scheduledAt)}</dd>
+            <dd>{scheduledText}</dd>
           </div>
         )}
-        {event.deadlineAt && (
+        {deadlineText && (
           <div>
             <dt className="text-muted-foreground">{t("jobs.stepDeadlineAt")}</dt>
-            <dd>{formatDate(event.deadlineAt)}</dd>
+            <dd>{deadlineText}</dd>
           </div>
         )}
       </dl>

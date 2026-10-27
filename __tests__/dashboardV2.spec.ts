@@ -222,7 +222,7 @@ describe("legacy read family", () => {
     await seedLegacyJob({ status: "rejected", dueDate: soon });
     await seedLegacyJob({ status: "new", dueDate: later });
 
-    const reminders = await getOverviewReminders();
+    const { reminders } = await getOverviewReminders();
     const kinds = Object.fromEntries(reminders.map((r) => [r.id, r.kind]));
     expect(kinds[`task:${overdueTask.id}`]).toBe("task");
     expect(kinds[`deadline:${job.id}`]).toBe("deadline");
@@ -235,7 +235,30 @@ describe("legacy read family", () => {
 
   it("returns an empty reminder list when nothing is due", async () => {
     await seedTask({ title: "No due date" });
-    expect(await getOverviewReminders()).toEqual([]);
+    expect((await getOverviewReminders()).reminders).toEqual([]);
+  });
+
+  it("limits mixed DateOnly and instant reminders after their attention sort", async () => {
+    const { addDaysToDateOnly, todayDateOnly } = await import("@/lib/datetime");
+    const { getUserTimeZone } = await import("@/lib/userSettings/timeZone.server");
+    const zone = await getUserTimeZone(userId);
+    const tomorrow = addDaysToDateOnly(todayDateOnly(zone), 1);
+    await prisma.task.createMany({
+      data: Array.from({ length: 6 }, (_, i) => ({
+        userId,
+        title: `Tomorrow ${i}`,
+        status: "in-progress",
+        dueOn: tomorrow,
+        duePrecision: "dateOnly",
+      })),
+    });
+    const overdue = await seedTask({
+      title: "Earlier instant",
+      dueDate: new Date(Date.now() - DAYS),
+    });
+    const { reminders } = await getOverviewReminders();
+    expect(reminders).toHaveLength(6);
+    expect(reminders[0]).toMatchObject({ id: `task:${overdue.id}`, overdue: true });
   });
 });
 
@@ -351,7 +374,7 @@ describe("ab read family", () => {
       data: { deadline: new Date(Date.now() + 3 * DAYS) },
     });
 
-    const reminders = await getOverviewReminders();
+    const { reminders } = await getOverviewReminders();
     expect(reminders).toHaveLength(1);
     expect(reminders[0]).toMatchObject({
       kind: "deadline",
@@ -359,6 +382,44 @@ describe("ab read family", () => {
       detail: "Acme",
       overdue: false,
     });
+  });
+
+  it("labels the time carrier that supplies a process reminder's attention", async () => {
+    await activate();
+    const { addDaysToDateOnly, dateOnlyUtcWindow, todayDateOnly } = await import("@/lib/datetime");
+    const { getUserTimeZone } = await import("@/lib/userSettings/timeZone.server");
+    const zone = await getUserTimeZone(userId);
+    const deadlineOn = addDaysToDateOnly(todayDateOnly(zone), 3);
+    const deadlineStart = dateOnlyUtcWindow(deadlineOn, zone).startIso;
+    const scheduledAt = new Date(Date.now() + DAYS);
+    const opportunity = await seedOpportunity({ attempts: [{ stage: "DRAFT" }] });
+    const attempt = await prisma.applicationAttempt.findFirstOrThrow({
+      where: { jobOpportunityId: opportunity.id },
+    });
+    const step = await prisma.applicationProcessStep.create({
+      data: {
+        applicationAttemptId: attempt.id,
+        category: "INTERVIEW",
+        label: "Interview before deadline",
+        sortOrder: 1,
+        scheduledAt,
+        scheduledAtPrecision: "minute",
+        deadlineOn,
+        deadlinePrecision: "dateOnly",
+      },
+    });
+    expect((await getOverviewReminders()).reminders).toEqual([
+      expect.objectContaining({
+        id: `event:${step.id}`, at: scheduledAt.toISOString(), dateOn: null,
+      }),
+    ]);
+    await prisma.applicationProcessStep.update({
+      where: { id: step.id },
+      data: { scheduledAt: new Date(new Date(deadlineStart).getTime() + 3_600_000) },
+    });
+    expect((await getOverviewReminders()).reminders).toEqual([
+      expect.objectContaining({ id: `event:${step.id}`, at: deadlineStart, dateOn: deadlineOn }),
+    ]);
   });
 });
 
@@ -384,7 +445,7 @@ describe("blocked read family", () => {
     expect(stats.upcomingActivities).toBe(1);
 
     // The reminder strip degrades to task reminders only.
-    const reminders = await getOverviewReminders();
+    const { reminders } = await getOverviewReminders();
     expect(reminders.every((r) => r.kind === "task")).toBe(true);
   });
 });
