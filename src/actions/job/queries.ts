@@ -9,6 +9,7 @@ import {
 } from "@/lib/career/jobsReadDispatch";
 import { requireUser } from "../shared";
 import { getServerI18n } from "@/i18n/server";
+import { getUserTimeZone } from "@/lib/userSettings/timeZone.server";
 
 export const getJobsList = async (
   page: number = 1,
@@ -39,7 +40,8 @@ export const getJobsList = async (
       const { t } = await getServerI18n();
       return { success: false, message: t("errors.careerJobsUnavailable") };
     }
-    return { success: true, data: result.data, total: result.total };
+    const timeZone = await getUserTimeZone(user.id);
+    return { success: true, data: result.data, total: result.total, timeZone };
   } catch (error) {
     const msg = "Failed to fetch jobs list. ";
     return handleError(error, msg);
@@ -64,7 +66,8 @@ export const getJobDetails = async (
       const { t } = await getServerI18n();
       return { success: false, message: t("errors.careerJobsUnavailable") };
     }
-    return { job: result.job, success: true };
+    const timeZone = await getUserTimeZone(user.id);
+    return { job: result.job, success: true, timeZone };
   } catch (error) {
     const msg = "Failed to fetch job details. ";
     return handleError(error, msg);

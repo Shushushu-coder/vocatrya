@@ -74,6 +74,11 @@ import {
 } from "@/utils/localstorage.utils";
 import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
+import {
+  dateOnlyFromPickerDate,
+  runtimeTimeZone,
+} from "@/lib/datetime";
+import { jobDeadlinePickerDate } from "@/lib/jobs/deadlineTime";
 
 type AddJobProps = {
   jobStatuses: JobStatus[];
@@ -90,6 +95,8 @@ type AddJobProps = {
   careerRuntimeMode?: string;
   abRolloutScope?: AbRolloutScope;
   onSaved?: () => void;
+  /** Account time zone for deadline semantics; falls back to the runtime zone. */
+  timeZone?: string;
 };
 
 export function AddJob({
@@ -107,6 +114,7 @@ export function AddJob({
   careerRuntimeMode,
   abRolloutScope,
   onSaved,
+  timeZone,
 }: AddJobProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -121,6 +129,7 @@ export function AddJob({
     careerRuntimeMode,
     abRolloutScope,
   );
+  const tz = timeZone ?? runtimeTimeZone();
 
   useEffect(() => {
     if (!dialogOpen && searchParams.get("add-job") === "true") {
@@ -209,7 +218,18 @@ export function AddJob({
         workplaceType: editJob.workplaceType ?? undefined,
         source: editJob.JobSource?.id,
         status: editJob.Status.id,
-        dueDate: editJob.dueDate ?? null,
+        // Canonical rows carry the deadline triple — backfill the picker with
+        // the calendar day it declares in the account zone (never the raw
+        // instant, which would misrender dateOnly rows).
+        dueDate: hideUnsupportedAbFields
+          ? (() => {
+              try {
+                return jobDeadlinePickerDate(editJob, tz) ?? null;
+              } catch {
+                return editJob.dueDate ?? null;
+              }
+            })()
+          : (editJob.dueDate ?? null),
         recruitmentCohort: editJob.recruitmentCohort ?? "",
         recruitmentBatch: editJob.recruitmentBatch ?? "",
         salaryRange: editJob.salaryRange ?? "",
@@ -247,8 +267,25 @@ export function AddJob({
 
   function onSubmit(data: AddJobFormValues) {
     startTransition(async () => {
+      // Canonical write contract: the picker day becomes deadlineOn
+      // (dateOnly). On edit, an untouched picker is sent as undefined so the
+      // stored triple is preserved instead of being rewritten with whatever
+      // wall date the backfill happened to show.
+      const deadlineOn =
+        editJob && !form.getFieldState("dueDate").isDirty
+          ? undefined
+          : data.dueDate
+            ? dateOnlyFromPickerDate(data.dueDate)
+            : null;
       const payload = hideUnsupportedAbFields
-        ? { ...data, resume: undefined, coverLetter: undefined, tags: [] }
+        ? {
+            ...data,
+            resume: undefined,
+            coverLetter: undefined,
+            tags: [],
+            dueDate: undefined,
+            deadlineOn,
+          }
         : data;
       const result = editJob ? await updateJob(payload) : await addJob(payload);
       toastActionResult(result, {
@@ -642,7 +679,7 @@ export function AddJob({
                         </FormLabel>
                         <DatePicker
                           field={field}
-                          presets={true}
+                          presets={!hideUnsupportedAbFields || tz === runtimeTimeZone()}
                           isEnabled={true}
                         />
                         <FormMessage />

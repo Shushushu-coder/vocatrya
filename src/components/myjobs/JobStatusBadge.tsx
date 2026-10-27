@@ -4,17 +4,21 @@ import { StatusBadge } from "../StatusBadge";
 import { getJobStatusBadgeColor } from "@/lib/badge-colors";
 import { cn } from "@/lib/utils";
 import { JobResponse } from "@/models/job.model";
+import { isDeadlineOverdue, runtimeTimeZone } from "@/lib/datetime";
+import { jobDeadlineBusinessValue } from "@/lib/jobs/deadlineTime";
 
 import { useI18n, getLocalizedJobStatus } from "@/i18n";
 
 type JobStatusBadgeProps = {
   job: JobResponse;
   className?: string;
+  /** Account zone — DateOnly deadlines turn overdue at end of *its* day. */
+  timeZone?: string;
 };
 
 // Dismissed and past-due drafts override the stored status. Shared by the
 // table and card views so the two can't disagree about the same job.
-export function JobStatusBadge({ job, className }: JobStatusBadgeProps) {
+export function JobStatusBadge({ job, className, timeZone }: JobStatusBadgeProps) {
   const { t } = useI18n();
 
   if (job.discoveryStatus === "dismissed") {
@@ -28,7 +32,14 @@ export function JobStatusBadge({ job, className }: JobStatusBadgeProps) {
     );
   }
 
-  if (job.dueDate && new Date() > job.dueDate && job.Status?.value === "draft") {
+  if (
+    job.Status?.value === "draft" &&
+    isDeadlineOverdue(
+      jobDeadlineBusinessValue(job),
+      new Date(),
+      timeZone ?? runtimeTimeZone(),
+    )
+  ) {
     return (
       <StatusBadge
         label={t("jobs.statuses.expired")}

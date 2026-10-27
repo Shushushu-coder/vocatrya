@@ -13,6 +13,7 @@ type MyJobsGridProps = {
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   onAddNote: (jobId: string) => void;
   deleteIsArchive?: boolean;
+  timeZone?: string;
 };
 
 function MyJobsGrid({
@@ -23,6 +24,7 @@ function MyJobsGrid({
   onChangeJobStatus,
   onAddNote,
   deleteIsArchive = false,
+  timeZone,
 }: MyJobsGridProps) {
   const { t } = useI18n();
   const [alertOpen, setAlertOpen] = useState(false);
@@ -45,6 +47,7 @@ function MyJobsGrid({
             onChangeJobStatus={onChangeJobStatus}
             onAddNote={onAddNote}
             onDeleteJob={onDeleteJob}
+            timeZone={timeZone}
           />
         ))}
       </div>

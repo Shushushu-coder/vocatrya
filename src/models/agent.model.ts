@@ -79,6 +79,10 @@ export type AgentJobSummary = {
   company: string | null;
   status: string | null;
   location: string | null;
+  /** "YYYY-MM-DD" calendar-day deadline carrier, when the position has one. */
+  deadlineOn?: string | null;
+  /** Normalized: "dateOnly" | "minute" | "fullInstant" | "unknown" | null. */
+  deadlinePrecision?: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };

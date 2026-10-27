@@ -27,6 +27,9 @@ export type CreateAgentOpportunityInput = {
   jobType?: string | null;
   workplaceType?: string | null;
   dueDate?: Date | null;
+  /** Day-level deadline "YYYY-MM-DD" — mutually exclusive with dueDate
+   *  (enforced at the tool schema). */
+  deadlineOn?: string | null;
   jobUrl?: string | null;
   salaryRange?: string | null;
   /**
@@ -136,6 +139,7 @@ export async function createAgentOpportunityInTransaction(
     workplaceType,
     sourceUrl,
     sourceLabel: resolvedSource?.label ?? null,
+    deadlineOn: input.deadlineOn ?? null,
     deadline: input.dueDate ?? null,
     salaryText: normalizeOptionalText(input.salaryRange) ?? null,
     status: OPPORTUNITY_STATUS.UNKNOWN,

@@ -16,7 +16,7 @@ export const POST = async () => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { t } = await getServerI18n();
+  const { t, locale } = await getServerI18n();
   const passThrough = new PassThrough();
   let isFirstChunk = true;
   let hasError = false;
@@ -31,15 +31,20 @@ export const POST = async () => {
           transformJobForCsv(job, recordIndex + idx, t)
         );
         recordIndex += chunk.length;
-        const csv = unparseJobsCsv(transformedData, t, {
-          header: isFirstChunk,
-        });
+        const csv = unparseJobsCsv(
+          transformedData,
+          t,
+          {
+            header: isFirstChunk,
+          },
+          locale,
+        );
         passThrough.write(
           (isFirstChunk ? "" : "\r\n") + csv,
         );
         isFirstChunk = false;
       }
-      if (isFirstChunk) passThrough.write(unparseJobsCsv([], t, { header: true }));
+      if (isFirstChunk) passThrough.write(unparseJobsCsv([], t, { header: true }, locale));
     } catch (error) {
       hasError = true;
       log.error("Error streaming jobs CSV", { error: String(error) });

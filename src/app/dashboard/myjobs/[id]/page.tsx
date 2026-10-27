@@ -14,7 +14,7 @@ import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
 
 async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [{ job }, statuses, companies, titles, locations, sources, tags, runtime] =
+  const [{ job, timeZone }, statuses, companies, titles, locations, sources, tags, runtime] =
     await Promise.all([
       getJobDetails(id),
       getStatusList(),
@@ -43,6 +43,7 @@ async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
         tags={tags ?? []}
         careerRuntimeMode={runtime.mode}
         abRolloutScope={runtime.rolloutScope}
+        timeZone={timeZone}
       />
     </div>
   );

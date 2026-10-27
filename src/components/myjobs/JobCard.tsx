@@ -18,6 +18,7 @@ type JobCardProps = {
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   onAddNote: (jobId: string) => void;
   onDeleteJob: (jobId: string) => void;
+  timeZone?: string;
 };
 
 import { useI18n } from "@/i18n";
@@ -29,6 +30,7 @@ export function JobCard({
   onChangeJobStatus,
   onAddNote,
   onDeleteJob,
+  timeZone,
 }: JobCardProps) {
   const { t, formatDate } = useI18n();
   const { freshNativeFull } = useCareerSurfaces();
@@ -91,7 +93,7 @@ export function JobCard({
       </div>
 
       <div className="mt-auto flex items-center justify-between border-t pt-3">
-        <JobStatusBadge job={job} />
+        <JobStatusBadge job={job} timeZone={timeZone} />
         <JobActionsMenu
           job={job}
           jobStatuses={jobStatuses}

@@ -89,6 +89,7 @@ export function JobsToolbar({
   hideAddJob = false,
   careerRuntimeMode,
   abRolloutScope,
+  timeZone,
 }: {
   jobsCount: number;
   totalJobs: number;
@@ -123,6 +124,7 @@ export function JobsToolbar({
   hideAddJob?: boolean;
   careerRuntimeMode?: string;
   abRolloutScope?: AbRolloutScope;
+  timeZone?: string;
 }) {
   const { t } = useI18n();
   const hideDiscoveryFilters = isAbJobReadMode(
@@ -234,6 +236,7 @@ export function JobsToolbar({
             initialOpen={addJobInitialOpen}
             careerRuntimeMode={careerRuntimeMode}
             abRolloutScope={abRolloutScope}
+            timeZone={timeZone}
             onSaved={onReload}
           />
         )}

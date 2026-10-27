@@ -561,7 +561,11 @@ describe("AddJob Component - Edit Mode", () => {
     applied: true,
   } as unknown as JobResponse;
 
-  async function renderEditMode(overrides: Partial<JobResponse> = {}) {
+  async function renderEditMode(
+    overrides: Partial<JobResponse> = {},
+    canonical = false,
+    timeZone?: string,
+  ) {
     const mockCompanies = (await getMockList(1, 10, "companies")).data;
     const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
     const mockLocations = (await getMockList(1, 10, "locations")).data;
@@ -576,6 +580,9 @@ describe("AddJob Component - Edit Mode", () => {
         tags={[]}
         editJob={{ ...editJob, ...overrides }}
         resetEditJob={mockResetEditJob}
+        careerRuntimeMode={canonical ? "AB_ENABLED" : undefined}
+        abRolloutScope={canonical ? "full" : undefined}
+        timeZone={timeZone}
       />,
     );
   }
@@ -604,6 +611,55 @@ describe("AddJob Component - Edit Mode", () => {
     expect(appliedSwitch).toBeChecked();
     // Already-applied history cannot be un-applied from the edit form.
     expect(appliedSwitch).toBeDisabled();
+  });
+
+  it("preserves an untouched canonical historical deadline on save", async () => {
+    await renderEditMode({ deadlinePrecision: "unknown" }, true, "Asia/Shanghai");
+    await userEvent.click(screen.getByTestId("save-job-btn"));
+    await waitFor(() => expect(updateJob).toHaveBeenCalledWith(
+      expect.objectContaining({ dueDate: undefined, deadlineOn: undefined }),
+    ));
+  });
+
+  it("clears the whole canonical deadline when the selected day is deselected", async () => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    await renderEditMode({
+      dueDate: null, deadlineOn: today, deadlinePrecision: "dateOnly",
+    }, true, "Asia/Shanghai");
+    const user = userEvent.setup({ skipHover: true });
+    await user.click(screen.getByLabelText(/due date/i));
+    await user.click(document.querySelector<HTMLButtonElement>(`[data-day="${today}"] button`)!);
+    await user.click(screen.getByTestId("save-job-btn"));
+    await waitFor(() => expect(updateJob).toHaveBeenCalledWith(
+      expect.objectContaining({ dueDate: undefined, deadlineOn: null }),
+    ));
+  });
+
+  it("writes the selected canonical day instead of preserving the old value", async () => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    const next = new Date();
+    next.setDate(next.getDate() + 1);
+    const tomorrow = format(next, "yyyy-MM-dd");
+    await renderEditMode({
+      dueDate: null, deadlineOn: today, deadlinePrecision: "dateOnly",
+    }, true, "Asia/Shanghai");
+    const user = userEvent.setup({ skipHover: true });
+    await user.click(screen.getByLabelText(/due date/i));
+    await user.click(document.querySelector<HTMLButtonElement>(`[data-day="${tomorrow}"] button`)!);
+    await user.click(screen.getByTestId("save-job-btn"));
+    await waitFor(() => expect(updateJob).toHaveBeenCalledWith(
+      expect.objectContaining({ dueDate: undefined, deadlineOn: tomorrow }),
+    ));
+  });
+
+  it("does not offer host-date presets for a canonical picker in another zone", async () => {
+    const { runtimeTimeZone } = await import("@/lib/datetime");
+    const zone = runtimeTimeZone() === "Pacific/Kiritimati" ? "Etc/GMT+12" : "Pacific/Kiritimati";
+    await renderEditMode({
+      dueDate: null, deadlineOn: "2026-11-20", deadlinePrecision: "dateOnly",
+    }, true, zone);
+    await userEvent.click(screen.getByLabelText(/due date/i));
+    expect(screen.queryByText("Select preset")).not.toBeInTheDocument();
   });
 
   it("pre-fills a free-text salary that matches no suggestion", async () => {

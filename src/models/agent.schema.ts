@@ -30,6 +30,14 @@ export const AgentAddJobSchema = z
   .object(McpAddJobInputShape)
   .omit({ upsert: true, allowDuplicate: true })
   .extend({
+    // Calendar-day deadline alternative to the dueDate instant — pick ONE:
+    // deadlineOn when the posting only names a day, dueDate when it names a
+    // moment. Passing both is rejected in AgentAddJobParseSchema.
+    deadlineOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe("Application deadline as a calendar date YYYY-MM-DD (the whole local day). Use instead of dueDate when the posting only gives a day; never pass both."),
     jobDescription: z
       .string()
       .refine((val) => val === "N/A" || val.length >= 10, "jobDescription must be at least 10 characters")
@@ -43,6 +51,15 @@ export const AgentAddJobInputShape = AgentAddJobSchema.shape;
 export const AgentAddJobParseSchema = AgentAddJobSchema.extend({
   dueDate: z.string().datetime({ offset: true }).optional().transform((v) => (v ? new Date(v) : undefined)),
   appliedDate: z.string().datetime({ offset: true }).optional().transform((v) => (v ? new Date(v) : undefined)),
+}).superRefine((input, ctx) => {
+  if (input.deadlineOn && input.dueDate) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["deadlineOn"],
+      message:
+        "deadlineOn and dueDate are mutually exclusive — pass deadlineOn for a day-level deadline or dueDate for an exact instant, not both.",
+    });
+  }
 });
 
 export type AgentAddJobInput = z.infer<typeof AgentAddJobParseSchema>;

@@ -23,6 +23,11 @@ import {
   getLocalizedJobType,
   getLocalizedWorkplaceType,
 } from "@/i18n";
+import { isDeadlineOverdue, runtimeTimeZone } from "@/lib/datetime";
+import {
+  formatJobDeadline,
+  jobDeadlineBusinessValue,
+} from "@/lib/jobs/deadlineTime";
 
 type JobSummaryCardProps = {
   job: JobResponse;
@@ -31,6 +36,8 @@ type JobSummaryCardProps = {
   showCampusFields?: boolean;
   /** Fresh + full removes the legacy match cell entirely. */
   showMatchScore?: boolean;
+  /** Account zone — deadline display/overdue anchored to it. */
+  timeZone?: string;
 };
 
 export function JobSummaryCard({
@@ -39,12 +46,16 @@ export function JobSummaryCard({
   matchData,
   showCampusFields = false,
   showMatchScore = true,
+  timeZone,
 }: JobSummaryCardProps) {
-  const { t, formatDate } = useI18n();
+  const { t, formatDate, locale } = useI18n();
+  const tz = timeZone ?? runtimeTimeZone();
+  // Precision-aware: a dateOnly deadline stays live until its account-zone
+  // calendar day ends; an instant is overdue at the moment itself.
   const expired =
-    job.dueDate &&
-    new Date() > new Date(job.dueDate) &&
-    currentStatus?.value === "draft";
+    currentStatus?.value === "draft" &&
+    isDeadlineOverdue(jobDeadlineBusinessValue(job), new Date(), tz);
+  const deadlineDisplay = formatJobDeadline(job, locale, tz);
 
   return (
     <Card>
@@ -97,12 +108,12 @@ export function JobSummaryCard({
               <p className="mt-1 font-medium">{job.recruitmentBatch}</p>
             </div>
           ) : null}
-          {showCampusFields && job.dueDate ? (
+          {showCampusFields && deadlineDisplay ? (
             <div>
               <p className="text-sm text-muted-foreground">
                 {t("jobs.applicationDeadline")}
               </p>
-              <p className="mt-1 font-medium">{formatDate(job.dueDate)}</p>
+              <p className="mt-1 font-medium">{deadlineDisplay}</p>
             </div>
           ) : null}
           <div>

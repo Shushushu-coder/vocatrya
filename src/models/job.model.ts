@@ -48,7 +48,12 @@ export interface JobResponse {
   workplaceType?: string | null;
   createdAt: Date;
   appliedDate: Date | null;
+  /** Instant carrier only — null on a pure deadlineOn dateOnly row. */
   dueDate: Date | null;
+  /** "YYYY-MM-DD" calendar-day deadline carrier (canonical/A+B rows). */
+  deadlineOn?: string | null;
+  /** Normalized: "dateOnly" | "minute" | "fullInstant" | "unknown" | null. */
+  deadlinePrecision?: string | null;
   recruitmentCohort?: string | null;
   recruitmentBatch?: string | null;
   salaryRange: string | null;

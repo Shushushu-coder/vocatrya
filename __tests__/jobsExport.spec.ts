@@ -26,7 +26,7 @@ describe("jobs CSV locale and current schema", () => {
   it.each(["zh-CN", "en"] as const)("localizes only system content in %s", (locale) => {
     const t = (key: string) => translate(locale, key);
     const row = transformJobForCsv(job, 25, t);
-    expect(JOB_CSV_FIELD_KEYS).toHaveLength(12);
+    expect(JOB_CSV_FIELD_KEYS).toHaveLength(13);
     expect(row.index).toBe("26");
     expect(row.createdAt).toBe("2026-09-30");
     expect(row.appliedDate).toBe("2026-09-01");
@@ -41,12 +41,14 @@ describe("jobs CSV locale and current schema", () => {
     expect(row.JobSource).toBe(job.JobSource.label);
     // Raw user text is never localized or rewritten.
     expect(row.salaryRange).toBe("15k–20k·15薪");
-    const csv = unparseJobsCsv([row], t, { header: true });
+    const csv = unparseJobsCsv([row], t, { header: true }, locale);
     const parsed = Papa.parse<string[]>(csv).data;
-    expect(parsed[0]).toEqual(jobCsvHeaders(t));
+    expect(parsed[0]).toEqual(jobCsvHeaders(t, locale));
     expect(parsed[0]).toContain(locale === "en" ? "Company" : "公司");
     expect(parsed[0]).toContain(locale === "en" ? "Job Type" : "职位类型");
     expect(parsed[0][11]).toBe(locale === "en" ? "Salary" : "薪资待遇");
+    // jobs.deadline dictionary entry is still pending — interim fallback.
+    expect(parsed[0][12]).toBe(locale === "en" ? "Deadline" : "截止日期");
     expect(parsed[1][5]).toBe(job.JobTitle.label);
     expect(parsed[1][11]).toBe("15k–20k·15薪");
   });
@@ -65,9 +67,46 @@ describe("jobs CSV locale and current schema", () => {
       const row = transformJobForCsv({ ...job, salaryRange: empty }, 0, t);
       expect(row.salaryRange).toBe("");
       const parsed = Papa.parse<string[]>(unparseJobsCsv([row], t, { header: true })).data;
-      expect(parsed[1]).toHaveLength(12);
+      expect(parsed[1]).toHaveLength(13);
       expect(parsed[1][11]).toBe("");
     }
+  });
+
+  it("exports deadlineOn verbatim and instants as ISO, empty for none", () => {
+    const t = (key: string) => translate("en", key);
+    // dateOnly carrier: verbatim YYYY-MM-DD, never through a tz-shifting Date.
+    expect(
+      transformJobForCsv(
+        { ...job, deadlineOn: "2026-03-15", deadlinePrecision: "dateOnly" },
+        0,
+        t,
+      ).deadline,
+    ).toBe("2026-03-15");
+    // instant carrier (dueDate) → ISO-8601 UTC.
+    const instant = new Date("2026-03-15T20:00:00.000Z");
+    expect(
+      transformJobForCsv(
+        { ...job, dueDate: instant, deadlinePrecision: "unknown" },
+        0,
+        t,
+      ).deadline,
+    ).toBe(instant.toISOString());
+    // no carriers at all → empty cell.
+    expect(transformJobForCsv({ ...job }, 0, t).deadline).toBe("");
+    // a deadlineOn string without the dateOnly declaration is NOT a date:
+    // the instant carrier wins (contradictory write — instant stays the fact).
+    expect(
+      transformJobForCsv(
+        {
+          ...job,
+          deadlineOn: "2026-03-15",
+          dueDate: instant,
+          deadlinePrecision: "unknown",
+        },
+        0,
+        t,
+      ).deadline,
+    ).toBe(instant.toISOString());
   });
 
   it("localizes seeded sources and preserves unknown status/source labels", () => {

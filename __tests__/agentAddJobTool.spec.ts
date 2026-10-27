@@ -73,6 +73,25 @@ describe("add_job agent tool", () => {
     expect((createJobFromNames as any).mock.calls[0][0].createdVia).toBe("chat");
   });
 
+  it("does not advertise or convert a DateOnly deadline in Legacy mode", async () => {
+    const tool = buildAddJobTool("user-1", "posting");
+    expect("deadlineOn" in (tool.inputSchema as any).shape).toBe(false);
+    const result: any = await execute(tool, {
+      company: "Acme", jobTitle: "Engineer", deadlineOn: "2026-11-30",
+    });
+    expect(result.created).toBe(false);
+    expect(result.validationError).toContain("deadlineOn");
+    expect(createJobFromNames).not.toHaveBeenCalled();
+  });
+
+  it("preserves an explicitly offset instant in Legacy mode", async () => {
+    await execute(buildAddJobTool("user-1", "posting"), {
+      company: "Acme", jobTitle: "Engineer", dueDate: "2026-11-30T18:00:00+08:00",
+    });
+    expect(vi.mocked(createJobFromNames).mock.calls[0][0].dueDate?.toISOString())
+      .toBe("2026-11-30T10:00:00.000Z");
+  });
+
   it("never forwards allowDuplicate, even if the model invents it", async () => {
     await execute(buildAddJobTool("user-1", "posting"), { company: "Acme", jobTitle: "Engineer", allowDuplicate: true, upsert: true });
     const passed = (createJobFromNames as any).mock.calls[0][0];
