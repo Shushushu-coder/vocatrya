@@ -4,7 +4,56 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## Main 后续修复与下一批（2026-10-27）
+## W3/W5/W6 Main 集成与问题修复（2026-10-27，当前状态）
+
+用户授权提交、合并并检查问题。本轮已将 W3 `b2579202`、W5 `c1465700`、W6 `3702f87f` 集成 main，组合源码节点 `5ce3eaff`；`jobs.deadline` 双语词条提交 `2c8ccd9f`。后文工作区交付记录保留为历史，不代表这些代码仍待集成。
+
+### 已修复并验证
+
+- W3：Legacy Agent 不再公布或接受 DateOnly 新字段，不制造午夜 Instant，旧 offset Instant 契约保留；canonical 表单跨账户时区禁用宿主快捷日期、可靠读取 dirty；新写裸 Instant 一律 fullInstant，不按整分钟边界推断精度；补齐表单与 Agent 的 DateOnly 往返，以及真实隔离 SQLite 写入到 Upcoming 的时区/逾期联动回归。补齐表单 effect 的上下文依赖。
+- W5：职位名称/地点/渠道改名在事务内检查本人 canonical 引用（含归档），有引用则明确拒绝，保护文本快照与计数/查找；未引用项可编辑，真实 FK 的标签/活动类型沿用原身份。新增同 key 标题不再隐式改名，渠道原样保存保留原 value。对话框异常保草稿，保存中禁止编辑/取消/关闭。
+- 7 处旧 /unavailable/i 断言已改为现有消息常量的精确断言，错误码/门控未放松，相关套件通过。
+- W6：不可用能力只隐藏编辑，不清除已有分配；模式切换、异步加载和原配置保留回归通过。
+- 隔离集成目录组合验证 **26 文件/574 项全通过**；最终表单依赖修复后 AddJob 全套 **42 项通过**。完整 tsc、改动文件 ESLint（最后一处 Hook 告警已修复）、新增词条检查及 Git 差异检查通过。未运行完整 Build 或桌面 E2E，不宣称已通过完整应用验收。
+
+### 当前剩余任务与边界
+
+- W1–W6 代码均已集成；W5 的 BD-LINKS 仍 PARTIAL：职业素材 SKILL 真实字典引用尚缺，未用 structuredData.tagId 伪造 FK。由 Career Owner 收口方案后再开发。
+- canonical 文本快照暂采用“引用中禁止改名”保护，不提供级联改名/快照迁移；系统渠道仍禁改。此限制不代表历史记录会自动随字典改名。
+- W7 简历完整用户路径验收尚未执行；其他窗口仍待对应 Windows Electron fresh-native 验收及最终跨模块重开闭环，全部 passes 保持原值（仅 RM-BIND 为 true）。
+- 桌面入口由另一窗口排查；真实系统自启操作另获授权；G-A 证据仍需技术核实。Task 性能参考仍为 avg 309.0ms/max 549.2ms，不将其冒充全部指标达标。
+- 主目录认证/桌面 E2E 的 Dirty 均保留，未纳入本轮提交。未 Push，未操作真实数据库，未清理 Worktree/运行目录。相关源分支与集成分支的独有提交、未提交内容及进程占用在收尾核对。
+
+## W3/W5/W6 工作区交付记录（2026-10-27，历史状态）
+
+本轮按用户要求更新任务清单，不提交/合并功能代码，不启动下一任务。Main 仍为 `8b4ac777`；三分支均基于该提交且只有未提交修改。已核对分支、HEAD、Git status/diff；下列测试数字来自执行窗口报告，本轮未独立复跑，不作为组合构建或功能验收证据。
+
+| 窗口 | 代码/Main 状态 | 验证报告 | 当前剩余 |
+| --- | --- | --- | --- |
+| W1 流程联动 | 已集成 Main | 原组合定向检查通过 | W3 接入后的跨模块闭环、Windows Electron 实际联动与重开 |
+| W2 Task | 已集成 Main | 5k 排序分页正确；后续优化 avg 309.0ms/max 549.2ms | 桌面验收；300ms 参考预算仍略超，非新增开发阻塞 |
+| W3 职位 | 工作区代码交付，未提交/集成 | 报告 18 文件/385 项和 tsc 通过 | 复审/集成、jobs.deadline 词条、Agent Legacy 契约核对、最终联动与桌面验收 |
+| W4 职业资料 | 已集成 Main | 原组合与隐私专项检查通过 | 职业素材技能字典复用缺口交接、完整桌面验收 |
+| W5 基础数据 | 维护 UI/action 已交付，引用闭环仍 PARTIAL，未提交/集成 | 报告 436 项相关测试通过、tsc/lint 通过；另报告 7 个既有失败断言 | 字典改名后的 canonical 关联/计数、职业素材 SKILL 复用、失败断言、复审/集成与桌面验收 |
+| W6 设置 | 最小诚实态修复已交付，未提交/集成 | 报告 149 项与 tsc/lint 通过 | 复审/集成、桌面保存/失败/重开与 Backup V5 恢复验收；真实系统自启操作另获授权 |
+| W7 简历 | 已有实现，尚未执行本轮验收任务 | 继续复用 RM-BIND 通过证据 | 素材→创建/复用→编辑/冻结→预览/导出→重开验收，不重复开发 |
+
+### 必须保留的实际缺口
+
+1. **BD-LINKS 职业素材技能复用**：CareerSkillDetail 仍只维护 skillName 文本。W5 的 structuredData.tagId 方案仅是建议，未批准；职业资料合同禁止以该 JSON 承载规格内结构化事实，不能把 JSON ID 当作真实 FK。由单一 Career Owner 核对最小合规方案；若必须调整字段合同或 Schema，再明确收口，不擅自落库。
+2. **字典改名后的 canonical 关联**：JobOpportunity.title/locationText/sourceLabel 是文本快照，现有按 label 映射的计数会在改名后失配。禁止自动批量改写机会文本；需核对稳定身份映射/保留历史快照等兼容方案，不能因 Legacy FK 路径正常就宣称 canonical 也通过。
+3. **7 个文案断言失败**：W5 报告 jobtitle/jobLocation/jobSource.actions 与 dictionaryAbReadPath 的 /unavailable/i 与实际产品文案不符。Main 源码确实仍有这些断言；基线可复现性和精确失败数待定向复核，不为让测试过而改回产品错误文案或放松门控。
+4. **W3 集成事项**：补 jobs.deadline（en Deadline / zh-CN 截止日期）；复用已集成的 Upcoming 读取合同，仍需最终联动验证。Agent legacy 分支把 deadlineOn 映射本地午夜的改动须在集成复审时核对 Legacy instant-only 冻结边界，不能直接算验收通过。
+5. **共同桌面验收**：另一窗口继续负责认证/桌面壳/E2E 入口；本轮三窗口均未完成 Windows Electron fresh-native 验收，所有 Feature passes 原值不变。不得将 Web 单测、tsc 或 report 的“完成”替代实机证据。
+
+### 后续工作顺序（待执行）
+
+- 核实并修正 W5 七个失败断言，同时收口 BD-LINKS 两项实际缺口；与 W3/W6 的集成前复审按文件 Owner 独立推进。
+- 获授权后提交/集成 W3/W5/W6，在组合代码上做最小充分验证；Main 的 implementationStatus 仅在实际集成后更新。
+- 桌面入口可用后，原各窗口接续对应验收，W1 补跨模块时间闭环；W7 执行简历验收，不再另拆通用验收窗口。
+- 延期仍为 RM-MATCH、BD-ARCHIVE、REM-V1；G-A 证据与系统自启授权边界不变。Worktree/运行目录均保留，未授权不清理。
+
+## Main 后续修复与下一批（2026-10-27，历史调度记录）
 
 - 修复 `applicationProfile.materialPartialWrite.spec.ts` 四处 ActionResult 成功分支窄化，失败直接使测试失败；Main 当前完整 tsc 与修复后的组合源码 tsc 均通过。
 - Task 到期排序仅在同一次调用内复用相同日历日的账户时区日终计算，保留排序/分页与 unknown 语义，不使用跨账户/时区缓存。新增跨时区重复调用排序回归。
@@ -78,7 +127,7 @@
 
 统计按 `MVP_FEATURES.json` 的 Feature ID：共 31 项，本期 28 项（1 项已验收、27 项未完成验收），延期 3 项。Feature 与执行工作包不是一一对应，以下合并共享实现，避免重复开发。
 
-### 工作包进度（W1/W2/W4 已集成，其余待开发）
+### 工作包进度（W1–W6 均已集成，未完成项见文首）
 
 | 工作包 | 对应 Feature | 剩余范围 |
 | --- | --- | --- |
@@ -86,11 +135,11 @@
 | 职业资料 UI 与复制 | CP-EDIT、CP-RECORDS、CP-PRIVACY、CP-COPY、CP-LEGACY | W4 已集成新字段/对象、教育派生和复制保护；剩余实际路径验收，发现缺口再修复 |
 | 流程时间消费者 P-PROC | P-PROC | W1 已集成时间/精度/zone 的读写与展示；待最终跨模块和桌面验收 |
 | 任务时间消费者 P-TASK | P-TASK | W2 已集成；5k 正确性通过，性能实测高于参考预算；待桌面验收 |
-| 职位时间消费者 P-JO | P-JO | 截止日期表单、读写、详情、CSV、Agent，保留 Legacy 合同 |
+| 职位时间消费者 P-JO | P-JO | W3 已集成，Legacy 兼容/词条/定向联动已核对；待完整桌面验收 |
 | 共享时间集成 | PROC-UPCOMING、P-TZ、P-PROC、P-TASK、P-JO | W1 共享接口及 Upcoming/Dashboard 已集成；待 W3 交付和最终联动验收 |
-| 基础数据维护 | BD-CORE | 补齐职位名称/地点/渠道独立维护及标签/活动类型编辑的实际缺口，复用现有 CRUD |
-| 基础数据引用 | BD-LINKS | 核对并补齐标签/技能与职业素材及业务表单的复用和引用，仅修实际缺口 |
-| AI 设置最小接线 | SET-AI-SERVICES | 已有生产业务必需的连接/模型配置、真实状态与失败反馈；不扩项 |
+| 基础数据维护 | BD-CORE | W5 已集成，canonical 引用中禁改保护及失败断言已修复；待完整桌面验收 |
+| 基础数据引用 | BD-LINKS | 既有引用与 canonical 改名保护已集成；职业素材 SKILL 字典复用仍有真实缺口 |
+| AI 设置最小接线 | SET-AI-SERVICES | W6 已集成不可用能力诚实态修复，已有配置复用；待桌面验收 |
 
 ### 已有实现，安排缺失的验收
 

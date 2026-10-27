@@ -218,7 +218,7 @@
         "按已批准的精度及用户时区显示事件时间。"
       ],
       "passes": false,
-      "implementationNotes": "2026-10-27 W1 已集成 main：Upcoming/Dashboard 消费流程 sidecar、Task dueOn 和 Job deadlineOn，按账户时区计算关注/逾期/分桶；完成与取消排除。修复混合任务提前截断、首次加载失败永久 loading 和关注日期载体不一致。组合定向验证通过；W3 尚未交付，跨模块最终验收及 Windows Electron 实际联动待完成，passes 保持 false。"
+      "implementationNotes": "2026-10-27 W1 已集成 main：Upcoming/Dashboard 消费流程 sidecar、Task dueOn 和 Job deadlineOn，按账户时区计算关注/逾期/分桶；完成与取消排除。修复混合任务提前截断、首次加载失败永久 loading 和关注日期载体不一致。组合定向验证通过；W3 已集成，隔离 SQLite 写入到 Upcoming 的定向联动通过；完整跨模块用户路径与 Windows Electron 实际联动仍待完成，passes 保持 false。"
     },
     {
       "id": "P-TZ",
@@ -226,7 +226,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
-      "implementationNotes": "已集成 Settings 可搜索 IANA 时区选择、跟随系统、原子持久化及客户端/服务端统一读取接口；拒绝缩写与裸 offset，脏设置安全回退且不回写。语言与时区按字段合流串行保存，失败独立回滚，避免跨字段丢失待保存修改。定向组件、action、隔离 SQLite 持久化及连接重开验证通过；真实浏览器/Electron 界面与进程退出重开未验收，流程等时间消费者尚待 P-PROC/P-JO/P-TASK 接线，passes 保持 false。",
+      "implementationNotes": "已集成 Settings 可搜索 IANA 时区选择、跟随系统、原子持久化及客户端/服务端统一读取接口；拒绝缩写与裸 offset，脏设置安全回退且不回写。语言与时区按字段合流串行保存，失败独立回滚，避免跨字段丢失待保存修改。定向组件、action、隔离 SQLite 持久化及连接重开验证通过；真实浏览器/Electron 界面与进程退出重开未验收，P-PROC/P-TASK 消费者已集成，P-JO 已集成，隔离数据库联动回归通过，最终桌面跨模块验收未完成，passes 保持 false。",
       "description": "用户可以设置 IANA 时区；相关日期显示按冻结后的时区合同执行。",
       "steps": [
         "在 Settings 选择并保存合法时区，刷新与重启后仍保留。",
@@ -253,14 +253,15 @@
       "category": "DateTime / Task",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "IMPLEMENTED",
       "description": "JobOpportunity 岗位截止日期使用 canonical deadlineOn/deadlinePrecision，并贯通详情、编辑、CSV、Agent 和 Upcoming。",
       "steps": [
         "新增、编辑有截止日期的职位，重新打开后 canonical 日期与精度一致。",
         "列表/详情/CSV/Agent 读取和 Upcoming 对同一截止日表达一致。",
         "历史 unknown 精度不被擅自转换或改写。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W3 已提交并集成 main（b2579202）：deadlineOn/deadlinePrecision 贯通表单、服务、DTO、列表/详情、CSV、Agent 与账户时区；jobs.deadline 双语词条已补。复审移除 Legacy Agent 纯日期伪午夜转换（Legacy 拒绝新 DateOnly 字段，旧 offset Instant 保留）、修复跨区快捷日期与 dirty 读取；新裸 Instant 一律 fullInstant，不按整分猜精度。隔离 SQLite Job 写入→Upcoming 的时区/逾期/重读联动回归及组合定向验证通过。Windows Electron fresh-native 未完成，passes false。"
     },
     {
       "id": "P-TASK",
@@ -282,8 +283,8 @@
       "category": "Basic Data",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
-      "implementationNotes": "任务隔离浏览器验收覆盖公司新增/编辑及六类基础数据创建、选择、业务保存、刷新重开与关联一致性。职位名称、地点、渠道未提供独立 admin 新增/编辑 UI，标签和活动类型未提供编辑 UI；主要基础数据编辑验收尚未完整满足，不扩项补做。Windows Electron 未执行，passes 保持 false。",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-10-27 W5 已提交并集成 main（c1465700）：职位名称/地点/渠道新增入口、主要字典编辑、失败保草稿、系统渠道禁改已接线。为保护 canonical 文本快照，使用中（含归档引用）的职位名称/地点/渠道拒绝改名；未引用项可编辑，Tag/Activity 真 FK 路径保留。新增同 key 标题不覆盖已有 label，保存期间禁止关闭/编辑，异常有反馈。7 处旧文案断言已修正，组合定向验证通过；职业素材 SKILL 引用另见 BD-LINKS。Windows Electron 未完成，passes false。",
       "description": "用户可维护并选择公司、职位名称、地点、投递渠道、标签和活动类型等高频基础数据。",
       "steps": [
         "新增、编辑主要基础数据，表单可选并在保存后正确关联。",
@@ -316,7 +317,8 @@
         "新增或编辑标签、技能后，可在相关职业素材或职位表单复用。",
         "已关联记录重新打开显示真实值，不出现悬空或错误引用。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W5 已集成现有引用验证与 canonical 改名保护，未批量改写历史机会。TagInput/QuestionForm/简历 Skill.tagId 等已有引用保留；职业素材 CareerSkillDetail 仍只有 skillName 文本，字典复用尚缺。structuredData.tagId 建议未采纳，不能作为真实 FK；需单一 Career Owner 收口最小合规方案。保持 PARTIAL，Windows Electron 未完成，passes false。"
     },
     {
       "id": "BD-ARCHIVE",
@@ -341,7 +343,8 @@
         "切换简体中文/英文，刷新和重启后仍为已选语言。",
         "失败时反馈真实状态，不显示假成功。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": " 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。"
     },
     {
       "id": "SET-APPEARANCE",
@@ -349,7 +352,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "核实已有主题设置具备即时生效、串行保存、权威回填及失败回滚，无需重复开发。任务隔离浏览器四项验证记录通过，覆盖即时切换、刷新持久化、连续切换及保存失败；Windows Electron 主题桥接冒烟记录通过。完整 Settings 渲染端到端与应用退出/重开验收仍待完成，passes 保持 false。",
+      "implementationNotes": "核实已有主题设置具备即时生效、串行保存、权威回填及失败回滚，无需重复开发。任务隔离浏览器四项验证记录通过，覆盖即时切换、刷新持久化、连续切换及保存失败；Windows Electron 主题桥接冒烟记录通过。完整 Settings 渲染端到端与应用退出/重开验收仍待完成，passes 保持 false。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。",
       "description": "已开放的外观设置真实生效、可持久保存，并处理保存失败。",
       "steps": [
         "调整已开放的外观选项后即时生效，重新打开应用仍保持该设置。",
@@ -363,7 +366,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "Settings 已接通自启、最小化启动和关闭至托盘 IPC，包含权威状态回填、串行合流保存及失败回读反馈。定向测试通过；任务隔离 Electron 冒烟记录覆盖托盘、最小化、还原、退出及独立进程偏好读回。系统自启写入/重启及完整 Settings 渲染端到端实机验收待完成，未改真实系统自启配置。",
+      "implementationNotes": "Settings 已接通自启、最小化启动和关闭至托盘 IPC，包含权威状态回填、串行合流保存及失败回读反馈。定向测试通过；任务隔离 Electron 冒烟记录覆盖托盘、最小化、还原、退出及独立进程偏好读回。系统自启写入/重启及完整 Settings 渲染端到端实机验收待完成，未改真实系统自启配置。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。",
       "description": "Settings UI 接通现有桌面自启、最小化启动与关闭到托盘 IPC。",
       "steps": [
         "在 Windows 桌面端设置自启、最小化启动及关闭至托盘，选项反馈实际底层状态。",
@@ -378,7 +381,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。 2026-10-27 W4 Backup V5、语言/证明人/附件组与敏感附件字节已集成；新格式完整桌面备份恢复仍待完成。",
+      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。 2026-10-27 W4 Backup V5、语言/证明人/附件组与敏感附件字节已集成；新格式完整桌面备份恢复仍待完成。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。",
       "description": "已实现的数据备份、预检和恢复入口可用于本地数据管理。",
       "steps": [
         "用户可从 Settings 找到备份和恢复入口，在隔离数据环境完成备份、预检与恢复。",
@@ -391,13 +394,14 @@
       "category": "Settings / Desktop",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "2026-10-27 已批准：仅交付现有业务必需的 AI 连接与模型分配配置，其余明确不可用，不能展示虚假连接状态。",
       "steps": [
         "本期仅接通已有业务必需的 AI Connection/Model Assignment；选择与连接状态须与实际业务能力一致。",
         "未实现的能力明确不可用，不伪装成已接通，也不破坏已有账号登录和 BYOK 隔离。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W6 已提交并集成 main（3702f87f）：无生产消费者的 CAREER_REFLECTION 不提供编辑，fresh-native full 下 MATCH_ANALYSIS 显示不可用，已有分配不清除；Legacy 可用入口、其他业务配置、readiness/BYOK/权限保留。补充模式切换和异步加载回归，组合定向验证通过；Windows Electron 保存/失败/退出重开仍未执行，passes false。"
     },
     {
       "id": "RM-RESUME",
