@@ -251,7 +251,7 @@ export function AddJob({
       }
       setDialogOpen(true);
     }
-  }, [editJob, reset]);
+  }, [editJob, reset, hideUnsupportedAbFields, tz]);
 
   useEffect(() => {
     if (!dialogOpen || hideUnsupportedAbFields) return;
