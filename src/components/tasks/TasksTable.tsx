@@ -29,14 +29,13 @@ import {
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "../StatusBadge";
 import { TASK_STATUS_BADGE_COLORS } from "@/lib/badge-colors";
+import { format, isToday, parse } from "date-fns";
+import { runtimeTimeZone } from "@/lib/datetime";
 import {
-  format,
-  isToday,
-  isTomorrow,
-  isPast,
-  isThisWeek,
-  parse,
-} from "date-fns";
+  formatTaskDue,
+  taskDueDateGroup,
+  type TaskDueDateGroup,
+} from "@/lib/tasks/dueTime";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +68,7 @@ type TasksTableProps = {
   onChangeTaskStatus: (id: string, status: TaskStatus) => void;
   onStartActivity: (id: string) => void;
   groupBy?: TaskGroupBy;
+  timeZone?: string;
 };
 
 type PriorityLevel = "low" | "medium" | "high" | "critical";
@@ -106,28 +106,15 @@ const priorityConfig: Record<
   },
 };
 
-type DateGroup =
-  | "Overdue"
-  | "Today"
-  | "Tomorrow"
-  | "This Week"
-  | "Later"
-  | "No Due Date";
+type DateGroup = TaskDueDateGroup;
 
 type CreatedDateGroup = string; // Format: "YYYY-MM-DD"
 type UpdatedDateGroup = string; // Format: "YYYY-MM-DD"
 
-function getDateGroup(dueDate: Date | null | undefined): DateGroup {
-  if (!dueDate) return "No Due Date";
-  const date = new Date(dueDate);
-  if (isPast(date) && !isToday(date)) return "Overdue";
-  if (isToday(date)) return "Today";
-  if (isTomorrow(date)) return "Tomorrow";
-  if (isThisWeek(date)) return "This Week";
-  return "Later";
-}
-
-function groupTasksByDate(tasks: Task[]): Record<DateGroup, Task[]> {
+function groupTasksByDate(
+  tasks: Task[],
+  timeZone: string,
+): Record<DateGroup, Task[]> {
   const groups: Record<DateGroup, Task[]> = {
     Overdue: [],
     Today: [],
@@ -138,7 +125,7 @@ function groupTasksByDate(tasks: Task[]): Record<DateGroup, Task[]> {
   };
 
   tasks.forEach((task) => {
-    const group = getDateGroup(task.dueDate);
+    const group = taskDueDateGroup(task, timeZone);
     groups[group].push(task);
   });
 
@@ -200,8 +187,9 @@ function TasksTable({
   onChangeTaskStatus,
   onStartActivity,
   groupBy = "none",
+  timeZone = runtimeTimeZone(),
 }: TasksTableProps) {
-  const { t, formatDate } = useI18n();
+  const { t, formatDate, locale } = useI18n();
   const [alertOpen, setAlertOpen] = useState(false);
   const dateGroupLabels: Record<DateGroup, string> = {
     Overdue: t("tasks.overdue"),
@@ -281,6 +269,15 @@ function TasksTable({
       </TableCell>
       <TableCell className="py-1 px-2">
         {task.activityType?.label || "—"}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell py-1 px-2 whitespace-nowrap">
+        {(() => {
+          try {
+            return formatTaskDue(task, locale, timeZone) ?? "—";
+          } catch {
+            return "—";
+          }
+        })()}
       </TableCell>
       <TableCell className="hidden md:table-cell py-1 px-2">
         <StatusBadge
@@ -402,6 +399,9 @@ function TasksTable({
         </TableHead>
         <TableHead className="h-9 px-2">{t("common.title")}</TableHead>
         <TableHead className="h-9 px-2">{t("tasks.activityType")}</TableHead>
+        <TableHead className="hidden lg:table-cell h-9 px-2">
+          {t("tasks.dueDate")}
+        </TableHead>
         <TableHead className="hidden md:table-cell h-9 px-2">
           {t("common.status")}
         </TableHead>
@@ -457,7 +457,7 @@ function TasksTable({
   }
 
   if (groupBy === "dueDate") {
-    const groupedTasks = groupTasksByDate(tasks);
+    const groupedTasks = groupTasksByDate(tasks, timeZone);
     const groupOrder: DateGroup[] = [
       "Overdue",
       "Today",

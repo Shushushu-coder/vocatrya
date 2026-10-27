@@ -1,4 +1,5 @@
 import { ActivityType } from "./activity.model";
+import type { TaskDuePrecision } from "@/lib/tasks/dueTime";
 
 export const TASK_STATUSES = {
   "in-progress": "In Progress",
@@ -25,6 +26,8 @@ export interface Task {
   priority: number;
   percentComplete: number;
   dueDate?: Date | null;
+  dueOn?: string | null;
+  duePrecision?: TaskDuePrecision | null;
   activityTypeId?: string | null;
   activityType?: ActivityType | null;
   activities?: { id: string }[];

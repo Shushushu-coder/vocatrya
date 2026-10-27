@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import userEvent from "@testing-library/user-event";
 import { createTask, updateTask } from "@/actions/task.actions";
 import { Task } from "@/models/task.model";
+import { runtimeTimeZone } from "@/lib/datetime";
 
 vi.mock("@/utils/user.utils", () => ({
   getCurrentUser: vi.fn(),
@@ -570,6 +571,33 @@ describe("TaskForm Component", () => {
       });
       expect(mockOnSaveAndStart).not.toHaveBeenCalled();
     });
+  });
+
+  describe("Account time zone date picking", () => {
+    it.each([false, true])(
+      "keeps calendar selection and exposes host presets only for a matching account zone (matches=%s)",
+      async (matches) => {
+        const hostZone = runtimeTimeZone();
+        const otherZone = hostZone === "Pacific/Kiritimati"
+          ? "America/New_York"
+          : "Pacific/Kiritimati";
+        render(
+          <TaskForm
+            activityTypes={mockActivityTypes}
+            resetEditTask={mockResetEditTask}
+            onTaskSaved={mockOnTaskSaved}
+            dialogOpen={true}
+            setDialogOpen={mockSetDialogOpen}
+            timeZone={matches ? hostZone : otherZone}
+          />,
+        );
+        await user.click(screen.getByLabelText(/Due Date/i));
+        expect(screen.getByRole("grid")).toBeInTheDocument();
+        const preset = screen.queryByText("Select Preset");
+        if (matches) expect(preset).toBeInTheDocument();
+        else expect(preset).not.toBeInTheDocument();
+      },
+    );
   });
 
   describe("Dialog State Management", () => {

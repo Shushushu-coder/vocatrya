@@ -14,18 +14,15 @@ export const AddTaskFormSchema = z.object({
   status: z.enum(["in-progress", "complete", "needs-attention", "cancelled"]),
   priority: z.number().min(0).max(10),
   percentComplete: z.number().min(0).max(100),
-  dueDate: z
-    .date()
+  // Picker carrier only: the form binds its Date here; the write contract is
+  // `dueOn` below, and actions ignore this field.
+  dueDate: z.date().optional().nullable(),
+  // Due write contract: absent = field untouched (update keeps stored values),
+  // null = explicit clear, "YYYY-MM-DD" = set a calendar-day due (dateOnly).
+  dueOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid due date." })
     .optional()
-    .nullable()
-    .refine(
-      (date) => {
-        if (!date) return true;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return date >= today;
-      },
-      { message: "Due date cannot be in the past." }
-    ),
+    .nullable(),
   activityTypeId: z.string().optional().nullable(),
 });
