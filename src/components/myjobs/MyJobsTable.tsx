@@ -106,6 +106,9 @@ function MyJobsTable({
                       </Badge>
                     )}
                   </div>
+                  <p className="break-words text-xs font-normal text-muted-foreground">
+                    {job.salaryRange || "-"}
+                  </p>
                 </TableCell>
                 <TableCell className="font-medium max-w-[100px] md:max-w-[160px]">
                   <span className="block truncate">{job.Company?.label}</span>
@@ -138,7 +141,7 @@ function MyJobsTable({
                 )}
                 <TableCell className="hidden max-w-[10rem] md:table-cell">
                   <span className="block truncate" title={sourceLabel}>
-                    {sourceLabel}
+                    {sourceLabel || "-"}
                   </span>
                 </TableCell>
                 <TableCell>

@@ -21,7 +21,7 @@ type JobCardProps = {
   timeZone?: string;
 };
 
-import { useI18n } from "@/i18n";
+import { getLocalizedJobSource, useI18n } from "@/i18n";
 
 export function JobCard({
   job,
@@ -64,6 +64,9 @@ export function JobCard({
           <p className="truncate text-sm text-muted-foreground">
             {job.Company?.label}
           </p>
+          <p className="break-words text-sm text-muted-foreground">
+            {job.salaryRange || "-"}
+          </p>
         </div>
         {!freshNativeFull &&
           (job.matchScore != null ? (
@@ -84,12 +87,10 @@ export function JobCard({
           <Calendar className="h-3.5 w-3.5 shrink-0" />
           {job.appliedDate ? formatDate(job.appliedDate) : t("jobs.notApplied")}
         </span>
-        {job.JobSource?.label && (
           <span className="flex min-w-0 items-center gap-1">
             <PlusCircle className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{job.JobSource.label}</span>
+            <span className="truncate">{getLocalizedJobSource(job.JobSource, t) || "-"}</span>
           </span>
-        )}
       </div>
 
       <div className="mt-auto flex items-center justify-between border-t pt-3">

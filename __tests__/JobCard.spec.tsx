@@ -52,6 +52,18 @@ function renderCard(job: JobResponse) {
 }
 
 describe("JobCard", () => {
+  it("shows salary verbatim and keeps the source as plain text", () => {
+    const salary = '15k-25k*14薪, "可谈" negotiable';
+    renderCard(makeJob({ salaryRange: salary }));
+    expect(screen.getByText(salary)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Indeed" })).not.toBeInTheDocument();
+  });
+
+  it("uses neutral placeholders for missing salary and source", () => {
+    renderCard(makeJob({ salaryRange: null, JobSource: null }));
+    expect(screen.getAllByText("-")).toHaveLength(2);
+  });
+
   it("renders the title as a link to the job details page", () => {
     renderCard(makeJob());
 

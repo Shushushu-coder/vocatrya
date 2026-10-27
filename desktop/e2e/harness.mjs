@@ -90,6 +90,9 @@ export async function waitForInitialNavigation(page, origin, authenticated) {
   // Finding a same-origin page does not mean Electron's initial loadURL has
   // finished. A test navigation before load can abort startup and its backend.
   await page.waitForURL((url) => url.origin === origin && url.pathname === (authenticated ? "/dashboard" : "/signin"), { waitUntil: "load", timeout: 60_000 });
+  // Account locale/theme reconciliation can refresh the initial document
+  // after load. Let those startup requests settle before the test navigates.
+  await page.waitForLoadState("networkidle", { timeout: 30_000 });
 }
 
 export async function connectDesktop(instance, { authenticated = false } = {}) {

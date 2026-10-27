@@ -63,6 +63,18 @@ function renderTable(jobs: JobResponse[], overrides: Partial<React.ComponentProp
 }
 
 describe("MyJobsTable", () => {
+  it("shows salary verbatim and keeps the source as plain text", () => {
+    const salary = '15k-25k*14薪, "可谈" negotiable';
+    renderTable([makeJob({ salaryRange: salary })]);
+    expect(screen.getByText(salary)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Indeed" })).not.toBeInTheDocument();
+  });
+
+  it("uses neutral placeholders for missing salary and source", () => {
+    renderTable([makeJob({ salaryRange: null, JobSource: null })]);
+    expect(screen.getAllByText("-")).toHaveLength(2);
+  });
+
   it("renders a row per job with title, company, and location", () => {
     renderTable([makeJob()]);
 

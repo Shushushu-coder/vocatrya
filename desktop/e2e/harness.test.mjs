@@ -41,6 +41,10 @@ for (const authenticated of [false, true]) {
     let ready = false;
     const pendingLoad = new Promise((resolve) => { completeLoad = resolve; });
     const page = {
+      async waitForLoadState(state, options) {
+        assert.equal(state, "networkidle");
+        assert.equal(options.timeout, 30_000);
+      },
       async waitForURL(matches, options) {
         const origin = "http://127.0.0.1:45678";
         assert.equal(matches(new URL(`${origin}${authenticated ? "/dashboard" : "/signin"}`)), true);

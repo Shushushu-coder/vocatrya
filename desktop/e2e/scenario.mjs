@@ -33,6 +33,7 @@ export async function checkNavigation(page, origin) {
 
   const sidebar = page.getByRole("complementary");
   const expectedRoutes = ["/dashboard", "/dashboard/analytics", "/dashboard/myjobs", "/dashboard/tasks", "/dashboard/activities", "/dashboard/questions", "/dashboard/interview", "/dashboard/profile", "/dashboard/admin", "/dashboard/settings"];
+  await expect(sidebar.getByRole("link")).toHaveCount(expectedRoutes.length);
   const links = await sidebar.getByRole("link").evaluateAll((nodes) => nodes.map((node) => ({ name: node.textContent.trim(), href: node.getAttribute("href") })));
   expect(links.map((item) => item.href).sort()).toEqual([...expectedRoutes].sort());
   const errors = [];
