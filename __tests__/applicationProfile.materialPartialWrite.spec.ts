@@ -50,7 +50,7 @@ type DetailRow = Record<string, unknown> | null | undefined;
 
 async function readMaterial(id: string) {
   const res = await getApplicationMaterial(id);
-  expect(res.success).toBe(true);
+  if (!res.success) throw new Error(res.message);
   return res.data as Record<string, unknown>;
 }
 
@@ -102,7 +102,7 @@ describe("material record incremental writes (isolated db)", () => {
         rankText: "top 5%",
       },
     });
-    expect(created.success).toBe(true);
+    if (!created.success) throw new Error(created.message);
     const id = (created.data as { id: string }).id;
 
     // One detail key: gpaValue updates, everything else stays.
@@ -165,7 +165,7 @@ describe("material record incremental writes (isolated db)", () => {
         locationText: "Shanghai",
       },
     });
-    expect(created.success).toBe(true);
+    if (!created.success) throw new Error(created.message);
     const id = (created.data as { id: string }).id;
 
     const up = await updateApplicationMaterial({
@@ -187,7 +187,7 @@ describe("material record incremental writes (isolated db)", () => {
       title: "Keep",
       detail: { institution: "Keep U", gpaValue: 3 },
     });
-    expect(created.success).toBe(true);
+    if (!created.success) throw new Error(created.message);
     const id = (created.data as { id: string }).id;
 
     const rejected = await updateApplicationMaterial({

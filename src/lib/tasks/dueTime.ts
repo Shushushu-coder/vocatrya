@@ -97,10 +97,23 @@ export function taskDueSortKeyIso(
 export function orderTasksByDue<
   T extends TaskDueFields & { id: string; priority: number },
 >(rows: T[], timeZone: string): T[] {
-  const decorated = rows.map((row) => ({
-    row,
-    key: taskDueSortKeyIso(row, timeZone),
-  }));
+  // Rows often share a due day. Resolve its zone boundary once per sort;
+  // keeping the cache local also makes account-zone changes take effect.
+  const dayEnds = new Map<DateOnlyString, InstantIso>();
+  const decorated = rows.map((row) => {
+    const value = taskDueBusinessValue(row);
+    let key: InstantIso | null = null;
+    if (value?.kind === "dateOnly") {
+      key = dayEnds.get(value.date) ?? null;
+      if (key === null) {
+        key = dateOnlyUtcWindow(value.date, timeZone).endIsoExclusive;
+        dayEnds.set(value.date, key);
+      }
+    } else if (value?.kind === "instant") {
+      key = value.iso;
+    }
+    return { row, key };
+  });
   decorated.sort((a, b) => {
     if (a.key === null && b.key === null) {
       // no sort key either way — fall through to the tie-break chain

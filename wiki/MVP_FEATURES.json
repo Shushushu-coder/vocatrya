@@ -275,7 +275,7 @@
         "在合同规定的数据规模上保持可用；历史时间数据不被自动改写。"
       ],
       "passes": false,
-      "implementationNotes": "2026-10-27 W2 已集成 main：dueOn/duePrecision 读写、账户时区、列表分组及全量必要字段先排序后分页；修复跨区快捷日期。W2 隔离 SQLite 5k/200 页报告无漏无重，avg 547.6ms/max 1615.8ms 高于 300ms 参考预算；本次组合定向验证通过，未重复性能实测。Windows Electron 验收未完成，passes 保持 false。"
+      "implementationNotes": "2026-10-27 W2 已集成 main：dueOn/duePrecision 读写、账户时区、列表分组及全量必要字段先排序后分页；修复跨区快捷日期。W2 隔离 SQLite 5k/200 页报告无漏无重，avg 547.6ms/max 1615.8ms 高于 300ms 参考预算；本次组合定向验证通过，未重复性能实测。Windows Electron 验收未完成，passes 保持 false。 后续 main 修复：排序内复用相同日期的时区边界，跨时区回归通过；重跑 5k/200 页 avg 309.0ms、max 549.2ms，平均仍略高于 300ms 参考预算，不宣称全部性能指标达标。"
     },
     {
       "id": "BD-CORE",

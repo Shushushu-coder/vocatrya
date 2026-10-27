@@ -268,8 +268,8 @@ describe("§5.4 — 5,000-row mixed-due pagination", () => {
       const max = Math.max(...pageMs);
       // Reference budget is ≤300ms/page; record actuals, assert a generous
       // CI-safe ceiling only (perf assertion must not flake on slow agents).
-      console.log(
-        `[5k pagination] pages=${TOTAL_PAGES} avg=${avg.toFixed(1)}ms max=${max.toFixed(1)}ms per page`,
+      process.stdout.write(
+        `[5k pagination] pages=${TOTAL_PAGES} avg=${avg.toFixed(1)}ms max=${max.toFixed(1)}ms per page\n`,
       );
       expect(max).toBeLessThan(5000);
       expect(avg).toBeLessThan(3000);

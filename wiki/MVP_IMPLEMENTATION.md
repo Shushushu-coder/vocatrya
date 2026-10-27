@@ -4,7 +4,15 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## W1/W2/W4 Main 集成记录（2026-10-27）
+## Main 后续修复与下一批（2026-10-27）
+
+- 修复 `applicationProfile.materialPartialWrite.spec.ts` 四处 ActionResult 成功分支窄化，失败直接使测试失败；Main 当前完整 tsc 与修复后的组合源码 tsc 均通过。
+- Task 到期排序仅在同一次调用内复用相同日历日的账户时区日终计算，保留排序/分页与 unknown 语义，不使用跨账户/时区缓存。新增跨时区重复调用排序回归。
+- 4 个相关测试文件共 91 项通过；改动文件 ESLint 和差异检查通过。单独读取 5k/200 页性能结果：avg 309.0ms、max 549.2ms/页；较此前报告改善，但平均仍略高于 300ms 参考预算，不宣称全部性能指标达标。
+- 下一批 W3（职位）、W5（基础数据）、W6（设置）可在独立 Worktree 并行。W3 不修改字典专属 action/admin UI；W5 不修改 AddJob、Job 专属读写与 Settings；W6 不修改字典/Task/Job/备份底层。共享时间工具、Upcoming/overview、Schema、双语词条和 wiki 继续由对应单 Owner 协调。
+- 桌面验收入口仍由另一窗口排查。下一批先完成各自代码和定向验证，入口修复可用后再做对应隔离 Windows Electron fresh-native 验收；不让多个窗口重复修改认证、桌面壳或 E2E 启动器，也不以 Web 验证替代桌面通过。
+
+## W1/W2/W4 Main 集成记录（2026-10-27，后续修复见上）
 
 用户授权先合并、由另一窗口排查桌面验收。代码已于本轮集成至 main：W1 `e9a57b00`、W2 `fa672934`、W4 `0c524a37`，组合合并点 `fe8713d0`；职业资料双语补齐提交 `6aaab974`。
 
