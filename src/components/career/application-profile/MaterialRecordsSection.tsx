@@ -30,6 +30,7 @@ import {
   MATERIAL_DETAIL_FIELDS,
   toDateInput,
 } from "./materialFields";
+import { AttachmentInlineList } from "./AttachmentCard";
 
 export type MaterialItem = MaterialLike & {
   id: string;
@@ -123,6 +124,15 @@ export function MaterialRecordsSection({
   function detailForSubmit(type: string): Record<string, unknown> {
     const org = materialForm.organization.trim() || null;
     const role = materialForm.role.trim() || null;
+    if (type === "LANGUAGE") {
+      return {
+        // Language records reuse the generic org/role inputs as
+        // examOrLevel/score so no extra create-form state is needed.
+        language: materialForm.title.trim() || null,
+        examOrLevel: materialForm.organization.trim() || null,
+        score: materialForm.role.trim() || null,
+      };
+    }
     if (type === "EDUCATION") {
       return {
         institution: materialForm.institution.trim() || null,
@@ -386,7 +396,19 @@ export function MaterialRecordsSection({
               testId={`${fieldPrefix}-title`}
             />
             {MATERIAL_DETAIL_FIELDS[item.type].map((def) =>
-              def.kind === "date" ? (
+              def.kind === "boolean" ? (
+                <MaterialCurrentCheckbox
+                  key={def.key}
+                  label={t(`applicationProfile.${def.labelKey}`)}
+                  committed={detailFieldDraft(item, def) === "true"}
+                  onSave={(v) =>
+                    saveMaterialPatch(item, {
+                      detail: { [def.key]: v },
+                    })
+                  }
+                  testId={`${fieldPrefix}-${def.key}`}
+                />
+              ) : def.kind === "date" ? (
                 <MaterialDateField
                   key={def.key}
                   label={t(`applicationProfile.${def.labelKey}`)}
@@ -444,6 +466,9 @@ export function MaterialRecordsSection({
             testId={`${fieldPrefix}-notes`}
           />
           {renderEvidenceBlock(item)}
+          {item.type === "AWARD" && (
+            <AttachmentInlineList category="AWARD_PROOF" materialItemId={item.id} />
+          )}
         </CardContent>
       </Card>
     );
@@ -528,7 +553,9 @@ export function MaterialRecordsSection({
             ))}
           </div>
           <label className="text-sm font-medium">
-            {t("applicationProfile.materialTitle")}
+            {materialType === "LANGUAGE"
+              ? t("applicationProfile.materialLanguage")
+              : t("applicationProfile.materialTitle")}
           </label>
           <Input
             value={materialForm.title}
@@ -615,7 +642,9 @@ export function MaterialRecordsSection({
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               <div className="flex flex-col gap-1">
                 <label className="text-sm">
-                  {t("applicationProfile.materialOrganization")}
+                  {materialType === "LANGUAGE"
+                    ? t("applicationProfile.materialLanguageExam")
+                    : t("applicationProfile.materialOrganization")}
                 </label>
                 <Input
                   value={materialForm.organization}
@@ -629,7 +658,9 @@ export function MaterialRecordsSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-sm">
-                  {t("applicationProfile.materialRole")}
+                  {materialType === "LANGUAGE"
+                    ? t("applicationProfile.materialLanguageScore")
+                    : t("applicationProfile.materialRole")}
                 </label>
                 <Input
                   value={materialForm.role}

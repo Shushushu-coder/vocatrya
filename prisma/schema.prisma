@@ -50,6 +50,7 @@ model User {
   careerMaterialItems    CareerMaterialItem[]
   candidateProfile       CandidateProfile?
   candidateSensitiveInfo CandidateSensitiveInfo?
+  candidateAttachments   CandidateAttachment[]
   resumeVariants         ResumeVariant[]
   resumeImportAttempts   ResumeImportAttempt[]
   matchAnalyses          MatchAnalysis[]
@@ -1130,6 +1131,8 @@ model CareerMaterialItem {
   skillDetail          CareerSkillDetail?
   certificationDetail  CareerCertificationDetail?
   customDetail         CareerCustomDetail?
+  languageDetail       CareerLanguageDetail?
+  attachments          CandidateAttachment[]
 
   @@index([userId, type, archivedAt])
 }
@@ -1141,6 +1144,7 @@ model CareerInternshipDetail {
   organizationName String?
   roleTitle        String?
   locationText     String?
+  department       String?
   structuredData   String   @default("{}")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1171,6 +1175,8 @@ model CareerProjectDetail {
   roleTitle        String?
   projectUrl       String?
   organizationName String?
+  projectType      String?
+  techStack        String?
   structuredData   String   @default("{}")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1197,6 +1203,8 @@ model CareerPublicationDetail {
   venue          String?
   authors        String?
   url            String?
+  venueLevel     String?
+  authorRole     String?
   publishedAt    DateTime?
   structuredData String    @default("{}")
   createdAt      DateTime  @default(now())
@@ -1240,6 +1248,21 @@ model CareerEducationDetail {
   gpaValue       Float?
   gpaScale       Float?
   rankText       String?
+
+  currentStudyLocation   String?
+  department             String?
+  majorCategory          String?
+  studyMode              String?
+  isExchange             Boolean @default(false)
+  graduationOn           String?
+  graduationExpected     Boolean @default(false)
+  rankClassText          String?
+  rankMajorText          String?
+  hasNationalScholarship Boolean @default(false)
+  advisorName            String?
+  labName                String?
+  researchDirection      String?
+
   structuredData String   @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1252,6 +1275,9 @@ model CareerAwardDetail {
   materialItemId String    @unique
   issuer         String?
   awardedAt      DateTime?
+  awardType      String?
+  awardLevel     String?
+  awardScope     String?
   structuredData String    @default("{}")
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1276,6 +1302,7 @@ model CareerCertificationDetail {
   materialItemId String    @unique
   organization   String?
   credentialUrl  String?
+  credentialId   String?
   issueDate      DateTime?
   expirationDate DateTime?
   structuredData String    @default("{}")
@@ -1288,6 +1315,20 @@ model CareerCertificationDetail {
 model CareerCustomDetail {
   id             String   @id @default(uuid())
   materialItemId String   @unique
+  structuredData String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  materialItem CareerMaterialItem @relation(fields: [materialItemId], references: [id], onDelete: Cascade)
+}
+
+model CareerLanguageDetail {
+  id             String   @id @default(uuid())
+  materialItemId String   @unique
+  language       String?
+  examOrLevel    String?
+  score          String?
+  obtainedOn     String?
   structuredData String   @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1339,6 +1380,14 @@ model CandidateProfile {
   householdRegistration String?
   graduationCohort      String?
 
+  countryOrRegion  String?
+  wechatId         String?
+  qqNumber         String?
+  currentCity      String?
+  homeCity         String?
+  homeAddress      String?
+  phoneCountryCode String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1349,6 +1398,7 @@ model CandidateSensitiveInfo {
   id     String @id @default(uuid())
   userId String @unique
 
+  idType                   String?
   idNumber                 String?
   emergencyContactName     String?
   emergencyContactRelation String?
@@ -1359,6 +1409,7 @@ model CandidateSensitiveInfo {
 
   user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   familyMembers CandidateFamilyMember[]
+  referees      CandidateReferee[]
 }
 
 model CandidateFamilyMember {
@@ -1378,6 +1429,50 @@ model CandidateFamilyMember {
   sensitiveInfo CandidateSensitiveInfo @relation(fields: [sensitiveInfoId], references: [id], onDelete: Cascade)
 
   @@index([sensitiveInfoId, sortOrder])
+}
+
+model CandidateReferee {
+  id              String @id @default(uuid())
+  sensitiveInfoId String
+
+  name         String?
+  organization String?
+  position     String?
+  relationship String?
+  phone        String?
+  email        String?
+  note         String?
+  sortOrder    Int     @default(0)
+  archivedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sensitiveInfo CandidateSensitiveInfo @relation(fields: [sensitiveInfoId], references: [id], onDelete: Cascade)
+
+  @@index([sensitiveInfoId, sortOrder])
+}
+
+model CandidateAttachment {
+  id             String  @id @default(uuid())
+  userId         String
+  materialItemId String?
+
+  category   String
+  fileName   String
+  mimeType   String
+  sizeBytes  Int?
+  storageKey String
+  origin     String    @default("USER")
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  materialItem CareerMaterialItem? @relation(fields: [materialItemId], references: [id], onDelete: SetNull)
+
+  @@index([userId, materialItemId])
 }
 
 model ResumeVariant {

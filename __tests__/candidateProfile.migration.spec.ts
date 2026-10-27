@@ -34,7 +34,10 @@ describe("candidate profile rename migration", () => {
   it("preserves existing ResumeContactProfile rows and values", async () => {
     const ctx = makeAbTestDbUrl();
     const schemaPath = preparePrismaProject(ctx.dir, {
-      excludeSuffix: CANDIDATE_PROFILE_MIGRATION,
+      // The career contract migration ALTERs CandidateProfile and
+      // CandidateSensitiveInfo, so it cannot deploy without the rename
+      // migration this spec is isolating.
+      excludeSuffix: [CANDIDATE_PROFILE_MIGRATION, "career_v1_schema_contract"],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
     try {

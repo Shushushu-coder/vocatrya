@@ -102,10 +102,13 @@ export type BackupModel =
   | "CareerSkillDetail"
   | "CareerCertificationDetail"
   | "CareerCustomDetail"
+  | "CareerLanguageDetail"
   | "CareerEvidence"
   | "CandidateProfile"
   | "CandidateSensitiveInfo"
   | "CandidateFamilyMember"
+  | "CandidateReferee"
+  | "CandidateAttachment"
   | "ResumeVariant"
   | "ResumeVariantVersion"
   | "ResumeVariantSection"
@@ -480,6 +483,11 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: { materialItemId: "CareerMaterialItem" },
     scope: byMaterial,
   },
+  CareerLanguageDetail: {
+    delegate: "careerLanguageDetail",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byMaterial,
+  },
   CareerEvidence: {
     delegate: "careerEvidence",
     fks: { materialItemId: "CareerMaterialItem" },
@@ -502,6 +510,19 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     delegate: "candidateFamilyMember",
     fks: { sensitiveInfoId: "CandidateSensitiveInfo" },
     scope: bySensitiveInfo,
+    dataset: "sensitive",
+  },
+  CandidateReferee: {
+    delegate: "candidateReferee",
+    fks: { sensitiveInfoId: "CandidateSensitiveInfo" },
+    scope: bySensitiveInfo,
+    dataset: "sensitive",
+  },
+  CandidateAttachment: {
+    delegate: "candidateAttachment",
+    owner: "userId",
+    fks: { materialItemId: "CareerMaterialItem" },
+    scope: byUser,
     dataset: "sensitive",
   },
   ResumeVariant: {
@@ -801,10 +822,13 @@ export const INSERT_ORDER: BackupModel[] = [
   "CareerSkillDetail",
   "CareerCertificationDetail",
   "CareerCustomDetail",
+  "CareerLanguageDetail",
   "CareerEvidence",
   "CandidateProfile",
   "CandidateSensitiveInfo",
   "CandidateFamilyMember",
+  "CandidateReferee",
+  "CandidateAttachment",
   "ResumeVariant",
   "ResumeVariantVersion",
   "ResumeVariantSection",
@@ -931,4 +955,6 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "InterviewSession",
   "AIConnection",
   "AIBusinessAssignment",
+  "CandidateReferee",
+  "CandidateAttachment",
 ];

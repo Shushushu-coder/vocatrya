@@ -33,7 +33,10 @@ describe("campus core fields migration", () => {
   it("applies on disposable sqlite and leaves existing rows null", async () => {
     const ctx = makeAbTestDbUrl();
     const schemaPath = preparePrismaProject(ctx.dir, {
-      excludeSuffix: CAMPUS_CORE_FIELDS_MIGRATION,
+      // The career contract migration ALTERs/REFERENCES the career tables
+      // created by CAMPUS_CORE_FIELDS_MIGRATION, so it cannot deploy in the
+      // pre-campus baseline this spec isolates.
+      excludeSuffix: [CAMPUS_CORE_FIELDS_MIGRATION, "career_v1_schema_contract"],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
     try {

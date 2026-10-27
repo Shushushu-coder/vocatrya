@@ -201,7 +201,9 @@ describe("emptiness models", () => {
       "Activity",
       "ApplicationAttempt",
       "Automation",
+      "CandidateAttachment",
       "CandidateProfile",
+      "CandidateReferee",
       "CareerMaterialItem",
       "Contact",
       "CoverLetter",
@@ -236,6 +238,8 @@ describe("backup datasets", () => {
     expect([...SENSITIVE_BACKUP_MODELS]).toEqual([
       "CandidateSensitiveInfo",
       "CandidateFamilyMember",
+      "CandidateReferee",
+      "CandidateAttachment",
     ]);
     expect(STANDARD_BACKUP_MODELS).not.toEqual(
       expect.arrayContaining([...SENSITIVE_BACKUP_MODELS]),

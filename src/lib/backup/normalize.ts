@@ -1,6 +1,9 @@
 import path from "path";
 import { APP_CONSTANTS } from "@/lib/constants";
-import { sniffFileType } from "@/lib/ai/import/extract-text";
+import {
+  sniffAttachmentFileType,
+  sniffFileType,
+} from "@/lib/ai/import/extract-text";
 import { calculateNextRunAt } from "@/lib/scraper/schedule";
 
 const NON_TERMINAL_RUN_STATUSES = new Set(["running", "cancelling"]);
@@ -69,6 +72,55 @@ export function checkImportedFile(
   const kind = sniffFileType(bytes);
   if (!kind) return null;
   return { kind, mimeType: IMPORT_MIME[kind] };
+}
+
+const ATTACHMENT_MIME: Record<"png" | "jpg" | "pdf", string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  pdf: "application/pdf",
+};
+
+export const MAX_CAREER_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+// storageKey is a logical key relative to UPLOADS_DIR/files — restored rows
+// never carry a source-machine path.
+export function logicalCareerAttachmentStorageKey(
+  attachmentId: string,
+  fileName: string,
+): string {
+  return `career-attachments/${attachmentId}/${safeEntryName(fileName)}`;
+}
+
+export function importedAttachmentPath(
+  newAttachmentId: string,
+  entryName: string,
+  kind: "png" | "jpg" | "pdf",
+): string {
+  const base = safeEntryName(entryName).replace(/\.[^.]+$/, "");
+  return path.join(
+    APP_CONSTANTS.UPLOADS_DIR,
+    "files",
+    "career-attachments",
+    newAttachmentId,
+    `${base}.${kind}`,
+  );
+}
+
+// Same gate shape as checkImportedFile: bound size, then magic bytes. The
+// sniffed mimeType is what CandidateAttachment.mimeType is set to — never
+// the value in the payload.
+export function checkImportedAttachment(
+  bytes: Buffer,
+  category?: string,
+): { kind: "png" | "jpg" | "pdf"; mimeType: string } | null {
+  if (bytes.length === 0 || bytes.length > MAX_CAREER_ATTACHMENT_BYTES) {
+    return null;
+  }
+  const kind = sniffAttachmentFileType(bytes);
+  if (!kind) return null;
+  if (category === "ID_PHOTO" && kind === "pdf") return null;
+  if (category !== undefined && !["ID_PHOTO", "AWARD_PROOF", "OTHER"].includes(category)) return null;
+  return { kind, mimeType: ATTACHMENT_MIME[kind] };
 }
 
 // A run restored as running or cancelling holds the single-active slot forever:

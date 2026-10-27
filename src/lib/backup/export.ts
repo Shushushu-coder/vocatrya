@@ -13,8 +13,11 @@ import { stripSensitiveBackupGroups } from "./compat";
 import { isResumeFilePath } from "@/lib/resumeFiles";
 import {
   isAbsoluteStorageKey,
+  logicalCareerAttachmentStorageKey,
   logicalResumeArtifactStorageKey,
+  safeEntryName,
 } from "./normalize";
+import { resolveCareerAttachmentStorageKey } from "@/lib/career/candidateAttachmentService";
 
 type Row = Record<string, unknown>;
 
@@ -125,6 +128,18 @@ export async function collectBackupData(
         return { ...artifact, storageKey, bytesMissing: true };
       }
 
+      if (model === "CandidateAttachment") {
+        const attachment = clean as Row & {
+          id: string;
+          storageKey: string;
+          fileName: string;
+        };
+        const storageKey = isAbsoluteStorageKey(attachment.storageKey)
+          ? logicalCareerAttachmentStorageKey(attachment.id, attachment.fileName)
+          : attachment.storageKey;
+        return { ...attachment, storageKey };
+      }
+
       return clean;
     });
   });
@@ -163,6 +178,20 @@ export async function buildBackupZip(
       zip.file(`files/${file.id}/${path.basename(file.filePath)}`, bytes);
     } catch {
       file.fileMissing = true;
+    }
+  }
+
+  // Attachment bytes travel only inside a sensitive backup: the rows only
+  // exist in data when includeSensitiveData is true. The zip entry reuses the
+  // logical key layout career-attachments/<id>/<fileName>; the row keeps the
+  // metadata and a bytesMissing marker when the source file is unreadable.
+  for (const attachment of data.CandidateAttachment) {
+    const entryName = `career-attachments/${attachment.id}/${safeEntryName(attachment.fileName)}`;
+    try {
+      const target = resolveCareerAttachmentStorageKey(attachment.storageKey);
+      zip.file(entryName, await fs.readFile(target));
+    } catch {
+      attachment.bytesMissing = true;
     }
   }
 

@@ -6,6 +6,9 @@ const nextConfig = {
   outputFileTracingRoot: dirname(fileURLToPath(import.meta.url)),
   outputFileTracingExcludes: { "*": ["./services/managed-ai/**"] },
   devIndicators: false,
+  experimental: {
+    serverActions: { bodySizeLimit: "6mb" },
+  },
   async headers() {
     return [
       {

@@ -43,13 +43,20 @@ const FULL_INPUT: ApplicationProjectionInput = {
 };
 
 describe("PERSONAL_INFO_COPY_FIELDS whitelist", () => {
-  it("contains exactly the 11 editable personal fields and no sensitive keys", () => {
+  it("contains the approved non-sensitive personal fields and no sensitive keys", () => {
     const keys = PERSONAL_INFO_COPY_FIELDS.map((f) => f.key);
     expect(keys).toEqual([
       "fullName",
       "email",
+      "phoneCountryCode",
       "phone",
       "address",
+      "countryOrRegion",
+      "wechatId",
+      "qqNumber",
+      "currentCity",
+      "homeCity",
+      "homeAddress",
       "gender",
       "birthDate",
       "ethnicity",
@@ -57,6 +64,9 @@ describe("PERSONAL_INFO_COPY_FIELDS whitelist", () => {
       "nativePlace",
       "householdRegistration",
       "graduationCohort",
+      "highestEducation",
+      "schoolCity",
+      "linksData",
     ]);
     for (const key of keys) {
       expect(key).not.toMatch(/idNumber|emergency|familyMember|reference/i);

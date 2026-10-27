@@ -3,7 +3,7 @@ import { CareerRuntimeError } from "./errors";
 import { assertResumeV1Writable } from "./capabilities";
 import { normalizeOptionalText } from "./opportunityService";
 
-export const CANDIDATE_GENDER = ["男", "女", "其他"] as const;
+export const CANDIDATE_GENDER = ["男", "女", "保密", "其他"] as const;
 export type CandidateGender = (typeof CANDIDATE_GENDER)[number];
 
 export const CANDIDATE_POLITICAL_STATUS = [
@@ -35,9 +35,17 @@ export type CandidateProfileInput = {
   nativePlace?: string | null;
   householdRegistration?: string | null;
   graduationCohort?: string | null;
+  countryOrRegion?: string | null;
+  wechatId?: string | null;
+  qqNumber?: string | null;
+  currentCity?: string | null;
+  homeCity?: string | null;
+  homeAddress?: string | null;
+  phoneCountryCode?: string | null;
 };
 
 export type CandidateSensitiveInfoInput = {
+  idType?: string | null;
   idNumber?: string | null;
   emergencyContactName?: string | null;
   emergencyContactRelation?: string | null;
@@ -111,8 +119,23 @@ function assertBirthDate(
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[+()\-.\s\d]{5,30}$/;
+const PHONE_COUNTRY_CODE_PATTERN = /^\+?\d{1,4}$/;
 
-function assertEmail(
+function assertPhoneCountryCode(
+  value: string | null | undefined,
+): string | null | undefined {
+  const text = optionalText(value);
+  if (text === undefined || text === null) return text;
+  if (!PHONE_COUNTRY_CODE_PATTERN.test(text)) {
+    throw new CareerRuntimeError(
+      "INVALID_PHONE_COUNTRY_CODE",
+      "Invalid phone country code.",
+    );
+  }
+  return text;
+}
+
+export function assertEmail(
   value: string | null | undefined,
 ): string | null | undefined {
   const text = optionalText(value);
@@ -123,7 +146,7 @@ function assertEmail(
   return text;
 }
 
-function assertPhone(
+export function assertPhone(
   value: string | null | undefined,
 ): string | null | undefined {
   const text = optionalText(value);
@@ -170,6 +193,13 @@ export class CandidateProfileService {
       nativePlace: optionalText(input.nativePlace),
       householdRegistration: optionalText(input.householdRegistration),
       graduationCohort: optionalText(input.graduationCohort),
+      countryOrRegion: optionalText(input.countryOrRegion),
+      wechatId: optionalText(input.wechatId),
+      qqNumber: optionalText(input.qqNumber),
+      currentCity: optionalText(input.currentCity),
+      homeCity: optionalText(input.homeCity),
+      homeAddress: optionalText(input.homeAddress),
+      phoneCountryCode: assertPhoneCountryCode(input.phoneCountryCode),
     };
     return this.db.candidateProfile.upsert({
       where: { userId },
@@ -181,7 +211,13 @@ export class CandidateProfileService {
   async getCandidateSensitiveInfo(userId: string = this.userId) {
     return this.db.candidateSensitiveInfo.findUnique({
       where: { userId },
-      include: { familyMembers: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        familyMembers: { orderBy: { sortOrder: "asc" } },
+        referees: {
+          where: { archivedAt: null },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        },
+      },
     });
   }
 
@@ -191,6 +227,7 @@ export class CandidateProfileService {
   ) {
     await this.gate();
     const data = {
+      idType: optionalText(input.idType),
       idNumber: optionalText(input.idNumber),
       emergencyContactName: optionalText(input.emergencyContactName),
       emergencyContactRelation: optionalText(input.emergencyContactRelation),
