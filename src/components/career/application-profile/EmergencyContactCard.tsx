@@ -199,8 +199,10 @@ export function EmergencyContactCard() {
     }
     setSaving(true);
     try {
-      const res = await updateEmergencyContact(payload);
-      if (res.success) {
+      // A thrown server action is the same failure as success:false: keep the
+      // draft and surface the error so the user can retry the same edit.
+      const res = await updateEmergencyContact(payload).catch(() => null);
+      if (res?.success) {
         toastSuccess(t("applicationProfile.saveSuccess"));
         setEditing(false);
         setBaseline(null);

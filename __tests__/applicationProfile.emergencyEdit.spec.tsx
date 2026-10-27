@@ -128,10 +128,11 @@ describe("EmergencyContactCard edit data protection", () => {
     expect(updateEmergencyContact).not.toHaveBeenCalled();
   });
 
-  it("failed save keeps the draft so the user can retry", async () => {
-    (updateEmergencyContact as unknown as MockFn)
-      .mockResolvedValueOnce({ success: false })
-      .mockResolvedValueOnce({ success: true });
+  it.each(["response", "exception"])("failed save (%s) keeps the draft so the user can retry", async (failure) => {
+    const update = updateEmergencyContact as unknown as MockFn;
+    if (failure === "exception") update.mockRejectedValueOnce(new Error("network unavailable"));
+    else update.mockResolvedValueOnce({ success: false });
+    update.mockResolvedValueOnce({ success: true });
     await openCard();
     await enterEdit();
     fireEvent.change(screen.getByTestId("emergency-input-relation"), {

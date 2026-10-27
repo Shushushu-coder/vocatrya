@@ -22,7 +22,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "七 Tab、显隐管理与 UserSettings 原子持久化接口已集成；包含并发保存防护。组件测试通过，真实保存、刷新、重启及历史数据验收待完成。",
+      "implementationNotes": "任务隔离浏览器七 Tab、显隐保存、刷新、服务重启重开与记录保留验收通过；Windows Electron 完整退出重开结果未核实，passes 保持 false。",
       "description": "职业资料采用七 Tab，允许用户管理 Tab 显示，保留历史求职意向数据但不提供独立全局求职意向 Tab。",
       "steps": [
         "打开职业资料，能访问个人信息、教育经历、实习经历、项目经历、获奖经历、其他、网申资料七个 Tab。",
@@ -37,7 +37,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
-      "implementationNotes": "个人信息现有 11 字段与当前支持类型的素材字段已集成直接编辑及自动保存；素材使用单键增量写入，保留详情兄弟字段，串行保存、失败草稿与重试、中文输入法保护和记录 Tab 常驻挂载已接通，卸载不再触发异步兜底提交。组件及隔离 SQLite 定向验证通过；敏感字段仍沿用显式编辑，真实浏览器/Electron、输入节奏及中文输入法实机验收待完成。",
+      "implementationNotes": "任务隔离浏览器验证个人/素材自动保存、快速输入、切换 Tab、失败草稿重试、刷新及服务重启重开；中文输入法仅通过合成 composition 事件验证，实机输入法与 Windows Electron 完整退出重开未核实，敏感字段仍沿用显式编辑，passes 保持 false。",
       "description": "职业资料字段可直接编辑、自动保存，并在失败时保留输入供重试。",
       "steps": [
         "编辑一项资料字段，无需整页保存即可完成持久化；重新打开仍显示修改后的值。",
@@ -65,7 +65,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成当前字段与记录范围内的个人分组、素材 Tab（含只读任职记录）、分区及按需网申汇总复制，复用已有字段和记录复制；批量复制以字段白名单排除敏感对象，剪贴板失败反馈保留。定向组件与文本测试通过；真实浏览器/Electron 剪贴板完整验收待完成，未新增 Schema 或未来敏感对象。",
+      "implementationNotes": "任务隔离浏览器字段、分组、记录、Tab、网申汇总复制与敏感过滤路径通过；Windows Electron 剪贴板完整验收未核实，passes 保持 false。",
       "description": "在现有“复制本条”基础上提供字段、分组、记录、Tab、网申汇总的分级复制。",
       "steps": [
         "字段、分组、记录、Tab 和按需网申汇总均能复制正确文本。",
@@ -80,7 +80,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
-      "implementationNotes": "已集成紧急联系人安全编辑：编辑前读取原值，按字段差量保存，主动清空使用 null；读取失败不进入空值编辑，保存失败保留草稿，收起清除明文展示并使迟到读取失效。定向组件与隔离 SQLite 验证通过，真实用户路径待验收；证明人、附件及其他新增敏感对象仍依赖后续 Schema 范围。",
+      "implementationNotes": "已集成保存请求抛异常时保留紧急联系人草稿并提示失败的修复。任务隔离浏览器验证默认掩码、显式揭示/收起、迟到响应失效、差量编辑、清空及失败重试；组件与隔离 SQLite 定向验证通过。证明人/附件等新增敏感对象尚缺，Windows Electron 完整验收未核实，passes 保持 false。",
       "description": "职业资料中的证件、紧急联系人、证明人及附件等敏感内容默认受保护。",
       "steps": [
         "默认视图隐藏敏感字段；查看或单字段复制需明确操作。",
@@ -95,6 +95,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
+      "implementationNotes": "任务隔离浏览器使用合成旧资料验证个人信息与素材可读写、历史求职意向和证件值保留，并覆盖刷新与服务重启重开；Windows Electron 完整退出重开未核实，passes 保持 false。",
       "description": "七 Tab 可正确呈现既有候选人资料与职业素材，不破坏历史求职意向。",
       "steps": [
         "用旧版本已存在的数据打开新版七 Tab，原个人信息和经历可读取与继续修改。",
