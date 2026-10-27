@@ -19,6 +19,7 @@ type JobStatusBadgeMenuProps = {
   jobStatuses: JobStatus[];
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   className?: string;
+  timeZone?: string;
 };
 
 export function JobStatusBadgeMenu({
@@ -26,6 +27,7 @@ export function JobStatusBadgeMenu({
   jobStatuses,
   onChangeJobStatus,
   className,
+  timeZone,
 }: JobStatusBadgeMenuProps) {
   const { t } = useI18n();
   const currentStatus = getLocalizedJobStatus(job.Status, t);
@@ -42,7 +44,7 @@ export function JobStatusBadgeMenu({
               })}
               className="cursor-pointer rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-              <JobStatusBadge job={job} className={className} />
+              <JobStatusBadge job={job} className={className} timeZone={timeZone} />
             </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>

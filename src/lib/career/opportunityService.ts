@@ -1,4 +1,8 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import {
+  requireDateOnly,
+  toInstantIso,
+} from "@/lib/datetime";
 import { CareerRuntimeError } from "./errors";
 import {
   FORBIDDEN_OPPORTUNITY_STATUSES,
@@ -24,6 +28,11 @@ export type OpportunitySafeFields = {
   sourceUrl?: string | null;
   externalSourceKey?: string | null;
   deadline?: Date | null;
+  /** Calendar-day carrier ("YYYY-MM-DD"). When defined, it is the deadline
+   *  contract: a string writes deadlineOn+dateOnly and clears `deadline`;
+   *  null clears the whole triple. When undefined, `deadline` is the
+   *  (instant) carrier instead. Never pass both — deadlineOn wins. */
+  deadlineOn?: string | null;
   recruitmentCohort?: string | null;
   recruitmentBatch?: string | null;
   salaryText?: string | null;
@@ -32,6 +41,16 @@ export type OpportunitySafeFields = {
   closedAt?: Date | null;
   archivedAt?: Date | null;
 };
+
+// A fresh bare Date is an explicitly supplied instant fact. Being exactly
+// on a minute boundary says nothing about the input's declared precision.
+function instantWritePrecision(
+  value: Date | null | undefined,
+): string | null {
+  if (!value) return null;
+  toInstantIso(value);
+  return "fullInstant";
+}
 
 export function normalizeOptionalText(
   value: string | null | undefined,
@@ -80,6 +99,7 @@ export class OpportunityService {
     sourceUrl?: string | null;
     sourceLabel?: string | null;
     deadline?: Date | null;
+    deadlineOn?: string | null;
     recruitmentCohort?: string | null;
     recruitmentBatch?: string | null;
     salaryText?: string | null;
@@ -99,6 +119,8 @@ export class OpportunityService {
     if (!company) {
       throw new CareerRuntimeError("COMPANY_NOT_FOUND", "Company not found");
     }
+    const deadlineOn =
+      input.deadlineOn == null ? null : requireDateOnly(input.deadlineOn);
 
     return this.db.jobOpportunity.create({
       data: {
@@ -112,7 +134,13 @@ export class OpportunityService {
         workplaceType: input.workplaceType ?? null,
         sourceUrl: input.sourceUrl ?? null,
         sourceLabel: input.sourceLabel ?? null,
-        deadline: input.deadline ?? null,
+        // A defined deadlineOn is the dateOnly contract and always wins over
+        // the instant carrier — never store a fake UTC/local midnight.
+        deadline: deadlineOn ? null : (input.deadline ?? null),
+        deadlineOn,
+        deadlinePrecision: deadlineOn
+          ? "dateOnly"
+          : instantWritePrecision(input.deadline),
         recruitmentCohort: normalizeOptionalText(input.recruitmentCohort) ?? null,
         recruitmentBatch: normalizeOptionalText(input.recruitmentBatch) ?? null,
         salaryText: input.salaryText ?? null,
@@ -185,7 +213,20 @@ export class OpportunityService {
     if (fields.externalSourceKey !== undefined) {
       data.externalSourceKey = fields.externalSourceKey;
     }
-    if (fields.deadline !== undefined) data.deadline = fields.deadline;
+    // Single carrier: an explicit deadlineOn (incl. null = clear all three)
+    // supersedes; a bare `deadline` write clears deadlineOn so a stale DateOnly
+    // can't shadow the instant.
+    if (fields.deadlineOn !== undefined) {
+      const on =
+        fields.deadlineOn === null ? null : requireDateOnly(fields.deadlineOn);
+      data.deadlineOn = on;
+      data.deadlinePrecision = on ? "dateOnly" : null;
+      data.deadline = null;
+    } else if (fields.deadline !== undefined) {
+      data.deadline = fields.deadline;
+      data.deadlineOn = null;
+      data.deadlinePrecision = instantWritePrecision(fields.deadline);
+    }
     if (fields.recruitmentCohort !== undefined) {
       data.recruitmentCohort =
         normalizeOptionalText(fields.recruitmentCohort) ?? null;

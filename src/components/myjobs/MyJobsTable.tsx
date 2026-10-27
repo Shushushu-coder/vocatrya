@@ -28,6 +28,7 @@ type MyJobsTableProps = {
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   onAddNote: (jobId: string) => void;
   deleteIsArchive?: boolean;
+  timeZone?: string;
 };
 
 import { getLocalizedJobSource, useI18n } from "@/i18n";
@@ -40,6 +41,7 @@ function MyJobsTable({
   onChangeJobStatus,
   onAddNote,
   deleteIsArchive = false,
+  timeZone,
 }: MyJobsTableProps) {
   const { t, formatDate } = useI18n();
   const { freshNativeFull } = useCareerSurfaces();
@@ -117,6 +119,7 @@ function MyJobsTable({
                     jobStatuses={jobStatuses}
                     onChangeJobStatus={onChangeJobStatus}
                     className="max-w-[10rem] justify-center overflow-hidden"
+                    timeZone={timeZone}
                   />
                 </TableCell>
                 {!freshNativeFull && (

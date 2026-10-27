@@ -55,6 +55,7 @@ vi.mock("@prisma/client", () => {
     resume: { count: vi.fn() },
     coverLetter: { count: vi.fn() },
     tag: { count: vi.fn() },
+    userSettings: { findUnique: vi.fn(() => null) },
   };
   return {
     PrismaClient: vi.fn(function () {
@@ -228,6 +229,7 @@ describe("jobActions", () => {
         success: true,
         data,
         total,
+        timeZone: expect.any(String),
       });
       expect(prisma.job.findMany).toHaveBeenCalledTimes(1);
       expect(prisma.job.count).toHaveBeenCalledTimes(1);
@@ -464,6 +466,7 @@ describe("jobActions", () => {
           success: true,
           data: mockFilteredData,
           total: 1,
+          timeZone: expect.any(String),
         });
       });
 
@@ -847,7 +850,11 @@ describe("jobActions", () => {
 
     const result = await getJobDetails("2");
 
-    expect(result).toStrictEqual({ job: mockJob, success: true });
+    expect(result).toStrictEqual({
+      job: mockJob,
+      success: true,
+      timeZone: expect.any(String),
+    });
     expect(prisma.job.findUnique).toHaveBeenCalledWith({
       where: {
         id: "2",

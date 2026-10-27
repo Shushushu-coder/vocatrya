@@ -91,6 +91,7 @@ function JobsContainer({
     initialLoading,
     loadingMore,
     loadError,
+    timeZone,
     loadJobs,
     reloadJobs,
     retryLoad,
@@ -202,6 +203,7 @@ function JobsContainer({
           hideAddJob={!allowJobMutations}
           careerRuntimeMode={careerRuntimeMode}
           abRolloutScope={abRolloutScope}
+          timeZone={timeZone}
         />
         <CardContent>
           {initialLoading && <Loading />}
@@ -260,6 +262,7 @@ function JobsContainer({
                 onChangeJobStatus={onChangeJobStatus}
                 onAddNote={onAddNote}
                 deleteIsArchive={deleteIsArchive}
+                timeZone={timeZone}
               />
             ) : (
               <MyJobsTable
@@ -270,6 +273,7 @@ function JobsContainer({
                 onChangeJobStatus={onChangeJobStatus}
                 onAddNote={onAddNote}
                 deleteIsArchive={deleteIsArchive}
+                timeZone={timeZone}
               />
             ))}
           {loadError === null && jobs.length < totalJobs && (

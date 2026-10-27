@@ -3,6 +3,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { getJob, listJobs, resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
 import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import type { AgentGetJobResult, AgentJobSummary, AgentListJobsResult } from "@/models/agent.model";
+import { jobDeadlinePrecision } from "@/lib/jobs/deadlineTime";
 
 const AGENT_JOB_LIST_CAP = 40;
 
@@ -19,6 +20,8 @@ type CanonicalJobRow = {
   updatedAt?: Date | string | null;
   appliedDate?: Date | string | null;
   dueDate?: Date | string | null;
+  deadlineOn?: string | null;
+  deadlinePrecision?: string | null;
   description?: string | null;
   jobUrl?: string | null;
 };
@@ -41,6 +44,10 @@ function summaryOf(job: CanonicalJobRow): AgentJobSummary {
     company: labelOf(job.Company),
     status: job.Status?.label?.trim() || job.Status?.value?.trim() || null,
     location: labelOf(job.Location),
+    // dueDate is the instant-carrier compat projection; the precision-aware
+    // deadline lives in deadlineOn + the normalized deadlinePrecision.
+    deadlineOn: job.deadlineOn ?? null,
+    deadlinePrecision: jobDeadlinePrecision(job),
     createdAt: isoOf(job.createdAt),
     updatedAt: isoOf(job.updatedAt),
   };

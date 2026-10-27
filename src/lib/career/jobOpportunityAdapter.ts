@@ -23,6 +23,7 @@ import {
   pickLatestAttempt,
   planUiStatusWrite,
 } from "./uiStatus";
+import { jobDeadlinePrecision } from "@/lib/jobs/deadlineTime";
 
 export { deriveUiStatus, pickLatestAttempt, planUiStatusWrite } from "./uiStatus";
 
@@ -36,6 +37,11 @@ export type JobFormMutationInput = {
   source?: string | null;
   status: string;
   dueDate?: Date | null;
+  /** Deadline as "YYYY-MM-DD" (canonical write contract). When defined it
+   *  supersedes dueDate; undefined on update leaves the stored triple
+   *  untouched — required so an unedited DatePicker can't rewrite a stored
+   *  unknown instant with the wall-clock date it happened to show. */
+  deadlineOn?: string | null;
   dateApplied?: Date | null;
   salaryRange?: string | null;
   recruitmentCohort?: string | null;
@@ -250,6 +256,7 @@ export async function createOpportunityFromJobForm(
       workplaceType: input.workplaceType ?? null,
       sourceUrl: input.jobUrl ?? null,
       sourceLabel: source?.label ?? null,
+      deadlineOn: input.deadlineOn,
       deadline: input.dueDate ?? null,
       recruitmentCohort: normalizeOptionalText(input.recruitmentCohort) ?? null,
       recruitmentBatch: normalizeOptionalText(input.recruitmentBatch) ?? null,
@@ -303,7 +310,10 @@ export async function updateOpportunityFromJobForm(
       workplaceType: input.workplaceType ?? null,
       sourceUrl: input.jobUrl ?? null,
       sourceLabel: source?.label ?? null,
-      deadline: input.dueDate ?? null,
+      deadlineOn: input.deadlineOn,
+      // The instant carrier only flows when no dateOnly contract was sent —
+      // updateSafe treats deadlineOn-defined as the whole deadline write.
+      deadline: input.dueDate,
       recruitmentCohort:
         input.recruitmentCohort === undefined
           ? undefined
@@ -354,6 +364,8 @@ type OpportunityWithRelations = {
   sourceLabel: string | null;
   sourceUrl: string | null;
   deadline: Date | null;
+  deadlineOn: string | null;
+  deadlinePrecision: string | null;
   recruitmentCohort: string | null;
   recruitmentBatch: string | null;
   salaryText: string | null;
@@ -520,7 +532,15 @@ export function mapOpportunityToJobView(
     workplaceType: opportunity.workplaceType,
     createdAt: opportunity.createdAt,
     appliedDate: firstSubmittedAt,
+    // dueDate stays the instant-carrier compat projection: null on a pure
+    // dateOnly row — consumers read the real deadline through the triple.
     dueDate: opportunity.deadline ?? null,
+    deadlineOn: opportunity.deadlineOn ?? null,
+    deadlinePrecision: jobDeadlinePrecision({
+      deadlineOn: opportunity.deadlineOn,
+      dueDate: opportunity.deadline,
+      deadlinePrecision: opportunity.deadlinePrecision,
+    }),
     recruitmentCohort: opportunity.recruitmentCohort ?? null,
     recruitmentBatch: opportunity.recruitmentBatch ?? null,
     salaryRange: opportunity.salaryText,

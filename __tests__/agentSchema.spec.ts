@@ -23,7 +23,11 @@ describe("AgentAddJobSchema", () => {
     const inherited = Object.keys(McpAddJobInputShape).filter(
       (k) => k !== "upsert" && k !== "allowDuplicate",
     );
-    expect(Object.keys(AgentAddJobSchema.shape).sort()).toEqual(inherited.sort());
+    // deadlineOn is agent-only: the day-level alternative to the dueDate
+    // instant, absent from the shared MCP shape.
+    expect(Object.keys(AgentAddJobSchema.shape).sort()).toEqual(
+      [...inherited, "deadlineOn"].sort(),
+    );
   });
 
   it("inherits the MCP describe() text for a field it does not override", () => {

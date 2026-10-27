@@ -129,6 +129,21 @@ function canonicalTool(pastedText?: string) {
 }
 
 describe("canonical add_job", () => {
+  it("stores a DateOnly deadline and returns its declared precision without an instant", async () => {
+    await freshFull();
+    const result = await execute(canonicalTool(), {
+      company: "Acme", jobTitle: "Engineer", deadlineOn: "2026-11-30",
+    });
+    const id = (result as { jobOpportunityId: string }).jobOpportunityId;
+    expect(result).toMatchObject({ created: true });
+    expect(await appPrisma.jobOpportunity.findUniqueOrThrow({ where: { id } }))
+      .toMatchObject({ deadlineOn: "2026-11-30", deadline: null, deadlinePrecision: "dateOnly" });
+    expect(await getJobForAgent(userId, id)).toMatchObject({
+      status: "ok", job: { deadlineOn: "2026-11-30", deadlinePrecision: "dateOnly", dueDate: null },
+    });
+    expect(createJobFromNames).not.toHaveBeenCalled();
+  });
+
   it("asks for approval before a company and title can be written, including without a description", async () => {
     const tool = canonicalTool();
     const gate = tool.needsApproval as (input: unknown, ctx: unknown) => boolean;

@@ -10,6 +10,7 @@ import {
   saveToLocalStorage,
 } from "@/utils/localstorage.utils";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { runtimeTimeZone } from "@/lib/datetime";
 
 // Owns the job list itself: pagination, search, view mode, infinite scroll,
 // and the reload triggered when the agent chat writes job data.
@@ -45,6 +46,9 @@ export function useJobsList({
   // null = the last read succeeded. A string is the action message so a
   // failed read is not presented as an empty job list.
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Account zone from the list envelope — deadline (deadlineOn/precision)
+  // display and overdue checks are anchored to it, not the runtime zone.
+  const [timeZone, setTimeZone] = useState<string>(() => runtimeTimeZone());
   const failedPageRef = useRef(1);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -172,8 +176,9 @@ export function useJobsList({
       // success would otherwise clear a newer error, and a late failure
       // would fail a list that already loaded.
       if (generationRef.current !== generation) return;
-      const { success, data, total, message } = result ?? {};
+      const { success, data, total, message, timeZone: zone } = result ?? {};
       if (success && data) {
+        if (zone) setTimeZone(zone);
         // In-generation ordering: only the next contiguous page may apply.
         // Duplicate or out-of-order page responses drop their rows; the
         // sentinel re-requests any gap from the applied page state.
@@ -273,6 +278,7 @@ export function useJobsList({
     initialLoading,
     loadingMore,
     loadError,
+    timeZone,
     loadJobs,
     reloadJobs,
     retryLoad,

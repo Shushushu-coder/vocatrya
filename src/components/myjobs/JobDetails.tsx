@@ -83,6 +83,8 @@ type JobDetailsProps = {
   tags: Tag[];
   careerRuntimeMode?: string;
   abRolloutScope?: AbRolloutScope;
+  /** Account zone for deadline display/overdue semantics. */
+  timeZone?: string;
 };
 
 function JobDetails({
@@ -95,6 +97,7 @@ function JobDetails({
   tags,
   careerRuntimeMode,
   abRolloutScope,
+  timeZone,
 }: JobDetailsProps) {
   const { t } = useI18n();
   const showTimeline = isAbJobReadMode(careerRuntimeMode, abRolloutScope);
@@ -247,6 +250,7 @@ function JobDetails({
           matchData={parsedMatchData}
           showCampusFields={showTimeline}
           showMatchScore={!freshNativeFull}
+          timeZone={timeZone}
         />
 
         {showRestrictedResumePanel && (
@@ -380,6 +384,7 @@ function JobDetails({
         hideTrigger
         careerRuntimeMode={careerRuntimeMode}
         abRolloutScope={abRolloutScope}
+        timeZone={timeZone}
         redirectPath={`/dashboard/myjobs/${job.id}?tab=${activeTab}`}
       />
       <DeleteAlertDialog

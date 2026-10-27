@@ -51,7 +51,9 @@ export function buildAddJobTool(
       : AGENT_TOOL_DESCRIPTIONS.add_job,
     // Date transforms are deferred here so this schema doubles as the JSON
     // schema the model reads — see src/models/agent.schema.ts.
-    inputSchema: AgentAddJobSchema,
+    inputSchema: canonical
+      ? AgentAddJobSchema
+      : AgentAddJobSchema.omit({ deadlineOn: true }),
     // Approval is asked for every call that could write, and skipped only for
     // one that execute is already certain to reject. The card renders before
     // execute runs, so a doomed call otherwise spends a Confirm and the retry
@@ -63,6 +65,11 @@ export function buildAddJobTool(
       return Boolean(pastedText ?? input?.jobDescription);
     },
     execute: async (raw, exec): Promise<AgentAddJobResult> => {
+      // Older/replayed callers can bypass the advertised schema. A Legacy
+      // Job has no DateOnly carrier, so reject rather than invent midnight.
+      if (!canonical && raw && "deadlineOn" in raw) {
+        return failed("deadlineOn is not supported in this mode. Only an explicitly supplied dueDate instant with an offset is supported; do not invent a time for a calendar-day deadline.");
+      }
       const parsed = AgentAddJobParseSchema.safeParse(raw);
       if (!parsed.success) {
         // Returned, not thrown, so the model can see why and retry.
@@ -93,6 +100,7 @@ export function buildAddJobTool(
               jobType: input.jobType,
               workplaceType: input.workplaceType,
               dueDate: input.dueDate,
+              deadlineOn: input.deadlineOn,
               jobUrl: input.jobUrl,
               salaryRange: input.salaryRange,
               toolCallId: exec?.toolCallId,

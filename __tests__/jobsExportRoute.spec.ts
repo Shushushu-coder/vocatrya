@@ -34,9 +34,10 @@ describe("CSV POST request locale", () => {
     expect(csv.split("\uFEFF")).toHaveLength(2);
     const rows = Papa.parse<string[]>(csv.slice(1)).data;
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toHaveLength(12);
+    expect(rows[0]).toHaveLength(13);
     expect(rows[0][4]).toBe(locale === "en" ? "Company" : "公司");
     expect(rows[0][11]).toBe(locale === "en" ? "Salary" : "薪资待遇");
+    expect(rows[0][12]).toBe(locale === "en" ? "Deadline" : "截止日期");
     expect(rows[1][2]).toBe(locale === "en" ? "Yes" : "是");
     expect(rows[2][2]).toBe(locale === "en" ? "No" : "否");
     expect(rows[1][6]).toBe(locale === "en" ? "Internship" : "实习");

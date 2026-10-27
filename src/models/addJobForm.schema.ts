@@ -47,6 +47,14 @@ export function createAddJobFormSchema(t: (key: string) => string) {
         message: t("jobs.validation.statusMin"),
       }),
     dueDate: z.date().optional().nullable(),
+    // Canonical (A+B) deadline contract: "YYYY-MM-DD" or null. The client
+    // derives it from the dueDate picker at submit time; undefined on edit
+    // means the field was never touched and the stored triple is preserved.
+    deadlineOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .nullable(),
     recruitmentCohort: z.string().optional().nullable(),
     recruitmentBatch: z.string().optional().nullable(),
     /**
