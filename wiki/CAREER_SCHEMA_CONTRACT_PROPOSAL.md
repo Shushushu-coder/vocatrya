@@ -10,6 +10,22 @@
 > - D2–D4、D6–D9、D11–D15：采用 §10 推荐。新 Migration 与 Backup V5 由单一 Schema/Integration Owner 负责，新增字段必须同步备份格式；不改写历史数据。
 > - 派生仅在读取层完成。可用事实的字段映射、校验及稳定排序由开发负责人落实；不得新增未经批准的“已取得”推断规则。若现有字段不足以表达确认事实，先保持未知，不擅自补造数据。
 
+## BD-LINKS 补充合同（2026-10-27，已批准并集成 Main）
+
+实施记录：源码提交 3490cdaa 已集成 Main，备份为 V6；实际重建迁移补显式事务并通过中途失败回滚验证。桌面验收未完成，详见 MVP_IMPLEMENTATION.md 文首。
+
+本补充是对 BD-V1 原“不新增 Schema”范围的明确例外，仅用于 CareerSkillDetail 与既有 Tag 的真实引用。优先于工作区 proposal 中的待确认项；不代表已实现或验收，不授权真实数据操作或自动提交/合并/推送。
+
+1. 新增 `CareerSkillDetail.tagId String?` → `Tag.id`，关系 `onDelete: SetNull`，新增 `@@index([tagId])` 与 Tag 反向关系。使用新 Migration，现有行 tagId 为 NULL，不按名关联、不 backfill，不改已执行 Migration。
+2. 通过专用 service/action 关联与解除：校验 material 属于当前用户、类型 SKILL、Tag 属于同一用户，并遵守职业资料写门控。通用 detail 补丁禁止 tagId/tag，不能绕过专用通道或在关联态制造第二套名称来源。
+3. 显式关联时 skillName 写当前 tag.label；显式解除时保留解除前用户所见的当前 label。item.title 保持独立，不同步改写；Tag 改名时不级联写历史快照。冻结简历与投递历史保持原事实。
+4. 已关联仅展示活 Tag 名及解除操作；未关联保留文本编辑，提供最多一个 Tag 的选择/就地创建，复用既有去重和失败保草稿机制。最小范围不改创建表单，先建文本技能再关联。
+5. Tag 删除守卫和管理端计数纳入 careerSkillDetails（含归档素材），在并发下保持有引用不能正常删除；SetNull 是数据库兜底。无有效引用时回退 skillName，不制造悬空关联。
+6. Backup **V6**：导出/校验/预检/恢复与 idmap 同步 tagId，作为标准数据；支持 V1–V5 旧备份（缺失字段为 NULL），悬空可空 FK 按已有规则降 NULL。新 V6 必须被旧 V5 程序明确拒绝，不能以同号可选字段造成静默关系丢失；保留敏感数据隔离和原始文本。
+7. 纳入未来 legacy 迁移对已有 Skill.tagId 的保留：仅限 Tag 存在且 createdBy 等于目标用户；无效或跨用户引用不保留，沿用文本快照。已迁移数据不重跑。canonicalResumeImport 继续文本导入，不按同名自动关联。
+8. bd-links-closure 为单一源码 Owner：Schema/新 Migration、素材服务/Action/UI/复制投影、备份、tag.actions、TagsTable、job.model、migrator/phase2Auditor 及相关测试。主协调窗口独占双语词条和 wiki；不得修改公共 TagInput、认证/桌面壳或其他任务文件，必要共享改动先交接。
+9. 验证覆盖新旧迁移链与不变量、同用户/跨用户权限、关联/解除/改名、归档引用禁删与并发失败、复制/投影/冻结历史、V6 重映射与 V1–V5 兼容及失败恢复。用隔离 SQLite；桌面验收待共享入口交付后接续，未执行不得标 passes。
+
 本文档是职业资料新增字段与模型开发前的合同收口方案，供冻结后作为 `CP-SCHEMA`、`CP-RECORDS`、`CP-PRIVACY` 及后续 UI/复制工作包的实现依据。本文档**不修改任何运行时代码、Schema、Migration 或备份代码**。
 
 **标注约定**

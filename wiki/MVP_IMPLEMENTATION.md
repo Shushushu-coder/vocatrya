@@ -4,7 +4,44 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## W3/W5/W6 Main 集成与问题修复（2026-10-27，当前状态）
+## BD-LINKS / Backup V6 已集成 Main（2026-10-27，当前状态）
+
+用户已明确授权复审、必要修复、提交和 Main 合并。本轮源码提交 `3490cdaa`，合并点 `18c0d482`，追加并发删除与活标签复制回归 `c4c5f1af`；后文未提交/待集成描述均为历史阶段记录。
+
+- BD-LINKS 改为 IMPLEMENTED：真实可空 Tag FK/SetNull/索引、同用户专用通道、活名 UI/复制/面试消费、归档引用禁删、Backup V6 和未来 legacy 真实 FK 保留均已在 Main。skillName/item.title/冻结与投递历史按合同保留，未按名称自动关联或 backfill。
+- 复审修复：输入缺失/空 ID 在进入 Prisma 前拒绝；素材关联/解除和关联态文本补丁读查写放入事务；Tag 删除先校验归属再读引用计数，避免跨用户计数信息泄露；UI 捕获网络异常、失败保留选择可重试、阻止重复提交和保存期文本编辑。
+- 迁移专项实际发现并修复了故障恢复缺陷：原表重建 SQL 在 DROP 后注入错误会使旧表不可读。新迁移加入显式 BEGIN IMMEDIATE/COMMIT；在隔离数据库用真实 Prisma migrate deploy 再测，正常升级保留原字段/记录/唯一约束/FK/索引，注入相同失败后旧表与数据回滚保留。数据库不变量检查通过；新增永久迁移回归2项通过。
+- 组合验证：**37 文件/410 项通过**（备份、技能引用、迁移、素材读写、UI和相关消费者）；追加技能关联/删除并发、活名复制和冻结版本写边界 **2 文件/18 项通过**。Tag actions 连续两次独立运行各 **31 项通过**，当前 mock 模型与 transaction 回调完整，未复现 count 错误，无证据将旧失败归因于生成竞态。
+- 完整 tsc、所有改动文件 ESLint（零告警）、现有中英文词条校验与 Git 差异检查通过。隔离验证使用 bd-links-closure 独立依赖/Prisma Client；Main 合并后仅重生成客户端，未对真实数据库执行迁移。
+- Windows Electron fresh-native 仍未执行，不把隔离数据库或 UI spec 当作桌面验收；全部 passes 保持原值，仅 RM-BIND 为 true。共享桌面入口由原窗口继续处理，W7 等对应窗口随后同步本次 Main、使用隔离新数据根构建并接续真实导出和退出重开。
+- 主目录其他窗口的认证/桌面/E2E Dirty 保留且未纳入提交；未 Push，未删除 Worktree 或验证证据。收尾核对源/集成分支独有提交、Dirty 和进程占用，不擅自清理。
+
+当前下一步是桌面入口交付后的集中用户验收与 W7 完整简历闭环；已有实现不重复开发。原 Task 性能参考观察及 G-A/系统自启授权边界继续保留。
+
+## BD-LINKS 工作区实现交付（2026-10-27，历史阶段）
+
+- 已核对 `codex/bd-links-closure @ f4f0727d`：26 个已跟踪文件修改、3 项未跟踪（测试、迁移目录、SkillTagField）；业务实现尚未提交、未合并。Main 仍为 `f4f0727d`，Schema 尚无技能 Tag FK、备份仍为 V5。
+- 已实现范围：可空真实 FK/SetNull/索引；专用关联/解除及同用户校验；关联态拒绝通用 skillName 修改；UI/复制/投影单一活名；含归档引用的 Tag 删除事务守卫；Backup V6 引用重映射与 V1–V5 兼容；未来 legacy 迁移仅保留同用户已有真实 tagId。
+- `src/lib/interview/services/hostQueries.ts` 为同一关联显示的读取消费者，新增读取 tag.label 并优先于 skillName；列入本次集成复审范围，不扩大到面试 runtime 或其他业务改造。未改 i18n/wiki，无新增词条需求。
+- 新 Migration 为 CareerSkillDetail 表重建，保留现有全部具名列和 materialItemId 唯一索引，新增 tagId 未出现在 INSERT...SELECT 中，存量为 NULL；不称为“物理上仅 ADD COLUMN”。执行窗口报告隔离全迁移链与不变量通过；集成检查须确认原记录/约束保留及失败安全，不操作真实数据库。
+- 执行窗口报告：tsc、改动文件 ESLint、定向测试批次 127+93+7 项均通过。本轮仅核对 Git/关键差异，未独立复跑，不冒充组合集成验证。
+- **待复核的一次失败**：tag.actions 曾 7 项报读取 count 未定义，重跑通过。当前测试 mock 已包含 careerSkillDetail.count 与 transaction 回调；不能仅凭时间相邻就认定为 Prisma generate 竞态。合并前检查 Mock/Client 隔离、生成目标、并行执行及删除 guard 的失败/并发路径，避免用“重跑过了”掩盖稳定性问题。
+- 当前状态为“工作区已实现、Main 待集成、Electron 未验收”；BD-LINKS 在 Feature 清单保持 PARTIAL/false，Backup V6 不提前写成 Main 已交付。W7 仍是服务级/Web 通过、真实 PDF/Electron 退出重开待共享入口交付。
+- 下一步为获授权后的合并前复审、必要修复、提交与集成，再接续对应桌面验收。本轮不自动提交或合并，不清理任何 Worktree/证据。
+
+## BD-LINKS 已批准实施与 W7 阶段交付（2026-10-27，尚未新增集成）
+
+- Main 仍为 `f4f0727d`，主目录认证/E2E Dirty 未变。本轮用户已批准 BD-LINKS 真实 FK 与 Backup V6 调整；由原窗口实施。本记录不代表已有新代码集成，不提交或合并代码。
+- `codex/bd-links-closure` 已交付 `.tmp/bd-links-closure/proposal.md`，工作区无业务代码改动。结论是复用 Tag 字典、新增 CareerSkillDetail.tagId 可空真实 FK，skillName 保留快照；旧 legacy Skill 行不能直接充当职业素材关系。structuredData 假引用与按名自动关联仍禁止。
+- **已批准的范围调整**：本次为原 B6 不新增 Schema 约束的明确例外；新增具名 FK（SetNull + tagId 索引），并升 Backup V6，向后支持 V1–V5，避免旧 V5 恢复代码接受新备份后静默剥离引用。不能把同一版本可解析等同于语义无损。
+- 其余推荐语义：关联/解除时显式刷新 skillName 快照，item.title 不联动；关联态显示活 Tag 名，单一名称来源，通用补丁不得绕过关联字段的写入契约；删除计数含归档素材并保护并发，SetNull 仅兜底。冻结简历/已投递快照不随 Tag 改名更新。
+- 已批准纳入未来迁移对 legacy Skill 已有 tagId 的保留，但仅限 Tag 存在且 createdBy 等于目标用户；无效或跨用户引用降级 NULL 并保留文本，不按名补链，不重跑已执行迁移。canonical 简历文本导入不自动关联。
+- 已批准由 bd-links-closure 单一 Owner 修改 Schema/新 Migration/服务/UI/备份及 tag.actions、TagsTable、job.model、migrator/phase2Auditor；双语词条仍由主协调统一处理。具体合同见 CAREER_SCHEMA_CONTRACT_PROPOSAL.md 的 BD-LINKS 补充；可在原 Worktree 实施，不授权提交/合并/推送或真实数据操作。
+- W7：已核对 service-checkpoints.json 与 web-checkpoints.json；执行窗口报告服务级 12 检查点、Web 真实 UI 11/11 通过，本轮未独立复跑。新增 `w7Resume.acceptance.spec.ts` 未提交；服务测试 PDF 是合成字节，只证明 artifact 存储/hash/路径，不能证明生产 PDF 渲染。
+- W7 Electron 未执行：真实 PDF 导出、应用退出/重开仍待入口修复交付。当前脚本固定 CDP 9223 和 electron-data 根，实际运行前应改每轮动态 CDP/唯一数据根，同一轮退出重开才复用同一根；复用正式启动器的运行身份检查，不复制未交接认证 Dirty，不重复排查共享桌面壳。
+- RM-RESUME 保持 IMPLEMENTED、passes false；RM-BIND 不受影响。原窗口保留活跃 handoff 与证据，不清理，不重复执行已有 Web 路径来充当桌面证据。
+
+## W3/W5/W6 Main 集成与问题修复（2026-10-27）
 
 用户授权提交、合并并检查问题。本轮已将 W3 `b2579202`、W5 `c1465700`、W6 `3702f87f` 集成 main，组合源码节点 `5ce3eaff`；`jobs.deadline` 双语词条提交 `2c8ccd9f`。后文工作区交付记录保留为历史，不代表这些代码仍待集成。
 
@@ -18,7 +55,7 @@
 
 ### 当前剩余任务与边界
 
-- W1–W6 代码均已集成；W5 的 BD-LINKS 仍 PARTIAL：职业素材 SKILL 真实字典引用尚缺，未用 structuredData.tagId 伪造 FK。由 Career Owner 收口方案后再开发。
+- W1–W6 代码均已集成；该阶段 BD-LINKS 尚为 PARTIAL；后续已按补充合同实现并集成，见文首。
 - canonical 文本快照暂采用“引用中禁止改名”保护，不提供级联改名/快照迁移；系统渠道仍禁改。此限制不代表历史记录会自动随字典改名。
 - W7 简历完整用户路径验收尚未执行；其他窗口仍待对应 Windows Electron fresh-native 验收及最终跨模块重开闭环，全部 passes 保持原值（仅 RM-BIND 为 true）。
 - 桌面入口由另一窗口排查；真实系统自启操作另获授权；G-A 证据仍需技术核实。Task 性能参考仍为 avg 309.0ms/max 549.2ms，不将其冒充全部指标达标。
@@ -138,7 +175,7 @@
 | 职位时间消费者 P-JO | P-JO | W3 已集成，Legacy 兼容/词条/定向联动已核对；待完整桌面验收 |
 | 共享时间集成 | PROC-UPCOMING、P-TZ、P-PROC、P-TASK、P-JO | W1 共享接口及 Upcoming/Dashboard 已集成；待 W3 交付和最终联动验收 |
 | 基础数据维护 | BD-CORE | W5 已集成，canonical 引用中禁改保护及失败断言已修复；待完整桌面验收 |
-| 基础数据引用 | BD-LINKS | 既有引用与 canonical 改名保护已集成；职业素材 SKILL 字典复用仍有真实缺口 |
+| 基础数据引用 | BD-LINKS | 既有引用、canonical 改名保护及职业素材 SKILL 真实 FK 已集成；待完整桌面验收 |
 | AI 设置最小接线 | SET-AI-SERVICES | W6 已集成不可用能力诚实态修复，已有配置复用；待桌面验收 |
 
 ### 已有实现，安排缺失的验收

@@ -311,14 +311,14 @@
       "category": "Basic Data",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "标签和技能等基础数据与职业素材及业务表单保持正确的引用关系。",
       "steps": [
         "新增或编辑标签、技能后，可在相关职业素材或职位表单复用。",
         "已关联记录重新打开显示真实值，不出现悬空或错误引用。"
       ],
       "passes": false,
-      "implementationNotes": "2026-10-27 W5 已集成现有引用验证与 canonical 改名保护，未批量改写历史机会。TagInput/QuestionForm/简历 Skill.tagId 等已有引用保留；职业素材 CareerSkillDetail 仍只有 skillName 文本，字典复用尚缺。structuredData.tagId 建议未采纳，不能作为真实 FK；需单一 Career Owner 收口最小合规方案。保持 PARTIAL，Windows Electron 未完成，passes false。"
+      "implementationNotes": "2026-10-27 已提交并集成 Main：3490cdaa 实现真实 CareerSkillDetail.tagId FK/SetNull/索引、专用同用户关联/解除、活 Tag 单一名源、复制及面试读取、含归档引用的删除守卫、Backup V6 与未来 legacy 同用户 FK 保留。复审修复运行时缺失ID的查询条件忽略、服务读查写竞态、跨用户删除引用信息暴露、UI网络异常/失败重试/重复提交与编辑保护，以及重建迁移中途失败不可回滚的问题；新迁移加入显式事务。真实隔离迁移升级/原行约束保留/注入失败回滚/不变量通过；组合37文件410项、追加关联并发/复制/冻结写边界18项通过，Tag actions两次单独31项均通过，未复现此前count错误、不认定生成竞态。tsc/lint/词条/差异检查通过。Windows Electron fresh-native 未执行，passes false。"
     },
     {
       "id": "BD-ARCHIVE",
@@ -381,7 +381,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。 2026-10-27 W4 Backup V5、语言/证明人/附件组与敏感附件字节已集成；新格式完整桌面备份恢复仍待完成。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。",
+      "implementationNotes": "已集成恢复时预捕获 File/Summary 归属以清理替换记录，以及预导入快照包含敏感数据以支持完整回滚。任务隔离浏览器验证标准/敏感导出、预检、跨账户恢复、服务重启、取消/损坏/不支持格式及快照回滚；旧格式兼容由已有合成 fixture 验证。相关定向测试通过，Windows Electron 实机验收未执行，passes 保持 false。 2026-10-27 W4 Backup V5、语言/证明人/附件组与敏感附件字节已集成；新格式完整桌面备份恢复仍待完成。 2026-10-27 W6 报告设置组定向检查通过；Windows Electron fresh-native 完整路径未执行，不新增验收通过状态。 2026-10-27 Backup V6 已集成 Main，技能引用重映射、旧V1–V5兼容、旧V5拒V6和备份回归通过；完整桌面备份恢复仍未验收。",
       "description": "已实现的数据备份、预检和恢复入口可用于本地数据管理。",
       "steps": [
         "用户可从 Settings 找到备份和恢复入口，在隔离数据环境完成备份、预检与恢复。",
@@ -414,7 +414,8 @@
         "基于既有职业素材创建或复用 Resume Variant，并可预览和导出。",
         "冻结版本后历史内容稳定，重新打开仍能查看。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-10-27 W7 阶段交付（codex/mvp-w7-resume，基线 f4f0727d）：已核对隔离 fresh-native 服务级检查点和 Web 11 步记录均通过；本轮未独立复跑。新增服务级 spec 未提交；服务层使用合成 PDF 字节验证 artifact 保存/hash/路径，不是真实 PDF 渲染导出。Windows Electron fresh-native 完整路径、真实 PDF 导出及真正退出重开未执行，受另一窗口桌面入口交付阻塞；桌面脚本尚需动态 CDP 端口与每轮唯一数据根准备。RM-BIND 未受影响，不重复回归；passes false。"
     },
     {
       "id": "RM-BIND",
