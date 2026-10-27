@@ -6,6 +6,7 @@ import {
   AB_ROLLOUT_SCOPE_ENV,
 } from "@/lib/career/identities";
 import { activateFreshAbNative, CareerRuntimeError } from "@/lib/career";
+import { buildMaterialItemText } from "@/lib/career/applicationCopy";
 import { CareerMaterialService } from "@/lib/career/careerMaterialService";
 import { sanitizeApplicationMaterialDetail } from "@/lib/career/careerMaterialInput";
 import {
@@ -143,6 +144,24 @@ describe("skill↔Tag link channel (isolated db)", () => {
     else expect(detail.skillName).toBe("Free Draft");
   });
 
+  it("concurrent link and tag deletion cannot leave a dangling reference", async () => {
+    const tag = await createTag("Delete Race", userId);
+    const id = await createSkill();
+    const results = await Promise.all([
+      materials().setSkillTag({ id, tagId: tag.id }).then(() => true, () => false),
+      deleteTagById(tag.id).then((result) => result.success),
+    ]);
+    expect(results.some(Boolean)).toBe(true);
+    const remaining = await prisma.tag.findUnique({ where: { id: tag.id } });
+    const detail = await prisma.careerSkillDetail.findUniqueOrThrow({ where: { materialItemId: id } });
+    if (!remaining) expect(detail.tagId).toBeNull();
+    if (detail.tagId) {
+      expect(remaining?.id).toBe(detail.tagId);
+      expect(detail.skillName).toBe(tag.label);
+    }
+    expect(await prisma.$queryRawUnsafe("PRAGMA foreign_key_check")).toEqual([]);
+  });
+
   it("links a same-user tag, snapshots its label, and returns the relation", async () => {
     const tag = await createTag("React", userId);
     const id = await createSkill();
@@ -201,6 +220,12 @@ describe("skill↔Tag link channel (isolated db)", () => {
     expect(detail.tag?.label).toBe("Docker Compose");
     // skillName is only the fallback snapshot — the rename does not cascade.
     expect(detail.skillName).toBe("Docker");
+    const copied = buildMaterialItemText({
+      title: item.title,
+      skillDetail: { skillName: detail.skillName, proficiency: "advanced", tag: detail.tag },
+    });
+    expect(copied).toContain("Docker Compose (advanced)");
+    expect(copied).not.toContain("Docker (advanced)");
   });
 
   it("rejects a tag owned by another user", async () => {
