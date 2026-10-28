@@ -4,7 +4,17 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## 最终验收结果（2026-10-27，当前状态）
+## 兼容性收口复审与 Main 集成（2026-10-28，当前状态）
+
+- 用户已授权复审并提交执行窗口的兼容性收口；本窗口核对原代码差异和 .tmp/compat-closure 中的旧库迁移、五模式双语及托盘证据，未重新启动 Build/装配/E2E。
+- CP-LEGACY、JOB-05 已通过并随本次代码纳入 Main，当前 28 项 IN_SCOPE 中 25 项 passes=true。剩余 CP-EDIT（真实 IME）、SET-DESKTOP（真实系统自启）和 SET-AI-SERVICES（真实 AI/BYOK 业务）保留 false，不能据此全项发布放行。
+- 原窗口 Windows Electron 证据：旧 Schema 的 55 条迁移经新版真实启动升级至 57 条，明确 skipped-migrated / COMPLETED / AB_ENABLED / resume_v1，旧字段逐列保留、UI 编辑及退出重开通过；Legacy、fresh full/resume-only/disabled、迁移态 resume_v1 的中英文提示和真实服务端写请求通过。首次 Legacy 登录态脚本误判的失败及修正后重测均保留。
+- 原窗口托盘 8 项通过：真实关闭/还原/退出、最小化、隔离偏好持久化、文件写失败反馈及重开；系统自启只读状态，未写入真实配置。原构建来源和证据详见 Feature 清单，不把已迁移库当 fresh-native。
+- 模式 UI 统一从 dashboard 已解析快照计算职位写入许可；保留 Legacy 与迁移态 resume_v1 兼容写路径，fresh resume-only/disabled 隐藏新增深链/全局/空态入口，补双语说明，不修改或放宽服务端写门。
+- 复审补齐只读详情顶部删除、状态徽章及其 Radix 触发器/菜单项、列表自动匹配深链、详情自动匹配/求职信与笔记写入入口。既有内容仍可阅读，provider 外保留 Legacy 默认行为。新增定向回归后，6 文件/181 项、完整 tsc、触及源码 ESLint 通过；这些补充修复只做定向检查，未声称已由原窗口生产构建覆盖。
+- 本次不 Push、不发布，不操作真实库、安装版或系统自启，不清理其他 Worktree/证据。并行窗口的 AGENTS.md 与 wiki/index.md 修改保留，不纳入本次提交。
+
+## 最终验收结果（2026-10-27，历史结果）
 
 用户明确启动最终验收后，由主窗口单独串行执行。28 项 IN_SCOPE 中当前 23 项 passes=true（含此前已通过且未受影响的 RM-BIND），5 项保留 false；这不是全项发布放行。
 

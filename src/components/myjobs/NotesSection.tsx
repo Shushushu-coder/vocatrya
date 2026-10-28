@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { PlusCircle } from "lucide-react";
 import { toastActionResult } from "@/lib/toast";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type NotesSectionProps = {
   jobId: string;
@@ -22,6 +23,7 @@ export function NotesSection({
   onCountChange,
 }: NotesSectionProps) {
   const { t } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
   const [notes, setNotes] = useState<NoteResponse[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editNote, setEditNote] = useState<NoteResponse | null>(null);
@@ -93,6 +95,7 @@ export function NotesSection({
             size="sm"
             className="h-7 gap-1"
             onClick={handleAddNote}
+            disabled={!jobMutationsEnabled}
           >
             <PlusCircle className="h-3.5 w-3.5" />
             {t("jobs.newNote")}
@@ -115,7 +118,7 @@ export function NotesSection({
       </div>
 
       <NoteDialog
-        open={dialogOpen}
+        open={dialogOpen && jobMutationsEnabled}
         onOpenChange={setDialogOpen}
         jobId={jobId}
         editNote={editNote}
@@ -124,7 +127,7 @@ export function NotesSection({
       <DeleteAlertDialog
         pageTitle="note"
         alertTitle={t("jobs.deleteNoteConfirm")}
-        open={deleteAlertOpen}
+        open={deleteAlertOpen && jobMutationsEnabled}
         onOpenChange={setDeleteAlertOpen}
         onDelete={handleDelete}
       />

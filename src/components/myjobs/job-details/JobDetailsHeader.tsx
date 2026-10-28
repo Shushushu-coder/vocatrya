@@ -35,6 +35,7 @@ import {
 } from "@/models/job.model";
 import { CompanyLogo } from "../CompanyLogo";
 import { useI18n, getLocalizedJobType, getLocalizedWorkplaceType } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type JobDetailsHeaderProps = {
   job: JobResponse;
@@ -69,6 +70,7 @@ export function JobDetailsHeader({
   onChangeStatus,
 }: JobDetailsHeaderProps) {
   const { t } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
   const details = [
     job.Location?.label,
     getLocalizedJobType(getJobTypeLabel(job.jobType), t),
@@ -110,7 +112,7 @@ export function JobDetailsHeader({
           <Button
             variant="outline"
             className="cursor-pointer"
-            disabled={chatBusy}
+            disabled={chatBusy || !jobMutationsEnabled}
             title={chatBusy ? t("jobs.assistantBusy") : undefined}
             onClick={onMatch}
           >
@@ -125,7 +127,7 @@ export function JobDetailsHeader({
             variant="outline"
             className="cursor-pointer"
             data-testid="generate-cover-letter-btn"
-            disabled={!!coverLetterBlockedReason}
+            disabled={!!coverLetterBlockedReason || !jobMutationsEnabled}
             title={coverLetterBlockedReason}
             onClick={onCoverLetter}
           >
@@ -141,6 +143,7 @@ export function JobDetailsHeader({
           variant="outline"
           onClick={onEdit}
           data-testid="job-details-edit-btn"
+          disabled={!jobMutationsEnabled}
         >
           <Pencil className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
@@ -152,6 +155,7 @@ export function JobDetailsHeader({
           className="text-destructive hover:text-destructive"
           onClick={onDelete}
           data-testid="job-details-delete-btn"
+          disabled={!jobMutationsEnabled}
         >
           <Trash2 className="h-4 w-4 sm:mr-2" />
           <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
@@ -173,17 +177,17 @@ export function JobDetailsHeader({
           <DropdownMenuContent align="end" className="w-[200px]">
             <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem className="cursor-pointer" onClick={onEdit}>
+              <DropdownMenuItem className="cursor-pointer" onClick={onEdit} disabled={!jobMutationsEnabled}>
                 <Pencil className="mr-2 h-4 w-4" />
                 {t("jobs.editJob")}
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={onAddNote}>
+              <DropdownMenuItem className="cursor-pointer" onClick={onAddNote} disabled={!jobMutationsEnabled}>
                 <StickyNote className="mr-2 h-4 w-4" />
                 {t("jobs.addANote")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger disabled={!jobMutationsEnabled}>
                   <Tags className="mr-2 h-4 w-4" />
                   {t("jobs.changeStatus")}
                 </DropdownMenuSubTrigger>
@@ -201,6 +205,7 @@ export function JobDetailsHeader({
               <DropdownMenuItem
                 className="text-red-600 cursor-pointer"
                 onClick={onDelete}
+                disabled={!jobMutationsEnabled}
               >
                 <Trash className="mr-2 h-4 w-4" />
                 {t("common.delete")}

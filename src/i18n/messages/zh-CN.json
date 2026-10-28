@@ -2186,6 +2186,8 @@
     "jobsCountUnavailable": "暂不支持"
   },
   "career": {
+    "jobsReadOnlyTitle": "职位编辑尚未启用",
+    "jobsReadOnlyDescription": "当前可编辑职业资料和简历，暂不能新建或修改职位。",
     "runtimeReadyTitle": "编辑功能尚未启用",
     "runtimeReadyDescription": "当前应用尚未启用职业资料与投递数据的编辑功能，也无法通过旧版编辑器修改职位和简历。",
     "runtimeBlockedTitle": "编辑功能暂不可用",

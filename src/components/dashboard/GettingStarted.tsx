@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 // The four starting points reuse the same deep links as the header's global
 // create menu, so each entry lands on the target surface's own create flow
@@ -58,6 +59,7 @@ const ENTRIES = [
 // and the grid collapses 4 -> 2 -> 1 columns as the window narrows.
 export default function GettingStarted() {
   const { t } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
   return (
     <Card data-testid="overview-getting-started">
       <CardHeader className="pb-2">
@@ -69,7 +71,7 @@ export default function GettingStarted() {
         </CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-2 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-4">
-        {ENTRIES.map((entry) => (
+        {ENTRIES.filter((entry) => jobMutationsEnabled || entry.key !== "job").map((entry) => (
           <Link
             key={entry.key}
             href={entry.href}

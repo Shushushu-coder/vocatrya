@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 
@@ -135,11 +135,14 @@ import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 import SettingsSidebar from "@/components/settings/SettingsSidebar";
 import { MatchJobButton } from "@/components/myjobs/MatchJobButton";
 import JobDetails from "@/components/myjobs/JobDetails";
+import { JobStatusBadgeMenu } from "@/components/myjobs/JobStatusBadgeMenu";
+import { CareerRuntimeNotice } from "@/components/career/CareerRuntimeNotice";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { AgentChatEmptyState } from "@/components/agent/AgentChatEmptyState";
 import type { JobResponse } from "@/models/job.model";
 
-const wrap = (node: React.ReactNode, fresh = true) => (
-  <CareerSurfacesProvider freshNativeFull={fresh}>{node}</CareerSurfacesProvider>
+const wrap = (node: React.ReactNode, fresh = true, jobMutationsEnabled = true) => (
+  <CareerSurfacesProvider freshNativeFull={fresh} jobMutationsEnabled={jobMutationsEnabled}>{node}</CareerSurfacesProvider>
 );
 
 const testUser = { id: "1", name: "Test User", email: "test@example.com" };
@@ -321,6 +324,11 @@ describe("SettingsSidebar", () => {
 // ---------------------------------------------------------------------------
 
 describe("MatchJobButton", () => {
+  it("does not link to automatic matching when job mutations are unavailable", () => {
+    render(wrap(<MatchJobButton jobId="job-1" />, false, false));
+    expect(screen.queryByRole("link", { name: /match/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /match/i })).toBeDisabled();
+  });
   it("renders nothing under fresh + full", () => {
     const { container } = render(wrap(<MatchJobButton jobId="job-1" />));
     expect(container.firstChild).toBeNull();
@@ -363,6 +371,41 @@ const jobDetailsProps = {
   careerRuntimeMode: "AB_ENABLED",
   abRolloutScope: "full" as const,
 };
+
+describe("restricted job surfaces", () => {
+  it("disables the shared status picker without invoking a write", async () => {
+    const onChange = vi.fn();
+    render(wrap(<TooltipProvider><JobStatusBadgeMenu job={makeJob()} jobStatuses={[]}
+      onChangeJobStatus={onChange} /></TooltipProvider>, false, false));
+    const picker = screen.getByRole("button");
+    expect(picker).toBeDisabled();
+    await userEvent.click(picker);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("disables destructive and AI entry points, including a retained auto-match link", async () => {
+    searchParams = new URLSearchParams("tab=match&match=1");
+    await act(async () => {
+      render(wrap(<JobDetails job={makeJob()} {...jobDetailsProps}
+        abRolloutScope="resume_v1" />, false, false));
+    });
+    expect(screen.getByTestId("job-details-delete-btn")).toBeDisabled();
+    expect(screen.getByTestId("job-details-edit-btn")).toBeDisabled();
+    for (const button of screen.getAllByRole("button", { name: "Match with AI" })) expect(button).toBeDisabled();
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("job-details-actions-menu-btn"));
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute("aria-disabled", "true");
+    searchParams = new URLSearchParams("");
+  });
+
+  it("shows an accurate restricted-scope notice without affecting writable scopes", () => {
+    const { rerender } = render(<CareerRuntimeNotice mode="AB_ENABLED" jobMutationsEnabled={false} />);
+    expect(screen.getByText("Job editing is not enabled yet")).toBeInTheDocument();
+    rerender(<CareerRuntimeNotice mode="AB_ENABLED" jobMutationsEnabled />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
 
 describe("JobDetails under fresh + full", () => {
   beforeEach(() => {

@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import { JobResponse, JobStatus } from "@/models/job.model";
 import { JobStatusMenuItems } from "./JobStatusMenuItems";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type JobActionsMenuProps = {
   job: JobResponse;
@@ -38,6 +39,7 @@ export function JobActionsMenu({
 }: JobActionsMenuProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
 
   return (
     <DropdownMenu>
@@ -65,6 +67,7 @@ export function JobActionsMenu({
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={() => editJob(job.id)}
+            disabled={!jobMutationsEnabled}
           >
             <Pencil className="mr-2 h-4 w-4" />
             {t("jobs.editJob")}
@@ -72,13 +75,14 @@ export function JobActionsMenu({
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={() => onAddNote(job.id)}
+            disabled={!jobMutationsEnabled}
           >
             <StickyNote className="mr-2 h-4 w-4" />
             {t("jobs.addANote")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger disabled={!jobMutationsEnabled}>
               <Tags className="mr-2 h-4 w-4" />
               {t("jobs.changeStatus")}
             </DropdownMenuSubTrigger>
@@ -96,6 +100,7 @@ export function JobActionsMenu({
           <DropdownMenuItem
             className="text-red-600 cursor-pointer"
             onClick={() => onDeleteJob(job.id)}
+            disabled={!jobMutationsEnabled}
           >
             <Trash className="mr-2 h-4 w-4" />
             {t("common.delete")}

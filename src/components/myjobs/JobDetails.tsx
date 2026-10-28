@@ -109,7 +109,7 @@ function JobDetails({
     careerRuntimeMode ?? "",
     abRolloutScope ?? "none",
   );
-  const { freshNativeFull } = useCareerSurfaces();
+  const { freshNativeFull, jobMutationsEnabled } = useCareerSurfaces();
   const jobDetailTabs = freshNativeFull
     ? FRESH_FULL_JOB_DETAIL_TABS
     : showTimeline
@@ -180,16 +180,18 @@ function JobDetails({
   const onCoverLetter = () =>
     requestChat(`Write a cover letter for ${jobLabel}`);
 
-  useAutoMatch(onMatch, !freshNativeFull);
+  useAutoMatch(onMatch, !freshNativeFull && jobMutationsEnabled);
 
   // Doubles as the busy gate: the header button, the empty state and
   // Regenerate all key on this one reason.
   const coverLetterBlockedReason =
-    job.descriptionCompleteness === "title-only"
-      ? t("jobs.addDescriptionFirst")
-      : chatBusy
-        ? t("jobs.assistantBusy")
-        : undefined;
+    !jobMutationsEnabled
+      ? t("career.jobsReadOnlyTitle")
+      : job.descriptionCompleteness === "title-only"
+        ? t("jobs.addDescriptionFirst")
+        : chatBusy
+          ? t("jobs.assistantBusy")
+          : undefined;
 
   const onEditJob = () => {
     setEditJobTarget({ ...job, Status: currentStatus });
@@ -326,7 +328,7 @@ function JobDetails({
                     description={t("jobs.noMatchDescription")}
                     actionLabel={t("jobs.matchWithAi")}
                     onAction={onMatch}
-                    actionDisabled={chatBusy}
+                    actionDisabled={chatBusy || !jobMutationsEnabled}
                     actionTitle={chatBusy ? t("jobs.assistantBusy") : undefined}
                   />
                 )}

@@ -14,6 +14,15 @@ export type FreshSurfaceRuntimeInput = {
   rolloutScope?: AbRolloutScope | null;
 };
 
+/** Mirrors the job writers: scoped migrated instances retain legacy writes;
+ * fresh instances can write jobs only through the full canonical path. */
+export function canMutateJobsSurface(input: FreshSurfaceRuntimeInput): boolean {
+  if (input.mode === "LEGACY_ONLY") return true;
+  if (input.mode !== "AB_ENABLED") return false;
+  return input.origin !== "fresh" ||
+    isFullAbCapabilityEnabled(input.mode, input.rolloutScope ?? "none");
+}
+
 /**
  * True only for a trusted fresh data origin running the full A+B rollout.
  * A migrated instance at full scope keeps its compatibility surfaces, and

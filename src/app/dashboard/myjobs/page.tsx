@@ -7,6 +7,7 @@ import { getAllCompanies } from "@/actions/company.actions";
 import { getAllJobTitles } from "@/actions/jobtitle.actions";
 import { getAllJobLocations } from "@/actions/jobLocation.actions";
 import { getAllTags } from "@/actions/tag.actions";
+import { canMutateJobsSurface } from "@/lib/career/freshSurfacePolicy";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -26,7 +27,7 @@ async function MyJobs() {
     ]);
   return (
     <div className="col-span-3 min-w-0">
-      <CareerRuntimeNotice mode={runtime.mode} />
+      <CareerRuntimeNotice mode={runtime.mode} jobMutationsEnabled={canMutateJobsSurface(runtime)} />
       <MyJobsPageTabs
         companies={companies}
         titles={titles}
@@ -34,7 +35,7 @@ async function MyJobs() {
         sources={sources}
         statuses={statuses}
         tags={tags ?? []}
-        allowJobMutations={runtime.writeFamily !== "blocked"}
+        allowJobMutations={canMutateJobsSurface(runtime)}
         careerRuntimeMode={runtime.mode}
         abRolloutScope={runtime.rolloutScope}
       />

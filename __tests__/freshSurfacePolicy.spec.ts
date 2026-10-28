@@ -1,7 +1,22 @@
 import {
   isFreshFullHiddenNavRoute,
   isFreshNativeFullSurface,
+  canMutateJobsSurface,
 } from "@/lib/career/freshSurfacePolicy";
+
+describe("job mutation surfaces match the runtime write paths", () => {
+  it.each([
+    ["legacy", "LEGACY_ONLY", "none", true],
+    ["fresh", "AB_ENABLED", "full", true],
+    ["fresh", "AB_ENABLED", "resume_v1", false],
+    ["fresh", "AB_READY_DISABLED", "full", false],
+    ["migrated", "AB_ENABLED", "resume_v1", true],
+    ["migrated", "AB_READY_DISABLED", "full", false],
+    ["unknown", "BLOCKED", "none", false],
+  ] as const)("%s %s %s -> %s", (origin, mode, rolloutScope, expected) => {
+    expect(canMutateJobsSurface({origin, mode, rolloutScope})).toBe(expected);
+  });
+});
 
 describe("isFreshNativeFullSurface", () => {
   it("is true only for a trusted fresh origin on the full rollout", () => {

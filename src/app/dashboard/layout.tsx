@@ -14,7 +14,7 @@ import { AgentChatProvider } from "@/components/agent/AgentChatProvider";
 import { AgentChatPanel } from "@/components/agent/AgentChatPanel";
 import { loadActiveChatConversation } from "@/actions/agentChat.actions";
 import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
-import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
+import { canMutateJobsSurface, isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -69,7 +69,7 @@ export default async function RootLayout({
 
   return (
     <ActivityProvider>
-      <CareerSurfacesProvider freshNativeFull={freshNativeFull}>
+      <CareerSurfacesProvider freshNativeFull={freshNativeFull} jobMutationsEnabled={canMutateJobsSurface(runtime)}>
       <SidebarProvider initialExpanded={initialExpanded} initialWidth={initialWidth}>
         <RightRailProvider>
           <AgentChatProvider initialConversation={conversation.data ?? null}>

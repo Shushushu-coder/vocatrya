@@ -95,15 +95,15 @@
       "category": "Career Profile",
       "priority": "P0",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
-      "implementationNotes": "2026-10-27 最终验收：本轮 Windows Electron fresh-native 用合成旧形状资料核对读取/修改、旧求职意向与证件保留、完整退出重开通过。这不等于从旧版本数据库启动新版并升级；旧库原生升级路径未实测，保留 PARTIAL/false，不操作真实用户旧库。",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-10-28 兼容性验收通过：从旧 Main e9ad10f9 的 Schema/55 条迁移构造合成旧库，旧版官方 Phase 3 迁移器预检与迁移 PASS；新版真实 Windows Electron 启动执行 55→57 条结构升级，fresh-native 激活明确 skipped-migrated，实际 COMPLETED/AB_ENABLED/resume_v1。逐列核对原个人资料、经历、求职意向和敏感字段保留，七 Tab 读取、个人资料/教育经历真实 UI 编辑及完整退出重开通过。复用与 Main 3b4b75ff 的 1,100 个构建输入一致的 e1879aca 产物（nS35fBmVoQmYzIiHrq7Mr）。证据：.tmp/compat-closure/legacy-before.json、old-migration-result.json、legacy-migrated/checks.json；未操作真实用户旧库。",
       "description": "七 Tab 可正确呈现既有候选人资料与职业素材，不破坏历史求职意向。",
       "steps": [
         "用旧版本已存在的数据打开新版七 Tab，原个人信息和经历可读取与继续修改。",
         "升级前求职意向数据仍存在，不因导航调整被清除。",
         "重新打开后数据一致。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "JOB-01",
@@ -167,13 +167,13 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-27 最终验收：此前 Web/定向证据保留。本轮仅覆盖 Windows Electron fresh-native full 正常路径，未逐一运行迁移态 resume_v1、resume-only、disabled 等受限模式的中英文提示；passes 保持 false。",
+      "implementationNotes": "2026-10-28 Windows Electron 兼容性验收通过：Legacy（NOT_STARTED/LEGACY_ONLY/none）、fresh-native full、fresh-native resume-only、fresh-native disabled、迁移态 COMPLETED/resume_v1 的真实状态与中英文职位/简历提示逐一核对，无内部实验术语。发现并修复 fresh resume-only 职位入口仍开放的问题：职位页/深链、标题栏菜单与空态入口统一受模式门控制，相关操作菜单禁用，补准确的中英文受限提示；未放宽服务端写门，迁移态 resume_v1 保留冻结合同的 Legacy 写路径。新生产构建 ez9mJ3VnfydzmhUjs-0PI 来自 Main 3b4b75ff + 原窗口兼容性修复（现随本次集成提交），与原窗口当时的 1,100 个应用构建输入一致；五模式中英文入口与真实职位/简历服务端请求、拒绝写入零新增及完整退出均通过。定向 3 文件/78 项通过。证据：.tmp/compat-closure/current-provenance.json、mode-regression-checks.json（前三模式通过，Legacy 因脚本误判已有登录态超时）、mode-regression-remainder.json（修正脚本后 Legacy/迁移态通过）；原失败记录保留。 主窗口复审另外补齐只读详情顶部删除、共享状态触发器/菜单项、自动匹配深链及笔记入口，181 项定向测试、完整类型检查和 ESLint 通过；这些补充修复未重跑生产构建或桌面 E2E，不把原窗口构建证据冒充为补丁实机证据。",
       "description": "用户界面不暴露 A+B、运行时环境变量等内部实验术语。",
       "steps": [
         "中英文职位相关运行提示和简历提示中不出现“A+B”或 VOCATRYA_AB_RUNTIME_ENABLED 等内部术语。",
         "提示文字准确表达真实能力与受限状态，不掩盖未实现功能。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "PROC-ATTEMPT",
@@ -366,7 +366,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-27 最终验收：Windows Electron fresh-native 隔离 root 的关闭到托盘偏好保存/重开读回与 quit IPC 真退出通过，既有托盘/最小化冒烟证据保留。真实系统自启配置与系统重启、完整托盘退出路径本轮未验收；不因最终 E2E 授权擅自改系统自启，passes false。",
+      "implementationNotes": "2026-10-28 部分验收通过，passes 仍 false：Windows Electron fresh-native FRESH_READY/AB_ENABLED/full，独立数据根；复用 Main 3b4b75ff 构建输入一致的 e1879aca 产物（nS35fBmVoQmYzIiHrq7Mr）。真实窗口关闭在偏好关闭时完整退出，开启时隐藏到真实托盘；Windows 原生托盘弹出菜单以系统键盘选择打开/退出，验证还原与进程/后端结束。最小化启动、两项偏好持久化、真实文件写失败反馈及开关回退、完整退出重开和登录态保留通过。测试仅通过主进程调试器观察窗口并捕获原生菜单对象，未替换模式门或托盘行为。证据：.tmp/compat-closure/tray2/checks.json、tray.mjs、inspector.mjs；早期调试连接脚本问题已修正并保留记录。系统自启只读取状态，未写真实系统自启、未安装或重启系统，真实自启验收仍未执行。",
       "description": "Settings UI 接通现有桌面自启、最小化启动与关闭到托盘 IPC。",
       "steps": [
         "在 Windows 桌面端设置自启、最小化启动及关闭至托盘，选项反馈实际底层状态。",

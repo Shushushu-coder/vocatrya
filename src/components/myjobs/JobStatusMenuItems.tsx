@@ -4,6 +4,7 @@ import { DropdownMenuItem } from "../ui/dropdown-menu";
 import { JobStatus } from "@/models/job.model";
 
 import { useI18n, getLocalizedJobStatus } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type JobStatusMenuItemsProps = {
   jobStatuses: JobStatus[];
@@ -19,6 +20,7 @@ export function JobStatusMenuItems({
   onSelectStatus,
 }: JobStatusMenuItemsProps) {
   const { t } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
 
   return (
     <>
@@ -27,7 +29,7 @@ export function JobStatusMenuItems({
           className="cursor-pointer relative pl-8"
           key={status.id}
           onSelect={() => onSelectStatus(status)}
-          disabled={status.id === currentStatusId}
+          disabled={!jobMutationsEnabled || status.id === currentStatusId}
         >
           {status.id === currentStatusId && (
             <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">

@@ -4,6 +4,7 @@ import { TipTapContentViewer } from "../TipTapContentViewer";
 import { Button } from "../ui/button";
 import { Pencil, Trash } from "lucide-react";
 import { useI18n } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type NoteCardProps = {
   note: NoteResponse;
@@ -13,6 +14,7 @@ type NoteCardProps = {
 
 export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
   const { t, formatDateTime } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
 
   return (
     <div className="border rounded-lg p-4 space-y-2">
@@ -31,6 +33,7 @@ export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
             size="icon"
             className="h-7 w-7"
             onClick={() => onEdit(note)}
+            disabled={!jobMutationsEnabled}
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -39,6 +42,7 @@ export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
             size="icon"
             className="h-7 w-7 text-destructive"
             onClick={() => onDelete(note.id)}
+            disabled={!jobMutationsEnabled}
           >
             <Trash className="h-3.5 w-3.5" />
           </Button>

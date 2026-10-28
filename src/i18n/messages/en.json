@@ -2186,6 +2186,8 @@
     "jobsCountUnavailable": "Not supported"
   },
   "career": {
+    "jobsReadOnlyTitle": "Job editing is not enabled yet",
+    "jobsReadOnlyDescription": "You can edit your career profile and resumes. Creating or changing jobs is currently unavailable.",
     "runtimeReadyTitle": "Editing is not enabled yet",
     "runtimeReadyDescription": "Career profile and application editing is not enabled for this app yet. Changes to jobs and resumes through the previous version's editors are also unavailable.",
     "runtimeBlockedTitle": "Editing is temporarily unavailable",

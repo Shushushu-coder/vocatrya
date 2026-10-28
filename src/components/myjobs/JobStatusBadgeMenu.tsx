@@ -13,6 +13,7 @@ import { JobStatusBadge } from "./JobStatusBadge";
 import { JobStatusMenuItems } from "./JobStatusMenuItems";
 import { JobResponse, JobStatus } from "@/models/job.model";
 import { useI18n, getLocalizedJobStatus } from "@/i18n";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type JobStatusBadgeMenuProps = {
   job: JobResponse;
@@ -30,15 +31,17 @@ export function JobStatusBadgeMenu({
   timeZone,
 }: JobStatusBadgeMenuProps) {
   const { t } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
   const currentStatus = getLocalizedJobStatus(job.Status, t);
 
   return (
     <DropdownMenu>
       <Tooltip>
         <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
+          <DropdownMenuTrigger asChild disabled={!jobMutationsEnabled}>
             <button
               type="button"
+              disabled={!jobMutationsEnabled}
               aria-label={t("jobs.changeStatusCurrently", {
                 status: currentStatus,
               })}
@@ -48,7 +51,7 @@ export function JobStatusBadgeMenu({
             </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>{t("jobs.clickToChangeStatus")}</TooltipContent>
+        <TooltipContent>{t(jobMutationsEnabled ? "jobs.clickToChangeStatus" : "career.jobsReadOnlyTitle")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="start" className="p-0">
         <JobStatusMenuItems

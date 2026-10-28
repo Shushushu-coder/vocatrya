@@ -31,7 +31,7 @@ const CREATE_MENU_ITEMS = [
 // density still serves the in-app header on the plain web build.
 export function CreateMenu({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
-  const { freshNativeFull } = useCareerSurfaces();
+  const { freshNativeFull, jobMutationsEnabled } = useCareerSurfaces();
   const uploadHref = freshNativeFull
     ? "/dashboard/profile/resumes"
     : "/dashboard/profile";
@@ -67,7 +67,7 @@ export function CreateMenu({ compact = false }: { compact?: boolean }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {CREATE_MENU_ITEMS.map((item) => (
+          {CREATE_MENU_ITEMS.filter((item) => jobMutationsEnabled || item.key !== "dashboard.job").map((item) => (
             <DropdownMenuItem key={item.href} asChild>
               <Link href={item.href}>{t(item.key)}</Link>
             </DropdownMenuItem>
