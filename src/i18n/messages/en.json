@@ -1877,7 +1877,24 @@
     "audioRecordingPlaybackLabel": "Recording playback",
     "audioRecordingUnsupported": "Recording is not supported in this environment.",
     "audioRecordingError": "Recording failed ({detail}).",
-    "audioPageFootnote": "Microphone permission is requested only after you click “Enable microphone”. Recordings never touch disk and are destroyed when you leave this page; playback uses the system default output device."
+    "audioPageFootnote": "Microphone permission is requested only after you click “Enable microphone”. Recordings never touch disk and are destroyed when you leave this page; playback uses the system default output device.",
+    "about": {
+      "title": "About",
+      "description": "Version, build, and environment facts about this Vocatrya installation.",
+      "versionLabel": "App version",
+      "buildLabel": "Build source",
+      "buildDevelopment": "Development build",
+      "buildInstalled": "Installed build",
+      "environmentLabel": "Runtime environment",
+      "environmentDesktop": "Electron desktop",
+      "environmentBrowser": "Browser",
+      "licenseLabel": "Open-source license",
+      "diagnosticsTitle": "Diagnostics",
+      "diagnosticsDescription": "Copies version and environment facts to attach when reporting issues. Contains no credentials, keys, personal data, or local file paths.",
+      "copyDiagnostics": "Copy diagnostics",
+      "diagnosticsCopied": "Copied",
+      "copyDiagnosticsFailed": "Could not copy diagnostics."
+    }
   },
   "developer": {
     "title": "Developer Options",

@@ -1877,7 +1877,24 @@
     "audioRecordingPlaybackLabel": "录音回放",
     "audioRecordingUnsupported": "当前环境不支持录音。",
     "audioRecordingError": "录音失败（{detail}）。",
-    "audioPageFootnote": "仅在点击“启用麦克风”后才会请求麦克风权限；录音不写入磁盘，离开本页即销毁；回放经系统默认输出设备播放。"
+    "audioPageFootnote": "仅在点击“启用麦克风”后才会请求麦克风权限；录音不写入磁盘，离开本页即销毁；回放经系统默认输出设备播放。",
+    "about": {
+      "title": "关于",
+      "description": "当前 Vocatrya 安装的版本、构建与运行环境信息。",
+      "versionLabel": "应用版本",
+      "buildLabel": "构建来源",
+      "buildDevelopment": "开发构建",
+      "buildInstalled": "安装版",
+      "environmentLabel": "运行环境",
+      "environmentDesktop": "Electron 桌面",
+      "environmentBrowser": "浏览器",
+      "licenseLabel": "开源许可",
+      "diagnosticsTitle": "诊断信息",
+      "diagnosticsDescription": "复制版本与环境事实，供反馈问题时附加；不包含凭据、密钥、个人数据或本机文件路径。",
+      "copyDiagnostics": "复制诊断信息",
+      "diagnosticsCopied": "已复制",
+      "copyDiagnosticsFailed": "复制诊断信息失败。"
+    }
   },
   "developer": {
     "title": "开发者选项",

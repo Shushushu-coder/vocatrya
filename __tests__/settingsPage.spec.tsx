@@ -53,6 +53,9 @@ vi.mock("@/components/settings/ShortcutsSettings", () => ({
 vi.mock("@/components/settings/AudioSettings", () => ({
   default: () => <div data-testid="audio-settings" />,
 }));
+vi.mock("@/components/settings/AboutSettings", () => ({
+  default: () => <div data-testid="about-settings" />,
+}));
 
 const NAV = "settings-nav";
 const EXPECTED_SECTION_ORDER = [
@@ -185,27 +188,11 @@ describe("Settings page — V1 navigation shell", () => {
     expect(screen.queryByTestId("mcp-settings")).not.toBeInTheDocument();
   });
 
-  it.each(["About"] as const)(
-    "the %s entry opens an honest unavailable page until its component lands",
-    async (name) => {
-      const user = userEvent.setup();
-      render(<Settings />);
-      await user.click(screen.getByRole("button", { name }));
-      expect(
-        screen.getByTestId("settings-section-unavailable"),
-      ).toBeInTheDocument();
-      // Nav still works afterwards.
-      await user.click(screen.getByRole("button", { name: "General" }));
-      await waitFor(() =>
-        expect(screen.getByTestId("general-settings")).toBeInTheDocument(),
-      );
-    },
-  );
-
   it.each([
     ["Notifications", "notifications-settings"],
     ["Shortcuts", "shortcuts-settings"],
     ["Audio", "audio-settings"],
+    ["About", "about-settings"],
   ] as const)(
     "the %s entry mounts its delivered owner component",
     async (name, testId) => {
