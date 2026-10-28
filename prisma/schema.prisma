@@ -64,6 +64,9 @@ model User {
   // Phase B account-login foundation (additive backrelations only).
   aiConnections         AIConnection[]
   aiBusinessAssignments AIBusinessAssignment[]
+
+  // REM-V1 persistent schedule reminders (additive backrelation only).
+  reminders             Reminder[]
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -1004,6 +1007,46 @@ model ApplicationProcessStep {
 
   @@index([applicationAttemptId, sortOrder])
   @@index([scheduledAt])
+}
+
+/// REM-V1 persistent schedule reminder. Derived, write-through state: the
+/// renderer-driven claim loop delivers it and the service layer keeps it in
+/// sync with the source anchors (ApplicationProcessStep.scheduledAt,
+/// Job.dueDate). PENDING rows track the current schedule; FIRED/CANCELLED
+/// rows are terminal and never rewritten by sync; EXPIRED rows revive only
+/// when the source is rescheduled back into the valid window.
+/// targetId is polymorphic (sourceType selects the table), so it is
+/// intentionally NOT a declared foreign key.
+model Reminder {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // "PROCESS_STEP" -> ApplicationProcessStep.id (anchor: scheduledAt)
+  // "JOB_DUE"      -> Job.id (anchor: dueDate)
+  sourceType String
+  targetId   String
+
+  // The instant the source carries; the overdue window is measured from it.
+  anchorAt   DateTime
+  // anchorAt - leadMinutes at last sync; the claim index reads this column.
+  fireAt     DateTime
+
+  title      String
+  body       String    @default("")
+  deepLink   String
+
+  // PENDING | FIRED | CANCELLED | EXPIRED
+  status     String    @default("PENDING")
+  firedAt    DateTime?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // One live schedule record per (user, source, target): reschedule upserts
+  // in place instead of multiplying rows.
+  @@unique([userId, sourceType, targetId])
+  @@index([userId, status, fireAt])
 }
 
 /// Interview-specific root hanging off ApplicationProcessStep (optional 1:1).

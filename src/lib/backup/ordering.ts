@@ -140,7 +140,8 @@ export type BackupModel =
   | "SessionSummaryGeneration"
   | "SessionSummaryInput"
   | "CoachingConversation"
-  | "DialogueTurn";
+  | "DialogueTurn"
+  | "Reminder";
 
 export type BackupDataset = "standard" | "sensitive";
 
@@ -762,6 +763,16 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     },
     scope: byInterviewSession,
   },
+  // targetId is polymorphic (PROCESS_STEP -> ApplicationProcessStep,
+  // JOB_DUE -> Job), so it cannot ride the declared-fks remap: import.ts
+  // rewrites it per sourceType, and a target absent from the backup leaves
+  // the row restored as CANCELLED rather than pointing at nothing.
+  Reminder: {
+    delegate: "reminder",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+  },
 };
 
 export const INSERT_ORDER: BackupModel[] = [
@@ -861,6 +872,9 @@ export const INSERT_ORDER: BackupModel[] = [
   "SessionSummaryInput",
   "CoachingConversation",
   "DialogueTurn",
+  // Derived delivery state: wiped (reverse order) before its sources, and on
+  // insert every target id is already minted regardless of position.
+  "Reminder",
 ];
 
 export const DELETE_ORDER: BackupModel[] = [...INSERT_ORDER]

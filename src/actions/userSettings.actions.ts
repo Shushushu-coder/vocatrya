@@ -20,6 +20,7 @@ import {
 } from "@/lib/userSettings/patch";
 import { isValidLocale, type Locale } from "@/i18n/config";
 import { isSupportedTimeZone } from "@/lib/userSettings/timeZone";
+import { isNotificationLeadMinutes } from "@/lib/reminders/shared";
 
 // Structural adapter so the patch primitive never imports @/lib/db itself —
 // the store is injected, keeping the CAS loop testable in isolation.
@@ -194,4 +195,36 @@ export const updateSettingsTimeZone = async (
     };
   }
   return updateUserSettings({ settings: { general: { timeZone } } });
+};
+
+/**
+ * REM-V1 write entry: persist notification preferences at
+ * `settings.notifications.*` via the same atomic patch path. Only the two
+ * supported keys are writable and both are validated before any write, so a
+ * bad input leaves the stored document untouched.
+ */
+export const updateNotificationSettings = async (input: {
+  enabled?: boolean;
+  leadMinutes?: number;
+}): Promise<any | undefined> => {
+  const notifications: { enabled?: boolean; leadMinutes?: number } = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") {
+      return {
+        success: false,
+        message: "Notification switch must be a boolean.",
+      };
+    }
+    notifications.enabled = input.enabled;
+  }
+  if (input.leadMinutes !== undefined) {
+    if (!isNotificationLeadMinutes(input.leadMinutes)) {
+      return {
+        success: false,
+        message: "Lead time must be one of the supported minute presets.",
+      };
+    }
+    notifications.leadMinutes = input.leadMinutes;
+  }
+  return updateUserSettings({ settings: { notifications } });
 };

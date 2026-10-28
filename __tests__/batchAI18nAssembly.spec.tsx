@@ -83,8 +83,8 @@ const NEW_KEYS: Record<string, [string, string]> = {
     "通知"
   ],
   "settings.notificationsDescription": [
-    "This version has no system notification events and no configurable notification preferences. The real capabilities related to notifications are listed below.",
-    "当前版本没有系统通知事件，也没有可配置的通知偏好。此处如实列出与通知相关的真实能力。"
+    "Schedule reminders arrive as Windows system notifications; in-app feedback messages are built in.",
+    "日程提醒以 Windows 系统通知送达；应用内消息反馈为内置机制。"
   ],
   "settings.notificationsInAppTitle": [
     "In-app feedback messages",
@@ -103,8 +103,8 @@ const NEW_KEYS: Record<string, [string, string]> = {
     "系统通知"
   ],
   "settings.notificationsSystemDescription": [
-    "Not provided — the app registers no system notification events (no Windows notification integration), so there is nothing to turn on or off.",
-    "未提供——应用未注册任何系统通知事件（无 Windows 通知集成），因此没有可开启或关闭的通知选项。"
+    "Process-step schedules and job deadlines raise a Windows system notification when due. Delivered while the app is running (including minimized or hidden to tray); not delivered after a full quit.",
+    "流程步骤排期与岗位截止在到期时通过 Windows 系统通知提醒。应用运行（含最小化或托盘隐藏）时送达；完全退出后不再送达。"
   ],
   "settings.capabilityNotProvided": [
     "Not provided",
@@ -115,12 +115,12 @@ const NEW_KEYS: Record<string, [string, string]> = {
     "通知偏好"
   ],
   "settings.notificationsPreferencesDescription": [
-    "Not provided — with no real notification events there is no preference to store.",
-    "未提供——没有真实的通知事件，因此不存在可保存的通知偏好。"
+    "Choose how far ahead of the scheduled time reminders fire.",
+    "选择提醒相对日程时间的提前量。"
   ],
   "settings.notificationsFootnote": [
-    "Configurable options will appear here only after real notification events are integrated. Action results and critical error feedback always stay visible in the current task view.",
-    "接入真实通知事件后，本页才会提供对应的可配置项；操作结果与关键错误反馈始终显示在当前任务界面。"
+    "Reminders are delivered while the app is running (including minimized or hidden to tray). Delivery is not guaranteed after a full quit; on reopen, reminders overdue by less than 24 hours fire immediately. Action results and critical error feedback always stay visible in the current task view.",
+    "提醒在应用运行（含最小化或托盘隐藏）时送达；完全退出应用后不承诺送达，重新打开时 24 小时内的逾期提醒会立即补送。操作结果与关键错误反馈始终显示在当前任务界面。"
   ],
   "settings.shortcuts": [
     "Shortcuts",

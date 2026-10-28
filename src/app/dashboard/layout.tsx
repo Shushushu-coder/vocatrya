@@ -19,6 +19,7 @@ import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
 import StaleSessionSignOut from "@/components/StaleSessionSignOut";
+import ReminderScheduler from "@/components/reminders/ReminderScheduler";
 import { auth, signOut } from "@/auth";
 
 export default async function RootLayout({
@@ -83,6 +84,10 @@ export default async function RootLayout({
                 <TitleBarActions />
                 <Header />
                 <GlobalActivityBanner />
+                {/* REM-V1 renderer-side reminder ticker: polls/claims due
+                    reminders every 60s, on mount, and on visibility restore;
+                    raises HTML5 Notifications itself. Renders nothing. */}
+                <ReminderScheduler />
                 {/* Container, not viewport, queries: the docked chat panel
                     shrinks this box without changing the viewport width. */}
                 <main className="@container/main flex-1 p-4 sm:px-4 sm:py-0">
