@@ -1,8 +1,11 @@
 // SET-AI-SERVICES honest-capability rows: a purpose is editable only when a
 // real production consumer resolves it in the current runtime mode.
-// CAREER_REFLECTION has no consumer in any mode; MATCH_ANALYSIS is consumed
-// only by legacy-gated automation/match surfaces, so the fresh-native full
-// surface also marks it "Not provided" instead of a saveable assignment.
+// CAREER_REFLECTION now has a consumer (interview reflection AI drafts run
+// through the TEXT_ONLY one-shot seam), so it renders as a normal editable
+// row gated on local one-shot capability like INTERVIEW. MATCH_ANALYSIS is
+// consumed only by legacy-gated automation/match surfaces, so the
+// fresh-native full surface still marks it "Not provided" instead of a
+// saveable assignment.
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
@@ -49,8 +52,8 @@ vi.mock("@/actions/managedAi.actions", () => ({
   assignManagedBusinessAiSource: vi.fn(),
 }));
 
-const UNAVAILABLE_TESTID = "ai-assign-unavailable-CAREER_REFLECTION";
 const MATCH_TESTID = "ai-assign-unavailable-MATCH_ANALYSIS";
+const REFLECTION_ROW_TESTID = "ai-assign-row-CAREER_REFLECTION";
 
 function expectNoInteractiveControls(container: HTMLElement) {
   expect(
@@ -65,26 +68,27 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
     vi.mocked(listBusinessAiAssignments).mockResolvedValue({ success: true, data: [] });
   });
 
-  it("marks CAREER_REFLECTION Not provided and renders no controls for it", async () => {
+  it("renders CAREER_REFLECTION as an editable row now that a consumer resolves it", async () => {
     render(<AiAssignmentsCard />);
-    // Editable purposes still render their connection pickers.
     await waitFor(() =>
       expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0),
     );
-    const row = screen.getByTestId(UNAVAILABLE_TESTID);
+    // Every purpose is editable outside the fresh-native gate.
+    expect(screen.getAllByRole("combobox")).toHaveLength(6);
     expect(
-      within(row).getByText("settings.capabilityNotProvided"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("ai-assign-unavailable-CAREER_REFLECTION"),
+    ).not.toBeInTheDocument();
+    const row = screen.getByTestId(REFLECTION_ROW_TESTID);
     expect(
       within(row).getByText("settings.aiAssignPurposeCareerReflection"),
     ).toBeInTheDocument();
-    expectNoInteractiveControls(row);
-    // Every other purpose keeps an editable picker outside fresh-native.
-    expect(screen.getAllByRole("combobox")).toHaveLength(5);
+    // The editable row offers the connection picker and model input.
+    expect(within(row).getByRole("combobox")).toBeInTheDocument();
+    expect(within(row).getByRole("textbox")).toBeInTheDocument();
     expect(screen.queryByTestId(MATCH_TESTID)).not.toBeInTheDocument();
   });
 
-  it("also marks MATCH_ANALYSIS Not provided on the fresh-native full surface", async () => {
+  it("marks MATCH_ANALYSIS Not provided on the fresh-native full surface while CAREER_REFLECTION stays editable", async () => {
     render(
       <CareerSurfacesProvider freshNativeFull={true}>
         <AiAssignmentsCard />
@@ -93,7 +97,6 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
     await waitFor(() =>
       expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0),
     );
-    expect(screen.getByTestId(UNAVAILABLE_TESTID)).toBeInTheDocument();
     const matchRow = screen.getByTestId(MATCH_TESTID);
     expect(
       within(matchRow).getByText("settings.capabilityNotProvided"),
@@ -102,11 +105,13 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
       within(matchRow).getByText("settings.aiAssignPurposeMatchAnalysis"),
     ).toBeInTheDocument();
     expectNoInteractiveControls(matchRow);
-    // GLOBAL_DEFAULT / RESUME / CAREER_DIALOGUE / INTERVIEW stay editable.
-    expect(screen.getAllByRole("combobox")).toHaveLength(4);
+    // GLOBAL_DEFAULT / RESUME / CAREER_REFLECTION / CAREER_DIALOGUE /
+    // INTERVIEW stay editable on the full surface.
+    expect(screen.getAllByRole("combobox")).toHaveLength(5);
+    expect(screen.getByTestId(REFLECTION_ROW_TESTID)).toBeInTheDocument();
   });
 
-  it("preserves saved assignments while unavailable and exposes match again in Legacy", async () => {
+  it("preserves a saved MATCH_ANALYSIS row while unavailable and keeps CAREER_REFLECTION editable", async () => {
     vi.mocked(listBusinessAiAssignments).mockResolvedValue({
       success: true,
       data: ["MATCH_ANALYSIS", "CAREER_REFLECTION"].map((purpose) => ({
@@ -117,11 +122,14 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
     const view = render(<CareerSurfacesProvider freshNativeFull={true}><AiAssignmentsCard /></CareerSurfacesProvider>);
     await screen.findByTestId(MATCH_TESTID);
     expectNoInteractiveControls(screen.getByTestId(MATCH_TESTID));
-    expectNoInteractiveControls(screen.getByTestId(UNAVAILABLE_TESTID));
     expect(screen.queryByDisplayValue("MATCH_ANALYSIS-model")).toBeNull();
+    // A saved CAREER_REFLECTION assignment renders its saved pair — the
+    // row is a normal editable purpose now.
+    expect(
+      screen.getByDisplayValue("CAREER_REFLECTION-model"),
+    ).toBeInTheDocument();
     view.rerender(<CareerSurfacesProvider freshNativeFull={false}><AiAssignmentsCard /></CareerSurfacesProvider>);
     expect(screen.getByDisplayValue("MATCH_ANALYSIS-model")).toBeInTheDocument();
-    expectNoInteractiveControls(screen.getByTestId(UNAVAILABLE_TESTID));
     expect(clearBusinessAiAssignment).not.toHaveBeenCalled();
     expect(setBusinessAiAssignment).not.toHaveBeenCalled();
   });
@@ -134,7 +142,7 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
     expect(screen.queryAllByRole("combobox")).toHaveLength(0);
     await act(async () => { resolve({ success: true, data: [] }); });
     expectNoInteractiveControls(screen.getByTestId(MATCH_TESTID));
-    expectNoInteractiveControls(screen.getByTestId(UNAVAILABLE_TESTID));
-    expect(screen.getAllByRole("combobox")).toHaveLength(4);
+    expect(screen.getByTestId(REFLECTION_ROW_TESTID)).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox")).toHaveLength(5);
   });
 });
