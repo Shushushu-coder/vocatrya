@@ -498,7 +498,7 @@
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
       "description": "完善 AI 对话的回答操作，优先支持复制 AI 回答，再增量完善代码块复制与普通已完成回答的重新生成。",
-      "implementationNotes": "2026-10-28 Main 集成首个增量：纳入 codex/agent-answer-copy（基于 411fbca8）的逐条助手正文复制，保留多段换行，复制 Markdown 源文，排除隐藏推理/工具参数输出/粘贴数据/其他消息；流式复制点击时可见快照，纯工具和空回答无按钮，具备成功反馈、失败重试及无障碍标签。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。代码块独立复制及普通已完成回答重新生成未做，整体保持 PARTIAL；Windows Electron fresh-native 真实剪贴板及历史重开验收未执行，passes 保持 false。",
+      "implementationNotes": "2026-10-28 Main 集成首个增量：纳入 codex/agent-answer-copy（基于 411fbca8）的逐条助手正文复制，保留多段换行，复制 Markdown 源文，排除隐藏推理/工具参数输出/粘贴数据/其他消息；流式复制点击时可见快照，纯工具和空回答无按钮，具备成功反馈、失败重试及无障碍标签。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。代码块独立复制及普通已完成回答重新生成未做，整体保持 PARTIAL；Windows Electron fresh-native 真实剪贴板及历史重开验收未执行，passes 保持 false。 2026-10-28 第二增量集成：助手回答顶层围栏代码块新增独立复制，保留代码正文缩进与换行，排除语言标签和围栏；支持流式可见快照、成功/失败反馈、重试及键盘标签，整条回答复制复用相同剪贴板处理，补齐中英文词条。复核修复 Unicode 分隔符被改成换行导致代码内容改变的问题并补回归测试。嵌套列表/引用内围栏及缩进代码块暂不提供独立按钮；普通已完成回答重新生成尚未实现，整体保持 PARTIAL。桌面真实剪贴板与历史重开留给用户手动验收，passes 保持 false。",
       "steps": [
         "普通、多段、Markdown 与中文助手回答可逐条复制，保留换行，复制范围明确且不包含隐藏推理、原始工具参数或未显示的敏感上下文。",
         "复制成功和失败反馈真实，失败可重试，操作具有键盘与读屏标签；明确流式阶段行为，纯工具结果和空回答不提供无意义操作。",
@@ -514,7 +514,7 @@
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
       "description": "在设置 → 设备与输入新增输入偏好，支持回车行为、进入编辑、快捷提示和自动聚焦四项设备级偏好；优先接入网申资料及职业资料直接编辑字段。",
-      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/input-preferences（基于 411fbca8）的四项本机偏好（默认 newline/click/focus/off）、设置入口、网申及职业资料字段接入。复核修复 IME composition ref 在跳转前拦截、visibility:hidden 跳过、键盘重新进入时应用选区策略、持久化失败明确报错并保留原设置，以及 Enter 下一项的同步校验/必填门；抽出客户端安全的既有职业资料校验供服务与字段复用，不变更业务规则。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。完整 AC-01～AC-16 保留；真实中文 IME、Windows Electron fresh-native、重开持久化及窄窗口验收未执行，passes 保持 false。",
+      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/input-preferences（基于 411fbca8）的四项本机偏好（默认 newline/click/focus/off）、设置入口、网申及职业资料字段接入。复核修复 IME composition ref 在跳转前拦截、visibility:hidden 跳过、键盘重新进入时应用选区策略、持久化失败明确报错并保留原设置，以及 Enter 下一项的同步校验/必填门；抽出客户端安全的既有职业资料校验供服务与字段复用，不变更业务规则。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。完整 AC-01～AC-16 保留；真实中文 IME、Windows Electron fresh-native、重开持久化及窄窗口验收未执行，passes 保持 false。 2026-10-28 收口集成：修复非默认本机偏好在 SSR 水合时的不一致，改用稳定 useSyncExternalStore 快照；为 Legacy/只读素材卡片的证据编辑补齐字段区域，恢复 Enter 下一项与准确提示；补水合回归测试。真实中文 IME、Windows Electron、重开与窄窗口仍待用户手动验收，passes 保持 false。",
       "steps": [
         "AC-01/13：四项默认值正确，独立本机保存、即时生效且重启保留；不依赖云端同步，缺失或无效值安全回退。",
         "AC-02/03/04：Enter 按偏好换行或下一项；Shift+Enter 仅在多行字段换行；最后一项结束编辑且不提交整表，跳过隐藏、禁用和只读字段。",

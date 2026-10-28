@@ -17,7 +17,7 @@
 | 任务 | Main 实施状态与范围 | 剩余事项 |
 | --- | --- | --- |
 | SET-INPUT-PREFERENCES | IMPLEMENTED；四偏好、本机存储、设置入口、职业/网申资料编辑、显式连续填写、焦点/提示/IME 保护 | 真实中文 IME、Windows Electron fresh-native、重开持久化与窄窗口验收 |
-| AGENT-CHAT-UX | PARTIAL；逐条正文复制，复制 Markdown 源文，流式取点击时可见快照，成功/失败及无障碍反馈 | 真实桌面剪贴板与历史重开；代码块复制和普通回答重新生成尚未开发 |
+| AGENT-CHAT-UX | PARTIAL；逐条正文复制及顶层围栏代码块独立复制，流式取点击时可见快照，成功/失败及无障碍反馈 | 真实桌面剪贴板与历史重开；嵌套围栏/缩进代码块暂不支持独立复制，普通回答重新生成尚未开发 |
 | SET-AI-RUNTIME-UPDATE | IMPLEMENTED；七类运行时查询、自动/手动共用检查、缓存/超时/重试、版本与兼容状态分离、恢复指引；不执行更新 | Settings UI 与 Windows Electron fresh-native 验收 |
 
 合并前修复：
@@ -32,6 +32,13 @@ Main 实际验证：前端及相关业务定向 **15 文件/177 项**、runtime 
 代码来源：`.worktrees/input-preferences` / `codex/input-preferences`、`.worktrees/agent-answer-copy` / `codex/agent-answer-copy`、`.worktrees/runtime-update-check` / `codex/runtime-update-check`。七类上游为 Codex/Claude/OpenCode/Copilot 的 npm latest、Grok stable channel、Devin manifest、Cursor 官方安装脚本 CLI 钉值；Cursor 不使用编辑器版本端点。查询来源可达性沿用 Owner 报告，本轮未重新联网探测。精确版本认证及 `executionEnabled: false` 保留，无本机 CLI 安装更新或真实账号/数据库操作。
 
 以下各项原始缺口说明为开发前基线，当前状态以上述 Main 集成进度为准。
+
+### 输入偏好收口与代码块复制增量（2026-10-28）
+
+- 输入偏好：补稳定的 SSR/客户端水合快照，避免已保存非默认值造成水合不一致；补 Legacy/只读素材卡片证据字段区域，恢复 Enter 下一项及准确提示，增加水合回归覆盖。
+- 聊天：新增顶层围栏代码块独立复制，保留缩进/换行，支持流式快照、失败重试和键盘操作；整条回答复制复用剪贴板 hook，中英文词条已接入。复核修复 Unicode 分隔符误转换并补回归覆盖。列表/引用内围栏及缩进代码块暂不提供独立复制；普通已完成回答重新生成仍未实现。
+- Main 组合定向检查 10 文件/158 项通过；完整类型检查（不生成增量缓存）、9 个改动代码文件 ESLint、JSON 解析/重复键及差异空白检查通过。两条任务分支分别提交后集成。
+- 仅进行开发检查，不启动 Electron、浏览器、生产构建、装配或 E2E；真实中文 IME、桌面剪贴板、重开持久化与窄窗口由用户手动验收。两项 passes 均保持 false，聊天整体仍为 PARTIAL。
 
 ### 1. 账号区域自动检测 CLI 更新
 

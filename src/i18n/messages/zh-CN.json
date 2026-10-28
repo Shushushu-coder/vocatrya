@@ -2781,5 +2781,10 @@
     "unverifiedAvailableHint": "可用版本尚未经过应用能力验证——能力认证当前精确绑定 v{certified}；更新后将按新探测版本重新判定，不会自动放宽。",
     "recoveryCommand": "如需回退到认证版本 {version}：{command}",
     "recoveryNone": "官方渠道不提供固定版本回退——如能力验证失败，请查阅安装文档。"
+  },
+  "agentCodeBlock": {
+    "copy": "复制代码",
+    "copied": "已复制",
+    "copyFailed": "复制失败，请重试。"
   }
 }

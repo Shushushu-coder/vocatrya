@@ -2781,5 +2781,10 @@
     "unverifiedAvailableHint": "The available version has not been verified — capability certification is pinned to v{certified}. After updating, capabilities are re-evaluated against the newly probed version and are never relaxed automatically.",
     "recoveryCommand": "To restore the certified version {version}: {command}",
     "recoveryNone": "The official channel offers no pinned-version rollback — if capability verification fails, see the install documentation."
+  },
+  "agentCodeBlock": {
+    "copy": "Copy code",
+    "copied": "Copied",
+    "copyFailed": "Copy failed. Please try again."
   }
 }
