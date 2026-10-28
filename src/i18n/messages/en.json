@@ -2642,5 +2642,51 @@
   "basicDataInline": {
     "createFailed": "Failed to create {name}.",
     "createUnsupported": "Creating {name} here isn't supported."
+  },
+  "matchAnalysis": {
+    "sourceLabel": "Material source",
+    "sourceCareerProfile": "Career profile",
+    "assignmentResolved": "Runs with {provider} · {model}",
+    "assignmentNotConfigured": "No AI assignment resolves for match analysis. Configure one under Settings → AI Assignments or set a global default.",
+    "assignmentInvalid": "The saved match assignment is unusable ({code}). Fix it under Settings → AI Assignments.",
+    "run": "Run fast screening",
+    "retry": "Retry",
+    "running": "Screening…",
+    "runFailed": "Screening could not finish",
+    "jdMissingHint": "This job has no description yet — add one before matching.",
+    "materialEmptyHint": "The selected material source is empty. Add career materials or pick a resume version before matching.",
+    "verdict": {
+      "PASS": "Pass",
+      "BORDERLINE": "Borderline",
+      "FAIL": "Fail"
+    },
+    "sections": {
+      "reasons": "Reasons",
+      "hardRequirements": "Hard requirements",
+      "coreMatch": "Core match",
+      "preferenceMatch": "Preference match"
+    },
+    "stale": "Outdated",
+    "staleBecause": "Outdated because {reasons}.",
+    "staleReasons": {
+      "JD_CHANGED": "the job description changed",
+      "CAREER_MATERIAL_CHANGED": "the career material changed",
+      "PREFERENCE_CHANGED": "your preferences changed",
+      "RESUME_VERSION_CHANGED": "the resume version changed"
+    },
+    "historyTitle": "Analysis history",
+    "historyEmpty": "No saved analyses yet.",
+    "ranWith": "{provider} · {model}",
+    "loadFailed": "Couldn't load match analysis.",
+    "errors": {
+      "MATCH_JD_MISSING": "This job has no job description to analyze.",
+      "MATCH_INSUFFICIENT_MATERIAL": "The selected material source has no usable content — the screening was not started.",
+      "NOT_CONFIGURED": "No AI assignment is configured for match analysis. Set one under Settings → AI Assignments and retry.",
+      "connection": "The AI connection could not run this screening ({code}). Check the connection and retry.",
+      "invalidAssignment": "The configured assignment is unusable ({code}). Update it under Settings → AI Assignments and retry.",
+      "quota": "The AI provider refused the request ({code}). Check quota or entitlement, then retry.",
+      "output": "The model output failed validation ({code}). Retry to run the screening again.",
+      "generic": "Fast screening failed ({code}). You can retry."
+    }
   }
 }

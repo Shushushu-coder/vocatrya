@@ -43,6 +43,7 @@ import { useAutoMatch } from "./job-details/useAutoMatch";
 import { JobContactsTab } from "./job-details/JobContactsTab";
 import { ApplicationTimelineTab } from "./job-details/ApplicationTimelineTab";
 import { ApplicationResumeBindingPanel } from "./job-details/ApplicationResumeBindingPanel";
+import { MatchAnalysisPanel } from "./job-details/MatchAnalysisPanel";
 import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 import {
@@ -69,10 +70,15 @@ const AB_JOB_DETAIL_TABS = [
   "contacts",
 ] as const;
 
-// Match, cover letter and contacts have no canonical fresh-native
-// implementation yet — under fresh + full the tabs are simply absent, so a
-// retained ?tab=match link falls back to the description tab.
-const FRESH_FULL_JOB_DETAIL_TABS = ["description", "timeline", "notes"] as const;
+// Cover letter and contacts have no canonical fresh-native implementation
+// yet — under fresh + full those tabs are simply absent, so a retained
+// ?tab=letter link falls back to the description tab.
+const FRESH_FULL_JOB_DETAIL_TABS = [
+  "description",
+  "timeline",
+  "match",
+  "notes",
+] as const;
 
 type JobDetailsProps = {
   job: JobResponse;
@@ -274,7 +280,9 @@ function JobDetails({
             {showTimeline && (
               <TabsTrigger value="timeline">{t("jobs.timelineTab")}</TabsTrigger>
             )}
-            {!freshNativeFull && (
+            {freshNativeFull ? (
+              <TabsTrigger value="match">{t("jobs.matchTab")}</TabsTrigger>
+            ) : (
               <TabsTrigger value="match">{t("automations.aiMatch")}</TabsTrigger>
             )}
             {!freshNativeFull && (
@@ -317,25 +325,25 @@ function JobDetails({
               </Card>
             </TabsContent>
           )}
-          {!freshNativeFull && (
-            <TabsContent value="match" className="mt-4">
-              <Card className="p-6">
-                {parsedMatchData && parsedMatchData.analyzed !== false ? (
-                  <MatchDetails matchData={parsedMatchData} />
-                ) : (
-                  <JobTabEmptyState
-                    icon={Sparkles}
-                    title={t("jobs.noMatchYet")}
-                    description={t("jobs.noMatchDescription")}
-                    actionLabel={t("jobs.matchWithAi")}
-                    onAction={onMatch}
-                    actionDisabled={chatBusy || !jobMutationsEnabled}
-                    actionTitle={chatBusy ? t("jobs.assistantBusy") : undefined}
-                  />
-                )}
-              </Card>
-            </TabsContent>
-          )}
+          <TabsContent value="match" className="mt-4">
+            <Card className="p-6">
+              {freshNativeFull ? (
+                <MatchAnalysisPanel jobId={job.id} />
+              ) : parsedMatchData && parsedMatchData.analyzed !== false ? (
+                <MatchDetails matchData={parsedMatchData} />
+              ) : (
+                <JobTabEmptyState
+                  icon={Sparkles}
+                  title={t("jobs.noMatchYet")}
+                  description={t("jobs.noMatchDescription")}
+                  actionLabel={t("jobs.matchWithAi")}
+                  onAction={onMatch}
+                  actionDisabled={chatBusy || !jobMutationsEnabled}
+                  actionTitle={chatBusy ? t("jobs.assistantBusy") : undefined}
+                />
+              )}
+            </Card>
+          </TabsContent>
           {!freshNativeFull && (
             <TabsContent value="letter" className="mt-4">
               <Card className="p-6">
