@@ -116,9 +116,9 @@ describe("InterviewAiSettings — OpenRouter model selection (F4-UI-001)", () =>
     const user = userEvent.setup();
     await renderLoaded();
 
-    await pickProvider(user, "OpenAI");
+    await pickProvider(user, "DeepSeek");
     await user.click(screen.getByRole("combobox", { name: "interview.model" }));
-    await user.click(await screen.findByRole("option", { name: "gpt-4o" }));
+    await user.click(await screen.findByRole("option", { name: "deepseek-chat" }));
     expect(saveButton()).toBeEnabled();
 
     await pickProvider(user, "OpenRouter");
@@ -126,7 +126,7 @@ describe("InterviewAiSettings — OpenRouter model selection (F4-UI-001)", () =>
     const modelInput = screen.getByLabelText("interview.model");
     expect(modelInput).toHaveValue("");
     expect(saveButton()).toBeDisabled();
-    // The stale OpenAI model must not be silently submitted.
+    // The previous provider's model must not be silently submitted.
     await user.type(modelInput, "deepseek/deepseek-chat");
     await user.click(saveButton());
     await waitFor(() =>
@@ -191,9 +191,7 @@ describe("InterviewAiSettings — OpenRouter model selection (F4-UI-001)", () =>
   });
 
   it.each([
-    ["OpenAI", "gpt-4o"],
     ["DeepSeek", "deepseek-chat"],
-    ["Google Gemini", "gemini-2.0-flash"],
   ])(
     "keeps the curated dropdown for %s — regression",
     async (providerName, expectedOption) => {

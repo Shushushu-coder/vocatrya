@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AiProvider,
-  OpenaiModel,
   DeepseekModel,
-  GeminiModel,
 } from "@/models/ai.model";
-import { PROVIDER_REGISTRY, AI_PROVIDERS } from "@/lib/ai/provider-registry";
+import { PROVIDER_REGISTRY, SETTINGS_BYOK_PROVIDERS } from "@/lib/ai/provider-registry";
 import {
   Select,
   SelectContent,
@@ -37,12 +35,8 @@ export default function InterviewAiSettings() {
 
   const fallbackModels = useCallback((value: AiProvider): string[] => {
     switch (value) {
-      case AiProvider.OPENAI:
-        return Object.values(OpenaiModel);
       case AiProvider.DEEPSEEK:
         return Object.values(DeepseekModel);
-      case AiProvider.GEMINI:
-        return Object.values(GeminiModel);
       default:
         return [];
     }
@@ -56,7 +50,7 @@ export default function InterviewAiSettings() {
         const interview = result?.data?.settings?.ai?.interview as
           | { provider?: AiProvider; model?: string }
           | undefined;
-        if (interview?.provider) {
+        if (interview?.provider && SETTINGS_BYOK_PROVIDERS.includes(interview.provider)) {
           setProvider(interview.provider);
           setModel(interview.model ?? "");
           setModels(fallbackModels(interview.provider));
@@ -124,7 +118,7 @@ export default function InterviewAiSettings() {
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {AI_PROVIDERS.map((id) => (
+              {SETTINGS_BYOK_PROVIDERS.map((id) => (
                 <SelectItem key={id} value={id}>
                   {PROVIDER_REGISTRY[id].displayName}
                 </SelectItem>

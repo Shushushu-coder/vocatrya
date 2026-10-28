@@ -24,12 +24,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, ShieldCheck } from "lucide-react";
 import {
   getUserApiKeys,
   saveApiKey,
   deleteApiKey,
-  getDefaultOllamaBaseUrl,
 } from "@/actions/apiKey.actions";
 import {
   getByokCredentialStorageStatus,
@@ -40,9 +39,7 @@ import type {
   ApiKeyClientResponse,
   ApiKeyProvider,
 } from "@/models/apiKey.model";
-import { getAiProviders } from "@/lib/ai/provider-registry";
-import { AiProvider } from "@/models/ai.model";
-import { checkOllamaConnection } from "@/utils/ai.utils";
+import { PROVIDER_REGISTRY, SETTINGS_BYOK_PROVIDERS } from "@/lib/ai/provider-registry";
 import { useI18n } from "@/i18n";
 
 interface ProviderConfig {
@@ -54,10 +51,7 @@ interface ProviderConfig {
   sensitive: boolean;
 }
 
-// Registry-driven: every BYOK provider (Ollama, OpenAI, DeepSeek,
-// OpenRouter, Gemini) renders from the same provider-registry entries the
-// rest of the app uses — including DeepSeek as a normal BYOK provider.
-const PROVIDERS: ProviderConfig[] = getAiProviders().map((entry) => ({
+const PROVIDERS: ProviderConfig[] = SETTINGS_BYOK_PROVIDERS.map((id) => PROVIDER_REGISTRY[id]).map((entry) => ({
   id: entry.id as ApiKeyProvider,
   name: entry.displayName,
   placeholder: entry.keyConfig.placeholder,
@@ -84,27 +78,15 @@ function ByokConnectionsCard() {
   const { t } = useI18n();
   const [keys, setKeys] = useState<ApiKeyClientResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [defaultOllamaUrl, setDefaultOllamaUrl] = useState(
-    "http://127.0.0.1:11434",
-  );
   const [editingProvider, setEditingProvider] = useState<ApiKeyProvider | null>(
     null,
   );
   const [inputValue, setInputValue] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [ollamaConnected, setOllamaConnected] = useState<boolean | null>(null);
-  const [ollamaChecking, setOllamaChecking] = useState(false);
   const [storageStatus, setStorageStatus] = useState<CredentialStorageStatus | null>(null);
   const [migrating, setMigrating] = useState(false);
   const [verifyingStorage, setVerifyingStorage] = useState(false);
-
-  const recheckOllamaConnection = async () => {
-    setOllamaChecking(true);
-    const result = await checkOllamaConnection(AiProvider.OLLAMA);
-    setOllamaConnected(result.isConnected);
-    setOllamaChecking(false);
-  };
 
   const fetchStorageStatus = async () => {
     try {
@@ -117,8 +99,6 @@ function ByokConnectionsCard() {
 
   useEffect(() => {
     fetchKeys();
-    getDefaultOllamaBaseUrl().then(setDefaultOllamaUrl);
-    recheckOllamaConnection();
     fetchStorageStatus();
   }, []);
 
@@ -140,7 +120,7 @@ function ByokConnectionsCard() {
     keys.find((k) => k.provider === provider);
 
   const isBaseUrlProvider = (providerId: string) => {
-    const entry = getAiProviders().find((e) => e.id === providerId);
+    const entry = PROVIDER_REGISTRY[providerId];
     return entry?.credentialType === "base-url";
   };
 
@@ -323,10 +303,7 @@ function ByokConnectionsCard() {
                       {isBaseUrl && (
                         <span className="block text-xs text-muted-foreground/70 mt-0.5">
                           {t("settings.defaultPrefix", {
-                            value:
-                              provider.id === "ollama"
-                                ? defaultOllamaUrl
-                                : provider.placeholder,
+                            value: provider.placeholder,
                           })}
                         </span>
                       )}
@@ -355,37 +332,6 @@ function ByokConnectionsCard() {
                   )}
                 </div>
               </CardHeader>
-              {provider.id === "ollama" && (
-                <div className="px-6 pb-3">
-                  <div className="flex items-center gap-2">
-                    {ollamaChecking ? (
-                      <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>{t("settings.checking")}</span>
-                      </div>
-                    ) : ollamaConnected === true ? (
-                      <div className="flex items-center gap-1 text-green-600 text-sm">
-                        <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>{t("settings.ollamaRunning")}</span>
-                      </div>
-                    ) : ollamaConnected === false ? (
-                      <div className="flex items-center gap-1 text-red-600 text-sm">
-                        <XCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>{t("settings.ollamaNotRunning")}</span>
-                      </div>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      onClick={recheckOllamaConnection}
-                      disabled={ollamaChecking}
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${ollamaChecking ? "animate-spin" : ""}`} />
-                    </Button>
-                  </div>
-                </div>
-              )}
               <CardContent>
                 {isEditing ? (
                   <div className="space-y-3">
@@ -396,11 +342,7 @@ function ByokConnectionsCard() {
                       <Input
                         id={`key-${provider.id}`}
                         type={provider.inputType}
-                        placeholder={
-                          isBaseUrl && provider.id === "ollama"
-                            ? defaultOllamaUrl
-                            : provider.placeholder
-                        }
+                        placeholder={provider.placeholder}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         className="mt-1"

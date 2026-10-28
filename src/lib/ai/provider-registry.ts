@@ -120,6 +120,10 @@ export const PROVIDER_REGISTRY: Record<string, ProviderRegistryEntry> = {
 export const AI_PROVIDERS = ["ollama", "openai", "deepseek", "openrouter", "gemini"] as const;
 export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
+// Settings exposes these BYOK providers; keep the full registry for existing
+// credentials and execution compatibility.
+export const SETTINGS_BYOK_PROVIDERS: readonly AiProviderId[] = ["deepseek", "openrouter"];
+
 export function getAiProviders(): ProviderRegistryEntry[] {
   return AI_PROVIDERS.map((id) => PROVIDER_REGISTRY[id]);
 }

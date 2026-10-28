@@ -44,7 +44,7 @@ import {
   BYOK_API_KEY_PROVIDERS,
   BYOK_BACKEND_KIND,
 } from "@/lib/ai/connections";
-import { PROVIDER_REGISTRY } from "@/lib/ai/provider-registry";
+import { PROVIDER_REGISTRY, SETTINGS_BYOK_PROVIDERS } from "@/lib/ai/provider-registry";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 // Purpose rows render in registry order. INTERVIEW is editable now that
@@ -226,7 +226,10 @@ function AiAssignmentsCard() {
         }
       }
       if (connResult.success && connResult.data) {
-        setConnections(connResult.data);
+        setConnections(connResult.data.filter((connection) =>
+          connection.backendKind !== BYOK_BACKEND_KIND ||
+          SETTINGS_BYOK_PROVIDERS.some((provider) => provider.toUpperCase() === connection.provider),
+        ));
       }
       const nextAssignments: Record<string, BusinessAssignmentSummary> = {};
       const nextDrafts: Record<string, Draft> = {};
