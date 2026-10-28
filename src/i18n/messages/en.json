@@ -35,6 +35,7 @@
       "EXTRACTION_FAILED": "Could not extract text. Try another PDF or DOCX file.",
       "ENCRYPTED": "This file is password-protected. Upload an unencrypted file.",
       "DECOMPRESSION_BOMB": "The uncompressed file exceeds safety limits. Choose a smaller file.",
+      "AI_UNAVAILABLE": "AI is unavailable right now — the connection, runtime, or model capability is not ready. Check the AI settings and try again.",
       "AI_PARSE_FAILED": "Could not parse the resume safely. Try again."
     }
   },

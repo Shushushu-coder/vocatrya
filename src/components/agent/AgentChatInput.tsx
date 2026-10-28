@@ -164,7 +164,9 @@ export function AgentChatInput() {
 
   return (
     <div className="flex flex-col gap-2">
-      {error || actionError || (preflight.checked && !preflight.ok) ? (
+      {error ||
+      actionError ||
+      (preflight.checked && !preflight.ok && !preflight.dismissed) ? (
         <ChatErrorBanner />
       ) : null}
 

@@ -137,6 +137,7 @@ function Probe() {
       <span data-testid="brand-completion">{c.brandCompletion}</span>
       <button onClick={() => void c.addToolApprovalResponse({ id: "ap1", approved: true })}>approve</button>
       <button onClick={() => void c.addToolApprovalResponse({ id: "ap2", approved: false })}>rejectSecond</button>
+      <button onClick={c.clearError}>clearError</button>
       <button onClick={c.clearQueued}>clearQueued</button>
       <span data-testid="queued">
         {c.queued ? (c.queued.parts[0] as any).text : ""}
@@ -145,6 +146,7 @@ function Probe() {
       <button onClick={toggle}>toggleSidebar</button>
       <span data-testid="sidebar">{String(expanded)}</span>
       <span data-testid="state">{`${c.isOpen}|${c.approvalPending}|${c.interruptedTurn}|${holder}|${c.preflight.ok}`}</span>
+      <span data-testid="preflight-dismissed">{String(c.preflight.dismissed)}</span>
       <span data-testid="composer-nonce">{c.composerNonce}</span>
       <span data-testid="panel-expanded">{String(c.isPanelExpanded)}</span>
       <span data-testid="review-stream">{c.toolStreams["rv1"] ?? ""}</span>
@@ -469,6 +471,44 @@ describe("AgentChatProvider", () => {
     await act(async () => {
       await userEvent.click(screen.getByText("open"));
     });
+    expect(screen.getByTestId("state").textContent).toMatch(/false$/);
+  });
+
+  it("dismisses the preflight banner only until the next check", async () => {
+    (checkOllamaConnection as any).mockResolvedValue({
+      isConnected: false,
+      error: "Ollama is not reachable.",
+    });
+    setup();
+    await act(async () => {
+      await userEvent.click(screen.getByText("open"));
+    });
+    expect(screen.getByTestId("preflight-dismissed")).toHaveTextContent("false");
+    await act(async () => {
+      await userEvent.click(screen.getByText("clearError"));
+    });
+    expect(chat.clearError).toHaveBeenCalled();
+    expect(screen.getByTestId("preflight-dismissed")).toHaveTextContent("true");
+    // Re-running the check re-announces a still-failing state.
+    await act(async () => {
+      await userEvent.click(screen.getByText("open"));
+    });
+    expect(screen.getByTestId("preflight-dismissed")).toHaveTextContent("false");
+  });
+
+  it("announces a completed failure even when the old banner was dismissed during the check", async () => {
+    vi.mocked(checkOllamaConnection).mockResolvedValue({ isConnected: false });
+    setup();
+    await userEvent.click(screen.getByText("open"));
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toMatch(/false$/));
+    let finish!: (result: { isConnected: boolean }) => void;
+    vi.mocked(checkOllamaConnection).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await userEvent.click(screen.getByText("open"));
+    await waitFor(() => expect(finish).toBeDefined());
+    await userEvent.click(screen.getByText("clearError"));
+    expect(screen.getByTestId("preflight-dismissed")).toHaveTextContent("true");
+    await act(async () => { finish({ isConnected: false }); });
+    expect(screen.getByTestId("preflight-dismissed")).toHaveTextContent("false");
     expect(screen.getByTestId("state").textContent).toMatch(/false$/);
   });
 

@@ -35,6 +35,7 @@
       "EXTRACTION_FAILED": "无法读取文件文本，请尝试其他 PDF 或 DOCX 文件。",
       "ENCRYPTED": "文件受密码保护，请上传未加密文件。",
       "DECOMPRESSION_BOMB": "文件解压后超过安全大小限制，请上传较小文件。",
+      "AI_UNAVAILABLE": "AI 服务当前不可用（连接、运行时或模型能力未就绪）。请检查 AI 设置后重试。",
       "AI_PARSE_FAILED": "未能安全解析简历，请重试。"
     }
   },

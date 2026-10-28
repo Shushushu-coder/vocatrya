@@ -61,7 +61,24 @@ export function CanonicalResumeImport() {
     } catch { setError("SAVE_FAILED"); }
     finally { busy.current = false; setPhase("idle"); }
   };
-  const errorKey = error && (["UNSUPPORTED_FORMAT", "NO_TEXT", "NO_CONTENT", "TOO_SHORT", "TOO_LONG", "FILE_TOO_LARGE", "CORRUPTED", "SAVE_FAILED", "AI_NOT_CONFIGURED", "EXTRACTION_FAILED", "ENCRYPTED", "DECOMPRESSION_BOMB"].includes(error) ? error : "AI_PARSE_FAILED");
+  // AI environment failures (connection/runtime/capability not ready) are
+  // not file problems — collapsing them into AI_PARSE_FAILED advises
+  // retrying a file that can never pass on this runtime. They surface as
+  // their own category instead.
+  const AI_UNAVAILABLE_CODES = [
+    "ASSIGNED_CONNECTION_UNAVAILABLE", "AUTH_NOT_CONFIRMED", "BACKEND_UNAVAILABLE",
+    "BYOK_CREDENTIAL_UNAVAILABLE", "CAPABILITY_UNSUPPORTED",
+    "CONNECTION_DISCONNECTED", "CONNECTION_ERROR",
+    "MANAGED_AUTH_REQUIRED", "MANAGED_BINDING_UNAVAILABLE",
+    "MANAGED_EXECUTION_NOT_IMPLEMENTED", "MANAGED_PROVENANCE_INVALID",
+    "MANAGED_RUNTIME_UNAVAILABLE", "MODEL_DISABLED", "MODEL_UNAVAILABLE",
+    "PERMISSION_BOUNDARY_NOT_READY", "REAUTH_REQUIRED", "RUNTIME_BROKEN",
+    "RUNTIME_NOT_AVAILABLE", "RUNTIME_NOT_INSTALLED",
+    "STRUCTURED_OUTPUT_NATIVE_SCHEMA_VIOLATION", "STRUCTURED_OUTPUT_NOT_VERIFIED",
+    "STRUCTURED_OUTPUT_UNSUPPORTED", "UNSUPPORTED_BACKEND",
+    "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
+  ];
+  const errorKey = error && (["UNSUPPORTED_FORMAT", "NO_TEXT", "NO_CONTENT", "TOO_SHORT", "TOO_LONG", "FILE_TOO_LARGE", "CORRUPTED", "SAVE_FAILED", "AI_NOT_CONFIGURED", "EXTRACTION_FAILED", "ENCRYPTED", "DECOMPRESSION_BOMB"].includes(error) ? error : AI_UNAVAILABLE_CODES.includes(error) ? "AI_UNAVAILABLE" : "AI_PARSE_FAILED");
   if (!open) return <Button variant="outline" onClick={() => setOpen(true)}>{t("canonicalImport.open")}</Button>;
   return <div className="w-full space-y-3 rounded-md border p-4" data-testid="canonical-resume-import">
     <h2 className="font-medium">{t(preview ? "canonicalImport.review" : "canonicalImport.open")}</h2>
