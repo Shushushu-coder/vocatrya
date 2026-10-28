@@ -4,7 +4,8 @@ import { Question } from "@/models/question.model";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QuestionTagBadge } from "@/components/questions/QuestionTagBadge";
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,11 +26,6 @@ type QuestionCardProps = {
   onDelete: (questionId: string) => void;
 };
 
-function truncateHtml(html: string, maxLength: number): string {
-  if (html.length <= maxLength) return html;
-  return html.substring(0, maxLength) + "...";
-}
-
 export function QuestionCard({
   question,
   onEdit,
@@ -40,13 +36,11 @@ export function QuestionCard({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const hasAnswer = hasDescription(question.answer);
-  const isLongAnswer = hasAnswer && question.answer!.length > 300;
 
   return (
     <>
       <div
-        className="border rounded-lg p-4 hover:bg-accent/50 transition-colors cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
+        className="border rounded-lg p-4 hover:bg-accent/50 transition-colors"
         data-testid="question-card"
       >
         <div className="flex items-start justify-between gap-2">
@@ -82,15 +76,18 @@ export function QuestionCard({
         </div>
 
         {hasAnswer && (
-          <div className="mt-2 text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert">
-            <TipTapContentViewer
-              content={
-                expanded || !isLongAnswer
-                  ? question.answer!
-                  : truncateHtml(question.answer!, 300)
-              }
-            />
-          </div>
+          <Collapsible open={expanded} onOpenChange={setExpanded} className="mt-2">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="gap-1 px-0" data-testid="question-answer-toggle">
+                <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                <span>{t("questions.answer")}</span>
+                <span className="text-xs text-muted-foreground">{expanded ? t("questions.showLess") : t("questions.showMore")}</span>
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert">
+              <TipTapContentViewer content={question.answer!} />
+            </CollapsibleContent>
+          </Collapsible>
         )}
 
         {question.tags && question.tags.length > 0 && (
@@ -109,17 +106,6 @@ export function QuestionCard({
           </div>
         )}
 
-        {isLongAnswer && (
-          <button
-            className="text-xs text-primary mt-2 hover:underline"
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded(!expanded);
-            }}
-          >
-            {expanded ? t("questions.showLess") : t("questions.showMore")}
-          </button>
-        )}
       </div>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
