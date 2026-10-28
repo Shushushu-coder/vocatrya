@@ -37,7 +37,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-27 最终验收：Main 自动保存代码已实现；Windows Electron fresh-native 个人/素材连续输入、切 Tab、保存失败保草稿/重试、刷新及完整退出重开通过。中文输入法仅有合成 composition 事件覆盖，真实 IME 仍需人工确认，passes 保持 false。敏感字段按合同保留显式编辑。",
+      "implementationNotes": "2026-10-27 最终验收：Main 自动保存代码已实现；Windows Electron fresh-native 个人/素材连续输入、切 Tab、保存失败保草稿/重试、刷新及完整退出重开通过。中文输入法仅有合成 composition 事件覆盖，真实 IME 仍需人工确认，passes 保持 false。敏感字段按合同保留显式编辑。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。个人字段自动保存、真实退出重开后链接字段与隔离 SQLite 一致；修正脚本字段加载等待后复测通过。真实中文 IME 仍待用户手动确认，passes 保持 false。",
       "description": "职业资料字段可直接编辑、自动保存，并在失败时保留输入供重试。",
       "steps": [
         "编辑一项资料字段，无需整页保存即可完成持久化；重新打开仍显示修改后的值。",
@@ -466,14 +466,14 @@
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
       "description": "Codex 等账号/运行时区域自动检测可用更新，提供真实版本状态和手动重查，并表达与应用能力认证的兼容关系。",
-      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/runtime-update-check（基于 411fbca8）的未提交实现及合并前修复。七类运行时真实上游查询，自动/手动共用服务、缓存/超时/重试，版本更新与精确兼容认证分别表达，恢复指引仅展示文本，不安装更新、不放宽认证。复核修复原生 AbortError 数字 code 导致设置页崩溃、重查 IPC 失败仍保留成功状态、Cursor 同日不同 SHA 被虚假排序（含 v/V 前缀）三项问题。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过；Owner 原检查记录见实施台账。生产构建、装配、Windows Electron fresh-native Settings UI 与功能验收未执行，passes 保持 false。",
+      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/runtime-update-check（基于 411fbca8）的未提交实现及合并前修复。七类运行时真实上游查询，自动/手动共用服务、缓存/超时/重试，版本更新与精确兼容认证分别表达，恢复指引仅展示文本，不安装更新、不放宽认证。复核修复原生 AbortError 数字 code 导致设置页崩溃、重查 IPC 失败仍保留成功状态、Cursor 同日不同 SHA 被虚假排序（含 v/V 前缀）三项问题。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过；Owner 原检查记录见实施台账。生产构建、装配、Windows Electron fresh-native Settings UI 与功能验收未执行，passes 保持 false。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。六种已安装运行时真实上游自动查询、当前/可用版本及检查时间、手动重查、缓存与强制重查、版本/精确认证状态分别表达、executionEnabled=false 通过。针对隔离主进程在服务创建前注入更新源 fetch 失败，真实 Settings UI 显示 CHECK_FAILED、保留重试，不误报最新；退出该进程后在默认系统网络下真实查询恢复 UP_TO_DATE。故障注入不代表真实上游宕机，不改系统代理、不执行安装更新。初始脚本的选择器/等待及注入时机失败均保留；修正后复用同一产物，证据 .worktrees/input-runtime-acceptance/.tmp/input-runtime-acceptance/evidence-fixed/ 的 checks-progress.json、finish-checks.json、update-sections.json。",
       "steps": [
         "在隔离 Windows Electron 中，自动检查与手动重查共用真实上游版本查询；显示当前版本、可用版本和检查状态/时间。",
         "版本检查具备缓存和有界超时；网络失败可重试且不显示虚假的已是最新；不支持的运行时如实提示。",
         "分别表达有新版与应用已验证兼容；对未认证版本提供明确的兼容验证或恢复路径，保留现有能力检查。",
         "自动检查不隐式安装更新；若另行批准更新执行，须核对安装归属、进行中的生成任务，并在完成后重新探测版本与连接状态。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "AGENT-CAPABILITIES",
@@ -498,7 +498,7 @@
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
       "description": "完善 AI 对话的回答操作，优先支持复制 AI 回答，再增量完善代码块复制与普通已完成回答的重新生成。",
-      "implementationNotes": "2026-10-28 Main 集成首个增量：纳入 codex/agent-answer-copy（基于 411fbca8）的逐条助手正文复制，保留多段换行，复制 Markdown 源文，排除隐藏推理/工具参数输出/粘贴数据/其他消息；流式复制点击时可见快照，纯工具和空回答无按钮，具备成功反馈、失败重试及无障碍标签。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。代码块独立复制及普通已完成回答重新生成未做，整体保持 PARTIAL；Windows Electron fresh-native 真实剪贴板及历史重开验收未执行，passes 保持 false。 2026-10-28 第二增量集成：助手回答顶层围栏代码块新增独立复制，保留代码正文缩进与换行，排除语言标签和围栏；支持流式可见快照、成功/失败反馈、重试及键盘标签，整条回答复制复用相同剪贴板处理，补齐中英文词条。复核修复 Unicode 分隔符被改成换行导致代码内容改变的问题并补回归测试。嵌套列表/引用内围栏及缩进代码块暂不提供独立按钮；普通已完成回答重新生成尚未实现，整体保持 PARTIAL。桌面真实剪贴板与历史重开留给用户手动验收，passes 保持 false。 2026-10-28 第三增量集成：最新一条已持久化、完成且有可见正文的助手回答支持显式重新生成；历史中间回答、待批准及最新用户轮次含已保存写入回执时不开放。客户端/服务端复用同一写入回执判定，复用 revision/CAS、请求租约与 checkpoint 幂等保护，保留无参错误重试语义；补同 tick 重复点击保护。Main 合并前复核修复重生成后遗留旧 actionError 提示并补回归；协调窗口定向 7 文件/177 项、改动代码 ESLint 通过，完整类型检查通过。普通回答重新生成代码已实现，整体实施状态更新为 IMPLEMENTED；Windows Electron fresh-native 真实流式、复制与历史重开、真实读屏尚待集中验收，passes 保持 false。嵌套/缩进代码块独立复制不在本次范围。",
+      "implementationNotes": "2026-10-28 Main 集成首个增量：纳入 codex/agent-answer-copy（基于 411fbca8）的逐条助手正文复制，保留多段换行，复制 Markdown 源文，排除隐藏推理/工具参数输出/粘贴数据/其他消息；流式复制点击时可见快照，纯工具和空回答无按钮，具备成功反馈、失败重试及无障碍标签。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。代码块独立复制及普通已完成回答重新生成未做，整体保持 PARTIAL；Windows Electron fresh-native 真实剪贴板及历史重开验收未执行，passes 保持 false。 2026-10-28 第二增量集成：助手回答顶层围栏代码块新增独立复制，保留代码正文缩进与换行，排除语言标签和围栏；支持流式可见快照、成功/失败反馈、重试及键盘标签，整条回答复制复用相同剪贴板处理，补齐中英文词条。复核修复 Unicode 分隔符被改成换行导致代码内容改变的问题并补回归测试。嵌套列表/引用内围栏及缩进代码块暂不提供独立按钮；普通已完成回答重新生成尚未实现，整体保持 PARTIAL。桌面真实剪贴板与历史重开留给用户手动验收，passes 保持 false。 2026-10-28 第三增量集成：最新一条已持久化、完成且有可见正文的助手回答支持显式重新生成；历史中间回答、待批准及最新用户轮次含已保存写入回执时不开放。客户端/服务端复用同一写入回执判定，复用 revision/CAS、请求租约与 checkpoint 幂等保护，保留无参错误重试语义；补同 tick 重复点击保护。Main 合并前复核修复重生成后遗留旧 actionError 提示并补回归；协调窗口定向 7 文件/177 项、改动代码 ESLint 通过，完整类型检查通过。普通回答重新生成代码已实现，整体实施状态更新为 IMPLEMENTED；Windows Electron fresh-native 真实流式、复制与历史重开、真实读屏尚待集中验收，passes 保持 false。嵌套/缩进代码块独立复制不在本次范围。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。合成持久历史中仅最后普通回答显示重新生成、旧回答只可复制，带已保存写入回执不显示重新生成；真实 quit/reopen 历史及按钮保持，正文与顶层围栏代码实际 Windows 剪贴板内容通过（系统换行 CRLF）。隔离托管运行时未登录，不复制真实凭据，真实 AI 重新生成流式调用 BLOCKED，passes 保持 false。证据同目录 checks-progress.json、code-copy.json；合成对话不冒充实际模型输出。",
       "steps": [
         "普通、多段、Markdown 与中文助手回答可逐条复制，保留换行，复制范围明确且不包含隐藏推理、原始工具参数或未显示的敏感上下文。",
         "复制成功和失败反馈真实，失败可重试，操作具有键盘与读屏标签；明确流式阶段行为，纯工具结果和空回答不提供无意义操作。",
@@ -514,7 +514,7 @@
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
       "description": "在设置 → 设备与输入新增输入偏好，支持回车行为、进入编辑、快捷提示和自动聚焦四项设备级偏好；优先接入网申资料及职业资料直接编辑字段。",
-      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/input-preferences（基于 411fbca8）的四项本机偏好（默认 newline/click/focus/off）、设置入口、网申及职业资料字段接入。复核修复 IME composition ref 在跳转前拦截、visibility:hidden 跳过、键盘重新进入时应用选区策略、持久化失败明确报错并保留原设置，以及 Enter 下一项的同步校验/必填门；抽出客户端安全的既有职业资料校验供服务与字段复用，不变更业务规则。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。完整 AC-01～AC-16 保留；真实中文 IME、Windows Electron fresh-native、重开持久化及窄窗口验收未执行，passes 保持 false。 2026-10-28 收口集成：修复非默认本机偏好在 SSR 水合时的不一致，改用稳定 useSyncExternalStore 快照；为 Legacy/只读素材卡片的证据编辑补齐字段区域，恢复 Enter 下一项与准确提示；补水合回归测试。真实中文 IME、Windows Electron、重开与窄窗口仍待用户手动验收，passes 保持 false。 2026-10-28 集中 Windows Electron fresh-native 验收发现并修复真实重开持久化缺陷：本地后端动态端口改变 origin，原 localStorage 四偏好丢失。改为 Electron 固定设备配置文件、原子写入及主窗口主帧同源校验的窄 IPC，保留 Web localStorage，并迁移当前可访问旧 origin 的有效偏好。前端 3 文件/45 项、桌面 2 文件/11 项定向检查及完整类型检查、改动代码 ESLint 通过；重建后的真实退出重开回归待执行，passes 保持 false。首次验收另有脚本假设/定位失败，保留失败证据，不视为已通过。",
+      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/input-preferences（基于 411fbca8）的四项本机偏好（默认 newline/click/focus/off）、设置入口、网申及职业资料字段接入。复核修复 IME composition ref 在跳转前拦截、visibility:hidden 跳过、键盘重新进入时应用选区策略、持久化失败明确报错并保留原设置，以及 Enter 下一项的同步校验/必填门；抽出客户端安全的既有职业资料校验供服务与字段复用，不变更业务规则。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。完整 AC-01～AC-16 保留；真实中文 IME、Windows Electron fresh-native、重开持久化及窄窗口验收未执行，passes 保持 false。 2026-10-28 收口集成：修复非默认本机偏好在 SSR 水合时的不一致，改用稳定 useSyncExternalStore 快照；为 Legacy/只读素材卡片的证据编辑补齐字段区域，恢复 Enter 下一项与准确提示；补水合回归测试。真实中文 IME、Windows Electron、重开与窄窗口仍待用户手动验收，passes 保持 false。 2026-10-28 集中 Windows Electron fresh-native 验收发现并修复真实重开持久化缺陷：本地后端动态端口改变 origin，原 localStorage 四偏好丢失。改为 Electron 固定设备配置文件、原子写入及主窗口主帧同源校验的窄 IPC，保留 Web localStorage，并迁移当前可访问旧 origin 的有效偏好。前端 3 文件/45 项、桌面 2 文件/11 项定向检查及完整类型检查、改动代码 ESLint 通过；重建后的真实退出重开回归待执行，passes 保持 false。首次验收另有脚本假设/定位失败，保留失败证据，不视为已通过。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。四默认值、即时生效、Enter/Shift+Enter、校验保草稿与焦点、末字段结束、非空文本三种选区/键盘进入、保存后选区保持、提示、连续填写/敏感表单聚焦、Tab 顺序、960px 渲染视口及中英文切换通过。真实 quit IPC 退出后后端 origin 62550→50573，四偏好从设备文件保留，旧 localStorage 为空仍正确。真实中文 IME 待用户手动操作，passes 保持 false。额外旧 EMPLOYMENT 证据字段脚本断言未通过：实际只读区显示文本且无该编辑区域，本轮不将其冒充已验收。证据同目录 checks-progress.json、legacy-dom.json；旧失败保留。",
       "steps": [
         "AC-01/13：四项默认值正确，独立本机保存、即时生效且重启保留；不依赖云端同步，缺失或无效值安全回退。",
         "AC-02/03/04：Enter 按偏好换行或下一项；Shift+Enter 仅在多行字段换行；最后一项结束编辑且不提交整表，跳过隐藏、禁用和只读字段。",
