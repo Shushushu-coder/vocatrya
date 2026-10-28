@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   SquareCheckBig,
   BriefcaseBusiness,
-  CalendarClock,
   UserRound,
   Wrench,
   Zap,
@@ -27,22 +26,13 @@ export const APP_CONSTANTS = {
   MAX_SKILL_CATEGORIES: 8,
   MAX_SKILLS_PER_CATEGORY: 20,
   MIN_RESUME_SECTIONS_FOR_SELECTION: 2,
-  ACTIVITY_MAX_DURATION_MINUTES: 8 * 60, // 8 Hours
-  ACTIVITY_MAX_DURATION_MS: 8 * 60 * 60 * 1000, // 8 hours in milliseconds
-  ACTIVITY_MIN_DURATION_MINUTES: 2, // activities shorter than this are discarded
-  ACTIVITY_BREAK_DEFAULT_MINUTES: 15,
-  ACTIVITY_BREAK_PRESETS: [5, 10, 15, 30],
-  ACTIVITY_BREAK_STEP_MINUTES: 5,
-  ACTIVITY_BREAK_MIN_MINUTES: 5,
-  ACTIVITY_BREAK_MAX_MINUTES: 60,
-  RECENT_NUM_JOBS_ACTIVITIES: 10,
+  RECENT_NUM_JOBS: 10,
   AI_SLOW_RESPONSE_THRESHOLD_MS: 15_000, // 15 seconds
   INTERSECTION_OBSERVER_THRESHOLD: 0.1,
   SIDEBAR_STORAGE_KEY: "sidebar-expanded",
   SIDEBAR_WIDTH_STORAGE_KEY: "sidebar-width",
   DASHBOARD_WEEKLY_CHART_STORAGE_KEY: "dashboard-weekly-chart-tab",
   DASHBOARD_RECENT_CARD_STORAGE_KEY: "dashboard-recent-card-tab",
-  DASHBOARD_JOBS_ACTIVITY_STORAGE_KEY: "dashboard-jobs-activity-tab",
   DASHBOARD_ANALYTICS_TAB_STORAGE_KEY: "dashboard-analytics-tab",
   DASHBOARD_ANALYTICS_WINDOW_STORAGE_KEY: "dashboard-analytics-window",
   LAST_JOB_LOCATION_STORAGE_KEY: "last-job-location",
@@ -243,7 +233,15 @@ export const APP_CONSTANTS = {
   // File uploads: desktop packaged runtime injects an explicit absolute
   // UPLOADS_DIR (stable <data-root>/files); Docker keeps /data and dev keeps
   // data. No Electron import is permitted here - plain env contract only.
-  UPLOADS_DIR: (() => { const o = ((process.env.UPLOADS_DIR || process.env.VOCATRYA_UPLOADS_DIR) || "").trim(); if (o) return o; return process.env.NODE_ENV !== "production" ? "data" : "/data"; })(),
+  UPLOADS_DIR: (() => {
+    const o = (
+      process.env.UPLOADS_DIR ||
+      process.env.VOCATRYA_UPLOADS_DIR ||
+      ""
+    ).trim();
+    if (o) return o;
+    return process.env.NODE_ENV !== "production" ? "data" : "/data";
+  })(),
 
   // Backup caps. Everything is held in RAM at once, so the upload cap is what
   // bounds memory on a box also running Next and the scheduler; the
@@ -326,10 +324,9 @@ export const JOB_STATUSES = [
 ] as const;
 
 // Zod's z.enum needs a non-empty tuple; JOB_STATUSES is the source of truth.
-export const JOB_STATUS_VALUES = JOB_STATUSES.map((s) => s.value) as unknown as [
-  string,
-  ...string[],
-];
+export const JOB_STATUS_VALUES = JOB_STATUSES.map(
+  (s) => s.value,
+) as unknown as [string, ...string[]];
 
 export const DISCOVERY_STATUSES = [
   { label: "New", value: "new" },
@@ -371,11 +368,6 @@ export const SIDEBAR_LINKS = [
     label: "Tasks",
   },
   {
-    icon: CalendarClock,
-    route: "/dashboard/activities",
-    label: "Activities",
-  },
-  {
     icon: BookOpen,
     route: "/dashboard/questions",
     label: "Questions",
@@ -397,4 +389,3 @@ export const SIDEBAR_LINKS = [
     devOnly: true,
   },
 ];
-

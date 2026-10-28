@@ -3,7 +3,7 @@
 // Dashboard graceful degradation for a BLOCKED jobs read family. Runs the
 // real server actions against one disposable database: when the runtime
 // resolves blocked, jobs reads must surface a typed blocked result (never a
-// fabricated zero) while jobs-independent activity reads keep working.
+// fabricated zero) while jobs-independent task reads keep working.
 // Unknown database failures keep failing loudly.
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -35,11 +35,12 @@ vi.mock("@/utils/user.utils", () => ({ getCurrentUser: vi.fn() }));
 
 import { getCurrentUser } from "@/utils/user.utils";
 import {
-  getActivityCalendarData,
-  getActivityDataForPeriod,
   getJobsActivityForPeriod,
-  getJobsActivitySummary,
-  getRecentActivities,
+  getJobsBoardTotals,
+  getJobsCalendarData,
+  getJobStatusDistribution,
+  getOverviewReminders,
+  getOverviewStats,
   getRecentJobs,
 } from "@/actions/dashboard.actions";
 import { resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
@@ -81,20 +82,9 @@ async function blockCareerRuntime() {
   });
 }
 
-async function seedActivity(label = "Deep Work", minutes = 90) {
-  const type = await prisma.activityType.create({
-    data: { label, value: `at-${randomUUID()}`, createdBy: userId },
-  });
-  const now = new Date();
-  return prisma.activity.create({
-    data: {
-      userId,
-      activityName: label,
-      startTime: now,
-      endTime: now,
-      duration: minutes,
-      activityTypeId: type.id,
-    },
+async function seedTask(title = "Open task") {
+  return prisma.task.create({
+    data: { userId, title, status: "in-progress" },
   });
 }
 
@@ -128,17 +118,24 @@ describe("composite BLOCKED runtime", () => {
     await blockCareerRuntime();
     expect((await resolveJobsReadFamily(prisma)).family).toBe("blocked");
 
-    const [summary, recent, weekly, calendar] = await Promise.all([
-      getJobsActivitySummary(7),
+    const [totals, dist, recent, weekly, calendar] = await Promise.all([
+      getJobsBoardTotals(),
+      getJobStatusDistribution(),
       getRecentJobs(),
       getJobsActivityForPeriod(),
-      getActivityCalendarData(),
+      getJobsCalendarData(),
     ]);
 
-    expect(summary.jobsBlocked).toBe(true);
-    // Blocked is not a zero: no jobs counts are fabricated.
-    expect(summary.jobsApplied).toBeUndefined();
-    expect(summary.jobsTrend).toBeUndefined();
+    expect(totals).toMatchObject({
+      blocked: true,
+      code: "JOBS_READ_UNAVAILABLE",
+    });
+    expect("data" in totals).toBe(false);
+    expect(dist).toMatchObject({
+      blocked: true,
+      code: "JOBS_READ_UNAVAILABLE",
+    });
+    expect("data" in dist).toBe(false);
     expect(recent).toMatchObject({
       blocked: true,
       code: "JOBS_READ_UNAVAILABLE",
@@ -156,22 +153,19 @@ describe("composite BLOCKED runtime", () => {
     expect("data" in calendar).toBe(false);
   });
 
-  it("keeps jobs-independent activity reads working", async () => {
+  it("keeps jobs-independent task reads working", async () => {
     await blockCareerRuntime();
-    await seedActivity("Deep Work", 90);
+    await seedTask("Deep Work follow-up");
 
-    const summary = await getJobsActivitySummary(7);
-    expect(summary.jobsBlocked).toBe(true);
-    expect(summary.topActivities).toEqual([{ label: "Deep Work", hours: 1.5 }]);
-    expect(summary.totalHours).toBe(1.5);
+    const stats = await getOverviewStats();
+    expect(stats.jobsBlocked).toBe(true);
+    // Blocked is not a zero: no jobs counts are fabricated.
+    expect(stats.inProgress).toBeUndefined();
+    expect(stats.applied7d).toBeUndefined();
+    expect(stats.openTasks).toBe(1);
 
-    const recentActivities = await getRecentActivities();
-    expect(recentActivities).toHaveLength(1);
-    expect(recentActivities?.[0]?.activityName).toBe("Deep Work");
-
-    const chart = await getActivityDataForPeriod();
-    expect(chart.keys).toEqual(["Deep Work"]);
-    expect(chart.data.at(-1)?.["Deep Work"]).toBe(1.5);
+    const { reminders } = await getOverviewReminders();
+    expect(reminders.every((r) => r.kind === "task")).toBe(true);
   });
 });
 
@@ -179,12 +173,11 @@ describe("normal read families", () => {
   it("legacy family keeps the pre-existing result shapes", async () => {
     expect((await resolveJobsReadFamily(prisma)).family).toBe("legacy");
     await seedLegacyJob(new Date());
-    await seedActivity("Deep Work", 60);
 
-    const summary = await getJobsActivitySummary(7);
-    expect(summary.jobsBlocked).toBe(false);
-    if (!summary.jobsBlocked) {
-      expect(summary.jobsApplied).toBe(1);
+    const stats = await getOverviewStats();
+    expect(stats.jobsBlocked).toBe(false);
+    if (!stats.jobsBlocked) {
+      expect(stats.applied7d).toBe(1);
     }
 
     const recent = await getRecentJobs();
@@ -203,7 +196,7 @@ describe("normal read families", () => {
       expect(total).toBe(1);
     }
 
-    const calendar = await getActivityCalendarData();
+    const calendar = await getJobsCalendarData();
     expect(calendar.blocked).toBe(false);
     if (!calendar.blocked) {
       const year = new Date().getFullYear().toString();
@@ -234,10 +227,10 @@ describe("normal read families", () => {
       },
     });
 
-    const summary = await getJobsActivitySummary(7);
-    expect(summary.jobsBlocked).toBe(false);
-    if (!summary.jobsBlocked) {
-      expect(summary.jobsApplied).toBe(1);
+    const stats = await getOverviewStats();
+    expect(stats.jobsBlocked).toBe(false);
+    if (!stats.jobsBlocked) {
+      expect(stats.applied7d).toBe(1);
     }
 
     const recent = await getRecentJobs();
@@ -255,7 +248,9 @@ describe("non-blocked failures", () => {
     const jobsFind = vi
       .spyOn(prisma.job, "findMany")
       .mockRejectedValue(new Error("sqlite exploded"));
-    await expect(getRecentJobs()).rejects.toThrow("Failed to fetch jobs list. ");
+    await expect(getRecentJobs()).rejects.toThrow(
+      "Failed to fetch jobs list. ",
+    );
     jobsFind.mockRestore();
 
     const groupBy = vi
@@ -265,16 +260,5 @@ describe("non-blocked failures", () => {
       "Failed to fetch jobs list. ",
     );
     groupBy.mockRestore();
-
-    const activitiesFind = vi
-      .spyOn(prisma.activity, "findMany")
-      .mockRejectedValue(new Error("sqlite exploded"));
-    await expect(getJobsActivitySummary(7)).rejects.toThrow(
-      "Failed to fetch jobs and activity summary",
-    );
-    await expect(getActivityDataForPeriod()).rejects.toThrow(
-      "Failed to fetch activities data.",
-    );
-    activitiesFind.mockRestore();
   });
 });

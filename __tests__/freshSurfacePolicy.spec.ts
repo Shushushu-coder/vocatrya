@@ -14,7 +14,7 @@ describe("job mutation surfaces match the runtime write paths", () => {
     ["migrated", "AB_READY_DISABLED", "full", false],
     ["unknown", "BLOCKED", "none", false],
   ] as const)("%s %s %s -> %s", (origin, mode, rolloutScope, expected) => {
-    expect(canMutateJobsSurface({origin, mode, rolloutScope})).toBe(expected);
+    expect(canMutateJobsSurface({ origin, mode, rolloutScope })).toBe(expected);
   });
 });
 
@@ -99,7 +99,6 @@ describe("isFreshFullHiddenNavRoute", () => {
       "/dashboard/myjobs",
       "/dashboard/myjobs/job-1",
       "/dashboard/tasks",
-      "/dashboard/activities",
       "/dashboard/questions",
       "/dashboard/interview",
       "/dashboard/profile",

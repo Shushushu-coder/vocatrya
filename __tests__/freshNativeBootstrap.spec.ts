@@ -34,7 +34,13 @@ const DISABLED_ENV = {
 const DEFAULT_ENV = { NODE_ENV: "test" } as NodeJS.ProcessEnv;
 
 function deployMigrations(url: string): void {
-  const prismaCli = path.join(REPO_ROOT, "node_modules", "prisma", "build", "index.js");
+  const prismaCli = path.join(
+    REPO_ROOT,
+    "node_modules",
+    "prisma",
+    "build",
+    "index.js",
+  );
   const result = spawnSync(process.execPath, [prismaCli, "migrate", "deploy"], {
     cwd: REPO_ROOT,
     env: { ...process.env, DATABASE_URL: url },
@@ -69,18 +75,22 @@ beforeEach(async () => {
 });
 
 async function stateRow() {
-  return prisma.abMigrationState.findUnique({ where: { scopeKey: "instance" } });
+  return prisma.abMigrationState.findUnique({
+    where: { scopeKey: "instance" },
+  });
 }
 
-async function expectUntouched(before: {
-  id: string;
-  status: string;
-  migrationKey: string;
-  completedAt: Date | null;
-  verifiedAt: Date | null;
-  errorCode: string | null;
-  updatedAt: Date;
-} | null) {
+async function expectUntouched(
+  before: {
+    id: string;
+    status: string;
+    migrationKey: string;
+    completedAt: Date | null;
+    verifiedAt: Date | null;
+    errorCode: string | null;
+    updatedAt: Date;
+  } | null,
+) {
   const after = await stateRow();
   if (before === null) {
     expect(after).toBeNull();
@@ -90,8 +100,12 @@ async function expectUntouched(before: {
   expect(after?.id).toBe(before.id);
   expect(after?.status).toBe(before.status);
   expect(after?.migrationKey).toBe(before.migrationKey);
-  expect(after?.completedAt?.getTime() ?? null).toBe(before.completedAt?.getTime() ?? null);
-  expect(after?.verifiedAt?.getTime() ?? null).toBe(before.verifiedAt?.getTime() ?? null);
+  expect(after?.completedAt?.getTime() ?? null).toBe(
+    before.completedAt?.getTime() ?? null,
+  );
+  expect(after?.verifiedAt?.getTime() ?? null).toBe(
+    before.verifiedAt?.getTime() ?? null,
+  );
   expect(after?.errorCode).toBe(before.errorCode);
   expect(after?.updatedAt.getTime()).toBe(before.updatedAt.getTime());
 }
@@ -124,14 +138,23 @@ describe("ensureFreshNativeState", () => {
   });
 
   it("does not activate or rewrite a database that already has a legacy career root", async () => {
-    const userId = await seedAccount(prisma, `legacy-${Date.now()}@example.com`);
+    const userId = await seedAccount(
+      prisma,
+      `legacy-${Date.now()}@example.com`,
+    );
     const title = await prisma.jobTitle.create({
-      data: { label: "Engineer", value: `eng-${Date.now()}`, createdBy: userId },
+      data: {
+        label: "Engineer",
+        value: `eng-${Date.now()}`,
+        createdBy: userId,
+      },
     });
     const company = await prisma.company.create({
       data: { label: "Acme", value: `acme-${Date.now()}`, createdBy: userId },
     });
-    const status = await prisma.jobStatus.findFirstOrThrow({ where: { value: "applied" } });
+    const status = await prisma.jobStatus.findFirstOrThrow({
+      where: { value: "applied" },
+    });
     await prisma.job.create({
       data: {
         userId,
@@ -151,7 +174,9 @@ describe("ensureFreshNativeState", () => {
     });
     expect(await prisma.job.count()).toBe(beforeJobs);
     expect(await prisma.abMigrationState.count()).toBe(0);
-    const resolved = await resolveCareerRuntimeMode(prisma, { env: DISABLED_ENV });
+    const resolved = await resolveCareerRuntimeMode(prisma, {
+      env: DISABLED_ENV,
+    });
     expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.LEGACY_ONLY);
   });
 
@@ -168,7 +193,9 @@ describe("ensureFreshNativeState", () => {
       },
     });
     const outcome = await ensureFreshNativeState(prisma);
-    expect(outcome.result).toBe(FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE);
+    expect(outcome.result).toBe(
+      FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE,
+    );
     expect(outcome.mutated).toBe(false);
     expect(await prisma.legacyMigrationMap.count()).toBe(1);
     expect(await prisma.abMigrationState.count()).toBe(0);
@@ -184,13 +211,18 @@ describe("ensureFreshNativeState", () => {
       },
     });
     const second = await ensureFreshNativeState(prisma);
-    expect(second.result).toBe(FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE);
+    expect(second.result).toBe(
+      FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE,
+    );
     expect(await prisma.dataMigrationRun.count()).toBe(1);
     expect(await prisma.abMigrationState.count()).toBe(0);
   });
 
   it("does not fabricate state over partial A+B residue", async () => {
-    const userId = await seedAccount(prisma, `residue-${Date.now()}@example.com`);
+    const userId = await seedAccount(
+      prisma,
+      `residue-${Date.now()}@example.com`,
+    );
     const company = await prisma.company.create({
       data: { label: "Acme", value: `acme-${Date.now()}`, createdBy: userId },
     });
@@ -204,7 +236,9 @@ describe("ensureFreshNativeState", () => {
     });
     expect(await prisma.jobOpportunity.count()).toBe(1);
     expect(await prisma.abMigrationState.count()).toBe(0);
-    const resolved = await resolveCareerRuntimeMode(prisma, { env: DISABLED_ENV });
+    const resolved = await resolveCareerRuntimeMode(prisma, {
+      env: DISABLED_ENV,
+    });
     expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.BLOCKED);
   });
 
@@ -222,7 +256,9 @@ describe("ensureFreshNativeState", () => {
       mutated: false,
     });
     await expectUntouched(before);
-    const resolved = await resolveCareerRuntimeMode(prisma, { env: DISABLED_ENV });
+    const resolved = await resolveCareerRuntimeMode(prisma, {
+      env: DISABLED_ENV,
+    });
     expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
     expect(resolved.migrationStatus).toBe(AB_MIGRATION_STATUS.COMPLETED);
   });
@@ -241,7 +277,9 @@ describe("ensureFreshNativeState", () => {
       mutated: false,
     });
     await expectUntouched(before);
-    const resolved = await resolveCareerRuntimeMode(prisma, { env: DISABLED_ENV });
+    const resolved = await resolveCareerRuntimeMode(prisma, {
+      env: DISABLED_ENV,
+    });
     expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.BLOCKED);
   });
 
@@ -252,11 +290,13 @@ describe("ensureFreshNativeState", () => {
     });
     const inProgress = await stateRow();
     const first = await ensureFreshNativeState(prisma);
-    expect(first.result).toBe(FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE);
-    await expectUntouched(inProgress);
-    expect((await resolveCareerRuntimeMode(prisma, { env: DISABLED_ENV })).mode).toBe(
-      CAREER_RUNTIME_MODE.BLOCKED,
+    expect(first.result).toBe(
+      FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE,
     );
+    await expectUntouched(inProgress);
+    expect(
+      (await resolveCareerRuntimeMode(prisma, { env: DISABLED_ENV })).mode,
+    ).toBe(CAREER_RUNTIME_MODE.BLOCKED);
 
     await resetDisposableDb(prisma);
     await writeInstanceMigrationState(prisma, {
@@ -267,23 +307,40 @@ describe("ensureFreshNativeState", () => {
     });
     const unverified = await stateRow();
     const second = await ensureFreshNativeState(prisma);
-    expect(second.result).toBe(FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE);
+    expect(second.result).toBe(
+      FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE,
+    );
     await expectUntouched(unverified);
   });
 
   it("still activates when only shared catalogs are present", async () => {
-    const userId = await seedAccount(prisma, `catalog-${Date.now()}@example.com`);
+    const userId = await seedAccount(
+      prisma,
+      `catalog-${Date.now()}@example.com`,
+    );
     const company = await prisma.company.create({
       data: { label: "Acme", value: `acme-${Date.now()}`, createdBy: userId },
     });
     await prisma.jobTitle.create({
-      data: { label: "Engineer", value: `eng-${Date.now()}`, createdBy: userId },
+      data: {
+        label: "Engineer",
+        value: `eng-${Date.now()}`,
+        createdBy: userId,
+      },
     });
     await prisma.location.create({
-      data: { label: "Remote", value: `remote-${Date.now()}`, createdBy: userId },
+      data: {
+        label: "Remote",
+        value: `remote-${Date.now()}`,
+        createdBy: userId,
+      },
     });
     await prisma.tag.create({
-      data: { label: "Priority", value: `priority-${Date.now()}`, createdBy: userId },
+      data: {
+        label: "Priority",
+        value: `priority-${Date.now()}`,
+        createdBy: userId,
+      },
     });
     await prisma.contact.create({
       data: { name: "Ada", createdBy: userId },
@@ -295,13 +352,16 @@ describe("ensureFreshNativeState", () => {
       data: { userId, title: "Follow up" },
     });
     const activityType = await prisma.activityType.create({
-      data: { label: "Research", value: `research-${Date.now()}`, createdBy: userId },
+      data: {
+        label: "Research",
+        value: `research-${Date.now()}`,
+        createdBy: userId,
+      },
     });
-    await prisma.activity.create({
+    await prisma.task.create({
       data: {
         userId,
-        activityName: "Read the posting",
-        startTime: new Date(),
+        title: "Read the posting",
         activityTypeId: activityType.id,
       },
     });
@@ -338,10 +398,12 @@ describe("ensureFreshNativeState", () => {
       },
     });
 
-    await expect(ensureFreshNativeStateForActiveDatabase({
-      db: proxy as unknown as PrismaClient,
-      log: (line) => lines.push(line),
-    })).rejects.toThrow(/disk full/);
+    await expect(
+      ensureFreshNativeStateForActiveDatabase({
+        db: proxy as unknown as PrismaClient,
+        log: (line) => lines.push(line),
+      }),
+    ).rejects.toThrow(/disk full/);
     expect(lines).toEqual(["fresh-native activation: failed"]);
     expect(lines.join("\n")).not.toContain("file:");
   });
@@ -364,7 +426,9 @@ describe("ensureFreshNativeState", () => {
       db: prisma,
       log: (line) => lines.push(line),
     });
-    expect(failedState.result).toBe(FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE);
+    expect(failedState.result).toBe(
+      FRESH_NATIVE_BOOTSTRAP_RESULT.SKIPPED_NOT_ELIGIBLE,
+    );
     expect(lines).toEqual(["fresh-native activation: skipped-not-eligible"]);
     expect(JSON.stringify(lines)).not.toContain("file:");
   });
@@ -373,7 +437,9 @@ describe("ensureFreshNativeState", () => {
     await ensureFreshNativeState(prisma);
     expect(isAbRuntimeFeatureEnabled(DEFAULT_ENV)).toBe(false);
     expect(resolveAbRolloutScope(DEFAULT_ENV)).toBe("none");
-    const resolved = await resolveCareerRuntimeMode(prisma, { env: DEFAULT_ENV });
+    const resolved = await resolveCareerRuntimeMode(prisma, {
+      env: DEFAULT_ENV,
+    });
     expect(resolved.migrationStatus).toBe(AB_MIGRATION_STATUS.FRESH_READY);
     expect(resolved.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
     expect(resolved.rolloutScope).toBe("full");
@@ -416,9 +482,14 @@ describe("ensureFreshNativeState", () => {
 
 describe("fresh-native startup entrypoints", () => {
   it("keeps Docker and Desktop flag defaults unchanged", () => {
-    const entrypoint = fs.readFileSync(path.join(REPO_ROOT, "docker-entrypoint.sh"), "utf8");
+    const entrypoint = fs.readFileSync(
+      path.join(REPO_ROOT, "docker-entrypoint.sh"),
+      "utf8",
+    );
     const migrateAt = entrypoint.indexOf("prisma@6.19.0 migrate deploy");
-    const activateAt = entrypoint.indexOf("fresh-native-runtime/ensure-fresh-native.cjs");
+    const activateAt = entrypoint.indexOf(
+      "fresh-native-runtime/ensure-fresh-native.cjs",
+    );
     const serverAt = entrypoint.indexOf("node server.js");
     expect(migrateAt).toBeGreaterThanOrEqual(0);
     expect(activateAt).toBeGreaterThan(migrateAt);
@@ -426,23 +497,43 @@ describe("fresh-native startup entrypoints", () => {
     expect(entrypoint).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED");
     expect(entrypoint).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE");
     expect(entrypoint).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED=(true|false)/);
-    expect(entrypoint).not.toMatch(/VOCATRYA_AB_ROLLOUT_SCOPE=(none|full|resume_v1)/);
+    expect(entrypoint).not.toMatch(
+      /VOCATRYA_AB_ROLLOUT_SCOPE=(none|full|resume_v1)/,
+    );
 
-    const dockerfile = fs.readFileSync(path.join(REPO_ROOT, "Dockerfile"), "utf8");
-    expect(dockerfile).toContain("node scripts/build-fresh-native-bootstrap.mjs");
+    const dockerfile = fs.readFileSync(
+      path.join(REPO_ROOT, "Dockerfile"),
+      "utf8",
+    );
+    expect(dockerfile).toContain(
+      "node scripts/build-fresh-native-bootstrap.mjs",
+    );
     expect(dockerfile).toContain("fresh-native-runtime");
 
-    const runtime = fs.readFileSync(path.join(REPO_ROOT, "desktop", "main", "runtime.js"), "utf8");
+    const runtime = fs.readFileSync(
+      path.join(REPO_ROOT, "desktop", "main", "runtime.js"),
+      "utf8",
+    );
     expect(runtime).not.toContain('VOCATRYA_AB_ROLLOUT_SCOPE: "none"');
     expect(runtime).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED:\s*"true"/);
     expect(runtime).not.toMatch(/VOCATRYA_AB_ROLLOUT_SCOPE:\s*"full"/);
 
-    const compose = fs.readFileSync(path.join(REPO_ROOT, "docker-compose.yml"), "utf8");
-    expect(compose).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-false}");
-    expect(compose).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-none}");
+    const compose = fs.readFileSync(
+      path.join(REPO_ROOT, "docker-compose.yml"),
+      "utf8",
+    );
+    expect(compose).not.toContain(
+      "VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-false}",
+    );
+    expect(compose).not.toContain(
+      "VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-none}",
+    );
     expect(compose).not.toContain("__VOCATRYA_AB_UNSET__");
 
-    const example = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+    const example = fs.readFileSync(
+      path.join(REPO_ROOT, ".env.example"),
+      "utf8",
+    );
     expect(example).not.toMatch(/^VOCATRYA_AB_ROLLOUT_SCOPE=none/m);
     expect(example).not.toMatch(/^VOCATRYA_AB_RUNTIME_ENABLED=true/m);
     expect(example).toContain("# VOCATRYA_AB_RUNTIME_ENABLED=false");
@@ -450,15 +541,23 @@ describe("fresh-native startup entrypoints", () => {
   });
 
   it("bootstraps a migrated database through the Node 20 entry and then no-ops", async () => {
-    const built = spawnSync(process.execPath, ["scripts/build-fresh-native-bootstrap.mjs"], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      timeout: 60_000,
-    });
+    const built = spawnSync(
+      process.execPath,
+      ["scripts/build-fresh-native-bootstrap.mjs"],
+      {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        timeout: 60_000,
+      },
+    );
     if (built.status !== 0) {
       throw new Error(built.stderr || built.stdout || "bootstrap build failed");
     }
-    const entryPath = path.join(REPO_ROOT, "fresh-native-runtime", "ensure-fresh-native.cjs");
+    const entryPath = path.join(
+      REPO_ROOT,
+      "fresh-native-runtime",
+      "ensure-fresh-native.cjs",
+    );
     const proofDir = fs.mkdtempSync(path.join(os.tmpdir(), "voc-fresh-proof-"));
     const dbPath = path.join(proofDir, "app.db");
     const databaseUrl = `file:${dbPath.replace(/\\/g, "/")}`;
@@ -479,7 +578,9 @@ describe("fresh-native startup entrypoints", () => {
       expect(refused.stdout).toContain("fresh-native activation: failed");
       expect(refused.stderr).toContain("does not accept arguments");
 
-      const proof = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+      const proof = new PrismaClient({
+        datasources: { db: { url: databaseUrl } },
+      });
       try {
         expect(await proof.abMigrationState.count()).toBe(0);
         const first = run();
@@ -493,7 +594,9 @@ describe("fresh-native startup entrypoints", () => {
 
         const second = run();
         expect(second.status).toBe(0);
-        expect(second.stdout.trim()).toBe("fresh-native activation: already-ready");
+        expect(second.stdout.trim()).toBe(
+          "fresh-native activation: already-ready",
+        );
         const again = await proof.abMigrationState.findFirstOrThrow();
         expect(await proof.abMigrationState.count()).toBe(1);
         expect(again.updatedAt.getTime()).toBe(row.updatedAt.getTime());

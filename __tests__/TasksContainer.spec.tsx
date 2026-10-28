@@ -6,12 +6,9 @@ import {
   getTaskById,
   deleteTaskById,
   updateTaskStatus,
-  startActivityFromTask,
-  createTask,
 } from "@/actions/task.actions";
 import { Task } from "@/models/task.model";
 import { useRouter } from "next/navigation";
-import { useActivity } from "@/context/ActivityContext";
 
 vi.mock("next-auth", () => {
   const mockAuth = vi.fn();
@@ -48,8 +45,6 @@ vi.mock("@/actions/task.actions", () => ({
   getTaskById: vi.fn(),
   deleteTaskById: vi.fn(),
   updateTaskStatus: vi.fn(),
-  startActivityFromTask: vi.fn(),
-  createTask: vi.fn(),
   updateTask: vi.fn(),
 }));
 
@@ -57,12 +52,6 @@ vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
   useSearchParams: vi.fn(() => new URLSearchParams()),
   usePathname: () => "/dashboard/tasks",
-}));
-
-vi.mock("@/context/ActivityContext", () => ({
-  useActivity: vi.fn(() => ({
-    refreshCurrentActivity: vi.fn(),
-  })),
 }));
 
 global.ResizeObserver = class ResizeObserver {
@@ -114,8 +103,6 @@ describe("TasksContainer Component", () => {
     prefetch: vi.fn(),
   };
 
-  const mockRefreshCurrentActivity = vi.fn();
-
   const mockActivityTypes = [
     {
       id: "type-1",
@@ -151,7 +138,6 @@ describe("TasksContainer Component", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-      activities: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -172,7 +158,6 @@ describe("TasksContainer Component", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-      activities: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -185,9 +170,6 @@ describe("TasksContainer Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (useRouter as any).mockReturnValue(mockRouter);
-    (useActivity as any).mockReturnValue({
-      refreshCurrentActivity: mockRefreshCurrentActivity,
-    });
   });
 
   describe("Initial Load", () => {
@@ -201,10 +183,14 @@ describe("TasksContainer Component", () => {
       render(<TasksContainer activityTypes={mockActivityTypes} />);
 
       await waitFor(() => {
-        expect(getTasksList).toHaveBeenCalledWith(1, 25, undefined, [
-          "in-progress",
-          "needs-attention",
-        ], undefined, "none");
+        expect(getTasksList).toHaveBeenCalledWith(
+          1,
+          25,
+          undefined,
+          ["in-progress", "needs-attention"],
+          undefined,
+          "none",
+        );
       });
 
       await waitFor(() => {
@@ -215,7 +201,7 @@ describe("TasksContainer Component", () => {
 
     it("should show loading state while fetching tasks", () => {
       (getTasksList as any).mockImplementation(
-        () => new Promise(() => {}) // Never resolves to keep loading state
+        () => new Promise(() => {}), // Never resolves to keep loading state
       );
 
       render(<TasksContainer activityTypes={mockActivityTypes} />);
@@ -259,10 +245,10 @@ describe("TasksContainer Component", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByTestId("task-form-dialog-title")
+          screen.getByTestId("task-form-dialog-title"),
         ).toBeInTheDocument();
         expect(screen.getByTestId("task-form-dialog-title")).toHaveTextContent(
-          "Add Task"
+          "Add Task",
         );
       });
     });
@@ -358,7 +344,7 @@ describe("TasksContainer Component", () => {
       await waitFor(() => {
         expect(getTaskById).toHaveBeenCalledWith("task-1");
         expect(screen.getByTestId("task-form-dialog-title")).toHaveTextContent(
-          "Edit Task"
+          "Edit Task",
         );
       });
     });
@@ -386,7 +372,7 @@ describe("TasksContainer Component", () => {
       await waitFor(() => {
         expect(getTaskById).toHaveBeenCalledWith("task-1");
         expect(
-          screen.queryByTestId("task-form-dialog-title")
+          screen.queryByTestId("task-form-dialog-title"),
         ).not.toBeInTheDocument();
       });
     });
@@ -451,241 +437,6 @@ describe("TasksContainer Component", () => {
         expect(updateTaskStatus).toHaveBeenCalledWith("task-1", "complete");
       });
     });
-
-    it("should start activity from task successfully", async () => {
-      (startActivityFromTask as any).mockResolvedValue({
-        success: true,
-      });
-
-      const startActivityButtons = screen.getAllByTestId(/start-activity-/);
-      await user.click(startActivityButtons[0]);
-
-      await waitFor(() => {
-        expect(startActivityFromTask).toHaveBeenCalledWith("task-1");
-        expect(mockRefreshCurrentActivity).toHaveBeenCalled();
-      });
-    });
-
-    it("should handle start activity failure", async () => {
-      (startActivityFromTask as any).mockResolvedValue({
-        success: false,
-        message: "Failed to start activity",
-      });
-
-      const startActivityButtons = screen.getAllByTestId(/start-activity-/);
-      await user.click(startActivityButtons[0]);
-
-      // A rejected start resyncs the per-user running activity, but with
-      // nothing running it must not offer to switch.
-      await waitFor(() => {
-        expect(startActivityFromTask).toHaveBeenCalledWith("task-1");
-        expect(mockRefreshCurrentActivity).toHaveBeenCalledTimes(1);
-      });
-      expect(
-        screen.queryByText(/Stop current activity and start a new one/i),
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  describe("Start Activity Confirmation", () => {
-    const mockStopActivity = vi.fn();
-
-    beforeEach(() => {
-      (getTasksList as any).mockResolvedValue({
-        success: true,
-        data: mockTasks,
-        total: 2,
-      });
-    });
-
-    it("starts the activity directly when nothing is currently in progress", async () => {
-      (startActivityFromTask as any).mockResolvedValue({ success: true });
-
-      render(<TasksContainer activityTypes={mockActivityTypes} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Task 1")).toBeInTheDocument();
-      });
-
-      const startActivityButtons = screen.getAllByTestId(/start-activity-/);
-      await user.click(startActivityButtons[0]);
-
-      await waitFor(() => {
-        expect(startActivityFromTask).toHaveBeenCalledWith("task-1");
-      });
-      expect(mockStopActivity).not.toHaveBeenCalled();
-    });
-
-    it("shows a confirm dialog naming the running activity instead of starting immediately", async () => {
-      (useActivity as any).mockReturnValue({
-        refreshCurrentActivity: mockRefreshCurrentActivity,
-        currentActivity: { id: "current-1", activityName: "Ongoing Task" },
-        stopActivity: mockStopActivity,
-      });
-
-      render(<TasksContainer activityTypes={mockActivityTypes} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Task 1")).toBeInTheDocument();
-      });
-
-      const startActivityButtons = screen.getAllByTestId(/start-activity-/);
-      await user.click(startActivityButtons[0]);
-
-      expect(startActivityFromTask).not.toHaveBeenCalled();
-      expect(
-        await screen.findByText(/"Ongoing Task" is currently in progress/i)
-      ).toBeInTheDocument();
-    });
-
-    it("stops the running activity then starts the task activity on confirm", async () => {
-      (useActivity as any).mockReturnValue({
-        refreshCurrentActivity: mockRefreshCurrentActivity,
-        currentActivity: { id: "current-1", activityName: "Ongoing Task" },
-        stopActivity: mockStopActivity,
-      });
-      (startActivityFromTask as any).mockResolvedValue({ success: true });
-
-      render(<TasksContainer activityTypes={mockActivityTypes} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Task 1")).toBeInTheDocument();
-      });
-
-      const startActivityButtons = screen.getAllByTestId(/start-activity-/);
-      await user.click(startActivityButtons[0]);
-
-      const confirmButton = await screen.findByRole("button", {
-        name: "Stop & Start",
-      });
-      await user.click(confirmButton);
-
-      await waitFor(() => {
-        expect(mockStopActivity).toHaveBeenCalledTimes(1);
-        expect(startActivityFromTask).toHaveBeenCalledWith("task-1");
-      });
-    });
-  });
-
-  describe("Save & Start from the Add Task dialog", () => {
-    beforeEach(() => {
-      (getTasksList as any).mockResolvedValue({
-        success: true,
-        data: mockTasks,
-        total: 2,
-      });
-    });
-
-    const openAddTaskDialogAndFillForm = async () => {
-      const addButton = screen.getByTestId("add-task-btn");
-      await user.click(addButton);
-
-      await screen.findByTestId("task-form-dialog-title");
-
-      const titleInput = screen.getByLabelText(/Title/i);
-      await user.type(titleInput, "Brand New Task");
-
-      const activityTypeCombobox = screen.getByLabelText(/Activity Type/i);
-      await user.click(activityTypeCombobox);
-      const developmentOption = screen.getByRole("option", {
-        name: "Development",
-      });
-      await user.click(developmentOption);
-    };
-
-    it("creates the task and starts its activity when nothing is in progress", async () => {
-      (createTask as any).mockResolvedValue({
-        success: true,
-        data: { id: "new-task-id" },
-      });
-      (startActivityFromTask as any).mockResolvedValue({ success: true });
-
-      render(<TasksContainer activityTypes={mockActivityTypes} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Task 1")).toBeInTheDocument();
-      });
-
-      await openAddTaskDialogAndFillForm();
-
-      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
-      await user.click(saveAndStartBtn);
-
-      await waitFor(() => {
-        expect(createTask).toHaveBeenCalledTimes(1);
-        expect(startActivityFromTask).toHaveBeenCalledWith("new-task-id");
-        expect(mockRefreshCurrentActivity).toHaveBeenCalled();
-      });
-      expect(
-        screen.queryByTestId("task-form-dialog-title")
-      ).not.toBeInTheDocument();
-    });
-
-    it("shows the confirm dialog instead of starting immediately when an activity is already running", async () => {
-      const mockStopActivity = vi.fn();
-      (useActivity as any).mockReturnValue({
-        refreshCurrentActivity: mockRefreshCurrentActivity,
-        currentActivity: { id: "current-1", activityName: "Ongoing Task" },
-        stopActivity: mockStopActivity,
-      });
-      (createTask as any).mockResolvedValue({
-        success: true,
-        data: { id: "new-task-id" },
-      });
-
-      render(<TasksContainer activityTypes={mockActivityTypes} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Task 1")).toBeInTheDocument();
-      });
-
-      await openAddTaskDialogAndFillForm();
-
-      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
-      await user.click(saveAndStartBtn);
-
-      await waitFor(() => {
-        expect(createTask).toHaveBeenCalledTimes(1);
-      });
-      expect(startActivityFromTask).not.toHaveBeenCalled();
-      expect(
-        await screen.findByText(/"Ongoing Task" is currently in progress/i)
-      ).toBeInTheDocument();
-
-      (startActivityFromTask as any).mockResolvedValue({ success: true });
-      const confirmButton = screen.getByRole("button", {
-        name: "Stop & Start",
-      });
-      await user.click(confirmButton);
-
-      await waitFor(() => {
-        expect(mockStopActivity).toHaveBeenCalledTimes(1);
-        expect(startActivityFromTask).toHaveBeenCalledWith("new-task-id");
-      });
-    });
-
-    it("does not start an activity when task creation fails", async () => {
-      (createTask as any).mockResolvedValue({
-        success: false,
-        message: "Failed to create task",
-      });
-
-      render(<TasksContainer activityTypes={mockActivityTypes} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Task 1")).toBeInTheDocument();
-      });
-
-      await openAddTaskDialogAndFillForm();
-
-      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
-      await user.click(saveAndStartBtn);
-
-      await waitFor(() => {
-        expect(createTask).toHaveBeenCalledTimes(1);
-      });
-      expect(startActivityFromTask).not.toHaveBeenCalled();
-    });
   });
 
   describe("Filtering and Grouping", () => {
@@ -697,7 +448,7 @@ describe("TasksContainer Component", () => {
       });
 
       render(
-        <TasksContainer activityTypes={mockActivityTypes} filterKey="type-1" />
+        <TasksContainer activityTypes={mockActivityTypes} filterKey="type-1" />,
       );
 
       await waitFor(() => {
@@ -707,10 +458,14 @@ describe("TasksContainer Component", () => {
 
     it("should apply activity type filter", async () => {
       await waitFor(() => {
-        expect(getTasksList).toHaveBeenCalledWith(1, 25, "type-1", [
-          "in-progress",
-          "needs-attention",
-        ], undefined, "none");
+        expect(getTasksList).toHaveBeenCalledWith(
+          1,
+          25,
+          "type-1",
+          ["in-progress", "needs-attention"],
+          undefined,
+          "none",
+        );
       });
     });
 
@@ -726,9 +481,14 @@ describe("TasksContainer Component", () => {
       await user.click(inProgressCheckbox);
 
       await waitFor(() => {
-        expect(getTasksList).toHaveBeenCalledWith(1, 25, "type-1", [
-          "needs-attention",
-        ], undefined, "none");
+        expect(getTasksList).toHaveBeenCalledWith(
+          1,
+          25,
+          "type-1",
+          ["needs-attention"],
+          undefined,
+          "none",
+        );
       });
     });
 
@@ -744,10 +504,14 @@ describe("TasksContainer Component", () => {
       });
 
       await waitFor(() => {
-        expect(getTasksList).toHaveBeenLastCalledWith(1, 25, "type-1", [
-          "in-progress",
-          "needs-attention",
-        ], undefined, "dueDate");
+        expect(getTasksList).toHaveBeenLastCalledWith(
+          1,
+          25,
+          "type-1",
+          ["in-progress", "needs-attention"],
+          undefined,
+          "dueDate",
+        );
       });
     });
   });
@@ -802,10 +566,14 @@ describe("TasksContainer Component", () => {
       });
 
       await waitFor(() => {
-        expect(getTasksList).toHaveBeenCalledWith(2, 25, undefined, [
-          "in-progress",
-          "needs-attention",
-        ], undefined, "none");
+        expect(getTasksList).toHaveBeenCalledWith(
+          2,
+          25,
+          undefined,
+          ["in-progress", "needs-attention"],
+          undefined,
+          "none",
+        );
       });
     });
 
@@ -835,7 +603,7 @@ describe("TasksContainer Component", () => {
       await waitFor(() => {
         expect(screen.getByText(/Showing/i)).toBeInTheDocument();
         expect(
-          screen.getByText("1 to 2", { exact: false })
+          screen.getByText("1 to 2", { exact: false }),
         ).toBeInTheDocument();
         expect(screen.getByText("10", { exact: false })).toBeInTheDocument();
       });
@@ -895,17 +663,16 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           undefined,
-          "none"
+          "none",
         );
       });
 
       vi.clearAllMocks();
 
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "Task 1"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "Task 1");
 
       // Before debounce, getTasksList should not be called with search term
       expect(getTasksList).not.toHaveBeenCalled();
@@ -922,7 +689,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           "Task 1",
-          "none"
+          "none",
         );
       });
     });
@@ -950,10 +717,9 @@ describe("TasksContainer Component", () => {
       });
 
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "Task 1"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "Task 1");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -985,10 +751,9 @@ describe("TasksContainer Component", () => {
       });
 
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "nonexistent"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "nonexistent");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -1014,16 +779,16 @@ describe("TasksContainer Component", () => {
 
       // Toggle status filter first
       const filterButton = screen.getByRole("button", { name: /status/i });
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(
-        filterButton
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .click(filterButton);
 
       const inProgressCheckbox = screen.getByRole("menuitemcheckbox", {
         name: "In Progress",
       });
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(
-        inProgressCheckbox
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .click(inProgressCheckbox);
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -1032,7 +797,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["needs-attention"],
           undefined,
-          "none"
+          "none",
         );
       });
 
@@ -1040,10 +805,9 @@ describe("TasksContainer Component", () => {
 
       // Now search
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "Task"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "Task");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -1056,7 +820,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["needs-attention"],
           "Task",
-          "none"
+          "none",
         );
       });
     });
@@ -1069,7 +833,7 @@ describe("TasksContainer Component", () => {
       });
 
       render(
-        <TasksContainer activityTypes={mockActivityTypes} filterKey="type-1" />
+        <TasksContainer activityTypes={mockActivityTypes} filterKey="type-1" />,
       );
 
       await waitFor(() => {
@@ -1079,17 +843,16 @@ describe("TasksContainer Component", () => {
           "type-1",
           ["in-progress", "needs-attention"],
           undefined,
-          "none"
+          "none",
         );
       });
 
       vi.clearAllMocks();
 
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "Development"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "Development");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -1102,7 +865,7 @@ describe("TasksContainer Component", () => {
           "type-1",
           ["in-progress", "needs-attention"],
           "Development",
-          "none"
+          "none",
         );
       });
     });
@@ -1133,10 +896,9 @@ describe("TasksContainer Component", () => {
 
       // Type search term
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "Task"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "Task");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -1149,7 +911,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           "Task",
-          "none"
+          "none",
         );
       });
 
@@ -1170,7 +932,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           "Task",
-          "none"
+          "none",
         );
       });
     });
@@ -1191,10 +953,9 @@ describe("TasksContainer Component", () => {
       vi.clearAllMocks();
 
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "first search"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "first search");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -1207,20 +968,19 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           "first search",
-          "none"
+          "none",
         );
       });
 
       vi.clearAllMocks();
 
       // Change search term
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).clear(
-        searchInput
-      );
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "second search"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .clear(searchInput);
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "second search");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -1233,7 +993,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           "second search",
-          "none"
+          "none",
         );
       });
     });
@@ -1274,7 +1034,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           "Task",
-          "none"
+          "none",
         );
       });
     });
@@ -1292,7 +1052,7 @@ describe("TasksContainer Component", () => {
         <TasksContainer
           activityTypes={mockActivityTypes}
           onTasksChanged={mockOnTasksChanged}
-        />
+        />,
       );
 
       await waitFor(() => {
@@ -1301,10 +1061,9 @@ describe("TasksContainer Component", () => {
 
       // Type search term
       const searchInput = screen.getByPlaceholderText("Search tasks...");
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(
-        searchInput,
-        "Task"
-      );
+      await userEvent
+        .setup({ advanceTimers: vi.advanceTimersByTime })
+        .type(searchInput, "Task");
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -1317,7 +1076,7 @@ describe("TasksContainer Component", () => {
           undefined,
           ["in-progress", "needs-attention"],
           "Task",
-          "none"
+          "none",
         );
       });
 

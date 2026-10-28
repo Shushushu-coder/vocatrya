@@ -14,18 +14,26 @@ beforeEach(() => {
   searchParams = new URLSearchParams();
 });
 
-it.each(["add-job", "add-task", "add-activity", "add-question", "import-resume"])(
+it.each(["add-job", "add-task", "add-question", "import-resume"])(
   "consumes %s without losing filters and handles a second toolbar click",
   (parameter) => {
     const open = vi.fn();
     searchParams = new URLSearchParams(`${parameter}=true&status=open`);
     const { rerender } = renderHook(() => useQueryDialog(parameter, open));
     expect(open).toHaveBeenCalledTimes(1);
-    expect(replace).toHaveBeenLastCalledWith("/dashboard/tasks?status=open", { scroll: false });
+    expect(replace).toHaveBeenLastCalledWith("/dashboard/tasks?status=open", {
+      scroll: false,
+    });
     rerender();
     expect(open).toHaveBeenCalledTimes(1);
-    act(() => { searchParams = new URLSearchParams("status=open"); rerender(); });
-    act(() => { searchParams = new URLSearchParams(`${parameter}=true&status=open`); rerender(); });
+    act(() => {
+      searchParams = new URLSearchParams("status=open");
+      rerender();
+    });
+    act(() => {
+      searchParams = new URLSearchParams(`${parameter}=true&status=open`);
+      rerender();
+    });
     expect(open).toHaveBeenCalledTimes(2);
   },
 );

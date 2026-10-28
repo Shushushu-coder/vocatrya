@@ -75,7 +75,6 @@ export type BackupModel =
   | "ContactRole"
   | "JobContact"
   | "Task"
-  | "Activity"
   | "Question"
   | "AIConnection"
   | "AIBusinessAssignment"
@@ -209,12 +208,48 @@ const bySensitiveInfo = (userId: string) => ({ sensitiveInfo: { userId } });
 const byInterviewSession = (userId: string) => ({ session: { userId } });
 
 export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
-  Company: { delegate: "company", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
-  JobTitle: { delegate: "jobTitle", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
-  Location: { delegate: "location", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
-  JobSource: { delegate: "jobSource", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
-  Tag: { delegate: "tag", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
-  ActivityType: { delegate: "activityType", owner: "createdBy", lookup: true, fks: {}, scope: byCreatedBy },
+  Company: {
+    delegate: "company",
+    owner: "createdBy",
+    lookup: true,
+    fks: {},
+    scope: byCreatedBy,
+  },
+  JobTitle: {
+    delegate: "jobTitle",
+    owner: "createdBy",
+    lookup: true,
+    fks: {},
+    scope: byCreatedBy,
+  },
+  Location: {
+    delegate: "location",
+    owner: "createdBy",
+    lookup: true,
+    fks: {},
+    scope: byCreatedBy,
+  },
+  JobSource: {
+    delegate: "jobSource",
+    owner: "createdBy",
+    lookup: true,
+    fks: {},
+    scope: byCreatedBy,
+  },
+  Tag: {
+    delegate: "tag",
+    owner: "createdBy",
+    lookup: true,
+    fks: {},
+    scope: byCreatedBy,
+  },
+  ActivityType: {
+    delegate: "activityType",
+    owner: "createdBy",
+    lookup: true,
+    fks: {},
+    scope: byCreatedBy,
+  },
 
   Profile: { delegate: "profile", owner: "userId", fks: {}, scope: byUser },
 
@@ -230,7 +265,11 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
 
   // ContactInfo hangs off Resume, not ResumeSection: resumeId @unique, and the
   // relation field is lower-case `resume` unlike ResumeSection's `Resume`.
-  ContactInfo: { delegate: "contactInfo", fks: { resumeId: "Resume" }, scope: (userId) => ({ resume: { profile: { userId } } }) },
+  ContactInfo: {
+    delegate: "contactInfo",
+    fks: { resumeId: "Resume" },
+    scope: (userId) => ({ resume: { profile: { userId } } }),
+  },
 
   // Summary holds no foreign key either — ResumeSection.summaryId points at it.
   Summary: { delegate: "summary", fks: {}, scope: bySection },
@@ -270,7 +309,11 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: { tagId: "Tag", resumeSectionId: "ResumeSection" },
     scope: bySection,
   },
-  CoverLetter: { delegate: "coverLetter", fks: { profileId: "Profile" }, scope: byProfile },
+  CoverLetter: {
+    delegate: "coverLetter",
+    fks: { profileId: "Profile" },
+    scope: byProfile,
+  },
   Automation: {
     delegate: "automation",
     owner: "userId",
@@ -291,8 +334,17 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     },
     scope: byUser,
   },
-  Note: { delegate: "note", owner: "userId", fks: { jobId: "Job" }, scope: byUser },
-  Interview: { delegate: "interview", fks: { jobId: "Job" }, scope: (userId) => ({ job: { userId } }) },
+  Note: {
+    delegate: "note",
+    owner: "userId",
+    fks: { jobId: "Job" },
+    scope: byUser,
+  },
+  Interview: {
+    delegate: "interview",
+    fks: { jobId: "Job" },
+    scope: (userId) => ({ job: { userId } }),
+  },
   Contact: {
     delegate: "contact",
     owner: "createdBy",
@@ -325,13 +377,12 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: { activityTypeId: "ActivityType" },
     scope: byUser,
   },
-  Activity: {
-    delegate: "activity",
-    owner: "userId",
-    fks: { activityTypeId: "ActivityType", taskId: "Task" },
-    scope: byUser,
+  Question: {
+    delegate: "question",
+    owner: "createdBy",
+    fks: {},
+    scope: byCreatedBy,
   },
-  Question: { delegate: "question", owner: "createdBy", fks: {}, scope: byCreatedBy },
   // Phase B account-login foundation: user business config, so both models
   // travel in the standard backup. Connection metadata only — credentials
   // and runtime login state never leave the machine, so a restored
@@ -367,7 +418,12 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: { automationId: "Automation", resolvedConnectionId: "AIConnection" },
     scope: (userId) => ({ automation: { userId } }),
   },
-  UserSettings: { delegate: "userSettings", owner: "userId", fks: {}, scope: byUser },
+  UserSettings: {
+    delegate: "userSettings",
+    owner: "userId",
+    fks: {},
+    scope: byUser,
+  },
 
   // Instance-level singleton. Restored with the ZIP because it decides whether
   // the restored database may enter A+B runtime. Feature flag still defaults off.
@@ -802,7 +858,6 @@ export const INSERT_ORDER: BackupModel[] = [
   "Contact",
   "JobContact",
   "Task",
-  "Activity",
   "Question",
   // AIConnection must precede every model that can lock onto it:
   // AIBusinessAssignment, AutomationRun, JobDescriptionParse,
@@ -929,14 +984,46 @@ export const DEFERRED_FKS: ReadonlyArray<{
   field: string;
   target: BackupModel;
 }> = [
-  { model: "JobOpportunity", field: "currentJdVersionId", target: "JobDescriptionVersion" },
-  { model: "JobDescriptionVersion", field: "currentParseId", target: "JobDescriptionParse" },
-  { model: "ResumeVariant", field: "currentVersionId", target: "ResumeVariantVersion" },
-  { model: "ResumeVariantVersion", field: "parentVersionId", target: "ResumeVariantVersion" },
-  { model: "ResumeVariantVersion", field: "sourceMatchAnalysisId", target: "MatchAnalysis" },
-  { model: "ApplicationAttempt", field: "transferredFromAttemptId", target: "ApplicationAttempt" },
-  { model: "InterviewSession", field: "currentQuestionInstanceId", target: "QuestionInstance" },
-  { model: "AnswerAttempt", field: "activeRevisionId", target: "TranscriptRevision" },
+  {
+    model: "JobOpportunity",
+    field: "currentJdVersionId",
+    target: "JobDescriptionVersion",
+  },
+  {
+    model: "JobDescriptionVersion",
+    field: "currentParseId",
+    target: "JobDescriptionParse",
+  },
+  {
+    model: "ResumeVariant",
+    field: "currentVersionId",
+    target: "ResumeVariantVersion",
+  },
+  {
+    model: "ResumeVariantVersion",
+    field: "parentVersionId",
+    target: "ResumeVariantVersion",
+  },
+  {
+    model: "ResumeVariantVersion",
+    field: "sourceMatchAnalysisId",
+    target: "MatchAnalysis",
+  },
+  {
+    model: "ApplicationAttempt",
+    field: "transferredFromAttemptId",
+    target: "ApplicationAttempt",
+  },
+  {
+    model: "InterviewSession",
+    field: "currentQuestionInstanceId",
+    target: "QuestionInstance",
+  },
+  {
+    model: "AnswerAttempt",
+    field: "activeRevisionId",
+    target: "TranscriptRevision",
+  },
 ];
 
 export const DEFERRED_FK_FIELDS = new Set(
@@ -955,7 +1042,6 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "Note",
   "Contact",
   "Task",
-  "Activity",
   "Question",
   "Automation",
   "JobOpportunity",

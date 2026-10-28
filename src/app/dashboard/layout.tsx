@@ -3,8 +3,6 @@ import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import { TitleBarActions } from "@/components/desktop/TitleBarActions";
 import Sidebar from "@/components/Sidebar";
-import { ActivityProvider } from "@/context/ActivityContext";
-import { GlobalActivityBanner } from "@/components/activities/GlobalActivityBanner";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { clampSidebarWidth } from "@/lib/constants";
 import SidebarInset from "@/components/SidebarInset";
@@ -14,7 +12,10 @@ import { AgentChatProvider } from "@/components/agent/AgentChatProvider";
 import { AgentChatPanel } from "@/components/agent/AgentChatPanel";
 import { loadActiveChatConversation } from "@/actions/agentChat.actions";
 import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
-import { canMutateJobsSurface, isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
+import {
+  canMutateJobsSurface,
+  isFreshNativeFullSurface,
+} from "@/lib/career/freshSurfacePolicy";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { isLegacyResumeEditorReadOnly } from "@/lib/career/capabilities";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -70,42 +71,49 @@ export default async function RootLayout({
   }
 
   return (
-    <ActivityProvider>
-      <CareerSurfacesProvider freshNativeFull={freshNativeFull} jobMutationsEnabled={canMutateJobsSurface(runtime)} resumeV1Enabled={runtime.resumeV1Enabled} legacyResumeMutationsEnabled={!isLegacyResumeEditorReadOnly(runtime.mode, runtime.rolloutScope)}>
-      <SidebarProvider initialExpanded={initialExpanded} initialWidth={initialWidth}>
+    <CareerSurfacesProvider
+      freshNativeFull={freshNativeFull}
+      jobMutationsEnabled={canMutateJobsSurface(runtime)}
+      resumeV1Enabled={runtime.resumeV1Enabled}
+      legacyResumeMutationsEnabled={
+        !isLegacyResumeEditorReadOnly(runtime.mode, runtime.rolloutScope)
+      }
+    >
+      <SidebarProvider
+        initialExpanded={initialExpanded}
+        initialWidth={initialWidth}
+      >
         <RightRailProvider>
           <AgentChatProvider initialConversation={conversation.data ?? null}>
             <SaveStatusProvider>
-            <div className="flex min-h-[calc(100vh-var(--desktop-titlebar-height,0px))] w-full bg-muted/40">
-              <Sidebar user={user} signOutAction={signOutAction} />
-              <SidebarInset>
-                {/* Renders only portals into DesktopTitleBar's slots; kept
+              <div className="flex min-h-[calc(100vh-var(--desktop-titlebar-height,0px))] w-full bg-muted/40">
+                <Sidebar user={user} signOutAction={signOutAction} />
+                <SidebarInset>
+                  {/* Renders only portals into DesktopTitleBar's slots; kept
                     inside the provider tree so the agent-chat trigger and
                     create-menu permissions resolve correctly. */}
-                <TitleBarActions />
-                <Header />
-                <GlobalActivityBanner />
-                {/* REM-V1 renderer-side reminder ticker: polls/claims due
+                  <TitleBarActions />
+                  <Header />
+                  {/* REM-V1 renderer-side reminder ticker: polls/claims due
                     reminders every 60s, on mount, and on visibility restore;
                     raises HTML5 Notifications itself. Renders nothing. */}
-                <ReminderScheduler />
-                {/* Container, not viewport, queries: the docked chat panel
+                  <ReminderScheduler />
+                  {/* Container, not viewport, queries: the docked chat panel
                     shrinks this box without changing the viewport width. */}
-                <main className="@container/main flex-1 p-4 sm:px-4 sm:py-0">
-                  <div className="items-start gap-4 md:gap-4 @3xl/main:grid @3xl/main:grid-cols-3">
-                    {children}
-                  </div>
-                </main>
-              </SidebarInset>
-              {/* Portaled, so it sits outside the 3-column grid and needs no
+                  <main className="@container/main flex-1 p-4 sm:px-4 sm:py-0">
+                    <div className="items-start gap-4 md:gap-4 @3xl/main:grid @3xl/main:grid-cols-3">
+                      {children}
+                    </div>
+                  </main>
+                </SidebarInset>
+                {/* Portaled, so it sits outside the 3-column grid and needs no
                   col-span-3 wrapper. */}
-              <AgentChatPanel />
-            </div>
+                <AgentChatPanel />
+              </div>
             </SaveStatusProvider>
           </AgentChatProvider>
         </RightRailProvider>
       </SidebarProvider>
-      </CareerSurfacesProvider>
-    </ActivityProvider>
+    </CareerSurfacesProvider>
   );
 }

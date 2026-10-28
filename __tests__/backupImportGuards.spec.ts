@@ -15,7 +15,9 @@ vi.mock("@/lib/scheduler", () => ({ syncSchedulerState: vi.fn() }));
 // Mocked so the guards spec never touches the filesystem; Task 4.1 covers the
 // real thing and Task 7.2 exercises it end to end.
 vi.mock("@/lib/backup/snapshot", () => ({
-  writeSnapshot: vi.fn().mockResolvedValue("data/backups/user-1/pre-import-x.zip"),
+  writeSnapshot: vi
+    .fn()
+    .mockResolvedValue("data/backups/user-1/pre-import-x.zip"),
 }));
 
 vi.mock("@/lib/db", async () => {
@@ -34,8 +36,13 @@ vi.mock("@/lib/db", async () => {
   const mock: Record<string, unknown> = {
     automationRun: { ...counted(), findFirst: vi.fn().mockResolvedValue(null) },
     jobStatus: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
-    user: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ defaultResumeId: null }) },
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(mock)),
+    user: {
+      update: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue({ defaultResumeId: null }),
+    },
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn(mock),
+    ),
   };
   for (const model of INSERT_ORDER) {
     mock[MODEL_SPECS[model].delegate] = counted();
@@ -45,12 +52,18 @@ vi.mock("@/lib/db", async () => {
   return { default: mock };
 });
 
-const mockDb = db as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>;
+const mockDb = db as unknown as Record<
+  string,
+  Record<string, ReturnType<typeof vi.fn>>
+>;
 
 async function emptyBackup(): Promise<Buffer> {
   const data = emptyStandardBackupData();
   const zip = new JSZip();
-  zip.file("manifest.json", JSON.stringify(buildManifest(data, "owner@example.com")));
+  zip.file(
+    "manifest.json",
+    JSON.stringify(buildManifest(data, "owner@example.com")),
+  );
   zip.file("data.json", JSON.stringify(data));
   return zip.generateAsync({ type: "nodebuffer" });
 }
@@ -105,6 +118,56 @@ describe("importBackup guards", () => {
     expect(mockDb.job.deleteMany).not.toHaveBeenCalled();
   });
 
+  // ACTIVITY-RETIRE: a legacy backup that still carries Activity rows is
+  // rejected by normalizeBackupData inside readData — before the wipe, the
+  // snapshot, and the pre-transaction JobStatus write.
+  it("refuses a legacy backup with retired Activity rows before any write", async () => {
+    const manifest = buildManifest(emptyStandardBackupData(), EMAIL);
+    const zip = new JSZip();
+    zip.file(
+      "manifest.json",
+      JSON.stringify({
+        ...manifest,
+        counts: { ...manifest.counts, Activity: 1 },
+      }),
+    );
+    zip.file(
+      "data.json",
+      JSON.stringify({
+        ...emptyStandardBackupData(),
+        Activity: [{ id: "a1", title: "Job Search" }],
+      }),
+    );
+    const bytes = await zip.generateAsync({ type: "nodebuffer" });
+    await expect(
+      importBackup(bytes, "user-1", EMAIL, true),
+    ).rejects.toBeInstanceOf(BackupError);
+    expect(mockDb.jobStatus.create).not.toHaveBeenCalled();
+    expect(writeSnapshot).not.toHaveBeenCalled();
+    expect(mockDb.job.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // Same era, but the group is empty — the row set is stripped and the
+  // import proceeds; a legacy manifest may still count "Activity": 0.
+  it("imports a legacy backup whose only Activity trace is an empty group", async () => {
+    const manifest = buildManifest(emptyStandardBackupData(), EMAIL);
+    const zip = new JSZip();
+    zip.file(
+      "manifest.json",
+      JSON.stringify({
+        ...manifest,
+        counts: { ...manifest.counts, Activity: 0 },
+      }),
+    );
+    zip.file(
+      "data.json",
+      JSON.stringify({ ...emptyStandardBackupData(), Activity: [] }),
+    );
+    const bytes = await zip.generateAsync({ type: "nodebuffer" });
+    await importBackup(bytes, "user-1", EMAIL, true);
+    expect(syncSchedulerState).toHaveBeenCalled();
+  });
+
   it("syncs the scheduler after a successful import", async () => {
     await importBackup(await emptyBackup(), "user-1", EMAIL, true);
     expect(syncSchedulerState).toHaveBeenCalled();
@@ -122,7 +185,12 @@ describe("importBackup guards", () => {
   // after the wipe is a snapshot of nothing.
   it("snapshots a non-empty target before deleting anything", async () => {
     mockDb.job.count.mockResolvedValueOnce(4);
-    const result = await importBackup(await emptyBackup(), "user-1", EMAIL, true);
+    const result = await importBackup(
+      await emptyBackup(),
+      "user-1",
+      EMAIL,
+      true,
+    );
 
     expect(writeSnapshot).toHaveBeenCalledWith("user-1", EMAIL);
     expect(result.snapshotPath).toBeTruthy();
@@ -132,7 +200,12 @@ describe("importBackup guards", () => {
   });
 
   it("skips the snapshot on an empty target", async () => {
-    const result = await importBackup(await emptyBackup(), "user-1", EMAIL, true);
+    const result = await importBackup(
+      await emptyBackup(),
+      "user-1",
+      EMAIL,
+      true,
+    );
     expect(writeSnapshot).not.toHaveBeenCalled();
     expect(result.snapshotPath).toBeNull();
   });

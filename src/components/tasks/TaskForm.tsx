@@ -48,11 +48,8 @@ type TaskFormProps = {
   onTaskSaved: () => void;
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
-  onSaveAndStart?: (taskId: string) => void;
   timeZone?: string;
 };
-
-
 
 export function TaskForm({
   activityTypes,
@@ -61,7 +58,6 @@ export function TaskForm({
   onTaskSaved,
   dialogOpen,
   setDialogOpen,
-  onSaveAndStart,
   timeZone = runtimeTimeZone(),
 }: TaskFormProps) {
   const { t, formatDateTime } = useI18n();
@@ -125,10 +121,7 @@ export function TaskForm({
     }
   }, [editTask, reset, timeZone]);
 
-  function onSubmit(
-    data: z.infer<typeof AddTaskFormSchema>,
-    startAfterSave = false,
-  ) {
+  function onSubmit(data: z.infer<typeof AddTaskFormSchema>) {
     // dueOn is the write contract: undefined keeps stored values on edit,
     // null clears, a YYYY-MM-DD string sets a calendar-day due.
     const dueDateTouched = form.formState.dirtyFields.dueDate === true;
@@ -153,26 +146,18 @@ export function TaskForm({
         ? await updateTask({ ...data, dueOn })
         : await createTask({ ...data, dueOn });
       toastActionResult<Task>(result, {
-        success: editTask
-          ? t("tasks.taskUpdated")
-          : t("tasks.taskCreated"),
-        onSuccess: (task) => {
+        success: editTask ? t("tasks.taskUpdated") : t("tasks.taskCreated"),
+        onSuccess: () => {
           reset();
           setDialogOpen(false);
           resetEditTask();
           onTaskSaved();
-          if (startAfterSave && task?.id) {
-            onSaveAndStart?.(task.id);
-          }
         },
       });
     });
   }
 
-  const onSaveClick = form.handleSubmit((data) => onSubmit(data, false));
-  const onSaveAndStartClick = form.handleSubmit((data) =>
-    onSubmit(data, true),
-  );
+  const onSaveClick = form.handleSubmit((data) => onSubmit(data));
 
   const pageTitle = editTask ? t("tasks.editTask") : t("tasks.addTask");
   const pageDescription = editTask
@@ -188,240 +173,228 @@ export function TaskForm({
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle data-testid="task-form-dialog-title">
-              {pageTitle}
-            </DialogTitle>
-            <DialogDescription>{pageDescription}</DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form
-              onSubmit={onSaveClick}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4"
-            >
-              {/* Title */}
-              <div className="md:col-span-2">
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t("tasks.titleRequired")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={t("tasks.titlePlaceholder")}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Activity Type */}
-              <div>
-                <FormField
-                  control={form.control}
-                  name="activityTypeId"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t("tasks.activityType")}</FormLabel>
-                      <FormControl>
-                        <Combobox
-                          options={activityTypes}
-                          field={{
-                            ...field,
-                            name: "activityType",
-                          }}
-                          creatable
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Status */}
-              <div>
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t("common.status")}</FormLabel>
-                      <SelectFormCtrl
-                        label={t("tasks.taskStatus")}
-                        options={statusOptions}
-                        field={field}
+        <DialogHeader>
+          <DialogTitle data-testid="task-form-dialog-title">
+            {pageTitle}
+          </DialogTitle>
+          <DialogDescription>{pageDescription}</DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form
+            onSubmit={onSaveClick}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4"
+          >
+            {/* Title */}
+            <div className="md:col-span-2">
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>{t("tasks.titleRequired")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t("tasks.titlePlaceholder")}
+                        {...field}
                       />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-              {/* Priority */}
-              <div>
-                <FormField
-                  control={form.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>
-                        {t("tasks.priorityValue", { value: priorityValue })}
-                      </FormLabel>
-                      <FormControl>
-                        <Slider
-                          min={0}
-                          max={10}
-                          step={1}
-                          value={[field.value]}
-                          onValueChange={(value) => field.onChange(value[0])}
-                          className="mt-2"
-                        />
-                      </FormControl>
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{t("tasks.lowZero")}</span>
-                        <span>{t("tasks.highTen")}</span>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Percent Complete */}
-              <div>
-                <FormField
-                  control={form.control}
-                  name="percentComplete"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>
-                        {t("tasks.percentCompleteValue", {
-                          value: percentCompleteValue,
-                        })}
-                      </FormLabel>
-                      <FormControl>
-                        <Slider
-                          min={0}
-                          max={100}
-                          step={5}
-                          value={[field.value]}
-                          onValueChange={(value) => field.onChange(value[0])}
-                          className="mt-2"
-                        />
-                      </FormControl>
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>0%</span>
-                        <span>100%</span>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Due Date */}
-              <div>
-                <FormField
-                  control={form.control}
-                  name="dueDate"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t("tasks.dueDate")}</FormLabel>
-                      <DatePicker
-                        field={field}
-                        // Shared presets use the host calendar. Keep them only
-                        // when it matches the account; manual days stay usable.
-                        presets={timeZone === runtimeTimeZone()}
-                        isEnabled={true}
+            {/* Activity Type */}
+            <div>
+              <FormField
+                control={form.control}
+                name="activityTypeId"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>{t("tasks.activityType")}</FormLabel>
+                    <FormControl>
+                      <Combobox
+                        options={activityTypes}
+                        field={{
+                          ...field,
+                          name: "activityType",
+                        }}
+                        creatable
                       />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-              {/* Created and Updated Dates */}
-              {editTask && (
-                <div className="flex flex-col gap-2">
-                  <div>
-                    <p className="text-sm font-medium">{t("common.created")}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {editTask.createdAt
-                        ? formatDateTime(new Date(editTask.createdAt))
-                        : t("common.notAvailable")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{t("common.updated")}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {editTask.updatedAt
-                        ? formatDateTime(new Date(editTask.updatedAt))
-                        : t("common.notAvailable")}
-                    </p>
-                  </div>
+            {/* Status */}
+            <div>
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>{t("common.status")}</FormLabel>
+                    <SelectFormCtrl
+                      label={t("tasks.taskStatus")}
+                      options={statusOptions}
+                      field={field}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Priority */}
+            <div>
+              <FormField
+                control={form.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>
+                      {t("tasks.priorityValue", { value: priorityValue })}
+                    </FormLabel>
+                    <FormControl>
+                      <Slider
+                        min={0}
+                        max={10}
+                        step={1}
+                        value={[field.value]}
+                        onValueChange={(value) => field.onChange(value[0])}
+                        className="mt-2"
+                      />
+                    </FormControl>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{t("tasks.lowZero")}</span>
+                      <span>{t("tasks.highTen")}</span>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Percent Complete */}
+            <div>
+              <FormField
+                control={form.control}
+                name="percentComplete"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>
+                      {t("tasks.percentCompleteValue", {
+                        value: percentCompleteValue,
+                      })}
+                    </FormLabel>
+                    <FormControl>
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={[field.value]}
+                        onValueChange={(value) => field.onChange(value[0])}
+                        className="mt-2"
+                      />
+                    </FormControl>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>0%</span>
+                      <span>100%</span>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Due Date */}
+            <div>
+              <FormField
+                control={form.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>{t("tasks.dueDate")}</FormLabel>
+                    <DatePicker
+                      field={field}
+                      // Shared presets use the host calendar. Keep them only
+                      // when it matches the account; manual days stay usable.
+                      presets={timeZone === runtimeTimeZone()}
+                      isEnabled={true}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Created and Updated Dates */}
+            {editTask && (
+              <div className="flex flex-col gap-2">
+                <div>
+                  <p className="text-sm font-medium">{t("common.created")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {editTask.createdAt
+                      ? formatDateTime(new Date(editTask.createdAt))
+                      : t("common.notAvailable")}
+                  </p>
                 </div>
-              )}
-
-              {/* Description */}
-              <div className="md:col-span-2">
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t("common.description")}</FormLabel>
-                      <FormControl>
-                        <TiptapEditor field={field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div>
+                  <p className="text-sm font-medium">{t("common.updated")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {editTask.updatedAt
+                      ? formatDateTime(new Date(editTask.updatedAt))
+                      : t("common.notAvailable")}
+                  </p>
+                </div>
               </div>
+            )}
 
-              <div className="md:col-span-2">
-                <DialogFooter>
-                  <div>
-                    <Button
-                      type="reset"
-                      variant="outline"
-                      className="mt-2 md:mt-0 w-full"
-                      onClick={closeDialog}
-                    >
-                      {t("common.cancel")}
-                    </Button>
-                  </div>
-                  {onSaveAndStart && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="mt-2 md:mt-0"
-                      onClick={onSaveAndStartClick}
-                      disabled={isPending}
-                      data-testid="save-and-start-task-btn"
-                    >
-                      {t("tasks.saveAndStart")}
-                    </Button>
-                  )}
+            {/* Description */}
+            <div className="md:col-span-2">
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>{t("common.description")}</FormLabel>
+                    <FormControl>
+                      <TiptapEditor field={field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <DialogFooter>
+                <div>
                   <Button
-                    type="submit"
-                    disabled={isPending}
-                    data-testid="save-task-btn"
+                    type="reset"
+                    variant="outline"
+                    className="mt-2 md:mt-0 w-full"
+                    onClick={closeDialog}
                   >
-                    {t("common.save")}
-                    {isPending && (
-                      <Loader className="h-4 w-4 shrink-0 spinner ml-2" />
-                    )}
+                    {t("common.cancel")}
                   </Button>
-                </DialogFooter>
-              </div>
-            </form>
-          </Form>
+                </div>
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  data-testid="save-task-btn"
+                >
+                  {t("common.save")}
+                  {isPending && (
+                    <Loader className="h-4 w-4 shrink-0 spinner ml-2" />
+                  )}
+                </Button>
+              </DialogFooter>
+            </div>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

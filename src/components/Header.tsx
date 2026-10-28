@@ -1,10 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  PanelLeft,
-  Briefcase,
-} from "lucide-react";
+import { PanelLeft, Briefcase } from "lucide-react";
 
 import { Button } from "./ui/button";
 import {
@@ -24,14 +21,13 @@ import { isFreshFullHiddenNavRoute } from "@/lib/career/freshSurfacePolicy";
 export function getSidebarNavLabel(
   route: string,
   fallbackLabel: string,
-  t: (key: string) => string
+  t: (key: string) => string,
 ): string {
   if (route === "/dashboard") return t("nav.dashboard");
   if (route.startsWith("/dashboard/analytics")) return t("nav.analytics");
   if (route.startsWith("/dashboard/myjobs")) return t("nav.jobs");
   if (route.startsWith("/dashboard/automations")) return t("nav.automations");
   if (route.startsWith("/dashboard/tasks")) return t("nav.tasks");
-  if (route.startsWith("/dashboard/activities")) return t("nav.activities");
   if (route.startsWith("/dashboard/questions")) return t("nav.questions");
   if (route.startsWith("/dashboard/interview")) return t("nav.interview");
   if (route.startsWith("/dashboard/profile")) return t("nav.profile");

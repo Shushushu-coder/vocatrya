@@ -1,20 +1,6 @@
-// Barrel for the activity server actions, split into src/actions/activity/.
-// Each module below carries its own "use server"; this file only re-exports so
-// the long-standing "@/actions/activity.actions" import path keeps working.
-
-export {
-  getActivitiesList,
-  createActivity,
-  deleteActivityById,
-} from "./activity/activities";
-
-export {
-  startActivityById,
-  stopActivityById,
-  getCurrentActivity,
-} from "./activity/timer";
-
-export { startBreak, endBreak, updateBreakLength } from "./activity/breaks";
+// Barrel for the task-category (ActivityType) server actions. The activity
+// product was retired; this path stays so existing "@/actions/activity.actions"
+// imports keep working without churn across callers.
 
 export {
   getAllActivityTypes,

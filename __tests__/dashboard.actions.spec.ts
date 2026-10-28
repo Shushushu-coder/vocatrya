@@ -1,9 +1,7 @@
 import {
-  getJobsActivitySummary,
   getRecentJobs,
-  getActivityDataForPeriod,
   getJobsActivityForPeriod,
-  getActivityCalendarData,
+  getJobsCalendarData,
 } from "@/actions/dashboard.actions";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -19,12 +17,13 @@ vi.mock("@prisma/client", () => {
       count: vi.fn(),
       groupBy: vi.fn(),
     },
-    activity: {
-      findMany: vi.fn(),
-    },
     $transaction: vi.fn(),
   };
-  return { PrismaClient: vi.fn(function() { return mPrismaClient; }) };
+  return {
+    PrismaClient: vi.fn(function () {
+      return mPrismaClient;
+    }),
+  };
 });
 
 vi.mock("@/utils/user.utils", () => ({
@@ -75,7 +74,7 @@ describe("Dashboard Actions", () => {
         orderBy: {
           appliedDate: "desc",
         },
-        take: APP_CONSTANTS.RECENT_NUM_JOBS_ACTIVITIES,
+        take: APP_CONSTANTS.RECENT_NUM_JOBS,
       });
     });
 
@@ -133,129 +132,6 @@ describe("Dashboard Actions", () => {
       } finally {
         delete (prisma as any).abMigrationState;
       }
-    });
-  });
-
-  describe("getActivityDataForPeriod", () => {
-    it("should return activity data grouped by day for authenticated user", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      const mockActivities = [
-        {
-          startTime: new Date("2024-01-01T10:00:00Z"),
-          duration: 60,
-          activityType: { label: "Applying" },
-        },
-        {
-          startTime: new Date("2024-01-01T14:00:00Z"),
-          duration: 30,
-          activityType: { label: "Interviewing" },
-        },
-      ];
-      (prisma.activity.findMany as any).mockResolvedValue(mockActivities);
-
-      const result = await getActivityDataForPeriod();
-
-      expect(Array.isArray(result.data)).toBe(true);
-      expect(result.data.length).toBe(7);
-      expect(result.data[0]).toHaveProperty("day");
-      expect(result.keys).toEqual(["Applying", "Interviewing"]);
-      expect(prisma.activity.findMany).toHaveBeenCalledTimes(1);
-    });
-
-    it("should throw error when user is not authenticated", async () => {
-      (getCurrentUser as any).mockResolvedValue(null);
-
-      await expect(getActivityDataForPeriod()).rejects.toThrow(
-        "Failed to fetch activities data.",
-      );
-    });
-
-    it("should handle database errors", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.activity.findMany as any).mockRejectedValue(
-        new Error("Database error"),
-      );
-
-      await expect(getActivityDataForPeriod()).rejects.toThrow(
-        "Failed to fetch activities data.",
-      );
-    });
-
-    it("should return data for all 7 days even with no activities", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      (prisma.activity.findMany as any).mockResolvedValue([]);
-
-      const result = await getActivityDataForPeriod();
-
-      expect(result.data.length).toBe(7);
-      result.data.forEach((day: any) => {
-        expect(day).toHaveProperty("day");
-      });
-    });
-
-    it("caps to the top three types and attaches a breakdown to the Other bucket", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      const today = new Date();
-      const mockActivities = [
-        {
-          startTime: today,
-          duration: 600,
-          activityType: { label: "Jobsync" },
-        },
-        {
-          startTime: today,
-          duration: 300,
-          activityType: { label: "Learning" },
-        },
-        {
-          startTime: today,
-          duration: 180,
-          activityType: { label: "Side Project 1" },
-        },
-        {
-          startTime: today,
-          duration: 120,
-          activityType: { label: "Job Search" },
-        },
-        {
-          startTime: today,
-          duration: 60,
-          activityType: { label: "Networking" },
-        },
-      ];
-      (prisma.activity.findMany as any).mockResolvedValue(mockActivities);
-
-      const result = await getActivityDataForPeriod();
-
-      expect(result.keys).toEqual([
-        "Jobsync",
-        "Learning",
-        "Side Project 1",
-        "__other__",
-      ]);
-      const todayEntry = result.data[result.data.length - 1];
-      expect(todayEntry["__other__"]).toBe(3);
-      expect(todayEntry.otherBreakdown).toEqual([
-        { label: "Job Search", hours: 2 },
-        { label: "Networking", hours: 1 },
-      ]);
-    });
-
-    it("should handle activities with missing activityType", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      const mockActivities = [
-        {
-          startTime: new Date("2024-01-01T10:00:00Z"),
-          duration: 60,
-          activityType: null,
-        },
-      ];
-      (prisma.activity.findMany as any).mockResolvedValue(mockActivities);
-
-      const result = await getActivityDataForPeriod();
-
-      expect(Array.isArray(result.data)).toBe(true);
-      expect(result.data.length).toBe(7);
     });
   });
 
@@ -321,7 +197,7 @@ describe("Dashboard Actions", () => {
     });
   });
 
-  describe("getActivityCalendarData", () => {
+  describe("getJobsCalendarData", () => {
     it("should return calendar data grouped by year for authenticated user", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
       const mockJobData = [
@@ -339,9 +215,8 @@ describe("Dashboard Actions", () => {
         },
       ];
       (prisma.job.groupBy as any).mockResolvedValue(mockJobData);
-      (prisma.activity.findMany as any).mockResolvedValue([]);
 
-      const result = await getActivityCalendarData();
+      const result = await getJobsCalendarData();
 
       expect(result.blocked).toBe(false);
       expect(prisma.job.groupBy).toHaveBeenCalledTimes(1);
@@ -350,7 +225,7 @@ describe("Dashboard Actions", () => {
     it("should throw error when user is not authenticated", async () => {
       (getCurrentUser as any).mockResolvedValue(null);
 
-      await expect(getActivityCalendarData()).rejects.toThrow(
+      await expect(getJobsCalendarData()).rejects.toThrow(
         "Failed to fetch jobs list. ",
       );
     });
@@ -361,7 +236,7 @@ describe("Dashboard Actions", () => {
         new Error("Database error"),
       );
 
-      await expect(getActivityCalendarData()).rejects.toThrow(
+      await expect(getJobsCalendarData()).rejects.toThrow(
         "Failed to fetch jobs list. ",
       );
     });
@@ -369,9 +244,8 @@ describe("Dashboard Actions", () => {
     it("should return empty object when no job data", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
       (prisma.job.groupBy as any).mockResolvedValue([]);
-      (prisma.activity.findMany as any).mockResolvedValue([]);
 
-      const result = await getActivityCalendarData();
+      const result = await getJobsCalendarData();
 
       expect(result).toEqual({ blocked: false, data: {} });
     });
@@ -389,9 +263,8 @@ describe("Dashboard Actions", () => {
         },
       ];
       (prisma.job.groupBy as any).mockResolvedValue(mockJobData);
-      (prisma.activity.findMany as any).mockResolvedValue([]);
 
-      const result = await getActivityCalendarData();
+      const result = await getJobsCalendarData();
 
       expect(result.blocked).toBe(false);
       if (result.blocked) return;
@@ -417,163 +290,13 @@ describe("Dashboard Actions", () => {
         },
       ];
       (prisma.job.groupBy as any).mockResolvedValue(mockJobData);
-      (prisma.activity.findMany as any).mockResolvedValue([]);
 
-      const result = await getActivityCalendarData();
+      const result = await getJobsCalendarData();
 
       expect(result.blocked).toBe(false);
       if (result.blocked) return;
       expect(result.data["2024"].length).toBe(1);
       expect(result.data["2024"][0].value).toBe(5);
-    });
-  });
-
-  describe("getJobsActivitySummary", () => {
-    const activityRows = (rows: [string, number][]) =>
-      rows.map(([label, duration]) => ({
-        duration,
-        activityType: { label },
-      }));
-
-    const mockJobAndActivity = (
-      jobsApplied: number,
-      priorJobs: number,
-      activities: unknown[],
-    ) => {
-      (prisma.$transaction as any).mockResolvedValue([jobsApplied, priorJobs]);
-      (prisma.activity.findMany as any).mockResolvedValue(activities);
-    };
-
-    it("returns the top three types and folds the rest into otherHours", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(
-        12,
-        8,
-        activityRows([
-          ["Jobsync", 600],
-          ["Learning", 300],
-          ["Side Project 1", 180],
-          ["Job Search", 120],
-          ["Networking", 60],
-        ]),
-      );
-
-      const result = await getJobsActivitySummary(7);
-
-      expect(result.jobsApplied).toBe(12);
-      expect(result.topActivities).toEqual([
-        { label: "Jobsync", hours: 10 },
-        { label: "Learning", hours: 5 },
-        { label: "Side Project 1", hours: 3 },
-      ]);
-      expect(result.otherActivities).toEqual([
-        { label: "Job Search", hours: 2 },
-        { label: "Networking", hours: 1 },
-      ]);
-      expect(result.otherHours).toBe(3);
-      expect(result.totalHours).toBe(21);
-    });
-
-    it("makes totalHours equal the sum of the values it reports", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(
-        0,
-        0,
-        activityRows([
-          ["A", 50],
-          ["B", 25],
-          ["C", 25],
-          ["D", 5],
-        ]),
-      );
-
-      const result = await getJobsActivitySummary(30);
-      const sum =
-        result.topActivities.reduce((acc, a) => acc + a.hours, 0) +
-        result.otherHours;
-
-      expect(result.totalHours).toBeCloseTo(sum, 5);
-    });
-
-    it("reports zero otherHours when there are three or fewer types", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(
-        3,
-        3,
-        activityRows([
-          ["Jobsync", 120],
-          ["Learning", 60],
-        ]),
-      );
-
-      const result = await getJobsActivitySummary(7);
-
-      expect(result.topActivities).toHaveLength(2);
-      expect(result.otherHours).toBe(0);
-      expect(result.totalHours).toBe(3);
-    });
-
-    it("returns empty results when nothing is logged", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(0, 0, []);
-
-      const result = await getJobsActivitySummary(7);
-
-      expect(result).toEqual({
-        jobsBlocked: false,
-        jobsApplied: 0,
-        jobsTrend: 0,
-        jobsInterview: undefined,
-        jobsOffer: undefined,
-        topActivities: [],
-        otherActivities: [],
-        otherHours: 0,
-        totalHours: 0,
-      });
-    });
-
-    it("labels activities with no type as Unknown", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(0, 0, [{ duration: 90, activityType: null }]);
-
-      const result = await getJobsActivitySummary(7);
-
-      expect(result.topActivities).toEqual([{ label: "Unknown", hours: 1.5 }]);
-    });
-
-    it("reports the percent change against the preceding window", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(15, 10, []);
-
-      const result = await getJobsActivitySummary(7);
-
-      expect(result.jobsTrend).toBe(50);
-    });
-
-    it("reports a negative trend when the count fell", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(5, 10, []);
-
-      const result = await getJobsActivitySummary(7);
-
-      expect(result.jobsTrend).toBe(-50);
-    });
-
-    it("reports a zero trend when the preceding window was also empty", async () => {
-      (getCurrentUser as any).mockResolvedValue(mockUser);
-      mockJobAndActivity(0, 0, []);
-
-      const result = await getJobsActivitySummary(7);
-
-      expect(result.jobsTrend).toBe(0);
-    });
-
-    it("throws when the user is not authenticated", async () => {
-      (getCurrentUser as any).mockResolvedValue(null);
-
-      await expect(getJobsActivitySummary(7)).rejects.toThrow(
-        "Not authenticated",
-      );
     });
   });
 });

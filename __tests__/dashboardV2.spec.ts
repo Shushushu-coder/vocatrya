@@ -129,21 +129,6 @@ async function seedTask(options: {
   });
 }
 
-async function seedActivityIn(hoursFromNow: number) {
-  const type = await prisma.activityType.create({
-    data: { label: "Deep Work", value: `at-${randomUUID()}`, createdBy: userId },
-  });
-  const start = new Date(Date.now() + hoursFromNow * 3_600_000);
-  return prisma.activity.create({
-    data: {
-      userId,
-      activityName: "Deep Work",
-      startTime: start,
-      activityTypeId: type.id,
-    },
-  });
-}
-
 const DAYS = 24 * 3_600_000;
 
 describe("legacy read family", () => {
@@ -196,8 +181,6 @@ describe("legacy read family", () => {
     await seedLegacyJob({ status: "rejected" });
     await seedTask({ title: "Open" });
     await seedTask({ title: "Done", status: "complete" });
-    await seedActivityIn(24);
-    await seedActivityIn(24 * 30); // outside the 7d window
 
     const stats = await getOverviewStats();
     expect(stats.jobsBlocked).toBe(false);
@@ -205,7 +188,6 @@ describe("legacy read family", () => {
     expect(stats.inProgress).toBe(2);
     expect(stats.applied7d).toBe(1);
     expect(stats.openTasks).toBe(1);
-    expect(stats.upcomingActivities).toBe(1);
   });
 
   it("surfaces due tasks and application deadlines as reminders", async () => {
@@ -226,8 +208,9 @@ describe("legacy read family", () => {
     const kinds = Object.fromEntries(reminders.map((r) => [r.id, r.kind]));
     expect(kinds[`task:${overdueTask.id}`]).toBe("task");
     expect(kinds[`deadline:${job.id}`]).toBe("deadline");
-    expect(reminders.find((r) => r.id === `task:${overdueTask.id}`)?.overdue)
-      .toBe(true);
+    expect(
+      reminders.find((r) => r.id === `task:${overdueTask.id}`)?.overdue,
+    ).toBe(true);
     expect(reminders).toHaveLength(3);
     expect(reminders.map((r) => r.title)).not.toContain("Later");
     expect(reminders.map((r) => r.title)).not.toContain("Done");
@@ -240,7 +223,8 @@ describe("legacy read family", () => {
 
   it("limits mixed DateOnly and instant reminders after their attention sort", async () => {
     const { addDaysToDateOnly, todayDateOnly } = await import("@/lib/datetime");
-    const { getUserTimeZone } = await import("@/lib/userSettings/timeZone.server");
+    const { getUserTimeZone } =
+      await import("@/lib/userSettings/timeZone.server");
     const zone = await getUserTimeZone(userId);
     const tomorrow = addDaysToDateOnly(todayDateOnly(zone), 1);
     await prisma.task.createMany({
@@ -258,7 +242,10 @@ describe("legacy read family", () => {
     });
     const { reminders } = await getOverviewReminders();
     expect(reminders).toHaveLength(6);
-    expect(reminders[0]).toMatchObject({ id: `task:${overdue.id}`, overdue: true });
+    expect(reminders[0]).toMatchObject({
+      id: `task:${overdue.id}`,
+      overdue: true,
+    });
   });
 });
 
@@ -352,7 +339,9 @@ describe("ab read family", () => {
       attempts: [{ submittedAt: new Date(), stage: "INTERVIEW" }],
     });
     await seedOpportunity({
-      attempts: [{ submittedAt: new Date(), stage: "CLOSED", outcome: "REJECTED" }],
+      attempts: [
+        { submittedAt: new Date(), stage: "CLOSED", outcome: "REJECTED" },
+      ],
     });
 
     const dist = await getJobStatusDistribution();
@@ -386,13 +375,17 @@ describe("ab read family", () => {
 
   it("labels the time carrier that supplies a process reminder's attention", async () => {
     await activate();
-    const { addDaysToDateOnly, dateOnlyUtcWindow, todayDateOnly } = await import("@/lib/datetime");
-    const { getUserTimeZone } = await import("@/lib/userSettings/timeZone.server");
+    const { addDaysToDateOnly, dateOnlyUtcWindow, todayDateOnly } =
+      await import("@/lib/datetime");
+    const { getUserTimeZone } =
+      await import("@/lib/userSettings/timeZone.server");
     const zone = await getUserTimeZone(userId);
     const deadlineOn = addDaysToDateOnly(todayDateOnly(zone), 3);
     const deadlineStart = dateOnlyUtcWindow(deadlineOn, zone).startIso;
     const scheduledAt = new Date(Date.now() + DAYS);
-    const opportunity = await seedOpportunity({ attempts: [{ stage: "DRAFT" }] });
+    const opportunity = await seedOpportunity({
+      attempts: [{ stage: "DRAFT" }],
+    });
     const attempt = await prisma.applicationAttempt.findFirstOrThrow({
       where: { jobOpportunityId: opportunity.id },
     });
@@ -410,24 +403,31 @@ describe("ab read family", () => {
     });
     expect((await getOverviewReminders()).reminders).toEqual([
       expect.objectContaining({
-        id: `event:${step.id}`, at: scheduledAt.toISOString(), dateOn: null,
+        id: `event:${step.id}`,
+        at: scheduledAt.toISOString(),
+        dateOn: null,
       }),
     ]);
     await prisma.applicationProcessStep.update({
       where: { id: step.id },
-      data: { scheduledAt: new Date(new Date(deadlineStart).getTime() + 3_600_000) },
+      data: {
+        scheduledAt: new Date(new Date(deadlineStart).getTime() + 3_600_000),
+      },
     });
     expect((await getOverviewReminders()).reminders).toEqual([
-      expect.objectContaining({ id: `event:${step.id}`, at: deadlineStart, dateOn: deadlineOn }),
+      expect.objectContaining({
+        id: `event:${step.id}`,
+        at: deadlineStart,
+        dateOn: deadlineOn,
+      }),
     ]);
   });
 });
 
 describe("blocked read family", () => {
-  it("returns typed blocked results while task/activity metrics stay real", async () => {
+  it("returns typed blocked results while task metrics stay real", async () => {
     await blockCareerRuntime();
     await seedTask({ title: "Open" });
-    await seedActivityIn(24);
 
     const [totals, dist, stats] = await Promise.all([
       getJobsBoardTotals(),
@@ -442,7 +442,6 @@ describe("blocked read family", () => {
     expect(stats.inProgress).toBeUndefined();
     expect(stats.applied7d).toBeUndefined();
     expect(stats.openTasks).toBe(1);
-    expect(stats.upcomingActivities).toBe(1);
 
     // The reminder strip degrades to task reminders only.
     const { reminders } = await getOverviewReminders();

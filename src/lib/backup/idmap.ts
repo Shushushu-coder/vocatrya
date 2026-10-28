@@ -1,9 +1,5 @@
 import { randomUUID } from "crypto";
-import {
-  DEFERRED_FK_FIELDS,
-  MODEL_SPECS,
-  type BackupModel,
-} from "./ordering";
+import { DEFERRED_FK_FIELDS, MODEL_SPECS, type BackupModel } from "./ordering";
 
 // Foreign keys that are nullable in the schema. A dangling value in one of
 // these is degraded to null (the spec's defaultResumeId rule generalised);
@@ -26,7 +22,6 @@ const OPTIONAL_FKS = new Set<string>([
   "Contact.workedAtCompanyId",
   "Contact.roleId",
   "Task.activityTypeId",
-  "Activity.taskId",
   "JobOpportunity.campaignId",
   "JobOpportunity.sourceAutomationId",
   "ApplicationAttempt.submittedResumeVersionId",

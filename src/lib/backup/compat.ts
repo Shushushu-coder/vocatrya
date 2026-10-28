@@ -11,7 +11,8 @@ import {
   type BackupManifest,
 } from "./schema";
 
-export const LEGACY_BACKUP_PROFILE_KEY = LEGACY_TARGET_ALIAS.RESUME_CONTACT_PROFILE;
+export const LEGACY_BACKUP_PROFILE_KEY =
+  LEGACY_TARGET_ALIAS.RESUME_CONTACT_PROFILE;
 export const CANONICAL_BACKUP_PROFILE_KEY = TARGET.CANDIDATE_PROFILE;
 
 const SENSITIVE_KEY_SET = new Set<string>(SENSITIVE_BACKUP_MODELS);
@@ -27,9 +28,7 @@ function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
-function remapCountKey(
-  counts: Record<string, number>,
-): Record<string, number> {
+function remapCountKey(counts: Record<string, number>): Record<string, number> {
   const hasLegacy = hasOwn(counts, LEGACY_BACKUP_PROFILE_KEY);
   const hasCanonical = hasOwn(counts, CANONICAL_BACKUP_PROFILE_KEY);
   if (hasLegacy && hasCanonical) {
@@ -110,6 +109,22 @@ export function normalizeBackupData(
   containsSensitiveData: boolean,
 ): unknown {
   const data = asRecord(raw, "data.json");
+
+  // The Activity product was retired. A legacy backup that still carries
+  // Activity rows is rejected loudly instead of silently dropping them —
+  // the owning decision (reject vs controlled skip) is tracked with the
+  // ACTIVITY-RETIRE contract. An empty "Activity": [] group is harmless and
+  // stripped so a v6 export parses cleanly.
+  const activityGroup = hasOwn(data, "Activity") ? data.Activity : undefined;
+  if (
+    activityGroup !== undefined &&
+    !(Array.isArray(activityGroup) && activityGroup.length === 0)
+  ) {
+    throw new BackupError(
+      "This backup was created by an older version and contains retired job-activity records, so it cannot be restored.",
+    );
+  }
+
   const hasLegacy = hasOwn(data, LEGACY_BACKUP_PROFILE_KEY);
   const hasCanonical = hasOwn(data, CANONICAL_BACKUP_PROFILE_KEY);
   if (hasLegacy && hasCanonical) {
@@ -119,6 +134,7 @@ export function normalizeBackupData(
   }
 
   const next: Record<string, unknown> = { ...data };
+  delete next.Activity;
   if (hasLegacy) {
     next[CANONICAL_BACKUP_PROFILE_KEY] = data[LEGACY_BACKUP_PROFILE_KEY];
     delete next[LEGACY_BACKUP_PROFILE_KEY];

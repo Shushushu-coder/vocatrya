@@ -28,7 +28,6 @@ export async function POST(req: NextRequest) {
     companies = [],
     locations = [],
     activityTypes = [],
-    activities = [],
     tags = [],
     mcpTokens = [],
     automations = [],
@@ -43,7 +42,6 @@ export async function POST(req: NextRequest) {
     companies?: string[];
     locations?: string[];
     activityTypes?: string[];
-    activities?: string[];
     tags?: string[];
     mcpTokens?: string[];
     automations?: string[];
@@ -79,21 +77,8 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
     for (const { id } of rows) {
-      // A task can't be deleted while an activity references it.
-      await prisma.activity.deleteMany({ where: { taskId: id, userId } });
       await prisma.task.deleteMany({ where: { id, userId } });
     }
-  }
-
-  // Delete standalone activities (created directly on the activities page, not
-  // through a task) by name before the Library teardown, so their activityType
-  // reference count drops to zero and the type becomes eligible for deletion.
-  // Starting an activity spawns a second running row with the same
-  // activityName, so matching on name removes both.
-  if (activities.length > 0) {
-    await prisma.activity.deleteMany({
-      where: { activityName: { in: activities }, userId },
-    });
   }
 
   // Delete questions before tags below — deleteTagsByName only removes a tag
@@ -176,11 +161,7 @@ async function deleteTagsByName(
 }
 
 type RefModel =
-  | "jobTitle"
-  | "company"
-  | "location"
-  | "activityType"
-  | "contactRole";
+  "jobTitle" | "company" | "location" | "activityType" | "contactRole";
 
 // Count every place a Library row can still be referenced from, so we never
 // delete one that another job or resume section still uses.
@@ -213,10 +194,7 @@ async function referenceCount(
     );
   }
   if (model === "activityType") {
-    return (
-      (await db.activity.count({ where: { activityTypeId: refId } })) +
-      (await db.task.count({ where: { activityTypeId: refId } }))
-    );
+    return db.task.count({ where: { activityTypeId: refId } });
   }
   if (model === "contactRole") {
     return (

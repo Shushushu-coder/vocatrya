@@ -306,22 +306,6 @@ const Task = z.object({
   updatedAt: dt,
 });
 
-const Activity = z.object({
-  id,
-  activityName: str,
-  startTime: dt,
-  endTime: optDt,
-  duration: optInt,
-  breakMinutes: int,
-  breakStartedAt: optDt,
-  breakPlannedMins: optInt,
-  description: optStr,
-  createdAt: dt,
-  updatedAt: dt,
-  activityTypeId: id,
-  taskId: optId,
-});
-
 const Question = z.object({
   id,
   question: str,
@@ -356,28 +340,33 @@ const AutomationRun = z.object({
 // export, injected on restore — same as every other owned model. Credentials
 // never travel; on import a CONNECTED ACCOUNT_LOGIN row is normalized to
 // REAUTH_REQUIRED (see normalizeAIConnection).
-const AIConnection = z.object({
-  id,
-  provider: str,
-  authType: str,
-  backendKind: str,
-  displayName: str,
-  accountIdentity: optStr,
-  status: str,
-  credentialRef: optStr,
-  runtimeProfileRef: optStr,
-  providerMetadata: optStr,
-  lastVerifiedAt: optDt,
-  archivedAt: optDt,
-  createdAt: dt,
-  updatedAt: dt,
-}).superRefine((row, ctx) => {
-  try {
-    assertManagedConnectionMetadataSafe(row);
-  } catch {
-    ctx.addIssue({ code: "custom", message: "Invalid or secret-bearing Managed connection metadata" });
-  }
-});
+const AIConnection = z
+  .object({
+    id,
+    provider: str,
+    authType: str,
+    backendKind: str,
+    displayName: str,
+    accountIdentity: optStr,
+    status: str,
+    credentialRef: optStr,
+    runtimeProfileRef: optStr,
+    providerMetadata: optStr,
+    lastVerifiedAt: optDt,
+    archivedAt: optDt,
+    createdAt: dt,
+    updatedAt: dt,
+  })
+  .superRefine((row, ctx) => {
+    try {
+      assertManagedConnectionMetadataSafe(row);
+    } catch {
+      ctx.addIssue({
+        code: "custom",
+        message: "Invalid or secret-bearing Managed connection metadata",
+      });
+    }
+  });
 
 const AIBusinessAssignment = z.object({
   id,
@@ -1324,7 +1313,6 @@ export const BackupDataSchema = z.object({
   Contact: group(Contact),
   JobContact: group(JobContact),
   Task: group(Task),
-  Activity: group(Activity),
   Question: group(Question),
   AIConnection: group(AIConnection),
   AIBusinessAssignment: group(AIBusinessAssignment),
@@ -1400,9 +1388,7 @@ export const BackupDataSchema = z.object({
   jobStatuses: group(z.object({ label: str, value: str })),
 
   // The only User field that travels; applied after Resume rows exist.
-  user: z
-    .object({ defaultResumeId: optId })
-    .default({ defaultResumeId: null }),
+  user: z.object({ defaultResumeId: optId }).default({ defaultResumeId: null }),
 });
 
 export type BackupData = z.infer<typeof BackupDataSchema>;

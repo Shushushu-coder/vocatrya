@@ -2,7 +2,6 @@ import {
   getOverviewDataState,
   getOverviewReminders,
   getOverviewStats,
-  getRecentActivities,
   getRecentJobs,
 } from "@/actions/dashboard.actions";
 import GettingStarted from "@/components/dashboard/GettingStarted";
@@ -17,14 +16,12 @@ export async function generateMetadata() {
 }
 
 export default async function Dashboard() {
-  const [stats, remindersData, recentJobs, recentActivities, dataState] =
-    await Promise.all([
-      getOverviewStats(),
-      getOverviewReminders(),
-      getRecentJobs(),
-      getRecentActivities(),
-      getOverviewDataState(),
-    ]);
+  const [stats, remindersData, recentJobs, dataState] = await Promise.all([
+    getOverviewStats(),
+    getOverviewReminders(),
+    getRecentJobs(),
+    getOverviewDataState(),
+  ]);
   return (
     <div className="col-span-3 mx-auto grid w-full max-w-[1400px] min-w-0 auto-rows-max gap-4">
       <OverviewMetrics stats={stats} />
@@ -38,7 +35,7 @@ export default async function Dashboard() {
       {dataState === "empty" ? (
         <GettingStarted />
       ) : (
-        <RecentUpdates jobs={recentJobs} activities={recentActivities} />
+        <RecentUpdates jobs={recentJobs} />
       )}
     </div>
   );

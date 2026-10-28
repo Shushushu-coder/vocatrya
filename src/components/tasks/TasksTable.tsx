@@ -12,7 +12,6 @@ import {
   Pencil,
   Tags,
   Trash,
-  CirclePlay,
   Check,
   ArrowDown,
   ArrowRight,
@@ -66,7 +65,6 @@ type TasksTableProps = {
   deleteTask: (id: string) => void;
   editTask: (id: string) => void;
   onChangeTaskStatus: (id: string, status: TaskStatus) => void;
-  onStartActivity: (id: string) => void;
   groupBy?: TaskGroupBy;
   timeZone?: string;
 };
@@ -132,11 +130,13 @@ function groupTasksByDate(
   return groups;
 }
 
+const UNCATEGORIZED_GROUP = "__uncategorized__";
+
 function groupTasksByActivityType(tasks: Task[]): Record<string, Task[]> {
   const groups: Record<string, Task[]> = {};
 
   tasks.forEach((task) => {
-    const key = task.activityType?.label || "No Activity Type";
+    const key = task.activityType?.label || UNCATEGORIZED_GROUP;
     if (!groups[key]) {
       groups[key] = [];
     }
@@ -185,7 +185,6 @@ function TasksTable({
   deleteTask,
   editTask,
   onChangeTaskStatus,
-  onStartActivity,
   groupBy = "none",
   timeZone = runtimeTimeZone(),
 }: TasksTableProps) {
@@ -355,14 +354,6 @@ function TasksTable({
               </DropdownMenuSub>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer text-green-600"
-                onClick={() => onStartActivity(task.id)}
-              >
-                <CirclePlay className="mr-2 h-4 w-4" />
-                {t("tasks.startActivity")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
                 className="text-red-600 cursor-pointer"
                 onClick={() => onDeleteTask(task.id)}
               >
@@ -372,21 +363,6 @@ function TasksTable({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-      </TableCell>
-      <TableCell className="hidden sm:table-cell py-1 px-1">
-        <Button
-          title={t("tasks.startActivity")}
-          aria-haspopup="true"
-          size="icon"
-          variant="ghost"
-          onClick={() => onStartActivity(task.id)}
-          data-testid="task-start-activity-btn"
-          className="opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-300"
-        >
-          <span>
-            <CirclePlay className="text-green-600" />
-          </span>
-        </Button>
       </TableCell>
     </TableRow>
   );
@@ -413,9 +389,6 @@ function TasksTable({
         </TableHead>
         <TableHead className="h-9 px-1">
           <span className="sr-only">{t("common.actions")}</span>
-        </TableHead>
-        <TableHead className="hidden sm:table-cell h-9 px-1">
-          <span className="sr-only">{t("tasks.startActivity")}</span>
         </TableHead>
       </TableRow>
     </TableHeader>
@@ -477,7 +450,7 @@ function TasksTable({
   if (groupBy === "activityType") {
     return renderGroupedTables(
       Object.entries(groupTasksByActivityType(tasks)).map(([label, group]) => [
-        label === "No Activity Type" ? t("tasks.noActivityType") : label,
+        label === UNCATEGORIZED_GROUP ? t("tasks.noActivityType") : label,
         group,
       ]),
     );

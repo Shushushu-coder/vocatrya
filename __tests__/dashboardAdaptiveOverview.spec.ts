@@ -105,22 +105,19 @@ async function seedTask(status = "in-progress") {
   });
 }
 
-async function seedActivity(endTime: Date | null = new Date()) {
-  const type = await prisma.activityType.create({
-    data: { label: "Deep Work", value: `at-${randomUUID()}`, createdBy: userId },
-  });
-  return prisma.activity.create({
+async function seedActivityType() {
+  return prisma.activityType.create({
     data: {
-      userId,
-      activityName: "Deep Work",
-      startTime: new Date(),
-      endTime,
-      activityTypeId: type.id,
+      label: "Deep Work",
+      value: `at-${randomUUID()}`,
+      createdBy: userId,
     },
   });
 }
 
-async function seedQuestion(options: { preset?: boolean; deleted?: boolean } = {}) {
+async function seedQuestion(
+  options: { preset?: boolean; deleted?: boolean } = {},
+) {
   return prisma.question.create({
     data: {
       question: `q-${randomUUID()}`,
@@ -172,9 +169,9 @@ describe("legacy read family", () => {
     expect(await getOverviewDataState()).toBe("nonempty");
   });
 
-  it("reports nonempty with a single activity record", async () => {
-    await seedActivity();
-    expect(await getOverviewDataState()).toBe("nonempty");
+  it("stays empty when only a task-category dictionary row exists", async () => {
+    await seedActivityType();
+    expect(await getOverviewDataState()).toBe("empty");
   });
 
   it("reports nonempty with only a user-created question", async () => {

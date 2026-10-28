@@ -39,7 +39,7 @@ async function resolveDueWrite(
 }
 
 export const createTask = async (
-  data: z.infer<typeof AddTaskFormSchema>
+  data: z.infer<typeof AddTaskFormSchema>,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -68,7 +68,7 @@ export const createTask = async (
 };
 
 export const updateTask = async (
-  data: z.infer<typeof AddTaskFormSchema>
+  data: z.infer<typeof AddTaskFormSchema>,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -109,7 +109,7 @@ export const updateTask = async (
 
 export const updateTaskStatus = async (
   taskId: string,
-  status: TaskStatus
+  status: TaskStatus,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -133,7 +133,7 @@ export const updateTaskStatus = async (
 };
 
 export const deleteTaskById = async (
-  taskId: string
+  taskId: string,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -143,23 +143,10 @@ export const deleteTaskById = async (
         id: taskId,
         userId: user.id,
       },
-      include: {
-        activities: {
-          select: { id: true },
-        },
-      },
     });
 
     if (!task) {
       return { success: false, message: "Task not found" };
-    }
-
-    if (task.activities.length > 0) {
-      return {
-        success: false,
-        message:
-          "Cannot delete task with linked activity. Remove the activity first.",
-      };
     }
 
     await prisma.task.delete({

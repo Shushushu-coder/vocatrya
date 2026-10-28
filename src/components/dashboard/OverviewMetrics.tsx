@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, Send, SquareCheckBig, CalendarClock } from "lucide-react";
+import { BriefcaseBusiness, Send, SquareCheckBig } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useI18n } from "@/i18n";
 import type { OverviewStats } from "@/actions/dashboard.actions";
@@ -29,17 +29,11 @@ export default function OverviewMetrics({ stats }: { stats: OverviewStats }) {
       label: t("dashboard.metricOpenTasks"),
       value: stats.openTasks,
     },
-    {
-      key: "upcomingActivities",
-      icon: CalendarClock,
-      label: t("dashboard.metricUpcoming7d"),
-      value: stats.upcomingActivities,
-    },
   ];
 
   return (
     <div className="grid min-w-0 gap-4">
-      <div className="grid min-w-0 grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-4 xl:grid-cols-3">
         {items.map((item) => (
           <Card key={item.key} data-testid={`overview-metric-${item.key}`}>
             <CardContent className="flex items-center gap-3 px-4 py-3">

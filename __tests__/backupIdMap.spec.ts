@@ -80,18 +80,30 @@ describe("buildCreateData", () => {
   });
 
   it("leaves a null foreign key null", () => {
-    const map = mapWith({ "old-act": "new-act", "old-type": "new-type" });
+    const map = mapWith({ "old-task": "new-task", "old-type": "new-type" });
     const data = buildCreateData(
-      "Activity",
-      { id: "old-act", activityTypeId: "old-type", taskId: null, activityName: "x" },
+      "Task",
+      { id: "old-task", activityTypeId: "old-type", title: "x" },
       map,
       "u",
     );
-    expect(data.taskId).toBeNull();
+    expect(data.activityTypeId).toBe("new-type");
+
+    const unmapped = buildCreateData(
+      "Task",
+      { id: "old-task", activityTypeId: null, title: "x" },
+      map,
+      "u",
+    );
+    expect(unmapped.activityTypeId).toBeNull();
   });
 
   it("nulls an optional foreign key whose target is not in the backup", () => {
-    const map = mapWith({ "old-job": "new-job", "old-title": "new-title", "old-co": "new-co" });
+    const map = mapWith({
+      "old-job": "new-job",
+      "old-title": "new-title",
+      "old-co": "new-co",
+    });
     const data = buildCreateData(
       "Job",
       {
@@ -130,7 +142,10 @@ describe("buildCreateData", () => {
   });
 
   it("throws when a required foreign key is dangling", () => {
-    const map = mapWith({ "old-skill": "new-skill", "old-section": "new-section" });
+    const map = mapWith({
+      "old-skill": "new-skill",
+      "old-section": "new-section",
+    });
     expect(() =>
       buildCreateData(
         "Skill",
@@ -164,7 +179,10 @@ describe("buildCreateData", () => {
   });
 
   it("never leaks the backup's own ids into the created row", () => {
-    const map = mapWith({ "old-resume": "new-resume", "old-profile": "new-profile" });
+    const map = mapWith({
+      "old-resume": "new-resume",
+      "old-profile": "new-profile",
+    });
     const data = buildCreateData(
       "Resume",
       { id: "old-resume", profileId: "old-profile", FileId: null, title: "CV" },

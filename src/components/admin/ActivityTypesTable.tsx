@@ -31,8 +31,7 @@ type ActivityTypeRow = {
   id: string;
   label: string;
   value: string;
-  totalDuration: number;
-  _count?: { Activities?: number; Tasks?: number };
+  _count?: { Tasks?: number };
 };
 
 type ActivityTypesTableProps = {
@@ -52,27 +51,13 @@ function ActivityTypesTable({
   const [editTarget, setEditTarget] = useState<ActivityTypeRow | null>(null);
 
   const onDelete = (at: ActivityTypeRow) => {
-    const activityCount = at._count?.Activities ?? 0;
     const taskCount = at._count?.Tasks ?? 0;
 
-    if (activityCount > 0 || taskCount > 0) {
-      const links = [
-        activityCount > 0
-          ? t(
-              activityCount === 1
-                ? "library.activityCountOne"
-                : "library.activityCountMany",
-              { count: activityCount },
-            )
-          : "",
-        taskCount > 0
-          ? t(taskCount === 1 ? "library.taskCountOne" : "library.taskCountMany", {
-              count: taskCount,
-            })
-          : "",
-      ]
-        .filter(Boolean)
-        .join(t("library.listSeparator"));
+    if (taskCount > 0) {
+      const links = t(
+        taskCount === 1 ? "library.taskCountOne" : "library.taskCountMany",
+        { count: taskCount },
+      );
 
       setAlert({
         openState: true,
@@ -105,11 +90,6 @@ function ActivityTypesTable({
     }
   };
 
-  const formatHours = (minutes: number) => {
-    const hours = minutes / 60;
-    return hours % 1 === 0 ? hours.toString() : hours.toFixed(1);
-  };
-
   return (
     <>
       <Table>
@@ -119,9 +99,7 @@ function ActivityTypesTable({
             <TableHead className="hidden sm:table-cell">
               {t("library.value")}
             </TableHead>
-            <TableHead>{t("library.activitiesCount")}</TableHead>
             <TableHead>{t("library.tasksCount")}</TableHead>
-            <TableHead>{t("library.totalHours")}</TableHead>
             <TableHead>{t("common.actions")}</TableHead>
           </TableRow>
         </TableHeader>
@@ -133,15 +111,7 @@ function ActivityTypesTable({
                 {at.value}
               </TableCell>
               <TableCell className="font-medium">
-                {at._count?.Activities ?? 0}
-              </TableCell>
-              <TableCell className="font-medium">
                 {at._count?.Tasks ?? 0}
-              </TableCell>
-              <TableCell className="font-medium">
-                {t("common.hoursValue", {
-                  count: formatHours(at.totalDuration),
-                })}
               </TableCell>
               <TableCell>
                 <DropdownMenu>

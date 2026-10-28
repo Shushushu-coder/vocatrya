@@ -236,7 +236,10 @@ async function seedPhase4Graph() {
   });
   await prisma.resumeVariant.update({
     where: { id: variant.id },
-    data: { currentVersionId: version2.id, targetJobOpportunityId: opportunity.id },
+    data: {
+      currentVersionId: version2.id,
+      targetJobOpportunityId: opportunity.id,
+    },
   });
 
   const section = await prisma.resumeVariantSection.create({
@@ -432,19 +435,38 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
-    for (const row of data.ResumeVariantSectionItem) delete row.materialTitleSnapshot;
+    for (const row of data.ResumeVariantSectionItem)
+      delete row.materialTitleSnapshot;
     zip.file("data.json", JSON.stringify(data));
     try {
-      await importBackup(await zip.generateAsync({ type: "nodebuffer" }), userId, "phase4@example.com", true);
-      const items = await prisma.resumeVariantSectionItem.findMany({ where: { section: { version: { resumeVariant: { userId } } } } });
+      await importBackup(
+        await zip.generateAsync({ type: "nodebuffer" }),
+        userId,
+        "phase4@example.com",
+        true,
+      );
+      const items = await prisma.resumeVariantSectionItem.findMany({
+        where: { section: { version: { resumeVariant: { userId } } } },
+      });
       expect(items.length).toBeGreaterThan(0);
-      expect(items.every((item) => item.materialTitleSnapshot === null)).toBe(true);
-      const variant = await prisma.resumeVariant.findFirstOrThrow({ where: { userId } });
-      const service = new ResumeVariantService(prisma, userId, { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" });
+      expect(items.every((item) => item.materialTitleSnapshot === null)).toBe(
+        true,
+      );
+      const variant = await prisma.resumeVariant.findFirstOrThrow({
+        where: { userId },
+      });
+      const service = new ResumeVariantService(prisma, userId, {
+        ...process.env,
+        [AB_RUNTIME_FEATURE_ENV]: "true",
+        [AB_ROLLOUT_SCOPE_ENV]: "full",
+      });
       const version = await service.getVersion(variant.currentVersionId!);
-      expect(projectResumeVariantText(version)).not.toContain("Captured historical title");
+      expect(projectResumeVariantText(version)).not.toContain(
+        "Captured historical title",
+      );
       for (const item of version.sections.flatMap((section) => section.items)) {
-        if (item.careerMaterialItem) expect(item.materialTitleSnapshot).toBeNull();
+        if (item.careerMaterialItem)
+          expect(item.materialTitleSnapshot).toBeNull();
       }
     } finally {
       await importBackup(buffer, userId, "phase4@example.com", true);
@@ -454,7 +476,9 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
   it("writes formatVersion 6 and omits DataMigrationRun", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
-    const manifest = JSON.parse(await zip.file("manifest.json")!.async("string"));
+    const manifest = JSON.parse(
+      await zip.file("manifest.json")!.async("string"),
+    );
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
     expect(manifest.formatVersion).toBe(6);
     expect(manifest.containsSensitiveData).toBe(false);
@@ -469,7 +493,12 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
 
   it("restores the A+B graph, remaps deferred FKs, and keeps snapshots", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
-    const result = await importBackup(buffer, userId, "phase4@example.com", true);
+    const result = await importBackup(
+      buffer,
+      userId,
+      "phase4@example.com",
+      true,
+    );
     expect(result.counts.JobOpportunity).toBe(1);
     expect(result.counts.DataMigrationRun).toBeUndefined();
 
@@ -482,15 +511,22 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
 
     const opportunity = await prisma.jobOpportunity.findFirstOrThrow({
       where: { userId },
-      include: { campaign: true, currentJdVersion: { include: { currentParse: true } } },
+      include: {
+        campaign: true,
+        currentJdVersion: { include: { currentParse: true } },
+      },
     });
     expect(opportunity.campaign?.name).toBe("2026 Campus");
     expect(opportunity.currentJdVersionId).toBeTruthy();
-    expect(opportunity.currentJdVersionId).toBe(opportunity.currentJdVersion?.id);
+    expect(opportunity.currentJdVersionId).toBe(
+      opportunity.currentJdVersion?.id,
+    );
     expect(opportunity.currentJdVersion?.currentParseId).toBe(
       opportunity.currentJdVersion?.currentParse?.id,
     );
-    expect(opportunity.currentJdVersion?.currentParse?.inputHash).toBe("parse-input-hash");
+    expect(opportunity.currentJdVersion?.currentParse?.inputHash).toBe(
+      "parse-input-hash",
+    );
 
     const variant = await prisma.resumeVariant.findFirstOrThrow({
       where: { userId },
@@ -502,7 +538,13 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(variant.currentVersionId).toBe(variant.currentVersion?.id);
     expect(variant.versions).toHaveLength(2);
     const current = variant.currentVersion!;
-    expect((await prisma.resumeVariantSectionItem.findFirstOrThrow({ where: { section: { resumeVariantVersionId: current.id } } })).materialTitleSnapshot).toBe("Captured historical title");
+    expect(
+      (
+        await prisma.resumeVariantSectionItem.findFirstOrThrow({
+          where: { section: { resumeVariantVersionId: current.id } },
+        })
+      ).materialTitleSnapshot,
+    ).toBe("Captured historical title");
     expect(current.status).toBe("FROZEN");
     expect(current.layoutConfig).toBe(LAYOUT);
     expect(current.headerSnapshot).toBe(HEADER);
@@ -520,13 +562,19 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(expressions[0].evidenceStatus).toBe("LINKED");
     expect(expressions[1].evidenceStatus).toBe("UNLINKED");
     expect(expressions[1].evidenceLinks).toHaveLength(0);
-    expect(expressions[0].evidenceLinks[0].evidenceContentSnapshot).toBe(SNAPSHOT_TEXT);
-    expect(expressions[0].evidenceLinks[0].evidenceHashSnapshot).toBe(SNAPSHOT_HASH);
+    expect(expressions[0].evidenceLinks[0].evidenceContentSnapshot).toBe(
+      SNAPSHOT_TEXT,
+    );
+    expect(expressions[0].evidenceLinks[0].evidenceHashSnapshot).toBe(
+      SNAPSHOT_HASH,
+    );
 
     const liveEvidence = await prisma.careerEvidence.findFirstOrThrow({
       where: { materialItem: { userId }, content: LIVE_EVIDENCE },
     });
-    expect(expressions[0].evidenceLinks[0].careerEvidenceId).toBe(liveEvidence.id);
+    expect(expressions[0].evidenceLinks[0].careerEvidenceId).toBe(
+      liveEvidence.id,
+    );
     expect(expressions[0].evidenceLinks[0].evidenceContentSnapshot).not.toBe(
       liveEvidence.content,
     );
@@ -543,7 +591,10 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     const attempt = await prisma.applicationAttempt.findFirstOrThrow({
       where: { userId },
       include: {
-        processSteps: { include: { interviewDetail: true }, orderBy: { sortOrder: "asc" } },
+        processSteps: {
+          include: { interviewDetail: true },
+          orderBy: { sortOrder: "asc" },
+        },
       },
     });
     expect(attempt.channelLabel).toBe("Careers page");
@@ -551,8 +602,12 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(attempt.notes).toBe("Submitted after referral");
     expect(attempt.submittedResumeVersionId).toBe(current.id);
     expect(attempt.submittedResumeArtifactId).toBe(artifact.id);
-    expect(attempt.submittedAgainstJdVersionId).toBe(opportunity.currentJdVersionId);
-    const interviewStep = attempt.processSteps.find((s) => s.category === "INTERVIEW");
+    expect(attempt.submittedAgainstJdVersionId).toBe(
+      opportunity.currentJdVersionId,
+    );
+    const interviewStep = attempt.processSteps.find(
+      (s) => s.category === "INTERVIEW",
+    );
     expect(interviewStep?.label).toBe("Hiring manager");
     expect(interviewStep?.sortOrder).toBe(10);
     expect(interviewStep?.interviewDetail?.interviewFormat).toBe("ONSITE");
@@ -569,7 +624,9 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(fast.isStale).toBe(true);
     expect(fast.staleReasonCodes).toBe(JSON.stringify(["JD_CHANGED"]));
     expect(fast.fastScreeningDetail?.inputSnapshot).toContain("Build widgets");
-    expect(fast.jobDescriptionParseId).toBe(opportunity.currentJdVersion?.currentParseId);
+    expect(fast.jobDescriptionParseId).toBe(
+      opportunity.currentJdVersion?.currentParseId,
+    );
 
     const deep = await prisma.matchAnalysis.findFirstOrThrow({
       where: { userId, analysisType: "DEEP_MATCH" },
@@ -584,7 +641,9 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(deep.evidenceLinks[0].evidenceContentSnapshot).toBe(SNAPSHOT_TEXT);
     expect(current.sourceMatchAnalysisId).toBe(deep.id);
 
-    const maps = await prisma.legacyMigrationMap.findMany({ where: { userId } });
+    const maps = await prisma.legacyMigrationMap.findMany({
+      where: { userId },
+    });
     expect(maps.length).toBeGreaterThan(0);
     const job = await prisma.job.findFirstOrThrow({ where: { userId } });
     const jobMap = maps.find(
@@ -604,24 +663,32 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     const restoredMode = await resolveCareerRuntimeMode(prisma);
     expect(restoredMode.mode).not.toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
     expect(restoredMode.mode).toBe(CAREER_RUNTIME_MODE.AB_READY_DISABLED);
-    const enabledEnv = { ...process.env, [AB_RUNTIME_FEATURE_ENV]: "true", [AB_ROLLOUT_SCOPE_ENV]: "full" };
+    const enabledEnv = {
+      ...process.env,
+      [AB_RUNTIME_FEATURE_ENV]: "true",
+      [AB_ROLLOUT_SCOPE_ENV]: "full",
+    };
     const flagged = await resolveCareerRuntimeMode(prisma, { env: enabledEnv });
     expect(flagged.mode).toBe(CAREER_RUNTIME_MODE.AB_ENABLED);
   }, 180_000);
 
   it("does not duplicate Phase 3 backfill after restore", async () => {
     const beforeOpps = await prisma.jobOpportunity.count({ where: { userId } });
-    const beforeMaps = await prisma.legacyMigrationMap.count({ where: { userId } });
+    const beforeMaps = await prisma.legacyMigrationMap.count({
+      where: { userId },
+    });
     const second = await runLegacyMigration(migrateOpts());
     expect(second.phaseResult).toBe("PASS");
     expect(second.duplicated).toBe(0);
     expect(second.created.opportunities).toBe(0);
     expect(second.created.attempts).toBe(0);
     expect(second.created.resumeVariants).toBe(0);
-    expect(await prisma.jobOpportunity.count({ where: { userId } })).toBe(beforeOpps);
-    expect(await prisma.legacyMigrationMap.count({ where: { userId } })).toBeGreaterThanOrEqual(
-      beforeMaps,
+    expect(await prisma.jobOpportunity.count({ where: { userId } })).toBe(
+      beforeOpps,
     );
+    expect(
+      await prisma.legacyMigrationMap.count({ where: { userId } }),
+    ).toBeGreaterThanOrEqual(beforeMaps);
   }, 180_000);
 
   it("is semantically stable across backup → restore → backup", async () => {
@@ -657,9 +724,13 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     }
     expect(second.Company[0].notes).toBe(first.Company[0].notes);
     expect(
-      second.ResumeExpressionEvidence.map((row) => row.evidenceContentSnapshot).sort(),
+      second.ResumeExpressionEvidence.map(
+        (row) => row.evidenceContentSnapshot,
+      ).sort(),
     ).toEqual(
-      first.ResumeExpressionEvidence.map((row) => row.evidenceContentSnapshot).sort(),
+      first.ResumeExpressionEvidence.map(
+        (row) => row.evidenceContentSnapshot,
+      ).sort(),
     );
     expect(second.MatchAnalysis.map((row) => row.inputHash).sort()).toEqual(
       first.MatchAnalysis.map((row) => row.inputHash).sort(),
@@ -700,7 +771,6 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
       "Contact",
       "JobContact",
       "Task",
-      "Activity",
       "Question",
       "AutomationRun",
       "UserSettings",
@@ -723,7 +793,11 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     await prisma.jobOpportunity.create({
       data: {
         userId,
-        companyId: (await prisma.company.findFirstOrThrow({ where: { createdBy: userId } })).id,
+        companyId: (
+          await prisma.company.findFirstOrThrow({
+            where: { createdBy: userId },
+          })
+        ).id,
         title: "Stale leftover",
       },
     });
@@ -733,9 +807,13 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     expect(await prisma.jobOpportunity.count({ where: { userId } })).toBe(0);
     expect(await prisma.resumeVariant.count({ where: { userId } })).toBe(0);
     expect(await prisma.matchAnalysis.count({ where: { userId } })).toBe(0);
-    expect(await prisma.legacyMigrationMap.count({ where: { userId } })).toBe(0);
+    expect(await prisma.legacyMigrationMap.count({ where: { userId } })).toBe(
+      0,
+    );
     expect(await prisma.abMigrationState.count()).toBe(0);
-    const companies = await prisma.company.findMany({ where: { createdBy: userId } });
+    const companies = await prisma.company.findMany({
+      where: { createdBy: userId },
+    });
     expect(companies.map((c) => c.value)).toEqual(["legacy-co"]);
     expect(companies[0].notes).toBeNull();
   }, 180_000);
@@ -749,16 +827,22 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     const beforeOpps = await prisma.jobOpportunity.count({ where: { userId } });
     data.JobOpportunity[0].currentJdVersionId = "missing-jd-version";
     const broken = new JSZip();
-    broken.file("manifest.json", await zip.file("manifest.json")!.async("string"));
+    broken.file(
+      "manifest.json",
+      await zip.file("manifest.json")!.async("string"),
+    );
     broken.file("data.json", JSON.stringify(data));
     const bytes = await broken.generateAsync({ type: "nodebuffer" });
 
     await expect(
       importBackup(bytes, userId, "phase4-fail@example.com", true),
     ).rejects.toBeInstanceOf(BackupError);
-    expect(await prisma.jobOpportunity.count({ where: { userId } })).toBe(beforeOpps);
+    expect(await prisma.jobOpportunity.count({ where: { userId } })).toBe(
+      beforeOpps,
+    );
     expect(
-      (await prisma.jobOpportunity.findFirstOrThrow({ where: { userId } })).title,
+      (await prisma.jobOpportunity.findFirstOrThrow({ where: { userId } }))
+        .title,
     ).not.toBeUndefined();
   }, 180_000);
 });

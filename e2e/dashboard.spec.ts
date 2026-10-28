@@ -1,12 +1,5 @@
 import { type Page } from "@playwright/test";
-import {
-  test,
-  expect,
-  createNewJob,
-  selectOrCreate,
-  uniqueName,
-  type CleanupRegistry,
-} from "./fixtures";
+import { test, expect, createNewJob, uniqueName } from "./fixtures";
 
 async function navigateToDashboard(page: Page) {
   await page.goto("/dashboard");
@@ -18,113 +11,11 @@ async function navigateToAnalytics(page: Page) {
   await expect(page.getByTestId("analytics-panel")).toBeVisible();
 }
 
-// The running activity is a per-user singleton and specs run in parallel
-// against one shared user, so a concurrently running spec can interleave a
-// switch-confirm around our stop click. Retry the whole click/confirm
-// handshake until the Stop button actually disappears.
-async function stopRunningActivity(page: Page) {
-  const stopButton = page.getByRole("button", {
-    name: "Stop Activity",
-    exact: true,
-  });
-  const confirmSwitchBtn = page.getByRole("button", { name: "Stop & Start" });
-  await expect(async () => {
-    if (await stopButton.isVisible().catch(() => false)) {
-      await stopButton.click({ force: true });
-    }
-    if (await confirmSwitchBtn.isVisible().catch(() => false)) {
-      await confirmSwitchBtn.click({ force: true });
-    }
-    await expect(stopButton).not.toBeVisible({ timeout: 2000 });
-  }).toPass({ timeout: 10000 });
-}
-
-async function navigateToTasks(page: Page) {
-  await page.goto("/dashboard/tasks");
-  await page.getByTestId("add-task-btn").waitFor({ state: "visible" });
-}
-
-async function createTaskWithActivityType(
-  page: Page,
-  title: string,
-  activityType: string,
-  cleanup: CleanupRegistry,
-) {
-  await page.getByTestId("add-task-btn").click({ force: true });
-  await expect(page.getByTestId("task-form-dialog-title")).toBeVisible();
-  const titleInput = page.getByPlaceholder("Enter task title");
-  await titleInput.waitFor({ state: "visible" });
-  await titleInput.fill(title);
-  await titleInput.blur();
-
-  await page.getByText("Select activityType").click({ force: true });
-  await page
-    .getByPlaceholder("Create or Search activityType")
-    .fill(activityType);
-  const createOption = page.getByText(`Create: ${activityType}`);
-  const existingOption = page.getByRole("option", {
-    name: activityType,
-    exact: true,
-  });
-  await expect(createOption.or(existingOption).first()).toBeVisible();
-  if (await existingOption.isVisible()) {
-    await existingOption.click({ force: true });
-  } else {
-    await createOption.click({ force: true });
-  }
-  await expect(
-    page.getByPlaceholder("Create or Search activityType"),
-  ).not.toBeVisible({ timeout: 15000 });
-  cleanup.activityType(activityType);
-
-  const saveBtn = page.getByTestId("save-task-btn");
-  await expect(saveBtn).toBeEnabled();
-  await saveBtn.click();
-  await expect(page.getByTestId("task-form-dialog-title")).not.toBeVisible({
-    timeout: 10000,
-  });
-  cleanup.task(title);
-}
-
-// The New Activity dialog pre-fills valid start/end times (now .. now+5m),
-// so this creates a completed activity that lands directly in the recent
-// activities list without waiting on ACTIVITY_MIN_DURATION_MINUTES.
-async function createCompletedActivity(
-  page: Page,
-  activityName: string,
-  activityType: string,
-  cleanup: CleanupRegistry,
-) {
-  await page.goto("/dashboard/activities");
-  await page.getByTestId("add-activity-btn").waitFor({ state: "visible" });
-  await page.getByTestId("add-activity-btn").click();
-  await expect(page.getByText("Add New Activity")).toBeVisible();
-
-  await page
-    .getByPlaceholder("Ex: Job Search, Learning skill, etc")
-    .fill(activityName);
-  await selectOrCreate(
-    page,
-    "Activity Type",
-    "Create or Search activityType",
-    activityType,
-  );
-  cleanup.activityType(activityType);
-
-  await page.getByTestId("save-activity-btn").click();
-  await expect(page.getByText("Add New Activity")).not.toBeVisible({
-    timeout: 10000,
-  });
-  cleanup.activity(activityName);
-}
-
-// The "New" dropdown in the header exposes the four create flows; picking
+// The "New" dropdown in the header exposes the create flows; picking
 // one deep-links to the target page which auto-opens its dialog.
 async function createViaMenu(page: Page, menuitemName: string) {
   await page.getByTestId("header-create-menu").click();
-  await page
-    .getByRole("menuitem", { name: menuitemName, exact: true })
-    .click();
+  await page.getByRole("menuitem", { name: menuitemName, exact: true }).click();
 }
 
 test.describe("Dashboard overview page", () => {
@@ -138,7 +29,9 @@ test.describe("Dashboard overview page", () => {
         await page.getByRole("switch").click();
       },
     });
-    await expect(page.getByRole("row", { name: jobText }).first()).toBeVisible();
+    await expect(
+      page.getByRole("row", { name: jobText }).first(),
+    ).toBeVisible();
 
     await navigateToDashboard(page);
 
@@ -146,7 +39,6 @@ test.describe("Dashboard overview page", () => {
       "overview-metric-inProgress",
       "overview-metric-applied7d",
       "overview-metric-openTasks",
-      "overview-metric-upcomingActivities",
     ]) {
       await expect(page.getByTestId(metric)).toBeVisible();
     }
@@ -188,12 +80,6 @@ test.describe("Dashboard overview page", () => {
     await expect(
       page.getByTestId("question-form-dialog-title"),
     ).not.toBeVisible();
-
-    await navigateToDashboard(page);
-    await createViaMenu(page, "Activities");
-    await expect(page).toHaveURL(/\/dashboard\/activities/, { timeout: 30000 });
-    await expect(page.getByText("Add New Activity")).toBeVisible();
-    await page.keyboard.press("Escape");
   });
 
   test("upload entry lands on the career profile surface", async ({ page }) => {
@@ -239,10 +125,6 @@ test.describe("Analytics board", () => {
     await expect(
       page.getByRole("tab", { name: "Status breakdown" }),
     ).toHaveAttribute("data-state", "active");
-    await tabs.getByRole("tab", { name: "Activity breakdown" }).click();
-    await expect(
-      page.getByRole("tab", { name: "Activity breakdown" }),
-    ).toHaveAttribute("data-state", "active");
 
     const windowToggle = page.getByTestId("analytics-window-toggle");
     await windowToggle.getByRole("button", { name: "30 days" }).click();
@@ -251,7 +133,10 @@ test.describe("Analytics board", () => {
     ).toHaveClass(/bg-primary/);
 
     await expect(
-      page.getByRole("heading", { name: "Activity Calendar", exact: true }),
+      page.getByRole("heading", {
+        name: "Job Application Calendar",
+        exact: true,
+      }),
     ).toBeVisible();
     const currentYear = new Date().getFullYear().toString();
     await page.getByLabel("Select year").click();
@@ -262,42 +147,19 @@ test.describe("Analytics board", () => {
 });
 
 test.describe("Dashboard recent updates", () => {
-  test("should not surface a very short discarded activity", async ({
+  test("recent updates surface a newly created job", async ({
     page,
     cleanup,
   }) => {
-    // Activities below ACTIVITY_MIN_DURATION_MINUTES are discarded on stop
-    // (src/context/ActivityContext.tsx), so a start immediately followed by
-    // a stop is deleted server-side rather than saved.
-    const taskTitle = uniqueName("E2E Dashboard Activity Task");
-    const activityType = uniqueName("E2E Dashboard Activity Type");
-    await navigateToTasks(page);
-    await createTaskWithActivityType(page, taskTitle, activityType, cleanup);
-    const taskRow = page
-      .getByRole("row", { name: new RegExp(taskTitle, "i") })
-      .first();
-    await expect(taskRow).toBeVisible({ timeout: 10000 });
-
-    await taskRow.hover();
-    await taskRow.getByTestId("task-start-activity-btn").click({ force: true });
-    // If another activity was already running (e.g. from a concurrently
-    // running spec), confirm the switch instead of hanging on the dialog.
-    const confirmSwitchBtn = page.getByRole("button", { name: "Stop & Start" });
-    try {
-      await confirmSwitchBtn.waitFor({ state: "visible", timeout: 3000 });
-      await confirmSwitchBtn.click();
-    } catch {
-      // No conflicting activity, continue.
-    }
+    const jobText = uniqueName("dashboard recent job");
+    await createNewJob(page, jobText, cleanup, {});
     await expect(
-      page.getByRole("button", { name: "Stop Activity", exact: true }),
-    ).toBeVisible({ timeout: 10000 });
-
-    await stopRunningActivity(page);
+      page.getByRole("row", { name: jobText }).first(),
+    ).toBeVisible();
 
     await navigateToDashboard(page);
     await expect(
-      page.getByTestId("recent-updates").getByText(taskTitle, { exact: true }),
-    ).not.toBeVisible();
+      page.getByTestId("recent-updates").getByRole("link", { name: jobText }),
+    ).toBeVisible();
   });
 });

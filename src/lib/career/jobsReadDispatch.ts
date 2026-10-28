@@ -11,19 +11,9 @@ import {
 } from "./jobOpportunityAdapter";
 import { isAbJobReadMode } from "./jobsReadCapabilities";
 import { CAREER_DATA_ORIGIN, resolveCareerRuntimeMode } from "./runtimeMode";
-import {
-  deriveUiStatus,
-  isOfferUiStatus,
-  pickLatestAttempt,
-} from "./uiStatus";
-import {
-  isAppliedAttempt,
-  APPLIED_ATTEMPT_WHERE,
-} from "./applicationFact";
-import {
-  OPPORTUNITY_STATUS,
-  PROCESS_STEP_CATEGORY,
-} from "./identities";
+import { deriveUiStatus, isOfferUiStatus, pickLatestAttempt } from "./uiStatus";
+import { isAppliedAttempt, APPLIED_ATTEMPT_WHERE } from "./applicationFact";
+import { OPPORTUNITY_STATUS, PROCESS_STEP_CATEGORY } from "./identities";
 
 export type JobsReadFamily = "ab" | "legacy" | "blocked";
 
@@ -267,7 +257,10 @@ function buildLegacyJobsWhere(userId: string, filters: JobsListFilters) {
   if (filter !== "dismissed") {
     whereClause.AND = [
       {
-        OR: [{ discoveryStatus: null }, { discoveryStatus: { not: "dismissed" } }],
+        OR: [
+          { discoveryStatus: null },
+          { discoveryStatus: { not: "dismissed" } },
+        ],
       },
     ];
   }
@@ -602,7 +595,7 @@ export async function loadJobsAppliedDateCounts(
 export async function loadRecentJobs(
   db: PrismaClient,
   userId: string,
-  take = APP_CONSTANTS.RECENT_NUM_JOBS_ACTIVITIES,
+  take = APP_CONSTANTS.RECENT_NUM_JOBS,
   env: NodeJS.ProcessEnv = process.env,
 ) {
   const { family, reason } = await resolveJobsReadFamily(db, env);
@@ -695,35 +688,36 @@ export async function loadJobsBoardTotals(
     };
   }
 
-  const [total, applied, interviews, offers, inProgress] = await db.$transaction([
-    db.job.count({ where: { userId, ...NOT_DISMISSED_WHERE } }),
-    db.job.count({
-      where: { userId, applied: true, ...NOT_DISMISSED_WHERE },
-    }),
-    // The legacy Interview relation is a stub with no date; the honest
-    // countable unit is a position currently at interview stage.
-    db.job.count({
-      where: {
-        userId,
-        Status: { value: "interview" },
-        ...NOT_DISMISSED_WHERE,
-      },
-    }),
-    db.job.count({
-      where: {
-        userId,
-        Status: { value: { in: ["offer", "offer-accepted"] } },
-        ...NOT_DISMISSED_WHERE,
-      },
-    }),
-    db.job.count({
-      where: {
-        userId,
-        Status: { value: { notIn: [...LEGACY_TERMINAL_STATUS_VALUES] } },
-        ...NOT_DISMISSED_WHERE,
-      },
-    }),
-  ]);
+  const [total, applied, interviews, offers, inProgress] =
+    await db.$transaction([
+      db.job.count({ where: { userId, ...NOT_DISMISSED_WHERE } }),
+      db.job.count({
+        where: { userId, applied: true, ...NOT_DISMISSED_WHERE },
+      }),
+      // The legacy Interview relation is a stub with no date; the honest
+      // countable unit is a position currently at interview stage.
+      db.job.count({
+        where: {
+          userId,
+          Status: { value: "interview" },
+          ...NOT_DISMISSED_WHERE,
+        },
+      }),
+      db.job.count({
+        where: {
+          userId,
+          Status: { value: { in: ["offer", "offer-accepted"] } },
+          ...NOT_DISMISSED_WHERE,
+        },
+      }),
+      db.job.count({
+        where: {
+          userId,
+          Status: { value: { notIn: [...LEGACY_TERMINAL_STATUS_VALUES] } },
+          ...NOT_DISMISSED_WHERE,
+        },
+      }),
+    ]);
   return { total, applied, interviews, offers, inProgress };
 }
 
@@ -792,7 +786,9 @@ export async function loadUpcomingJobDeadlines(
   userId: string,
   range: { start: Date; end: Date },
   env: NodeJS.ProcessEnv = process.env,
-): Promise<Array<{ id: string; title: string; company: string | null; dueDate: Date }>> {
+): Promise<
+  Array<{ id: string; title: string; company: string | null; dueDate: Date }>
+> {
   const { family, reason } = await resolveJobsReadFamily(db, env);
   rejectBlockedJobs(family, reason);
   if (family === "ab") {

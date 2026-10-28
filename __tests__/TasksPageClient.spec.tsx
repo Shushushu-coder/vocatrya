@@ -51,12 +51,6 @@ vi.mock("next/navigation", () => ({
   useSearchParams: vi.fn().mockReturnValue(new URLSearchParams()),
 }));
 
-vi.mock("@/context/ActivityContext", () => ({
-  useActivity: vi.fn(() => ({
-    refreshCurrentActivity: vi.fn(),
-  })),
-}));
-
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
@@ -144,11 +138,11 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       // Check if sidebar is rendered
-      expect(screen.getByText("Activity Types")).toBeInTheDocument();
+      expect(screen.getByText("Categories")).toBeInTheDocument();
       expect(screen.getByText("Development")).toBeInTheDocument();
       expect(screen.getByText("Testing")).toBeInTheDocument();
 
@@ -162,7 +156,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       expect(screen.getByText("8")).toBeInTheDocument();
@@ -174,7 +168,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       expect(screen.getByText("5")).toBeInTheDocument(); // Development count
@@ -189,7 +183,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const allButton = screen.getByRole("button", { name: /All/i });
@@ -208,7 +202,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const developmentButton = screen.getByRole("button", {
@@ -233,7 +227,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       // First click on a filter
@@ -267,7 +261,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const developmentButton = screen.getByRole("button", {
@@ -295,10 +289,10 @@ describe("TasksPageClient Component", () => {
           activityTypes={[]}
           activityTypesWithCounts={[]}
           totalTasks={0}
-        />
+        />,
       );
 
-      expect(screen.getByText("Activity Types")).toBeInTheDocument();
+      expect(screen.getByText("Categories")).toBeInTheDocument();
       expect(screen.getByText("Tasks")).toBeInTheDocument();
     });
 
@@ -311,7 +305,7 @@ describe("TasksPageClient Component", () => {
             taskCount: 0,
           }))}
           totalTasks={0}
-        />
+        />,
       );
 
       const zeroElements = screen.queryAllByText("0");
@@ -326,7 +320,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       // Check if main container has correct classes
@@ -340,7 +334,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const sidebar = container.querySelector(".w-48.border-r.py-4");
@@ -353,7 +347,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const tasksContainer = container.querySelector(".flex-1");
@@ -374,7 +368,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const developmentButton = screen.getByRole("button", {
@@ -390,7 +384,7 @@ describe("TasksPageClient Component", () => {
           "type-1",
           expect.any(Array),
           undefined,
-          "none"
+          "none",
         );
       });
     });
@@ -407,7 +401,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       // First select a filter
@@ -423,7 +417,7 @@ describe("TasksPageClient Component", () => {
           "type-1",
           expect.any(Array),
           undefined,
-          "none"
+          "none",
         );
       });
 
@@ -441,7 +435,7 @@ describe("TasksPageClient Component", () => {
           undefined,
           expect.any(Array),
           undefined,
-          "none"
+          "none",
         );
       });
     });
@@ -497,7 +491,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={manyActivityTypes}
           activityTypesWithCounts={manyActivityTypes}
           totalTasks={27}
-        />
+        />,
       );
 
       expect(screen.getByText("Development")).toBeInTheDocument();
@@ -547,7 +541,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={manyActivityTypes}
           activityTypesWithCounts={manyActivityTypes}
           totalTasks={18}
-        />
+        />,
       );
 
       const developmentButton = screen.getByRole("button", {
@@ -580,7 +574,7 @@ describe("TasksPageClient Component", () => {
   describe("URL Persistence", () => {
     it("should initialize the selected filter from the activityType URL param", () => {
       (useSearchParams as any).mockReturnValue(
-        new URLSearchParams("activityType=type-1")
+        new URLSearchParams("activityType=type-1"),
       );
 
       render(
@@ -588,7 +582,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const developmentButton = screen.getByRole("button", {
@@ -605,7 +599,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const developmentButton = screen.getByRole("button", {
@@ -616,14 +610,14 @@ describe("TasksPageClient Component", () => {
       await waitFor(() => {
         expect(routerMock.replace).toHaveBeenCalledWith(
           "/dashboard/tasks?activityType=type-1",
-          { scroll: false }
+          { scroll: false },
         );
       });
     });
 
     it("should remove the activityType param from the URL when All is clicked", async () => {
       (useSearchParams as any).mockReturnValue(
-        new URLSearchParams("activityType=type-1")
+        new URLSearchParams("activityType=type-1"),
       );
       const routerMock = (useRouter as any)();
 
@@ -632,7 +626,7 @@ describe("TasksPageClient Component", () => {
           activityTypes={mockActivityTypes}
           activityTypesWithCounts={mockActivityTypesWithCounts}
           totalTasks={8}
-        />
+        />,
       );
 
       const allButton = screen.getByRole("button", { name: /All/i });

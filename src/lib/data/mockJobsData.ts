@@ -1,6 +1,4 @@
-import { MOCK_DATA_IDENTIFIER } from "@/lib/data/mockActivities";
-
-export { MOCK_DATA_IDENTIFIER };
+export const MOCK_DATA_IDENTIFIER = "[MOCK_DATA]";
 
 export const mockJobDescriptions = [
   "We are looking for a talented engineer to join our team and help build scalable, high-performance web applications. You will work closely with product and design teams to deliver features that delight our users.",

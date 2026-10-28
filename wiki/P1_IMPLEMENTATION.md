@@ -34,6 +34,8 @@
 
 ### ACTIVITY-RETIRE：彻底移除求职活动，独立保留任务分类（第一修改任务）
 
+**2026-10-29 Owner 冻结备份策略**：旧备份包含非空 `Activity` 组时整包拒绝，在任何写入或清空前给出明确错误；空 `Activity: []` 组兼容剥离，旧 manifest 的 `Activity: 0` 不阻断导入。不实施受控跳过非空组。该决策不代表 Main 已集成、功能验收通过或真实库迁移获授权；状态在后续集成时同步。
+
 - **优先级 P1；范围 IN_SCOPE；实现状态 MISSING；`passes: false`。** 2026-10-28 Owner 已完成产品决策：当前版本尚未发布，极少量 Activity 历史记录仅属测试账号数据，**不归档、不迁移保留、不承担旧 Activity 备份兼容**。本工作包排在本 P1 台账第一位，但登记计划**不等于授权执行删除、真实数据库迁移、Commit、Push 或部署**。
 - **审计依据**：Owner 提供的《Vocatrya Job Activity Dependency Audit Report》，结论 `COMPLETE`，审计时 main HEAD 为 `879857587552c6c1ee9689695bca90ae474c449e`。核心证据：`Activity` 是独立的时间记录/休息系统；`Task.activityTypeId` 可选且引用 `ActivityType`；任务删除受到活动行检查的应用层阻断；Dashboard/Analytics 消费活动计数或时长，投递热力图色块实际来自投递数；Activity 备份休息字段有必填限制。**这是所提供审计结论，不代表本轮已访问并复核当前仓库**，实施前须重新核对实时 HEAD/Dirty 和实际调用点。
 
@@ -53,7 +55,7 @@
 2. **先独立任务分类**：维持 `Task.activityTypeId` 可空，支持未分类任务与分类的创建、编辑、查询、筛选、分组；从 Activity 写入和引用计数中解耦类型 CRUD，删除类型时继续保护任务引用；界面称「任务分类 / Task Category」。底层 `ActivityType` 是否重命名由最小风险决定，**不把重命名当成本轮必选动作**。
 3. **解除跨模块硬依赖**：移除 `deleteTaskById` 对历史活动行的拒绝，去掉 Tasks 的开始活动操作；移除 `getOverviewStats`、`getRecentActivities`、`getOverviewDataState` 中的活动统计/空账号逻辑，保持空账号引导基于实际保留业务；移除 `getJobsActivitySummary` 的活动时长图和 `getActivityCalendarData` 中小时提示及其活动查询，保留投递色块、职位/流程统计和提醒。清理未使用的 `getActivityDataForPeriod` 等独占代码。
 4. **拆除 Activity 产品与运行时**：移除活动页及路由、Top Bar/Sidebar/引导入口、Action/Query、ActivityProvider、GlobalActivityBanner、计时休息组件、定时器与状态持久化恢复、相关开发假数据；同步处理 i18n、测试、导航策略、桌面路由清单和不再适用的文档。不要引入设置隐藏开关、替代计时器或新的效率评分。
-5. **数据库与备份收口**：在确认没有生产调用后，新增独立 Prisma Migration（只追加新的迁移文件）以移除 `Activity` 模型对应表与外键；不编辑既有已执行迁移。同步移除 `Activity` 在备份 Schema/manifest、ordering、idmap、emptiness 等中的分组和引用，按现有版本策略处理 schema/format 契约；**不为旧 Activity 行（含缺少休息字段的旧行）维护数据恢复兼容**；含旧 Activity 的历史备份应整包拒绝还是受控忽略该分组，需在独立备份合同中明确并提供可见错误/结果，不能静默丢失其他业务数据；必须保证其他备份分组仍可导入导出，特别是 `ActivityType` → `Task` 的分类关系。活动行是可丢弃测试数据，不能据此误删任务、类型、职位或任何真实业务数据。
+5. **数据库与备份收口**：在确认没有生产调用后，新增独立 Prisma Migration（只追加新的迁移文件）以移除 `Activity` 模型对应表与外键；不编辑既有已执行迁移。同步移除 `Activity` 在备份 Schema/manifest、ordering、idmap、emptiness 等中的分组和引用，按现有版本策略处理 schema/format 契约；**不为旧 Activity 行（含缺少休息字段的旧行）维护数据恢复兼容**；按 2026-10-29 Owner 决策，含非空 Activity 组的历史备份在任何写入或清空前整包拒绝并明确提示，空组兼容剥离，不静默丢失其他业务数据；必须保证其他备份分组仍可导入导出，特别是 `ActivityType` → `Task` 的分类关系。活动行是可丢弃测试数据，不能据此误删任务、类型、职位或任何真实业务数据。
 6. **分层验证与授权门槛**：先做类型检查、相关 lint/单测、静态残余引用搜索、备份导出导入往返、隔离合成数据库的新迁移及外键校验，再做 Dashboard、Tasks、Analytics、投递日历及隔离 Windows Electron 的受影响路由/交互验收。触及真实本地或生产数据库的迁移与物理删除，必须先单独核实库身份、备份策略及获得 Owner 明确授权；Commit、Merge、Push、Release、Deploy 均需各自授权。
 
 **最低验收矩阵**
@@ -130,7 +132,7 @@
 
 | 工作包 | 依赖与实施约束 |
 | --- | --- |
-| ACTIVITY-RETIRE | 先解耦 Task 分类再移除 Activity；Schema/Backup 由单一 Owner 收口；**旧 Activity 备份导入策略**（整包拒绝或受控跳过）及**真实目标库迁移是否进入 `passes` 门槛**实施前须明确，不得静默丢失其他数据。 |
+| ACTIVITY-RETIRE | 先解耦 Task 分类再移除 Activity；Schema/Backup 由单一 Owner 收口；旧 Activity 备份已冻结为非空整包拒绝、空组兼容剥离；**真实目标库迁移是否进入 `passes` 门槛**仍须明确，不得静默丢失其他数据。 |
 | BD-ARCHIVE | 与职位/对话列表、统计口径、引用与用户数据隔离相关；应明确归档状态的持久化、恢复冲突和备份行为，不自动变成 30 天清理/回收站。 |
 | AI 三路径 | 可共用业务 AI 执行接口与 Settings 的 Model Assignment，但认证、凭据、用量、能力验证及每条路径的验收独立；Managed AI 的服务端部署/网关/预算须另设 Gate。 |
 | RESUME-BUILDER | 先核查当前 Resume/Career Material/Variant 契约，明确结构化 JSON Schema、文件格式和导出/分页合同；不以旧匹配功能存在代替简历编辑器验收。 |

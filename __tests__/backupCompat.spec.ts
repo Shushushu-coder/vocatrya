@@ -113,6 +113,41 @@ describe("backup v3 compatibility", () => {
     expect(JSON.stringify(data)).not.toContain("CandidateSensitiveInfo");
   });
 
+  it("rejects a legacy backup that still carries Activity rows", () => {
+    expect(() =>
+      normalizeBackupData(
+        { Activity: [{ id: "a1", title: "Job Search" }], Task: [] },
+        false,
+      ),
+    ).toThrow(BackupError);
+    expect(() =>
+      normalizeBackupData(
+        { Activity: [{ id: "a1", title: "Job Search" }] },
+        false,
+      ),
+    ).toThrow(/retired job-activity/);
+  });
+
+  it("strips an empty Activity group and tolerates a legacy Activity:0 count", () => {
+    const normalized = normalizeBackupData(
+      { Activity: [], Task: [] },
+      false,
+    ) as Record<string, unknown>;
+    expect(normalized).not.toHaveProperty("Activity");
+    expect(normalized).toHaveProperty("Task");
+
+    const manifest = normalizeManifest({
+      formatVersion: 5,
+      appVersion: "1.2.0",
+      exportedAt: "2026-01-01T00:00:00.000Z",
+      sourceEmail: "a@b.com",
+      counts: { Activity: 0, Task: 0 },
+      containsSensitiveData: false,
+    });
+    expect(manifest.counts.Activity).toBe(0);
+    expect(manifest.counts.Task).toBe(0);
+  });
+
   it("a v5-era reader rejects the v6 wire format instead of degrading", async () => {
     // The shipped v5 ManifestSchema is the literal union 1-5. If a v6 backup
     // parsed there, the tagId keys it cannot restore would be silently

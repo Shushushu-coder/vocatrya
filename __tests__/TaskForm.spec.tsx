@@ -11,8 +11,12 @@ vi.mock("@/utils/user.utils", () => ({
 }));
 
 vi.mock("@/actions/task.actions", () => ({
-  createTask: vi.fn().mockResolvedValue({ success: true, data: { id: "new-task-id" } }),
-  updateTask: vi.fn().mockResolvedValue({ success: true, data: { id: "task-id" } }),
+  createTask: vi
+    .fn()
+    .mockResolvedValue({ success: true, data: { id: "new-task-id" } }),
+  updateTask: vi
+    .fn()
+    .mockResolvedValue({ success: true, data: { id: "task-id" } }),
 }));
 
 global.ResizeObserver = class ResizeObserver {
@@ -65,7 +69,6 @@ describe("TaskForm Component", () => {
   const mockResetEditTask = vi.fn();
   const mockOnTaskSaved = vi.fn();
   const mockSetDialogOpen = vi.fn();
-  const mockOnSaveAndStart = vi.fn();
   const user = userEvent.setup({ skipHover: true });
 
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -86,7 +89,7 @@ describe("TaskForm Component", () => {
           onTaskSaved={mockOnTaskSaved}
           dialogOpen={true}
           setDialogOpen={mockSetDialogOpen}
-        />
+        />,
       );
     });
 
@@ -98,7 +101,7 @@ describe("TaskForm Component", () => {
 
     it("should show all form fields", () => {
       expect(screen.getByLabelText(/Title/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Activity Type/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Category/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Status/i)).toBeInTheDocument();
       expect(screen.getByText(/Priority:/i)).toBeInTheDocument();
       expect(screen.getByText(/% Complete:/i)).toBeInTheDocument();
@@ -123,7 +126,7 @@ describe("TaskForm Component", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText("Title must be at least 2 characters.")
+          screen.getByText("Title must be at least 2 characters."),
         ).toBeInTheDocument();
       });
     });
@@ -132,7 +135,7 @@ describe("TaskForm Component", () => {
       const titleInput = screen.getByLabelText(/Title/i);
       await user.type(titleInput, "New Test Task");
 
-      const activityTypeCombobox = screen.getByLabelText(/Activity Type/i);
+      const activityTypeCombobox = screen.getByLabelText(/Category/i);
       await user.click(activityTypeCombobox);
       const developmentOption = screen.getByRole("option", {
         name: "Development",
@@ -151,7 +154,7 @@ describe("TaskForm Component", () => {
             status: "in-progress",
             priority: 5,
             percentComplete: 0,
-          })
+          }),
         );
         expect(mockOnTaskSaved).toHaveBeenCalledTimes(1);
         expect(mockSetDialogOpen).toHaveBeenCalledWith(false);
@@ -168,16 +171,16 @@ describe("TaskForm Component", () => {
     });
 
     it("should display activity types in combobox", async () => {
-      const activityTypeCombobox = screen.getByLabelText(/Activity Type/i);
+      const activityTypeCombobox = screen.getByLabelText(/Category/i);
       await user.click(activityTypeCombobox);
 
       const options = screen.getAllByRole("option");
       expect(options.length).toBeGreaterThan(0);
       expect(
-        screen.getByRole("option", { name: "Development" })
+        screen.getByRole("option", { name: "Development" }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("option", { name: "Testing" })
+        screen.getByRole("option", { name: "Testing" }),
       ).toBeInTheDocument();
     });
 
@@ -186,16 +189,16 @@ describe("TaskForm Component", () => {
       await user.click(statusSelect);
 
       expect(
-        screen.getByRole("option", { name: "In Progress" })
+        screen.getByRole("option", { name: "In Progress" }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("option", { name: "Complete" })
+        screen.getByRole("option", { name: "Complete" }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("option", { name: "Needs Attention" })
+        screen.getByRole("option", { name: "Needs Attention" }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("option", { name: "Cancelled" })
+        screen.getByRole("option", { name: "Cancelled" }),
       ).toBeInTheDocument();
     });
 
@@ -215,7 +218,7 @@ describe("TaskForm Component", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText("Title must be at least 2 characters.")
+          screen.getByText("Title must be at least 2 characters."),
         ).toBeInTheDocument();
       });
     });
@@ -253,7 +256,6 @@ describe("TaskForm Component", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-      activities: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -267,7 +269,7 @@ describe("TaskForm Component", () => {
           onTaskSaved={mockOnTaskSaved}
           dialogOpen={true}
           setDialogOpen={mockSetDialogOpen}
-        />
+        />,
       );
     });
 
@@ -305,7 +307,7 @@ describe("TaskForm Component", () => {
             status: "needs-attention",
             priority: 7,
             percentComplete: 60,
-          })
+          }),
         );
         expect(mockOnTaskSaved).toHaveBeenCalledTimes(1);
         expect(mockSetDialogOpen).toHaveBeenCalledWith(false);
@@ -348,7 +350,7 @@ describe("TaskForm Component", () => {
           onTaskSaved={mockOnTaskSaved}
           dialogOpen={true}
           setDialogOpen={mockSetDialogOpen}
-        />
+        />,
       );
     });
 
@@ -383,7 +385,6 @@ describe("TaskForm Component", () => {
         dueDate: null,
         activityTypeId: null,
         activityType: null,
-        activities: [],
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -401,7 +402,7 @@ describe("TaskForm Component", () => {
           onTaskSaved={mockOnTaskSaved}
           dialogOpen={true}
           setDialogOpen={mockSetDialogOpen}
-        />
+        />,
       );
 
       // Just verify that when update fails, onTaskSaved is not called
@@ -410,177 +411,15 @@ describe("TaskForm Component", () => {
     });
   });
 
-  describe("Save and Start", () => {
-    beforeEach(() => {
-      (createTask as any).mockResolvedValue({
-        success: true,
-        data: { id: "new-task-id" },
-      });
-      (updateTask as any).mockResolvedValue({
-        success: true,
-        data: { id: "task-id" },
-      });
-    });
-
-    it("should not show the Save & Start button when onSaveAndStart is not provided", () => {
-      render(
-        <TaskForm
-          activityTypes={mockActivityTypes}
-          editTask={null}
-          resetEditTask={mockResetEditTask}
-          onTaskSaved={mockOnTaskSaved}
-          dialogOpen={true}
-          setDialogOpen={mockSetDialogOpen}
-        />
-      );
-
-      expect(
-        screen.queryByTestId("save-and-start-task-btn")
-      ).not.toBeInTheDocument();
-    });
-
-    it("should create the task and invoke onSaveAndStart with the new task id", async () => {
-      render(
-        <TaskForm
-          activityTypes={mockActivityTypes}
-          editTask={null}
-          resetEditTask={mockResetEditTask}
-          onTaskSaved={mockOnTaskSaved}
-          dialogOpen={true}
-          setDialogOpen={mockSetDialogOpen}
-          onSaveAndStart={mockOnSaveAndStart}
-        />
-      );
-
-      const titleInput = screen.getByLabelText(/Title/i);
-      await user.type(titleInput, "New Test Task");
-
-      const activityTypeCombobox = screen.getByLabelText(/Activity Type/i);
-      await user.click(activityTypeCombobox);
-      const developmentOption = screen.getByRole("option", {
-        name: "Development",
-      });
-      await user.click(developmentOption);
-
-      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
-      await user.click(saveAndStartBtn);
-
-      await waitFor(() => {
-        expect(createTask).toHaveBeenCalledTimes(1);
-        expect(mockOnTaskSaved).toHaveBeenCalledTimes(1);
-        expect(mockSetDialogOpen).toHaveBeenCalledWith(false);
-        expect(mockOnSaveAndStart).toHaveBeenCalledWith("new-task-id");
-      });
-    });
-
-    it("should update the task and invoke onSaveAndStart with the existing task id", async () => {
-      const mockEditTask: Task = {
-        id: "task-id",
-        userId: "user-id",
-        title: "Existing Task",
-        description: "Existing description",
-        status: "in-progress",
-        priority: 5,
-        percentComplete: 0,
-        dueDate: null,
-        activityTypeId: "type-1",
-        activityType: {
-          id: "type-1",
-          label: "Development",
-          value: "development",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        activities: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      render(
-        <TaskForm
-          activityTypes={mockActivityTypes}
-          editTask={mockEditTask}
-          resetEditTask={mockResetEditTask}
-          onTaskSaved={mockOnTaskSaved}
-          dialogOpen={true}
-          setDialogOpen={mockSetDialogOpen}
-          onSaveAndStart={mockOnSaveAndStart}
-        />
-      );
-
-      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
-      await user.click(saveAndStartBtn);
-
-      await waitFor(() => {
-        expect(updateTask).toHaveBeenCalledTimes(1);
-        expect(mockOnSaveAndStart).toHaveBeenCalledWith("task-id");
-      });
-    });
-
-    it("should not invoke onSaveAndStart when create fails", async () => {
-      (createTask as any).mockResolvedValueOnce({
-        success: false,
-        message: "Failed to create task",
-      });
-
-      render(
-        <TaskForm
-          activityTypes={mockActivityTypes}
-          editTask={null}
-          resetEditTask={mockResetEditTask}
-          onTaskSaved={mockOnTaskSaved}
-          dialogOpen={true}
-          setDialogOpen={mockSetDialogOpen}
-          onSaveAndStart={mockOnSaveAndStart}
-        />
-      );
-
-      const titleInput = screen.getByLabelText(/Title/i);
-      await user.type(titleInput, "New Test Task");
-
-      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
-      await user.click(saveAndStartBtn);
-
-      await waitFor(() => {
-        expect(createTask).toHaveBeenCalledTimes(1);
-      });
-      expect(mockOnSaveAndStart).not.toHaveBeenCalled();
-    });
-
-    it("should not invoke onSaveAndStart when the regular Save button is used", async () => {
-      render(
-        <TaskForm
-          activityTypes={mockActivityTypes}
-          editTask={null}
-          resetEditTask={mockResetEditTask}
-          onTaskSaved={mockOnTaskSaved}
-          dialogOpen={true}
-          setDialogOpen={mockSetDialogOpen}
-          onSaveAndStart={mockOnSaveAndStart}
-        />
-      );
-
-      const titleInput = screen.getByLabelText(/Title/i);
-      await user.type(titleInput, "New Test Task");
-
-      const saveBtn = screen.getByTestId("save-task-btn");
-      await user.click(saveBtn);
-
-      await waitFor(() => {
-        expect(createTask).toHaveBeenCalledTimes(1);
-      });
-      expect(mockOnSaveAndStart).not.toHaveBeenCalled();
-    });
-  });
-
   describe("Account time zone date picking", () => {
     it.each([false, true])(
       "keeps calendar selection and exposes host presets only for a matching account zone (matches=%s)",
       async (matches) => {
         const hostZone = runtimeTimeZone();
-        const otherZone = hostZone === "Pacific/Kiritimati"
-          ? "America/New_York"
-          : "Pacific/Kiritimati";
+        const otherZone =
+          hostZone === "Pacific/Kiritimati"
+            ? "America/New_York"
+            : "Pacific/Kiritimati";
         render(
           <TaskForm
             activityTypes={mockActivityTypes}
@@ -610,7 +449,7 @@ describe("TaskForm Component", () => {
           onTaskSaved={mockOnTaskSaved}
           dialogOpen={false}
           setDialogOpen={mockSetDialogOpen}
-        />
+        />,
       );
 
       const dialogTitle = screen.queryByTestId("task-form-dialog-title");
@@ -626,7 +465,7 @@ describe("TaskForm Component", () => {
           onTaskSaved={mockOnTaskSaved}
           dialogOpen={true}
           setDialogOpen={mockSetDialogOpen}
-        />
+        />,
       );
 
       const dialogTitle = screen.getByTestId("task-form-dialog-title");
