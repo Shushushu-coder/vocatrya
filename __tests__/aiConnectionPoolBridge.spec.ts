@@ -204,7 +204,7 @@ describe("internal resolve → desktop streaming bridge (production shape)", () 
         spawnSyncImpl: (cmd: string) =>
           cmd === "where.exe"
             ? { status: 0, stdout: `${FAKE_EXE}\r\n` }
-            : { status: 0, stdout: "codex-cli 0.160.0\n", stderr: "" },
+            : { status: 0, stdout: "codex-cli 0.165.0\n", stderr: "" },
         runner: vi.fn(async (invocation: unknown) => {
           runnerCalls.push(invocation);
           return { exitCode: 0, stdout: "", stderr: "" };

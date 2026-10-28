@@ -88,6 +88,22 @@ async function byokLanguageModel(
 
 function mapByokError(error: unknown, signal: AbortSignal): AIBusinessError {
   if (error instanceof AIBusinessError) return error;
+  // A real deadline expiry aborts the combined signal with a TimeoutError
+  // reason — it is a timeout, not a user cancel. `signal.reason` is `any`
+  // (DOMException), so read the name defensively rather than instanceof.
+  const reasonName =
+    typeof signal.reason === "object" && signal.reason !== null
+      ? (signal.reason as { name?: unknown }).name
+      : undefined;
+  if (
+    (error instanceof Error && error.name === "TimeoutError") ||
+    reasonName === "TimeoutError"
+  ) {
+    return new AIBusinessError(
+      AI_BUSINESS_ERROR_CODES.AI_EXECUTION_TIMEOUT,
+      "AI execution timed out",
+    );
+  }
   if (
     signal.aborted ||
     (error instanceof Error && error.name === "AbortError")
@@ -95,12 +111,6 @@ function mapByokError(error: unknown, signal: AbortSignal): AIBusinessError {
     return new AIBusinessError(
       AI_BUSINESS_ERROR_CODES.AI_EXECUTION_FAILED,
       "Execution aborted",
-    );
-  }
-  if (error instanceof Error && error.name === "TimeoutError") {
-    return new AIBusinessError(
-      AI_BUSINESS_ERROR_CODES.AI_EXECUTION_TIMEOUT,
-      "AI execution timed out",
     );
   }
   return new AIBusinessError(
