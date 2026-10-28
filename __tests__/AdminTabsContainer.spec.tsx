@@ -3,10 +3,11 @@ import userEvent from "@testing-library/user-event";
 import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 
 const mockPush = vi.fn();
+let mockPathname = "/dashboard/admin";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
-  usePathname: () => "/dashboard/admin",
+  usePathname: () => mockPathname,
   useSearchParams: () => new URLSearchParams(""),
 }));
 
@@ -81,6 +82,17 @@ describe("AdminTabsContainer", () => {
 
     const companiesTab = screen.getByRole("tab", { name: "Companies" });
     expect(companiesTab).toHaveAttribute("data-state", "active");
+  });
+
+  it("keeps dictionary tabs inside settings after navigation", async () => {
+    mockPathname = "/dashboard/settings";
+    try {
+      render(<AdminTabsContainer />);
+      await user.click(screen.getByRole("tab", { name: "Job Titles" }));
+      expect(mockPush).toHaveBeenCalledWith("/dashboard/settings?tab=job-titles&section=dictionary");
+    } finally {
+      mockPathname = "/dashboard/admin";
+    }
   });
 
   it("should switch tabs and update URL", async () => {

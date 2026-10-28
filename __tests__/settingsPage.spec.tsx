@@ -1,4 +1,4 @@
-// Settings V1 host shell: four nav groups with nine entries, `general` as the
+// Settings host shell: five nav groups with ten entries, `general` as the
 // default page, owner components mounted per section, honest unavailable
 // states for pages whose components have not landed, and the legacy MCP /
 // Interview compat surfaces kept reachable in their new homes.
@@ -8,6 +8,10 @@ import userEvent from "@testing-library/user-event";
 import Settings from "@/app/dashboard/settings/page";
 import SettingsDrawer from "@/components/settings/SettingsDrawer";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
+
+vi.mock("@/components/admin/AdminTabsContainer", () => ({
+  default: () => <div data-testid="dictionary-settings" />,
+}));
 
 vi.mock("@/components/settings/GeneralSettings", () => ({
   default: () => <div data-testid="general-settings" />,
@@ -55,6 +59,7 @@ const EXPECTED_SECTION_ORDER = [
   "AI Assignments",
   "Shortcuts",
   "Audio",
+  "Library",
   "Data & Privacy",
   "About",
 ];
@@ -65,10 +70,10 @@ function navButtons() {
 
 describe("Settings page — V1 navigation shell", () => {
   beforeEach(() => {
-    window.location.hash = "";
+    window.history.replaceState(null, "", "/dashboard/settings");
   });
 
-  it("renders nine sections in four groups, in the frozen order", () => {
+  it("renders ten sections in five groups", () => {
     render(<Settings />);
     const names = navButtons().map((button) => button.textContent);
     expect(names).toEqual(EXPECTED_SECTION_ORDER);
@@ -77,6 +82,7 @@ describe("Settings page — V1 navigation shell", () => {
       // settings.ai already exists in the locale bundles as "AI Configuration".
       "AI Configuration",
       "Devices & Input",
+      "Bulk Edit",
       "Data & Support",
     ]) {
       expect(screen.getByText(group)).toBeInTheDocument();
@@ -91,6 +97,20 @@ describe("Settings page — V1 navigation shell", () => {
     expect(
       screen.getByRole("button", { name: "General" }),
     ).toHaveAttribute("aria-current", "true");
+  });
+
+  it("mounts the dictionary under Bulk Edit and preserves its tab when switching sections", async () => {
+    window.history.replaceState(null, "", "/dashboard/settings?section=dictionary&tab=skills");
+    render(<Settings />);
+    expect(await screen.findByTestId("dictionary-settings")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Bulk Edit" })).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "true");
+    await userEvent.click(screen.getByRole("button", { name: "General" }));
+    expect(window.location.hash).toBe("#general");
+    expect(new URLSearchParams(window.location.search).has("section")).toBe(false);
+    expect(new URLSearchParams(window.location.search).get("tab")).toBe("skills");
+    await userEvent.click(screen.getByRole("button", { name: "Library" }));
+    expect(screen.getByTestId("dictionary-settings")).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get("section")).toBe("dictionary");
   });
 
   it("splits AI connections and business assignments onto different pages", async () => {

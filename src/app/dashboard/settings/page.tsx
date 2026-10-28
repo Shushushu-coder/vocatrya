@@ -14,6 +14,7 @@ import McpAccessSettings from "@/components/settings/McpAccessSettings";
 import NotificationsSettings from "@/components/settings/NotificationsSettings";
 import ShortcutsSettings from "@/components/settings/ShortcutsSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
+import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 import SettingsSidebar, {
   isSettingsSection,
   useSettingsText,
@@ -121,7 +122,11 @@ function Settings() {
     // and shared links land on the same page; replaceState avoids a history
     // entry per click. Post-commit only — see comment above.
     if (!userSelectedSection.current) return;
-    window.history.replaceState(null, "", `#${activeSection}`);
+    const params = new URLSearchParams(window.location.search);
+    if (activeSection === "dictionary") params.set("section", "dictionary");
+    else params.delete("section");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}#${activeSection}`);
   }, [activeSection]);
 
   const selectSection = (section: SettingsSection) => {
@@ -202,6 +207,11 @@ function Settings() {
             // AudioSettings renders its own page-level title.
             <SectionShell id="audio">
               <AudioSettings />
+            </SectionShell>
+          )}
+          {activeSection === "dictionary" && (
+            <SectionShell id="dictionary" title={t("nav.library")}>
+              <AdminTabsContainer />
             </SectionShell>
           )}
           {activeSection === "data-privacy" && (

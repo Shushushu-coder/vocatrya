@@ -27,10 +27,11 @@ function AdminTabsContainer() {
     (name: string, value: string) => {
       const params = new URLSearchParams(queryParams.toString());
       params.set(name, value);
+      if (pathname === "/dashboard/settings") params.set("section", "dictionary");
 
       return params.toString();
     },
-    [queryParams],
+    [queryParams, pathname],
   );
 
   const onTabChange = (tab: string) => {

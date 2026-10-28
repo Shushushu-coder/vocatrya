@@ -4,6 +4,7 @@ import {
   Bell,
   Bot,
   Database,
+  Library,
   Info,
   Keyboard,
   Palette,
@@ -15,9 +16,7 @@ import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { hasTranslation, useI18n } from "@/i18n";
 
-// Settings V1 information architecture: nine entries in four groups.
-// Section ids are frozen for the whole wave — page.tsx mounts each section's
-// owner-delivered panel, and downstream packages must not invent their own ids.
+// The settings host mounts the panel for each stable section id.
 export type SettingsSection =
   | "general"
   | "notifications"
@@ -26,6 +25,7 @@ export type SettingsSection =
   | "ai-assignments"
   | "shortcuts"
   | "audio"
+  | "dictionary"
   | "data-privacy"
   | "about";
 
@@ -39,7 +39,7 @@ export interface SettingsSectionMeta {
 }
 
 export interface SettingsSectionGroup {
-  id: "preferences" | "ai" | "devices" | "data-support";
+  id: "preferences" | "ai" | "devices" | "bulk-edit" | "data-support";
   labelKey: string;
   fallbackLabel: string;
   sections: readonly SettingsSectionMeta[];
@@ -72,6 +72,14 @@ export const SETTINGS_SECTION_GROUPS: readonly SettingsSectionGroup[] = [
     sections: [
       { id: "shortcuts", labelKey: "settings.sections.shortcuts", fallbackLabel: "Shortcuts", icon: Keyboard },
       { id: "audio", labelKey: "settings.sections.audio", fallbackLabel: "Audio", icon: Volume2 },
+    ],
+  },
+  {
+    id: "bulk-edit",
+    labelKey: "settings.groups.bulkEdit",
+    fallbackLabel: "Bulk Edit",
+    sections: [
+      { id: "dictionary", labelKey: "nav.library", fallbackLabel: "Library", icon: Library },
     ],
   },
   {

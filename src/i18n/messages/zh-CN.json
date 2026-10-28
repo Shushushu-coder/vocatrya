@@ -1774,6 +1774,7 @@
     "groups": {
       "preferences": "偏好设置",
       "devices": "设备与输入",
+      "bulkEdit": "批量修改",
       "dataSupport": "数据与支持"
     },
     "sections": {

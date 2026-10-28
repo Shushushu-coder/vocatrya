@@ -4,7 +4,6 @@ import {
   BriefcaseBusiness,
   CalendarClock,
   UserRound,
-  Sheet,
   Wrench,
   Zap,
   BookOpen,
@@ -388,11 +387,6 @@ export const SIDEBAR_LINKS = [
     icon: UserRound,
     route: "/dashboard/profile",
     label: "Profile",
-  },
-  {
-    icon: Sheet,
-    route: "/dashboard/admin",
-    label: "Library",
   },
   {
     icon: Wrench,

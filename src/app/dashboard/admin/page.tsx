@@ -1,4 +1,4 @@
-import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
+import { redirect } from "next/navigation";
 import { getServerI18n } from "@/i18n/server";
 
 export async function generateMetadata() {
@@ -6,16 +6,16 @@ export async function generateMetadata() {
   return { title: t("nav.library") };
 }
 
-async function AdminPage() {
-  const { t } = await getServerI18n();
-  return (
-    <div className="col-span-3 flex min-w-0 flex-col">
-      <h3 className="text-2xl font-semibold leading-none tracking-tight mb-4">
-        {t("nav.library")}
-      </h3>
-      <AdminTabsContainer />
-    </div>
-  );
+async function AdminPage({ searchParams }: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) {
+    if (typeof value === "string") params.set(key, value);
+    else if (Array.isArray(value)) value.forEach((item) => params.append(key, item));
+  }
+  params.set("section", "dictionary");
+  redirect(`/dashboard/settings?${params.toString()}`);
 }
 
 export default AdminPage;

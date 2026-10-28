@@ -1774,6 +1774,7 @@
     "groups": {
       "preferences": "Preferences",
       "devices": "Devices & Input",
+      "bulkEdit": "Bulk Edit",
       "dataSupport": "Data & Support"
     },
     "sections": {
