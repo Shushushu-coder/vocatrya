@@ -122,6 +122,8 @@ export class MatchAnalysisService {
     model?: string | null;
     promptVersion?: string | null;
     analysisSchemaVersion?: string;
+    resolvedConnectionId?: string | null;
+    managedAiProvenance?: string | null;
   }) {
     await this.gate();
     if (input.resumeVariantVersionId) {
@@ -166,6 +168,8 @@ export class MatchAnalysisService {
           promptVersion: input.promptVersion ?? null,
           status: MATCH_ANALYSIS_STATUS.COMPLETED,
           completedAt,
+          resolvedConnectionId: input.resolvedConnectionId ?? null,
+          managedAiProvenance: input.managedAiProvenance ?? null,
         },
       });
       await tx.fastScreeningDetail.create({

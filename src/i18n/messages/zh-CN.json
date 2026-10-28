@@ -2606,5 +2606,51 @@
   "basicDataInline": {
     "createFailed": "创建{name}失败。",
     "createUnsupported": "此处不支持创建{name}。"
+  },
+  "matchAnalysis": {
+    "sourceLabel": "素材来源",
+    "sourceCareerProfile": "职业资料",
+    "assignmentResolved": "将使用 {provider} · {model} 执行",
+    "assignmentNotConfigured": "尚无解析到的匹配分析 AI 分配。请在「设置 → AI 分配」中配置，或设置全局默认。",
+    "assignmentInvalid": "已保存的匹配分配不可用（{code}）。请在「设置 → AI 分配」中修复。",
+    "run": "开始快速筛选",
+    "retry": "重试",
+    "running": "筛选中…",
+    "runFailed": "筛选未能完成",
+    "jdMissingHint": "该职位还没有职位描述——请先补充描述再匹配。",
+    "materialEmptyHint": "所选素材来源为空。请先添加职业资料，或改选一个简历版本再匹配。",
+    "verdict": {
+      "PASS": "匹配",
+      "BORDERLINE": "勉强匹配",
+      "FAIL": "不匹配"
+    },
+    "sections": {
+      "reasons": "判断理由",
+      "hardRequirements": "硬性要求",
+      "coreMatch": "核心匹配",
+      "preferenceMatch": "求职偏好匹配"
+    },
+    "stale": "已过期",
+    "staleBecause": "结果已过期：{reasons}。",
+    "staleReasons": {
+      "JD_CHANGED": "职位描述已变更",
+      "CAREER_MATERIAL_CHANGED": "职业素材已变更",
+      "PREFERENCE_CHANGED": "求职偏好已变更",
+      "RESUME_VERSION_CHANGED": "简历版本已变更"
+    },
+    "historyTitle": "分析历史",
+    "historyEmpty": "还没有保存过分析结果。",
+    "ranWith": "{provider} · {model}",
+    "loadFailed": "无法加载匹配分析。",
+    "errors": {
+      "MATCH_JD_MISSING": "该职位没有可分析的职位描述。",
+      "MATCH_INSUFFICIENT_MATERIAL": "所选素材来源没有可用内容——未发起筛选。",
+      "NOT_CONFIGURED": "尚未为匹配分析配置 AI 分配。请在「设置 → AI 分配」中配置后重试。",
+      "connection": "AI 连接未能执行本次筛选（{code}）。请检查连接后重试。",
+      "invalidAssignment": "已配置的分配不可用（{code}）。请在「设置 → AI 分配」中更新后重试。",
+      "quota": "AI 提供方拒绝了本次请求（{code}）。请检查额度或授权后重试。",
+      "output": "模型输出未通过校验（{code}）。可重试重新筛选。",
+      "generic": "快速筛选失败（{code}）。可以重试。"
+    }
   }
 }
