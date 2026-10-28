@@ -692,7 +692,7 @@ describe("ActivitiesContainer deep link", () => {
     await waitFor(() => {
       expect(screen.getByText("Add New Activity")).toBeInTheDocument();
     });
-    expect(routerReplace).toHaveBeenCalledWith("/dashboard/activities");
+    expect(routerReplace).toHaveBeenCalledWith("/dashboard/activities", { scroll: false });
   });
 
   it("stays closed without the param", async () => {

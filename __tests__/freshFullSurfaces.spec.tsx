@@ -142,7 +142,7 @@ import { AgentChatEmptyState } from "@/components/agent/AgentChatEmptyState";
 import type { JobResponse } from "@/models/job.model";
 
 const wrap = (node: React.ReactNode, fresh = true, jobMutationsEnabled = true) => (
-  <CareerSurfacesProvider freshNativeFull={fresh} jobMutationsEnabled={jobMutationsEnabled}>{node}</CareerSurfacesProvider>
+  <CareerSurfacesProvider freshNativeFull={fresh} jobMutationsEnabled={jobMutationsEnabled} resumeV1Enabled={fresh}>{node}</CareerSurfacesProvider>
 );
 
 const testUser = { id: "1", name: "Test User", email: "test@example.com" };
@@ -216,7 +216,7 @@ describe("Header global actions", () => {
     render(wrap(<Header />));
     expect(screen.getByTestId("header-upload")).toHaveAttribute(
       "href",
-      "/dashboard/profile/resumes",
+      "/dashboard/profile/resumes?import-resume=true",
     );
   });
 
@@ -224,7 +224,7 @@ describe("Header global actions", () => {
     render(wrap(<Header />, false));
     expect(screen.getByTestId("header-upload")).toHaveAttribute(
       "href",
-      "/dashboard/profile",
+      "/dashboard/profile?import-resume=true",
     );
   });
 });

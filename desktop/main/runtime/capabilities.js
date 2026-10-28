@@ -140,16 +140,16 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     execution: Object.freeze({
       // `codex exec --ephemeral -s read-only` in a Vocatrya temp cwd.
       localOneShot: true,
-      // Re-verified 2026-10-28 on codex-cli 0.164.0, gpt-5.6-luna,
+      // Re-verified 2026-10-28 on codex-cli 0.165.0, gpt-5.6-luna,
       // through the production app-server adapter: P1/P2/P3 reconstructed
-      // exactly; P2 delivered 820 deltas across 497 chunks before completion.
+      // exactly; P2 delivered 970 deltas across 570 chunks before completion.
       // P4 aborted at the first delta with no late deltas. Unknown
       // notifications remain ignored. Exact version equality stays closed.
       streaming: true,
       streamingVerification: VERIFICATION_STATES.PASS,
       streamingMechanism:
         "codex app-server (item/agentMessage/delta over stdio JSON-RPC)",
-      streamingVerifiedRuntimeVersion: "0.164.0",
+      streamingVerifiedRuntimeVersion: "0.165.0",
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.STRONG_SANDBOX,
@@ -169,7 +169,7 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     }),
     // `codex exec --output-schema <file>` — the schema file is written
     // into the fresh Vocatrya-owned exec cwd; the final message lands
-    // in -o output. Re-verified 2026-10-28 on codex-cli 0.164.0,
+    // in -o output. Re-verified 2026-10-28 on codex-cli 0.165.0,
     // gpt-5.6-luna, through production executeText: 9/9 synthetic trials
     // (flat, job-like, resume-like) first-pass VALID under NATIVE_JSON_SCHEMA,
     // no retries or native violations. Exact version equality stays closed.
@@ -177,7 +177,7 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
       mechanism: "codex exec --output-schema <schema-file>",
       verification: STRUCTURED_OUTPUT_VERIFICATIONS.PASS,
-      verifiedRuntimeVersion: "0.164.0",
+      verifiedRuntimeVersion: "0.165.0",
     }),
   }),
 

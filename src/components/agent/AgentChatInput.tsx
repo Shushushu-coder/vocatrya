@@ -292,7 +292,7 @@ function ChatErrorBanner() {
         ) : null}
         {copy.action === "settings" ? (
           <Button asChild className="h-7 px-2 text-xs" size="sm" variant="outline">
-            <Link href="/dashboard/settings">{t("agent.goToAiSettings")}</Link>
+            <Link href="/dashboard/settings?section=ai-services">{t("agent.goToAiSettings")}</Link>
           </Button>
         ) : null}
         {copy.action === "new-model" ? (

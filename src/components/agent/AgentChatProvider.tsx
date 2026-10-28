@@ -41,6 +41,7 @@ import {
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 import { AiProvider } from "@/models/ai.model";
+import { AI_CONFIGURATION_CHANGED_EVENT } from "@/lib/ai/client-events";
 import {
   AGENT_NESTED_STREAM_PART_TYPE,
   isNestedTool,
@@ -218,6 +219,7 @@ function useAgentChatValue(
   const recoveryRef = useRef<{ conversationId: string; requestId: string } | null>(null);
   const recoveryBlockedRef = useRef(false);
   const selectionEpochRef = useRef(0);
+  const preflightEpochRef = useRef(0);
   const [recoveryFailure, setRecoveryFailure] = useState<{
     conversationId: string; requestId: string; operation: "reload" | "cancel";
   } | null>(null);
@@ -407,10 +409,13 @@ function useAgentChatValue(
   }, [stop, releaseRail, t]);
 
   const runPreflight = useCallback(async () => {
+    const epoch = ++preflightEpochRef.current;
+    const selectionEpoch = selectionEpochRef.current;
     // A fresh check supersedes the dismissal — a still-failing state
     // re-announces itself; the X only ever hid the previous report.
     setPreflightDismissed(false);
     const publishIdentity: typeof setIdentity = (next) => {
+      if (epoch !== preflightEpochRef.current || selectionEpoch !== selectionEpochRef.current) return;
       setPreflightDismissed(false);
       setIdentity(next);
     };
@@ -420,6 +425,10 @@ function useAgentChatValue(
         explicit: conversationIdRef.current ? null : explicitRef.current,
       });
       const state = account?.data;
+      if (!account?.success || !state) {
+        publishIdentity({ ...UNKNOWN_IDENTITY, checked: true, ok: false, kind: "blocked", code: account?.code ?? "BACKEND_UNAVAILABLE" });
+        return;
+      }
       if (state?.kind === "account" || state?.kind === "managed") {
         publishIdentity({
           checked: true,
@@ -438,7 +447,9 @@ function useAgentChatValue(
           checked: true,
           ok: false,
           kind: "blocked",
-          locked: Boolean(conversationIdRef.current) && prev.locked,
+          locked: state.locked ?? (Boolean(conversationIdRef.current) && prev.locked),
+          model: state.model ?? (conversationIdRef.current ? prev.model : null),
+          displayName: state.displayName ?? null,
           code: state.code,
           persistedLegacy: false,
         }));
@@ -455,26 +466,28 @@ function useAgentChatValue(
           persistedLegacy: state.persisted,
           code: state.model ? undefined : "AI_NOT_CONFIGURED",
         });
-        if (state.model || state.persisted) return;
+        if (!state.model) return;
       }
     } catch {
-      // Preflight is advisory. A missing action falls through to settings.
+      publishIdentity({ ...UNKNOWN_IDENTITY, checked: true, ok: false, kind: "blocked", code: "BACKEND_UNAVAILABLE" });
+      return;
     }
 
+    try {
     const settings = await getUserSettings();
     const ai = settings?.data?.settings?.ai;
-    const provider = ai?.provider ?? AiProvider.OLLAMA;
+    const provider = ai?.provider;
     const persistedLegacy =
       lockKindRef.current === "legacy" && Boolean(conversationIdRef.current);
 
-    if (!ai?.model) {
+    if (!ai?.model || !provider) {
       publishIdentity({
         checked: true,
         ok: false,
         kind: "legacy",
         locked: false,
         model: null,
-        displayName: provider,
+        displayName: null,
         persistedLegacy,
         code: "AI_NOT_CONFIGURED",
       });
@@ -504,7 +517,17 @@ function useAgentChatValue(
       persistedLegacy,
       code: result.isConnected ? undefined : "BACKEND_UNAVAILABLE",
     });
+    } catch {
+      publishIdentity({ ...UNKNOWN_IDENTITY, checked: true, ok: false, kind: "blocked", code: "BACKEND_UNAVAILABLE" });
+    }
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const refresh = () => { void runPreflight(); };
+    window.addEventListener(AI_CONFIGURATION_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(AI_CONFIGURATION_CHANGED_EVENT, refresh);
+  }, [isOpen, runPreflight]);
 
   const open = useCallback(() => {
     collapseSidebar();

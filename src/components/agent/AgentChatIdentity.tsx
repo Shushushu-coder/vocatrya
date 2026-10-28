@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { listEligibleChatModels } from "@/actions/agentChat.actions";
@@ -55,7 +56,7 @@ export function AgentChatIdentity() {
           model: identity.model,
           connection: identity.displayName,
         })
-      : (identity.model ?? identity.displayName ?? "");
+      : (identity.model ?? t(identity.code === "AI_NOT_CONFIGURED" ? "agent.configureAi" : "agent.selectModel"));
 
   const choose = (model: EligibleChatModel) => {
     const selection: ExplicitModelSelection = {
@@ -133,6 +134,11 @@ export function AgentChatIdentity() {
                 ))
               )}
             </div>
+            {models.length === 0 && (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/dashboard/settings?section=ai-services">{t("agent.goToAiSettings")}</Link>
+              </Button>
+            )}
           </>
         )}
       </PopoverContent>

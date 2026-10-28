@@ -56,6 +56,7 @@ vi.mock("@/actions/task.actions", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
   useSearchParams: vi.fn(() => new URLSearchParams()),
+  usePathname: () => "/dashboard/tasks",
 }));
 
 vi.mock("@/context/ActivityContext", () => ({

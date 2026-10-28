@@ -16,6 +16,7 @@ import { loadActiveChatConversation } from "@/actions/agentChat.actions";
 import { getCareerRuntimeSnapshot } from "@/actions/career.runtime";
 import { canMutateJobsSurface, isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
+import { isLegacyResumeEditorReadOnly } from "@/lib/career/capabilities";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
 import StaleSessionSignOut from "@/components/StaleSessionSignOut";
@@ -70,7 +71,7 @@ export default async function RootLayout({
 
   return (
     <ActivityProvider>
-      <CareerSurfacesProvider freshNativeFull={freshNativeFull} jobMutationsEnabled={canMutateJobsSurface(runtime)} resumeV1Enabled={runtime.resumeV1Enabled}>
+      <CareerSurfacesProvider freshNativeFull={freshNativeFull} jobMutationsEnabled={canMutateJobsSurface(runtime)} resumeV1Enabled={runtime.resumeV1Enabled} legacyResumeMutationsEnabled={!isLegacyResumeEditorReadOnly(runtime.mode, runtime.rolloutScope)}>
       <SidebarProvider initialExpanded={initialExpanded} initialWidth={initialWidth}>
         <RightRailProvider>
           <AgentChatProvider initialConversation={conversation.data ?? null}>

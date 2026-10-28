@@ -4,6 +4,8 @@ export type AgentErrorCategory =
   | "saved"
   | "auth"
   | "connection"
+  | "configuration"
+  | "runtime-verification"
   | "capability"
   | "retryable"
   | "tool"
@@ -18,14 +20,10 @@ const CONNECTION = new Set([
   "RUNTIME_NOT_INSTALLED",
   "RUNTIME_BROKEN",
   "BACKEND_UNAVAILABLE",
-  "AI_NOT_CONFIGURED",
   "PERMISSION_BOUNDARY_NOT_READY",
 ]);
 const CAPABILITY = new Set([
-  "MODEL_UNAVAILABLE",
   "STREAMING_NOT_SUPPORTED",
-  "STREAMING_NOT_VERIFIED",
-  "STRUCTURED_OUTPUT_NOT_VERIFIED",
   "STRUCTURED_OUTPUT_UNSUPPORTED",
   "STRUCTURED_OUTPUT_PARSE_FAILED",
   "STRUCTURED_OUTPUT_SCHEMA_FAILED",
@@ -54,6 +52,8 @@ export function categorizeAgentErrorCode(
   if (code === "CONVERSATION_REFRESH_FAILED" || code === "CONVERSATION_CANCEL_FAILED") return "recovery";
   if (code === "CONVERSATION_OPERATION_SAVED") return "saved";
   if (code.startsWith("CONVERSATION_")) return "conversation";
+  if (code === "AI_NOT_CONFIGURED" || code === "MODEL_UNAVAILABLE") return "configuration";
+  if (code === "STREAMING_NOT_VERIFIED" || code === "STRUCTURED_OUTPUT_NOT_VERIFIED") return "runtime-verification";
   if (AUTH.has(code)) return "auth";
   if (CONNECTION.has(code)) return "connection";
   if (CAPABILITY.has(code)) return "capability";
@@ -68,6 +68,10 @@ export function agentErrorCopy(category: AgentErrorCategory): {
   action: "retry" | "settings" | "new-model" | null;
 } {
   switch (category) {
+    case "configuration":
+      return { titleKey: "agent.errors.cannotSend", bodyKey: "agent.errors.notConfigured", action: "settings" };
+    case "runtime-verification":
+      return { titleKey: "agent.errors.cannotSend", bodyKey: "agent.errors.runtimeUnverified", action: "settings" };
     case "recovery":
       return { titleKey: "agent.errors.cannotSend", bodyKey: "agent.errors.recoveryFailed", action: null };
     case "conversation":

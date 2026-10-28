@@ -53,7 +53,8 @@ import { RECRUITMENT_BATCH_SUGGESTIONS } from "@/lib/data/recruitmentBatchData";
 import TiptapEditor from "../TiptapEditor";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import { redirect } from "next/navigation";
+import { useQueryDialog } from "@/hooks/useQueryDialog";
 import { Combobox } from "../ComboBox";
 import { NotesCollapsibleSection } from "./NotesCollapsibleSection";
 import { CoverLetter, Resume } from "@/models/profile.model";
@@ -118,9 +119,8 @@ export function AddJob({
   timeZone,
 }: AddJobProps) {
   const { t } = useI18n();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(initialOpen ?? false);
+  useQueryDialog("add-job", () => addJobForm());
   const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [coverLetters, setCoverLetters] = useState<CoverLetter[]>([]);
@@ -132,16 +132,6 @@ export function AddJob({
   );
   const tz = timeZone ?? runtimeTimeZone();
 
-  useEffect(() => {
-    if (!dialogOpen && searchParams.get("add-job") === "true") {
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("add-job");
-      const newPath = params.toString()
-        ? `?${params.toString()}`
-        : window.location.pathname;
-      router.replace(newPath);
-    }
-  }, [dialogOpen, router, searchParams]);
   // Status semantics are keyed by `value`, never by array position: the list
   // order is whatever the database happens to return.
   const statusIdByValue = useMemo(

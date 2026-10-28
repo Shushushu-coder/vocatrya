@@ -31,10 +31,10 @@ const CREATE_MENU_ITEMS = [
 // density still serves the in-app header on the plain web build.
 export function CreateMenu({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
-  const { freshNativeFull, jobMutationsEnabled } = useCareerSurfaces();
-  const uploadHref = freshNativeFull
-    ? "/dashboard/profile/resumes"
-    : "/dashboard/profile";
+  const { resumeV1Enabled, legacyResumeMutationsEnabled, jobMutationsEnabled } = useCareerSurfaces();
+  const uploadHref = resumeV1Enabled
+    ? "/dashboard/profile/resumes?import-resume=true"
+    : "/dashboard/profile?import-resume=true";
   // In the compact titlebar the actions match the surrounding window chrome:
   // ghost icon buttons with the label carried by aria-label/title instead of
   // visible text. The web header keeps labeled outline buttons.
@@ -74,9 +74,8 @@ export function CreateMenu({ compact = false }: { compact?: boolean }) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      {/* Upload is its own toolbar entry, not a create-menu item: it lands on
-          the existing career-profile surface rather than opening a form. */}
-      <Button
+      {/* Open the import flow supported by the current runtime. */}
+      {(resumeV1Enabled || legacyResumeMutationsEnabled) && <Button
         variant={buttonVariant}
         className={buttonClass}
         data-testid="header-upload"
@@ -92,7 +91,7 @@ export function CreateMenu({ compact = false }: { compact?: boolean }) {
             <span className="hidden sm:inline">{t("dashboard.upload")}</span>
           )}
         </Link>
-      </Button>
+      </Button>}
     </div>
   );
 }

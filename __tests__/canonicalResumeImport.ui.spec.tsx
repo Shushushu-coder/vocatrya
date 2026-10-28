@@ -2,8 +2,9 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/re
 import { CanonicalResumeImport } from "@/components/career/resume-variant/CanonicalResumeImport";
 import { importFixture, importRawText } from "./helpers/canonicalImportFixture";
 import ResumeVariantsPage from "@/app/dashboard/profile/resumes/page";
-const mocks = vi.hoisted(() => ({ push: vi.fn(), fetch: vi.fn(), runtime: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
+const mocks = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), fetch: vi.fn(), runtime: vi.fn() }));
+let searchParams = new URLSearchParams();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, replace: mocks.replace }), usePathname: () => "/dashboard/profile/resumes", useSearchParams: () => searchParams }));
 vi.mock("@/i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("@/i18n/server", () => ({ getServerI18n: async () => ({ t: (key: string) => key }) }));
 vi.mock("@/actions/career.runtime", () => ({ getCareerRuntimeSnapshot: mocks.runtime }));
@@ -11,12 +12,20 @@ vi.mock("@/components/career/CareerRuntimeNotice", () => ({ CareerRuntimeNotice:
 vi.mock("@/actions/resumeVariant.actions", () => ({ listResumeVariants: async () => ({ success: true, data: [] }), archiveResumeVariant: vi.fn(), createResumeVariant: vi.fn(), renameResumeVariant: vi.fn() }));
 const preview = { parsed: importFixture, rawText: importRawText, name: "Synthetic", approval: "signed",
   summary: { created: 4, reused: 0, conflicts: ["phone"] } };
-beforeEach(() => { vi.stubGlobal("fetch", mocks.fetch); });
+beforeEach(() => { searchParams = new URLSearchParams(); vi.stubGlobal("fetch", mocks.fetch); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const choose = () => {
   fireEvent.click(screen.getByText("canonicalImport.open"));
   fireEvent.change(screen.getByLabelText("canonicalImport.choose"), { target: { files: [new File(["%PDF"], "Synthetic.pdf", { type: "application/pdf" })] } });
 };
+it("opens file selection from the toolbar deep link without starting an upload", () => {
+  searchParams = new URLSearchParams("import-resume=true");
+  mocks.fetch.mockClear();
+  render(<CanonicalResumeImport />);
+  expect(screen.getByLabelText("canonicalImport.choose")).toBeVisible();
+  expect(mocks.replace).toHaveBeenCalledWith("/dashboard/profile/resumes", { scroll: false });
+  expect(mocks.fetch).not.toHaveBeenCalled();
+});
 it("fresh/full canonical list exposes Import Resume; legacy runtime does not", async () => {
   mocks.runtime.mockResolvedValue({ origin: "fresh", mode: "AB_ENABLED", rolloutScope: "full" });
   render(await ResumeVariantsPage());

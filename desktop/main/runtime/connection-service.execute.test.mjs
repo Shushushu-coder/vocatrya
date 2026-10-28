@@ -55,7 +55,7 @@ function makeDeps() {
     existsSyncImpl: (p) => p === FAKE_EXE,
     spawnSyncImpl: (cmd, args) => {
       if (cmd === "where.exe") return { status: 0, stdout: `${FAKE_EXE}\r\n` };
-      return { status: 0, stdout: "codex-cli 0.164.0\n", stderr: "" };
+      return { status: 0, stdout: "codex-cli 0.165.0\n", stderr: "" };
     },
     runner: vi.fn(runnerImpl),
     // Existing streaming cases cover the one-shot app-server path
@@ -373,7 +373,7 @@ describe("executeTextStream", () => {
   }
 
   it("refuses business streaming when the installed version drifted from the verified one", async () => {
-    // Codex streaming PASS is bound to the verified build (0.164.0) — an
+    // Codex streaming PASS is bound to the verified build (0.165.0) — an
     // upgraded runtime reports a different version and must fail closed.
     runnerScript = [];
     const drifted = createConnectionService({
@@ -739,7 +739,7 @@ describe("executeText structured verification gate", () => {
   }
 
   it("refuses structured execution on a version-drifted runtime (no bypass flag)", async () => {
-    // Codex structured output is verified on 0.164.0 — a binary reporting
+    // Codex structured output is verified on 0.165.0 — a binary reporting
     // a different version is back to unverified and fails closed.
     const drifted = createConnectionService({
       profilesRoot,

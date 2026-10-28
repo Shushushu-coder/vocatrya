@@ -54,7 +54,10 @@ function TasksContainer({
     onChangeTaskStatus,
   } = useTasksList({ filterKey, onTasksChanged });
 
-  useAutoOpenAddTaskDialog(setDialogOpen);
+  useAutoOpenAddTaskDialog((open) => {
+    setEditTask(null);
+    setDialogOpen(open);
+  });
 
   const onDeleteTask = async (taskId: string) => {
     const result = await deleteTaskById(taskId);

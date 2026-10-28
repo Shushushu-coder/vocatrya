@@ -47,7 +47,7 @@ export type AgentChatPreflight =
       displayName: string;
       locked: boolean;
     }
-  | { kind: "blocked"; code: string; connectionId?: string }
+  | { kind: "blocked"; code: string; connectionId?: string; model?: string | null; displayName?: string | null; locked?: boolean }
   | { kind: "legacy"; model: string | null; persisted: boolean };
 
 export type EligibleChatModel = {

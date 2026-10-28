@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { DesktopTitleBar } from "@/components/desktop/DesktopTitleBar";
 import { TitleBarActions } from "@/components/desktop/TitleBarActions";
 import Header from "@/components/Header";
+import { CreateMenu } from "@/components/GlobalActions";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 
 const chat = {
@@ -31,7 +32,7 @@ afterEach(() => {
 
 function renderShell(freshNativeFull = false) {
   return render(
-    <CareerSurfacesProvider freshNativeFull={freshNativeFull}>
+    <CareerSurfacesProvider freshNativeFull={freshNativeFull} resumeV1Enabled={freshNativeFull}>
       <DesktopTitleBar />
       <TitleBarActions />
     </CareerSurfacesProvider>
@@ -68,7 +69,7 @@ describe("TitleBarActions", () => {
     expect(within(leftSlot!).getByTestId("header-create-menu")).toBeTruthy();
     expect(within(leftSlot!).getByTestId("header-upload")).toHaveAttribute(
       "href",
-      "/dashboard/profile"
+      "/dashboard/profile?import-resume=true"
     );
     // 咨询 Vocatrya sits in the right slot. The shortcut-help button moved to
     // the left group: after the forward button, before the actions slot.
@@ -102,7 +103,45 @@ describe("TitleBarActions", () => {
     const leftSlot = document.getElementById("desktop-titlebar-actions-left");
     expect(
       await within(leftSlot!).findByTestId("header-upload")
-    ).toHaveAttribute("href", "/dashboard/profile/resumes");
+    ).toHaveAttribute("href", "/dashboard/profile/resumes?import-resume=true");
+  });
+
+  it("uses canonical import for migrated and resume-only runtimes too", () => {
+    render(
+      <CareerSurfacesProvider freshNativeFull={false} resumeV1Enabled legacyResumeMutationsEnabled={false}>
+        <CreateMenu compact />
+      </CareerSurfacesProvider>,
+    );
+    expect(screen.getByTestId("header-upload")).toHaveAttribute("href", "/dashboard/profile/resumes?import-resume=true");
+  });
+
+  it("hides unavailable upload and job creation in a restricted runtime", async () => {
+    render(
+      <CareerSurfacesProvider freshNativeFull={false} resumeV1Enabled={false} legacyResumeMutationsEnabled={false} jobMutationsEnabled={false}>
+        <CreateMenu compact />
+      </CareerSurfacesProvider>,
+    );
+    expect(screen.queryByTestId("header-upload")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("header-create-menu"));
+    expect(screen.queryByRole("menuitem", { name: "Job" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Tasks" })).toBeInTheDocument();
+  });
+
+  it("opens and closes the assistant from its titlebar entry", async () => {
+    installDesktopShell();
+    const { rerender } = renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Open assistant" }));
+    expect(chat.open).toHaveBeenCalled();
+    chat.isOpen = true;
+    rerender(
+      <CareerSurfacesProvider freshNativeFull={false}>
+        <DesktopTitleBar />
+        <TitleBarActions />
+      </CareerSurfacesProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Close assistant" }));
+    expect(chat.close).toHaveBeenCalled();
+    chat.isOpen = false;
   });
 
   it("opens the create menu from the titlebar trigger", async () => {

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryDialog } from "@/hooks/useQueryDialog";
 import {
   Card,
   CardContent,
@@ -38,17 +38,18 @@ function QuestionsContainer({
   onQuestionsChanged,
 }: QuestionsContainerProps) {
   const { t } = useI18n();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [page, setPage] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [editQuestion, setEditQuestion] = useState<Question | null>(null);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  useQueryDialog("add-question", () => {
+    setEditQuestion(null);
+    setDialogOpen(true);
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const hasSearched = useRef(false);
-  const autoOpenHandled = useRef(false);
 
   const loadQuestions = useCallback(
     async (pageNum: number, filter?: string, search?: string) => {
@@ -100,20 +101,6 @@ function QuestionsContainer({
     setEditQuestion(null);
     setDialogOpen(true);
   };
-
-  useEffect(() => {
-    if (autoOpenHandled.current) return;
-    if (searchParams.get("add-question") === "true") {
-      autoOpenHandled.current = true;
-      setDialogOpen(true);
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("add-question");
-      const newPath = params.toString()
-        ? `?${params.toString()}`
-        : window.location.pathname;
-      router.replace(newPath);
-    }
-  }, [router, searchParams]);
 
   useEffect(() => {
     loadQuestions(1, filterKey, searchTerm || undefined);

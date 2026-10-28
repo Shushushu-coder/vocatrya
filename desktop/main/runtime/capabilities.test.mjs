@@ -303,11 +303,11 @@ describe("account runtime capability matrix", () => {
         continue;
       }
       if (kind === "CODEX_RUNTIME") {
-        // Re-verified on codex-cli 0.164.0 through production
+        // Re-verified on codex-cli 0.165.0 through production
         // `codex exec --output-schema`: all nine flat/job-like/resume-like
         // synthetic trials were first-pass VALID with no retries.
         expect(so.verification, kind).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.PASS);
-        expect(so.verifiedRuntimeVersion, kind).toBe("0.164.0");
+        expect(so.verifiedRuntimeVersion, kind).toBe("0.165.0");
         continue;
       }
       expect(so.verification, kind).toBe(
@@ -324,12 +324,12 @@ describe("account runtime capability matrix", () => {
   it("reports streaming honestly — only managed-verified runtimes pass", () => {
     // DEVIN_RUNTIME earned PASS through a real managed E2E (devin -p
     // incremental stdout on 3000.10.31); CODEX_RUNTIME earned it through
-    // the app-server delta channel on 0.164.0. The other four remain
+    // the app-server delta channel on 0.165.0. The other four remain
     // PENDING — a documented stream mode without a managed delta run
     // never flips streaming to true.
     const VERIFIED_STREAMING = {
       DEVIN_RUNTIME: "3000.10.31",
-      CODEX_RUNTIME: "0.164.0",
+      CODEX_RUNTIME: "0.165.0",
     };
     for (const kind of IMPLEMENTED) {
       const execution = getAccountRuntimeCapabilities(kind).execution;
@@ -362,18 +362,18 @@ describe("account runtime capability matrix", () => {
     expect(copilot.streamingVerifiedRuntimeVersion).toBeNull();
   });
 
-  it("certifies CODEX_RUNTIME 0.164.0 only — nearby and unknown versions stay unverified", () => {
+  it("certifies CODEX_RUNTIME 0.165.0 only — nearby and unknown versions stay unverified", () => {
     const caps = getAccountRuntimeCapabilities("CODEX_RUNTIME");
     expect(caps.execution.streaming).toBe(true);
     expect(caps.execution.streamingVerification).toBe(VERIFICATION_STATES.PASS);
-    expect(caps.execution.streamingVerifiedRuntimeVersion).toBe("0.164.0");
+    expect(caps.execution.streamingVerifiedRuntimeVersion).toBe("0.165.0");
     expect(caps.structuredOutput.strategy).toBe(
       STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
     );
     expect(caps.structuredOutput.verification).toBe(
       STRUCTURED_OUTPUT_VERIFICATIONS.PASS,
     );
-    expect(caps.structuredOutput.verifiedRuntimeVersion).toBe("0.164.0");
+    expect(caps.structuredOutput.verifiedRuntimeVersion).toBe("0.165.0");
     // Fail-closed exact equality. A previously certified build, a patch
     // neighbor, a newer build, and an unknown version are all unverified.
     for (const version of [
@@ -383,7 +383,7 @@ describe("account runtime capability matrix", () => {
       "0.160.0",
       "0.163.9",
       "0.164.1",
-      "0.165.0",
+      "0.164.0",
       "0.161.0",
       "0.161.1",
       "",

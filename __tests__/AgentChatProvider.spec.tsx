@@ -41,6 +41,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/actions/agentChat.actions", () => ({
+  getAgentChatPreflight: vi.fn(async () => {
+    const settings = await getUserSettings();
+    return { success: true, data: { kind: "legacy", model: settings.data?.settings?.ai?.model ?? null, persisted: true } };
+  }),
   cancelChatConversationRequest: vi.fn(async () => ({ success: true, data: conversation() })),
   clearChatConversation: vi.fn(async () => ({ success: true })),
   deleteChatConversation: vi.fn(async () => ({ success: true })),
@@ -76,7 +80,9 @@ import {
   saveChatConversation,
   cancelChatConversationRequest,
   getChatConversation,
+  getAgentChatPreflight,
 } from "@/actions/agentChat.actions";
+import { AI_CONFIGURATION_CHANGED_EVENT } from "@/lib/ai/client-events";
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 
@@ -147,6 +153,7 @@ function Probe() {
       <span data-testid="sidebar">{String(expanded)}</span>
       <span data-testid="state">{`${c.isOpen}|${c.approvalPending}|${c.interruptedTurn}|${holder}|${c.preflight.ok}`}</span>
       <span data-testid="preflight-dismissed">{String(c.preflight.dismissed)}</span>
+      <span data-testid="identity">{JSON.stringify(c.identity)}</span>
       <span data-testid="composer-nonce">{c.composerNonce}</span>
       <span data-testid="panel-expanded">{String(c.isPanelExpanded)}</span>
       <span data-testid="review-stream">{c.toolStreams["rv1"] ?? ""}</span>
@@ -523,6 +530,49 @@ describe("AgentChatProvider", () => {
     });
     expect(screen.getByTestId("state").textContent).toMatch(/false$/);
     expect(checkOllamaConnection).not.toHaveBeenCalled();
+  });
+
+  it("retains the assigned model when runtime verification blocks a new draft", async () => {
+    vi.mocked(getAgentChatPreflight).mockResolvedValueOnce({ success: true, data: {
+      kind: "blocked", code: "STREAMING_NOT_VERIFIED", model: "gpt-5.6-luna", displayName: "ChatGPT", locked: false,
+    } });
+    render(draftTree());
+    await userEvent.click(screen.getByText("open"));
+    await waitFor(() => expect(screen.getByTestId("identity")).toHaveTextContent("gpt-5.6-luna"));
+    expect(screen.getByTestId("identity")).toHaveTextContent("ChatGPT");
+    expect(screen.getByTestId("state").textContent).toMatch(/false$/);
+    expect(getUserSettings).not.toHaveBeenCalled();
+    expect(checkOllamaConnection).not.toHaveBeenCalled();
+  });
+
+  it("does not invent Ollama when no AI is configured", async () => {
+    vi.mocked(getAgentChatPreflight).mockResolvedValueOnce({ success: true, data: { kind: "legacy", model: null, persisted: false } });
+    render(draftTree());
+    await userEvent.click(screen.getByText("open"));
+    await waitFor(() => expect(screen.getByTestId("identity")).toHaveTextContent("AI_NOT_CONFIGURED"));
+    expect(screen.getByTestId("identity")).not.toHaveTextContent("ollama");
+    expect(getUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to legacy settings after a failed authoritative preflight", async () => {
+    vi.mocked(getAgentChatPreflight).mockRejectedValueOnce(new Error("offline"));
+    render(draftTree());
+    await userEvent.click(screen.getByText("open"));
+    await waitFor(() => expect(screen.getByTestId("identity")).toHaveTextContent("BACKEND_UNAVAILABLE"));
+    expect(getUserSettings).not.toHaveBeenCalled();
+    expect(checkOllamaConnection).not.toHaveBeenCalled();
+  });
+
+  it("refreshes an open draft after AI settings change", async () => {
+    vi.mocked(getAgentChatPreflight)
+      .mockResolvedValueOnce({ success: true, data: { kind: "legacy", model: null, persisted: false } })
+      .mockResolvedValueOnce({ success: true, data: { kind: "account", connectionId: "conn-1", provider: "OPENAI", backendKind: "CODEX_RUNTIME", model: "gpt-5.6-luna", displayName: "ChatGPT", locked: false } });
+    render(draftTree());
+    await userEvent.click(screen.getByText("open"));
+    await waitFor(() => expect(screen.getByTestId("identity")).toHaveTextContent("AI_NOT_CONFIGURED"));
+    act(() => { window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT)); });
+    await waitFor(() => expect(screen.getByTestId("identity")).toHaveTextContent("gpt-5.6-luna"));
+    expect(screen.getByTestId("state").textContent).toMatch(/true$/);
   });
 
   it("puts the page context in the request body", () => {

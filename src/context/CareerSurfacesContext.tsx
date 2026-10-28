@@ -12,9 +12,10 @@ export type CareerSurfacesValue = {
   freshNativeFull: boolean;
   jobMutationsEnabled: boolean;
   resumeV1Enabled: boolean;
+  legacyResumeMutationsEnabled: boolean;
 };
 
-const DEFAULT_VALUE: CareerSurfacesValue = { freshNativeFull: false, jobMutationsEnabled: true, resumeV1Enabled: true };
+const DEFAULT_VALUE: CareerSurfacesValue = { freshNativeFull: false, jobMutationsEnabled: true, resumeV1Enabled: true, legacyResumeMutationsEnabled: true };
 
 const CareerSurfacesContext = createContext<CareerSurfacesValue>(DEFAULT_VALUE);
 
@@ -22,14 +23,16 @@ export function CareerSurfacesProvider({
   freshNativeFull,
   jobMutationsEnabled = true,
   resumeV1Enabled = true,
+  legacyResumeMutationsEnabled = true,
   children,
 }: {
   freshNativeFull: boolean;
   jobMutationsEnabled?: boolean;
   resumeV1Enabled?: boolean;
+  legacyResumeMutationsEnabled?: boolean;
   children: React.ReactNode;
 }) {
-  const value = useMemo(() => ({ freshNativeFull, jobMutationsEnabled, resumeV1Enabled }), [freshNativeFull, jobMutationsEnabled, resumeV1Enabled]);
+  const value = useMemo(() => ({ freshNativeFull, jobMutationsEnabled, resumeV1Enabled, legacyResumeMutationsEnabled }), [freshNativeFull, jobMutationsEnabled, resumeV1Enabled, legacyResumeMutationsEnabled]);
   return (
     <CareerSurfacesContext.Provider value={value}>
       {children}

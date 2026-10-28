@@ -16,6 +16,7 @@ import {
 } from "../ui/select";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
+import { AI_CONFIGURATION_CHANGED_EVENT } from "@/lib/ai/client-events";
 import {
   listAssignableAiConnections,
   mintAiConnectionTicket,
@@ -408,6 +409,7 @@ function AiAssignmentsCard() {
         });
         if (result.success) {
           toastSuccess(t("settings.aiAssignSaved"));
+          window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
           await load();
         } else {
           toastError(
@@ -461,6 +463,7 @@ function AiAssignmentsCard() {
       });
       if (result.success) {
         toastSuccess(t("settings.aiAssignSaved"));
+        window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
         await load();
       } else {
         toastError(t(ERROR_KEY[result.code ?? ""] ?? "settings.aiConnErrGeneric"));
@@ -476,6 +479,7 @@ function AiAssignmentsCard() {
       const result = await clearBusinessAiAssignment({ purpose });
       if (result.success) {
         toastSuccess(t("settings.aiAssignCleared"));
+        window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
         await load();
       } else {
         toastError(t(ERROR_KEY[result.code ?? ""] ?? "settings.aiConnErrGeneric"));

@@ -220,6 +220,16 @@ describe("AgentChatInput", () => {
     render(<AgentChatInput />);
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /dismiss error/i })).toBeInTheDocument();
+    expect(screen.getByText(/runtime version has changed/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /AI settings/i })).toHaveAttribute("href", "/dashboard/settings?section=ai-services");
+  });
+
+  it("guides an unconfigured user to AI settings instead of suggesting another model", () => {
+    chat.preflight = { checked: true, ok: false, code: "AI_NOT_CONFIGURED" };
+    render(<AgentChatInput />);
+    expect(screen.getByText(/AI is not configured/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /AI settings/i })).toHaveAttribute("href", "/dashboard/settings?section=ai-services");
+    expect(screen.queryByText(/another model/i)).not.toBeInTheDocument();
   });
 
   it("hides a dismissed preflight banner without lifting the send restriction", () => {

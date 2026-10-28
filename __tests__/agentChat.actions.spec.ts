@@ -344,6 +344,9 @@ describe("getAgentChatPreflight", () => {
     expect(result.data).toMatchObject({
       kind: "blocked",
       code: "STREAMING_NOT_VERIFIED",
+      model: "gpt-5.6-sol",
+      displayName: "ChatGPT via Codex",
+      locked: true,
     });
   });
 
@@ -450,24 +453,24 @@ describe("getAgentChatPreflight", () => {
     });
   });
 
-  it("readies GLOBAL_DEFAULT gpt-5.6-sol when the installed Codex runtime is the certified 0.160.0", async () => {
+  it("readies GLOBAL_DEFAULT gpt-5.6-luna on the certified Codex 0.165.0", async () => {
     (prisma.chatConversation.findUnique as any).mockResolvedValue(null);
     (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([
-      assignmentRow(),
+      { ...assignmentRow(), model: "gpt-5.6-luna" },
     ]);
     (prisma.aIConnection.findFirst as any).mockResolvedValue(
       lockedConnection(),
     );
     runtimeState.mockResolvedValue({
       capabilities: getAccountRuntimeCapabilities("CODEX_RUNTIME"),
-      runtimeVersion: "0.160.0",
+      runtimeVersion: "0.165.0",
       runtimeReady: true,
     });
     const result = await getAgentChatPreflight();
     expect(result.data).toMatchObject({
       kind: "account",
       connectionId: "conn-1",
-      model: "gpt-5.6-sol",
+      model: "gpt-5.6-luna",
       locked: false,
     });
     expect(result.data).not.toMatchObject({ code: "STREAMING_NOT_VERIFIED" });

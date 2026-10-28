@@ -388,44 +388,33 @@ async function accountPreflight(input: {
       archivedAt: true,
     },
   });
+  const blocked = (code: string): AgentChatPreflight => ({
+    kind: "blocked", code, connectionId: input.connectionId,
+    model: input.model, displayName: connection?.displayName ?? null, locked: input.locked,
+  });
   if (!connection || connection.archivedAt) {
-    return {
-      kind: "blocked",
-      code: "ASSIGNED_CONNECTION_UNAVAILABLE",
-      connectionId: input.connectionId,
-    };
+    return blocked("ASSIGNED_CONNECTION_UNAVAILABLE");
   }
   const classification = classifyAIConnection(connection);
   if (classification === "INVALID") {
-    return {
-      kind: "blocked",
-      code: "UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION",
-      connectionId: input.connectionId,
-    };
+    return blocked("UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION");
   }
   if (classification !== "BYOK") assertAccountExecutionIdentity(connection);
   if (connection.status !== "CONNECTED") {
-    return {
-      kind: "blocked",
-      code:
+    return blocked(
         connection.status === "REAUTH_REQUIRED"
           ? "REAUTH_REQUIRED"
           : connection.status === "DISCONNECTED"
             ? "CONNECTION_DISCONNECTED"
             : "CONNECTION_ERROR",
-      connectionId: connection.id,
-    };
+    );
   }
   if (!input.model) {
-    return { kind: "blocked", code: "MODEL_UNAVAILABLE" };
+    return blocked("MODEL_UNAVAILABLE");
   }
   const streamBlock = await accountStreamingBlockCode(connection);
   if (streamBlock) {
-    return {
-      kind: "blocked",
-      code: streamBlock,
-      connectionId: connection.id,
-    };
+    return blocked(streamBlock);
   }
   return {
     kind: "account",
@@ -591,6 +580,9 @@ export const getAgentChatPreflight = async (input?: {
             kind: "blocked",
             code: streamBlock,
             connectionId: resolution.connectionId,
+            model: resolution.model,
+            displayName: connection?.displayName ?? resolution.provider,
+            locked: false,
           },
         };
       }
@@ -614,6 +606,8 @@ export const getAgentChatPreflight = async (input?: {
           kind: "blocked",
           code: resolution.code,
           connectionId: resolution.connectionId,
+          model: resolution.model ?? null,
+          locked: false,
         },
       };
     }

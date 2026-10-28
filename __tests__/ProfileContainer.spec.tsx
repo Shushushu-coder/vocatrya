@@ -3,10 +3,28 @@ import userEvent from "@testing-library/user-event";
 import ProfileContainer from "@/components/profile/ProfileContainer";
 import React from "react";
 
+let searchParams = new URLSearchParams();
+const replace = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace }),
   usePathname: () => "/",
+  useSearchParams: () => searchParams,
 }));
+
+beforeEach(() => { searchParams = new URLSearchParams(); });
+
+it("opens legacy resume upload from the toolbar deep link", async () => {
+  searchParams = new URLSearchParams("import-resume=true");
+  await act(async () => { render(<ProfileContainer />); });
+  expect(screen.getByRole("dialog")).toBeVisible();
+  expect(replace).toHaveBeenCalledWith("/", { scroll: false });
+});
+
+it("does not open legacy upload when the editor is read-only", async () => {
+  searchParams = new URLSearchParams("import-resume=true");
+  await act(async () => { render(<ProfileContainer resumeReadOnly />); });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
 
 vi.mock("@/actions/userSettings.actions", () => ({
   getUserSettings: vi.fn().mockResolvedValue({ success: false }),

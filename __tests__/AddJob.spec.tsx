@@ -56,6 +56,7 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
   useRouter: vi.fn(() => ({ replace: vi.fn() })),
   useSearchParams: vi.fn(() => new URLSearchParams()),
+  usePathname: () => "/dashboard/myjobs",
 }));
 
 global.ResizeObserver = class ResizeObserver {
