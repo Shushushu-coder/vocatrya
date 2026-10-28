@@ -763,6 +763,17 @@ export async function importBackup(
                 );
               }
             }
+            // Reminder.targetId is polymorphic: PROCESS_STEP →
+            // ApplicationProcessStep, JOB_DUE → Job. A source row that was
+            // not in this backup leaves a live reminder pointing at nothing,
+            // so the restored row is downgraded to an inert CANCELLED
+            // tombstone instead.
+            if (model === "Reminder") {
+              const mapped = idMap.get(row.targetId as string);
+              payload = mapped
+                ? { ...payload, targetId: mapped }
+                : { ...payload, status: "CANCELLED" };
+            }
 
             await tx[spec.delegate].create({ data: payload });
           }

@@ -42,6 +42,11 @@ import {
   assertResumeV1Readable,
   assertResumeV1Writable,
 } from "./capabilities";
+import {
+  cancelPendingReminder,
+  syncProcessStepReminder,
+} from "@/lib/reminders/reminderService";
+import { REMINDER_SOURCE_TYPE } from "@/lib/reminders/shared";
 import { resolveOwnedMappedOpportunityId } from "./legacyJobOpportunityMapping";
 
 export type SubmissionProvenanceInput = {
@@ -765,7 +770,7 @@ export class ApplicationService {
         _max: { sortOrder: true },
       });
       const timeZone = input.timeZone ?? runtimeTimeZone();
-      return tx.applicationProcessStep.create({
+      const step = await tx.applicationProcessStep.create({
         data: {
           applicationAttemptId: attempt.id,
           category: input.category,
@@ -786,6 +791,9 @@ export class ApplicationService {
           source: PROCESS_STEP_SOURCE.USER,
         },
       });
+      // REM-V1: reminder sync shares the source write's transaction.
+      await syncProcessStepReminder(tx, this.userId, step.id);
+      return step;
     });
   }
 
@@ -812,32 +820,42 @@ export class ApplicationService {
       this.isCompletedStep(existing) ||
       existing.source !== PROCESS_STEP_SOURCE.USER
     ) {
-      return this.db.applicationProcessStep.update({
-        where: { id: existing.id },
-        data: {
-          notes: input.notes === undefined ? existing.notes : input.notes,
-          result: input.result === undefined ? existing.result : input.result,
-        },
+      return this.db.$transaction(async (tx) => {
+        const step = await tx.applicationProcessStep.update({
+          where: { id: existing.id },
+          data: {
+            notes: input.notes === undefined ? existing.notes : input.notes,
+            result:
+              input.result === undefined ? existing.result : input.result,
+          },
+        });
+        await syncProcessStepReminder(tx, this.userId, step.id);
+        return step;
       });
     }
 
     // `undefined` leaves the column triple untouched — a save that never
     // touched the field cannot rewrite a historical unknown precision.
     const timeZone = input.timeZone ?? runtimeTimeZone();
-    return this.db.applicationProcessStep.update({
-      where: { id: existing.id },
-      data: {
-        category: input.category ?? existing.category,
-        label: input.label === undefined ? existing.label : input.label.trim(),
-        ...(input.scheduledAt === undefined
-          ? {}
-          : this.stepTimeWrite("scheduledAt", input.scheduledAt, timeZone)),
-        ...(input.deadlineAt === undefined
-          ? {}
-          : this.stepTimeWrite("deadlineAt", input.deadlineAt, timeZone)),
-        notes: input.notes === undefined ? existing.notes : input.notes,
-        result: input.result === undefined ? existing.result : input.result,
-      },
+    return this.db.$transaction(async (tx) => {
+      const step = await tx.applicationProcessStep.update({
+        where: { id: existing.id },
+        data: {
+          category: input.category ?? existing.category,
+          label:
+            input.label === undefined ? existing.label : input.label.trim(),
+          ...(input.scheduledAt === undefined
+            ? {}
+            : this.stepTimeWrite("scheduledAt", input.scheduledAt, timeZone)),
+          ...(input.deadlineAt === undefined
+            ? {}
+            : this.stepTimeWrite("deadlineAt", input.deadlineAt, timeZone)),
+          notes: input.notes === undefined ? existing.notes : input.notes,
+          result: input.result === undefined ? existing.result : input.result,
+        },
+      });
+      await syncProcessStepReminder(tx, this.userId, step.id);
+      return step;
     });
   }
 
@@ -847,19 +865,29 @@ export class ApplicationService {
     if (this.isCompletedStep(existing)) {
       return existing;
     }
-    await this.db.applicationProcessStep.updateMany({
-      where: {
-        id: existing.id,
-        completedAt: null,
-        status: { notIn: [PROCESS_STEP_STATUS.COMPLETED, PROCESS_STEP_STATUS.CANCELLED] },
-      },
-      data: {
-        status: PROCESS_STEP_STATUS.COMPLETED,
-        completedAt: new Date(),
-        completedAtPrecision: "fullInstant",
-      },
+    return this.db.$transaction(async (tx) => {
+      await tx.applicationProcessStep.updateMany({
+        where: {
+          id: existing.id,
+          completedAt: null,
+          status: {
+            notIn: [
+              PROCESS_STEP_STATUS.COMPLETED,
+              PROCESS_STEP_STATUS.CANCELLED,
+            ],
+          },
+        },
+        data: {
+          status: PROCESS_STEP_STATUS.COMPLETED,
+          completedAt: new Date(),
+          completedAtPrecision: "fullInstant",
+        },
+      });
+      await syncProcessStepReminder(tx, this.userId, existing.id);
+      return tx.applicationProcessStep.findUniqueOrThrow({
+        where: { id: existing.id },
+      });
     });
-    return this.db.applicationProcessStep.findUniqueOrThrow({ where: { id: existing.id } });
   }
 
   async cancelProcessStep(stepId: string) {
@@ -880,19 +908,29 @@ export class ApplicationService {
     ) {
       return existing;
     }
-    await this.db.applicationProcessStep.updateMany({
-      where: {
-        id: existing.id,
-        completedAt: null,
-        status: { notIn: [PROCESS_STEP_STATUS.COMPLETED, PROCESS_STEP_STATUS.CANCELLED] },
-      },
-      data: {
-        status: PROCESS_STEP_STATUS.CANCELLED,
-        completedAt: new Date(),
-        completedAtPrecision: "fullInstant",
-      },
+    return this.db.$transaction(async (tx) => {
+      await tx.applicationProcessStep.updateMany({
+        where: {
+          id: existing.id,
+          completedAt: null,
+          status: {
+            notIn: [
+              PROCESS_STEP_STATUS.COMPLETED,
+              PROCESS_STEP_STATUS.CANCELLED,
+            ],
+          },
+        },
+        data: {
+          status: PROCESS_STEP_STATUS.CANCELLED,
+          completedAt: new Date(),
+          completedAtPrecision: "fullInstant",
+        },
+      });
+      await syncProcessStepReminder(tx, this.userId, existing.id);
+      return tx.applicationProcessStep.findUniqueOrThrow({
+        where: { id: existing.id },
+      });
     });
-    return this.db.applicationProcessStep.findUniqueOrThrow({ where: { id: existing.id } });
   }
 
   async deleteUserProcessStep(stepId: string) {
@@ -904,8 +942,19 @@ export class ApplicationService {
         "Only user-created process steps can be deleted",
       );
     }
-    return this.db.applicationProcessStep.delete({
-      where: { id: existing.id },
+    return this.db.$transaction(async (tx) => {
+      const deleted = await tx.applicationProcessStep.delete({
+        where: { id: existing.id },
+      });
+      // The target row is gone: tombstone the reminder instead of leaving a
+      // live row pointing at nothing.
+      await cancelPendingReminder(
+        tx,
+        this.userId,
+        REMINDER_SOURCE_TYPE.PROCESS_STEP,
+        existing.id,
+      );
+      return deleted;
     });
   }
 
@@ -928,29 +977,41 @@ export class ApplicationService {
         return existing;
       }
       const completing = input.status === PROCESS_STEP_STATUS.COMPLETED;
-      return this.db.applicationProcessStep.update({
-        where: { id: existing.id },
-        data: {
-          status: input.status,
-          source: PROCESS_STEP_SOURCE.SYSTEM,
-          completedAt: completing ? existing.completedAt ?? new Date() : existing.completedAt,
-          completedAtPrecision: completing ? "fullInstant" : existing.completedAtPrecision,
-        },
+      return this.db.$transaction(async (tx) => {
+        const step = await tx.applicationProcessStep.update({
+          where: { id: existing.id },
+          data: {
+            status: input.status,
+            source: PROCESS_STEP_SOURCE.SYSTEM,
+            completedAt: completing
+              ? (existing.completedAt ?? new Date())
+              : existing.completedAt,
+            completedAtPrecision: completing
+              ? "fullInstant"
+              : existing.completedAtPrecision,
+          },
+        });
+        await syncProcessStepReminder(tx, this.userId, step.id);
+        return step;
       });
     }
 
     const completing = input.status === PROCESS_STEP_STATUS.COMPLETED;
-    return this.db.applicationProcessStep.create({
-      data: {
-        applicationAttemptId: attempt.id,
-        category: input.category,
-        label: input.label,
-        sortOrder: input.sortOrder,
-        status: input.status,
-        source: PROCESS_STEP_SOURCE.SYSTEM,
-        completedAt: completing ? new Date() : null,
-        completedAtPrecision: completing ? "fullInstant" : null,
-      },
+    return this.db.$transaction(async (tx) => {
+      const step = await tx.applicationProcessStep.create({
+        data: {
+          applicationAttemptId: attempt.id,
+          category: input.category,
+          label: input.label,
+          sortOrder: input.sortOrder,
+          status: input.status,
+          source: PROCESS_STEP_SOURCE.SYSTEM,
+          completedAt: completing ? new Date() : null,
+          completedAtPrecision: completing ? "fullInstant" : null,
+        },
+      });
+      await syncProcessStepReminder(tx, this.userId, step.id);
+      return step;
     });
   }
 
@@ -1004,37 +1065,50 @@ export class ApplicationService {
         throw new CareerRuntimeError("PROCESS_STEP_NOT_FOUND", "Process step not found");
       }
       if (this.isCompletedStep(existing)) {
-        return this.db.applicationProcessStep.update({
-          where: { id: existing.id },
-          data: {
-            notes: input.notes === undefined ? existing.notes : input.notes,
-            result: input.result === undefined ? existing.result : input.result,
-          },
+        return this.db.$transaction(async (tx) => {
+          const step = await tx.applicationProcessStep.update({
+            where: { id: existing.id },
+            data: {
+              notes: input.notes === undefined ? existing.notes : input.notes,
+              result:
+                input.result === undefined ? existing.result : input.result,
+            },
+          });
+          await syncProcessStepReminder(tx, this.userId, step.id);
+          return step;
         });
       }
-      return this.db.applicationProcessStep.update({
-        where: { id: input.stepId },
-        data: {
-          category: data.category,
-          label: data.label,
-          sortOrder: data.sortOrder,
-          status: data.status,
-          scheduledAt: data.scheduledAt,
-          scheduledAtPrecision: null,
-          scheduledAtZone: null,
-          deadlineOn: null,
-          deadlineAt: data.deadlineAt,
-          deadlinePrecision: null,
-          deadlineZone: null,
-          completedAt: data.completedAt,
-          completedAtPrecision: data.completedAtPrecision,
-          result: data.result,
-          notes: data.notes,
-        },
+      return this.db.$transaction(async (tx) => {
+        const step = await tx.applicationProcessStep.update({
+          where: { id: input.stepId },
+          data: {
+            category: data.category,
+            label: data.label,
+            sortOrder: data.sortOrder,
+            status: data.status,
+            scheduledAt: data.scheduledAt,
+            scheduledAtPrecision: null,
+            scheduledAtZone: null,
+            deadlineOn: null,
+            deadlineAt: data.deadlineAt,
+            deadlinePrecision: null,
+            deadlineZone: null,
+            completedAt: data.completedAt,
+            completedAtPrecision: data.completedAtPrecision,
+            result: data.result,
+            notes: data.notes,
+          },
+        });
+        await syncProcessStepReminder(tx, this.userId, step.id);
+        return step;
       });
     }
 
-    return this.db.applicationProcessStep.create({ data });
+    return this.db.$transaction(async (tx) => {
+      const step = await tx.applicationProcessStep.create({ data });
+      await syncProcessStepReminder(tx, this.userId, step.id);
+      return step;
+    });
   }
 
   private isCompletedStep(step: { completedAt: Date | null; status: string }): boolean {

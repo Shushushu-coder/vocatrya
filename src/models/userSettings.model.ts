@@ -35,11 +35,22 @@ export interface GeneralSettings {
   timeZone?: string;
 }
 
+/**
+ * REM-V1 notification preferences under `settings.notifications.*`.
+ * `enabled` is the master delivery switch (absent = on); `leadMinutes` is
+ * one of the minute presets used to offset reminder fireAt from the anchor.
+ */
+export interface NotificationSettings {
+  enabled?: boolean;
+  leadMinutes?: number;
+}
+
 export interface UserSettingsData {
   ai: AiSettings;
   display: DisplaySettings;
   settings?: {
     general?: GeneralSettings;
+    notifications?: NotificationSettings;
   };
 }
 

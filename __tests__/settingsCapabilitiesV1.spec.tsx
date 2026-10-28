@@ -4,7 +4,7 @@
 // requests, and no "shortcuts" that were never registered.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nProvider } from "@/i18n";
 import NotificationsSettings from "@/components/settings/NotificationsSettings";
 import ShortcutsSettings from "@/components/settings/ShortcutsSettings";
@@ -15,6 +15,23 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard/settings",
 }));
 
+// REM-V1: notification preferences are real now — the page loads them via
+// getUserSettings and writes through updateNotificationSettings. Both are
+// stubbed so the loaded state is deterministic in jsdom.
+const notificationActions = vi.hoisted(() => ({
+  getUserSettings: vi.fn(),
+  updateNotificationSettings: vi.fn(),
+}));
+vi.mock("@/actions/userSettings.actions", () => notificationActions);
+
+vi.mock("@/lib/toast", () => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+  toastInfo: vi.fn(),
+  toastActionResult: vi.fn(),
+  GENERIC_ERROR_MESSAGE: "Something went wrong",
+}));
+
 const PAGES = {
   "notifications-settings": NotificationsSettings,
   "shortcuts-settings": ShortcutsSettings,
@@ -23,7 +40,25 @@ const PAGES = {
 
 afterEach(() => {
   delete (window as { vocatryaWindow?: unknown }).vocatryaWindow;
+  delete (globalThis as { Notification?: unknown }).Notification;
   vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  notificationActions.getUserSettings.mockResolvedValue({
+    success: true,
+    data: { userId: "u1", settings: { settings: {} } },
+  });
+  notificationActions.updateNotificationSettings.mockImplementation(
+    async (input: { enabled?: boolean; leadMinutes?: number }) => ({
+      success: true,
+      data: {
+        userId: "u1",
+        settings: { settings: { notifications: input } },
+      },
+    }),
+  );
 });
 
 function expectNoInteractiveControls(container: HTMLElement) {
@@ -34,32 +69,88 @@ function expectNoInteractiveControls(container: HTMLElement) {
   ).toBeNull();
 }
 
-describe("NotificationsSettings — honest capability page", () => {
-  it("lists the in-app toast feedback as built-in, not configurable", () => {
+describe("NotificationsSettings — real reminder controls", () => {
+  it("lists the in-app toast feedback as built-in, not configurable", async () => {
     render(<NotificationsSettings />);
     const page = screen.getByTestId("notifications-settings");
     expect(
-      within(page).getByText("In-app feedback messages"),
+      await within(page).findByText("In-app feedback messages"),
     ).toBeInTheDocument();
     expect(within(page).getByText("Built-in")).toBeInTheDocument();
     expect(within(page).getByText(/toast/i)).toBeInTheDocument();
   });
 
-  it("states system notifications and preferences as not provided", () => {
+  it("renders the reminder switch, lead selector, and test button", async () => {
     render(<NotificationsSettings />);
     const page = screen.getByTestId("notifications-settings");
     expect(
-      within(page).getByText("System notifications"),
+      await within(page).findByTestId("notifications-enabled-switch"),
     ).toBeInTheDocument();
     expect(
-      within(page).getByText("Notification preferences"),
+      within(page).getByTestId("notifications-lead-select"),
     ).toBeInTheDocument();
-    expect(within(page).getAllByText("Not provided")).toHaveLength(2);
+    expect(
+      within(page).getByTestId("notifications-test-button"),
+    ).toBeInTheDocument();
+    expect(within(page).queryByText("Not provided")).not.toBeInTheDocument();
+    // Honest boundary copy: delivered while running, not after a full quit.
+    expect(
+      within(page).getAllByText(/while the app is running/i).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(page).getByText(/not delivered after a full quit/i),
+    ).toBeInTheDocument();
   });
 
-  it("contains no interactive control that could imply a setting", () => {
-    const { container } = render(<NotificationsSettings />);
-    expectNoInteractiveControls(container);
+  it("rolls the switch back to the confirmed value when the write fails", async () => {
+    notificationActions.updateNotificationSettings.mockResolvedValue({
+      success: false,
+      message: "forced failure",
+    });
+    render(<NotificationsSettings />);
+    const page = screen.getByTestId("notifications-settings");
+    const toggle = await within(page).findByTestId(
+      "notifications-enabled-switch",
+    );
+    expect(toggle).toHaveAttribute("data-state", "checked");
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(toggle).toHaveAttribute("data-state", "checked"),
+    );
+  });
+
+  it("sends the test notification through the Notification API", async () => {
+    const constructed = vi.fn();
+    class FakeNotification {
+      static permission = "granted";
+      static requestPermission = vi.fn(async () => "granted");
+      constructor(title: string, options?: NotificationOptions) {
+        constructed(title, options);
+      }
+    }
+    (globalThis as { Notification?: unknown }).Notification =
+      FakeNotification;
+    render(<NotificationsSettings />);
+    const page = screen.getByTestId("notifications-settings");
+    fireEvent.click(
+      await within(page).findByTestId("notifications-test-button"),
+    );
+    await waitFor(() =>
+      expect(constructed).toHaveBeenCalledWith(
+        "Test notification",
+        expect.objectContaining({ body: expect.any(String) }),
+      ),
+    );
+  });
+
+  it("reports an unsupported environment instead of a dead button", async () => {
+    const { toastError } = await import("@/lib/toast");
+    render(<NotificationsSettings />);
+    const page = screen.getByTestId("notifications-settings");
+    fireEvent.click(
+      await within(page).findByTestId("notifications-test-button"),
+    );
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
   });
 });
 
@@ -206,6 +297,11 @@ describe("zh-CN fallback copy", () => {
         <AudioSettings />
       </I18nProvider>,
     );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("notifications-settings"),
+      ).toHaveTextContent("系统通知"),
+    );
     expect(
       screen.getByTestId("notifications-settings"),
     ).toHaveTextContent("通知");
@@ -222,7 +318,7 @@ describe("zh-CN fallback copy", () => {
 });
 
 describe("rendered DOM evidence", () => {
-  it("writes the three page fragments to the runtime evidence dir", () => {
+  it("writes the three page fragments to the runtime evidence dir", async () => {
     const dir = path.resolve(
       __dirname,
       "..",
@@ -236,6 +332,12 @@ describe("rendered DOM evidence", () => {
       const Page = PAGES[name];
       const { container, unmount } = render(<Page />);
       try {
+        // Capture the loaded fragment, not the notifications loading state.
+        await waitFor(() =>
+          expect(
+            container.querySelector(".flex.flex-wrap"),
+          ).not.toBeNull(),
+        );
         mkdirSync(dir, { recursive: true });
         writeFileSync(
           path.join(dir, `${name}.html`),
@@ -254,12 +356,18 @@ describe("rendered DOM evidence", () => {
 describe("Settings V1 compact-row layout", () => {
   it.each(Object.keys(PAGES))(
     "%s rows wrap instead of overflowing on narrow widths",
-    (testId) => {
+    async (testId) => {
       const Page = PAGES[testId as keyof typeof PAGES];
       render(<Page />);
       const page = screen.getByTestId(testId);
+      // NotificationsSettings resolves its persisted state before rendering
+      // rows; the other pages are loaded immediately.
+      await waitFor(() =>
+        expect(
+          page.querySelectorAll(".flex.flex-wrap").length,
+        ).toBeGreaterThan(0),
+      );
       const rows = page.querySelectorAll(".flex.flex-wrap");
-      expect(rows.length).toBeGreaterThan(0);
       for (const row of rows) {
         const text = row.querySelector(".min-w-0");
         expect(text).not.toBeNull();

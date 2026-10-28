@@ -327,10 +327,13 @@ test("SET-08 pages mount honest capability states and do not write settings", as
   await expect(notifications.getByText("Built-in", { exact: true })).toBeVisible();
   await expect(notifications.getByText("System notifications", { exact: true })).toBeVisible();
   await expect(notifications.getByText("Notification preferences", { exact: true })).toBeVisible();
-  await expect(notifications.getByText("Not provided", { exact: true })).toHaveCount(2);
-  await expect(notifications.getByRole("switch")).toHaveCount(0);
+  await expect(notifications.getByText("Not provided", { exact: true })).toHaveCount(0);
+  await expect(notifications.getByTestId("notifications-enabled-switch")).toBeVisible();
+  await expect(notifications.getByTestId("notifications-lead-select")).toBeVisible();
+  await expect(notifications.getByTestId("notifications-test-button")).toBeVisible();
+  await expect(notifications.getByRole("switch")).toHaveCount(1);
   await expect(notifications.getByRole("checkbox")).toHaveCount(0);
-  await expect(notifications.getByRole("button")).toHaveCount(0);
+  await expect(notifications).toContainText("Delivered while the app is running");
   await expect(notifications).not.toContainText("settings.notifications");
 
   const beforeKeys = await page.evaluate(() => window.__int01KeyAdds.length);
@@ -435,8 +438,11 @@ test("public zh-CN and en bundles, nine entries, and section priority hold", asy
     await expect(notifications.getByText("内置", { exact: true })).toBeVisible();
     await expect(notifications.getByText("系统通知", { exact: true })).toBeVisible();
     await expect(notifications.getByText("通知偏好", { exact: true })).toBeVisible();
-    await expect(notifications.getByText("未提供", { exact: true })).toHaveCount(2);
-    await expect(notifications).not.toContainText("This version has no system notification events");
+    await expect(notifications.getByText("未提供", { exact: true })).toHaveCount(0);
+    await expect(notifications.getByTestId("notifications-enabled-switch")).toBeVisible();
+    await expect(notifications.getByTestId("notifications-lead-select")).toBeVisible();
+    await expect(notifications.getByTestId("notifications-test-button")).toBeVisible();
+    await expect(notifications).toContainText("应用运行（含最小化或托盘隐藏）时送达");
     await expect(notifications).not.toContainText("settings.notifications");
     await expectNoOverflow(`zh notifications ${width}`);
 

@@ -1276,6 +1276,24 @@ const DialogueTurn = z.object({
   createdAt: dt,
 });
 
+// REM-V1 derived schedule records. targetId is polymorphic (sourceType
+// selects the referenced table), so it is carried verbatim and remapped
+// per sourceType at restore time.
+const Reminder = z.object({
+  id,
+  sourceType: str,
+  targetId: str,
+  anchorAt: dt,
+  fireAt: dt,
+  title: str,
+  body: str,
+  deepLink: str,
+  status: str,
+  firedAt: optDt,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
 const group = <T extends z.ZodTypeAny>(schema: T) =>
   z.array(schema).default([]);
 
@@ -1372,6 +1390,7 @@ export const BackupDataSchema = z.object({
   SessionSummaryInput: group(SessionSummaryInput),
   CoachingConversation: group(CoachingConversation),
   DialogueTurn: group(DialogueTurn),
+  Reminder: group(Reminder),
 
   // Implicit Prisma m2m relations are not models, so they travel as id pairs.
   _JobToTag: group(z.object({ jobId: id, tagId: id })),
