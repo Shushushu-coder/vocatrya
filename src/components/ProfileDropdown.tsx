@@ -20,7 +20,7 @@ interface ProfileDropdownProps {
   user: any;
   expanded: boolean;
   signOutAction: () => void;
-  // Owned by the sidebar footer so one fetch/dialog serves both the
+  // Owned by the sidebar so one fetch/dialog serves both the
   // Help entry and this menu's update-available item.
   version?: AppVersionInfo | null;
   onOpenSupport?: () => void;

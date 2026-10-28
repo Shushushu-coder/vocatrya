@@ -118,11 +118,13 @@ describe("Sidebar", () => {
     );
   });
 
-  it("exposes help, settings, and the account menu in the footer", async () => {
+  it("places help above navigation while settings and the account menu remain below", async () => {
     const user = userEvent.setup();
     renderSidebar();
 
     expect(screen.getByText(testUser.email)).toBeInTheDocument();
+    const help = screen.getByRole("button", { name: "Help & feedback" });
+    expect(help.compareDocumentPosition(screen.getByRole("link", { name: "Dashboard" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // Settings is a real route entry in the footer, not a nested menu item.
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(

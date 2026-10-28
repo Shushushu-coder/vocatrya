@@ -24,7 +24,7 @@ import { isFreshFullHiddenNavRoute } from "@/lib/career/freshSurfacePolicy";
 import { getSidebarNavLabel } from "./Header";
 
 // Same row geometry as NavLink (fixed 56px icon cell + fading label) so the
-// bottom utility entries line up with the business nav in both rail states.
+// utility entries line up with the business nav in both rail states.
 function SidebarAction({
   label,
   Icon,
@@ -67,25 +67,20 @@ function SidebarFooter({
   user,
   expanded,
   signOutAction,
+  version,
+  onOpenSupport,
 }: {
   user: CurrentUser | null;
   expanded: boolean;
   signOutAction: () => void;
+  version: ReturnType<typeof useAppVersion>;
+  onOpenSupport: () => void;
 }) {
   const { t } = useI18n();
   const path = usePathname();
-  const version = useAppVersion();
-  const [supportOpen, setSupportOpen] = useState(false);
-  const openSupport = () => setSupportOpen(true);
 
   return (
     <div className="flex flex-col gap-1 border-t py-2">
-      <SidebarAction
-        label={t("nav.helpFeedback")}
-        Icon={CircleHelp}
-        onClick={openSupport}
-        expanded={expanded}
-      />
       <NavLink
         label={t("nav.settings")}
         Icon={Settings}
@@ -98,12 +93,7 @@ function SidebarFooter({
         expanded={expanded}
         signOutAction={signOutAction}
         version={version}
-        onOpenSupport={openSupport}
-      />
-      <SupportDialog
-        open={supportOpen}
-        onOpenChange={setSupportOpen}
-        version={version}
+        onOpenSupport={onOpenSupport}
       />
     </div>
   );
@@ -120,6 +110,9 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
   const { expanded, width, isResizing, toggle, startResize, resizeByKey } =
     useSidebar();
   const { freshNativeFull } = useCareerSurfaces();
+  const version = useAppVersion();
+  const [supportOpen, setSupportOpen] = useState(false);
+  const openSupport = () => setSupportOpen(true);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -163,6 +156,15 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
           </span>
         </div>
 
+        <div className="shrink-0 border-b py-2">
+          <SidebarAction
+            label={t("nav.helpFeedback")}
+            Icon={CircleHelp}
+            onClick={openSupport}
+            expanded={expanded}
+          />
+        </div>
+
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto py-2">
           {SIDEBAR_LINKS.map((item) => {
             // Only show dev-only items in development mode
@@ -190,6 +192,13 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
           user={user}
           expanded={expanded}
           signOutAction={signOutAction}
+          version={version}
+          onOpenSupport={openSupport}
+        />
+        <SupportDialog
+          open={supportOpen}
+          onOpenChange={setSupportOpen}
+          version={version}
         />
 
         {/* Edge resize handle. Below the collapse threshold the rail snaps
