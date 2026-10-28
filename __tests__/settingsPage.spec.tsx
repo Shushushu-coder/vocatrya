@@ -1,4 +1,4 @@
-// Settings host shell: five nav groups with eleven entries, `general` as the
+// Settings host shell: five nav groups with twelve entries, `general` as the
 // default page, owner components mounted per section, honest unavailable
 // states for pages whose components have not landed, and the legacy MCP /
 // Interview compat surfaces kept reachable in their new homes.
@@ -53,6 +53,9 @@ vi.mock("@/components/settings/ShortcutsSettings", () => ({
 vi.mock("@/components/settings/AudioSettings", () => ({
   default: () => <div data-testid="audio-settings" />,
 }));
+vi.mock("@/components/settings/InputPreferencesSettings", () => ({
+  default: () => <div data-testid="input-preferences-settings" />,
+}));
 vi.mock("@/components/settings/AboutSettings", () => ({
   default: () => <div data-testid="about-settings" />,
 }));
@@ -66,6 +69,7 @@ const EXPECTED_SECTION_ORDER = [
   "AI Assignments",
   "Shortcuts",
   "Audio",
+  "Input Preferences",
   "Bulk Edit",
   "Resume Variants",
   "Data & Privacy",
@@ -81,7 +85,7 @@ describe("Settings page — V1 navigation shell", () => {
     window.history.replaceState(null, "", "/dashboard/settings");
   });
 
-  it("renders eleven sections in five groups", () => {
+  it("renders twelve sections in five groups", () => {
     render(<Settings />);
     const names = navButtons().map((button) => button.textContent);
     expect(names).toEqual(EXPECTED_SECTION_ORDER);
@@ -192,6 +196,7 @@ describe("Settings page — V1 navigation shell", () => {
     ["Notifications", "notifications-settings"],
     ["Shortcuts", "shortcuts-settings"],
     ["Audio", "audio-settings"],
+    ["Input Preferences", "input-preferences-settings"],
     ["About", "about-settings"],
   ] as const)(
     "the %s entry mounts its delivered owner component",

@@ -57,6 +57,7 @@ describe("runtime IPC boundary", () => {
       "runtime:getStatus",
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
+      "runtime:checkUpdate",
     ]);
     // The dangerous shapes must not exist at all.
     for (const forbidden of [
@@ -87,6 +88,7 @@ describe("runtime IPC boundary", () => {
       "runtime:getStatus",
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
+      "runtime:checkUpdate",
     ]) {
       for (const bad of [
         undefined,
@@ -145,6 +147,21 @@ describe("runtime IPC boundary", () => {
       backendKind: "CLAUDE_RUNTIME",
     });
     expect(update.methods[0].args).toEqual(["update"]);
+  });
+
+  it("checkUpdate runs the read-only online check — no install executes", async () => {
+    const ipcMain = fakeIpcMain();
+    registerRuntimeIpcHandlers(ipcMain, service);
+    // Everything is NOT_INSTALLED in this test env → the check reports
+    // NOT_RUN without touching the network.
+    const result = await ipcMain.invoke("runtime:checkUpdate", {
+      backendKind: "CODEX_RUNTIME",
+      force: true,
+      executable: "C:\\evil.exe", // hostile fields stay ignored
+    });
+    expect(result.backendKind).toBe("CODEX_RUNTIME");
+    expect(result.check.status).toBe("NOT_RUN");
+    expect(result.executionEnabled).toBe(false);
   });
 
   it("getStatus stays UNKNOWN without a managed profile and validates refs", async () => {

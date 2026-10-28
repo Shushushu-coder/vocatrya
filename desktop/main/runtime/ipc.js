@@ -13,6 +13,7 @@ const RUNTIME_IPC_CHANNELS = Object.freeze({
   getStatus: "runtime:getStatus",
   getInstallInfo: "runtime:getInstallInfo",
   getUpdateInfo: "runtime:getUpdateInfo",
+  checkUpdate: "runtime:checkUpdate",
 });
 
 function readBackendKind(payload) {
@@ -55,6 +56,16 @@ function registerRuntimeIpcHandlers(ipcMain, service) {
 
   ipcMain.handle(RUNTIME_IPC_CHANNELS.getUpdateInfo, (_event, payload) =>
     service.getUpdateInfo(readBackendKind(payload)),
+  );
+
+  // Online update check. The renderer may only say whether to bypass the
+  // shared cache (manual recheck) — it cannot pick a source, a URL, or
+  // trigger any install/update execution.
+  ipcMain.handle(RUNTIME_IPC_CHANNELS.checkUpdate, (_event, payload) =>
+    service.checkRuntimeUpdate(readBackendKind(payload), {
+      force:
+        payload && typeof payload === "object" && payload.force === true,
+    }),
   );
 
   return RUNTIME_IPC_CHANNELS;

@@ -5,7 +5,7 @@
  * readiness (never silent-install), and per-connection operations mint a
  * ticket then call the unified IPC surface.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
 
@@ -188,6 +188,25 @@ beforeEach(() => {
 });
 
 describe("AiConnectionsCard", () => {
+  it("reports a failed manual recheck after a successful automatic check", async () => {
+    installBridges();
+    window.vocatryaRuntime!.checkUpdate = vi.fn(async (_backendKind, options) => {
+      if (options?.force) throw new Error("IPC unavailable");
+      return {
+        currentVersion: "1.0.0",
+        check: { status: "UP_TO_DATE", latestVersion: "1.0.0", error: null },
+        compatibility: { current: null },
+      } as any;
+    });
+    const user = userEvent.setup();
+    render(<AiConnectionsCard />);
+    const card = (await screen.findByText("via OpenAI Codex CLI")).closest("section")!;
+    await waitFor(() => expect(within(card).getByText(/Up to date/)).toBeInTheDocument());
+    await user.click(within(card).getByRole("button", { name: /Recheck/ }));
+    await waitFor(() => expect(within(card).getByText(/Update check failed/)).toBeInTheDocument());
+    expect(within(card).queryByText(/Up to date/)).not.toBeInTheDocument();
+  });
+
   it("renders nothing outside the desktop bridge", () => {
     const { container } = render(<AiConnectionsCard />);
     expect(container).toBeEmptyDOMElement();

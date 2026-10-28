@@ -57,6 +57,15 @@ interface VocatryaRuntimeBridge {
     executionEnabled: boolean;
     methods: { kind: string; summary: string; executable: string; args: string[] }[];
   }>;
+  /**
+   * Read-only upstream update check — shared by the automatic mount-time
+   * check and the manual recheck. `force: true` bypasses the shared
+   * upstream cache; it never installs or updates anything.
+   */
+  checkUpdate(
+    backendKind: string,
+    options?: { force?: boolean },
+  ): Promise<import("../lib/ai/runtime/update-check").RuntimeUpdateCheckResult>;
 }
 
 interface AiConnectionOpConnection {

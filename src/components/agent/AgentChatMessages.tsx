@@ -9,6 +9,7 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { Button } from "@/components/ui/button";
+import { AgentAnswerActions } from "@/components/agent/AgentAnswerActions";
 import { AgentApprovalCard } from "@/components/agent/AgentApprovalCard";
 import { AgentMarkdown } from "@/components/agent/AgentMarkdown";
 import { AgentMatchContent } from "@/components/agent/AgentMatchContent";
@@ -17,6 +18,7 @@ import { AgentReviewContent } from "@/components/agent/AgentReviewContent";
 import { AgentStatusRow } from "@/components/agent/AgentStatusRow";
 import { AgentToolRunningCard } from "@/components/agent/AgentToolRunningCard";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { assistantAnswerCopyText } from "@/lib/agent/answerCopyText";
 import { resolvePastedText } from "@/lib/agent/paste";
 import { parseJobMatch } from "@/lib/ai/jobMatch/parse";
 import { parseResumeReview } from "@/lib/ai/resumeReview/parse";
@@ -107,86 +109,99 @@ export function AgentChatMessages() {
   return (
     <Conversation className="flex-1">
       <ConversationContent className="gap-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex flex-col gap-2 text-sm",
-              message.role === "user" && "items-end",
-            )}
-          >
-            {message.parts.map((part, i) => {
-              if (part.type === "text") {
-                // User text stays plain: it is their own words, and a user
-                // who types a markdown table did not ask for it to render.
-                if (message.role === "user") {
-                  return (
-                    <p
-                      key={i}
-                      className="min-w-0 max-w-[85%] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md bg-muted px-3 py-2"
-                    >
-                      {part.text}
-                    </p>
-                  );
-                }
-                return <AgentMarkdown key={i} text={part.text} />;
-              }
-              if (isAgentPastePart(part))
-                return <PasteChip key={i} data={part.data} />;
-              // Static, not dynamic: every tool this surface exposes is
-              // declared in buildAgentTools, so a dynamic part is not ours.
-              if (!isStaticToolUIPart(part)) return null;
-              switch (part.state) {
-                case "input-streaming":
-                case "input-available": {
-                  const tool = getToolName(part);
-                  const streamed = isNestedTool(tool)
-                    ? toolStreams[part.toolCallId]
-                    : undefined;
-                  if (!streamed) return <AgentToolRunningCard key={i} part={part} />;
-                  if (tool === "match_job") {
-                    const parsed = parseJobMatch(streamed);
+        {messages.map((message) => {
+          // Copy answers only ever covers the message's own visible prose —
+          // hidden reasoning, raw tool args and card output stay out of it.
+          // Empty answers and pure-tool turns get no action row at all.
+          const copyText =
+            message.role === "assistant"
+              ? assistantAnswerCopyText(message.parts)
+              : "";
+          return (
+            <div
+              key={message.id}
+              className={cn(
+                "flex flex-col gap-2 text-sm",
+                message.role === "user" && "items-end",
+              )}
+            >
+              {message.parts.map((part, i) => {
+                if (part.type === "text") {
+                  // User text stays plain: it is their own words, and a user
+                  // who types a markdown table did not ask for it to render.
+                  if (message.role === "user") {
                     return (
-                      <AgentMatchContent
+                      <p
+                        key={i}
+                        className="min-w-0 max-w-[85%] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md bg-muted px-3 py-2"
+                      >
+                        {part.text}
+                      </p>
+                    );
+                  }
+                  return <AgentMarkdown key={i} text={part.text} />;
+                }
+                if (isAgentPastePart(part))
+                  return <PasteChip key={i} data={part.data} />;
+                // Static, not dynamic: every tool this surface exposes is
+                // declared in buildAgentTools, so a dynamic part is not ours.
+                if (!isStaticToolUIPart(part)) return null;
+                switch (part.state) {
+                  case "input-streaming":
+                  case "input-available": {
+                    const tool = getToolName(part);
+                    const streamed = isNestedTool(tool)
+                      ? toolStreams[part.toolCallId]
+                      : undefined;
+                    if (!streamed)
+                      return <AgentToolRunningCard key={i} part={part} />;
+                    if (tool === "match_job") {
+                      const parsed = parseJobMatch(streamed);
+                      return (
+                        <AgentMatchContent
+                          key={i}
+                          body={parsed.body}
+                          scores={parsed.scores}
+                        />
+                      );
+                    }
+                    // A letter has no scores line, so stripping reasoning is
+                    // the whole of its parse.
+                    if (tool === "generate_cover_letter") {
+                      return (
+                        <AgentMarkdown key={i} text={stripThinking(streamed)} />
+                      );
+                    }
+                    const parsed = parseResumeReview(streamed);
+                    return (
+                      <AgentReviewContent
                         key={i}
                         body={parsed.body}
                         scores={parsed.scores}
                       />
                     );
                   }
-                  // A letter has no scores line, so stripping reasoning is the
-                  // whole of its parse.
-                  if (tool === "generate_cover_letter") {
-                    return <AgentMarkdown key={i} text={stripThinking(streamed)} />;
-                  }
-                  const parsed = parseResumeReview(streamed);
-                  return (
-                    <AgentReviewContent
-                      key={i}
-                      body={parsed.body}
-                      scores={parsed.scores}
-                    />
-                  );
+                  case "approval-requested":
+                  case "approval-responded":
+                    return (
+                      <AgentApprovalCard
+                        key={i}
+                        part={part}
+                        pastedText={pastedText}
+                        onRespond={addToolApprovalResponse}
+                      />
+                    );
+                  // Default, not a case list: AgentResultCard already returns
+                  // null for anything it does not recognize, and rendering
+                  // nothing beats rendering an unknown future state raw.
+                  default:
+                    return <AgentResultCard key={i} part={part} />;
                 }
-                case "approval-requested":
-                case "approval-responded":
-                  return (
-                    <AgentApprovalCard
-                      key={i}
-                      part={part}
-                      pastedText={pastedText}
-                      onRespond={addToolApprovalResponse}
-                    />
-                  );
-                // Default, not a case list: AgentResultCard already returns
-                // null for anything it does not recognize, and rendering
-                // nothing beats rendering an unknown future state raw.
-                default:
-                  return <AgentResultCard key={i} part={part} />;
-              }
-            })}
-          </div>
-        ))}
+              })}
+              {copyText && <AgentAnswerActions text={copyText} />}
+            </div>
+          );
+        })}
 
         {showContinue && (
           <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">

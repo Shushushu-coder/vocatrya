@@ -57,6 +57,7 @@ const RUNTIME_CHANNELS = Object.freeze({
   getStatus: "runtime:getStatus",
   getInstallInfo: "runtime:getInstallInfo",
   getUpdateInfo: "runtime:getUpdateInfo",
+  checkUpdate: "runtime:checkUpdate",
 });
 
 const AI_CONNECTION_CHANNELS = Object.freeze({
@@ -89,6 +90,13 @@ contextBridge.exposeInMainWorld("vocatryaRuntime", {
     ipcRenderer.invoke(RUNTIME_CHANNELS.getInstallInfo, { backendKind }),
   getUpdateInfo: (backendKind) =>
     ipcRenderer.invoke(RUNTIME_CHANNELS.getUpdateInfo, { backendKind }),
+  // Read-only upstream update check shared by the automatic mount-time
+  // check and the manual recheck ({ force: true } bypasses the cache).
+  checkUpdate: (backendKind, options) =>
+    ipcRenderer.invoke(RUNTIME_CHANNELS.checkUpdate, {
+      backendKind,
+      force: options?.force === true,
+    }),
 });
 
 contextBridge.exposeInMainWorld("vocatryaAi", {

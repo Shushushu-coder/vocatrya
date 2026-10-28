@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n";
+import { useStructuredField } from "@/lib/inputPreferences";
 
 const AUTOSAVE_DEBOUNCE_MS = 700;
 const SAVED_STATUS_MS = 1600;
@@ -33,6 +34,12 @@ type AutosaveController<T> = {
   draftOnly: (value: T) => void;
   /** Commit the current draft immediately (blur, toggle, retry). */
   commitNow: () => void;
+  /** True while the last commit attempt was refused by `committable`. */
+  validationBlocked: boolean;
+  /** Surface the validation-blocked state (Enter→next gate). */
+  markValidationBlocked: () => void;
+  /** Whether the current draft passes the `committable` gate. */
+  isCommittable: () => boolean;
 };
 
 /**
@@ -52,6 +59,7 @@ function useAutosave<T>({
 }: UseAutosaveOptions<T>): AutosaveController<T> {
   const [draft, setDraft] = useState(committed);
   const [status, setStatus] = useState<SaveStatus>("idle");
+  const [validationBlocked, setValidationBlocked] = useState(false);
   const committedRef = useRef(committed);
   const draftRef = useRef(committed);
   const inFlightRef = useRef(false);
@@ -97,7 +105,13 @@ function useAutosave<T>({
   const commit = useCallback(async () => {
     const save = onSaveRef.current;
     const target = normalizeRef.current(draftRef.current);
-    if (committableRef.current && !committableRef.current(target)) return;
+    if (committableRef.current && !committableRef.current(target)) {
+      // Validation blocks the commit but keeps the draft: blur, Tab-away and
+      // Enter→next all surface the same field-level error (AC-11).
+      setValidationBlocked(true);
+      return;
+    }
+    setValidationBlocked(false);
     if (inFlightRef.current) {
       pendingRef.current = target;
       return;
@@ -144,6 +158,7 @@ function useAutosave<T>({
     draftRef.current = value;
     setDraft(value);
     setStatus((s) => (s === "saving" ? s : "idle"));
+    setValidationBlocked(false);
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
@@ -177,7 +192,25 @@ function useAutosave<T>({
     [],
   );
 
-  return { draft, status, change, draftOnly, commitNow };
+  const isCommittable = useCallback(() => {
+    const gate = committableRef.current;
+    return !gate || gate(normalizeRef.current(draftRef.current));
+  }, []);
+
+  const markValidationBlocked = useCallback(() => {
+    setValidationBlocked(true);
+  }, []);
+
+  return {
+    draft,
+    status,
+    change,
+    draftOnly,
+    commitNow,
+    validationBlocked,
+    markValidationBlocked,
+    isCommittable,
+  };
 }
 
 function SaveStatusChip({
@@ -265,13 +298,27 @@ export function MaterialTextField({
   required,
   testId,
 }: TextFieldProps) {
-  const { draft, status, change, draftOnly, commitNow } = useAutosave<string>({
+  const { t } = useI18n();
+  const {
+    draft,
+    status,
+    change,
+    draftOnly,
+    commitNow,
+    validationBlocked,
+    markValidationBlocked,
+    isCommittable,
+  } = useAutosave<string>({
     committed,
     onSave,
     normalize: (v) => v.trim(),
     committable: required ? (v) => v.length > 0 : undefined,
   });
   const composingRef = useRef(false);
+  const structured = useStructuredField({
+    canLeave: isCommittable,
+    onLeaveBlocked: markValidationBlocked,
+  });
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     // While an IME composition is open the draft is intermediate text (e.g.
@@ -290,7 +337,11 @@ export function MaterialTextField({
       e.keyCode === 229
     )
       return;
-    if (e.key === "Enter") e.currentTarget.blur();
+    if (structured.bind.onKeyDown(e)) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
   }
 
   return (
@@ -301,11 +352,15 @@ export function MaterialTextField({
       testId={testId}
     >
       <Input
+        {...structured.bind}
         aria-label={label}
         className="h-8"
         value={draft}
         onChange={handleChange}
-        onBlur={commitNow}
+        onBlur={(e) => {
+          structured.bind.onBlur(e);
+          commitNow();
+        }}
         onKeyDown={handleKeyDown}
         onCompositionStart={() => {
           composingRef.current = true;
@@ -319,6 +374,22 @@ export function MaterialTextField({
         }}
         data-testid={testId ? `${testId}-input` : undefined}
       />
+      {validationBlocked && (
+        <div
+          className="text-xs text-destructive"
+          data-testid={testId ? `${testId}-required` : undefined}
+        >
+          {t("inputPrefs.fieldRequired")}
+        </div>
+      )}
+      {structured.hint.visible && (
+        <div
+          className="text-xs text-muted-foreground"
+          data-testid={testId ? `${testId}-hint` : undefined}
+        >
+          {structured.hint.text}
+        </div>
+      )}
     </FieldShell>
   );
 }
@@ -336,6 +407,7 @@ export function MaterialNotesField({
     normalize: (v) => v.trim(),
   });
   const composingRef = useRef(false);
+  const structured = useStructuredField({ multiline: true });
 
   return (
     <FieldShell
@@ -345,6 +417,7 @@ export function MaterialNotesField({
       testId={testId}
     >
       <Textarea
+        {...structured.bind}
         aria-label={label}
         value={draft}
         onChange={(e) => {
@@ -354,7 +427,13 @@ export function MaterialNotesField({
           }
           change(e.target.value);
         }}
-        onBlur={commitNow}
+        onBlur={(e) => {
+          structured.bind.onBlur(e);
+          commitNow();
+        }}
+        onKeyDown={(e) => {
+          if (!composingRef.current) structured.bind.onKeyDown(e);
+        }}
         onCompositionStart={() => {
           composingRef.current = true;
           draftOnly(draft);
@@ -365,6 +444,14 @@ export function MaterialNotesField({
         }}
         data-testid={testId ? `${testId}-input` : undefined}
       />
+      {structured.hint.visible && (
+        <div
+          className="text-xs text-muted-foreground"
+          data-testid={testId ? `${testId}-hint` : undefined}
+        >
+          {structured.hint.text}
+        </div>
+      )}
     </FieldShell>
   );
 }
@@ -381,6 +468,7 @@ export function MaterialDateField({
     onSave,
     normalize: (v) => v.trim(),
   });
+  const structured = useStructuredField();
   return (
     <FieldShell
       label={label}
@@ -389,14 +477,27 @@ export function MaterialDateField({
       testId={testId}
     >
       <Input
+        {...structured.bind}
         type="date"
         aria-label={label}
         className="h-8"
         value={draft}
         onChange={(e) => change(e.target.value)}
-        onBlur={commitNow}
+        onBlur={(e) => {
+          structured.bind.onBlur(e);
+          commitNow();
+        }}
+        onKeyDown={structured.bind.onKeyDown}
         data-testid={testId ? `${testId}-input` : undefined}
       />
+      {structured.hint.visible && (
+        <div
+          className="text-xs text-muted-foreground"
+          data-testid={testId ? `${testId}-hint` : undefined}
+        >
+          {structured.hint.text}
+        </div>
+      )}
     </FieldShell>
   );
 }
@@ -419,21 +520,38 @@ export function MaterialCurrentCheckbox({
     committed,
     onSave,
   });
+  const structured = useStructuredField();
   return (
-    <div className="flex items-end gap-2" data-testid={testId}>
-      <label className="text-sm">
-        <input
-          type="checkbox"
-          checked={draft}
-          onChange={(e) => {
-            change(e.target.checked);
-            commitNow();
-          }}
-          data-testid={testId ? `${testId}-input` : undefined}
-        />{" "}
-        {label}
-      </label>
-      <SaveStatusChip status={status} onRetry={commitNow} testId={testId} />
+    <div className="flex flex-col gap-1" data-testid={testId}>
+      <div className="flex items-end gap-2">
+        <label className="text-sm">
+          <input
+            {...structured.bind}
+            type="checkbox"
+            checked={draft}
+            onChange={(e) => {
+              change(e.target.checked);
+              commitNow();
+            }}
+            onBlur={(e) => {
+              structured.bind.onBlur(e);
+              commitNow();
+            }}
+            onKeyDown={structured.bind.onKeyDown}
+            data-testid={testId ? `${testId}-input` : undefined}
+          />{" "}
+          {label}
+        </label>
+        <SaveStatusChip status={status} onRetry={commitNow} testId={testId} />
+      </div>
+      {structured.hint.visible && (
+        <div
+          className="text-xs text-muted-foreground"
+          data-testid={testId ? `${testId}-hint` : undefined}
+        >
+          {structured.hint.text}
+        </div>
+      )}
     </div>
   );
 }

@@ -464,9 +464,9 @@
       "category": "Settings / AI Runtime",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "IMPLEMENTED",
       "description": "Codex 等账号/运行时区域自动检测可用更新，提供真实版本状态和手动重查，并表达与应用能力认证的兼容关系。",
-      "implementationNotes": "2026-10-28 用户试用需求，已核查 CraftStation aa336ebf151bb4508cc1f6b339b636f829a9226e 的上游版本查询、缓存、更新命令解析和自动更新开关。本项目现有 detect 只探测本机版本，UPDATE_AVAILABLE 尚无在线检测实现；getUpdateInfo 仅提供元数据且 executionEnabled=false，不能计为自动检测或更新已实现。此次仅记录，未实施。自动安装更新及其默认值仍待范围裁定；更新设计须处理精确版本能力认证，不能自动升级后仅留下不可用状态，也不能取消能力检查。详见 MVP_IMPLEMENTATION.md 的试用新增需求第 1 项。",
+      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/runtime-update-check（基于 411fbca8）的未提交实现及合并前修复。七类运行时真实上游查询，自动/手动共用服务、缓存/超时/重试，版本更新与精确兼容认证分别表达，恢复指引仅展示文本，不安装更新、不放宽认证。复核修复原生 AbortError 数字 code 导致设置页崩溃、重查 IPC 失败仍保留成功状态、Cursor 同日不同 SHA 被虚假排序（含 v/V 前缀）三项问题。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过；Owner 原检查记录见实施台账。生产构建、装配、Windows Electron fresh-native Settings UI 与功能验收未执行，passes 保持 false。",
       "steps": [
         "在隔离 Windows Electron 中，自动检查与手动重查共用真实上游版本查询；显示当前版本、可用版本和检查状态/时间。",
         "版本检查具备缓存和有界超时；网络失败可重试且不显示虚假的已是最新；不支持的运行时如实提示。",
@@ -498,12 +498,33 @@
       "scope": "IN_SCOPE",
       "implementationStatus": "PARTIAL",
       "description": "完善 AI 对话的回答操作，优先支持复制 AI 回答，再增量完善代码块复制与普通已完成回答的重新生成。",
-      "implementationNotes": "2026-10-28 用户试用需求。已有 Markdown、流式显示、停止生成、新建/历史对话、上下文选择、工具执行状态与写入确认卡；重新生成主要用于中断恢复/错误场景。AgentChatMessages 的普通助手文本只渲染 AgentMarkdown，尚无通用回答操作栏、逐条复制回答、代码块复制或普通已完成回答重新生成入口。首个独立交付为复制回答，后续操作逐项验收，不包含赋予编程、终端或文件系统能力。此次仅记录与源码核查，未实施或运行交互验收。详见 MVP_IMPLEMENTATION.md 的试用新增需求第 3 项。",
+      "implementationNotes": "2026-10-28 Main 集成首个增量：纳入 codex/agent-answer-copy（基于 411fbca8）的逐条助手正文复制，保留多段换行，复制 Markdown 源文，排除隐藏推理/工具参数输出/粘贴数据/其他消息；流式复制点击时可见快照，纯工具和空回答无按钮，具备成功反馈、失败重试及无障碍标签。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。代码块独立复制及普通已完成回答重新生成未做，整体保持 PARTIAL；Windows Electron fresh-native 真实剪贴板及历史重开验收未执行，passes 保持 false。",
       "steps": [
         "普通、多段、Markdown 与中文助手回答可逐条复制，保留换行，复制范围明确且不包含隐藏推理、原始工具参数或未显示的敏感上下文。",
         "复制成功和失败反馈真实，失败可重试，操作具有键盘与读屏标签；明确流式阶段行为，纯工具结果和空回答不提供无意义操作。",
         "重新打开历史对话后回答操作仍可用；代码块复制作为独立增量验证准确内容与反馈。",
         "普通已完成回答的重新生成复用现有对话修订及写入幂等保护，不因重复生成而重复创建职位或其他业务记录。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "SET-INPUT-PREFERENCES",
+      "category": "Settings / Device & Input",
+      "priority": "P0",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "在设置 → 设备与输入新增输入偏好，支持回车行为、进入编辑、快捷提示和自动聚焦四项设备级偏好；优先接入网申资料及职业资料直接编辑字段。",
+      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/input-preferences（基于 411fbca8）的四项本机偏好（默认 newline/click/focus/off）、设置入口、网申及职业资料字段接入。复核修复 IME composition ref 在跳转前拦截、visibility:hidden 跳过、键盘重新进入时应用选区策略、持久化失败明确报错并保留原设置，以及 Enter 下一项的同步校验/必填门；抽出客户端安全的既有职业资料校验供服务与字段复用，不变更业务规则。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。完整 AC-01～AC-16 保留；真实中文 IME、Windows Electron fresh-native、重开持久化及窄窗口验收未执行，passes 保持 false。",
+      "steps": [
+        "AC-01/13：四项默认值正确，独立本机保存、即时生效且重启保留；不依赖云端同步，缺失或无效值安全回退。",
+        "AC-02/03/04：Enter 按偏好换行或下一项；Shift+Enter 仅在多行字段换行；最后一项结束编辑且不提交整表，跳过隐藏、禁用和只读字段。",
+        "AC-05/11：真实输入法组字及候选确认不触发跳转；Enter 跳转遇校验失败保留输入与焦点并提示；保存失败保留草稿且可重试，不绕过已有保存校验逻辑。",
+        "AC-06/07：进入编辑支持点击位置、末尾、全选；键盘进入且无点击位置时默认末尾，策略仅首次进入编辑应用，重渲染和保存不重置选区。",
+        "AC-08：快捷提示支持始终显示、聚焦时显示、关闭，内容与当前偏好及字段实际能力一致，最后一项提示结束编辑。",
+        "AC-09/10：自动聚焦只响应主动进入支持的连续编辑区域，寻找首个有效字段并按需滚动；默认关闭，不因浏览、路由或普通弹窗抢焦点，不在移动端自动弹键盘。",
+        "AC-12：Tab/Shift+Tab 保持合理页面焦点顺序，无焦点陷阱、不强制循环；Esc 沿用字段取消逻辑，切换字段不丢草稿。",
+        "AC-14：优先接入网申资料与职业资料直接编辑字段，不全局拦截按键；聊天、搜索、下拉、富文本及 Markdown 长篇编辑器等独立交互不受影响。",
+        "AC-15/16：沿用设置视觉体系，三项下拉及一项开关按规定顺序呈现；固定与动态键盘说明准确，窄窗口可用，中英文完整。"
       ],
       "passes": false
     }

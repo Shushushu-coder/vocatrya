@@ -2,9 +2,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n";
 import { toastError, toastSuccess } from "@/lib/toast";
+import {
+  focusFirstRegionField,
+  INPUT_PREF_REGION_ATTR,
+  useInputPreferences,
+} from "@/lib/inputPreferences";
+import { StructuredInput } from "./StructuredField";
 import {
   copyIdDocumentField,
   getIdDocumentOverview,
@@ -27,6 +32,8 @@ const EMPTY_DRAFT: Draft = { idType: "", idNumber: "" };
 // an explicit reveal.
 export function IdDocumentCard() {
   const { t } = useI18n();
+  const inputPrefs = useInputPreferences();
+  const editRegionRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [revealed, setRevealed] = useState<Revealed | null>(null);
@@ -51,6 +58,14 @@ export function IdDocumentCard() {
   useEffect(() => {
     if (open) void load();
   }, [open, load]);
+
+  // Auto-focus preference: entering the edit form is the explicit continuous
+  // edit entry, so the first editable field takes focus (AC-09).
+  useEffect(() => {
+    if (editing && inputPrefs.autoFocus) {
+      focusFirstRegionField(editRegionRef.current);
+    }
+  }, [editing, inputPrefs.autoFocus]);
 
   useEffect(() => () => { readSeq.current += 1; }, []);
 
@@ -209,16 +224,20 @@ export function IdDocumentCard() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div
+              className="flex flex-col gap-2"
+              ref={editRegionRef}
+              {...{ [INPUT_PREF_REGION_ATTR]: true }}
+            >
               <label className="text-sm font-medium">{t("applicationProfile.idType")}</label>
-              <Input
+              <StructuredInput
                 value={form.idType}
                 disabled={saving}
                 data-testid="id-doc-input-type"
                 onChange={(e) => setForm((f) => ({ ...f, idType: e.target.value }))}
               />
               <label className="text-sm font-medium">{t("applicationProfile.idNumber")}</label>
-              <Input
+              <StructuredInput
                 value={form.idNumber}
                 disabled={saving}
                 data-testid="id-doc-input-number"

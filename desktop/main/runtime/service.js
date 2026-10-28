@@ -10,6 +10,7 @@ const {
 const { detectRuntime } = require("./detector");
 const { probeRuntimeAuthState } = require("./auth-probe");
 const { RuntimeProfileManager } = require("./profiles");
+const { createRuntimeUpdateChecker } = require("./update-check");
 const {
   getAccountRuntimeCapabilities,
 } = require("./capabilities");
@@ -32,6 +33,9 @@ function summarizeDefinition(definition) {
 // deps are injected for tests: { platform, env, spawnSyncImpl, existsSyncImpl, runner }
 function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
   const profileManager = new RuntimeProfileManager({ profilesRoot });
+  // One checker per service instance: its upstream cache lives as long as
+  // the main process's service (created once at startup).
+  const updateChecker = createRuntimeUpdateChecker(deps);
 
   function assertKnown(backendKind) {
     if (!isRegisteredBackendKind(backendKind)) {
@@ -120,6 +124,15 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
         executionEnabled: false,
         methods: definition.update.methods,
       };
+    },
+
+    // Real online update check — the single service behind both the
+    // automatic mount-time check and the manual recheck. Never executes
+    // an update; reports current/available versions, the check verdict
+    // with its timestamp, and the exact-version compatibility axis.
+    async checkRuntimeUpdate(backendKind, { force } = {}) {
+      assertKnown(backendKind);
+      return updateChecker.checkRuntimeUpdate(backendKind, { force });
     },
   };
 }

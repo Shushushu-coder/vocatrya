@@ -1,6 +1,20 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  focusFirstRegionField,
+  INPUT_PREF_REGION_ATTR,
+  useInputPreferences,
+} from "@/lib/inputPreferences";
 import Link from "next/link";
+import {
+  assertEmail,
+  assertPhone,
+  assertGender,
+  assertPoliticalStatus,
+  assertBirthDate,
+  assertPhoneCountryCode,
+} from "@/lib/career/candidateProfileValidation";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -94,6 +108,24 @@ async function copyText(
   }
 }
 
+const PROFILE_VALIDATORS: Record<string, (value: string) => unknown> = {
+  email: assertEmail,
+  phone: assertPhone,
+  gender: assertGender,
+  politicalStatus: assertPoliticalStatus,
+  birthDate: assertBirthDate,
+  phoneCountryCode: assertPhoneCountryCode,
+};
+
+function validProfileField(key: string, value: string) {
+  try {
+    PROFILE_VALIDATORS[key]?.(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const DEFAULT_VISIBILITY = normalizeTabVisibility(undefined);
 
 // CP-EDIT: the personal-info rows in display order; each row writes exactly
@@ -140,6 +172,7 @@ const ALL_SECTIONS_SELECTED: Record<ProjectionUiSectionId, boolean> = {
 
 export function ApplicationProfileWorkspace() {
   const { t } = useI18n();
+  const inputPrefs = useInputPreferences();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [tabVisibility, setTabVisibility] =
@@ -321,11 +354,25 @@ export function ApplicationProfileWorkspace() {
         </div>
 
         <TabsContent value="personal" forceMount hidden={activeTab !== "personal"}>
-          <Card>
+          <Card {...{ [INPUT_PREF_REGION_ATTR]: true }}>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">
                 {t("careerProfileTabs.personal")}
               </CardTitle>
+              {inputPrefs.autoFocus && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="personal-start-fill"
+                  onClick={(e) =>
+                    focusFirstRegionField(
+                      e.currentTarget.closest(`[${INPUT_PREF_REGION_ATTR}]`),
+                    )
+                  }
+                >
+                  {t("inputPrefs.startFill")}
+                </Button>
+              )}
               {!isProfileEmpty && (
                 <Button
                   size="sm"
@@ -353,6 +400,7 @@ export function ApplicationProfileWorkspace() {
                       `applicationProfile.field${key.charAt(0).toUpperCase()}${key.slice(1)}`,
                     )}
                     value={profile?.[key]}
+                    validate={(value) => validProfileField(key, value)}
                     onSave={(v) => saveProfileField(key, v)}
                   />
                 ))}
