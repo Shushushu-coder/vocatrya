@@ -1,7 +1,8 @@
 // SET-INPUT-PREFERENCES: device-local storage contract — defaults for empty
 // or corrupt snapshots, per-key fallback on invalid values, merged partial
 // updates, same-tab change notification and restart persistence.
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -39,6 +40,24 @@ describe("input preferences storage", () => {
       hintMode: "focus",
       autoFocus: false,
     });
+  });
+
+  it("hydrates server defaults before applying stored non-default preferences", () => {
+    updateInputPreferences({ enterBehavior: "next" });
+    function Preference() {
+      return <span>{useInputPreferences().enterBehavior}</span>;
+    }
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(<Preference />);
+    expect(container.textContent).toBe("newline");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<Preference />, { container, hydrate: true });
+      expect(container.textContent).toBe("next");
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it("falls back to defaults on a corrupt snapshot", () => {

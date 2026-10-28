@@ -98,20 +98,45 @@ export function updateInputPreferences(
   return next;
 }
 
+let cachedRaw: string | null | undefined;
+let cachedSnapshot: InputPreferences = DEFAULT_INPUT_PREFERENCES;
+
+// The stored JSON string keys the cache: a write or a cross-tab storage
+// event changes it, while unchanged content reuses the snapshot so
+// useSyncExternalStore never sees a fresh-but-equal object per read.
+function getClientSnapshot(): InputPreferences {
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY);
+  } catch {
+    raw = null;
+  }
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
+    cachedSnapshot = readInputPreferences();
+  }
+  return cachedSnapshot;
+}
+
+function subscribeInputPreferences(onChange: () => void) {
+  window.addEventListener(INPUT_PREFERENCES_CHANGED_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(INPUT_PREFERENCES_CHANGED_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
 export function useInputPreferences(): InputPreferences {
-  const [prefs, setPrefs] = React.useState<InputPreferences>(() =>
-    readInputPreferences(),
+  // SSR/hydration renders the shared defaults via getServerSnapshot; the
+  // stored values apply right after hydration. A useState initializer would
+  // read localStorage during hydration and mismatch the server-rendered
+  // settings selects for anyone with non-default preferences.
+  return React.useSyncExternalStore(
+    subscribeInputPreferences,
+    getClientSnapshot,
+    () => DEFAULT_INPUT_PREFERENCES,
   );
-  React.useEffect(() => {
-    const refresh = () => setPrefs(readInputPreferences());
-    window.addEventListener(INPUT_PREFERENCES_CHANGED_EVENT, refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener(INPUT_PREFERENCES_CHANGED_EVENT, refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, []);
-  return prefs;
 }
 
 /** IME composition in progress: Enter confirms candidates, never navigates. */

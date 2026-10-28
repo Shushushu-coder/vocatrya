@@ -326,9 +326,10 @@ export function MaterialRecordsSection({
   function renderMaterialCard(item: MaterialItem) {
     if (!isEditableMaterialType(item.type)) {
       // Legacy/non-allowlist records (EMPLOYMENT, CUSTOM, unknown types)
-      // stay read-only, same as before.
+      // stay read-only, same as before. The card still marks a region so
+      // the evidence block's bound fields keep Enter→next and hints honest.
       return (
-        <Card key={item.id}>
+        <Card key={item.id} {...{ [INPUT_PREF_REGION_ATTR]: true }}>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-sm">{item.title}</CardTitle>
             <div className="flex gap-1">
