@@ -261,20 +261,20 @@ describe("execution seam contract", () => {
       ).toEqual({ ready: false, code: "STREAMING_NOT_SUPPORTED" });
     }
     // Codex passed managed delta verification via `codex app-server`
-    // item/agentMessage/delta on 0.160.0 — same version-bound contract.
+    // item/agentMessage/delta on 0.165.0 — same version-bound contract.
     const codexCaps = cap("CODEX_RUNTIME");
-    expect(codexCaps.execution.streamingVerifiedRuntimeVersion).toBe("0.160.0");
-    expect(codexCaps.structuredOutput.verifiedRuntimeVersion).toBe("0.160.0");
+    expect(codexCaps.execution.streamingVerifiedRuntimeVersion).toBe("0.165.0");
+    expect(codexCaps.structuredOutput.verifiedRuntimeVersion).toBe("0.165.0");
     expect(
       checkStreamingExecutionReadiness({
         capabilities: codexCaps,
         connectionStatus: "CONNECTED",
         permissionScope: "TEXT_ONLY",
-        runtimeVersion: "0.160.0",
+        runtimeVersion: "0.165.0",
       }),
     ).toEqual({ ready: true });
     expect(
-      codexCaps.structuredOutput.verifiedRuntimeVersion === "0.160.0" &&
+      codexCaps.structuredOutput.verifiedRuntimeVersion === "0.165.0" &&
         codexCaps.structuredOutput.verification === "PASS" &&
         codexCaps.structuredOutput.strategy === "NATIVE_JSON_SCHEMA",
     ).toBe(true);

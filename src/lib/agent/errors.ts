@@ -63,6 +63,8 @@ export function mapAgentError(
         return "The AI connection this conversation uses is disconnected. Reconnect it in Settings → AI Connections.";
       case "CONNECTION_ERROR":
         return "The AI connection this conversation uses is in an error state. Check it in Settings → AI Connections.";
+      case "BYOK_CREDENTIAL_UNAVAILABLE":
+        return "The API key bound to this conversation's AI connection cannot be read. Re-enter it in Settings → Custom API Key (BYOK).";
       case "RUNTIME_NOT_AVAILABLE":
       case "RUNTIME_NOT_INSTALLED":
       case "RUNTIME_BROKEN":
