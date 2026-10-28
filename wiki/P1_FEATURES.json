@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "project": "Vocatrya",
+  "baseline": {
+    "source": "MVP_IMPLEMENTATION_REVISED.md",
+    "gitRef": "8ff63dfbbbba785ad39559537e3610a3c46cbac6",
+    "date": "2026-10-26"
+  },
+  "definitions": {
+    "implementationStatus": "Assessment of the feature's user-facing target: IMPLEMENTED = main business path connected; PARTIAL = some paths connected; MISSING = full target not implemented. Infrastructure alone does not establish feature completion.",
+    "passes": "Set true only after feature-specific real user-facing acceptance and applicable data/runtime gates pass; code presence, Main integration, probes or isolated unit tests alone are insufficient.",
+    "steps": "Feature-level delivery/acceptance checkpoints; detailed sequencing and unresolved implementation contracts are in P1_IMPLEMENTATION.md. Listing steps is not authorization to execute them.",
+    "scope": {
+      "IN_SCOPE": "P1 product delivery or verification scope; not automatic authorization for code, migrations, data changes, commit or deployment.",
+      "OWNER_DECISION": "Existing capability recorded; additional tool scope requires a separate Owner decision.",
+      "DEFERRED": "Not required for the active P1 delivery."
+    }
+  },
+  "features": [
+    {
+      "id": "ACTIVITY-RETIRE",
+      "category": "Tasks / Activity",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "2026-10-28 Owner 已确认：未发布版本彻底移除「求职活动」时间记录体系（页面、入口、计时/休息、时长统计、Activity 表及专属备份分组），不保留少量测试活动数据或旧 Activity 备份兼容；「任务分类」保留为 Tasks 独立、可选字段，继续支持分类维护、筛选和分组。该项列为 P1 第一修改任务，尚未执行。",
+      "steps": [
+        "实施前以实际仓库 HEAD/Dirty 和 2026-10-28 COMPLETE 依赖审计为基础复核调用链；本项 IN_SCOPE 表示产品范围已确认，不等于授权删除文件、修改真实数据库、执行迁移、提交或部署。",
+        "先解耦任务分类：保留 Task.activityTypeId 的可选性、ActivityType 及其创建/维护、任务筛选与分组和对应备份映射；界面将其作为「任务分类 / Task Category」独立呈现。底层名称按最小风险决定，不为了改名引入多余迁移。",
+        "移除任务侧从任务开始计时入口、切换确认，以及 deleteTaskById 对关联 Activity 的应用层删除限制；修正分类删除对活动行的检查，保留被任务引用时的必要保护，确保任务创建、完成和删除不再依赖 Activity。",
+        "剥离 Dashboard 的活动计数、近期活动、空账号判断及「未来 7 天活动」入口；剥离 Analytics 的活动时长环图和日历小时数提示，同时保留 Job/投递统计、按投递数着色的热力图及既有日历/提醒流程。",
+        "删除 /dashboard/activities 页面及 Sidebar/Header/创建菜单/新手引导入口、活动表单、Actions/Queries/Provider/全局计时条、休息组件、自动停止与恢复、专属开发假数据、独占状态/文案与测试；同步更新桌面路由期望和导航策略。",
+        "解除所有生产读写后，设计新的 Prisma 迁移移除 Activity 模型/外键/表，并从备份 Schema、manifest/ordering、idmap 和 emptiness 中移除 Activity 专属分组；不保留测试 Activity 行或旧 Activity 数据兼容，继续完整保留 ActivityType 与 Task 分类的导出/导入关系；不得修改已执行迁移。 对含 Activity 的旧备份如何处理（拒绝或受控忽略）仍需独立确定，禁止静默丢失其他业务数据。",
+        "通过静态搜索和定向单测、备份往返、合成数据库迁移验证、页面与隔离 Windows Electron 验收确认无残余 Activity 读写及路由入口；任务分类、任务删除、Dashboard、Analytics、投递热力图、职位、提醒和其他备份分组均正常。真实库迁移、破坏性删除、commit/push/deploy 另行逐项授权。 隔离迁移验收与真实目标库执行完成的标记边界需在实施 Gate 中明确。"
+      ],
+      "passes": false,
+      "implementationNotes": "依据 2026-10-28 Owner 提供的《Vocatrya Job Activity Dependency Audit Report》（结论 COMPLETE；审计 HEAD 879857587552c6c1ee9689695bca90ae474c449e）。已确认 Activity 独立承担计时和休息；Task、Dashboard、Analytics 消费类型或时长；ActivityType 同时承载 Tasks 的可选分类；deleteTaskById 存在应用层活动关联阻断；热力图色块来自投递数；备份 Activity 行有必填休息字段。Owner 明确未发布版本仅有极少测试 Activity 数据，无需归档或旧活动备份兼容。该依据为所提供审计结论，不代表当前仓库已独立复核或开始实施。"
+    },
+    {
+      "id": "BD-ARCHIVE",
+      "category": "Settings / Data & Support",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "2026-10-28 Owner 确认：在「设置 → 数据与支持 → 归档数据」集中管理归档；P1 首批覆盖职位和 AI 对话历史，后续再扩展至简历、面试题库、面试练习数据等。归档长期保留、可随时恢复、没有 30 天或其他自动过期；保留现有删除确认，归档不等于永久删除，不建设全局回收站。原「全品类基础数据归档」范围被本决策取代。",
+      "steps": [
+        "提供职位与 AI 对话历史的归档入口，以及设置 → 数据与支持 → 归档数据的查询/恢复管理入口；非首批类型不出现虚假的可归档承诺。",
+        "归档只改变正常工作视图中的可见状态；保留职位/投递事实与关联记录、对话完整消息及所属用户关系，恢复后内容一致。历史累计统计、关联展示和筛选口径在实现合同中明确，禁止静默删除业务事实。",
+        "归档记录长期保留且可重复恢复/查看；不新增 30 天后台清理、软删除回收站或自动到期策略；现有删除确认与独立永久删除语义不被替换。",
+        "落实用户数据隔离、关联完整性、备份导出/导入及隔离 Windows Electron 用户验收；涉及 Schema/数据写入、迁移、删除和部署须单独授权。"
+      ],
+      "passes": false,
+      "implementationNotes": "这是新确认的 P1 产品范围，不是原已延期的「全品类 Basic Data」归档，也不等同于删除恢复。归档入口与受影响的职位/对话列表需要实施设计；本轮尚无代码或真实数据变更。"
+    },
+    {
+      "id": "AI-ACCOUNT-LOGIN",
+      "category": "Settings / AI",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "P1 三条独立 AI 路径之一：账号登录型 AI。用户已实际试用并确认相关聊天功能可用；这不等于全部业务场景和 Windows Electron 验收已完成。账号登录与 BYOK、托管服务独立判断、独立验收。",
+      "steps": [
+        "维持已有账号授权与已验证运行时的连接、能力认证、模型分配和明确错误状态，不将 CLI 登录等同于所有业务可用。",
+        "在授权的真实连接与隔离 Windows Electron 环境中核对模型选择/状态、流式聊天、适用的结构化业务调用、失败和刷新；不重复不必要的相同版本认证。",
+        "记录真实用户界面和业务验收证据；未覆盖的路径不得用服务级探测或按钮可点替代；与 BYOK 和托管 AI 分别判定 passes。"
+      ],
+      "passes": false,
+      "implementationNotes": "原 SET-AI-SERVICES 证据保留：2026-10-28 Codex CLI 0.164.0 与随后 0.165.0 经授权、使用合成内容分别完成 desktop connection-service 流式 4 项和结构化 9/9 探测，保留精确版本拒绝策略；相关修复涵盖预检提示、导入环境文案、受阻模型名、未配置时 Ollama 错显及全局预检刷新，159 项相关测试及类型/ESLint 通过。隔离 Electron fresh-native/full 构建 G79eH1Wz4YriE8lYq4jPN 核对了顶部模型与发送按钮；用户确认聊天复制与重新生成可用。完整账号登录业务/UI 验收仍未全部完成。"
+    },
+    {
+      "id": "AI-BYOK",
+      "category": "Settings / AI",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "PARTIAL",
+      "description": "P1 三条独立 AI 路径之一：用户自带 API Key（BYOK）。已有部分连接/模型分配与隔离基础，但真实 API Key 到业务调用的端到端路径尚未测试通过，不得标记为可用或已验收。",
+      "steps": [
+        "核查现有 BYOK 连接与模型目录/分配逻辑、密钥保存和权限边界；对未配置、错误密钥、不可用模型展示真实状态。",
+        "在经授权的真实 API Key 和支持的服务商上完成实际业务调用，包括所需的结构化输出/流式能力、错误恢复与模型分配生效；不得用模拟请求或连接测试代替。",
+        "核验 BYOK 不泄露密钥、不与账号登录或托管服务串用凭据/额度，并在实际桌面用户界面验证；独立记录结果与 passes。"
+      ],
+      "passes": false,
+      "implementationNotes": "原 SET-AI-SERVICES 已记录账号登录/BYOK 隔离和诚实可用状态，但没有覆盖 BYOK 真实业务调用与 Windows Electron 完整验收。PARTIAL 表示已有基础设施而非已证明 BYOK 可用。"
+    },
+    {
+      "id": "AI-MANAGED",
+      "category": "Settings / AI / Hosted",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "P1 三条独立 AI 路径之一：Vocatrya 托管 AI。用户可实际订阅/获得权益并使用的端到端产品能力尚未交付；不把已有设计、Schema 或部分服务端工作等同于已完成。",
+      "steps": [
+        "落实由 Vocatrya 服务端保管上游凭据、服务端受控的稳定模型目录/上游映射，和与账号登录/BYOK 隔离的用户选择及调用路径。",
+        "实现并验收订阅/Entitlement、配额、用量持久记录、并发与异常/失败记账规则及必要的用户可见状态；不能仅做 UI 配置或本地模拟。",
+        "基于获授权真实网关、隔离 Beta 环境和可控测试预算执行生产等价端到端调用及额度/失败验证；供应商中国市场接入已有客服商务回复，技术与服务验收仍待完成。",
+        "完成隔离 Windows Electron 用户场景验证，形成独立的可用性/安全/额度证据；部署、真实凭据、迁移和生产操作需专项授权。"
+      ],
+      "passes": false,
+      "implementationNotes": "2026-10-28 用户表示青云 TOP 客服已回复其中国市场相关接入没有问题；这是商务沟通事实，不取代真实网关、服务质量、安全及部署验收。MISSING 仅指面向用户的完整托管 AI 产品目标尚未交付，不断言已有后端基础设施不存在。"
+    },
+    {
+      "id": "RESUME-BUILDER",
+      "category": "Resume / Workspace",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "MISSING",
+      "description": "P1 核心新工作包：简历导入并解析为可校对的结构化 JSON/素材模块，采用两栏工作台（左侧素材模块库，右侧可拖拽编辑与实时简历预览）；版本和排版控制置于顶部。支持按目标岗位组合/排序/删减内容、控制篇幅、创建独立版本、导出后继续精细排版。",
+      "steps": [
+        "核查现有 Career Material、ResumeVariantVersion 及导入/导出能力边界，先设计稳定 JSON Schema、来源追溯和解析错误/不确定项校对；不得把 AI 推断当作原始事实。",
+        "交付左侧长期素材模块库、右侧可编辑预览与拖拽组合；支持 Section 及经历要点的选择、排序、隐藏/删减和版本局部改写，确保操作某版本不破坏原始素材。",
+        "顶部支持版本切换/创建、目标职位绑定、篇幅/模板/排版控制；AI 修改默认产生新版本并支持比较与回退，保持版本历史和来源可追溯。",
+        "验证预览的真实分页与篇幅溢出反馈，以及可用的 PDF/可编辑文档导出质量；导出后允许用户自行优化排版，避免首期扩成任意自由画布。",
+        "用真实结构的简历样例在隔离 Windows Electron 做导入→校对→拖拽→版本→预览→导出往返验收；解析文件格式和导出实现细节在实施合同中具体核实。"
+      ],
+      "passes": false,
+      "implementationNotes": "这是新确定的产品工作流目标；现有简历基础记录/版本设施不能证明模块化导入、拖拽、分页与导出已实现。Match 分析可利用后续结构化数据，但不要求重写或删除已有 canonical 匹配服务。"
+    },
+    {
+      "id": "AGENT-CAPABILITIES",
+      "category": "Agent",
+      "priority": "P1",
+      "scope": "OWNER_DECISION",
+      "implementationStatus": "PARTIAL",
+      "description": "保留现有 fresh-native/full Agent 五项工具与既有能力限制，不在本轮扩展其他 Agent 能力。原 RM-MATCH 在 P1 台账中不再作为独立 Feature：将候选 match_job 作为本 Feature 的未接通、待合同裁定的工具工作项；独立 canonical MatchAnalysisService 与职位详情 FAST_SCREENING 继续存在并可复用。",
+      "implementationNotes": "2026-10-28 源码核查：当前 fresh-native/full 注册 list_jobs、get_job、add_job、get_resume、review_resume 五项；add_job 需要批准且不代表投递，review_resume 不自动保存至 Resume Variant。match_job、generate_cover_letter 未开放。原 RM-MATCH 记录的 canonical 职位详情 FAST_SCREENING 最小链路已在 Main 集成（素材选择→MATCH_ANALYSIS 模型分配→结构化执行→MatchAnalysisService 保存→历史及 stale）；定向 fastScreening 12 项、matchAnalysis 8 项及类型/ESLint 证据已记录，但真实连接 E2E 与隔离 Windows Electron 验收尚未完成。迁移的是 P1 台账归属，不是删除或替换独立服务。match_job 接入依赖独立批准的工具合同及合适的简历版本输入，Deep Match 不视为已交付；其他 Agent 新工具暂不讨论。",
+      "steps": [
+        "保留并对照真实 fresh-native/full 工具注册、系统提示和用户说明，核对现有五项工具的真实连接行为及确认/存储边界。",
+        "在 AGENT-CAPABILITIES 中登记 match_job 作为未实现/未授权接入的 Agent Tool 工作项；未来接入必须复用独立 canonical 匹配业务服务和可追溯的简历版本输入，禁止直接启用 Legacy 工具。",
+        "记录 canonical FAST_SCREENING 独立服务已实现但尚未完成真实连接/Windows Electron 验收；不可将该服务的实现状态外推成 Agent match_job 可用。",
+        "除 match_job 台账归属调整外，其他 Agent 扩展范围保留 OWNER_DECISION 且暂不讨论；未来写入工具仍须单独确认批准、权限、失败恢复和幂等。"
+      ],
+      "passes": false
+    }
+  ]
+}

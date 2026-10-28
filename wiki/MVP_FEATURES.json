@@ -321,18 +321,6 @@
       "implementationNotes": "2026-10-27 最终验收：Main 真实 CareerSkillDetail.tagId FK、专用同用户通道、通用 patch 保护、活名投影及 SetNull/删除守卫已实现。Windows Electron fresh-native 选择/就地创建、改名活显示与复制、被引用拒删、解除快照及重开通过；V6 桌面恢复重映射后的技能 Tag 关联通过。"
     },
     {
-      "id": "BD-ARCHIVE",
-      "category": "Basic Data",
-      "priority": "P1",
-      "scope": "DEFERRED",
-      "implementationStatus": "MISSING",
-      "description": "全品类基础数据归档暂缓，不把物理删除当作归档。",
-      "steps": [
-        "若未来启用归档，先确认各类数据的隐藏、引用与恢复语义，再由 Schema Owner 评估相应实现。"
-      ],
-      "passes": false
-    },
-    {
       "id": "SET-LOCALE",
       "category": "Settings / Desktop",
       "priority": "P0",
@@ -366,7 +354,7 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-28 部分验收通过，passes 仍 false：Windows Electron fresh-native FRESH_READY/AB_ENABLED/full，独立数据根；复用 Main 3b4b75ff 构建输入一致的 e1879aca 产物（nS35fBmVoQmYzIiHrq7Mr）。真实窗口关闭在偏好关闭时完整退出，开启时隐藏到真实托盘；Windows 原生托盘弹出菜单以系统键盘选择打开/退出，验证还原与进程/后端结束。最小化启动、两项偏好持久化、真实文件写失败反馈及开关回退、完整退出重开和登录态保留通过。测试仅通过主进程调试器观察窗口并捕获原生菜单对象，未替换模式门或托盘行为。证据：.tmp/compat-closure/tray2/checks.json、tray.mjs、inspector.mjs；早期调试连接脚本问题已修正并保留记录。系统自启只读取状态，未写真实系统自启、未安装或重启系统，真实自启验收仍未执行。",
+      "implementationNotes": "2026-10-28 部分验收通过，passes 仍 false：Windows Electron fresh-native FRESH_READY/AB_ENABLED/full，独立数据根；复用 Main 3b4b75ff 构建输入一致的 e1879aca 产物（nS35fBmVoQmYzIiHrq7Mr）。真实窗口关闭在偏好关闭时完整退出，开启时隐藏到真实托盘；Windows 原生托盘弹出菜单以系统键盘选择打开/退出，验证还原与进程/后端结束。最小化启动、两项偏好持久化、真实文件写失败反馈及开关回退、完整退出重开和登录态保留通过。测试仅通过主进程调试器观察窗口并捕获原生菜单对象，未替换模式门或托盘行为。证据：.tmp/compat-closure/tray2/checks.json、tray.mjs、inspector.mjs；早期调试连接脚本问题已修正并保留记录。系统自启只读取状态，未写真实系统自启、未安装或重启系统，真实自启验收仍未执行。 2026-10-28 用户明确安排“自启验收发布新版本的时候验证”。真实 Windows 系统自启验证列为新版本发布时的待验收事项，当前不执行系统配置变更，原验收条件不变，passes 保持 false。",
       "description": "Settings UI 接通现有桌面自启、最小化启动与关闭到托盘 IPC。",
       "steps": [
         "在 Windows 桌面端设置自启、最小化启动及关闭至托盘，选项反馈实际底层状态。",
@@ -388,20 +376,6 @@
         "错误输入或失败路径有明确反馈，不对真实用户数据库做测试操作。"
       ],
       "passes": true
-    },
-    {
-      "id": "SET-AI-SERVICES",
-      "category": "Settings / Desktop",
-      "priority": "P1",
-      "scope": "IN_SCOPE",
-      "implementationStatus": "IMPLEMENTED",
-      "description": "2026-10-27 已批准：仅交付现有业务必需的 AI 连接与模型分配配置，其余明确不可用，不能展示虚假连接状态。",
-      "steps": [
-        "本期仅接通已有业务必需的 AI Connection/Model Assignment；选择与连接状态须与实际业务能力一致。",
-        "未实现的能力明确不可用，不伪装成已接通，也不破坏已有账号登录和 BYOK 隔离。"
-      ],
-      "passes": false,
-      "implementationNotes": "2026-10-27 最终验收：Main 的诚实可用状态与接线保持。本轮 Windows Electron fresh-native 核对未提供分配项。2026-10-28 用户试用暴露 Codex CLI 0.164.0 与原 0.160.0 能力认证绑定不一致，聊天/导入按设计拒绝执行；已修复预检提示关闭及导入环境错误文案。经用户授权，以 gpt-5.6-luna 和合成内容通过生产 desktop connection-service 执行边界完成流式 4 项（增量/重组/中止）及结构化 9/9 首次有效探测，认证绑定更新到 0.164.0，精确版本拒绝策略保留。这是实际运行时探测，未替代 Windows Electron 完整业务界面及 BYOK 验收，passes 保持 false。 2026-10-28 本轮试用修复（随本次提交纳入 Main）：本机运行时再次升级至 0.165.0；经用户授权用 gpt-5.6-luna 和合成内容完成流式 4 项及结构化 9/9 首次有效验证后更新精确认证版本。修复受阻模型名称丢失、未配置时默认展示 Ollama、未配置/运行时待验证提示混淆，以及全局配置变更后的预检刷新；159 项相关测试、类型检查和 ESLint 通过。隔离 Windows Electron fresh-native/full 构建 G79eH1Wz4YriE8lYq4jPN 已重开并保留试用账号数据，实际核对顶部模型和发送按钮可用，未代发业务消息；完整 AI/BYOK 业务验收未完成，passes 保持 false。"
     },
     {
       "id": "RM-RESUME",
@@ -430,20 +404,6 @@
         "后续编辑简历草稿不会悄然改写已有投递历史。"
       ],
       "passes": true
-    },
-    {
-      "id": "RM-MATCH",
-      "category": "Resume / Match",
-      "priority": "P1",
-      "scope": "DEFERRED",
-      "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-28 最小链路已交付（Main 集成）：canonical 职位详情 match tab → 素材来源选择 → MATCH_ANALYSIS 分配解析 → 结构化执行 → MatchAnalysisService 持久化 → 历史列表与 stale 标记；覆盖素材不足/JD缺失/NOT_CONFIGURED/连接失败与重试，Deep Match 未做，AiAssignmentsCard 的 fresh-native 门控已在同轮解禁。tsc/eslint 干净，fastScreening 12 项与 matchAnalysis 8 项定向测试通过。真实连接端到端分析与 Windows Electron fresh-native 验收未执行，passes 保持 false。",
-      "description": "canonical 职位详情已交付最小 FAST_SCREENING 匹配链路，真实连接及 Windows Electron 功能验收待完成；聊天 Agent 匹配接入与 Deep Match 不计入已交付能力，原延期范围保持。",
-      "steps": [
-        "若纳入本期：从 canonical 职位详情启动匹配，调用实际生产服务并保存、展示与重新读取结果。",
-        "不将方法定义、Schema 或仅 legacy 可用的按钮视为通过；不要求完整 Deep Match 扩展。"
-      ],
-      "passes": false
     },
     {
       "id": "REM-V1",
@@ -476,36 +436,20 @@
       "passes": true
     },
     {
-      "id": "AGENT-CAPABILITIES",
-      "category": "Agent",
-      "priority": "P1",
-      "scope": "OWNER_DECISION",
-      "implementationStatus": "PARTIAL",
-      "description": "记录并核对 Agent 的真实可调用能力；新增业务工具范围待裁定，不把已有界面功能或 Legacy 工具视为 fresh-native Agent 已支持。",
-      "implementationNotes": "2026-10-28 源码核查：fresh-native/full 生产工具注册及系统提示一致开放 list_jobs、get_job、add_job、get_resume、review_resume 五项；添加职位需确认且不代表投递，Resume Variant 评审不会自动保存到版本。当前显式移除 match_job 与 generate_cover_letter；职位详情已有独立 canonical FAST_SCREENING 服务但尚未接入聊天。未开放更新职位、管理 Attempt/申请流程、实际投递、编辑简历/职业素材，以及读取任务/笔记/活动/设置。用户贴出的 AI 自述基本准确；现有五工具有实现不等于扩展完成或本次业务验收通过。匹配接入、职位更新、流程管理和编辑能力仅记录待评估，不自动纳入开发。详见 MVP_IMPLEMENTATION.md 的试用新增需求第 2 项。",
-      "steps": [
-        "按实际运行模式核对生产工具注册、系统提示与用户可见能力说明一致，不声称执行不存在的工具。",
-        "在隔离 Windows Electron fresh-native/full 中，通过真实生产连接验证五项现有工具的读取范围、添加职位确认及简历评审保存边界。",
-        "新增能力先明确范围与对应业务合同；若批准 Agent 匹配接入，应复用 canonical 匹配服务，验证持久化与历史读取，不直接解除 Legacy 工具门控。",
-        "若批准新增写入工具，须分别验收用户批准、权限、失败恢复和幂等，不重复创建或改写已保存的业务事实。"
-      ],
-      "passes": false
-    },
-    {
       "id": "AGENT-CHAT-UX",
       "category": "Agent / Chat UX",
       "priority": "P1",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
       "description": "完善 AI 对话的回答操作，优先支持复制 AI 回答，再增量完善代码块复制与普通已完成回答的重新生成。",
-      "implementationNotes": "2026-10-28 Main 集成首个增量：纳入 codex/agent-answer-copy（基于 411fbca8）的逐条助手正文复制，保留多段换行，复制 Markdown 源文，排除隐藏推理/工具参数输出/粘贴数据/其他消息；流式复制点击时可见快照，纯工具和空回答无按钮，具备成功反馈、失败重试及无障碍标签。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。代码块独立复制及普通已完成回答重新生成未做，整体保持 PARTIAL；Windows Electron fresh-native 真实剪贴板及历史重开验收未执行，passes 保持 false。 2026-10-28 第二增量集成：助手回答顶层围栏代码块新增独立复制，保留代码正文缩进与换行，排除语言标签和围栏；支持流式可见快照、成功/失败反馈、重试及键盘标签，整条回答复制复用相同剪贴板处理，补齐中英文词条。复核修复 Unicode 分隔符被改成换行导致代码内容改变的问题并补回归测试。嵌套列表/引用内围栏及缩进代码块暂不提供独立按钮；普通已完成回答重新生成尚未实现，整体保持 PARTIAL。桌面真实剪贴板与历史重开留给用户手动验收，passes 保持 false。 2026-10-28 第三增量集成：最新一条已持久化、完成且有可见正文的助手回答支持显式重新生成；历史中间回答、待批准及最新用户轮次含已保存写入回执时不开放。客户端/服务端复用同一写入回执判定，复用 revision/CAS、请求租约与 checkpoint 幂等保护，保留无参错误重试语义；补同 tick 重复点击保护。Main 合并前复核修复重生成后遗留旧 actionError 提示并补回归；协调窗口定向 7 文件/177 项、改动代码 ESLint 通过，完整类型检查通过。普通回答重新生成代码已实现，整体实施状态更新为 IMPLEMENTED；Windows Electron fresh-native 真实流式、复制与历史重开、真实读屏尚待集中验收，passes 保持 false。嵌套/缩进代码块独立复制不在本次范围。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。合成持久历史中仅最后普通回答显示重新生成、旧回答只可复制，带已保存写入回执不显示重新生成；真实 quit/reopen 历史及按钮保持，正文与顶层围栏代码实际 Windows 剪贴板内容通过（系统换行 CRLF）。隔离托管运行时未登录，不复制真实凭据，真实 AI 重新生成流式调用 BLOCKED，passes 保持 false。证据同目录 checks-progress.json、code-copy.json；合成对话不冒充实际模型输出。",
+      "implementationNotes": "2026-10-28 Main 集成首个增量：纳入 codex/agent-answer-copy（基于 411fbca8）的逐条助手正文复制，保留多段换行，复制 Markdown 源文，排除隐藏推理/工具参数输出/粘贴数据/其他消息；流式复制点击时可见快照，纯工具和空回答无按钮，具备成功反馈、失败重试及无障碍标签。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。代码块独立复制及普通已完成回答重新生成未做，整体保持 PARTIAL；Windows Electron fresh-native 真实剪贴板及历史重开验收未执行，passes 保持 false。 2026-10-28 第二增量集成：助手回答顶层围栏代码块新增独立复制，保留代码正文缩进与换行，排除语言标签和围栏；支持流式可见快照、成功/失败反馈、重试及键盘标签，整条回答复制复用相同剪贴板处理，补齐中英文词条。复核修复 Unicode 分隔符被改成换行导致代码内容改变的问题并补回归测试。嵌套列表/引用内围栏及缩进代码块暂不提供独立按钮；普通已完成回答重新生成尚未实现，整体保持 PARTIAL。桌面真实剪贴板与历史重开留给用户手动验收，passes 保持 false。 2026-10-28 第三增量集成：最新一条已持久化、完成且有可见正文的助手回答支持显式重新生成；历史中间回答、待批准及最新用户轮次含已保存写入回执时不开放。客户端/服务端复用同一写入回执判定，复用 revision/CAS、请求租约与 checkpoint 幂等保护，保留无参错误重试语义；补同 tick 重复点击保护。Main 合并前复核修复重生成后遗留旧 actionError 提示并补回归；协调窗口定向 7 文件/177 项、改动代码 ESLint 通过，完整类型检查通过。普通回答重新生成代码已实现，整体实施状态更新为 IMPLEMENTED；Windows Electron fresh-native 真实流式、复制与历史重开、真实读屏尚待集中验收，passes 保持 false。嵌套/缩进代码块独立复制不在本次范围。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。合成持久历史中仅最后普通回答显示重新生成、旧回答只可复制，带已保存写入回执不显示重新生成；真实 quit/reopen 历史及按钮保持，正文与顶层围栏代码实际 Windows 剪贴板内容通过（系统换行 CRLF）。隔离托管运行时未登录，不复制真实凭据，真实 AI 重新生成流式调用 BLOCKED，passes 保持 false。证据同目录 checks-progress.json、code-copy.json；合成对话不冒充实际模型输出。 2026-10-28 用户在本聊天明确确认“B也验收了，可以复制和重新生成聊天”，并授权同步 Wiki。结合既有 Windows Electron fresh-native/full 真实剪贴板、历史退出重开及写入幂等定向证据，聊天复制与普通回答重新生成的人工验收闭环，passes 更新为 true。本轮未重新运行桌面或 E2E，未补造人工试用构建标识；此确认不外推为完整 AI Connection/Model Assignment 或 BYOK 隔离验收。",
       "steps": [
         "普通、多段、Markdown 与中文助手回答可逐条复制，保留换行，复制范围明确且不包含隐藏推理、原始工具参数或未显示的敏感上下文。",
         "复制成功和失败反馈真实，失败可重试，操作具有键盘与读屏标签；明确流式阶段行为，纯工具结果和空回答不提供无意义操作。",
         "重新打开历史对话后回答操作仍可用；代码块复制作为独立增量验证准确内容与反馈。",
         "普通已完成回答的重新生成复用现有对话修订及写入幂等保护，不因重复生成而重复创建职位或其他业务记录。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "SET-INPUT-PREFERENCES",
@@ -513,20 +457,20 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "description": "在设置 → 设备与输入新增输入偏好，支持回车行为、进入编辑、快捷提示和自动聚焦四项设备级偏好；优先接入网申资料及职业资料直接编辑字段。",
-      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/input-preferences（基于 411fbca8）的四项本机偏好（默认 newline/click/focus/off）、设置入口、网申及职业资料字段接入。复核修复 IME composition ref 在跳转前拦截、visibility:hidden 跳过、键盘重新进入时应用选区策略、持久化失败明确报错并保留原设置，以及 Enter 下一项的同步校验/必填门；抽出客户端安全的既有职业资料校验供服务与字段复用，不变更业务规则。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。完整 AC-01～AC-16 保留；真实中文 IME、Windows Electron fresh-native、重开持久化及窄窗口验收未执行，passes 保持 false。 2026-10-28 收口集成：修复非默认本机偏好在 SSR 水合时的不一致，改用稳定 useSyncExternalStore 快照；为 Legacy/只读素材卡片的证据编辑补齐字段区域，恢复 Enter 下一项与准确提示；补水合回归测试。真实中文 IME、Windows Electron、重开与窄窗口仍待用户手动验收，passes 保持 false。 2026-10-28 集中 Windows Electron fresh-native 验收发现并修复真实重开持久化缺陷：本地后端动态端口改变 origin，原 localStorage 四偏好丢失。改为 Electron 固定设备配置文件、原子写入及主窗口主帧同源校验的窄 IPC，保留 Web localStorage，并迁移当前可访问旧 origin 的有效偏好。前端 3 文件/45 项、桌面 2 文件/11 项定向检查及完整类型检查、改动代码 ESLint 通过；重建后的真实退出重开回归待执行，passes 保持 false。首次验收另有脚本假设/定位失败，保留失败证据，不视为已通过。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。四默认值、即时生效、Enter/Shift+Enter、校验保草稿与焦点、末字段结束、非空文本三种选区/键盘进入、保存后选区保持、提示、连续填写/敏感表单聚焦、Tab 顺序、960px 渲染视口及中英文切换通过。真实 quit IPC 退出后后端 origin 62550→50573，四偏好从设备文件保留，旧 localStorage 为空仍正确。真实中文 IME 待用户手动操作，passes 保持 false。额外旧 EMPLOYMENT 证据字段脚本断言未通过：实际只读区显示文本且无该编辑区域，本轮不将其冒充已验收。证据同目录 checks-progress.json、legacy-dom.json；旧失败保留。 2026-10-28 用户手动反馈其他输入及保存均正常，并明确要求资料页精简：去掉字段 Enter/Shift+Enter 提示及“连续填写”入口，将职业/网申资料字段、记录、分组与汇总复制统一改为图标，保留 title/aria-label 及原复制范围、敏感保护。对应快捷提示设置撤下；原 hintMode 存储键保留兼容，回车行为、进入编辑选区、显式编辑表单自动聚焦及自动保存不变。该用户要求取代原 AC-08 提示展示及 AC-09 连续填写按钮的展示要求，不以原展示断言为新验收条件。界面精简后定向组件/业务检查 6 文件/80 项通过；当前桌面试用产物仍是 027ee788，未重建或冒充新界面实机验收，passes 暂保持 false。",
+      "description": "在设置 → 设备与输入提供回车行为、进入编辑选区和显式编辑表单自动聚焦三项设备级偏好；接入网申资料及职业资料直接编辑字段。按用户修订撤下快捷提示设置与连续填写入口，资料复制统一使用图标。",
+      "implementationNotes": "2026-10-28 Main 集成：纳入 codex/input-preferences（基于 411fbca8）的四项本机偏好（默认 newline/click/focus/off）、设置入口、网申及职业资料字段接入。复核修复 IME composition ref 在跳转前拦截、visibility:hidden 跳过、键盘重新进入时应用选区策略、持久化失败明确报错并保留原设置，以及 Enter 下一项的同步校验/必填门；抽出客户端安全的既有职业资料校验供服务与字段复用，不变更业务规则。Main 组合定向检查 20 文件/235 项通过（前端 177、runtime 58），完整类型检查及改动代码 ESLint 通过。完整 AC-01～AC-16 保留；真实中文 IME、Windows Electron fresh-native、重开持久化及窄窗口验收未执行，passes 保持 false。 2026-10-28 收口集成：修复非默认本机偏好在 SSR 水合时的不一致，改用稳定 useSyncExternalStore 快照；为 Legacy/只读素材卡片的证据编辑补齐字段区域，恢复 Enter 下一项与准确提示；补水合回归测试。真实中文 IME、Windows Electron、重开与窄窗口仍待用户手动验收，passes 保持 false。 2026-10-28 集中 Windows Electron fresh-native 验收发现并修复真实重开持久化缺陷：本地后端动态端口改变 origin，原 localStorage 四偏好丢失。改为 Electron 固定设备配置文件、原子写入及主窗口主帧同源校验的窄 IPC，保留 Web localStorage，并迁移当前可访问旧 origin 的有效偏好。前端 3 文件/45 项、桌面 2 文件/11 项定向检查及完整类型检查、改动代码 ESLint 通过；重建后的真实退出重开回归待执行，passes 保持 false。首次验收另有脚本假设/定位失败，保留失败证据，不视为已通过。 2026-10-28 集中 Windows Electron fresh-native/full 定向验收，源码 Main 027ee788，生产构建 _ZTM_lGR5BMXu6AVFRgWY，源码摘要 53aac39b6687e451b2492ad34f51452f2c870037b86e693afba544f805faa7dc。四默认值、即时生效、Enter/Shift+Enter、校验保草稿与焦点、末字段结束、非空文本三种选区/键盘进入、保存后选区保持、提示、连续填写/敏感表单聚焦、Tab 顺序、960px 渲染视口及中英文切换通过。真实 quit IPC 退出后后端 origin 62550→50573，四偏好从设备文件保留，旧 localStorage 为空仍正确。真实中文 IME 待用户手动操作，passes 保持 false。额外旧 EMPLOYMENT 证据字段脚本断言未通过：实际只读区显示文本且无该编辑区域，本轮不将其冒充已验收。证据同目录 checks-progress.json、legacy-dom.json；旧失败保留。 2026-10-28 用户手动反馈其他输入及保存均正常，并明确要求资料页精简：去掉字段 Enter/Shift+Enter 提示及“连续填写”入口，将职业/网申资料字段、记录、分组与汇总复制统一改为图标，保留 title/aria-label 及原复制范围、敏感保护。对应快捷提示设置撤下；原 hintMode 存储键保留兼容，回车行为、进入编辑选区、显式编辑表单自动聚焦及自动保存不变。该用户要求取代原 AC-08 提示展示及 AC-09 连续填写按钮的展示要求，不以原展示断言为新验收条件。界面精简后定向组件/业务检查 6 文件/80 项通过；当前桌面试用产物仍是 027ee788，未重建或冒充新界面实机验收，passes 暂保持 false。 2026-10-28 用户在本聊天明确确认“A：输入偏好与资料页精简收口我已经人工验收了”，并授权同步 Wiki。按用户此前批准的精简范围（撤下快捷提示设置和连续填写入口、复制统一图标，保留三项偏好与设备持久化），结合既有 Windows Electron fresh-native/full 定向证据，人工验收闭环，passes 更新为 true。本轮仅记录用户验收结论，未重新运行桌面或 E2E；未提供本次人工试用的新增构建标识，不补造产物信息。",
       "steps": [
-        "AC-01/13：四项默认值正确，独立本机保存、即时生效且重启保留；不依赖云端同步，缺失或无效值安全回退。",
+        "AC-01/13：保留的三项偏好默认值正确，独立本机保存、即时生效且重启保留；不依赖云端同步，缺失或无效值安全回退；旧 hintMode 存储键保持兼容。",
         "AC-02/03/04：Enter 按偏好换行或下一项；Shift+Enter 仅在多行字段换行；最后一项结束编辑且不提交整表，跳过隐藏、禁用和只读字段。",
         "AC-05/11：真实输入法组字及候选确认不触发跳转；Enter 跳转遇校验失败保留输入与焦点并提示；保存失败保留草稿且可重试，不绕过已有保存校验逻辑。",
         "AC-06/07：进入编辑支持点击位置、末尾、全选；键盘进入且无点击位置时默认末尾，策略仅首次进入编辑应用，重渲染和保存不重置选区。",
-        "AC-08：快捷提示支持始终显示、聚焦时显示、关闭，内容与当前偏好及字段实际能力一致，最后一项提示结束编辑。",
-        "AC-09/10：自动聚焦只响应主动进入支持的连续编辑区域，寻找首个有效字段并按需滚动；默认关闭，不因浏览、路由或普通弹窗抢焦点，不在移动端自动弹键盘。",
+        "AC-08（2026-10-28 用户修订）：撤下快捷提示设置，资料字段不再显示重复的 Enter/Shift+Enter 提示；复制图标保留范围说明、键盘/读屏标签与失败反馈。",
+        "AC-09/10（2026-10-28 用户修订）：撤下连续填写入口；自动聚焦只响应主动进入支持的显式编辑表单，寻找首个有效字段并按需滚动；默认关闭，不因浏览、路由或普通弹窗抢焦点，不在移动端自动弹键盘。",
         "AC-12：Tab/Shift+Tab 保持合理页面焦点顺序，无焦点陷阱、不强制循环；Esc 沿用字段取消逻辑，切换字段不丢草稿。",
         "AC-14：优先接入网申资料与职业资料直接编辑字段，不全局拦截按键；聊天、搜索、下拉、富文本及 Markdown 长篇编辑器等独立交互不受影响。",
-        "AC-15/16：沿用设置视觉体系，三项下拉及一项开关按规定顺序呈现；固定与动态键盘说明准确，窄窗口可用，中英文完整。"
+        "AC-15/16（2026-10-28 用户修订）：沿用设置视觉体系，保留回车行为、进入编辑选区两项下拉及自动聚焦一项开关；窄窗口可用，中英文完整。"
       ],
-      "passes": false
+      "passes": true
     }
   ]
 }
