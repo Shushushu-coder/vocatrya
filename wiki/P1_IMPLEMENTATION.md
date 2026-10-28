@@ -1,6 +1,6 @@
 # Vocatrya P1 增量实施计划
 
-> 更新日期：2026-10-28。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**；ACTIVITY-RETIRE 另依据 Owner 提供的 2026-10-28 COMPLETE 审计（审计 HEAD `87985758...`）。本次为产品台账/实施合同更新，未访问当前仓库验证代码现状。
+> 更新日期：2026-10-29。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。本轮已集成活动退役（`81f939b8`）、AI 修复（`68212510`）及简历工作台合同（`06efa71b`）；功能验收与代码集成分别记录。
 > 状态口径：`IMPLEMENTED` 表示相应业务主路径已有实现，`PARTIAL` 表示部分实现，`MISSING` 表示目标产品能力尚未完整实现。上述状态不代表用户验收完成；`passes: true` 仅在对应真实业务与必要数据/桌面 Gate 通过后设置。
 
 ## A. 范围、迁移关系与状态
@@ -16,16 +16,16 @@
 - 原 `RM-MATCH` 不再单列 P1 Feature。其候选 Agent `match_job` 记录到 `AGENT-CAPABILITIES`；**现有 canonical FAST_SCREENING/MatchAnalysisService 仍是独立可复用业务能力**，代码不因台账迁移被删除或改写。
 - `AGENT-CAPABILITIES` 其余能力与扩展决策保持现状，本次只调整匹配工具的台账归属。
 
-当前 **7 项**，其中 `IMPLEMENTED` 1 项、`PARTIAL` 2 项、`MISSING` 4 项；**全部 `passes: false`**：
+当前 **7 项**，其中 `IMPLEMENTED` 2 项、`PARTIAL` 2 项、`MISSING` 3 项；**全部 `passes: false`**：
 
 | Feature | P1 范围 | 实现状态 | 当前结论 |
 | --- | --- | --- | --- |
-| **ACTIVITY-RETIRE（第一修改任务）** | IN_SCOPE | MISSING | 产品删除范围已确认，尚未执行 |
+| **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | 活动退役与独立任务分类已集成；隔离桌面验收待执行 |
 | **BD-ARCHIVE** | IN_SCOPE | MISSING | 职位/对话归档产品规则已确认，尚未实现 |
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
-| **AI-BYOK** | IN_SCOPE | PARTIAL | 配置基础存在，真实 API Key 业务调用未验收 |
+| **AI-BYOK** | IN_SCOPE | PARTIAL | 凭据边界与真实信号超时分类修复已集成；真实 Key 业务调用未验收 |
 | **AI-MANAGED** | IN_SCOPE | MISSING | 面向用户的托管服务尚未交付 |
-| **RESUME-BUILDER** | IN_SCOPE | MISSING | 模块化解析→编辑→版本→导出链路待设计实施 |
+| **RESUME-BUILDER** | IN_SCOPE | MISSING | v2 实施合同已集成，四项关键产品决定已批准；工作台未编码 |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | 现有五工具保留；`match_job` 仅登记待合同裁定 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
@@ -34,9 +34,9 @@
 
 ### ACTIVITY-RETIRE：彻底移除求职活动，独立保留任务分类（第一修改任务）
 
-**2026-10-29 Owner 冻结备份策略**：旧备份包含非空 `Activity` 组时整包拒绝，在任何写入或清空前给出明确错误；空 `Activity: []` 组兼容剥离，旧 manifest 的 `Activity: 0` 不阻断导入。不实施受控跳过非空组。该决策不代表 Main 已集成、功能验收通过或真实库迁移获授权；状态在后续集成时同步。
+**2026-10-29 Owner 冻结备份策略**：旧备份包含非空 `Activity` 组时整包拒绝，在任何写入或清空前给出明确错误；空 `Activity: []` 组兼容剥离，旧 manifest 的 `Activity: 0` 不阻断导入。不实施受控跳过非空组。实现已随 `81f939b8` 集成；该决策不等于功能验收通过或真实库迁移获授权。
 
-- **优先级 P1；范围 IN_SCOPE；实现状态 MISSING；`passes: false`。** 2026-10-28 Owner 已完成产品决策：当前版本尚未发布，极少量 Activity 历史记录仅属测试账号数据，**不归档、不迁移保留、不承担旧 Activity 备份兼容**。本工作包排在本 P1 台账第一位，但登记计划**不等于授权执行删除、真实数据库迁移、Commit、Push 或部署**。
+- **优先级 P1；范围 IN_SCOPE；实现状态 IMPLEMENTED；`passes: false`。** Activity 页面、计时/休息、专属统计、模型及备份分组已移除；保留 ActivityType、Task.activityTypeId、任务分类与投递统计。新增 `20261029000000_retire_activity_table` 迁移，未改历史迁移、未执行真实库迁移。隔离合成库验证由 Coding Owner 完成；Windows Electron 验收尚未执行。
 - **审计依据**：Owner 提供的《Vocatrya Job Activity Dependency Audit Report》，结论 `COMPLETE`，审计时 main HEAD 为 `879857587552c6c1ee9689695bca90ae474c449e`。核心证据：`Activity` 是独立的时间记录/休息系统；`Task.activityTypeId` 可选且引用 `ActivityType`；任务删除受到活动行检查的应用层阻断；Dashboard/Analytics 消费活动计数或时长，投递热力图色块实际来自投递数；Activity 备份休息字段有必填限制。**这是所提供审计结论，不代表本轮已访问并复核当前仓库**，实施前须重新核对实时 HEAD/Dirty 和实际调用点。
 
 **冻结的产品合同**
@@ -81,11 +81,15 @@
 
 ### AI-ACCOUNT-LOGIN：账号登录型 AI
 
+- 2026-10-29 集成 `68212510`：测试认证版本断言对齐已认证的 Codex 0.165.0，未放宽精确版本门控；代码/隔离测试证据已核对，真实账号业务与 Windows Electron 完整验收仍待完成。
+
 - **P1 / IN_SCOPE / IMPLEMENTED / `passes: false`。** 用户已经实际试用并确认相关聊天功能可用；但服务级探测与部分人工操作**不等于完整业务/UI 验收**。
 - 原 `SET-AI-SERVICES` 的有效证据归属本项：Codex CLI 0.164.0 与 0.165.0 分别完成经授权的流式 4 项及结构化 9/9 desktop connection-service 认证；保留精确版本门控。相关 UI/环境状态问题已修复，159 项定向测试、类型检查和 ESLint 通过；隔离 Electron fresh-native/full 构建 `G79eH1Wz4YriE8lYq4jPN` 已核对模型与发送按钮，用户反馈聊天复制/重新生成可用。
 - 剩余：在真实账号连接下验证连接/模型分配、已支持业务的流式与结构化执行、错误恢复、刷新和隔离 Windows Electron 的完整用户路径；证据只覆盖已验证的具体运行时和版本，不外推到 BYOK 或托管 AI。
 
 ### AI-BYOK：用户自带 API Key
+
+- 2026-10-29 集成 `68212510`：补充 BYOK 凭据故障操作指引、隔离测试代理环境，修复真实截止信号被误判成普通取消的问题；18 项 BYOK 执行测试覆盖 one-shot/streaming 截止与取消。真实 API Key 业务调用未执行，保持 PARTIAL 与 `passes: false`。
 
 - **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 配置、模型分配及账号/BYOK 隔离的基础已有记录，但**尚未证实真实 API Key 能成功执行实际业务调用**。
 - 核查密钥存储/访问边界、连接和模型选择的真实状态，验证未配置、无效 Key、模型不可用、额度/网络错误等情况不虚报可用。
@@ -101,6 +105,8 @@
 **三条路径共同原则**：共享可复用业务调用契约，但账号登录、BYOK、托管网关的身份/凭据/模型能力/计费边界不得混用；不默默切换到另一种路径。每条 AI 各自维护 `implementationStatus`、证据与 `passes`，一个通过不代表其他通过。
 
 ### RESUME-BUILDER：结构化模块简历工作台（P1 核心）
+
+- 2026-10-29 集成 [工作台实施合同 v2](./RESUME_BUILDER_CONTRACT_PROPOSAL.md)（`06efa71b`）。Owner 已批准 `@dnd-kit`、DOCX 导出、篇幅软目标及本期条目级导入排除；AI 改写与粘贴导入后续再做。其余待决项不外推批准；分页仍需技术验证。依赖未安装，工作台未编码，保持 MISSING。
 
 - **P1 / IN_SCOPE / MISSING / `passes: false`。** 现有 Career Material、Resume Variant 等基础能力不等于已实现新的模块化导入、拖拽工作台、分页与导出。实施前先对照真实 Schema、当前简历数据流与格式/导出能力作设计核查。
 
@@ -142,6 +148,7 @@
 
 ## D. 完成口径与执行边界
 
+- 2026-10-29 Main 组合验证：14 个定向测试文件、212 项通过，覆盖任务/分类、Dashboard、备份拒绝与往返、BYOK 截止/取消及 AI 运行时断言。重新生成 Prisma client 并刷新遗留活动页的 Next 路由类型后，完整非增量 TypeScript 检查通过；未运行生产构建或桌面/E2E。
 - `passes` **按七个 Feature 分别**认定：ACTIVITY-RETIRE 需要拆除与保留功能回归、备份/隔离迁移及桌面证据；BD-ARCHIVE 需要职位和对话归档/恢复与长期保留的验证；三条 AI 各自需要真实业务调用及隔离桌面体验；RESUME-BUILDER 需要解析、拖拽、版本、分页、导出的完整用户闭环；AGENT 保持原工具验收和待裁定扩展边界。
 - 真实业务数据、凭据、数据库迁移、生产系统与发布不能由台账范围自动授权。原则上先使用合成数据和隔离环境完成最小充分验证，不盲目重复既有有效版本认证；必要的真实连接验收另取明确授权。
-- 原 P1 文件是**历史评估**，本次是**文档更新**：并未运行代码、Schema 迁移、真实网关/Windows Electron 验收，也未提交、合并、推送、发布或部署。完成情况只能据后续实际证据改写，不得因本次产品决策把 `passes` 设为 `true`。
+- 2026-10-29 本轮已获提交/合并授权并完成三条工作线 Main 集成；未推送、发布、部署，未进行真实库迁移、真实模型调用或 Windows Electron/E2E 验收。功能完成情况仍按实际证据认定，全部 `passes` 保持 `false`。

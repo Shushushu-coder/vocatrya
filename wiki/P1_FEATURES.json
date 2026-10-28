@@ -22,8 +22,8 @@
       "category": "Tasks / Activity",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "MISSING",
-      "description": "2026-10-28 Owner 已确认：未发布版本彻底移除「求职活动」时间记录体系（页面、入口、计时/休息、时长统计、Activity 表及专属备份分组），不保留少量测试活动数据或旧 Activity 备份兼容；「任务分类」保留为 Tasks 独立、可选字段，继续支持分类维护、筛选和分组。该项列为 P1 第一修改任务，尚未执行。",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "2026-10-28 Owner 已确认：未发布版本彻底移除「求职活动」时间记录体系（页面、入口、计时/休息、时长统计、Activity 表及专属备份分组），不保留少量测试活动数据或旧 Activity 备份兼容；「任务分类」保留为 Tasks 独立、可选字段，继续支持分类维护、筛选和分组。2026-10-29 已完成代码实现并集成 Main，隔离 Windows Electron 功能验收待执行。",
       "steps": [
         "实施前以实际仓库 HEAD/Dirty 和 2026-10-28 COMPLETE 依赖审计为基础复核调用链；本项 IN_SCOPE 表示产品范围已确认，不等于授权删除文件、修改真实数据库、执行迁移、提交或部署。",
         "先解耦任务分类：保留 Task.activityTypeId 的可选性、ActivityType 及其创建/维护、任务筛选与分组和对应备份映射；界面将其作为「任务分类 / Task Category」独立呈现。底层名称按最小风险决定，不为了改名引入多余迁移。",
@@ -34,7 +34,7 @@
         "通过静态搜索和定向单测、备份往返、合成数据库迁移验证、页面与隔离 Windows Electron 验收确认无残余 Activity 读写及路由入口；任务分类、任务删除、Dashboard、Analytics、投递热力图、职位、提醒和其他备份分组均正常。真实库迁移、破坏性删除、commit/push/deploy 另行逐项授权。 隔离迁移验收与真实目标库执行完成的标记边界需在实施 Gate 中明确。"
       ],
       "passes": false,
-      "implementationNotes": "依据 2026-10-28 Owner 提供的《Vocatrya Job Activity Dependency Audit Report》（结论 COMPLETE；审计 HEAD 879857587552c6c1ee9689695bca90ae474c449e）。已确认 Activity 独立承担计时和休息；Task、Dashboard、Analytics 消费类型或时长；ActivityType 同时承载 Tasks 的可选分类；deleteTaskById 存在应用层活动关联阻断；热力图色块来自投递数；备份 Activity 行有必填休息字段。Owner 明确未发布版本仅有极少测试 Activity 数据，无需归档或旧活动备份兼容。该依据为所提供审计结论，不代表当前仓库已独立复核或开始实施。"
+      "implementationNotes": "依据 2026-10-28 Owner 提供的《Vocatrya Job Activity Dependency Audit Report》（结论 COMPLETE；审计 HEAD 879857587552c6c1ee9689695bca90ae474c449e）。已确认 Activity 独立承担计时和休息；Task、Dashboard、Analytics 消费类型或时长；ActivityType 同时承载 Tasks 的可选分类；deleteTaskById 存在应用层活动关联阻断；热力图色块来自投递数；备份 Activity 行有必填休息字段。Owner 明确未发布版本仅有极少测试 Activity 数据，无需归档或旧活动备份兼容。该依据为所提供审计结论，不代表当前仓库已独立复核或开始实施。 2026-10-29 Main 集成 81f939b8：移除 Activity 产品、计时/休息、专属统计、模型和备份组；保留任务分类及投递日历。新增 20261029000000_retire_activity_table 迁移，历史迁移未改；隔离合成库验证通过。Owner 批准非空旧 Activity 备份整包拒绝、空组剥离，新增导入写入前保护回归。完整类型检查通过，先前约430个错误为 Prisma client 未生成所致，已更正。未执行 Windows Electron 验收或真实库迁移，passes 保持 false。"
     },
     {
       "id": "BD-ARCHIVE",
@@ -65,7 +65,7 @@
         "记录真实用户界面和业务验收证据；未覆盖的路径不得用服务级探测或按钮可点替代；与 BYOK 和托管 AI 分别判定 passes。"
       ],
       "passes": false,
-      "implementationNotes": "原 SET-AI-SERVICES 证据保留：2026-10-28 Codex CLI 0.164.0 与随后 0.165.0 经授权、使用合成内容分别完成 desktop connection-service 流式 4 项和结构化 9/9 探测，保留精确版本拒绝策略；相关修复涵盖预检提示、导入环境文案、受阻模型名、未配置时 Ollama 错显及全局预检刷新，159 项相关测试及类型/ESLint 通过。隔离 Electron fresh-native/full 构建 G79eH1Wz4YriE8lYq4jPN 核对了顶部模型与发送按钮；用户确认聊天复制与重新生成可用。完整账号登录业务/UI 验收仍未全部完成。"
+      "implementationNotes": "原 SET-AI-SERVICES 证据保留：2026-10-28 Codex CLI 0.164.0 与随后 0.165.0 经授权、使用合成内容分别完成 desktop connection-service 流式 4 项和结构化 9/9 探测，保留精确版本拒绝策略；相关修复涵盖预检提示、导入环境文案、受阻模型名、未配置时 Ollama 错显及全局预检刷新，159 项相关测试及类型/ESLint 通过。隔离 Electron fresh-native/full 构建 G79eH1Wz4YriE8lYq4jPN 核对了顶部模型与发送按钮；用户确认聊天复制与重新生成可用。完整账号登录业务/UI 验收仍未全部完成。 2026-10-29 Main 集成 68212510：测试断言对齐已认证 0.165.0，精确版本门控保留；代码/隔离验证通过，真实账号业务与 Windows Electron 完整验收未执行，passes 保持 false。"
     },
     {
       "id": "AI-BYOK",
@@ -80,7 +80,7 @@
         "核验 BYOK 不泄露密钥、不与账号登录或托管服务串用凭据/额度，并在实际桌面用户界面验证；独立记录结果与 passes。"
       ],
       "passes": false,
-      "implementationNotes": "原 SET-AI-SERVICES 已记录账号登录/BYOK 隔离和诚实可用状态，但没有覆盖 BYOK 真实业务调用与 Windows Electron 完整验收。PARTIAL 表示已有基础设施而非已证明 BYOK 可用。"
+      "implementationNotes": "原 SET-AI-SERVICES 已记录账号登录/BYOK 隔离和诚实可用状态，但没有覆盖 BYOK 真实业务调用与 Windows Electron 完整验收。PARTIAL 表示已有基础设施而非已证明 BYOK 可用。 2026-10-29 Main 集成 68212510：凭据故障提示、测试凭据代理显式隔离及真实截止超时分类修复，18项执行回归覆盖 one-shot/streaming 的真实信号截止与取消；真实 API Key 调用及 Windows Electron 验收未执行，PARTIAL 和 passes:false 保持。"
     },
     {
       "id": "AI-MANAGED",
@@ -113,7 +113,7 @@
         "用真实结构的简历样例在隔离 Windows Electron 做导入→校对→拖拽→版本→预览→导出往返验收；解析文件格式和导出实现细节在实施合同中具体核实。"
       ],
       "passes": false,
-      "implementationNotes": "这是新确定的产品工作流目标；现有简历基础记录/版本设施不能证明模块化导入、拖拽、分页与导出已实现。Match 分析可利用后续结构化数据，但不要求重写或删除已有 canonical 匹配服务。"
+      "implementationNotes": "这是新确定的产品工作流目标；现有简历基础记录/版本设施不能证明模块化导入、拖拽、分页与导出已实现。Match 分析可利用后续结构化数据，但不要求重写或删除已有 canonical 匹配服务。 2026-10-29 Main 集成 06efa71b 的 RESUME_BUILDER_CONTRACT_PROPOSAL.md v2：Owner 批准 @dnd-kit、DOCX、篇幅软目标、本期条目级导入排除；AI改写与粘贴导入后续再做。其余提案及分页技术验证不外推批准。未编码或安装依赖，MISSING 与 passes:false 保持。"
     },
     {
       "id": "AGENT-CAPABILITIES",
