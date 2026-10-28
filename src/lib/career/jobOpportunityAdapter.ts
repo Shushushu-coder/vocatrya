@@ -380,7 +380,7 @@ type OpportunityWithRelations = {
     createdBy: string;
     logoUrl?: string | null;
   };
-  currentJdVersion: { rawContent: string } | null;
+  currentJdVersion: { rawContent: string; rawContentFormat?: string } | null;
   applicationAttempts: Array<{
     id: string;
     currentStageCategory: string;
@@ -544,8 +544,8 @@ export function mapOpportunityToJobView(
     recruitmentCohort: opportunity.recruitmentCohort ?? null,
     recruitmentBatch: opportunity.recruitmentBatch ?? null,
     salaryRange: opportunity.salaryText,
-    description:
-      opportunity.currentJdVersion?.rawContent ?? opportunity.notes ?? "",
+    description: opportunity.currentJdVersion?.rawContent ?? opportunity.notes ?? "",
+    descriptionFormat: opportunity.currentJdVersion?.rawContentFormat,
     jobUrl: opportunity.sourceUrl,
     applied,
     resumeId: null,
@@ -586,7 +586,7 @@ export const AB_APPLIED_OPPORTUNITY_WHERE = {
 
 export const OPPORTUNITY_LIST_INCLUDE = {
   company: true,
-  currentJdVersion: { select: { rawContent: true } },
+  currentJdVersion: { select: { rawContent: true, rawContentFormat: true } },
   applicationAttempts: {
     where: { archivedAt: null },
     select: {

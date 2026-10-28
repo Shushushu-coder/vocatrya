@@ -223,6 +223,15 @@ describe("AgentChatMessages", () => {
     expect(screen.getByText("## not a heading")).toBeInTheDocument();
   });
 
+  it("constrains long user bubbles while retaining line breaks and wrapping long tokens", () => {
+    const text = `岗位职责\n${"https://example.test/" + "a".repeat(500)}\n任职要求`;
+    chat.messages = [user([{ type: "text", text }])];
+    render(<AgentChatMessages />);
+    const bubble = screen.getByText((_, element) => element?.tagName === "P" && element.textContent === text);
+    expect(bubble).toHaveClass("max-w-[85%]", "min-w-0", "whitespace-pre-wrap", "[overflow-wrap:anywhere]");
+    expect(bubble.parentElement).toHaveClass("items-end");
+  });
+
   it("does not render a link the model emitted", () => {
     chat.messages = [
       assistant([{ type: "text", text: "[click](https://evil.example/?d=x)" }]),

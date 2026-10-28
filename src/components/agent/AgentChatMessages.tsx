@@ -123,7 +123,7 @@ export function AgentChatMessages() {
                   return (
                     <p
                       key={i}
-                      className="whitespace-pre-wrap break-words rounded-md bg-muted px-3 py-2"
+                      className="min-w-0 max-w-[85%] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md bg-muted px-3 py-2"
                     >
                       {part.text}
                     </p>

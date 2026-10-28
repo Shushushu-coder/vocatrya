@@ -1,4 +1,5 @@
 "use client";
+import { jobDescriptionEditorHtml } from "@/lib/jobs/description";
 import {
   Dialog,
   DialogContent,
@@ -233,7 +234,7 @@ export function AddJob({
         recruitmentCohort: editJob.recruitmentCohort ?? "",
         recruitmentBatch: editJob.recruitmentBatch ?? "",
         salaryRange: editJob.salaryRange ?? "",
-        jobDescription: editJob.description,
+        jobDescription: jobDescriptionEditorHtml(editJob),
         applied: editJob.applied,
         jobUrl: editJob.jobUrl ?? "",
         dateApplied: editJob.appliedDate ?? undefined,

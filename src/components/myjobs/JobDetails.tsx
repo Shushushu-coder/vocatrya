@@ -9,6 +9,7 @@ import {
   Tag,
 } from "@/models/job.model";
 import { TipTapContentViewer } from "../TipTapContentViewer";
+import { jobDescriptionEditorHtml } from "@/lib/jobs/description";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -300,7 +301,7 @@ function JobDetails({
           </TabsList>
           <TabsContent value="description" className="mt-4">
             <Card className="p-6">
-              <TipTapContentViewer content={job?.description} />
+              <TipTapContentViewer content={jobDescriptionEditorHtml(job)} />
             </Card>
           </TabsContent>
           {showTimeline && (

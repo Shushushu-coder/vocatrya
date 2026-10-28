@@ -60,6 +60,7 @@ export interface JobResponse {
   recruitmentBatch?: string | null;
   salaryRange: string | null;
   description: string;
+  descriptionFormat?: string;
   jobUrl: string;
   applied: boolean;
   resumeId?: string;

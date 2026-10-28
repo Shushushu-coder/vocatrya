@@ -4,7 +4,15 @@
 > 依据：当前 Main 源码实证 + 《MAIN CONTEXT & MVP Implementation Plan》+ 《Vocatrya 职业资料 V1 回归定义与结构基线》(docs/resources)。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=有基础但缺关键功能或集成；MISSING=无对应实现；UNVERIFIED=证据不足。
 
-## 兼容性收口复审与 Main 集成（2026-10-28，当前状态）
+## 试用反馈修复与运行时认证（2026-10-28，当前状态）
+
+- 已集成：题库回答默认折叠、完整富文本展开与键盘操作（`20836438`）；AI 预检失败提示可关闭，新预检完成会重新报告失败，关闭提示不解除发送限制；简历导入将运行时/连接不可用与解析失败分开提示（`f6144f29`，合并节点 `81a4ec35`）。
+- Codex CLI 升级至 0.164.0 后与原 0.160.0 认证绑定不符，是本次聊天和简历导入被拒绝执行的共同原因。经用户授权，用 gpt-5.6-luna 和合成内容通过生产桌面执行边界验证流式 4 项、结构化 9/9 首次有效；更新精确认证版本，保留其他版本拒绝策略（`39a85ca3`）。随后合成简历通过正式导入 schema 和原文事实校验，未发送真实简历或聊天内容。
+- 本次修复：用户消息气泡最大宽度为聊天区的 85%，保持右对齐并允许长链接折行；职位读取透出 JD 原文格式，仅在详情显示和编辑回填时将纯文本安全转义为 HTML 并保留换行。已有 JD 可直接受益，不迁移或改写原文，不改变 Agent 读取原文及已有 HTML 的契约。
+- 本次定向验证：AgentChatMessages、agentCanonicalAddJob、jobsAbReadPath、AddJob、JobDetails 共 5 文件/140 项通过，完整类型检查与改动文件 ESLint 通过。未启动新的生产构建或 Electron E2E，不将这些证据视为新界面补丁的桌面验收。
+- 隔离试用应用仍为 `39a85ca3` / Build ID `TYS3qOBs2e5Vgc3WX9_et`，复用原隔离数据目录；本次消息布局/JD 换行补丁尚未进入该运行产物。28 项 IN_SCOPE 中仍为 25 项通过，CP-EDIT、SET-DESKTOP、SET-AI-SERVICES 保留 false；无 Push、发布或真实系统自启操作。
+
+## 兼容性收口复审与 Main 集成（2026-10-28，历史阶段）
 
 - 用户已授权复审并提交执行窗口的兼容性收口；本窗口核对原代码差异和 .tmp/compat-closure 中的旧库迁移、五模式双语及托盘证据，未重新启动 Build/装配/E2E。
 - CP-LEGACY、JOB-05 已通过并随本次代码纳入 Main，当前 28 项 IN_SCOPE 中 25 项 passes=true。剩余 CP-EDIT（真实 IME）、SET-DESKTOP（真实系统自启）和 SET-AI-SERVICES（真实 AI/BYOK 业务）保留 false，不能据此全项发布放行。

@@ -10,6 +10,8 @@ import {
   activateFreshAbNative,
 } from "@/lib/career";
 import { createJobFromNames } from "@/lib/jobs/createJobFromNames";
+import { getOpportunityAsJob } from "@/lib/career/jobOpportunityAdapter";
+import { jobDescriptionEditorHtml } from "@/lib/jobs/description";
 import {
   resetDisposableDb,
   seedAccount,
@@ -219,6 +221,22 @@ describe("canonical add_job", () => {
     expect(await appPrisma.jobDescriptionParse.count()).toBe(0);
     expect(await appPrisma.applicationAttempt.count()).toBe(0);
     expect(await appPrisma.job.count()).toBe(0);
+  });
+
+  it("projects multiline plain JD safely for the rich text viewer while preserving stored source and existing HTML", async () => {
+    await freshFull();
+    const source = '岗位职责\r\n负责研发 <Agent> & 产品\r\n\r\n任职要求\n熟悉 TypeScript';
+    const result = await execute(canonicalTool(), { company: "测试公司", jobTitle: "产品经理", jobDescription: source });
+    const id = (result as { jobOpportunityId: string }).jobOpportunityId;
+    const version = await appPrisma.jobDescriptionVersion.findFirstOrThrow({ where: { jobOpportunityId: id } });
+    expect(version.rawContent).toBe(source);
+    const view = await getOpportunityAsJob(appPrisma, userId, id);
+    expect(view?.description).toBe(source);
+    expect(view?.descriptionFormat).toBe("PLAIN_TEXT");
+    expect(jobDescriptionEditorHtml(view!)).toBe('<p>岗位职责<br>负责研发 &lt;Agent&gt; &amp; 产品<br><br>任职要求<br>熟悉 TypeScript</p>');
+    const html = '<h2>岗位职责</h2><p>负责研发<br>保留格式</p>';
+    await appPrisma.jobDescriptionVersion.update({ where: { id: version.id }, data: { rawContent: html, rawContentFormat: "HTML" } });
+    expect(jobDescriptionEditorHtml((await getOpportunityAsJob(appPrisma, userId, id))!)).toBe(html);
   });
 
   it("reuses an existing company and creates a new one only when the name is new", async () => {
