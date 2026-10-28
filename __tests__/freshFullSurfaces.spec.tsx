@@ -212,20 +212,14 @@ describe("Header global actions", () => {
     expect(within(menu).queryByText("Automation")).not.toBeInTheDocument();
   });
 
-  it("routes upload to the resumes surface under fresh + full", () => {
+  it("has no global upload entry under fresh + full", () => {
     render(wrap(<Header />));
-    expect(screen.getByTestId("header-upload")).toHaveAttribute(
-      "href",
-      "/dashboard/profile/resumes?import-resume=true",
-    );
+    expect(screen.queryByTestId("header-upload")).toBeNull();
   });
 
-  it("routes upload to the profile surface outside fresh + full", () => {
+  it("has no global upload entry outside fresh + full", () => {
     render(wrap(<Header />, false));
-    expect(screen.getByTestId("header-upload")).toHaveAttribute(
-      "href",
-      "/dashboard/profile?import-resume=true",
-    );
+    expect(screen.queryByTestId("header-upload")).toBeNull();
   });
 });
 

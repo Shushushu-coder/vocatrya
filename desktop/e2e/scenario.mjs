@@ -23,13 +23,12 @@ export async function checkNavigation(page, origin) {
   await assertDesktopSurface(page);
   const titlebar = page.getByTestId("desktop-titlebar");
   await expect(titlebar.getByTestId("header-create-menu")).toBeVisible();
-  await expect(titlebar.getByTestId("header-upload")).toBeVisible();
+  await expect(page.getByTestId("header-upload")).toHaveCount(0);
   await expect(page.locator(".header-global-actions")).toBeHidden();
-  await expect(titlebar.getByTestId("header-upload")).toHaveAttribute("href", "/dashboard/profile/resumes");
   await titlebar.getByTestId("header-create-menu").click();
   await expect(page.getByRole("menuitem").first()).toBeVisible();
   await page.keyboard.press("Escape");
-  console.log("PASS desktop titlebar owns create/upload actions");
+  console.log("PASS desktop titlebar owns create actions and has no upload entry");
 
   const sidebar = page.getByRole("complementary");
   const expectedRoutes = ["/dashboard", "/dashboard/analytics", "/dashboard/myjobs", "/dashboard/tasks", "/dashboard/activities", "/dashboard/questions", "/dashboard/interview", "/dashboard/profile", "/dashboard/admin", "/dashboard/settings"];

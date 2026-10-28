@@ -13,11 +13,11 @@ vi.mock("next/navigation", () => ({
 
 beforeEach(() => { searchParams = new URLSearchParams(); });
 
-it("opens legacy resume upload from the toolbar deep link", async () => {
+it("ignores the removed toolbar upload deep link", async () => {
   searchParams = new URLSearchParams("import-resume=true");
   await act(async () => { render(<ProfileContainer />); });
-  expect(screen.getByRole("dialog")).toBeVisible();
-  expect(replace).toHaveBeenCalledWith("/", { scroll: false });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(replace).not.toHaveBeenCalled();
 });
 
 it("does not open legacy upload when the editor is read-only", async () => {

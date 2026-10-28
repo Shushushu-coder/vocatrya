@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n";
 import type { ParsedResumeImport } from "@/lib/career/resumeImportContract";
-import { useQueryDialog } from "@/hooks/useQueryDialog";
 
 type Preview = { parsed: ParsedResumeImport; rawText: string; name: string; approval: string;
   summary: { created: number; reused: number; conflicts: string[] } };
@@ -14,7 +13,6 @@ export function CanonicalResumeImport() {
   const { t } = useI18n();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  useQueryDialog("import-resume", () => setOpen(true));
   const [phase, setPhase] = useState<"idle" | "extracting" | "parsing" | "saving">("idle");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<string | null>(null);

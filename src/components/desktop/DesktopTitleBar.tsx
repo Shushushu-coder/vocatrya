@@ -197,7 +197,7 @@ export function DesktopTitleBar() {
       <div className="app-region-no-drag ml-1 flex items-center">
         <ShortcutHelp />
       </div>
-      {/* Dashboard-scoped actions (create menu, upload) are portaled in by
+      {/* Dashboard-scoped actions (create menu) are portaled in by
           TitleBarActions; their providers only exist under /dashboard, so the
           slot stays empty on auth and other non-dashboard routes. */}
       <div

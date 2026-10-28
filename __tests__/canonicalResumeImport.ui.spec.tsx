@@ -18,12 +18,14 @@ const choose = () => {
   fireEvent.click(screen.getByText("canonicalImport.open"));
   fireEvent.change(screen.getByLabelText("canonicalImport.choose"), { target: { files: [new File(["%PDF"], "Synthetic.pdf", { type: "application/pdf" })] } });
 };
-it("opens file selection from the toolbar deep link without starting an upload", () => {
+it("ignores the removed toolbar deep link and still opens from its own import button", () => {
   searchParams = new URLSearchParams("import-resume=true");
   mocks.fetch.mockClear();
   render(<CanonicalResumeImport />);
+  expect(screen.queryByLabelText("canonicalImport.choose")).toBeNull();
+  fireEvent.click(screen.getByText("canonicalImport.open"));
   expect(screen.getByLabelText("canonicalImport.choose")).toBeVisible();
-  expect(mocks.replace).toHaveBeenCalledWith("/dashboard/profile/resumes", { scroll: false });
+  expect(mocks.replace).not.toHaveBeenCalled();
   expect(mocks.fetch).not.toHaveBeenCalled();
 });
 it("fresh/full canonical list exposes Import Resume; legacy runtime does not", async () => {

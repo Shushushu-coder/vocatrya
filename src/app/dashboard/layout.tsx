@@ -81,7 +81,7 @@ export default async function RootLayout({
               <SidebarInset>
                 {/* Renders only portals into DesktopTitleBar's slots; kept
                     inside the provider tree so the agent-chat trigger and
-                    mode-aware upload href resolve correctly. */}
+                    create-menu permissions resolve correctly. */}
                 <TitleBarActions />
                 <Header />
                 <GlobalActivityBanner />

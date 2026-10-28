@@ -53,7 +53,7 @@ function renderDashboardChrome() {
 }
 
 describe("TitleBarActions", () => {
-  it("portals create, upload and assistant actions into the titlebar", async () => {
+  it("portals create and assistant actions without the removed upload entry", async () => {
     installDesktopShell();
     renderShell();
     const titlebar = await screen.findByTestId("desktop-titlebar");
@@ -67,10 +67,7 @@ describe("TitleBarActions", () => {
 
     expect(within(titlebar).getByTestId("header-create-menu")).toBeTruthy();
     expect(within(leftSlot!).getByTestId("header-create-menu")).toBeTruthy();
-    expect(within(leftSlot!).getByTestId("header-upload")).toHaveAttribute(
-      "href",
-      "/dashboard/profile?import-resume=true"
-    );
+    expect(within(leftSlot!).queryByTestId("header-upload")).toBeNull();
     // 咨询 Vocatrya sits in the right slot. The shortcut-help button moved to
     // the left group: after the forward button, before the actions slot.
     const assistant = within(rightSlot!).getByRole("button", {
@@ -97,25 +94,7 @@ describe("TitleBarActions", () => {
     expect(screen.queryByTestId("header-create-menu")).toBeNull();
   });
 
-  it("routes upload to the resumes surface under fresh + full", async () => {
-    installDesktopShell();
-    renderShell(true);
-    const leftSlot = document.getElementById("desktop-titlebar-actions-left");
-    expect(
-      await within(leftSlot!).findByTestId("header-upload")
-    ).toHaveAttribute("href", "/dashboard/profile/resumes?import-resume=true");
-  });
-
-  it("uses canonical import for migrated and resume-only runtimes too", () => {
-    render(
-      <CareerSurfacesProvider freshNativeFull={false} resumeV1Enabled legacyResumeMutationsEnabled={false}>
-        <CreateMenu compact />
-      </CareerSurfacesProvider>,
-    );
-    expect(screen.getByTestId("header-upload")).toHaveAttribute("href", "/dashboard/profile/resumes?import-resume=true");
-  });
-
-  it("hides unavailable upload and job creation in a restricted runtime", async () => {
+  it("keeps job creation restricted after removing upload", async () => {
     render(
       <CareerSurfacesProvider freshNativeFull={false} resumeV1Enabled={false} legacyResumeMutationsEnabled={false} jobMutationsEnabled={false}>
         <CreateMenu compact />
@@ -175,7 +154,7 @@ describe("global actions uniqueness per shell", () => {
     // in-header fallback. A second match here is the strict-mode violation
     // that broke the dashboard E2E suite.
     expect(await screen.findAllByTestId("header-create-menu")).toHaveLength(1);
-    expect(screen.getAllByTestId("header-upload")).toHaveLength(1);
+    expect(screen.queryByTestId("header-upload")).toBeNull();
     expect(
       screen.getAllByRole("button", { name: "Open assistant" })
     ).toHaveLength(1);
@@ -197,7 +176,7 @@ describe("global actions uniqueness per shell", () => {
     // hides, so the desktop never presents two toolbars.
     const titlebar = await screen.findByTestId("desktop-titlebar");
     expect(within(titlebar).getByTestId("header-create-menu")).toBeTruthy();
-    expect(within(titlebar).getByTestId("header-upload")).toBeTruthy();
+    expect(within(titlebar).queryByTestId("header-upload")).toBeNull();
     expect(
       within(titlebar).getByRole("button", { name: "Open assistant" })
     ).toBeTruthy();
@@ -208,7 +187,7 @@ describe("global actions uniqueness per shell", () => {
       within(fallback as HTMLElement).getByTestId("header-create-menu")
     ).toBeTruthy();
     expect(
-      within(fallback as HTMLElement).getByTestId("header-upload")
-    ).toBeTruthy();
+      within(fallback as HTMLElement).queryByTestId("header-upload")
+    ).toBeNull();
   });
 });

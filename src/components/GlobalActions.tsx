@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, Plus, Upload } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,15 +31,11 @@ const CREATE_MENU_ITEMS = [
 // density still serves the in-app header on the plain web build.
 export function CreateMenu({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
-  const { resumeV1Enabled, legacyResumeMutationsEnabled, jobMutationsEnabled } = useCareerSurfaces();
-  const uploadHref = resumeV1Enabled
-    ? "/dashboard/profile/resumes?import-resume=true"
-    : "/dashboard/profile?import-resume=true";
+  const { jobMutationsEnabled } = useCareerSurfaces();
   // In the compact titlebar the actions match the surrounding window chrome:
   // ghost icon buttons with the label carried by aria-label/title instead of
   // visible text. The web header keeps labeled outline buttons.
   const buttonVariant = compact ? "ghost" : "outline";
-  const buttonClass = compact ? "h-7 w-7 gap-0 px-0" : "gap-1.5";
   const menuButtonClass = compact ? "h-7 w-auto gap-0.5 px-1.5" : "gap-1.5";
 
   return (
@@ -74,24 +70,6 @@ export function CreateMenu({ compact = false }: { compact?: boolean }) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      {/* Open the import flow supported by the current runtime. */}
-      {(resumeV1Enabled || legacyResumeMutationsEnabled) && <Button
-        variant={buttonVariant}
-        className={buttonClass}
-        data-testid="header-upload"
-        asChild
-      >
-        <Link
-          href={uploadHref}
-          aria-label={compact ? t("dashboard.upload") : undefined}
-          title={compact ? t("dashboard.upload") : undefined}
-        >
-          <Upload className="h-4 w-4" />
-          {!compact && (
-            <span className="hidden sm:inline">{t("dashboard.upload")}</span>
-          )}
-        </Link>
-      </Button>}
     </div>
   );
 }

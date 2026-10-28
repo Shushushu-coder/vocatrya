@@ -33,7 +33,6 @@ import {
 } from "../ui/dropdown-menu";
 import { useI18n } from "@/i18n";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { useQueryDialog } from "@/hooks/useQueryDialog";
 
 const ProfileContainer = ({
   resumeReadOnly = false,
@@ -47,10 +46,6 @@ const ProfileContainer = ({
   const [coverLetterDialogOpen, setCoverLetterDialogOpen] = useState(false);
 
   const [resumeToEdit, setResumeToEdit] = useState<Resume | null>(null);
-  useQueryDialog("import-resume", () => {
-    setResumeToEdit(null);
-    setResumeDialogOpen(true);
-  }, !resumeReadOnly);
   const [coverLetterToEdit, setCoverLetterToEdit] =
     useState<CoverLetter | null>(null);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
