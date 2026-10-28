@@ -365,13 +365,15 @@ test("SET-08 pages mount honest capability states and do not write settings", as
   await expect(audio).toBeVisible();
   await expect(audio.getByRole("heading", { name: "Audio", exact: true })).toBeVisible();
   await expect(audio.getByText("Microphone input", { exact: true })).toBeVisible();
-  await expect(audio.getByText("The app does not capture audio and never requests microphone permission.", { exact: true })).toBeVisible();
-  await expect(audio.getByText("Audio output & device switching", { exact: true })).toBeVisible();
+  await expect(audio.getByText("Choose the microphone used for recording; the selection is stored on this device and applied automatically next time.", { exact: true })).toBeVisible();
+  await expect(audio.getByText("Input level", { exact: true })).toBeVisible();
   await expect(audio.getByText("Recording test", { exact: true })).toBeVisible();
-  await expect(audio.getByText("Not provided", { exact: true })).toHaveCount(4);
+  // Only the speech-transcription row keeps the "Not provided" badge.
+  await expect(audio.getByText("Not provided", { exact: true })).toHaveCount(1);
+  await expect(audio.getByTestId("audio-mic-enable")).toBeVisible();
   await expect(audio.getByRole("switch")).toHaveCount(0);
   await expect(audio.getByRole("checkbox")).toHaveCount(0);
-  await expect(audio.getByRole("button")).toHaveCount(0);
+  // No permission is requested before the user clicks Enable microphone.
   const mediaCalls = await page.evaluate(() => window.__int01MediaCalls);
   expect(mediaCalls).toEqual({ getUserMedia: 0, enumerateDevices: 0, setSinkId: 0 });
 
@@ -453,7 +455,11 @@ test("public zh-CN and en bundles, nine entries, and section priority hold", asy
     const audio = page.getByTestId("audio-settings");
     await expect(audio.getByRole("heading", { name: "音频", exact: true })).toBeVisible();
     await expect(audio.getByText("麦克风输入", { exact: true })).toBeVisible();
-    await expect(audio.getByText("未提供", { exact: true })).toHaveCount(4);
+    await expect(audio.getByTestId("audio-mic-enable")).toBeVisible();
+    await expect(audio.getByText("输入电平", { exact: true })).toBeVisible();
+    await expect(audio.getByText("录音测试", { exact: true })).toBeVisible();
+    // Only the speech-transcription row keeps the "Not provided" badge.
+    await expect(audio.getByText("未提供", { exact: true })).toHaveCount(1);
     await expect(audio).not.toContainText("settings.audio");
     await expectNoOverflow(`zh audio ${width}`);
 
