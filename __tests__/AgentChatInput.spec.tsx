@@ -214,4 +214,18 @@ describe("AgentChatInput", () => {
     render(<AgentChatInput />);
     expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
   });
+
+  it("shows the banner while a failed preflight is not dismissed", () => {
+    chat.preflight = { checked: true, ok: false, code: "STREAMING_NOT_VERIFIED" };
+    render(<AgentChatInput />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dismiss error/i })).toBeInTheDocument();
+  });
+
+  it("hides a dismissed preflight banner without lifting the send restriction", () => {
+    chat.preflight = { checked: true, ok: false, dismissed: true, code: "STREAMING_NOT_VERIFIED" };
+    render(<AgentChatInput />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
+  });
 });

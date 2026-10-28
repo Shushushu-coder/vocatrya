@@ -57,6 +57,11 @@ it("renders safe extraction and save errors without raw server output", async ()
   expect(await screen.findByRole("alert")).toHaveTextContent("canonicalImport.errors.UNSUPPORTED_FORMAT");
   expect(screen.queryByText("secret stack")).not.toBeInTheDocument();
 });
+it("surfaces AI environment failures instead of the parse-failure copy", async () => {
+  mocks.fetch.mockResolvedValueOnce({ ok: false, json: async () => ({ code: "STRUCTURED_OUTPUT_NOT_VERIFIED" }) });
+  render(<CanonicalResumeImport />); choose();
+  expect(await screen.findByRole("alert")).toHaveTextContent("canonicalImport.errors.AI_UNAVAILABLE");
+});
 it("save failure keeps the review available for an idempotent retry", async () => {
   mocks.fetch.mockResolvedValueOnce({ ok: true, json: async () => preview })
     .mockResolvedValueOnce({ ok: false, json: async () => ({ code: "SAVE_FAILED" }) });

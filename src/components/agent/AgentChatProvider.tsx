@@ -204,6 +204,9 @@ function useAgentChatValue(
   );
   const [explicit, setExplicit] = useState<ExplicitModelSelection | null>(null);
   const [actionError, setActionError] = useState<{ code: string } | null>(null);
+  // Display-only dismissal of the preflight banner — it never lifts the
+  // send restriction, which stays bound to identity.ok.
+  const [preflightDismissed, setPreflightDismissed] = useState(false);
   const [contextPickerNonce, setContextPickerNonce] = useState(0);
   const [modelPickerNonce, setModelPickerNonce] = useState(0);
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -404,6 +407,13 @@ function useAgentChatValue(
   }, [stop, releaseRail, t]);
 
   const runPreflight = useCallback(async () => {
+    // A fresh check supersedes the dismissal — a still-failing state
+    // re-announces itself; the X only ever hid the previous report.
+    setPreflightDismissed(false);
+    const publishIdentity: typeof setIdentity = (next) => {
+      setPreflightDismissed(false);
+      setIdentity(next);
+    };
     try {
       const account = await getAgentChatPreflight({
         conversationId: conversationIdRef.current,
@@ -411,7 +421,7 @@ function useAgentChatValue(
       });
       const state = account?.data;
       if (state?.kind === "account" || state?.kind === "managed") {
-        setIdentity({
+        publishIdentity({
           checked: true,
           ok: true,
           kind: state.kind,
@@ -423,7 +433,7 @@ function useAgentChatValue(
         return;
       }
       if (state?.kind === "blocked") {
-        setIdentity((prev) => ({
+        publishIdentity((prev) => ({
           ...prev,
           checked: true,
           ok: false,
@@ -435,7 +445,7 @@ function useAgentChatValue(
         return;
       }
       if (state?.kind === "legacy") {
-        setIdentity({
+        publishIdentity({
           checked: true,
           ok: Boolean(state.model),
           kind: "legacy",
@@ -458,7 +468,7 @@ function useAgentChatValue(
       lockKindRef.current === "legacy" && Boolean(conversationIdRef.current);
 
     if (!ai?.model) {
-      setIdentity({
+      publishIdentity({
         checked: true,
         ok: false,
         kind: "legacy",
@@ -472,7 +482,7 @@ function useAgentChatValue(
     }
 
     if (provider !== AiProvider.OLLAMA) {
-      setIdentity({
+      publishIdentity({
         checked: true,
         ok: true,
         kind: "legacy",
@@ -484,7 +494,7 @@ function useAgentChatValue(
       return;
     }
     const result = await checkOllamaConnection(provider);
-    setIdentity({
+    publishIdentity({
       checked: true,
       ok: result.isConnected,
       kind: "legacy",
@@ -882,6 +892,7 @@ function useAgentChatValue(
   const preflight = {
     checked: identity.checked,
     ok: identity.ok,
+    dismissed: preflightDismissed,
     model: identity.model ?? undefined,
     provider: identity.displayName ?? undefined,
     code: identity.code,
@@ -903,6 +914,7 @@ function useAgentChatValue(
     clearError: () => {
       chat.clearError();
       setActionError(null);
+      setPreflightDismissed(true);
     },
     clearActionError,
     sendMessage,
