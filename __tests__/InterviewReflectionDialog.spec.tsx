@@ -6,6 +6,8 @@ import {
   getInterviewReflection,
   saveInterviewReflection,
 } from "@/actions/application.actions";
+import { generateInterviewReflectionDraft } from "@/actions/interviewReflectionAi.actions";
+import { resolveBusinessAiConfig } from "@/actions/aiAssignment.actions";
 import type { ApplicationProcessStepDTO } from "@/lib/career/applicationTimeline";
 
 vi.mock("next/navigation", () => ({
@@ -17,6 +19,14 @@ vi.mock("@/actions/application.actions", () => ({
   saveInterviewReflection: vi.fn(),
 }));
 
+vi.mock("@/actions/interviewReflectionAi.actions", () => ({
+  generateInterviewReflectionDraft: vi.fn(),
+}));
+
+vi.mock("@/actions/aiAssignment.actions", () => ({
+  resolveBusinessAiConfig: vi.fn(),
+}));
+
 vi.mock("@/lib/toast", () => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -24,6 +34,8 @@ vi.mock("@/lib/toast", () => ({
 
 const getReflection = vi.mocked(getInterviewReflection);
 const saveReflection = vi.mocked(saveInterviewReflection);
+const generateDraft = vi.mocked(generateInterviewReflectionDraft);
+const resolveConfig = vi.mocked(resolveBusinessAiConfig);
 
 const step: ApplicationProcessStepDTO = {
   id: "step-interview",
@@ -65,9 +77,24 @@ function existingReflection() {
   };
 }
 
+const aiDraftOutcome = {
+  status: "DRAFT" as const,
+  draft: {
+    reflectionText: "【面试概况】一面\n【待补充：发挥如何】",
+    items: [
+      { questionText: "AI 生成的问题", answerNotes: null },
+      { questionText: "AI 追问", answerNotes: "AI 要点" },
+    ],
+  },
+};
+
 describe("InterviewReflectionDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resolveConfig.mockResolvedValue({
+      success: true,
+      data: { status: "RESOLVED", source: "BUSINESS_ASSIGNMENT" },
+    });
   });
 
   it("shows existing question text, answer notes, and overall reflection", async () => {
@@ -383,6 +410,210 @@ describe("InterviewReflectionDialog", () => {
 
     await userEvent.keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("saves only the existing content when an unapplied AI draft is still in preview", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    generateDraft.mockResolvedValue({ success: true, data: aiDraftOutcome });
+    saveReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByDisplayValue("项目经历回答还是太散。");
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-ai-generate"),
+    );
+    // The draft preview is editable and separate from the form.
+    expect(
+      await screen.findByTestId("interview-reflection-draft"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interview-reflection-draft-overall"),
+    ).toHaveValue("【面试概况】一面\n【待补充：发挥如何】");
+    // Nothing leaked into the form yet.
+    expect(screen.getByTestId("interview-reflection-overall")).toHaveValue(
+      "项目经历回答还是太散。",
+    );
+    expect(
+      screen.getAllByTestId("interview-reflection-question-row"),
+    ).toHaveLength(2);
+    await userEvent.click(screen.getByTestId("interview-reflection-save"));
+    await waitFor(() => expect(saveReflection).toHaveBeenCalledTimes(1));
+    expect(saveReflection).toHaveBeenCalledWith({
+      applicationProcessStepId: "step-interview",
+      reflectionText: "项目经历回答还是太散。",
+      items: [
+        {
+          id: "item-a",
+          questionText: "介绍一下你的推荐系统项目",
+          answerNotes: "讲了模型，但没有明确个人贡献",
+        },
+        {
+          id: "item-b",
+          questionText: "最大的技术挑战是什么",
+          answerNotes: "冷启动",
+        },
+      ],
+    });
+  });
+
+  it("applies an edited AI draft into the form and persists it through the normal save", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    generateDraft.mockResolvedValue({ success: true, data: aiDraftOutcome });
+    saveReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByDisplayValue("项目经历回答还是太散。");
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-ai-generate"),
+    );
+    await screen.findByTestId("interview-reflection-draft");
+    // Edit the draft before applying — the preview is the editable surface.
+    await userEvent.clear(
+      screen.getByTestId("interview-reflection-draft-overall"),
+    );
+    await userEvent.type(
+      screen.getByTestId("interview-reflection-draft-overall"),
+      "编辑后的整体反思",
+    );
+    // Drop one generated question in preview; it must not reach the form.
+    await userEvent.click(
+      screen.getAllByTestId("interview-reflection-draft-remove")[0],
+    );
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-draft-apply"),
+    );
+    expect(
+      screen.queryByTestId("interview-reflection-draft"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("interview-reflection-overall")).toHaveValue(
+      "编辑后的整体反思",
+    );
+    // Existing rows kept; the remaining generated question appended.
+    expect(
+      screen.getAllByTestId("interview-reflection-question-row"),
+    ).toHaveLength(3);
+    await userEvent.click(screen.getByTestId("interview-reflection-save"));
+    await waitFor(() => expect(saveReflection).toHaveBeenCalledTimes(1));
+    expect(saveReflection).toHaveBeenCalledWith({
+      applicationProcessStepId: "step-interview",
+      reflectionText: "编辑后的整体反思",
+      items: [
+        {
+          id: "item-a",
+          questionText: "介绍一下你的推荐系统项目",
+          answerNotes: "讲了模型，但没有明确个人贡献",
+        },
+        {
+          id: "item-b",
+          questionText: "最大的技术挑战是什么",
+          answerNotes: "冷启动",
+        },
+        { questionText: "AI 追问", answerNotes: "AI 要点" },
+      ],
+    });
+  });
+
+  it("shows the generation error honestly and retries", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: {
+        applicationProcessStepId: "step-interview",
+        reflectionText: null,
+        items: [],
+      },
+    });
+    generateDraft
+      .mockResolvedValueOnce({ success: false, message: "gateway timeout" })
+      .mockResolvedValueOnce({ success: true, data: aiDraftOutcome });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByTestId("interview-reflection-ai-generate");
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-ai-generate"),
+    );
+    expect(
+      await screen.findByTestId("interview-reflection-ai-error"),
+    ).toHaveTextContent("gateway timeout");
+    expect(
+      screen.queryByTestId("interview-reflection-draft"),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-ai-generate"),
+    );
+    expect(await screen.findByTestId("interview-reflection-draft")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("interview-reflection-ai-error"),
+    ).not.toBeInTheDocument();
+    expect(generateDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("disables generation and links to AI Assignments when no assignment resolves", async () => {
+    resolveConfig.mockResolvedValue({
+      success: true,
+      data: { status: "NOT_CONFIGURED" },
+    });
+    getReflection.mockResolvedValue({
+      success: true,
+      data: {
+        applicationProcessStepId: "step-interview",
+        reflectionText: null,
+        items: [],
+      },
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByTestId("interview-reflection-ai-unavailable");
+    const button = screen.getByTestId("interview-reflection-ai-generate");
+    expect(button).toBeDisabled();
+    expect(
+      screen
+        .getByTestId("interview-reflection-ai-unavailable")
+        .querySelector("a"),
+    ).toHaveAttribute("href", "/dashboard/settings#ai-assignments");
+    expect(generateDraft).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an invalid assignment with its code instead of pretending", async () => {
+    resolveConfig.mockResolvedValue({
+      success: true,
+      data: {
+        status: "INVALID_ASSIGNMENT",
+        code: "REAUTH_REQUIRED",
+      },
+    });
+    getReflection.mockResolvedValue({
+      success: true,
+      data: {
+        applicationProcessStepId: "step-interview",
+        reflectionText: null,
+        items: [],
+      },
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    const hint = await screen.findByTestId("interview-reflection-ai-invalid");
+    expect(hint).toHaveTextContent("REAUTH_REQUIRED");
+    expect(
+      screen.getByTestId("interview-reflection-ai-generate"),
+    ).toBeDisabled();
+    expect(generateDraft).not.toHaveBeenCalled();
   });
 
   it("renders zh-CN chrome under the zh-CN provider", async () => {
