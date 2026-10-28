@@ -32,10 +32,13 @@ afterEach(() => {
 
 function renderShell(freshNativeFull = false) {
   return render(
-    <CareerSurfacesProvider freshNativeFull={freshNativeFull} resumeV1Enabled={freshNativeFull}>
+    <CareerSurfacesProvider
+      freshNativeFull={freshNativeFull}
+      resumeV1Enabled={freshNativeFull}
+    >
       <DesktopTitleBar />
       <TitleBarActions />
-    </CareerSurfacesProvider>
+    </CareerSurfacesProvider>,
   );
 }
 
@@ -48,7 +51,7 @@ function renderDashboardChrome() {
       <DesktopTitleBar />
       <TitleBarActions />
       <Header />
-    </CareerSurfacesProvider>
+    </CareerSurfacesProvider>,
   );
 }
 
@@ -59,9 +62,7 @@ describe("TitleBarActions", () => {
     const titlebar = await screen.findByTestId("desktop-titlebar");
 
     const leftSlot = document.getElementById("desktop-titlebar-actions-left");
-    const rightSlot = document.getElementById(
-      "desktop-titlebar-actions-right"
-    );
+    const rightSlot = document.getElementById("desktop-titlebar-actions-right");
     expect(leftSlot).not.toBeNull();
     expect(rightSlot).not.toBeNull();
 
@@ -74,42 +75,57 @@ describe("TitleBarActions", () => {
       name: "Open assistant",
     });
     expect(assistant).toBeTruthy();
-    const shortcuts = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    const shortcuts = screen.getByRole("button", {
+      name: "Keyboard shortcuts",
+    });
     expect(
       screen
         .getByRole("button", { name: "Forward" })
-        .compareDocumentPosition(shortcuts) & Node.DOCUMENT_POSITION_FOLLOWING
+        .compareDocumentPosition(shortcuts) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       shortcuts.compareDocumentPosition(leftSlot!) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
   it("keeps the slots empty when no dashboard mount provides actions", () => {
     installDesktopShell();
     render(<DesktopTitleBar />);
-    expect(document.getElementById("desktop-titlebar-actions-left")).toBeEmptyDOMElement();
-    expect(document.getElementById("desktop-titlebar-actions-right")).toBeEmptyDOMElement();
+    expect(
+      document.getElementById("desktop-titlebar-actions-left"),
+    ).toBeEmptyDOMElement();
+    expect(
+      document.getElementById("desktop-titlebar-actions-right"),
+    ).toBeEmptyDOMElement();
     expect(screen.queryByTestId("header-create-menu")).toBeNull();
   });
 
   it("keeps job creation restricted after removing upload", async () => {
     render(
-      <CareerSurfacesProvider freshNativeFull={false} resumeV1Enabled={false} legacyResumeMutationsEnabled={false} jobMutationsEnabled={false}>
+      <CareerSurfacesProvider
+        freshNativeFull={false}
+        resumeV1Enabled={false}
+        legacyResumeMutationsEnabled={false}
+        jobMutationsEnabled={false}
+      >
         <CreateMenu compact />
       </CareerSurfacesProvider>,
     );
     expect(screen.queryByTestId("header-upload")).not.toBeInTheDocument();
     await userEvent.click(screen.getByTestId("header-create-menu"));
-    expect(screen.queryByRole("menuitem", { name: "Job" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Job" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Tasks" })).toBeInTheDocument();
   });
 
   it("opens and closes the assistant from its titlebar entry", async () => {
     installDesktopShell();
     const { rerender } = renderShell();
-    await userEvent.click(screen.getByRole("button", { name: "Open assistant" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open assistant" }),
+    );
     expect(chat.open).toHaveBeenCalled();
     chat.isOpen = true;
     rerender(
@@ -118,7 +134,9 @@ describe("TitleBarActions", () => {
         <TitleBarActions />
       </CareerSurfacesProvider>,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Close assistant" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Close assistant" }),
+    );
     expect(chat.close).toHaveBeenCalled();
     chat.isOpen = false;
   });
@@ -130,18 +148,15 @@ describe("TitleBarActions", () => {
     const leftSlot = document.getElementById("desktop-titlebar-actions-left");
     await user.click(within(leftSlot!).getByTestId("header-create-menu"));
     expect(
-      await screen.findByRole("menuitem", { name: "Job" })
+      await screen.findByRole("menuitem", { name: "Job" }),
     ).toHaveAttribute("href", "/dashboard/myjobs?add-job=true");
     expect(screen.getByRole("menuitem", { name: "Tasks" })).toHaveAttribute(
       "href",
-      "/dashboard/tasks?add-task=true"
+      "/dashboard/tasks?add-task=true",
     );
-    expect(
-      screen.getByRole("menuitem", { name: "Activities" })
-    ).toHaveAttribute("href", "/dashboard/activities?add-activity=true");
     expect(screen.getByRole("menuitem", { name: "Question" })).toHaveAttribute(
       "href",
-      "/dashboard/questions?add-question=true"
+      "/dashboard/questions?add-question=true",
     );
   });
 });
@@ -156,14 +171,14 @@ describe("global actions uniqueness per shell", () => {
     expect(await screen.findAllByTestId("header-create-menu")).toHaveLength(1);
     expect(screen.queryByTestId("header-upload")).toBeNull();
     expect(
-      screen.getAllByRole("button", { name: "Open assistant" })
+      screen.getAllByRole("button", { name: "Open assistant" }),
     ).toHaveLength(1);
 
     expect(
-      document.getElementById("desktop-titlebar-actions-left")
+      document.getElementById("desktop-titlebar-actions-left"),
     ).toBeEmptyDOMElement();
     expect(
-      document.getElementById("desktop-titlebar-actions-right")
+      document.getElementById("desktop-titlebar-actions-right"),
     ).toBeEmptyDOMElement();
   });
 
@@ -178,16 +193,16 @@ describe("global actions uniqueness per shell", () => {
     expect(within(titlebar).getByTestId("header-create-menu")).toBeTruthy();
     expect(within(titlebar).queryByTestId("header-upload")).toBeNull();
     expect(
-      within(titlebar).getByRole("button", { name: "Open assistant" })
+      within(titlebar).getByRole("button", { name: "Open assistant" }),
     ).toBeTruthy();
 
     const fallback = document.querySelector(".header-global-actions");
     expect(fallback).not.toBeNull();
     expect(
-      within(fallback as HTMLElement).getByTestId("header-create-menu")
+      within(fallback as HTMLElement).getByTestId("header-create-menu"),
     ).toBeTruthy();
     expect(
-      within(fallback as HTMLElement).queryByTestId("header-upload")
+      within(fallback as HTMLElement).queryByTestId("header-upload"),
     ).toBeNull();
   });
 });

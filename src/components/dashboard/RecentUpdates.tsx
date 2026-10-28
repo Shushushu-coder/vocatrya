@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BriefcaseBusiness, CalendarClock } from "lucide-react";
+import { BriefcaseBusiness } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n, getLocalizedJobStatus } from "@/i18n";
 import type { DashboardJobsReadResult } from "@/actions/dashboard/shared";
@@ -19,30 +19,19 @@ type RecentJob = {
   Status?: { label: string; value: string } | null;
 };
 
-type RecentActivity = {
-  id: string;
-  activityName: string;
-  endTime?: Date | string | null;
-  activityType?: { label: string } | null;
-};
-
 type FeedRow = {
   id: string;
-  kind: "job" | "activity";
   title: string;
   detail?: string;
   at: Date | string;
   href: string;
 };
 
-// One merged, compact feed: the most recent applications and logged
-// activities interleaved by date, instead of the old two stacked cards.
+// Compact feed of the most recent applications.
 export default function RecentUpdates({
   jobs,
-  activities,
 }: {
   jobs: DashboardJobsReadResult<RecentJob[]>;
-  activities: RecentActivity[];
 }) {
   const { t, formatDate } = useI18n();
 
@@ -53,7 +42,6 @@ export default function RecentUpdates({
       if (!at) continue;
       rows.push({
         id: `job:${job.id}`,
-        kind: "job",
         title: job.JobTitle?.label ?? "",
         detail: [
           job.Company?.label,
@@ -67,20 +55,7 @@ export default function RecentUpdates({
       });
     }
   }
-  for (const activity of activities) {
-    if (!activity.endTime) continue;
-    rows.push({
-      id: `activity:${activity.id}`,
-      kind: "activity",
-      title: activity.activityName,
-      detail: activity.activityType?.label ?? undefined,
-      at: activity.endTime,
-      href: "/dashboard/activities",
-    });
-  }
-  rows.sort(
-    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
-  );
+  rows.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
   const visible = rows.slice(0, MAX_ROWS);
 
   return (
@@ -97,30 +72,26 @@ export default function RecentUpdates({
             {t("dashboard.noRecentUpdates")}
           </p>
         ) : (
-          visible.map((row) => {
-            const Icon =
-              row.kind === "job" ? BriefcaseBusiness : CalendarClock;
-            return (
-              <Link
-                key={row.id}
-                href={row.href}
-                className="flex min-w-0 items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{row.title}</p>
-                  {row.detail ? (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {row.detail}
-                    </p>
-                  ) : null}
-                </div>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {formatDate(row.at, { month: "short", day: "numeric" })}
-                </span>
-              </Link>
-            );
-          })
+          visible.map((row) => (
+            <Link
+              key={row.id}
+              href={row.href}
+              className="flex min-w-0 items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <BriefcaseBusiness className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{row.title}</p>
+                {row.detail ? (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.detail}
+                  </p>
+                ) : null}
+              </div>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {formatDate(row.at, { month: "short", day: "numeric" })}
+              </span>
+            </Link>
+          ))
         )}
       </CardContent>
     </Card>

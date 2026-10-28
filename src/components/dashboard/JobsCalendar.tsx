@@ -17,7 +17,7 @@ import {
 // no chart will be rendered.
 // website examples showcase many properties,
 // you'll often use just a few of them.
-export default function ActivityCalendar({
+export default function JobsCalendar({
   years,
   dataByYear,
 }: {
@@ -29,14 +29,11 @@ export default function ActivityCalendar({
   const [year, setYear] = useState(years.at(-1));
   const borderColor = "var(--color-card)";
   const data = dataByYear[year ?? ""] ?? [];
-  const hoursMap = Object.fromEntries(
-    data.map((d) => [d.day, d.hours ?? 0]),
-  );
   return (
     <Card className="w-full min-w-0">
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="min-w-0 text-lg text-foreground">{t("dashboard.activityCalendar")}</CardTitle>
+          <CardTitle className="min-w-0 text-lg text-foreground">{t("dashboard.jobsCalendar")}</CardTitle>
           <Select value={year} onValueChange={setYear}>
             <SelectTrigger className="w-[100px]" aria-label={t("dashboard.selectYear")}>
               <SelectValue placeholder={t("dashboard.selectYear")} />
@@ -64,40 +61,29 @@ export default function ActivityCalendar({
           monthBorderColor={borderColor}
           dayBorderWidth={2}
           dayBorderColor={borderColor}
-          tooltip={(day) => {
-            const hours = hoursMap[day.day] ?? 0;
-            return (
-              <div
-                style={{
-                  background: "var(--color-popover)",
-                  color: "var(--color-popover-foreground)",
-                  border: "1px solid var(--color-border)",
-                  padding: "6px 12px",
-                  borderRadius: "4px",
-                  fontSize: "12px",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <div><strong>{format(parseISO(day.day), "EEE MMM d, yyyy")}</strong></div>
-                <div>
-                  {t(
-                    Number(day.value) === 1
-                      ? "dashboard.calendarJobsOne"
-                      : "dashboard.calendarJobsMany",
-                    { count: day.value },
-                  )}
-                </div>
-                <div>
-                  {t(
-                    hours === 1
-                      ? "dashboard.calendarHoursOne"
-                      : "dashboard.calendarHoursMany",
-                    { count: hours },
-                  )}
-                </div>
+          tooltip={(day) => (
+            <div
+              style={{
+                background: "var(--color-popover)",
+                color: "var(--color-popover-foreground)",
+                border: "1px solid var(--color-border)",
+                padding: "6px 12px",
+                borderRadius: "4px",
+                fontSize: "12px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <div><strong>{format(parseISO(day.day), "EEE MMM d, yyyy")}</strong></div>
+              <div>
+                {t(
+                  Number(day.value) === 1
+                    ? "dashboard.calendarJobsOne"
+                    : "dashboard.calendarJobsMany",
+                  { count: day.value },
+                )}
               </div>
-            );
-          }}
+            </div>
+          )}
           theme={{
             text: {
               fill: "var(--color-muted-foreground)",

@@ -30,7 +30,7 @@
         "移除任务侧从任务开始计时入口、切换确认，以及 deleteTaskById 对关联 Activity 的应用层删除限制；修正分类删除对活动行的检查，保留被任务引用时的必要保护，确保任务创建、完成和删除不再依赖 Activity。",
         "剥离 Dashboard 的活动计数、近期活动、空账号判断及「未来 7 天活动」入口；剥离 Analytics 的活动时长环图和日历小时数提示，同时保留 Job/投递统计、按投递数着色的热力图及既有日历/提醒流程。",
         "删除 /dashboard/activities 页面及 Sidebar/Header/创建菜单/新手引导入口、活动表单、Actions/Queries/Provider/全局计时条、休息组件、自动停止与恢复、专属开发假数据、独占状态/文案与测试；同步更新桌面路由期望和导航策略。",
-        "解除所有生产读写后，设计新的 Prisma 迁移移除 Activity 模型/外键/表，并从备份 Schema、manifest/ordering、idmap 和 emptiness 中移除 Activity 专属分组；不保留测试 Activity 行或旧 Activity 数据兼容，继续完整保留 ActivityType 与 Task 分类的导出/导入关系；不得修改已执行迁移。 对含 Activity 的旧备份如何处理（拒绝或受控忽略）仍需独立确定，禁止静默丢失其他业务数据。",
+        "解除所有生产读写后，设计新的 Prisma 迁移移除 Activity 模型/外键/表，并从备份 Schema、manifest/ordering、idmap 和 emptiness 中移除 Activity 专属分组；不保留测试 Activity 行或旧 Activity 数据兼容，继续完整保留 ActivityType 与 Task 分类的导出/导入关系；不得修改已执行迁移。 2026-10-29 Owner 已确认：含非空 Activity 组的旧备份在任何写入或清空前整包拒绝并明确提示；空组兼容剥离，允许旧 manifest 的 Activity: 0，不静默丢失其他业务数据。",
         "通过静态搜索和定向单测、备份往返、合成数据库迁移验证、页面与隔离 Windows Electron 验收确认无残余 Activity 读写及路由入口；任务分类、任务删除、Dashboard、Analytics、投递热力图、职位、提醒和其他备份分组均正常。真实库迁移、破坏性删除、commit/push/deploy 另行逐项授权。 隔离迁移验收与真实目标库执行完成的标记边界需在实施 Gate 中明确。"
       ],
       "passes": false,

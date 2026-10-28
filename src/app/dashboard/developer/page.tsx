@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import {
-  MockActivitiesCard,
   MockProfileCard,
   MockJobsCard,
 } from "@/components/developer/DeveloperContainer";
@@ -17,18 +16,17 @@ export default async function DeveloperPage() {
   return (
     <>
       <div className="col-span-3">
-        <h1 className="text-3xl font-bold tracking-tight">{t("nav.developer")}</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {t("nav.developer")}
+        </h1>
         <p className="text-muted-foreground mt-2">
           {t("developer.pageDescription")}
         </p>
       </div>
       <div className="col-start-1 self-start">
-        <MockActivitiesCard />
-      </div>
-      <div className="col-start-2 self-start">
         <MockProfileCard />
       </div>
-      <div className="col-start-3 self-start">
+      <div className="col-start-2 self-start">
         <MockJobsCard />
       </div>
     </>

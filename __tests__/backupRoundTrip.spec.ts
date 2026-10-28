@@ -74,11 +74,18 @@ async function seedFullAccount() {
   const tag = await prisma.tag.create({
     data: { label: "Remote", value: "remote", createdBy: userId },
   });
-  const status = await prisma.jobStatus.findFirstOrThrow({ where: { value: "applied" } });
+  const status = await prisma.jobStatus.findFirstOrThrow({
+    where: { value: "applied" },
+  });
 
   const profile = await prisma.profile.create({ data: { userId } });
 
-  const resumeFilePath = path.join(uploadsDir, "files", "resumes", "seed-resume.pdf");
+  const resumeFilePath = path.join(
+    uploadsDir,
+    "files",
+    "resumes",
+    "seed-resume.pdf",
+  );
   fs.writeFileSync(resumeFilePath, Buffer.from("%PDF-1.4 seed"));
   const file = await prisma.file.create({
     data: {
@@ -100,7 +107,9 @@ async function seedFullAccount() {
       phone: "123",
     },
   });
-  const summary = await prisma.summary.create({ data: { content: "Summary text" } });
+  const summary = await prisma.summary.create({
+    data: { content: "Summary text" },
+  });
   const section = await prisma.resumeSection.create({
     data: {
       resumeId: resume.id,
@@ -110,7 +119,12 @@ async function seedFullAccount() {
     },
   });
   await prisma.skill.create({
-    data: { tagId: tag.id, resumeSectionId: section.id, category: "Languages", order: 1 },
+    data: {
+      tagId: tag.id,
+      resumeSectionId: section.id,
+      category: "Languages",
+      order: 1,
+    },
   });
   await prisma.user.update({
     where: { id: userId },
@@ -151,24 +165,19 @@ async function seedFullAccount() {
   });
 
   const question = await prisma.question.create({
-    data: { question: "Why us?", createdBy: userId, tags: { connect: { id: tag.id } } },
+    data: {
+      question: "Why us?",
+      createdBy: userId,
+      tags: { connect: { id: tag.id } },
+    },
   });
   expect(question.id).toBeTruthy();
 
   const activityType = await prisma.activityType.create({
     data: { label: "Applying", value: "applying", createdBy: userId },
   });
-  const task = await prisma.task.create({
+  await prisma.task.create({
     data: { userId, title: "Apply to Acme", activityTypeId: activityType.id },
-  });
-  await prisma.activity.create({
-    data: {
-      userId,
-      activityName: "Applying",
-      startTime: new Date(),
-      activityTypeId: activityType.id,
-      taskId: task.id,
-    },
   });
 
   const automation = await prisma.automation.create({
@@ -191,7 +200,13 @@ async function seedFullAccount() {
 
   // Rows the wipe must not touch, and one it must.
   await prisma.apiKey.create({
-    data: { userId, provider: "openai", encryptedKey: "e", iv: "i", last4: "1234" },
+    data: {
+      userId,
+      provider: "openai",
+      encryptedKey: "e",
+      iv: "i",
+      last4: "1234",
+    },
   });
   await prisma.mcpAccessToken.create({
     data: {
@@ -224,7 +239,12 @@ describe("backup round trip", () => {
       data: { status: "failed", completedAt: new Date() },
     });
 
-    const result = await importBackup(buffer, userId, "owner@example.com", true);
+    const result = await importBackup(
+      buffer,
+      userId,
+      "owner@example.com",
+      true,
+    );
 
     expect(result.counts.Job).toBe(1);
     expect(result.filesWritten).toBe(1);
@@ -232,12 +252,14 @@ describe("backup round trip", () => {
     // The safety net exists on disk and is a real, readable backup.
     expect(result.snapshotPath).toBeTruthy();
     expect(fs.existsSync(result.snapshotPath!)).toBe(true);
-    expect(result.snapshotPath!.startsWith(path.join(uploadsDir, "backups", userId))).toBe(
-      true,
-    );
+    expect(
+      result.snapshotPath!.startsWith(path.join(uploadsDir, "backups", userId)),
+    ).toBe(true);
 
     // Lookups are replaced, not merged.
-    const companies = await prisma.company.findMany({ where: { createdBy: userId } });
+    const companies = await prisma.company.findMany({
+      where: { createdBy: userId },
+    });
     expect(companies.map((c) => c.value).sort()).toEqual(["acme"]);
 
     // Tag associations survive on both sides.
@@ -271,12 +293,13 @@ describe("backup round trip", () => {
     });
     expect(user.defaultResumeId).toBe(resume.id);
 
-    // Activity -> Task survived.
-    const activity = await prisma.activity.findFirstOrThrow({
+    // ActivityType -> Task survived.
+    const task = await prisma.task.findFirstOrThrow({
       where: { userId },
-      include: { task: true },
+      include: { activityType: true },
     });
-    expect(activity.task?.title).toBe("Apply to Acme");
+    expect(task.title).toBe("Apply to Acme");
+    expect(task.activityType?.value).toBe("applying");
 
     // In-flight state normalized on the way in.
     const run = await prisma.automationRun.findFirstOrThrow({
@@ -285,7 +308,9 @@ describe("backup round trip", () => {
     expect(run.status).toBe("failed");
     expect(run.errorMessage).toBe("interrupted");
 
-    const automation = await prisma.automation.findFirstOrThrow({ where: { userId } });
+    const automation = await prisma.automation.findFirstOrThrow({
+      where: { userId },
+    });
     expect(automation.status).toBe("active");
     expect(automation.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
 
@@ -305,9 +330,9 @@ describe("backup round trip", () => {
     const file = await prisma.file.findFirstOrThrow({
       where: { Resume: { profile: { userId } } },
     });
-    expect(file.filePath.startsWith(path.join(uploadsDir, "files", "resumes"))).toBe(
-      true,
-    );
+    expect(
+      file.filePath.startsWith(path.join(uploadsDir, "files", "resumes")),
+    ).toBe(true);
     expect(fs.existsSync(file.filePath)).toBe(true);
     expect(fs.readFileSync(file.filePath).toString()).toContain("seed");
   }, 120_000);
@@ -347,7 +372,9 @@ describe("backup round trip", () => {
     expect(contact.jobLinks[0].Role.id).toBe(contact.Role?.id);
 
     // The roles came back once, not doubled on top of anything.
-    expect(await prisma.contactRole.count({ where: { createdBy: userId } })).toBe(5);
+    expect(
+      await prisma.contactRole.count({ where: { createdBy: userId } }),
+    ).toBe(5);
   });
 
   it("reseeds the default contact roles when restoring a pre-contacts backup", async () => {
@@ -357,7 +384,9 @@ describe("backup round trip", () => {
     const JSZip = (await import("jszip")).default;
     const zip = await JSZip.loadAsync(buffer);
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
-    const manifest = JSON.parse(await zip.file("manifest.json")!.async("string"));
+    const manifest = JSON.parse(
+      await zip.file("manifest.json")!.async("string"),
+    );
     for (const group of ["Contact", "ContactRole", "JobContact"]) {
       delete data[group];
       delete manifest.counts[group];
@@ -368,7 +397,9 @@ describe("backup round trip", () => {
 
     await importBackup(legacy, userId, "owner@example.com", true);
 
-    const roles = await prisma.contactRole.findMany({ where: { createdBy: userId } });
+    const roles = await prisma.contactRole.findMany({
+      where: { createdBy: userId },
+    });
     expect(roles.map((r) => r.value).sort()).toEqual(
       CONTACT_ROLES.map((r) => r.value).sort(),
     );
@@ -399,7 +430,9 @@ describe("backup round trip", () => {
     await expect(
       importBackup(buffer, contactsOnlyId, "contacts@example.com", false),
     ).rejects.toThrow(/already holds data/);
-    expect(await prisma.contact.count({ where: { createdBy: contactsOnlyId } })).toBe(1);
+    expect(
+      await prisma.contact.count({ where: { createdBy: contactsOnlyId } }),
+    ).toBe(1);
   }, 120_000);
 
   it("rolls back to the snapshot an import took", async () => {
@@ -422,8 +455,9 @@ describe("backup round trip", () => {
     );
     expect(imported.snapshotPath).toBeTruthy();
     expect(
-      (await prisma.company.findMany({ where: { createdBy: rollbackUserId } }))
-        .map((c) => c.value),
+      (
+        await prisma.company.findMany({ where: { createdBy: rollbackUserId } })
+      ).map((c) => c.value),
     ).not.toContain("before");
 
     const snapshots = await listSnapshots(rollbackUserId);
@@ -458,7 +492,12 @@ describe("backup round trip", () => {
       data: { status: "failed", completedAt: new Date() },
     });
 
-    const result = await importBackup(tampered, userId, "owner@example.com", true);
+    const result = await importBackup(
+      tampered,
+      userId,
+      "owner@example.com",
+      true,
+    );
 
     expect(result.filesWritten).toBe(0);
     expect(result.counts.File).toBe(1);
@@ -472,7 +511,9 @@ describe("backup round trip", () => {
     const resumesDir = path.join(uploadsDir, "files", "resumes");
     expect(file.filePath.startsWith(resumesDir)).toBe(true);
     expect(
-      fs.readdirSync(resumesDir).some((n) => n.includes("MZ") || n.endsWith(".exe")),
+      fs
+        .readdirSync(resumesDir)
+        .some((n) => n.includes("MZ") || n.endsWith(".exe")),
     ).toBe(false);
   }, 120_000);
 
@@ -499,7 +540,9 @@ describe("backup round trip", () => {
   }, 120_000);
 
   it("refuses before any write when the target has an active run", async () => {
-    const automation = await prisma.automation.findFirstOrThrow({ where: { userId } });
+    const automation = await prisma.automation.findFirstOrThrow({
+      where: { userId },
+    });
     await prisma.automationRun.create({
       data: { automationId: automation.id, status: "running" },
     });

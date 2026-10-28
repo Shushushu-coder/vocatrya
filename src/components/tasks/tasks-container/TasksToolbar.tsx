@@ -65,7 +65,11 @@ export function TasksToolbar({
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <CardTitle>{t("tasks.title")}</CardTitle>
         {!initialLoading && totalTasks > 0 && (
-          <RecordsCount count={tasksCount} total={totalTasks} label={t("tasks.recordsLabel")} />
+          <RecordsCount
+            count={tasksCount}
+            total={totalTasks}
+            label={t("tasks.recordsLabel")}
+          />
         )}
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
@@ -85,7 +89,9 @@ export function TasksToolbar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{t("tasks.filterByStatusLabel")}</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                {t("tasks.filterByStatusLabel")}
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {(Object.keys(TASK_STATUSES) as TaskStatus[]).map((status) => (
                 <DropdownMenuCheckboxItem
@@ -117,10 +123,16 @@ export function TasksToolbar({
                 <SelectLabel>{t("tasks.groupBy")}</SelectLabel>
                 <SelectSeparator />
                 <SelectItem value="none">{t("common.none")}</SelectItem>
-                <SelectItem value="createdDate">{t("tasks.createdDate")}</SelectItem>
+                <SelectItem value="createdDate">
+                  {t("tasks.createdDate")}
+                </SelectItem>
                 <SelectItem value="dueDate">{t("tasks.dueDate")}</SelectItem>
-                <SelectItem value="updatedDate">{t("tasks.updatedDate")}</SelectItem>
-                <SelectItem value="activityType">{t("activities.activityType")}</SelectItem>
+                <SelectItem value="updatedDate">
+                  {t("tasks.updatedDate")}
+                </SelectItem>
+                <SelectItem value="activityType">
+                  {t("tasks.activityType")}
+                </SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>

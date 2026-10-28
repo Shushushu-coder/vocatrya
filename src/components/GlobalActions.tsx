@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 const CREATE_MENU_ITEMS = [
   { key: "dashboard.job", href: "/dashboard/myjobs?add-job=true" },
   { key: "nav.tasks", href: "/dashboard/tasks?add-task=true" },
-  { key: "nav.activities", href: "/dashboard/activities?add-activity=true" },
   { key: "dashboard.question", href: "/dashboard/questions?add-question=true" },
 ] as const;
 
@@ -63,7 +62,9 @@ export function CreateMenu({ compact = false }: { compact?: boolean }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {CREATE_MENU_ITEMS.filter((item) => jobMutationsEnabled || item.key !== "dashboard.job").map((item) => (
+          {CREATE_MENU_ITEMS.filter(
+            (item) => jobMutationsEnabled || item.key !== "dashboard.job",
+          ).map((item) => (
             <DropdownMenuItem key={item.href} asChild>
               <Link href={item.href}>{t(item.key)}</Link>
             </DropdownMenuItem>

@@ -5,8 +5,10 @@ import OverviewReminders from "@/components/dashboard/OverviewReminders";
 import RecentUpdates from "@/components/dashboard/RecentUpdates";
 import BoardTotals from "@/components/dashboard/BoardTotals";
 import AnalyticsPanel from "@/components/dashboard/AnalyticsPanel";
-import type { OverviewStats, OverviewReminder } from "@/actions/dashboard.actions";
-import type { JobsActivitySummary } from "@/actions/dashboard/stats";
+import type {
+  OverviewStats,
+  OverviewReminder,
+} from "@/actions/dashboard.actions";
 
 vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
@@ -55,48 +57,32 @@ const blocked = {
   message: "blocked",
 };
 
-const emptySummary: JobsActivitySummary = {
-  jobsBlocked: false,
-  jobsApplied: 0,
-  jobsTrend: 0,
-  topActivities: [],
-  otherActivities: [],
-  otherHours: 0,
-  totalHours: 0,
-};
-
 const stats: OverviewStats = {
   jobsBlocked: false,
   inProgress: 4,
   applied7d: 2,
   openTasks: 3,
-  upcomingActivities: 1,
 };
 
 describe("OverviewMetrics", () => {
-  it("renders the four headline metrics", () => {
+  it("renders the three headline metrics", () => {
     render(<OverviewMetrics stats={stats} />);
     expect(screen.getByText("Active positions")).toBeInTheDocument();
     expect(screen.getByText("Applied (7d)")).toBeInTheDocument();
     expect(screen.getByText("Open tasks")).toBeInTheDocument();
-    expect(screen.getByText("Activities (next 7d)")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("overview-metric-inProgress"),
-    ).toHaveTextContent("4");
+    expect(screen.getByTestId("overview-metric-inProgress")).toHaveTextContent(
+      "4",
+    );
   });
 
   it("renders an em-dash and the notice for a blocked jobs family", () => {
-    render(
-      <OverviewMetrics
-        stats={{ jobsBlocked: true, openTasks: 2, upcomingActivities: 0 }}
-      />,
+    render(<OverviewMetrics stats={{ jobsBlocked: true, openTasks: 2 }} />);
+    expect(screen.getByTestId("overview-metric-inProgress")).toHaveTextContent(
+      "—",
     );
-    expect(
-      screen.getByTestId("overview-metric-inProgress"),
-    ).toHaveTextContent("—");
-    expect(
-      screen.getByTestId("overview-metric-openTasks"),
-    ).toHaveTextContent("2");
+    expect(screen.getByTestId("overview-metric-openTasks")).toHaveTextContent(
+      "2",
+    );
     expect(screen.getByTestId("jobs-unavailable-notice")).toBeInTheDocument();
   });
 });
@@ -139,32 +125,21 @@ describe("RecentUpdates", () => {
       Status: { label: "Applied", value: "applied" },
     },
   ]);
-  const activities = [
-    {
-      id: "a1",
-      activityName: "Deep Work",
-      endTime: "2026-10-21T00:00:00Z",
-      activityType: { label: "Learning" },
-    },
-  ];
-
-  it("interleaves jobs and activities newest first", () => {
-    render(<RecentUpdates jobs={jobs} activities={activities} />);
+  it("lists recent applications newest first", () => {
+    render(<RecentUpdates jobs={jobs} />);
     const links = screen.getAllByRole("link");
-    expect(links[0]).toHaveTextContent("Deep Work");
-    expect(links[1]).toHaveTextContent("Engineer");
-    expect(links[1]).toHaveAttribute("href", "/dashboard/myjobs/j1");
+    expect(links[0]).toHaveTextContent("Engineer");
+    expect(links[0]).toHaveAttribute("href", "/dashboard/myjobs/j1");
   });
 
   it("shows a compact empty state instead of a large blank card", () => {
-    render(<RecentUpdates jobs={ok([])} activities={[]} />);
+    render(<RecentUpdates jobs={ok([])} />);
     expect(screen.getByText("No recent updates")).toBeInTheDocument();
   });
 
-  it("degrades job rows to the notice while keeping activities", () => {
-    render(<RecentUpdates jobs={blocked as any} activities={activities} />);
+  it("degrades job rows to the notice", () => {
+    render(<RecentUpdates jobs={blocked as any} />);
     expect(screen.getByTestId("jobs-unavailable-notice")).toBeInTheDocument();
-    expect(screen.getByText("Deep Work")).toBeInTheDocument();
   });
 });
 
@@ -172,7 +147,13 @@ describe("BoardTotals", () => {
   it("renders all-time totals", () => {
     render(
       <BoardTotals
-        totals={ok({ total: 9, applied: 5, interviews: 2, offers: 1, inProgress: 6 })}
+        totals={ok({
+          total: 9,
+          applied: 5,
+          interviews: 2,
+          offers: 1,
+          inProgress: 6,
+        })}
       />,
     );
     expect(screen.getByTestId("board-total-total")).toHaveTextContent("9");
@@ -198,20 +179,14 @@ describe("AnalyticsPanel", () => {
     { status: "applied", count: 3 },
     { status: "interview", count: 1 },
   ]);
-  const summary: JobsActivitySummary = {
-    ...emptySummary,
-    topActivities: [{ label: "Applying", hours: 2.5 }],
-    totalHours: 2.5,
-  };
-
-  const renderPanel = (overrides: Partial<Parameters<typeof AnalyticsPanel>[0]> = {}) =>
+  const renderPanel = (
+    overrides: Partial<Parameters<typeof AnalyticsPanel>[0]> = {},
+  ) =>
     render(
       <AnalyticsPanel
         trend7={trend}
         trend30={trend}
         statusDist={statusDist}
-        activity7={summary}
-        activity30={summary}
         {...overrides}
       />,
     );
@@ -234,15 +209,6 @@ describe("AnalyticsPanel", () => {
     expect(within(legend).getByText("3")).toBeInTheDocument();
   });
 
-  it("switches to the activity breakdown with a total", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-    await user.click(screen.getByRole("tab", { name: "Activity breakdown" }));
-    const legend = screen.getByTestId("activity-legend");
-    expect(within(legend).getByText("Applying")).toBeInTheDocument();
-    expect(within(legend).getByText("2.5 hrs")).toBeInTheDocument();
-  });
-
   it("shows a compact note instead of an empty chart", () => {
     renderPanel({ trend7: ok([{ day: "Mon", value: 0 }]) });
     expect(screen.getByTestId("analytics-empty-note")).toHaveTextContent(
@@ -255,10 +221,10 @@ describe("AnalyticsPanel", () => {
     const user = userEvent.setup();
     renderPanel({ trend7: blocked as any, trend30: blocked as any });
     expect(screen.getByTestId("jobs-unavailable-notice")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Activity breakdown" }));
+    await user.click(screen.getByRole("tab", { name: "Status breakdown" }));
     expect(
       screen.queryByTestId("jobs-unavailable-notice"),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("activity-legend")).toBeInTheDocument();
+    expect(screen.getByTestId("status-legend")).toBeInTheDocument();
   });
 });

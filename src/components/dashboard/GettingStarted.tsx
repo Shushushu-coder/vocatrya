@@ -1,12 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  BookOpen,
-  BriefcaseBusiness,
-  CalendarClock,
-  SquareCheckBig,
-} from "lucide-react";
+import { BookOpen, BriefcaseBusiness, SquareCheckBig } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -38,13 +33,6 @@ const ENTRIES = [
     href: "/dashboard/tasks?add-task=true",
   },
   {
-    key: "activity",
-    icon: CalendarClock,
-    titleKey: "dashboard.gettingStartedActivityTitle",
-    descriptionKey: "dashboard.gettingStartedActivityDesc",
-    href: "/dashboard/activities?add-activity=true",
-  },
-  {
     key: "question",
     icon: BookOpen,
     titleKey: "dashboard.gettingStartedQuestionsTitle",
@@ -71,7 +59,9 @@ export default function GettingStarted() {
         </CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-2 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-4">
-        {ENTRIES.filter((entry) => jobMutationsEnabled || entry.key !== "job").map((entry) => (
+        {ENTRIES.filter(
+          (entry) => jobMutationsEnabled || entry.key !== "job",
+        ).map((entry) => (
           <Link
             key={entry.key}
             href={entry.href}

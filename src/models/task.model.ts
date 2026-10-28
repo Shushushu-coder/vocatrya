@@ -3,19 +3,15 @@ import type { TaskDuePrecision } from "@/lib/tasks/dueTime";
 
 export const TASK_STATUSES = {
   "in-progress": "In Progress",
-  "complete": "Complete",
+  complete: "Complete",
   "needs-attention": "Needs Attention",
-  "cancelled": "Cancelled",
+  cancelled: "Cancelled",
 } as const;
 
 export type TaskStatus = keyof typeof TASK_STATUSES;
 
 export type TaskGroupBy =
-  | "none"
-  | "createdDate"
-  | "dueDate"
-  | "updatedDate"
-  | "activityType";
+  "none" | "createdDate" | "dueDate" | "updatedDate" | "activityType";
 
 export interface Task {
   id: string;
@@ -30,7 +26,6 @@ export interface Task {
   duePrecision?: TaskDuePrecision | null;
   activityTypeId?: string | null;
   activityType?: ActivityType | null;
-  activities?: { id: string }[];
   createdAt: Date;
   updatedAt: Date;
 }

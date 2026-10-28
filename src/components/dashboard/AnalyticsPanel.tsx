@@ -11,9 +11,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { usePersistedTabIndex } from "@/hooks/usePersistedTabIndex";
 import { useI18n, getLocalizedJobStatus } from "@/i18n";
 import type { DashboardJobsReadResult } from "@/actions/dashboard/shared";
-import type { JobsActivitySummary } from "@/actions/dashboard/stats";
 import type { JobStatusCount } from "@/lib/career/jobsReadDispatch";
-import { buildDonutSlices, OTHER_SLICE_ID } from "./jobsActivityChart";
 import JobsUnavailableNotice from "./JobsUnavailableNotice";
 
 // Statuses exceed the 3-hue activity palette; this ordered set keeps each
@@ -45,7 +43,7 @@ const STATUS_COLORS = {
   ],
 } as const;
 
-const TAB_VALUES = ["trend", "status", "activity"] as const;
+const TAB_VALUES = ["trend", "status"] as const;
 const WINDOW_VALUES = ["7d", "30d"] as const;
 const CHART_HEIGHT = 220;
 
@@ -55,8 +53,6 @@ type AnalyticsPanelProps = {
   trend7: DashboardJobsReadResult<TrendDatum[]>;
   trend30: DashboardJobsReadResult<TrendDatum[]>;
   statusDist: DashboardJobsReadResult<JobStatusCount[]>;
-  activity7: JobsActivitySummary;
-  activity30: JobsActivitySummary;
 };
 
 const NIVO_THEME = {
@@ -84,8 +80,6 @@ export default function AnalyticsPanel({
   trend7,
   trend30,
   statusDist,
-  activity7,
-  activity30,
 }: AnalyticsPanelProps) {
   const { t, formatNumber } = useI18n();
   const [tabIndex, selectTab] = usePersistedTabIndex(
@@ -109,7 +103,6 @@ export default function AnalyticsPanel({
 
   const activeTab = TAB_VALUES[tabIndex];
   const trend = windowIndex === 0 ? trend7 : trend30;
-  const activity = windowIndex === 0 ? activity7 : activity30;
   const windowed = activeTab !== "status";
 
   return (
@@ -159,15 +152,8 @@ export default function AnalyticsPanel({
           }
         >
           <TabsList data-testid="analytics-tabs" className="h-9">
-            <TabsTrigger value="trend">
-              {t("dashboard.tabTrend")}
-            </TabsTrigger>
-            <TabsTrigger value="status">
-              {t("dashboard.tabStatus")}
-            </TabsTrigger>
-            <TabsTrigger value="activity">
-              {t("dashboard.tabActivity")}
-            </TabsTrigger>
+            <TabsTrigger value="trend">{t("dashboard.tabTrend")}</TabsTrigger>
+            <TabsTrigger value="status">{t("dashboard.tabStatus")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="trend">
@@ -261,14 +247,6 @@ export default function AnalyticsPanel({
           <TabsContent value="status">
             <StatusDistribution statusDist={statusDist} theme={theme} />
           </TabsContent>
-
-          <TabsContent value="activity">
-            <ActivityDistribution
-              summary={activity}
-              theme={theme}
-              reduceMotion={reduceMotion}
-            />
-          </TabsContent>
         </Tabs>
       </CardHeader>
     </Card>
@@ -299,8 +277,7 @@ function StatusDistribution({
     id: entry.status,
     label: getLocalizedJobStatus(entry.status, t) || entry.status,
     value: entry.count,
-    color:
-      STATUS_COLORS[theme][index % STATUS_COLORS[theme].length],
+    color: STATUS_COLORS[theme][index % STATUS_COLORS[theme].length],
   }));
 
   return (
@@ -343,12 +320,12 @@ function StatusDistribution({
           )}
         />
       </div>
-      <ul className="grid gap-1 px-2 pb-2 sm:min-w-44" data-testid="status-legend">
+      <ul
+        className="grid gap-1 px-2 pb-2 sm:min-w-44"
+        data-testid="status-legend"
+      >
         {slices.map((slice) => (
-          <li
-            key={slice.id}
-            className="flex items-center gap-2 text-sm"
-          >
+          <li key={slice.id} className="flex items-center gap-2 text-sm">
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-sm"
               style={{ background: slice.color }}
@@ -356,102 +333,6 @@ function StatusDistribution({
             <span className="min-w-0 flex-1 truncate">{slice.label}</span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
               {formatNumber(slice.value)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ActivityDistribution({
-  summary,
-  theme,
-  reduceMotion,
-}: {
-  summary: JobsActivitySummary;
-  theme: "light" | "dark";
-  reduceMotion: boolean;
-}) {
-  const { t, formatNumber } = useI18n();
-  const slices = buildDonutSlices(
-    summary.topActivities,
-    summary.otherHours,
-    theme,
-    summary.otherActivities,
-  );
-  if (summary.totalHours <= 0 || slices.length === 0) {
-    return <EmptyNote>{t("dashboard.noActivityInWindow")}</EmptyNote>;
-  }
-
-  return (
-    <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div style={{ height: CHART_HEIGHT }} className="min-w-0">
-        <ResponsivePie
-          data={slices}
-          innerRadius={0.62}
-          padAngle={1}
-          cornerRadius={3}
-          margin={{ top: 12, bottom: 12 }}
-          colors={{ datum: "data.color" }}
-          enableArcLinkLabels={false}
-          enableArcLabels={false}
-          animate={!reduceMotion}
-          theme={NIVO_THEME}
-          valueFormat={(value) => `${Number(value).toFixed(1)}h`}
-          tooltip={({ datum }) => (
-            <div
-              style={{
-                background: "var(--color-popover)",
-                color: "var(--color-popover-foreground)",
-                border: "1px solid var(--color-border)",
-                padding: "6px 10px",
-                borderRadius: 4,
-                fontSize: 13,
-                whiteSpace: "nowrap",
-              }}
-            >
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 10,
-                  height: 10,
-                  background: datum.color,
-                  borderRadius: 2,
-                  marginRight: 6,
-                }}
-              />
-              {datum.label}:{" "}
-              <strong>{Number(datum.value).toFixed(1)}h</strong>
-            </div>
-          )}
-        />
-      </div>
-      <ul
-        className="grid gap-1 px-2 pb-2 sm:min-w-44"
-        data-testid="activity-legend"
-      >
-        <li className="flex items-center gap-2 text-sm font-medium">
-          <span className="min-w-0 flex-1 truncate">
-            {t("dashboard.totalHoursLabel")}
-          </span>
-          <span className="shrink-0 tabular-nums">
-            {t("dashboard.hoursAbbr", { hours: summary.totalHours.toFixed(1) })}
-          </span>
-        </li>
-        {slices.map((slice) => (
-          <li key={slice.id} className="flex items-center gap-2 text-sm">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ background: slice.color }}
-            />
-            <span className="min-w-0 flex-1 truncate">
-              {slice.id === OTHER_SLICE_ID
-                ? t("dashboard.otherActivityTypes")
-                : slice.label}
-            </span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">
-              {formatNumber(slice.value)}h
             </span>
           </li>
         ))}

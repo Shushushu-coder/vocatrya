@@ -10,8 +10,6 @@ import {
 } from "@/components/ui/card";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import {
-  generateMockActivitiesAction,
-  clearMockActivitiesAction,
   generateMockProfileDataAction,
   clearMockProfileDataAction,
   generateMockJobsAction,
@@ -46,94 +44,6 @@ function StatusBanner({ message }: { message: StatusMessage }) {
   );
 }
 
-export function MockActivitiesCard() {
-  const { t } = useI18n();
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
-  const [message, setMessage] = useState<StatusMessage | null>(null);
-
-  const handleGenerate = async () => {
-    setIsGenerating(true);
-    setMessage(null);
-    const result = await generateMockActivitiesAction();
-    setMessage({
-      type: result.success ? "success" : "error",
-      text:
-        result.message ||
-        (result.success
-          ? t("developer.mockActivitiesGenerated")
-          : t("developer.mockActivitiesGenerateFailed")),
-    });
-    setIsGenerating(false);
-  };
-
-  const handleClear = async () => {
-    if (!confirm(t("developer.confirmClearMockActivities")))
-      return;
-
-    setIsClearing(true);
-    setMessage(null);
-    const result = await clearMockActivitiesAction();
-    setMessage({
-      type: result.success ? "success" : "error",
-      text:
-        result.message ||
-        (result.success
-          ? t("developer.mockActivitiesCleared")
-          : t("developer.mockActivitiesClearFailed")),
-    });
-    setIsClearing(false);
-  };
-
-  return (
-    <div className="space-y-4">
-      {message && <StatusBanner message={message} />}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("developer.mockDataManagement")}</CardTitle>
-          <CardDescription>
-            {t("developer.mockActivitiesCardDescription")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <h3 className="font-semibold mb-2">{t("developer.generateMockActivities")}</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              {t("developer.generateMockActivitiesBody")}
-            </p>
-            <Button
-              onClick={handleGenerate}
-              disabled={isGenerating || isClearing}
-              className="w-full"
-            >
-              {isGenerating && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {isGenerating ? t("developer.generating") : t("developer.generateMockActivities")}
-            </Button>
-          </div>
-
-          <div className="border-t pt-4">
-            <h3 className="font-semibold mb-2">{t("developer.clearMockActivities")}</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              {t("developer.clearMockActivitiesBody")}
-            </p>
-            <Button
-              onClick={handleClear}
-              disabled={isClearing || isGenerating}
-              variant="destructive"
-              className="w-full"
-            >
-              {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? t("developer.clearing") : t("developer.clearMockActivities")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 export function MockProfileCard() {
   const { t } = useI18n();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -156,8 +66,7 @@ export function MockProfileCard() {
   };
 
   const handleClear = async () => {
-    if (!confirm(t("developer.confirmClearMockProfile")))
-      return;
+    if (!confirm(t("developer.confirmClearMockProfile"))) return;
 
     setIsClearing(true);
     setMessage(null);
@@ -185,7 +94,9 @@ export function MockProfileCard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h3 className="font-semibold mb-2">{t("developer.generateMockProfileData")}</h3>
+            <h3 className="font-semibold mb-2">
+              {t("developer.generateMockProfileData")}
+            </h3>
             <p className="text-sm text-muted-foreground mb-4">
               {t("developer.generateMockProfileBody")}
             </p>
@@ -197,12 +108,16 @@ export function MockProfileCard() {
               {isGenerating && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {isGenerating ? t("developer.generating") : t("developer.generateMockProfileData")}
+              {isGenerating
+                ? t("developer.generating")
+                : t("developer.generateMockProfileData")}
             </Button>
           </div>
 
           <div className="border-t pt-4">
-            <h3 className="font-semibold mb-2">{t("developer.clearMockProfileData")}</h3>
+            <h3 className="font-semibold mb-2">
+              {t("developer.clearMockProfileData")}
+            </h3>
             <p className="text-sm text-muted-foreground mb-4">
               {t("developer.clearMockProfileBody")}
             </p>
@@ -213,7 +128,9 @@ export function MockProfileCard() {
               className="w-full"
             >
               {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? t("developer.clearing") : t("developer.clearMockProfileData")}
+              {isClearing
+                ? t("developer.clearing")
+                : t("developer.clearMockProfileData")}
             </Button>
           </div>
         </CardContent>
@@ -244,8 +161,7 @@ export function MockJobsCard() {
   };
 
   const handleClear = async () => {
-    if (!confirm(t("developer.confirmClearMockJobs")))
-      return;
+    if (!confirm(t("developer.confirmClearMockJobs"))) return;
 
     setIsClearing(true);
     setMessage(null);
@@ -273,7 +189,9 @@ export function MockJobsCard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h3 className="font-semibold mb-2">{t("developer.generateMockJobs")}</h3>
+            <h3 className="font-semibold mb-2">
+              {t("developer.generateMockJobs")}
+            </h3>
             <p className="text-sm text-muted-foreground mb-4">
               {t("developer.generateMockJobsBody")}
             </p>
@@ -285,12 +203,16 @@ export function MockJobsCard() {
               {isGenerating && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {isGenerating ? t("developer.generating") : t("developer.generateMockJobs")}
+              {isGenerating
+                ? t("developer.generating")
+                : t("developer.generateMockJobs")}
             </Button>
           </div>
 
           <div className="border-t pt-4">
-            <h3 className="font-semibold mb-2">{t("developer.clearMockJobs")}</h3>
+            <h3 className="font-semibold mb-2">
+              {t("developer.clearMockJobs")}
+            </h3>
             <p className="text-sm text-muted-foreground mb-4">
               {t("developer.clearMockJobsBody")}
             </p>
@@ -301,7 +223,9 @@ export function MockJobsCard() {
               className="w-full"
             >
               {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? t("developer.clearing") : t("developer.clearMockJobs")}
+              {isClearing
+                ? t("developer.clearing")
+                : t("developer.clearMockJobs")}
             </Button>
           </div>
         </CardContent>

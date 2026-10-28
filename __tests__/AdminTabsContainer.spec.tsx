@@ -64,14 +64,10 @@ describe("AdminTabsContainer", () => {
     render(<AdminTabsContainer />);
 
     expect(screen.getByRole("tab", { name: "Companies" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Job Titles" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Locations" })).toBeInTheDocument();
     expect(
-      screen.getByRole("tab", { name: "Job Titles" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: "Locations" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: "Activity Types" })
+      screen.getByRole("tab", { name: "Task Categories" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Contacts" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Roles" })).toBeInTheDocument();
@@ -89,7 +85,9 @@ describe("AdminTabsContainer", () => {
     try {
       render(<AdminTabsContainer />);
       await user.click(screen.getByRole("tab", { name: "Job Titles" }));
-      expect(mockPush).toHaveBeenCalledWith("/dashboard/settings?tab=job-titles&section=dictionary");
+      expect(mockPush).toHaveBeenCalledWith(
+        "/dashboard/settings?tab=job-titles&section=dictionary",
+      );
     } finally {
       mockPathname = "/dashboard/admin";
     }
@@ -101,9 +99,7 @@ describe("AdminTabsContainer", () => {
     const jobTitlesTab = screen.getByRole("tab", { name: "Job Titles" });
     await user.click(jobTitlesTab);
 
-    expect(mockPush).toHaveBeenCalledWith(
-      "/dashboard/admin?tab=job-titles"
-    );
+    expect(mockPush).toHaveBeenCalledWith("/dashboard/admin?tab=job-titles");
   });
 
   it("should switch to locations tab and update URL", async () => {
@@ -112,21 +108,19 @@ describe("AdminTabsContainer", () => {
     const locationsTab = screen.getByRole("tab", { name: "Locations" });
     await user.click(locationsTab);
 
-    expect(mockPush).toHaveBeenCalledWith(
-      "/dashboard/admin?tab=locations"
-    );
+    expect(mockPush).toHaveBeenCalledWith("/dashboard/admin?tab=locations");
   });
 
   it("should switch to activity types tab and update URL", async () => {
     render(<AdminTabsContainer />);
 
     const activityTypesTab = screen.getByRole("tab", {
-      name: "Activity Types",
+      name: "Task Categories",
     });
     await user.click(activityTypesTab);
 
     expect(mockPush).toHaveBeenCalledWith(
-      "/dashboard/admin?tab=activity-types"
+      "/dashboard/admin?tab=activity-types",
     );
   });
 

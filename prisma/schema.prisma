@@ -26,7 +26,6 @@ model User {
   Contact          Contact[]
   ContactRole      ContactRole[]
   Profile          Profile[]
-  Activity         Activity[]
   ActivityType     ActivityType[]
   Task             Task[]
   Automation       Automation[]
@@ -484,36 +483,9 @@ model ActivityType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  Activities Activity[]
-  Tasks      Task[]
+  Tasks Task[]
 
   @@unique([value, createdBy])
-}
-
-model Activity {
-  id               String    @id @default(uuid())
-  userId           String
-  User             User      @relation(fields: [userId], references: [id])
-  activityName     String
-  startTime        DateTime
-  endTime          DateTime?
-  duration         Int?
-  // Completed break time in minutes. Existing rows default to 0, so
-  // duration keeps meaning (endTime - startTime) for everything already saved.
-  breakMinutes     Int       @default(0)
-  // Set only while a break is open — this is the on-break flag.
-  breakStartedAt   DateTime?
-  // Drives the countdown ring only; never the arithmetic.
-  breakPlannedMins Int?
-  description      String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  activityType   ActivityType @relation(fields: [activityTypeId], references: [id])
-  activityTypeId String
-
-  taskId String?
-  task   Task?   @relation(fields: [taskId], references: [id])
 }
 
 model Task {
@@ -532,8 +504,6 @@ model Task {
 
   activityTypeId String?
   activityType   ActivityType? @relation(fields: [activityTypeId], references: [id])
-
-  activities Activity[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

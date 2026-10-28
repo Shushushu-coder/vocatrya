@@ -122,7 +122,9 @@ describe("backup ordering", () => {
   });
 
   it("scopes JobContact through the job, which is the only chain it has", () => {
-    expect(MODEL_SPECS.JobContact.scope("u1")).toEqual({ Job: { userId: "u1" } });
+    expect(MODEL_SPECS.JobContact.scope("u1")).toEqual({
+      Job: { userId: "u1" },
+    });
     expect(MODEL_SPECS.JobContact.fks).toEqual({
       jobId: "Job",
       contactId: "Contact",
@@ -186,7 +188,9 @@ describe("backup ordering", () => {
     expect(MODEL_SPECS.ContactInfo.scope("u1")).toEqual({
       resume: { profile: { userId: "u1" } },
     });
-    expect(MODEL_SPECS.Interview.scope("u1")).toEqual({ job: { userId: "u1" } });
+    expect(MODEL_SPECS.Interview.scope("u1")).toEqual({
+      job: { userId: "u1" },
+    });
     expect(MODEL_SPECS.AutomationRun.scope("u1")).toEqual({
       automation: { userId: "u1" },
     });
@@ -198,7 +202,6 @@ describe("emptiness models", () => {
     expect([...EMPTINESS_MODELS].sort()).toEqual([
       "AIBusinessAssignment",
       "AIConnection",
-      "Activity",
       "ApplicationAttempt",
       "Automation",
       "CandidateAttachment",
@@ -250,9 +253,9 @@ describe("backup datasets", () => {
     expect(modelsForWipe(true)).toEqual(
       expect.arrayContaining([...SENSITIVE_BACKUP_MODELS]),
     );
-    expect(
-      INSERT_ORDER.indexOf("CandidateSensitiveInfo"),
-    ).toBeLessThan(INSERT_ORDER.indexOf("CandidateFamilyMember"));
+    expect(INSERT_ORDER.indexOf("CandidateSensitiveInfo")).toBeLessThan(
+      INSERT_ORDER.indexOf("CandidateFamilyMember"),
+    );
     expect(DELETE_ORDER.indexOf("CandidateFamilyMember")).toBeLessThan(
       DELETE_ORDER.indexOf("CandidateSensitiveInfo"),
     );

@@ -7,11 +7,8 @@ import { requireUser } from "../shared";
 import { getUserTimeZone } from "@/lib/userSettings/timeZone.server";
 import { orderTasksByDue, withDueDto } from "@/lib/tasks/dueTime";
 
-const TASK_WITH_ACTIVITIES_INCLUDE = {
+const TASK_INCLUDE = {
   activityType: true,
-  activities: {
-    select: { id: true },
-  },
 };
 
 // The columns the due ordering needs — nothing more is fetched before the
@@ -66,7 +63,7 @@ export const getTasksList = async (
   filter?: string,
   statusFilter?: TaskStatus[],
   search?: string,
-  groupBy?: TaskGroupBy
+  groupBy?: TaskGroupBy,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -107,7 +104,7 @@ export const getTasksList = async (
       const position = new Map(pageIds.map((id, index) => [id, index]));
       const pageRows = await prisma.task.findMany({
         where: { id: { in: pageIds }, userId: user.id },
-        include: TASK_WITH_ACTIVITIES_INCLUDE,
+        include: TASK_INCLUDE,
       });
       pageRows.sort(
         (a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0),
@@ -123,7 +120,7 @@ export const getTasksList = async (
     const [data, total] = await Promise.all([
       prisma.task.findMany({
         where: whereClause,
-        include: TASK_WITH_ACTIVITIES_INCLUDE,
+        include: TASK_INCLUDE,
         orderBy: getTasksOrderBy(groupBy),
         skip: offset,
         take: limit,
@@ -145,9 +142,7 @@ export const getTasksList = async (
   }
 };
 
-export const getTaskById = async (
-  taskId: string
-): Promise<any | undefined> => {
+export const getTaskById = async (taskId: string): Promise<any | undefined> => {
   try {
     const user = await requireUser();
 
@@ -156,7 +151,7 @@ export const getTaskById = async (
         id: taskId,
         userId: user.id,
       },
-      include: TASK_WITH_ACTIVITIES_INCLUDE,
+      include: TASK_INCLUDE,
     });
 
     if (!task) {
