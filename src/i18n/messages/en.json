@@ -1841,7 +1841,24 @@
     "audioTranscriptionDescription": "No speech-to-text capability exists.",
     "audioRecordingTitle": "Recording test",
     "audioRecordingDescription": "There is no recording feature to test.",
-    "audioFootnote": "The only media call in the app is screen capture in the AI input (explicitly without audio). Once real audio capability is integrated, this page will list the actual settings and states."
+    "audioFootnote": "The only media call in the app is screen capture in the AI input (explicitly without audio). Once real audio capability is integrated, this page will list the actual settings and states.",
+    "about": {
+      "title": "About",
+      "description": "Version, build, and environment facts about this Vocatrya installation.",
+      "versionLabel": "App version",
+      "buildLabel": "Build source",
+      "buildDevelopment": "Development build",
+      "buildInstalled": "Installed build",
+      "environmentLabel": "Runtime environment",
+      "environmentDesktop": "Electron desktop",
+      "environmentBrowser": "Browser",
+      "licenseLabel": "Open-source license",
+      "diagnosticsTitle": "Diagnostics",
+      "diagnosticsDescription": "Copies version and environment facts to attach when reporting issues. Contains no credentials, keys, personal data, or local file paths.",
+      "copyDiagnostics": "Copy diagnostics",
+      "diagnosticsCopied": "Copied",
+      "copyDiagnosticsFailed": "Could not copy diagnostics."
+    }
   },
   "developer": {
     "title": "Developer Options",

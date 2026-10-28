@@ -1841,7 +1841,24 @@
     "audioTranscriptionDescription": "没有语音转文字能力。",
     "audioRecordingTitle": "录音测试",
     "audioRecordingDescription": "没有录音功能可供测试。",
-    "audioFootnote": "应用内唯一的媒体调用是 AI 输入框的屏幕截图（明确不含音轨）。接入真实音频能力后，本页将展示实际设置项与状态。"
+    "audioFootnote": "应用内唯一的媒体调用是 AI 输入框的屏幕截图（明确不含音轨）。接入真实音频能力后，本页将展示实际设置项与状态。",
+    "about": {
+      "title": "关于",
+      "description": "当前 Vocatrya 安装的版本、构建与运行环境信息。",
+      "versionLabel": "应用版本",
+      "buildLabel": "构建来源",
+      "buildDevelopment": "开发构建",
+      "buildInstalled": "安装版",
+      "environmentLabel": "运行环境",
+      "environmentDesktop": "Electron 桌面",
+      "environmentBrowser": "浏览器",
+      "licenseLabel": "开源许可",
+      "diagnosticsTitle": "诊断信息",
+      "diagnosticsDescription": "复制版本与环境事实，供反馈问题时附加；不包含凭据、密钥、个人数据或本机文件路径。",
+      "copyDiagnostics": "复制诊断信息",
+      "diagnosticsCopied": "已复制",
+      "copyDiagnosticsFailed": "复制诊断信息失败。"
+    }
   },
   "developer": {
     "title": "开发者选项",

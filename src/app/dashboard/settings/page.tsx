@@ -14,6 +14,7 @@ import McpAccessSettings from "@/components/settings/McpAccessSettings";
 import NotificationsSettings from "@/components/settings/NotificationsSettings";
 import ShortcutsSettings from "@/components/settings/ShortcutsSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
+import AboutSettings from "@/components/settings/AboutSettings";
 import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 import { ResumeVariantList } from "@/components/career/resume-variant/ResumeVariantList";
 import SettingsSidebar, {
@@ -26,19 +27,14 @@ import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 const DEFAULT_SECTION: SettingsSection = "general";
 
-// Assembly slots: this page exists in the navigation per the Settings V1 IA,
-// but its owner component is not delivered yet — SET-07 owns AboutSettings.
-// Until it lands, the section renders an honest unavailable state instead of
-// fabricated controls. Mounting is done here, in this file, once the
-// component exists.
+// Assembly slots: a section in the navigation whose owner component has not
+// landed yet renders an honest unavailable state instead of fabricated
+// controls. Every declared section is delivered today — the map is empty but
+// stays so the next pending section re-uses the mechanism instead of
+// inventing a new one.
 const PENDING_SECTION_META: Partial<
   Record<SettingsSection, { labelKey: string; fallbackLabel: string }>
-> = {
-  about: {
-    labelKey: "settings.sections.about",
-    fallbackLabel: "About",
-  },
-};
+> = {};
 
 function SectionShell({
   id,
@@ -234,6 +230,12 @@ function Settings() {
                     inside Data & Privacy; fresh-native surfaces still hide it. */}
                 {!freshNativeFull && <McpAccessSettings />}
               </div>
+            </SectionShell>
+          )}
+          {activeSection === "about" && (
+            // AboutSettings renders its own page-level title.
+            <SectionShell id="about">
+              <AboutSettings />
             </SectionShell>
           )}
           {PENDING_SECTION_META[activeSection] && (
