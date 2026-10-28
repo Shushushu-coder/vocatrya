@@ -70,15 +70,21 @@ describe("TitleBarActions", () => {
       "href",
       "/dashboard/profile"
     );
-    // 咨询 Vocatrya sits in the right slot, before the shortcut-help button.
+    // 咨询 Vocatrya sits in the right slot. The shortcut-help button moved to
+    // the left group: after the forward button, before the actions slot.
     const assistant = within(rightSlot!).getByRole("button", {
       name: "Open assistant",
     });
     expect(assistant).toBeTruthy();
+    const shortcuts = screen.getByRole("button", { name: "Keyboard shortcuts" });
     expect(
-      rightSlot!.compareDocumentPosition(
-        screen.getByRole("button", { name: "Keyboard shortcuts" })
-      ) & Node.DOCUMENT_POSITION_FOLLOWING
+      screen
+        .getByRole("button", { name: "Forward" })
+        .compareDocumentPosition(shortcuts) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      shortcuts.compareDocumentPosition(leftSlot!) &
+        Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 

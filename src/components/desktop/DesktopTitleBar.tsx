@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Keyboard } from "lucide-react";
 
-import { VocatryaMark } from "@/components/brand/VocatryaMark";
 import {
   Popover,
   PopoverContent,
@@ -116,7 +115,7 @@ function ShortcutHelp() {
           <Keyboard className="h-4 w-4" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={6} className="w-72">
+      <PopoverContent align="start" sideOffset={6} className="w-72">
         <h3 className="mb-3 text-sm font-semibold">{t("shortcuts.title")}</h3>
         <ul className="space-y-2">
           {SHORTCUTS.map((shortcut) => (
@@ -148,7 +147,7 @@ function ShortcutHelp() {
   );
 }
 
-// The desktop window chrome: brand, page-history controls, and the shortcut
+// The desktop window chrome: page-history controls and the shortcut
 // reference. Native caption buttons are drawn by Windows over the padded
 // right edge (titleBarOverlay), so this bar only reserves space for them.
 // Everything except the interactive controls is an app-region: drag zone.
@@ -167,10 +166,6 @@ export function DesktopTitleBar() {
         "pr-[140px]",
       )}
     >
-      <div className="flex items-center gap-1.5 px-1">
-        <VocatryaMark size={16} />
-        <span className="text-xs font-semibold tracking-wide">Vocatrya</span>
-      </div>
       <div className="app-region-no-drag ml-1 flex items-center">
         <button
           type="button"
@@ -193,6 +188,9 @@ export function DesktopTitleBar() {
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+      <div className="app-region-no-drag ml-1 flex items-center">
+        <ShortcutHelp />
+      </div>
       {/* Dashboard-scoped actions (create menu, upload) are portaled in by
           TitleBarActions; their providers only exist under /dashboard, so the
           slot stays empty on auth and other non-dashboard routes. */}
@@ -205,9 +203,6 @@ export function DesktopTitleBar() {
         id="desktop-titlebar-actions-right"
         className="app-region-no-drag mr-1 flex items-center"
       />
-      <div className="app-region-no-drag flex items-center">
-        <ShortcutHelp />
-      </div>
     </header>
   );
 }
