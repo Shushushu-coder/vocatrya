@@ -1,7 +1,11 @@
-// SET-08 honest capability pages: the Notifications / Shortcuts / Audio
-// settings components must render only capabilities that provably exist at
-// baseline 59499771 — no fake toggles, no dead buttons, no media permission
-// requests, and no "shortcuts" that were never registered.
+// SET-08 honest capability pages: the Notifications / Shortcuts settings
+// components must render only capabilities that provably exist at baseline
+// 59499771 — no fake toggles, no dead buttons, no media permission
+// requests, and no "shortcuts" that were never registered. The Audio page
+// has since shipped phase-1 controls (microphone pick, input level, an
+// in-memory recording test); its contract below covers the delivered
+// behavior — permission is only requested after a user click and
+// transcription honestly stays "Not provided".
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -255,40 +259,36 @@ describe("ShortcutsSettings — honest capability page", () => {
   });
 });
 
-describe("AudioSettings — honest capability page", () => {
-  it("declares the audio capabilities it does not have", () => {
+describe("AudioSettings — phase-1 controls", () => {
+  it("renders real controls for delivered features and keeps transcription honest", () => {
     render(<AudioSettings />);
     const page = screen.getByTestId("audio-settings");
     for (const title of [
       "Microphone input",
-      "Audio output & device switching",
+      "Input level",
       "Speech transcription & recognition",
       "Recording test",
     ]) {
       expect(within(page).getByText(title)).toBeInTheDocument();
     }
-    expect(within(page).getAllByText("Not provided")).toHaveLength(4);
-    expect(
-      within(page).getByText(/screen capture/i),
-    ).toBeInTheDocument();
+    // Only the transcription row keeps the badge in this phase.
+    expect(within(page).getAllByText("Not provided")).toHaveLength(1);
+    expect(within(page).getByTestId("audio-mic-enable")).toBeInTheDocument();
   });
 
-  it("never touches media devices or permission APIs", () => {
+  it("requests no media access and touches no media API before a user click", () => {
     const getUserMedia = vi.fn();
     const enumerateDevices = vi.fn();
+    const addEventListener = vi.fn();
     Object.defineProperty(navigator, "mediaDevices", {
-      value: { getUserMedia, enumerateDevices },
+      value: { getUserMedia, enumerateDevices, addEventListener },
       configurable: true,
     });
     const { unmount } = render(<AudioSettings />);
     unmount();
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(enumerateDevices).not.toHaveBeenCalled();
-  });
-
-  it("contains no interactive control that could imply a setting", () => {
-    const { container } = render(<AudioSettings />);
-    expectNoInteractiveControls(container);
+    expect(addEventListener).not.toHaveBeenCalled();
   });
 });
 
