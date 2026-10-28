@@ -401,7 +401,7 @@
         "未实现的能力明确不可用，不伪装成已接通，也不破坏已有账号登录和 BYOK 隔离。"
       ],
       "passes": false,
-      "implementationNotes": "2026-10-27 最终验收：Main 的诚实可用状态与接线保持。本轮 Windows Electron fresh-native 核对未提供分配项，但未使用真实 Connection/BYOK/模型完成业务调用，缺少对应实际环境证据；passes 保持 false，不调用或泄露真实凭据。"
+      "implementationNotes": "2026-10-27 最终验收：Main 的诚实可用状态与接线保持。本轮 Windows Electron fresh-native 核对未提供分配项。2026-10-28 用户试用暴露 Codex CLI 0.164.0 与原 0.160.0 能力认证绑定不一致，聊天/导入按设计拒绝执行；已修复预检提示关闭及导入环境错误文案。经用户授权，以 gpt-5.6-luna 和合成内容通过生产 desktop connection-service 执行边界完成流式 4 项（增量/重组/中止）及结构化 9/9 首次有效探测，认证绑定更新到 0.164.0，精确版本拒绝策略保留。这是实际运行时探测，未替代 Windows Electron 完整业务界面及 BYOK 验收，passes 保持 false。"
     },
     {
       "id": "RM-RESUME",

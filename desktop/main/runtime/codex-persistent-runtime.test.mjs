@@ -143,7 +143,7 @@ function identity(overrides = {}) {
     userId: "user-1",
     connectionId: "conn-1",
     resolvedModel: "gpt-5.6-sol",
-    runtimeVersion: "0.160.0",
+    runtimeVersion: "0.164.0",
     runtimeProfileRef: RP_A,
     executablePath: FAKE_EXE,
     profileDir: overrides.profileDir,
@@ -293,7 +293,7 @@ describe("CodexPersistentRuntimeManager", () => {
   });
 
   it("retires an older runtime version before the caller applies the capability gate", async () => {
-    await turn({ runtimeVersion: "0.160.0" });
+    await turn({ runtimeVersion: "0.164.0" });
     const next = await manager.acquire(id({ runtimeVersion: "0.161.0" }));
     expect(next.kind).toBe("fresh");
     expect(next.meta.runtimeRestartReason).toBe("version");
@@ -510,7 +510,7 @@ describe("executeTextStream persistent Codex integration", () => {
       buildInvocation: (input) => codexAdapter.buildStreamingInvocation(input),
     });
     runnerCalls = [];
-    version = "0.160.0";
+    version = "0.164.0";
     connection = resolvedConnection();
     backend = {
       resolveTicket: vi.fn(async () => ({
