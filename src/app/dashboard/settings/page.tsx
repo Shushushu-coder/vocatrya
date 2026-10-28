@@ -15,6 +15,7 @@ import NotificationsSettings from "@/components/settings/NotificationsSettings";
 import ShortcutsSettings from "@/components/settings/ShortcutsSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
 import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
+import { ResumeVariantList } from "@/components/career/resume-variant/ResumeVariantList";
 import SettingsSidebar, {
   isSettingsSection,
   useSettingsText,
@@ -93,7 +94,7 @@ function readSectionFromLocation(): SettingsSection | null {
 function Settings() {
   const { t } = useI18n();
   const text = useSettingsText();
-  const { freshNativeFull } = useCareerSurfaces();
+  const { freshNativeFull, resumeV1Enabled } = useCareerSurfaces();
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(DEFAULT_SECTION);
   // Writing the hash inside the click handler called Next's patched
@@ -210,8 +211,16 @@ function Settings() {
             </SectionShell>
           )}
           {activeSection === "dictionary" && (
-            <SectionShell id="dictionary" title={t("nav.library")}>
+            <SectionShell id="dictionary" title={text("settings.sections.bulkEdit", "Bulk Edit")}>
               <AdminTabsContainer />
+            </SectionShell>
+          )}
+          {activeSection === "resume-variants" && (
+            <SectionShell
+              id="resume-variants"
+              title={text("resumeVariants.title", "Resume Variants")}
+            >
+              {resumeV1Enabled ? <ResumeVariantList /> : <SectionUnavailable />}
             </SectionShell>
           )}
           {activeSection === "data-privacy" && (

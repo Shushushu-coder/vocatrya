@@ -1,4 +1,4 @@
-// Settings host shell: five nav groups with ten entries, `general` as the
+// Settings host shell: five nav groups with eleven entries, `general` as the
 // default page, owner components mounted per section, honest unavailable
 // states for pages whose components have not landed, and the legacy MCP /
 // Interview compat surfaces kept reachable in their new homes.
@@ -11,6 +11,10 @@ import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 
 vi.mock("@/components/admin/AdminTabsContainer", () => ({
   default: () => <div data-testid="dictionary-settings" />,
+}));
+
+vi.mock("@/components/career/resume-variant/ResumeVariantList", () => ({
+  ResumeVariantList: () => <div data-testid="resume-variants-settings" />,
 }));
 
 vi.mock("@/components/settings/GeneralSettings", () => ({
@@ -59,7 +63,8 @@ const EXPECTED_SECTION_ORDER = [
   "AI Assignments",
   "Shortcuts",
   "Audio",
-  "Library",
+  "Bulk Edit",
+  "Resume Variants",
   "Data & Privacy",
   "About",
 ];
@@ -73,7 +78,7 @@ describe("Settings page — V1 navigation shell", () => {
     window.history.replaceState(null, "", "/dashboard/settings");
   });
 
-  it("renders ten sections in five groups", () => {
+  it("renders eleven sections in five groups", () => {
     render(<Settings />);
     const names = navButtons().map((button) => button.textContent);
     expect(names).toEqual(EXPECTED_SECTION_ORDER);
@@ -82,7 +87,7 @@ describe("Settings page — V1 navigation shell", () => {
       // settings.ai already exists in the locale bundles as "AI Configuration".
       "AI Configuration",
       "Devices & Input",
-      "Bulk Edit",
+      "Career Management",
       "Data & Support",
     ]) {
       expect(screen.getByText(group)).toBeInTheDocument();
@@ -99,18 +104,37 @@ describe("Settings page — V1 navigation shell", () => {
     ).toHaveAttribute("aria-current", "true");
   });
 
-  it("mounts the dictionary under Bulk Edit and preserves its tab when switching sections", async () => {
+  it("mounts the dictionary under Career Management and preserves its tab when switching sections", async () => {
     window.history.replaceState(null, "", "/dashboard/settings?section=dictionary&tab=skills");
     render(<Settings />);
     expect(await screen.findByTestId("dictionary-settings")).toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "Bulk Edit" })).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "true");
+    expect(within(screen.getByRole("group", { name: "Career Management" })).getByRole("button", { name: "Bulk Edit" })).toHaveAttribute("aria-current", "true");
     await userEvent.click(screen.getByRole("button", { name: "General" }));
     expect(window.location.hash).toBe("#general");
     expect(new URLSearchParams(window.location.search).has("section")).toBe(false);
     expect(new URLSearchParams(window.location.search).get("tab")).toBe("skills");
-    await userEvent.click(screen.getByRole("button", { name: "Library" }));
+    await userEvent.click(screen.getByRole("button", { name: "Bulk Edit" }));
     expect(screen.getByTestId("dictionary-settings")).toBeInTheDocument();
     expect(new URLSearchParams(window.location.search).get("section")).toBe("dictionary");
+  });
+
+  it("mounts the resume variants list under Career Management when the capability is on", async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+    await user.click(screen.getByRole("button", { name: "Resume Variants" }));
+    expect(screen.getByTestId("resume-variants-settings")).toBeInTheDocument();
+  });
+
+  it("shows an honest unavailable state for resume variants when the capability is off", async () => {
+    const user = userEvent.setup();
+    render(
+      <CareerSurfacesProvider freshNativeFull={false} resumeV1Enabled={false}>
+        <Settings />
+      </CareerSurfacesProvider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Resume Variants" }));
+    expect(screen.getByTestId("settings-section-unavailable")).toBeInTheDocument();
+    expect(screen.queryByTestId("resume-variants-settings")).not.toBeInTheDocument();
   });
 
   it("splits AI connections and business assignments onto different pages", async () => {

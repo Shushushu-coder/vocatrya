@@ -202,7 +202,7 @@
     "activities": "Activities",
     "questions": "Questions",
     "interview": "Interview",
-    "profile": "Profile",
+    "profile": "Application Profile",
     "library": "Library",
     "developer": "Developer Options",
     "settings": "Settings",
@@ -1774,7 +1774,7 @@
     "groups": {
       "preferences": "Preferences",
       "devices": "Devices & Input",
-      "bulkEdit": "Bulk Edit",
+      "career": "Career Management",
       "dataSupport": "Data & Support"
     },
     "sections": {
@@ -1783,6 +1783,7 @@
       "aiAssignments": "AI Assignments",
       "shortcuts": "Shortcuts",
       "audio": "Audio",
+      "bulkEdit": "Bulk Edit",
       "dataPrivacy": "Data & Privacy",
       "about": "About"
     },

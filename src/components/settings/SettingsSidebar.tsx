@@ -4,6 +4,7 @@ import {
   Bell,
   Bot,
   Database,
+  Files,
   Library,
   Info,
   Keyboard,
@@ -26,6 +27,7 @@ export type SettingsSection =
   | "shortcuts"
   | "audio"
   | "dictionary"
+  | "resume-variants"
   | "data-privacy"
   | "about";
 
@@ -39,7 +41,7 @@ export interface SettingsSectionMeta {
 }
 
 export interface SettingsSectionGroup {
-  id: "preferences" | "ai" | "devices" | "bulk-edit" | "data-support";
+  id: "preferences" | "ai" | "devices" | "career" | "data-support";
   labelKey: string;
   fallbackLabel: string;
   sections: readonly SettingsSectionMeta[];
@@ -75,11 +77,12 @@ export const SETTINGS_SECTION_GROUPS: readonly SettingsSectionGroup[] = [
     ],
   },
   {
-    id: "bulk-edit",
-    labelKey: "settings.groups.bulkEdit",
-    fallbackLabel: "Bulk Edit",
+    id: "career",
+    labelKey: "settings.groups.career",
+    fallbackLabel: "Career Management",
     sections: [
-      { id: "dictionary", labelKey: "nav.library", fallbackLabel: "Library", icon: Library },
+      { id: "dictionary", labelKey: "settings.sections.bulkEdit", fallbackLabel: "Bulk Edit", icon: Library },
+      { id: "resume-variants", labelKey: "resumeVariants.title", fallbackLabel: "Resume Variants", icon: Files },
     ],
   },
   {

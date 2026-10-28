@@ -177,8 +177,7 @@ describe("fresh + full navigation", () => {
       "Activities",
       "Questions",
       "Interview",
-      "Profile",
-      "Library",
+      "Application Profile",
     ]) {
       expect(screen.getByRole("link", { name })).toBeInTheDocument();
     }

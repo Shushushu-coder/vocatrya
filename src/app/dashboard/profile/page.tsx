@@ -45,13 +45,6 @@ async function Profile() {
               {t("applicationProfile.openApplicationProfile")}
             </Link>
           </div>
-          <div className="rounded-lg border p-4">
-            <div className="text-sm font-medium">{t("resumeVariants.entryTitle")}</div>
-            <div className="text-sm text-muted-foreground">{t("resumeVariants.entryDescription")}</div>
-            <Link className="text-sm text-primary underline underline-offset-2" href="/dashboard/profile/resumes">
-              {t("resumeVariants.openResumeVariants")}
-            </Link>
-          </div>
         </div>
       )}
       {hideLegacyProfile ? null : (

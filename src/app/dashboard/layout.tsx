@@ -69,7 +69,7 @@ export default async function RootLayout({
 
   return (
     <ActivityProvider>
-      <CareerSurfacesProvider freshNativeFull={freshNativeFull} jobMutationsEnabled={canMutateJobsSurface(runtime)}>
+      <CareerSurfacesProvider freshNativeFull={freshNativeFull} jobMutationsEnabled={canMutateJobsSurface(runtime)} resumeV1Enabled={runtime.resumeV1Enabled}>
       <SidebarProvider initialExpanded={initialExpanded} initialWidth={initialWidth}>
         <RightRailProvider>
           <AgentChatProvider initialConversation={conversation.data ?? null}>

@@ -11,22 +11,25 @@ import { createContext, useContext, useMemo } from "react";
 export type CareerSurfacesValue = {
   freshNativeFull: boolean;
   jobMutationsEnabled: boolean;
+  resumeV1Enabled: boolean;
 };
 
-const DEFAULT_VALUE: CareerSurfacesValue = { freshNativeFull: false, jobMutationsEnabled: true };
+const DEFAULT_VALUE: CareerSurfacesValue = { freshNativeFull: false, jobMutationsEnabled: true, resumeV1Enabled: true };
 
 const CareerSurfacesContext = createContext<CareerSurfacesValue>(DEFAULT_VALUE);
 
 export function CareerSurfacesProvider({
   freshNativeFull,
   jobMutationsEnabled = true,
+  resumeV1Enabled = true,
   children,
 }: {
   freshNativeFull: boolean;
   jobMutationsEnabled?: boolean;
+  resumeV1Enabled?: boolean;
   children: React.ReactNode;
 }) {
-  const value = useMemo(() => ({ freshNativeFull, jobMutationsEnabled }), [freshNativeFull, jobMutationsEnabled]);
+  const value = useMemo(() => ({ freshNativeFull, jobMutationsEnabled, resumeV1Enabled }), [freshNativeFull, jobMutationsEnabled, resumeV1Enabled]);
   return (
     <CareerSurfacesContext.Provider value={value}>
       {children}

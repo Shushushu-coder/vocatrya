@@ -202,7 +202,7 @@
     "activities": "求职活动",
     "questions": "面试题库",
     "interview": "面试练习",
-    "profile": "职业资料",
+    "profile": "网申资料",
     "library": "基础字典",
     "developer": "开发者选项",
     "settings": "设置",
@@ -1774,7 +1774,7 @@
     "groups": {
       "preferences": "偏好设置",
       "devices": "设备与输入",
-      "bulkEdit": "批量修改",
+      "career": "职业管理",
       "dataSupport": "数据与支持"
     },
     "sections": {
@@ -1783,6 +1783,7 @@
       "aiAssignments": "AI 业务分配",
       "shortcuts": "快捷键",
       "audio": "音频",
+      "bulkEdit": "批量修改",
       "dataPrivacy": "数据与隐私",
       "about": "关于"
     },
