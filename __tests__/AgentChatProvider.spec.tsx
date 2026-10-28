@@ -96,6 +96,7 @@ function Probe() {
       <button onClick={c.close}>close</button>
       <button onClick={() => void c.startNewConversation()}>newConversation</button>
       <button onClick={() => void c.regenerate()}>regenerate</button>
+      <button onClick={() => void c.regenerate("a2")}>regenerateTarget</button>
       <button onClick={c.stop}>stop</button>
       <button onClick={() => void c.selectConversation("conv-2")}>switchConversation</button>
       <button
@@ -327,6 +328,9 @@ describe("AgentChatProvider", () => {
     expect(screen.getByTestId("state").textContent).toContain("|true|");
 
     chat.status = "ready";
+    // A stopped turn leaves the transcript on the user's own message — that
+    // is the tail a Continue actually reruns.
+    chat.messages = [{ id: "u1", role: "user", parts: [{ type: "text", text: "add a job" }] }];
     rerender(tree());
     await userEvent.click(screen.getByText("regenerate"));
     expect(chat.regenerate).toHaveBeenCalled();
@@ -1061,6 +1065,70 @@ describe("conversation client concurrency protocol", () => {
     await userEvent.click(screen.getByText("sendMessage"));
     expect(chat.sendMessage).toHaveBeenCalledTimes(1);
   });
+  // The answer action row names its own message; the request it produces must
+  // carry that id, not whatever happens to sit last when the POST is prepared.
+  it("sends the named answer as the regenerate target", async () => {
+    chat.messages = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "first" }] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "older" }] },
+      { id: "u2", role: "user", parts: [{ type: "text", text: "second" }] },
+      { id: "a2", role: "assistant", parts: [{ type: "text", text: "latest" }] },
+    ];
+    setup();
+    await userEvent.click(screen.getByText("regenerateTarget"));
+    expect(chat.regenerate).toHaveBeenCalledWith({ messageId: "a2" });
+    const body = chatInit().transport.prepareSendMessagesRequest({
+      messages: chat.messages.slice(0, -1),
+      trigger: "regenerate-message",
+      messageId: "a2",
+    }).body;
+    expect(body).toMatchObject({ operation: "regenerate", targetMessageId: "a2" });
+  });
+
+  // Regenerate has no queue; status only flips after the SDK has prepared the
+  // request, so the in-flight ref is what keeps a fast repeat click off the
+  // wire. Once the request settles, the next click is a fresh operation.
+  it("ignores a repeat regenerate until the in-flight request settles", async () => {
+    chat.messages = [{ id: "a1", role: "assistant", parts: [{ type: "text", text: "latest" }] }];
+    let release!: () => void;
+    chat.regenerate.mockImplementationOnce(
+      () => new Promise<void>((done) => { release = done; }),
+    );
+    setup();
+    await userEvent.click(screen.getByText("regenerate"));
+    await userEvent.click(screen.getByText("regenerate"));
+    expect(chat.regenerate).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await userEvent.click(screen.getByText("regenerate"));
+    expect(chat.regenerate).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears a recovered action error when regenerating the restored answer", async () => {
+    const messages = [
+      { id: "u2", role: "user", parts: [{ type: "text", text: "question" }] },
+      { id: "a2", role: "assistant", parts: [{ type: "text", text: "saved answer" }] },
+    ];
+    chat.messages = messages;
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: conversation(messages) });
+    setup(messages);
+    beginExecution();
+    act(() => chatInit().onError(new Error("generation failed")));
+    await waitFor(() => expect(screen.getByTestId("action-error").textContent).not.toBe(""));
+
+    await userEvent.click(screen.getByText("regenerateTarget"));
+
+    expect(chat.regenerate).toHaveBeenCalledWith({ messageId: "a2" });
+    expect(screen.getByTestId("action-error")).toHaveTextContent(/^$/);
+  });
+
+  // Nothing to regenerate against: an empty transcript has no target, and a
+  // request built on a missing id could never be admitted anyway.
+  it("does not open a regenerate request on an empty transcript", async () => {
+    setup();
+    await userEvent.click(screen.getByText("regenerate"));
+    expect(chat.regenerate).not.toHaveBeenCalled();
+  });
+
   it("cancels captured C1 identity on New Conversation and ignores its late durable finish", async () => {
     setup();
     const execution = beginExecution(false);

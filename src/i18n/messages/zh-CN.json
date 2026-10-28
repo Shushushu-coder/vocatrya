@@ -2746,7 +2746,8 @@
   "agentAnswer": {
     "copy": "复制回答",
     "copied": "已复制",
-    "copyFailed": "复制失败，请重试。"
+    "copyFailed": "复制失败，请重试。",
+    "regenerate": "重新生成回答"
   },
   "runtimeUpdate": {
     "currentVersion": "当前版本",

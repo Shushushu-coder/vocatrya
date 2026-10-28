@@ -152,6 +152,38 @@ describe("real SQLite request authority with two independent clients", () => {
     await expect(regen("r")).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
     expect((await load()).messages).toContain("saved");
   });
+  it("rejects regenerate on anything but the last assistant answer", async () => {
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u1"), assistant("a1"), user("u2"), assistant("answer")]) } });
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "a1" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+    expect((await load()).messages).toContain("a1");
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "u2" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+  });
+  it("regenerate refuses to rerun while a pending approval exists anywhere in the transcript", async () => {
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([proposal(), user("u"), assistant()]) } });
+    await expect(regen("r")).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+    expect((await load()).activeRequestId).toBeNull();
+  });
+  it("admits regenerate on the latest plain answer after an earlier saved write and drops only that answer", async () => {
+    const saved = proposal();
+    saved.id = "saved";
+    Object.assign(saved.parts[0], { state: "output-available", output: { created: true, jobId: "kept" } });
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u1"), saved, user("u2"), assistant()]) } });
+    const admitted = await regen("r");
+    expect(admitted.messages.map(m => m.id)).toEqual(["u1", "saved", "u2"]);
+    expect((await load()).activeRequestId).toBe("r");
+    expect((await load()).messages).toContain("kept");
+    await cancelConversationRequest(userId, conversationId, "r", a);
+  });
+  it("admits regenerate on a read-only tool answer", async () => {
+    const reads = { id: "answer", role: "assistant" as const, parts: [
+      { type: "tool-list_jobs", toolCallId: "l1", state: "output-available", input: {}, output: { status: "ok", jobs: [] } },
+      { type: "text", text: "You have no jobs." },
+    ] };
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u"), reads]) } });
+    const admitted = await regen("r");
+    expect(admitted.messages.map(m => m.id)).toEqual(["u"]);
+    await cancelConversationRequest(userId, conversationId, "r", a);
+  });
   it("rejects send while an unresolved proposal exists", async () => {
     await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([proposal()]) } });
     await expect(send("a")).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });

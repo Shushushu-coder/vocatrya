@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isToolUIPart, type UIMessage } from "ai";
 import prisma from "@/lib/db";
+import { hasWriteReceipt, regenerateTailHasWriteReceipt } from "./writeReceipt";
 
 export type ConversationErrorCode = "CONVERSATION_NOT_FOUND" | "CONVERSATION_STALE_WRITE" | "CONVERSATION_TURN_CONFLICT" | "CONVERSATION_PERSISTENCE_FAILED";
 export class ConversationRequestError extends Error {
@@ -39,12 +40,7 @@ export function pendingApprovals(messages: UIMessage[]) {
   return messages.flatMap(message => message.parts.filter(isToolUIPart)
     .filter(part => part.state === "approval-requested").map(part => ({ message, part })));
 }
-const writeTools = new Set(["add_job", "match_job", "generate_cover_letter"]);
-export function hasWriteReceipt(message: UIMessage) {
-  return message.parts.some(part => isToolUIPart(part) && writeTools.has(part.type.replace(/^tool-/, "")) &&
-    part.state === "output-available" && !!part.output && typeof part.output === "object" &&
-    ((part.output as { created?: boolean; saved?: boolean }).created === true || (part.output as { saved?: boolean }).saved === true));
-}
+export { hasWriteReceipt };
 
 export async function admitConversationRequest(input: ConversationOperation & {
   userId: string; conversationId: string; requestId: string; expectedRevision: number;
@@ -76,7 +72,7 @@ export async function admitConversationRequest(input: ConversationOperation & {
         messages.push(message);
       } else if (input.operation === "regenerate") {
         const index = messages.findIndex(m => m.id === input.targetMessageId);
-        if (pending.length || index < 0 || index !== messages.length - 1 || messages[index].role !== "assistant" || messages.slice(messages.findLastIndex(m => m.role === "user") + 1).some(hasWriteReceipt))
+        if (pending.length || index < 0 || index !== messages.length - 1 || messages[index].role !== "assistant" || regenerateTailHasWriteReceipt(messages))
           return { error: "CONVERSATION_TURN_CONFLICT" as const };
         messages.splice(index);
       } else {

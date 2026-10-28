@@ -228,6 +228,9 @@ function useAgentChatValue(
   const durableApprovalRef = useRef(Boolean(initial));
   const conflictRef = useRef(false);
   const regenerateTargetRef = useRef<string | null>(null);
+  // Status lags one render behind the click, so an in-flight ref is the only
+  // thing that stops a fast second click from opening a second request.
+  const regenerateInFlightRef = useRef(false);
   const contextRef = useRef(context);
   const explicitRef = useRef<ExplicitModelSelection | null>(null);
   const lockKindRef = useRef<ChatLockKind | null>(initial?.lockKind ?? null);
@@ -833,12 +836,25 @@ function useAgentChatValue(
     void dispatch(queued);
   }, [queued, approvalPending, chat.status, dispatch]);
 
-  const regenerate = useCallback(() => {
-    if (recoveryBlockedRef.current || streamingRef.current || !conversationIdRef.current) return;
-    regenerateTargetRef.current = chat.messages.at(-1)?.id ?? null;
+  const regenerate = useCallback((messageId?: string) => {
+    if (regenerateInFlightRef.current || recoveryBlockedRef.current || streamingRef.current || !conversationIdRef.current) return;
+    const target = messageId ?? chat.messages.at(-1)?.id;
+    if (!target) return;
+    regenerateInFlightRef.current = true;
+    regenerateTargetRef.current = target;
     conflictRef.current = false;
+    setActionError(null);
     setInterruptedTurn(false);
-    void chat.regenerate();
+    const settle = () => { regenerateInFlightRef.current = false; };
+    try {
+      void Promise.resolve(
+        messageId === undefined
+          ? chat.regenerate()
+          : chat.regenerate({ messageId }),
+      ).then(settle, settle);
+    } catch {
+      settle();
+    }
   }, [chat]);
 
   const clearQueued = useCallback(() => setQueued(undefined), []);

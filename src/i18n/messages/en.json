@@ -2746,7 +2746,8 @@
   "agentAnswer": {
     "copy": "Copy answer",
     "copied": "Copied",
-    "copyFailed": "Copy failed. Please try again."
+    "copyFailed": "Copy failed. Please try again.",
+    "regenerate": "Regenerate answer"
   },
   "runtimeUpdate": {
     "currentVersion": "Current",

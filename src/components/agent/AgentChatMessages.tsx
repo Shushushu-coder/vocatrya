@@ -19,6 +19,7 @@ import { AgentStatusRow } from "@/components/agent/AgentStatusRow";
 import { AgentToolRunningCard } from "@/components/agent/AgentToolRunningCard";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { assistantAnswerCopyText } from "@/lib/agent/answerCopyText";
+import { regenerateTailHasWriteReceipt } from "@/lib/agent/writeReceipt";
 import { resolvePastedText } from "@/lib/agent/paste";
 import { parseJobMatch } from "@/lib/ai/jobMatch/parse";
 import { parseResumeReview } from "@/lib/ai/resumeReview/parse";
@@ -91,6 +92,8 @@ export function AgentChatMessages() {
     addToolApprovalResponse,
     interruptedTurn,
     dismissInterrupted,
+    approvalPending,
+    conversationId,
   } = useAgentChat();
   const [dismissed, setDismissed] = useState(false);
 
@@ -105,6 +108,14 @@ export function AgentChatMessages() {
   };
 
   const { t } = useI18n();
+
+  // Regenerate is admitted only for the last message, and only when it is a
+  // plain assistant answer: the route rejects anything mid-turn, any pending
+  // approval and a tail that carries a saved write receipt. Mirroring the
+  // admission checks here keeps the button off the answers the server would
+  // refuse — history answers in the middle simply get no control.
+  const lastMessageId = messages.at(-1)?.id;
+  const tailHasWriteReceipt = regenerateTailHasWriteReceipt(messages);
 
   return (
     <Conversation className="flex-1">
@@ -198,7 +209,21 @@ export function AgentChatMessages() {
                     return <AgentResultCard key={i} part={part} />;
                 }
               })}
-              {copyText && <AgentAnswerActions text={copyText} />}
+              {copyText && (
+                <AgentAnswerActions
+                  text={copyText}
+                  onRegenerate={
+                    message.role === "assistant" &&
+                    message.id === lastMessageId &&
+                    status === "ready" &&
+                    !approvalPending &&
+                    Boolean(conversationId) &&
+                    !tailHasWriteReceipt
+                      ? () => regenerate(message.id)
+                      : undefined
+                  }
+                />
+              )}
             </div>
           );
         })}
