@@ -436,7 +436,8 @@
       "category": "Resume / Match",
       "priority": "P1",
       "scope": "DEFERRED",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-10-28 最小链路已交付（Main 集成）：canonical 职位详情 match tab → 素材来源选择 → MATCH_ANALYSIS 分配解析 → 结构化执行 → MatchAnalysisService 持久化 → 历史列表与 stale 标记；覆盖素材不足/JD缺失/NOT_CONFIGURED/连接失败与重试，Deep Match 未做，AiAssignmentsCard 的 fresh-native 门控已在同轮解禁。tsc/eslint 干净，fastScreening 12 项与 matchAnalysis 8 项定向测试通过。真实连接端到端分析与 Windows Electron fresh-native 验收未执行，passes 保持 false。",
       "description": "2026-10-27 已批准延期：canonical fresh-native 的 Match 用户入口和生产执行链路尚未交付，先完成 P0 求职闭环，不计为已实现或通过。",
       "steps": [
         "若纳入本期：从 canonical 职位详情启动匹配，调用实际生产服务并保存、展示与重新读取结果。",
@@ -449,7 +450,8 @@
       "category": "Reminder",
       "priority": "CONDITIONAL",
       "scope": "DEFERRED",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-10-28 首版已交付（Main 集成）：新 Reminder 模型 + migration（backup ordering/schema 同步纳入），ProcessStep 写路径事务内同步建/改/取消提醒，账号级通知偏好（总开关/提前量/测试通知）走原子 patch，渲染进程 60s tick 原子认领到期提醒并经 new Notification 送达，点击经 vocatryaDesktop.showWindow + deepLink 跳转，重启逾期 24h 内补送、更旧标 EXPIRED；边界文案如实标注完全退出不承诺。reminders 24 项与共享 spec 定向通过，58 个 migration 全量 deploy 与索引不变量验证通过。Windows 真实通知送达与点击跳转验收未执行，passes 保持 false。",
       "description": "Windows 本地持久提醒当前未实现，不阻塞首版内部 MVP。",
       "steps": [
         "若未来启用：提醒需可持久化、在 Windows 端真实调度与送达，关闭重开后规则仍有效。",

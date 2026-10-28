@@ -1,11 +1,9 @@
-// SET-AI-SERVICES honest-capability rows: a purpose is editable only when a
-// real production consumer resolves it in the current runtime mode.
-// CAREER_REFLECTION now has a consumer (interview reflection AI drafts run
-// through the TEXT_ONLY one-shot seam), so it renders as a normal editable
-// row gated on local one-shot capability like INTERVIEW. MATCH_ANALYSIS is
-// consumed only by legacy-gated automation/match surfaces, so the
-// fresh-native full surface still marks it "Not provided" instead of a
-// saveable assignment.
+// SET-AI-SERVICES purpose rows: every registered purpose now resolves a
+// real production consumer on every surface, so all rows render editable.
+// CAREER_REFLECTION runs interview reflection AI drafts through the
+// TEXT_ONLY one-shot seam; MATCH_ANALYSIS is resolved by the fresh-native
+// fast-screening flow. This spec guards the honest-capability invariant:
+// no purpose renders a fake or non-interactive "Not provided" row.
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
@@ -52,28 +50,19 @@ vi.mock("@/actions/managedAi.actions", () => ({
   assignManagedBusinessAiSource: vi.fn(),
 }));
 
-const MATCH_TESTID = "ai-assign-unavailable-MATCH_ANALYSIS";
+const MATCH_ROW_TESTID = "ai-assign-row-MATCH_ANALYSIS";
 const REFLECTION_ROW_TESTID = "ai-assign-row-CAREER_REFLECTION";
 
-function expectNoInteractiveControls(container: HTMLElement) {
-  expect(
-    container.querySelector(
-      'button, input, select, textarea, a[href], [role="switch"], [role="checkbox"], [tabindex]',
-    ),
-  ).toBeNull();
-}
-
-describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
+describe("AiAssignmentsCard — all purposes editable now that consumers exist", () => {
   beforeEach(() => {
     vi.mocked(listBusinessAiAssignments).mockResolvedValue({ success: true, data: [] });
   });
 
-  it("renders CAREER_REFLECTION as an editable row now that a consumer resolves it", async () => {
+  it("renders every purpose as an editable row on the default surface", async () => {
     render(<AiAssignmentsCard />);
     await waitFor(() =>
       expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0),
     );
-    // Every purpose is editable outside the fresh-native gate.
     expect(screen.getAllByRole("combobox")).toHaveLength(6);
     expect(
       screen.queryByTestId("ai-assign-unavailable-CAREER_REFLECTION"),
@@ -85,10 +74,10 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
     // The editable row offers the connection picker and model input.
     expect(within(row).getByRole("combobox")).toBeInTheDocument();
     expect(within(row).getByRole("textbox")).toBeInTheDocument();
-    expect(screen.queryByTestId(MATCH_TESTID)).not.toBeInTheDocument();
+    expect(screen.getByTestId(MATCH_ROW_TESTID)).toBeInTheDocument();
   });
 
-  it("marks MATCH_ANALYSIS Not provided on the fresh-native full surface while CAREER_REFLECTION stays editable", async () => {
+  it("keeps MATCH_ANALYSIS editable on the fresh-native full surface", async () => {
     render(
       <CareerSurfacesProvider freshNativeFull={true}>
         <AiAssignmentsCard />
@@ -97,21 +86,22 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
     await waitFor(() =>
       expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0),
     );
-    const matchRow = screen.getByTestId(MATCH_TESTID);
+    // The fresh-native fast-screening flow resolves MATCH_ANALYSIS, so the
+    // full surface no longer marks it "Not provided".
     expect(
-      within(matchRow).getByText("settings.capabilityNotProvided"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("ai-assign-unavailable-MATCH_ANALYSIS"),
+    ).not.toBeInTheDocument();
+    const matchRow = screen.getByTestId(MATCH_ROW_TESTID);
     expect(
       within(matchRow).getByText("settings.aiAssignPurposeMatchAnalysis"),
     ).toBeInTheDocument();
-    expectNoInteractiveControls(matchRow);
-    // GLOBAL_DEFAULT / RESUME / CAREER_REFLECTION / CAREER_DIALOGUE /
-    // INTERVIEW stay editable on the full surface.
-    expect(screen.getAllByRole("combobox")).toHaveLength(5);
+    expect(within(matchRow).getByRole("combobox")).toBeInTheDocument();
+    expect(within(matchRow).getByRole("textbox")).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox")).toHaveLength(6);
     expect(screen.getByTestId(REFLECTION_ROW_TESTID)).toBeInTheDocument();
   });
 
-  it("preserves a saved MATCH_ANALYSIS row while unavailable and keeps CAREER_REFLECTION editable", async () => {
+  it("renders saved MATCH_ANALYSIS and CAREER_REFLECTION pairs on every surface", async () => {
     vi.mocked(listBusinessAiAssignments).mockResolvedValue({
       success: true,
       data: ["MATCH_ANALYSIS", "CAREER_REFLECTION"].map((purpose) => ({
@@ -120,11 +110,10 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
       })),
     });
     const view = render(<CareerSurfacesProvider freshNativeFull={true}><AiAssignmentsCard /></CareerSurfacesProvider>);
-    await screen.findByTestId(MATCH_TESTID);
-    expectNoInteractiveControls(screen.getByTestId(MATCH_TESTID));
-    expect(screen.queryByDisplayValue("MATCH_ANALYSIS-model")).toBeNull();
-    // A saved CAREER_REFLECTION assignment renders its saved pair — the
-    // row is a normal editable purpose now.
+    await screen.findByTestId(MATCH_ROW_TESTID);
+    expect(
+      screen.getByDisplayValue("MATCH_ANALYSIS-model"),
+    ).toBeInTheDocument();
     expect(
       screen.getByDisplayValue("CAREER_REFLECTION-model"),
     ).toBeInTheDocument();
@@ -134,15 +123,18 @@ describe("AiAssignmentsCard — purposes without a reachable consumer", () => {
     expect(setBusinessAiAssignment).not.toHaveBeenCalled();
   });
 
-  it("does not expose unavailable controls while assignments load asynchronously", async () => {
+  it("shows only editable purpose rows once assignments finish loading", async () => {
     let resolve!: (value: { success: boolean; data: [] }) => void;
     vi.mocked(listBusinessAiAssignments).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
     render(<CareerSurfacesProvider freshNativeFull={true}><AiAssignmentsCard /></CareerSurfacesProvider>);
     expect(screen.getByText("settings.loadingSettings")).toBeInTheDocument();
     expect(screen.queryAllByRole("combobox")).toHaveLength(0);
     await act(async () => { resolve({ success: true, data: [] }); });
-    expectNoInteractiveControls(screen.getByTestId(MATCH_TESTID));
+    expect(
+      screen.queryByTestId("ai-assign-unavailable-MATCH_ANALYSIS"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId(MATCH_ROW_TESTID)).toBeInTheDocument();
     expect(screen.getByTestId(REFLECTION_ROW_TESTID)).toBeInTheDocument();
-    expect(screen.getAllByRole("combobox")).toHaveLength(5);
+    expect(screen.getAllByRole("combobox")).toHaveLength(6);
   });
 });
