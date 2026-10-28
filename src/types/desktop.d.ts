@@ -230,6 +230,10 @@ interface VocatryaDesktopBridge {
 }
 
 interface Window {
+  vocatryaInputPreferences?: {
+    read(): string | null;
+    write(raw: string): string;
+  };
   vocatryaResume?: {
     printToPDF(versionId: string): Promise<
       { ok: true; bytes: Uint8Array } |

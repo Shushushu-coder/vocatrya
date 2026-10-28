@@ -13,6 +13,18 @@
 // restore/quit. No paths, commands, or credentials cross this bridge.
 const { contextBridge, ipcRenderer } = require("electron");
 
+// A small synchronous snapshot keeps the existing immediate preference API.
+// The main process accepts only four validated values, never a path or key.
+function inputPreferenceRequest(channel, raw) {
+  const result = ipcRenderer.sendSync(channel, raw);
+  if (!result?.ok) throw new Error("Input preferences storage unavailable");
+  return result.value;
+}
+contextBridge.exposeInMainWorld("vocatryaInputPreferences", {
+  read: () => inputPreferenceRequest("inputPreferences:read"),
+  write: (raw) => inputPreferenceRequest("inputPreferences:write", raw),
+});
+
 // Mark Electron-hosted documents before first paint so CSS can reveal the
 // desktop-only chrome (custom titlebar strip, window-drag regions). The
 // marker is a plain DOM attribute — it grants the page no new capability;

@@ -33,6 +33,37 @@ describe("input preferences storage", () => {
     localStorage.clear();
   });
 
+  it("retains desktop preferences when a new loopback origin has empty localStorage", () => {
+    let device: string | null = null;
+    window.vocatryaInputPreferences = {
+      read: () => device,
+      write: (raw) => { device = raw; return raw; },
+    };
+    try {
+      updateInputPreferences({ enterBehavior: "next", autoFocus: true });
+      localStorage.clear();
+      expect(readInputPreferences()).toMatchObject({ enterBehavior: "next", autoFocus: true });
+      const { result } = renderHook(() => useInputPreferences());
+      expect(result.current.enterBehavior).toBe("next");
+      const previous = device;
+      window.vocatryaInputPreferences.write = () => { throw new Error("disk full"); };
+      expect(() => updateInputPreferences({ enterBehavior: "newline" })).toThrow("disk full");
+      expect(device).toBe(previous);
+      expect(readInputPreferences().enterBehavior).toBe("next");
+    } finally { delete window.vocatryaInputPreferences; }
+  });
+
+  it("migrates a reachable browser snapshot into the desktop device store", () => {
+    const raw = JSON.stringify({ ...DEFAULT_INPUT_PREFERENCES, editEntry: "end" });
+    localStorage.setItem(KEY, raw);
+    const write = vi.fn((value: string) => value);
+    window.vocatryaInputPreferences = { read: () => null, write };
+    try {
+      expect(readInputPreferences().editEntry).toBe("end");
+      expect(write).toHaveBeenCalledWith(raw);
+    } finally { delete window.vocatryaInputPreferences; }
+  });
+
   it("returns the four defaults when nothing is stored", () => {
     expect(readInputPreferences()).toEqual({
       enterBehavior: "newline",

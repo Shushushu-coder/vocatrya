@@ -34,6 +34,7 @@ const { createDesktopSettingsStore, DESKTOP_SETTINGS_FILE_NAME } = require("./de
 const { createKeybindingsStore, KEYBINDINGS_FILE_NAME } = require("./keybindings");
 const { createGlobalToggleHotkey } = require("./global-shortcuts");
 const { registerShortcutsIpc } = require("./shortcuts-ipc");
+const { registerInputPreferencesIpc } = require("./input-preferences");
 const { createDesktopLifecycle, shouldQuitWhenAllWindowsClosed } = require("./lifecycle");
 const { resolveColdStartEntry } = require("./cold-start");
 const { createQuitCoordinator, flushDefaultSession, runRegisteredReleaseHooks } = require("./shutdown");
@@ -499,6 +500,12 @@ if (!singleInstance) {
         getOrigin: () => (backendPort ? `http://127.0.0.1:${backendPort}` : null),
       });
       globalToggleHotkey.apply();
+      registerInputPreferencesIpc({
+        ipcMain,
+        filePath: path.join(foundationLayout ? foundationLayout.configDir : path.join(stateRoot(), "config"), "input-preferences.json"),
+        getWindow: () => mainWindow,
+        getOrigin: () => backendPort ? `http://127.0.0.1:${backendPort}` : null,
+      });
       hostedSessionBroker = await startHostedSessionBroker({ token: internalToken,
         store: createHostedSessionStore({ directory: path.join(stateRoot(), "hosted-sessions"), safeStorage }),
       });

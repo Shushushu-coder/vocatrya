@@ -4,9 +4,9 @@
  * SET-INPUT-PREFERENCES: device-local input preferences for structured
  * profile/material fields (wiki MVP_IMPLEMENTATION.md 试用新增需求 §4).
  *
- * - Storage: one JSON snapshot under APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY
- *   via the shared localstorage.utils helpers; each of the four keys falls back
- *   to its default when missing or invalid.
+ * - Storage: Electron keeps a validated snapshot in its device config file,
+ *   independent of the backend port. Web uses localStorage. Each invalid or
+ *   missing preference falls back to its default.
  * - Effect: `updateInputPreferences` writes and dispatches a same-tab event so
  *   mounted fields switch behavior without a restart; the `storage` event
  *   covers other tabs.
@@ -17,10 +17,6 @@
 import * as React from "react";
 import { useI18n } from "@/i18n";
 import { APP_CONSTANTS } from "@/lib/constants";
-import {
-  getFromLocalStorage,
-  saveToLocalStorage,
-} from "@/utils/localstorage.utils";
 
 export type EnterBehavior = "newline" | "next";
 export type EditEntryStrategy = "click" | "end" | "select-all";
@@ -63,21 +59,34 @@ function pick<T extends string>(value: unknown, allowed: readonly T[], fallback:
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
+function readRawInputPreferences(): string | null {
+  if (typeof window === "undefined") return null;
+  const bridge = window.vocatryaInputPreferences;
+  if (!bridge) return localStorage.getItem(APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY);
+  const saved = bridge.read();
+  if (saved !== null) return saved;
+  // Migrate a currently reachable old origin once; future ports use the
+  // device file. Sanitizing first also preserves per-key fallback behavior.
+  const legacy = localStorage.getItem(APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY);
+  if (!legacy) return null;
+  return bridge.write(JSON.stringify(parseInputPreferences(JSON.parse(legacy))));
+}
+
+function parseInputPreferences(raw: unknown): InputPreferences {
+  const d = DEFAULT_INPUT_PREFERENCES;
+  if (typeof raw !== "object" || raw === null) return d;
+  const r = raw as Record<string, unknown>;
+  return {
+    enterBehavior: pick(r.enterBehavior, ENTER_BEHAVIORS, d.enterBehavior),
+    editEntry: pick(r.editEntry, EDIT_ENTRIES, d.editEntry),
+    hintMode: pick(r.hintMode, HINT_MODES, d.hintMode),
+    autoFocus: typeof r.autoFocus === "boolean" ? r.autoFocus : d.autoFocus,
+  };
+}
+
 export function readInputPreferences(): InputPreferences {
   try {
-    const raw: unknown = getFromLocalStorage(
-      APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY,
-      null,
-    );
-    const d = DEFAULT_INPUT_PREFERENCES;
-    if (typeof raw !== "object" || raw === null) return d;
-    const r = raw as Record<string, unknown>;
-    return {
-      enterBehavior: pick(r.enterBehavior, ENTER_BEHAVIORS, d.enterBehavior),
-      editEntry: pick(r.editEntry, EDIT_ENTRIES, d.editEntry),
-      hintMode: pick(r.hintMode, HINT_MODES, d.hintMode),
-      autoFocus: typeof r.autoFocus === "boolean" ? r.autoFocus : d.autoFocus,
-    };
+    return parseInputPreferences(JSON.parse(readRawInputPreferences() ?? "null"));
   } catch {
     return DEFAULT_INPUT_PREFERENCES;
   }
@@ -91,7 +100,16 @@ export function updateInputPreferences(
   patch: Partial<InputPreferences>,
 ): InputPreferences {
   const next = { ...readInputPreferences(), ...patch };
-  saveToLocalStorage(APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY, next);
+  const raw = JSON.stringify(next);
+  if (typeof window !== "undefined") {
+    if (window.vocatryaInputPreferences) {
+      window.vocatryaInputPreferences.write(raw);
+      // The device file is authoritative; browser storage is only a mirror.
+      try { localStorage.setItem(APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY, raw); } catch { /* Device write succeeded. */ }
+    } else {
+      localStorage.setItem(APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY, raw);
+    }
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(INPUT_PREFERENCES_CHANGED_EVENT));
   }
@@ -107,7 +125,7 @@ let cachedSnapshot: InputPreferences = DEFAULT_INPUT_PREFERENCES;
 function getClientSnapshot(): InputPreferences {
   let raw: string | null;
   try {
-    raw = localStorage.getItem(APP_CONSTANTS.INPUT_PREFERENCES_STORAGE_KEY);
+    raw = readRawInputPreferences();
   } catch {
     raw = null;
   }
