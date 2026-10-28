@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, nativeImage, Menu, Tray, session } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, nativeImage, Menu, Tray, session, globalShortcut } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DESKTOP_APP_ID } = require("./installer-identity");
@@ -31,6 +31,9 @@ const { startExecutionServer } = require("./runtime/execute-server");
 const { createHostedSessionStore, startHostedSessionBroker } = require("./hosted-session");
 const { startCredentialBroker } = require("./credential-broker");
 const { createDesktopSettingsStore, DESKTOP_SETTINGS_FILE_NAME } = require("./desktop-settings");
+const { createKeybindingsStore, KEYBINDINGS_FILE_NAME } = require("./keybindings");
+const { createGlobalToggleHotkey } = require("./global-shortcuts");
+const { registerShortcutsIpc } = require("./shortcuts-ipc");
 const { createDesktopLifecycle, shouldQuitWhenAllWindowsClosed } = require("./lifecycle");
 const { resolveColdStartEntry } = require("./cold-start");
 const { createQuitCoordinator, flushDefaultSession, runRegisteredReleaseHooks } = require("./shutdown");
@@ -361,6 +364,15 @@ if (!singleInstance) {
       DESKTOP_SETTINGS_FILE_NAME,
     ),
   });
+  // Device-level keybindings sit beside desktop-settings.json in the same
+  // app-owned config directory — window-scope rebinds plus the global
+  // show/hide hotkey intent.
+  const keybindingsStore = createKeybindingsStore({
+    filePath: path.join(
+      foundationLayout ? foundationLayout.configDir : path.join(stateRoot(), "config"),
+      KEYBINDINGS_FILE_NAME,
+    ),
+  });
   const desktopLifecycle = createDesktopLifecycle({
     app,
     Tray,
@@ -372,6 +384,16 @@ if (!singleInstance) {
     createWindow: async () => {
       await createMainWindow();
     },
+  });
+
+  // Global show/hide hotkey: registered against the live window state so
+  // it keeps working while the window sits hidden in the tray. Disabled
+  // by default — nothing registers until the user opts in.
+  const globalToggleHotkey = createGlobalToggleHotkey({
+    globalShortcut,
+    store: keybindingsStore,
+    getWindow: () => mainWindow,
+    showMainWindow: () => desktopLifecycle.showMainWindow(),
   });
 
   // Per-window IPC ownership: window:setTheme and resume:printToPDF are
@@ -466,6 +488,17 @@ if (!singleInstance) {
       desktopLifecycle.registerIpc(ipcMain, () =>
         backendPort ? `http://127.0.0.1:${backendPort}` : null,
       );
+      // Keybinding IPC + the global show/hide hotkey. Registering at ready
+      // — before the window finishes loading — means the hotkey also works
+      // while the window is hidden to the tray; sender checks pin every
+      // write to the main window's own frame.
+      registerShortcutsIpc(ipcMain, {
+        store: keybindingsStore,
+        hotkey: globalToggleHotkey,
+        getWindow: () => mainWindow,
+        getOrigin: () => (backendPort ? `http://127.0.0.1:${backendPort}` : null),
+      });
+      globalToggleHotkey.apply();
       hostedSessionBroker = await startHostedSessionBroker({ token: internalToken,
         store: createHostedSessionStore({ directory: path.join(stateRoot(), "hosted-sessions"), safeStorage }),
       });
@@ -561,6 +594,11 @@ if (!singleInstance) {
         // Closing the loopback listener must never block shutdown.
       }
       desktopLifecycle.dispose();
+      try {
+        globalToggleHotkey.dispose();
+      } catch {
+        // unregisterAll must never block an in-progress quit.
+      }
       await Promise.all([
         terminateChildTree(ownedMigrationChild),
         terminateChildTree(backend),

@@ -170,16 +170,20 @@ describe("ShortcutsSettings — honest capability page", () => {
     expect(labels).toEqual(expect.arrayContaining(["Ctrl", "B"]));
   });
 
-  it("labels Alt+Arrow history keys as desktop-app scoped", () => {
+  it("labels Alt+Arrow history keys as desktop-app scoped", async () => {
     render(<ShortcutsSettings />);
     const page = screen.getByTestId("shortcuts-settings");
     expect(within(page).getByText("Go back one page")).toBeInTheDocument();
     expect(
       within(page).getByText("Go forward one page"),
     ).toBeInTheDocument();
-    expect(
-      within(page).getAllByText("Desktop app only"),
-    ).toHaveLength(2);
+    // Outside the desktop bridge every rebindable row carries the
+    // desktop-only badge in place of its edit controls.
+    await waitFor(() =>
+      expect(
+        within(page).getAllByText("Desktop app only"),
+      ).toHaveLength(4),
+    );
   });
 
   it("shows the environment note outside the desktop shell", async () => {
@@ -223,16 +227,16 @@ describe("ShortcutsSettings — honest capability page", () => {
     ).toBeInTheDocument();
   });
 
-  it("states global shortcuts and rebinding as not provided", () => {
+  it("shows the real global hotkey row instead of a not-provided badge", () => {
     render(<ShortcutsSettings />);
     const page = screen.getByTestId("shortcuts-settings");
     expect(
-      within(page).getByText("OS-level global shortcuts"),
+      within(page).getByText("Show or hide the main window"),
     ).toBeInTheDocument();
     expect(
-      within(page).getByText("Custom keybindings"),
+      within(page).getByText(/restored and focused/i),
     ).toBeInTheDocument();
-    expect(within(page).getAllByText("Not provided")).toHaveLength(2);
+    expect(within(page).queryByText("Not provided")).not.toBeInTheDocument();
   });
 
   it("registers no key handlers of its own", () => {
