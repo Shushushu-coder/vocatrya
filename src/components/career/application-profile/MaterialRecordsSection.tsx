@@ -1,4 +1,5 @@
 "use client";
+import { ProfileCopyButton } from "./ProfileCopyButton";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,11 +22,7 @@ import {
   MaterialNotesField,
   MaterialTextField,
 } from "./MaterialAutosaveField";
-import {
-  focusFirstRegionField,
-  INPUT_PREF_REGION_ATTR,
-  useInputPreferences,
-} from "@/lib/inputPreferences";
+import { INPUT_PREF_REGION_ATTR } from "@/lib/inputPreferences";
 import {
   StructuredCheckbox,
   StructuredInput,
@@ -120,7 +117,6 @@ export function MaterialRecordsSection({
   onChanged,
 }: MaterialRecordsSectionProps) {
   const { t } = useI18n();
-  const inputPrefs = useInputPreferences();
   const [materialType, setMaterialType] = useState<string>(
     creatableTypes[0] ?? "CUSTOM",
   );
@@ -333,9 +329,9 @@ export function MaterialRecordsSection({
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-sm">{item.title}</CardTitle>
             <div className="flex gap-1">
-              <Button
+              <ProfileCopyButton
+                label={t("applicationProfile.copyItem")}
                 variant="ghost"
-                size="sm"
                 onClick={() =>
                   copyText(
                     buildMaterialItemText(item),
@@ -343,9 +339,7 @@ export function MaterialRecordsSection({
                     t("applicationProfile.copyFailed"),
                   )
                 }
-              >
-                {t("applicationProfile.copyItem")}
-              </Button>
+              />
               <Button
                 variant="ghost"
                 size="sm"
@@ -376,23 +370,9 @@ export function MaterialRecordsSection({
             <span>{item.title}</span>
           </CardTitle>
           <div className="flex gap-1">
-            {inputPrefs.autoFocus && (
-              <Button
-                variant="ghost"
-                size="sm"
-                data-testid={`${fieldPrefix}-start-fill`}
-                onClick={(e) =>
-                  focusFirstRegionField(
-                    e.currentTarget.closest(`[${INPUT_PREF_REGION_ATTR}]`),
-                  )
-                }
-              >
-                {t("inputPrefs.startFill")}
-              </Button>
-            )}
-            <Button
+            <ProfileCopyButton
+              label={t("applicationProfile.copyItem")}
               variant="ghost"
-              size="sm"
               onClick={() =>
                 copyText(
                   buildMaterialItemText(item),
@@ -400,9 +380,7 @@ export function MaterialRecordsSection({
                   t("applicationProfile.copyFailed"),
                 )
               }
-            >
-              {t("applicationProfile.copyItem")}
-            </Button>
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -531,9 +509,9 @@ export function MaterialRecordsSection({
           )}
           {items.map(renderMaterialCard)}
           {items.length > 0 && (
-            <Button
+            <ProfileCopyButton
+              label={t("applicationProfile.copySection")}
               variant="outline"
-              size="sm"
               className="w-fit"
               onClick={() =>
                 copyText(
@@ -542,9 +520,7 @@ export function MaterialRecordsSection({
                   t("applicationProfile.copyFailed"),
                 )
               }
-            >
-              {t("applicationProfile.copySection")}
-            </Button>
+            />
           )}
         </CardContent>
       </Card>
@@ -552,9 +528,9 @@ export function MaterialRecordsSection({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">{readonlyTitle}</CardTitle>
-            <Button
+            <ProfileCopyButton
+              label={t("applicationProfile.copySection")}
               variant="outline"
-              size="sm"
               data-testid="readonly-copy-section"
               onClick={() =>
                 copyText(
@@ -563,9 +539,7 @@ export function MaterialRecordsSection({
                   t("applicationProfile.copyFailed"),
                 )
               }
-            >
-              {t("applicationProfile.copySection")}
-            </Button>
+            />
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {readonlyItems.map((item) => (

@@ -50,7 +50,7 @@ describe("InputPreferencesSettings", () => {
     localStorage.clear();
   });
 
-  it("renders the four rows with their default values", () => {
+  it("renders the three active preferences without the retired hint setting", () => {
     render(<InputPreferencesSettings />);
     expect(screen.getByTestId("input-prefs-enter")).toHaveTextContent(
       "New line",
@@ -58,9 +58,7 @@ describe("InputPreferencesSettings", () => {
     expect(screen.getByTestId("input-prefs-entry")).toHaveTextContent(
       "At click position",
     );
-    expect(screen.getByTestId("input-prefs-hints")).toHaveTextContent(
-      "On focus",
-    );
+    expect(screen.queryByTestId("input-prefs-hints")).toBeNull();
     expect(screen.getByTestId("input-prefs-autofocus")).not.toBeChecked();
     expect(screen.getByTestId("input-prefs-footer")).toHaveTextContent(
       "Enter and Shift+Enter insert a new line in multi-line fields.",
@@ -79,16 +77,15 @@ describe("InputPreferencesSettings", () => {
     );
   });
 
-  it("persists edit-entry, hint and auto-focus changes", async () => {
+  it("persists edit-entry and auto-focus changes", async () => {
     render(<InputPreferencesSettings />);
     await pickOption("input-prefs-entry", "Select all");
-    await pickOption("input-prefs-hints", "Off");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("input-prefs-autofocus"));
     expect(storedSnapshot()).toEqual({
       enterBehavior: "newline",
       editEntry: "select-all",
-      hintMode: "off",
+      hintMode: "focus",
       autoFocus: true,
     });
   });
@@ -108,9 +105,7 @@ describe("InputPreferencesSettings", () => {
     expect(screen.getByTestId("input-prefs-enter")).toHaveTextContent(
       "New line",
     );
-    expect(screen.getByTestId("input-prefs-hints")).toHaveTextContent(
-      "On focus",
-    );
+    expect(screen.queryByTestId("input-prefs-hints")).toBeNull();
   });
 
   it("renders the zh-CN copy when the locale is Chinese", () => {
@@ -127,9 +122,7 @@ describe("InputPreferencesSettings", () => {
     expect(screen.getByTestId("input-prefs-entry")).toHaveTextContent(
       "按点击位置",
     );
-    expect(screen.getByTestId("input-prefs-hints")).toHaveTextContent(
-      "聚焦时显示",
-    );
+    expect(screen.queryByTestId("input-prefs-hints")).toBeNull();
   });
 });
 

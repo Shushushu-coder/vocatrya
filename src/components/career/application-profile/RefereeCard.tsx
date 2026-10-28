@@ -1,4 +1,5 @@
 "use client";
+import { ProfileCopyButton } from "./ProfileCopyButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -300,14 +301,10 @@ export function RefereeCard() {
                         {value?.trim() ? value : t("applicationProfile.emptyValue")}
                       </div>
                       {value?.trim() && (
-                        <Button
+                        <ProfileCopyButton label={t("common.copy")}
                           variant="ghost"
-                          size="sm"
-                          className="h-7 px-2"
                           onClick={() => handleCopy(row.id, key)}
-                        >
-                          {t("common.copy")}
-                        </Button>
+                        />
                       )}
                     </div>
                   );

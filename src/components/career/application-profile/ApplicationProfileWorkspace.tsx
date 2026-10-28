@@ -1,10 +1,7 @@
 "use client";
+import { ProfileCopyButton } from "./ProfileCopyButton";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  focusFirstRegionField,
-  INPUT_PREF_REGION_ATTR,
-  useInputPreferences,
-} from "@/lib/inputPreferences";
+import { INPUT_PREF_REGION_ATTR } from "@/lib/inputPreferences";
 import Link from "next/link";
 import {
   assertEmail,
@@ -172,7 +169,6 @@ const ALL_SECTIONS_SELECTED: Record<ProjectionUiSectionId, boolean> = {
 
 export function ApplicationProfileWorkspace() {
   const { t } = useI18n();
-  const inputPrefs = useInputPreferences();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [tabVisibility, setTabVisibility] =
@@ -359,23 +355,9 @@ export function ApplicationProfileWorkspace() {
               <CardTitle className="text-base">
                 {t("careerProfileTabs.personal")}
               </CardTitle>
-              {inputPrefs.autoFocus && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="personal-start-fill"
-                  onClick={(e) =>
-                    focusFirstRegionField(
-                      e.currentTarget.closest(`[${INPUT_PREF_REGION_ATTR}]`),
-                    )
-                  }
-                >
-                  {t("inputPrefs.startFill")}
-                </Button>
-              )}
               {!isProfileEmpty && (
-                <Button
-                  size="sm"
+                <ProfileCopyButton
+                  label={t("applicationProfile.copyGroup")}
                   variant="outline"
                   data-testid="personal-copy-group"
                   onClick={() =>
@@ -385,9 +367,7 @@ export function ApplicationProfileWorkspace() {
                       t("applicationProfile.copyFailed"),
                     )
                   }
-                >
-                  {t("applicationProfile.copyGroup")}
-                </Button>
+                />
               )}
             </CardHeader>
             <CardContent>
@@ -475,8 +455,8 @@ export function ApplicationProfileWorkspace() {
             data-testid={`record-panel-${tabId}`}
           >
             <div className="flex flex-col gap-4">
-              <Button
-                size="sm"
+              <ProfileCopyButton
+                label={t("applicationProfile.copyTab")}
                 variant="outline"
                 className="self-end"
                 data-testid={`copy-tab-${tabId}`}
@@ -491,9 +471,7 @@ export function ApplicationProfileWorkspace() {
                     t("applicationProfile.copyFailed"),
                   )
                 }
-              >
-                {t("applicationProfile.copyTab")}
-              </Button>
+              />
               <MaterialRecordsSection
                 title={t(`careerProfileTabs.${tabId}`)}
                 items={itemsForRecordTab(materials, tabId)}
@@ -530,8 +508,8 @@ export function ApplicationProfileWorkspace() {
                     ? t("applicationProfile.copySelectNone")
                     : t("applicationProfile.copySelectAll")}
                 </Button>
-                <Button
-                  size="sm"
+                <ProfileCopyButton
+                  label={t("applicationProfile.copySelected")}
                   variant="outline"
                   data-testid="projection-copy-selected"
                   disabled={!selectedProjectionText}
@@ -542,9 +520,7 @@ export function ApplicationProfileWorkspace() {
                       t("applicationProfile.copyFailed"),
                     )
                   }
-                >
-                  {t("applicationProfile.copySelected")}
-                </Button>
+                />
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 text-sm">
@@ -566,10 +542,10 @@ export function ApplicationProfileWorkspace() {
                     t("applicationProfile.emptySection")}
                 </div>
                 {sectionText.has("basics") && (
-                  <Button
-                    size="sm"
+                  <ProfileCopyButton
+                    label={t("applicationProfile.copySection")}
                     variant="outline"
-                    className="mt-1 w-fit"
+                    className="mt-1"
                     onClick={() =>
                       copyText(
                         sectionText.get("basics") ?? "",
@@ -577,9 +553,7 @@ export function ApplicationProfileWorkspace() {
                         t("applicationProfile.copyFailed"),
                       )
                     }
-                  >
-                    {t("applicationProfile.copySection")}
-                  </Button>
+                  />
                 )}
               </div>
               <div>
@@ -600,10 +574,10 @@ export function ApplicationProfileWorkspace() {
                     t("applicationProfile.emptySection")}
                 </div>
                 {educationItems.length > 0 && (
-                  <Button
-                    size="sm"
+                  <ProfileCopyButton
+                    label={t("applicationProfile.copySection")}
                     variant="outline"
-                    className="mt-1 w-fit"
+                    className="mt-1"
                     onClick={() =>
                       copyText(
                         buildEducationSectionText(educationItems),
@@ -611,9 +585,7 @@ export function ApplicationProfileWorkspace() {
                         t("applicationProfile.copyFailed"),
                       )
                     }
-                  >
-                    {t("applicationProfile.copySection")}
-                  </Button>
+                  />
                 )}
               </div>
               <div>
@@ -635,10 +607,10 @@ export function ApplicationProfileWorkspace() {
                     t("applicationProfile.emptySection")}
                 </div>
                 {experienceItems.length > 0 && (
-                  <Button
-                    size="sm"
+                  <ProfileCopyButton
+                    label={t("applicationProfile.copySection")}
                     variant="outline"
-                    className="mt-1 w-fit"
+                    className="mt-1"
                     onClick={() =>
                       copyText(
                         buildExperienceSectionText(experienceItems),
@@ -646,9 +618,7 @@ export function ApplicationProfileWorkspace() {
                         t("applicationProfile.copyFailed"),
                       )
                     }
-                  >
-                    {t("applicationProfile.copySection")}
-                  </Button>
+                  />
                 )}
               </div>
               <div>
@@ -669,10 +639,10 @@ export function ApplicationProfileWorkspace() {
                     t("applicationProfile.emptySection")}
                 </div>
                 {skillItems.length > 0 && (
-                  <Button
-                    size="sm"
+                  <ProfileCopyButton
+                    label={t("applicationProfile.copySection")}
                     variant="outline"
-                    className="mt-1 w-fit"
+                    className="mt-1"
                     onClick={() =>
                       copyText(
                         buildSkillsSectionText(skillItems),
@@ -680,9 +650,7 @@ export function ApplicationProfileWorkspace() {
                         t("applicationProfile.copyFailed"),
                       )
                     }
-                  >
-                    {t("applicationProfile.copySection")}
-                  </Button>
+                  />
                 )}
               </div>
             </CardContent>

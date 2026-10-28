@@ -337,78 +337,15 @@ describe("edit-entry selection strategy", () => {
   });
 });
 
-describe("shortcut hints", () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
-  it("focus mode: hint appears while focused and matches newline keys", () => {
-    const { a } = renderTextPair();
-    expect(screen.queryByTestId("f-a-hint")).toBeNull();
-    focus(a);
-    expect(screen.getByTestId("f-a-hint")).toHaveTextContent(
-      "Tab: next field",
-    );
-    act(() => {
-      a.blur();
-    });
-    expect(screen.queryByTestId("f-a-hint")).toBeNull();
-  });
-
-  it("always mode shows hints without focus; off mode never shows them", () => {
-    const { unmount } = render(
-      <Region>
-        <MaterialTextField
-          label="A"
-          committed="aa"
-          onSave={vi.fn(async () => true)}
-          testId="f-a"
-        />
-      </Region>,
-    );
-    act(() => {
-      updateInputPreferences({ hintMode: "always" });
-    });
-    expect(screen.getByTestId("f-a-hint")).toBeInTheDocument();
-    act(() => {
-      updateInputPreferences({ hintMode: "off" });
-    });
-    expect(screen.queryByTestId("f-a-hint")).toBeNull();
-    unmount();
-  });
-
-  it("next mode names Enter navigation and finish on the last field", () => {
+describe("quiet field presentation", () => {
+  it("keeps keyboard navigation without hint rows even with an old always-on preference", () => {
     updateInputPreferences({ enterBehavior: "next", hintMode: "always" });
-    renderTextPair();
-    expect(screen.getByTestId("f-a-hint")).toHaveTextContent(
-      "Enter: next field",
-    );
-    expect(screen.getByTestId("f-b-hint")).toHaveTextContent(
-      "Enter: finish editing",
-    );
-  });
-
-  it("multi-line hints announce Shift+Enter only in next mode", () => {
-    updateInputPreferences({ hintMode: "always" });
-    render(
-      <Region>
-        <MaterialNotesField
-          label="Notes"
-          committed="x"
-          onSave={vi.fn(async () => true)}
-          testId="f-n"
-        />
-      </Region>,
-    );
-    expect(screen.getByTestId("f-n-hint")).toHaveTextContent(
-      "Enter: new line · Tab: next field",
-    );
-    act(() => {
-      updateInputPreferences({ enterBehavior: "next" });
-    });
-    expect(screen.getByTestId("f-n-hint")).toHaveTextContent(
-      "Enter: finish editing · Shift+Enter: new line",
-    );
+    const { a, b } = renderTextPair();
+    focus(a);
+    expect(screen.queryByTestId("f-a-hint")).toBeNull();
+    enter(a);
+    expect(document.activeElement).toBe(b);
+    expect(screen.queryByTestId("f-b-hint")).toBeNull();
   });
 });
 

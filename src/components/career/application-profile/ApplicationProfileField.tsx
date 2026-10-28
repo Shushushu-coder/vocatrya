@@ -1,4 +1,5 @@
 "use client";
+import { ProfileCopyButton } from "./ProfileCopyButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -247,9 +248,7 @@ export function ApplicationProfileField({
           )}
           {revealSlot}
           {!isEmpty && (
-            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleCopy} disabled={copying}>
-              {t("common.copy")}
-            </Button>
+            <ProfileCopyButton label={t("common.copy")} variant="ghost" onClick={handleCopy} disabled={copying} />
           )}
           {editSlot}
         </div>
@@ -282,14 +281,6 @@ export function ApplicationProfileField({
             {validationBlocked && (
               <div role="alert" className="text-xs text-destructive">
                 {t("inputPrefs.invalidField")}
-              </div>
-            )}
-            {structured.hint.visible && (
-              <div
-                className="text-xs text-muted-foreground"
-                data-testid={testId ? `${testId}-hint` : undefined}
-              >
-                {structured.hint.text}
               </div>
             )}
           </>

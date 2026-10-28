@@ -2730,7 +2730,7 @@
     "hintsOnFocus": "聚焦时显示",
     "hintsOff": "关闭",
     "autoFocus": "自动聚焦",
-    "autoFocusDescription": "主动进入连续填写时，聚焦首个可编辑字段并滚动到可见区域。",
+    "autoFocusDescription": "主动打开多字段编辑表单时，自动聚焦首个可编辑字段。",
     "startFill": "连续填写",
     "fieldRequired": "必填项",
     "hintEnterNext": "Enter 下一项",

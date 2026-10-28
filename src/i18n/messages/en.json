@@ -2730,7 +2730,7 @@
     "hintsOnFocus": "On focus",
     "hintsOff": "Off",
     "autoFocus": "Auto-focus",
-    "autoFocusDescription": "When you start a continuous fill-in entry, focus the first editable field and scroll it into view.",
+    "autoFocusDescription": "Focus the first editable field when you open a multi-field edit form.",
     "startFill": "Fill in sequence",
     "fieldRequired": "Required",
     "hintEnterNext": "Enter: next field",

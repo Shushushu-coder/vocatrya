@@ -1,4 +1,5 @@
 "use client";
+import { ProfileCopyButton } from "./ProfileCopyButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -280,9 +281,7 @@ export function EmergencyContactCard() {
                     {revealed ? t("applicationProfile.hide") : t("applicationProfile.reveal")}
                   </Button>
                   {displayName?.trim() && (
-                    <Button variant="ghost" size="sm" onClick={() => handleCopyField("emergencyContactName")}>
-                      {t("common.copy")}
-                    </Button>
+                    <ProfileCopyButton label={t("common.copy")} variant="ghost" onClick={() => handleCopyField("emergencyContactName")} />
                   )}
                 </div>
               </div>
@@ -295,9 +294,7 @@ export function EmergencyContactCard() {
                 </div>
                 <div className="flex gap-1">
                   {displayRelation?.trim() && (
-                    <Button variant="ghost" size="sm" onClick={() => handleCopyField("emergencyContactRelation")}>
-                      {t("common.copy")}
-                    </Button>
+                    <ProfileCopyButton label={t("common.copy")} variant="ghost" onClick={() => handleCopyField("emergencyContactRelation")} />
                   )}
                 </div>
               </div>
@@ -313,9 +310,7 @@ export function EmergencyContactCard() {
                     {revealed ? t("applicationProfile.hide") : t("applicationProfile.reveal")}
                   </Button>
                   {displayPhone?.trim() && (
-                    <Button variant="ghost" size="sm" onClick={() => handleCopyField("emergencyContactPhone")}>
-                      {t("common.copy")}
-                    </Button>
+                    <ProfileCopyButton label={t("common.copy")} variant="ghost" onClick={() => handleCopyField("emergencyContactPhone")} />
                   )}
                 </div>
               </div>

@@ -382,14 +382,6 @@ export function MaterialTextField({
           {t("inputPrefs.fieldRequired")}
         </div>
       )}
-      {structured.hint.visible && (
-        <div
-          className="text-xs text-muted-foreground"
-          data-testid={testId ? `${testId}-hint` : undefined}
-        >
-          {structured.hint.text}
-        </div>
-      )}
     </FieldShell>
   );
 }
@@ -444,14 +436,6 @@ export function MaterialNotesField({
         }}
         data-testid={testId ? `${testId}-input` : undefined}
       />
-      {structured.hint.visible && (
-        <div
-          className="text-xs text-muted-foreground"
-          data-testid={testId ? `${testId}-hint` : undefined}
-        >
-          {structured.hint.text}
-        </div>
-      )}
     </FieldShell>
   );
 }
@@ -490,14 +474,6 @@ export function MaterialDateField({
         onKeyDown={structured.bind.onKeyDown}
         data-testid={testId ? `${testId}-input` : undefined}
       />
-      {structured.hint.visible && (
-        <div
-          className="text-xs text-muted-foreground"
-          data-testid={testId ? `${testId}-hint` : undefined}
-        >
-          {structured.hint.text}
-        </div>
-      )}
     </FieldShell>
   );
 }
@@ -544,14 +520,6 @@ export function MaterialCurrentCheckbox({
         </label>
         <SaveStatusChip status={status} onRetry={commitNow} testId={testId} />
       </div>
-      {structured.hint.visible && (
-        <div
-          className="text-xs text-muted-foreground"
-          data-testid={testId ? `${testId}-hint` : undefined}
-        >
-          {structured.hint.text}
-        </div>
-      )}
     </div>
   );
 }

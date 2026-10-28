@@ -1,4 +1,5 @@
 "use client";
+import { ProfileCopyButton } from "./ProfileCopyButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -192,9 +193,7 @@ export function IdDocumentCard() {
                   </div>
                 </div>
                 {displayType?.trim() && (
-                  <Button variant="ghost" size="sm" onClick={() => handleCopyField("idType")}>
-                    {t("common.copy")}
-                  </Button>
+                  <ProfileCopyButton label={t("common.copy")} variant="ghost" onClick={() => handleCopyField("idType")} />
                 )}
               </div>
               <div className="flex items-center justify-between py-2">
@@ -211,9 +210,7 @@ export function IdDocumentCard() {
                     {revealed ? t("applicationProfile.hide") : t("applicationProfile.reveal")}
                   </Button>
                   {displayNumber?.trim() && (
-                    <Button variant="ghost" size="sm" onClick={() => handleCopyField("idNumber")}>
-                      {t("common.copy")}
-                    </Button>
+                    <ProfileCopyButton label={t("common.copy")} variant="ghost" onClick={() => handleCopyField("idNumber")} />
                   )}
                 </div>
               </div>

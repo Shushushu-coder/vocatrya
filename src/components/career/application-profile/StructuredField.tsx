@@ -46,7 +46,6 @@ export function StructuredInput({
       onLeaveBlocked?.();
     },
   });
-  const testId = (props as { "data-testid"?: string })["data-testid"];
   return (
     <div className={WRAPPER_CLASS}>
       <Input
@@ -80,14 +79,6 @@ export function StructuredInput({
             : "inputPrefs.invalidField")}
         </div>
       )}
-      {structured.hint.visible && (
-        <div
-          className="text-xs text-muted-foreground"
-          data-testid={testId ? `${testId}-hint` : undefined}
-        >
-          {structured.hint.text}
-        </div>
-      )}
     </div>
   );
 }
@@ -102,7 +93,6 @@ export function StructuredTextarea({
     canLeave,
     onLeaveBlocked,
   });
-  const testId = (props as { "data-testid"?: string })["data-testid"];
   return (
     <div className={WRAPPER_CLASS}>
       <Textarea
@@ -124,14 +114,6 @@ export function StructuredTextarea({
           if (!structured.bind.onKeyDown(e)) props.onKeyDown?.(e);
         }}
       />
-      {structured.hint.visible && (
-        <div
-          className="text-xs text-muted-foreground"
-          data-testid={testId ? `${testId}-hint` : undefined}
-        >
-          {structured.hint.text}
-        </div>
-      )}
     </div>
   );
 }

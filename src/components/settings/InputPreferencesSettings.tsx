@@ -7,7 +7,6 @@ import {
   useInputPreferences,
   type EditEntryStrategy,
   type EnterBehavior,
-  type HintMode,
   type InputPreferences,
 } from "@/lib/inputPreferences";
 import { Switch } from "../ui/switch";
@@ -49,7 +48,6 @@ const EDIT_ENTRIES: readonly EditEntryStrategy[] = [
   "end",
   "select-all",
 ];
-const HINT_MODES: readonly HintMode[] = ["always", "focus", "off"];
 
 // SET-INPUT-PREFERENCES: the four device-local input preferences. Values
 // persist under a single localStorage snapshot and mounted fields react via
@@ -146,41 +144,6 @@ export default function InputPreferencesSettings() {
                       : v === "end"
                         ? t("inputPrefs.entryEnd")
                         : t("inputPrefs.entrySelectAll")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-        />
-        <SettingRow
-          name={t("inputPrefs.hints")}
-          description={t("inputPrefs.hintsDescription")}
-          aside={
-            <Select
-              value={prefs.hintMode}
-              onValueChange={(v) =>
-                update({ hintMode: v as HintMode })
-              }
-            >
-              <SelectTrigger
-                className="w-44"
-                aria-label={t("inputPrefs.hints")}
-                data-testid="input-prefs-hints"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HINT_MODES.map((v) => (
-                  <SelectItem
-                    key={v}
-                    value={v}
-                    data-testid={`input-prefs-hints-${v}`}
-                  >
-                    {v === "always"
-                      ? t("inputPrefs.hintsAlways")
-                      : v === "focus"
-                        ? t("inputPrefs.hintsOnFocus")
-                        : t("inputPrefs.hintsOff")}
                   </SelectItem>
                 ))}
               </SelectContent>
