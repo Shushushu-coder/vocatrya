@@ -165,6 +165,38 @@ interface VocatryaDesktopLifecycleState {
   trayAvailable: boolean;
 }
 
+/**
+ * Device keybinding surface carried on the same vocatryaDesktop bridge.
+ * Combos are canonical "Mod/Alt/Shift+Key" strings shared with
+ * src/lib/shortcuts/combos.ts; null clears a window binding.
+ */
+type WindowShortcutActionId =
+  | "toggleSidebar"
+  | "historyBack"
+  | "historyForward";
+
+interface VocatryaShortcutState {
+  window: Record<WindowShortcutActionId, string | null>;
+  global: {
+    enabled: boolean;
+    combo: string;
+    /** Live OS registration status — never optimistic. */
+    registered: boolean;
+    /** Last registration failure code ("occupied") or null. */
+    error: string | null;
+  };
+}
+
+type VocatryaShortcutWriteResult =
+  | { ok: true; state: VocatryaShortcutState }
+  | {
+      ok: false;
+      code: "conflict" | "invalid" | "occupied" | "unsupported";
+      conflictingAction?: string;
+      /** Present when the refusal still carries authoritative state (rollback). */
+      state?: VocatryaShortcutState;
+    };
+
 interface VocatryaDesktopBridge {
   getState(): Promise<VocatryaDesktopLifecycleState>;
   /** Resolve to the post-write authoritative state. */
@@ -177,6 +209,15 @@ interface VocatryaDesktopBridge {
   setOpenAtLogin(enabled: boolean): Promise<VocatryaDesktopLifecycleState>;
   showWindow(): Promise<void>;
   quit(): Promise<void>;
+  getShortcutState(): Promise<VocatryaShortcutState>;
+  setWindowShortcut(input: {
+    action: WindowShortcutActionId;
+    combo: string | null;
+  }): Promise<VocatryaShortcutWriteResult>;
+  setGlobalShortcut(input: {
+    enabled?: boolean;
+    combo?: string;
+  }): Promise<VocatryaShortcutWriteResult>;
 }
 
 interface Window {

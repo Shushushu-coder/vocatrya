@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { APP_CONSTANTS, clampSidebarWidth } from "@/lib/constants";
+import { useWindowShortcut } from "@/lib/shortcuts/useWindowShortcut";
 
 const {
   SIDEBAR_WIDTH_PX: {
@@ -146,21 +147,13 @@ export function SidebarProvider({
     [toggle]
   );
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key?.toLowerCase() !== "b" || (!e.metaKey && !e.ctrlKey)) return;
-
-      // Let editable elements (inputs, Tiptap/ProseMirror) keep Cmd/Ctrl+B
-      // for their own shortcuts (e.g. bold) instead of toggling the sidebar.
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
-
-      e.preventDefault();
-      toggle();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggle]);
+  // Registry-driven binding (default Ctrl/Cmd+B, rebindable in settings).
+  // The toggleSidebar action keeps the editable-element guard: inputs and
+  // Tiptap/ProseMirror keep the combo for their own shortcuts (e.g. bold).
+  useWindowShortcut("toggleSidebar", useCallback((e: KeyboardEvent) => {
+    e.preventDefault();
+    toggle();
+  }, [toggle]));
 
   return (
     <SidebarContext.Provider

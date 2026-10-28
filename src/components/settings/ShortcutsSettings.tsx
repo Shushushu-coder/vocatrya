@@ -1,11 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "@/i18n";
 import type { Locale } from "@/i18n";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import { isDesktopShell } from "../desktop/desktopShell";
+import { toastError } from "@/lib/toast";
+import {
+  comboFromEvent,
+  comboToDisplayKeys,
+  isModifierKey,
+} from "@/lib/shortcuts/combos";
+import {
+  SHORTCUT_ACTIONS,
+  type ShortcutActionId,
+  type WindowShortcutActionId,
+} from "@/lib/shortcuts/registry";
+import {
+  findComboConflict,
+  useShortcutSnapshot,
+  writeGlobalToggle,
+  writeWindowBinding,
+} from "@/lib/shortcuts/bindings";
 
 // INT-01 owns the shared message bundles; until the declared keys land,
 // t() echoes the key and the paired fallback keeps the page readable.
@@ -46,16 +65,23 @@ function ShortcutRow({
   description,
   keys,
   joiner,
+  note,
   aside,
+  testId,
 }: {
   name: string;
   description: string;
   keys?: string[];
   joiner?: "+" | "/";
+  note?: ReactNode;
   aside?: ReactNode;
+  testId?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-3">
+    <div
+      className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-3"
+      data-testid={testId}
+    >
       <div className="min-w-0 flex-1 basis-56">
         <div className="text-sm font-medium leading-none break-words">
           {name}
@@ -63,6 +89,7 @@ function ShortcutRow({
         <p className="mt-1 text-sm text-muted-foreground break-words">
           {description}
         </p>
+        {note}
       </div>
       <div className="flex shrink-0 items-center gap-2 pt-0.5">
         {keys && <KeyCombo keys={keys} joiner={joiner} />}
@@ -87,24 +114,305 @@ function ShortcutGroup({
   );
 }
 
-// Audited at baseline 59499771: the app registers no OS-level global
-// shortcuts (no globalShortcut anywhere, application menu is removed) and
-// has no keybinding store. What exists is one window-level listener
-// (Ctrl/Cmd+B), two desktop-shell history listeners (Alt+Left/Right), and
-// element-scoped key handling inside specific controls. Everything below
-// is labelled with its real scope; nothing here is rebindable.
+type RowErrors = Partial<Record<ShortcutActionId, string>>;
+
+// The rebindable actions: the three window-scope bindings plus the global
+// show/hide hotkey. Recording a new combo uses a capture-phase window
+// listener so the pressed keys never reach the app's own shortcuts — and
+// conflict detection runs against every other live binding before write.
 function ShortcutsSettings() {
   const copy = useCopy();
-  // Alt+Left/Right only fire inside the Electron shell; the environment
-  // flag is read after mount so SSR output stays identical.
+  const snapshot = useShortcutSnapshot();
   const [desktopShell, setDesktopShell] = useState<boolean | null>(null);
+  const [recording, setRecording] = useState<ShortcutActionId | null>(null);
+  const [rowErrors, setRowErrors] = useState<RowErrors>({});
+  const [saving, setSaving] = useState(false);
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+
   useEffect(() => {
     setDesktopShell(isDesktopShell());
   }, []);
 
-  const badge = (key: string, fallback: Record<Locale, string>) => (
-    <Badge variant="outline">{copy(key, fallback)}</Badge>
+  const setRowError = useCallback(
+    (action: ShortcutActionId, message: string | null) => {
+      setRowErrors((prev) => ({ ...prev, [action]: message ?? undefined }));
+    },
+    [],
   );
+
+  const copyRef = useRef(copy);
+  copyRef.current = copy;
+
+  const saveCombo = useCallback(
+    async (action: ShortcutActionId, combo: string | null) => {
+      setSaving(true);
+      try {
+        const result =
+          action === "toggleWindow"
+            ? await writeGlobalToggle(combo ? { combo } : {})
+            : await writeWindowBinding(action, combo);
+        if (result.ok) {
+          setRowError(action, null);
+          const occupied = result.state.global.error;
+          if (action === "toggleWindow" && occupied === "occupied") {
+            setRowError(
+              action,
+              copyRef.current("settings.shortcutsGlobalOccupied", {
+                "zh-CN": "该组合键被系统或其他应用占用，未能注册。",
+                en: "This combination is taken by the OS or another app; registration failed.",
+              }),
+            );
+          }
+          return;
+        }
+        if (result.code === "conflict") {
+          setRowError(
+            action,
+            copyRef.current("settings.shortcutsConflict", {
+              "zh-CN": "该组合键已被其他快捷键使用。",
+              en: "This combination is already used by another shortcut.",
+            }),
+          );
+        } else if (result.code === "occupied") {
+          setRowError(
+            action,
+            copyRef.current("settings.shortcutsGlobalOccupied", {
+              "zh-CN": "该组合键被系统或其他应用占用，未能注册。",
+              en: "This combination is taken by the OS or another app; registration failed.",
+            }),
+          );
+        } else {
+          setRowError(
+            action,
+            copyRef.current("settings.shortcutsSaveFailed", {
+              "zh-CN": "快捷键设置保存失败。",
+              en: "Failed to save the shortcut.",
+            }),
+          );
+        }
+      } catch (error) {
+        console.error("Error saving shortcut binding:", error);
+        setRowError(
+          action,
+          copyRef.current("settings.shortcutsSaveFailed", {
+            "zh-CN": "快捷键设置保存失败。",
+            en: "Failed to save the shortcut.",
+          }),
+        );
+        toastError(
+          copyRef.current("settings.shortcutsSaveFailed", {
+            "zh-CN": "快捷键设置保存失败。",
+            en: "Failed to save the shortcut.",
+          }),
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [setRowError],
+  );
+
+  // Capture-phase keydown while recording: stopImmediatePropagation keeps
+  // the candidate combo away from the app's own window shortcuts. Esc
+  // cancels; a bare modifier press means the user is still composing; an
+  // unbindable key or a conflict reports the reason inline.
+  useEffect(() => {
+    if (!recording) return;
+    const action = recording;
+    const onKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.key === "Escape") {
+        setRecording(null);
+        return;
+      }
+      if (isModifierKey(event.key)) return;
+      const combo = comboFromEvent(event);
+      if (!combo) {
+        setRowError(
+          action,
+          copyRef.current("settings.shortcutsInvalidCombo", {
+            "zh-CN": "组合键需包含 Ctrl 或 Alt，并以字母、数字、功能键或常用按键结尾。",
+            en: "A shortcut needs Ctrl or Alt plus a letter, digit, function key, or named key.",
+          }),
+        );
+        setRecording(null);
+        return;
+      }
+      const conflict = findComboConflict(snapshotRef.current, action, combo);
+      if (conflict) {
+        setRowError(
+          action,
+          copyRef.current("settings.shortcutsConflict", {
+            "zh-CN": "该组合键已被其他快捷键使用。",
+            en: "This combination is already used by another shortcut.",
+          }),
+        );
+        setRecording(null);
+        return;
+      }
+      setRecording(null);
+      void saveCombo(action, combo);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recording, saveCombo, setRowError]);
+
+  const editable = snapshot.loaded && snapshot.bridgeAvailable;
+  const loading = !snapshot.loaded;
+
+  const desktopOnlyBadge = (
+    <Badge variant="outline">
+      {copy("settings.capabilityDesktopOnly", {
+        "zh-CN": "仅桌面应用",
+        en: "Desktop app only",
+      })}
+    </Badge>
+  );
+
+  // In a browser there is no device store: the rows honestly show the
+  // compiled-in defaults and the edit affordance is the desktop-only badge —
+  // never a fake save path.
+  function editControls(action: ShortcutActionId) {
+    if (!editable) {
+      return loading ? null : desktopOnlyBadge;
+    }
+    const actionMeta = SHORTCUT_ACTIONS[action];
+    const current =
+      action === "toggleWindow"
+        ? snapshot.global.combo
+        : snapshot.window[action];
+    const isDefault = current === actionMeta.defaultCombo;
+    return (
+      <>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={saving || recording !== null}
+          onClick={() => {
+            setRowError(action, null);
+            setRecording(action);
+          }}
+          data-testid={`shortcut-rebind-${action}`}
+        >
+          {copy("settings.shortcutsRebind", {
+            "zh-CN": "修改",
+            en: "Change",
+          })}
+        </Button>
+        {action !== "toggleWindow" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={saving || recording !== null || current === null}
+            onClick={() => void saveCombo(action, null)}
+            data-testid={`shortcut-clear-${action}`}
+          >
+            {copy("settings.shortcutsClear", {
+              "zh-CN": "清除",
+              en: "Clear",
+            })}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={saving || recording !== null || isDefault}
+          onClick={() => void saveCombo(action, actionMeta.defaultCombo)}
+          data-testid={`shortcut-reset-${action}`}
+        >
+          {copy("settings.shortcutsReset", {
+            "zh-CN": "恢复默认",
+            en: "Reset",
+          })}
+        </Button>
+      </>
+    );
+  }
+
+  function rowNote(action: ShortcutActionId, extra?: ReactNode) {
+    const error = rowErrors[action];
+    if (!error && !extra) return undefined;
+    return (
+      <>
+        {error && (
+          <p
+            className="mt-1 text-sm text-destructive break-words"
+            data-testid={`shortcut-error-${action}`}
+          >
+            {error}
+          </p>
+        )}
+        {extra}
+      </>
+    );
+  }
+
+  const windowRows: {
+    action: WindowShortcutActionId;
+    name: string;
+    description: string;
+    scopeNote?: ReactNode;
+  }[] = [
+    {
+      action: "toggleSidebar",
+      name: copy("shortcuts.toggleSidebar", {
+        "zh-CN": "展开或收起侧边栏",
+        en: "Expand or collapse the sidebar",
+      }),
+      description: copy("settings.shortcutsSidebarToggleScope", {
+        "zh-CN":
+          "应用窗口内生效；焦点位于文本输入控件时不触发（macOS 为 ⌘B）。",
+        en: "Active inside the app window; suppressed while a text input is focused (⌘B on macOS).",
+      }),
+    },
+    {
+      action: "historyBack",
+      name: copy("shortcuts.goBack", {
+        "zh-CN": "后退一页",
+        en: "Go back one page",
+      }),
+      description: copy("settings.shortcutsHistoryScope", {
+        "zh-CN": "仅桌面应用窗口内生效；浏览器环境中不可用。",
+        en: "Active only inside the desktop app window; not available in a browser.",
+      }),
+      scopeNote: desktopOnlyBadge,
+    },
+    {
+      action: "historyForward",
+      name: copy("shortcuts.goForward", {
+        "zh-CN": "前进一页",
+        en: "Go forward one page",
+      }),
+      description: copy("settings.shortcutsHistoryScope", {
+        "zh-CN": "仅桌面应用窗口内生效；浏览器环境中不可用。",
+        en: "Active only inside the desktop app window; not available in a browser.",
+      }),
+      scopeNote: desktopOnlyBadge,
+    },
+  ];
+
+  const globalState = snapshot.global;
+  const globalStatus = !globalState.enabled
+    ? copy("settings.shortcutsGlobalOff", {
+        "zh-CN": "未启用",
+        en: "Off",
+      })
+    : globalState.registered
+      ? copy("settings.shortcutsGlobalOn", {
+          "zh-CN": "已生效",
+          en: "Registered",
+        })
+      : globalState.error === "occupied"
+        ? copy("settings.shortcutsGlobalOccupied", {
+            "zh-CN": "该组合键被系统或其他应用占用，未能注册。",
+            en: "This combination is taken by the OS or another app; registration failed.",
+          })
+        : copy("settings.shortcutsGlobalUnregistered", {
+            "zh-CN": "未注册",
+            en: "Not registered",
+          });
 
   return (
     <div className="space-y-4" data-testid="shortcuts-settings">
@@ -116,10 +424,10 @@ function ShortcutsSettings() {
           })}
         </h3>
         <p className="text-sm text-muted-foreground break-words">
-          {copy("settings.shortcutsDescription", {
+          {copy("settings.shortcutsDescriptionV2", {
             "zh-CN":
-              "以下按键在当前版本实际生效，作用域均为应用窗口或控件级；没有系统级全局快捷键，也不支持自定义重绑定。",
-            en: "The keys below are active in this version, all scoped to the app window or focused controls. There are no OS-level global shortcuts and no custom rebinding.",
+              "应用窗口快捷键可在桌面应用内重绑定；系统级全局热键默认关闭。控件内按键为只读声明。",
+            en: "App-window shortcuts can be rebound inside the desktop app; the OS-level global hotkey is off by default. Control-level keys are read-only.",
           })}
         </p>
       </div>
@@ -143,47 +451,145 @@ function ShortcutsSettings() {
           en: "App window",
         })}
       >
+        {windowRows.map((row) => (
+          <ShortcutRow
+            key={row.action}
+            testId={`shortcut-row-${row.action}`}
+            name={row.name}
+            description={row.description}
+            keys={
+              recording === row.action
+                ? undefined
+                : snapshot.window[row.action]
+                  ? comboToDisplayKeys(snapshot.window[row.action])
+                  : undefined
+            }
+            note={rowNote(row.action)}
+            aside={
+              <>
+                {recording === row.action && (
+                  <span className="text-xs text-muted-foreground">
+                    {copy("settings.shortcutsRecording", {
+                      "zh-CN": "按下新的组合键，Esc 取消。",
+                      en: "Press the new combination — Esc cancels.",
+                    })}
+                  </span>
+                )}
+                {recording !== row.action &&
+                  snapshot.window[row.action] === null && (
+                    <span className="text-xs text-muted-foreground">
+                      {copy("settings.shortcutsUnbound", {
+                        "zh-CN": "未绑定",
+                        en: "Not bound",
+                      })}
+                    </span>
+                  )}
+                {editable && row.scopeNote}
+                {editControls(row.action)}
+              </>
+            }
+          />
+        ))}
+      </ShortcutGroup>
+
+      <ShortcutGroup
+        title={copy("settings.shortcutsGlobalGroup", {
+          "zh-CN": "系统级全局快捷键",
+          en: "OS-level global shortcut",
+        })}
+      >
         <ShortcutRow
-          name={copy("shortcuts.toggleSidebar", {
-            "zh-CN": "展开或收起侧边栏",
-            en: "Expand or collapse the sidebar",
+          testId="shortcut-row-toggleWindow"
+          name={copy("settings.shortcutsToggleWindow", {
+            "zh-CN": "显示或隐藏主窗口",
+            en: "Show or hide the main window",
           })}
-          description={copy("settings.shortcutsSidebarToggleScope", {
+          description={copy("settings.shortcutsToggleWindowScope", {
             "zh-CN":
-              "应用窗口内生效；焦点位于文本输入控件时不触发（macOS 为 ⌘B）。",
-            en: "Active inside the app window; suppressed while a text input is focused (⌘B on macOS).",
+              "窗口隐藏或最小化时按组合键唤出并聚焦；窗口可见且聚焦时将其隐藏。应用未运行时不生效。",
+            en: "Hidden or minimized windows are restored and focused; a visible, focused window hides. Inactive while the app is not running.",
           })}
-          keys={["Ctrl", "B"]}
-        />
-        <ShortcutRow
-          name={copy("shortcuts.goBack", {
-            "zh-CN": "后退一页",
-            en: "Go back one page",
-          })}
-          description={copy("settings.shortcutsHistoryScope", {
-            "zh-CN": "仅桌面应用窗口内生效；浏览器环境中不可用。",
-            en: "Active only inside the desktop app window; not available in a browser.",
-          })}
-          keys={["Alt", "←"]}
-          aside={badge("settings.capabilityDesktopOnly", {
-            "zh-CN": "仅桌面应用",
-            en: "Desktop app only",
-          })}
-        />
-        <ShortcutRow
-          name={copy("shortcuts.goForward", {
-            "zh-CN": "前进一页",
-            en: "Go forward one page",
-          })}
-          description={copy("settings.shortcutsHistoryScope", {
-            "zh-CN": "仅桌面应用窗口内生效；浏览器环境中不可用。",
-            en: "Active only inside the desktop app window; not available in a browser.",
-          })}
-          keys={["Alt", "→"]}
-          aside={badge("settings.capabilityDesktopOnly", {
-            "zh-CN": "仅桌面应用",
-            en: "Desktop app only",
-          })}
+          keys={
+            recording === "toggleWindow"
+              ? undefined
+              : comboToDisplayKeys(globalState.combo)
+          }
+          note={rowNote(
+            "toggleWindow",
+            <p
+              className="mt-1 text-sm text-muted-foreground break-words"
+              data-testid="shortcut-global-status"
+            >
+              {globalStatus}
+            </p>,
+          )}
+          aside={
+            <>
+              {editable && (
+                <Switch
+                  checked={globalState.enabled}
+                  disabled={saving || recording !== null}
+                  onCheckedChange={(enabled) => {
+                    setRowError("toggleWindow", null);
+                    setSaving(true);
+                    void writeGlobalToggle({ enabled })
+                      .then((result) => {
+                        if (!result.ok) {
+                          setRowError(
+                            "toggleWindow",
+                            result.code === "conflict"
+                              ? copyRef.current("settings.shortcutsConflict", {
+                                  "zh-CN": "该组合键已被其他快捷键使用。",
+                                  en: "This combination is already used by another shortcut.",
+                                })
+                              : copyRef.current("settings.shortcutsSaveFailed", {
+                                  "zh-CN": "快捷键设置保存失败。",
+                                  en: "Failed to save the shortcut.",
+                                }),
+                          );
+                          return;
+                        }
+                        const status = result.state.global;
+                        if (status.enabled && !status.registered) {
+                          setRowError(
+                            "toggleWindow",
+                            copyRef.current("settings.shortcutsGlobalOccupied", {
+                              "zh-CN":
+                                "该组合键被系统或其他应用占用，未能注册。",
+                              en: "This combination is taken by the OS or another app; registration failed.",
+                            }),
+                          );
+                        }
+                      })
+                      .catch((error) => {
+                        console.error("Error toggling global shortcut:", error);
+                        toastError(
+                          copyRef.current("settings.shortcutsSaveFailed", {
+                            "zh-CN": "快捷键设置保存失败。",
+                            en: "Failed to save the shortcut.",
+                          }),
+                        );
+                      })
+                      .finally(() => setSaving(false));
+                  }}
+                  aria-label={copy("settings.shortcutsToggleWindow", {
+                    "zh-CN": "显示或隐藏主窗口",
+                    en: "Show or hide the main window",
+                  })}
+                  data-testid="shortcut-global-toggle"
+                />
+              )}
+              {recording === "toggleWindow" && (
+                <span className="text-xs text-muted-foreground">
+                  {copy("settings.shortcutsRecording", {
+                    "zh-CN": "按下新的组合键，Esc 取消。",
+                    en: "Press the new combination — Esc cancels.",
+                  })}
+                </span>
+              )}
+              {editControls("toggleWindow")}
+            </>
+          }
         />
       </ShortcutGroup>
 
@@ -281,42 +687,6 @@ function ShortcutsSettings() {
             en: "Active inside open overlay components; a few surfaces such as an in-progress break dialog are exempt.",
           })}
           keys={["Esc"]}
-        />
-      </ShortcutGroup>
-
-      <ShortcutGroup
-        title={copy("settings.shortcutsUnavailableGroup", {
-          "zh-CN": "未提供的能力",
-          en: "Unavailable capabilities",
-        })}
-      >
-        <ShortcutRow
-          name={copy("settings.shortcutsGlobalTitle", {
-            "zh-CN": "系统级全局快捷键",
-            en: "OS-level global shortcuts",
-          })}
-          description={copy("settings.shortcutsGlobalDescription", {
-            "zh-CN": "应用未注册任何系统级全局快捷键。",
-            en: "The app registers no OS-level global shortcuts.",
-          })}
-          aside={badge("settings.capabilityNotProvided", {
-            "zh-CN": "未提供",
-            en: "Not provided",
-          })}
-        />
-        <ShortcutRow
-          name={copy("settings.shortcutsRebindTitle", {
-            "zh-CN": "自定义快捷键",
-            en: "Custom keybindings",
-          })}
-          description={copy("settings.shortcutsRebindDescription", {
-            "zh-CN": "当前版本不支持修改或重绑定快捷键，没有对应的配置存储。",
-            en: "Shortcuts cannot be edited or rebound in this version; no keybinding store exists.",
-          })}
-          aside={badge("settings.capabilityNotProvided", {
-            "zh-CN": "未提供",
-            en: "Not provided",
-          })}
         />
       </ShortcutGroup>
     </div>

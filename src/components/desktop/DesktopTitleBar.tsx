@@ -10,6 +10,9 @@ import {
 } from "@/components/ui/popover";
 import { isDesktopShell } from "@/components/desktop/desktopShell";
 import { useI18n } from "@/i18n";
+import { comboToDisplayKeys } from "@/lib/shortcuts/combos";
+import { useShortcutSnapshot } from "@/lib/shortcuts/bindings";
+import { useWindowShortcut } from "@/lib/shortcuts/useWindowShortcut";
 import { cn } from "@/lib/utils";
 
 // Minimal local view of the Chromium Navigation API. The desktop shell is
@@ -70,39 +73,35 @@ const NAV_BUTTON_CLASS =
   "flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40";
 
 // window.navigation performs the history jump itself, so the same handler can
-// serve Alt+Arrow shortcuts and the on-bar buttons without touching router
-// state. The guard on isComposing keeps IME sessions untouched; arrow keys
-// with Alt are never an editing shortcut on Windows, so text fields and the
-// resume editor are unaffected.
+// serve the registry-bound combos and the on-bar buttons without touching
+// router state. The actions' isComposing guard keeps IME sessions untouched;
+// the desktopOnly scope keeps the binding inert in a plain browser.
 function useHistoryShortcuts() {
-  useEffect(() => {
-    if (!isDesktopShell()) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing)
-        return;
-      const nav = appNavigation();
-      if (!nav) return;
-      if (e.key === "ArrowLeft" && nav.canGoBack) {
-        e.preventDefault();
-        nav.back();
-      } else if (e.key === "ArrowRight" && nav.canGoForward) {
-        e.preventDefault();
-        nav.forward();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  useWindowShortcut("historyBack", (e) => {
+    const nav = appNavigation();
+    if (nav?.canGoBack) {
+      e.preventDefault();
+      nav.back();
+    }
+  });
+  useWindowShortcut("historyForward", (e) => {
+    const nav = appNavigation();
+    if (nav?.canGoForward) {
+      e.preventDefault();
+      nav.forward();
+    }
+  });
 }
 
-const SHORTCUTS: { keys: string[]; labelKey: string }[] = [
-  { keys: ["Ctrl", "B"], labelKey: "shortcuts.toggleSidebar" },
-  { keys: ["Alt", "←"], labelKey: "shortcuts.goBack" },
-  { keys: ["Alt", "→"], labelKey: "shortcuts.goForward" },
-];
+const HELP_ACTIONS = [
+  { action: "toggleSidebar", labelKey: "shortcuts.toggleSidebar" },
+  { action: "historyBack", labelKey: "shortcuts.goBack" },
+  { action: "historyForward", labelKey: "shortcuts.goForward" },
+] as const;
 
 function ShortcutHelp() {
   const { t } = useI18n();
+  const bindings = useShortcutSnapshot().window;
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -118,26 +117,33 @@ function ShortcutHelp() {
       <PopoverContent align="start" sideOffset={6} className="w-72">
         <h3 className="mb-3 text-sm font-semibold">{t("shortcuts.title")}</h3>
         <ul className="space-y-2">
-          {SHORTCUTS.map((shortcut) => (
-            <li
-              key={shortcut.labelKey}
-              className="flex items-center justify-between gap-3 text-sm"
-            >
-              <span className="text-muted-foreground">
-                {t(shortcut.labelKey)}
-              </span>
-              <span className="flex shrink-0 items-center gap-1">
-                {shortcut.keys.map((key) => (
-                  <kbd
-                    key={key}
-                    className="rounded border bg-muted px-1.5 py-0.5 font-sans text-[11px] font-medium"
-                  >
-                    {key}
-                  </kbd>
-                ))}
-              </span>
-            </li>
-          ))}
+          {HELP_ACTIONS.map((shortcut) => {
+            const keys = comboToDisplayKeys(bindings[shortcut.action]);
+            return (
+              <li
+                key={shortcut.labelKey}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <span className="text-muted-foreground">
+                  {t(shortcut.labelKey)}
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {keys.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  ) : (
+                    keys.map((key) => (
+                      <kbd
+                        key={key}
+                        className="rounded border bg-muted px-1.5 py-0.5 font-sans text-[11px] font-medium"
+                      >
+                        {key}
+                      </kbd>
+                    ))
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ul>
         <p className="mt-3 text-xs text-muted-foreground">
           {t("shortcuts.closeHint")}

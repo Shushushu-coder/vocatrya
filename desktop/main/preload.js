@@ -150,6 +150,12 @@ const DESKTOP_LIFECYCLE_CHANNELS = Object.freeze({
   quit: "desktopLifecycle:quit",
 });
 
+const DESKTOP_SHORTCUT_CHANNELS = Object.freeze({
+  getState: "desktopShortcuts:getState",
+  setWindowBinding: "desktopShortcuts:setWindowBinding",
+  setGlobalToggle: "desktopShortcuts:setGlobalToggle",
+});
+
 contextBridge.exposeInMainWorld("vocatryaDesktop", {
   getState: () => ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.getState),
   setCloseToTray: (enabled) =>
@@ -162,4 +168,13 @@ contextBridge.exposeInMainWorld("vocatryaDesktop", {
     ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.setOpenAtLogin, { enabled }),
   showWindow: () => ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.showWindow),
   quit: () => ipcRenderer.invoke(DESKTOP_LIFECYCLE_CHANNELS.quit),
+  // Device keybindings: window-scope combos are canonical "Mod/Alt/Shift+Key"
+  // strings (null clears a binding); the global toggle writes intent and
+  // reports the live OS registration status back.
+  getShortcutState: () =>
+    ipcRenderer.invoke(DESKTOP_SHORTCUT_CHANNELS.getState),
+  setWindowShortcut: (input) =>
+    ipcRenderer.invoke(DESKTOP_SHORTCUT_CHANNELS.setWindowBinding, input),
+  setGlobalShortcut: (input) =>
+    ipcRenderer.invoke(DESKTOP_SHORTCUT_CHANNELS.setGlobalToggle, input),
 });
