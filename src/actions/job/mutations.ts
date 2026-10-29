@@ -36,6 +36,9 @@ const CAREER_ERROR_I18N_KEYS: Record<string, string> = {
   CAREER_READ_NOT_ENABLED: "errors.careerReadDenied",
   CAREER_WRITE_NOT_ENABLED: "errors.careerWriteDenied",
   AB_WRITES_NOT_ENABLED: "errors.careerWriteDenied",
+  OPPORTUNITY_ARCHIVED: "errors.jobArchived",
+  OPPORTUNITY_NOT_FOUND: "errors.notFound",
+  ATTEMPT_ARCHIVED: "errors.jobArchived",
 };
 
 export async function localizedJobError(error: unknown, fallback: string) {

@@ -97,6 +97,7 @@ describe("Application timeline read", () => {
     const timeline = await services().applications.getTimeline(opportunity.id);
     expect(timeline).toEqual({
       opportunityId: opportunity.id,
+      timeZone: expect.any(String),
       attempts: [],
     });
   });

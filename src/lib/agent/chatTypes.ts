@@ -23,6 +23,8 @@ export type ChatConversationSnapshot = ChatConversationSummary & {
   lockKind: ChatLockKind;
   resolvedConnectionId: string | null;
   resolvedModel: string | null;
+  /** Non-null on archived rows — Archive Center read-only views use it. */
+  archivedAt: string | null;
 };
 
 export type AgentChatPreflight =

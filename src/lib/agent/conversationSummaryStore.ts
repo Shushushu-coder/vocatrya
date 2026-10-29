@@ -1,4 +1,5 @@
 import "server-only";
+import { hasArchivedJobReference } from "./archiveVisibility";
 import {
   assertManagedHistoricalExecution,
   managedLockFromRow,
@@ -36,6 +37,9 @@ export type SummaryRepository = {
     managed?: { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 };
     /** Fail-closed marker for an inconsistent lock row (M4 §114). */
     lockInvalid?: string;
+    /** Archived conversations are AI-invisible: the scheduler must not
+     *  read their messages or generate summaries for them (D6). */
+    archived?: boolean;
     summary: ConversationSummaryRecord | null;
   } | null>;
   commit: (
@@ -63,9 +67,21 @@ export async function loadFreshConversationSummary(input: {
 }): Promise<{ text: string; throughMessageId: string } | undefined> {
   try {
     const row = await prisma.conversationSummary.findFirst({
-      where: { conversationId: input.conversationId, userId: input.userId },
+      where: {
+        conversationId: input.conversationId,
+        userId: input.userId,
+        // Never feed an archived conversation's summary into a live turn.
+        conversation: { archivedAt: null },
+      },
     });
     if (!row) return undefined;
+    const conversation = await prisma.chatConversation.findFirst({
+      where: { id: input.conversationId, userId: input.userId },
+      select: { messages: true, context: true },
+    });
+    if (!conversation || await hasArchivedJobReference(
+      prisma, input.userId, conversation.messages, conversation.context, input.messages, row,
+    )) return undefined;
     const verdict = validateConversationSummaryCoverage(toRecord(row), input.messages);
     if (verdict.status !== "FRESH") return undefined;
     return { text: verdict.text, throughMessageId: input.messages[verdict.throughIndex].id };
@@ -82,9 +98,19 @@ async function loadSummarySnapshot(
 ) {
   const conversation = await client.chatConversation.findFirst({
     where: { id: conversationId, userId },
-    select: { messages: true, resolvedConnectionId: true, resolvedModel: true, managedAiProvenance: true },
+    select: { messages: true, context: true, resolvedConnectionId: true, resolvedModel: true, managedAiProvenance: true, archivedAt: true },
   });
   if (!conversation) return null;
+  if (conversation.archivedAt || await hasArchivedJobReference(client, userId, conversation.messages, conversation.context)) {
+    // Archived: no messages, no lock, no summary — the scheduler skips.
+    return {
+      messages: [],
+      resolvedConnectionId: null,
+      resolvedModel: null,
+      archived: true,
+      summary: null,
+    };
+  }
   const managed = managedLockFromRow(conversation);
   let managedLock: { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 } | undefined;
   let lockInvalid: string | undefined;
@@ -154,9 +180,9 @@ async function commitOnClient(
     reload: async () => {
       const conversation = await client.chatConversation.findFirst({
         where: { id: conversationId, userId },
-        select: { messages: true },
+        select: { messages: true, archivedAt: true },
       });
-      if (!conversation) return null;
+      if (!conversation || conversation.archivedAt) return null;
       const summary = await client.conversationSummary.findUnique({
         where: { conversationId },
       });
@@ -210,6 +236,11 @@ async function recordSummaryFailure(
   at: Date,
 ): Promise<number> {
   const write = async (db: SummaryDb) => {
+    const conversation = await db.chatConversation.findFirst({
+      where: { id: conversationId, userId },
+      select: { archivedAt: true },
+    });
+    if (!conversation || conversation.archivedAt) return 0;
     const existing = await db.conversationSummary.findUnique({
       where: { conversationId },
     });

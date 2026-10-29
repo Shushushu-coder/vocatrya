@@ -39,6 +39,7 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
     resolvedConnectionId: true;
     resolvedModel: true;
     managedAiProvenance: true;
+    archivedAt: true;
     createdAt: true;
     updatedAt: true;
   };
@@ -54,6 +55,7 @@ const CHAT_ROW_SELECT = {
   resolvedConnectionId: true,
   resolvedModel: true,
   managedAiProvenance: true,
+  archivedAt: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -70,6 +72,13 @@ export class ChatConversationNotFoundError extends Error {
   constructor() {
     super("Conversation not found");
     this.name = "ChatConversationNotFoundError";
+  }
+}
+
+export class ChatConversationArchivedError extends Error {
+  constructor() {
+    super("Conversation is archived");
+    this.name = "ChatConversationArchivedError";
   }
 }
 
@@ -101,7 +110,7 @@ export async function listOwnedChatConversations(
   }>
 > {
   const rows = await prisma.chatConversation.findMany({
-    where: { userId },
+    where: { userId, archivedAt: null },
     orderBy: { updatedAt: "desc" },
     take: limit,
     select: SUMMARY_SELECT,
@@ -119,7 +128,7 @@ export async function getNewestOwnedChatConversation(
   userId: string,
 ): Promise<ChatConversationRow | null> {
   return prisma.chatConversation.findFirst({
-    where: { userId },
+    where: { userId, archivedAt: null },
     orderBy: { updatedAt: "desc" },
     select: CHAT_ROW_SELECT,
   });
@@ -184,13 +193,110 @@ export async function updateOwnedChatConversationContext(
   context: AgentConversationContextV1,
 ): Promise<ChatConversationRow> {
   const updated = await prisma.chatConversation.updateMany({
-    where: { id: conversationId, userId },
+    where: { id: conversationId, userId, archivedAt: null },
     data: { context: serializeConversationContext(context) },
   });
-  if (updated.count !== 1) throw new ChatConversationNotFoundError();
+  if (updated.count !== 1) {
+    const existing = await prisma.chatConversation.findFirst({
+      where: { id: conversationId, userId },
+      select: { archivedAt: true },
+    });
+    if (!existing) throw new ChatConversationNotFoundError();
+    throw new ChatConversationArchivedError();
+  }
   const row = await getOwnedChatConversation(userId, conversationId);
   if (!row) throw new ChatConversationNotFoundError();
   return row;
+}
+
+/**
+ * Reversible archive — removes the conversation from History and every AI
+ * read path. The active-request lock is released in the same CAS so an
+ * in-flight or stranded request cannot pin the row or block the restore;
+ * the request's own CAS then fails harmlessly on revision/activeRequestId.
+ * Idempotent: archiving an already-archived row is a success no-op.
+ */
+export async function archiveOwnedChatConversation(
+  userId: string,
+  conversationId: string,
+): Promise<ChatConversationRow> {
+  const updated = await prisma.chatConversation.updateMany({
+    where: { id: conversationId, userId, archivedAt: null },
+    data: {
+      archivedAt: new Date(),
+      activeRequestId: null,
+      activeRequestExpiresAt: null,
+    },
+  });
+  if (updated.count !== 1) {
+    const existing = await prisma.chatConversation.findFirst({
+      where: { id: conversationId, userId },
+      select: { id: true },
+    });
+    if (!existing) throw new ChatConversationNotFoundError();
+  }
+  const row = await getOwnedChatConversation(userId, conversationId);
+  if (!row) throw new ChatConversationNotFoundError();
+  return row;
+}
+
+/** Reverse of archiveOwnedChatConversation. Idempotent the same way. */
+export async function unarchiveOwnedChatConversation(
+  userId: string,
+  conversationId: string,
+): Promise<ChatConversationRow> {
+  const updated = await prisma.chatConversation.updateMany({
+    where: { id: conversationId, userId, archivedAt: { not: null } },
+    data: { archivedAt: null },
+  });
+  if (updated.count !== 1) {
+    const existing = await prisma.chatConversation.findFirst({
+      where: { id: conversationId, userId },
+      select: { id: true },
+    });
+    if (!existing) throw new ChatConversationNotFoundError();
+  }
+  const row = await getOwnedChatConversation(userId, conversationId);
+  if (!row) throw new ChatConversationNotFoundError();
+  return row;
+}
+
+/** Archive Center listing: archived conversations only. */
+export async function listArchivedChatConversations(
+  userId: string,
+  search?: string,
+  limit = APP_CONSTANTS.AGENT_CHAT_HISTORY_PAGE,
+): Promise<
+  Array<{
+    id: string;
+    title: string | null;
+    titleFallback: string | null;
+    archivedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }>
+> {
+  const q = search?.trim();
+  const rows = await prisma.chatConversation.findMany({
+    where: {
+      userId,
+      archivedAt: { not: null },
+      ...(q
+        ? { OR: [{ title: { contains: q } }, { messages: { contains: q } }] }
+        : {}),
+    },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+    select: { ...SUMMARY_SELECT, archivedAt: true },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    titleFallback: row.title ? null : titleFallbackFromMessages(row.messages),
+    archivedAt: row.archivedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }));
 }
 
 export async function deleteOwnedChatConversation(

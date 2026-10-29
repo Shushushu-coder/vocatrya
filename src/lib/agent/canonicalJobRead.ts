@@ -1,6 +1,7 @@
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getJob, listJobs, resolveJobsReadFamily } from "@/lib/career/jobsReadDispatch";
+import { isArchivedCanonicalJobView } from "@/lib/career/uiStatus";
 import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 import type { AgentGetJobResult, AgentJobSummary, AgentListJobsResult } from "@/models/agent.model";
 import { jobDeadlinePrecision } from "@/lib/jobs/deadlineTime";
@@ -16,6 +17,7 @@ type CanonicalJobRow = {
   Location?: JobLabel;
   Status?: { label?: string | null; value?: string | null } | null;
   JobSource?: JobLabel;
+  abCompat?: { uiStatus?: string | null } | null;
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
   appliedDate?: Date | string | null;
@@ -89,6 +91,8 @@ export async function getJobForAgent(
   if (!loaded.job) return { status: "no_job" };
 
   const job = loaded.job as CanonicalJobRow;
+  // Archived canonical jobs do not exist for AI: no details, no description.
+  if (isArchivedCanonicalJobView(job)) return { status: "no_job" };
   const full = job.description ?? "";
   const jobDescription = full.slice(0, APP_CONSTANTS.AGENT_CHAT_RESUME_MAX_CHARS);
   return {

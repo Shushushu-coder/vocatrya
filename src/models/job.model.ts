@@ -75,6 +75,17 @@ export interface JobResponse {
   discoveryStatus?: string | null;
   descriptionCompleteness?: DescriptionCompleteness | null;
   _count?: { Notes?: number };
+  /** Canonical A+B compat projection — present on JobOpportunity views only.
+   *  uiStatus is the derived board status ("archived" when archivedAt is set,
+   *  which makes the whole view read-only). */
+  abCompat?: {
+    uiStatus: string;
+    hasApplicationAttempt: boolean;
+    resumeUnsupported: boolean;
+    coverLetterUnsupported: boolean;
+    matchUnsupported: boolean;
+    tagsUnsupported: boolean;
+  };
 }
 
 export type JobsViewMode = "table" | "cards";

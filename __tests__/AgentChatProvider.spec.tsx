@@ -41,6 +41,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/actions/agentChat.actions", () => ({
+  archiveChatConversation: vi.fn(async () => ({ success: true })),
   getAgentChatPreflight: vi.fn(async () => {
     const settings = await getUserSettings();
     return { success: true, data: { kind: "legacy", model: settings.data?.settings?.ai?.model ?? null, persisted: true } };
@@ -175,6 +176,7 @@ const conversation = (messages: any[] = []) => ({
   lockKind: "legacy" as const,
   resolvedConnectionId: null,
   resolvedModel: null,
+  archivedAt: null,
 });
 
 const tree = (initialMessages: any[] = []) => (
@@ -213,6 +215,7 @@ const createdSnapshot = (id: string) => ({
     lockKind: "legacy" as const,
     resolvedConnectionId: null,
     resolvedModel: null,
+    archivedAt: null,
   },
 });
 

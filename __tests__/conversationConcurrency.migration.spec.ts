@@ -19,7 +19,7 @@ it("adds concurrency fields without changing a pre-change conversation or its su
     const before = await db.$queryRawUnsafe<Record<string, unknown>[]>("SELECT * FROM ChatConversation WHERE id = 'old'");
     copyMigrationBySuffix(ctx.dir, "chat_conversation_concurrency");
     migrateDeploy(ctx.url, schema);
-    const after = await db.$queryRawUnsafe<Record<string, unknown>[]>("SELECT id,userId,title,context,messages,resolvedConnectionId,resolvedModel,createdAt,updatedAt,revision,activeRequestId,activeRequestExpiresAt FROM ChatConversation WHERE id = 'old'");
+    const after = await db.$queryRawUnsafe<Record<string, unknown>[]>("SELECT id,userId,title,context,messages,resolvedConnectionId,resolvedModel,createdAt,updatedAt,revision,activeRequestId,activeRequestExpiresAt,archivedAt FROM ChatConversation WHERE id = 'old'");
     expect(after[0]).toEqual({ ...before[0], revision: 0, activeRequestId: null, activeRequestExpiresAt: null });
     expect(await db.conversationSummary.findUnique({ where: { conversationId: "old" } })).toEqual(summary);
     copyMigrationBySuffix(ctx.dir, "add_managed_ai_core_contracts");

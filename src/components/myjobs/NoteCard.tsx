@@ -10,9 +10,10 @@ type NoteCardProps = {
   note: NoteResponse;
   onEdit: (note: NoteResponse) => void;
   onDelete: (noteId: string) => void;
+  readOnly?: boolean;
 };
 
-export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
+export function NoteCard({ note, onEdit, onDelete, readOnly }: NoteCardProps) {
   const { t, formatDateTime } = useI18n();
   const { jobMutationsEnabled } = useCareerSurfaces();
 
@@ -27,7 +28,7 @@ export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
             </span>
           )}
         </div>
-        <div className="flex gap-1">
+        {!readOnly && <div className="flex gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -46,7 +47,7 @@ export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
           >
             <Trash className="h-3.5 w-3.5" />
           </Button>
-        </div>
+        </div>}
       </div>
       <TipTapContentViewer content={note.content} />
     </div>

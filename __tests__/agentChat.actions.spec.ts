@@ -192,7 +192,9 @@ describe("agentChat actions", () => {
     ]);
     const result = await listChatConversations();
     expect(prisma.chatConversation.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: "user-1" } }),
+      expect.objectContaining({
+        where: { userId: "user-1", archivedAt: null },
+      }),
     );
     expect(result.data?.[0]).toMatchObject({
       id: "row-1",

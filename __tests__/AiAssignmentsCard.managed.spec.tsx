@@ -93,3 +93,15 @@ it("explains Coming Soon, not a generic error, when a historical Managed assignm
   await waitFor(() => expect(toastError).toHaveBeenCalledWith("settings.aiAssignManagedComingSoon"));
   expect(assignManaged).toHaveBeenCalledWith({ purpose: "GLOBAL_DEFAULT", modelKey: "stable-model" });
 });
+
+it.each([
+  ["NOT_ENTITLED", "settings.aiAssignErrNotEntitled"],
+  ["MODEL_NOT_ALLOWED", "settings.aiAssignErrModelNotAllowed"],
+])("explains Managed assignment rejection %s", async (code, messageKey) => {
+  assignManaged.mockResolvedValue({ success: false, code });
+  const user = userEvent.setup();
+  render(<AiAssignmentsCard />);
+  await waitFor(() => expect(screen.getByDisplayValue("stable-model")).toBeInTheDocument());
+  await user.click(screen.getAllByRole("button", { name: "common.save" })[0]);
+  await waitFor(() => expect(toastError).toHaveBeenCalledWith(messageKey));
+});

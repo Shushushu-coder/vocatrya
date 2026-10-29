@@ -24,6 +24,7 @@ import {
   planUiStatusWrite,
 } from "./uiStatus";
 import { jobDeadlinePrecision } from "@/lib/jobs/deadlineTime";
+import { syncOpportunityStepReminders } from "@/lib/reminders/reminderService";
 
 export { deriveUiStatus, pickLatestAttempt, planUiStatusWrite } from "./uiStatus";
 
@@ -186,7 +187,8 @@ export async function syncApplicationFromUiStatus(
     return;
   }
   if (plan.kind === "archive-opportunity") {
-    await opportunities.updateSafe(opportunityId, { archivedAt: new Date() });
+    await opportunities.archive(opportunityId);
+    await syncOpportunityStepReminders(tx, userId, opportunityId);
     return;
   }
 
@@ -344,14 +346,74 @@ export async function updateOpportunityFromJobForm(
   });
 }
 
+/**
+ * Reversible archive. The flag flip and the reminder reconcile commit in one
+ * transaction (D3): pending step reminders park as EXPIRED while archived and
+ * revive on unarchive. Idempotent — a repeat call is a no-op success.
+ */
 export async function archiveOpportunity(
   db: PrismaClient,
   userId: string,
   opportunityId: string,
   env?: NodeJS.ProcessEnv,
 ) {
-  const opportunities = new OpportunityService(db, userId, env);
-  return opportunities.updateSafe(opportunityId, { archivedAt: new Date() });
+  return db.$transaction(async (tx) => {
+    const opportunities = new OpportunityService(tx, userId, env);
+    await opportunities.archive(opportunityId);
+    await syncOpportunityStepReminders(tx, userId, opportunityId);
+    return tx.jobOpportunity.findFirst({
+      where: { id: opportunityId, userId },
+    });
+  });
+}
+
+export async function unarchiveOpportunity(
+  db: PrismaClient,
+  userId: string,
+  opportunityId: string,
+  env?: NodeJS.ProcessEnv,
+) {
+  return db.$transaction(async (tx) => {
+    const opportunities = new OpportunityService(tx, userId, env);
+    await opportunities.unarchive(opportunityId);
+    await syncOpportunityStepReminders(tx, userId, opportunityId);
+    return tx.jobOpportunity.findFirst({
+      where: { id: opportunityId, userId },
+    });
+  });
+}
+
+/** Archive Center listing: canonical archived rows only, lightest shape. */
+export async function listArchivedOpportunities(
+  db: PrismaClient,
+  userId: string,
+  search?: string,
+) {
+  const q = search?.trim();
+  return db.jobOpportunity.findMany({
+    where: {
+      userId,
+      archivedAt: { not: null },
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q } },
+              { company: { label: { contains: q } } },
+              { locationText: { contains: q } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      archivedAt: true,
+      updatedAt: true,
+      company: { select: { label: true } },
+    },
+    orderBy: [{ archivedAt: "desc" }, { id: "asc" }],
+  });
 }
 
 type OpportunityWithRelations = {

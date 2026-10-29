@@ -29,6 +29,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { toastInfo } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 import {
+  archiveChatConversation,
   createChatConversation,
   deleteChatConversation,
   getAgentChatPreflight,
@@ -720,9 +721,15 @@ function useAgentChatValue(
     [chat, stop, resetTransient, runPreflight],
   );
 
-  const removeConversation = useCallback(
-    async (id: string) => {
-      const result = await deleteChatConversation(id);
+  // Shared post-removal flow: refresh History, then move the open draft to
+  // the newest live conversation (or a fresh one) when the removed row was
+  // the current draft — an archived id can never stay active.
+  const leaveConversation = useCallback(
+    async (
+      id: string,
+      run: (id: string) => Promise<{ success: boolean; code?: string }>,
+    ) => {
+      const result = await run(id);
       if (!result.success) {
         setActionError({ code: result.code ?? "GENERIC" });
         return false;
@@ -739,6 +746,16 @@ function useAgentChatValue(
       return true;
     },
     [selectConversation, startNewConversation],
+  );
+
+  const removeConversation = useCallback(
+    (id: string) => leaveConversation(id, deleteChatConversation),
+    [leaveConversation],
+  );
+
+  const archiveConversation = useCallback(
+    (id: string) => leaveConversation(id, archiveChatConversation),
+    [leaveConversation],
   );
 
   const approvalPending = useMemo(
@@ -976,6 +993,7 @@ function useAgentChatValue(
     startNewConversation,
     selectConversation,
     removeConversation,
+    archiveConversation,
     historyVersion,
     conversationId,
     context,

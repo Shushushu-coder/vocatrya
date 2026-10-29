@@ -9,13 +9,17 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import {
+  archiveOwnedChatConversation,
+  ChatConversationArchivedError,
   ChatConversationNotFoundError,
   contextOfRow,
   createChatConversationRecord,
   deleteOwnedChatConversation,
   getNewestOwnedChatConversation,
   getOwnedChatConversation,
+  listArchivedChatConversations as listArchivedChatConversationRows,
   listOwnedChatConversations,
+  unarchiveOwnedChatConversation,
   updateChatConversationMessages,
   updateOwnedChatConversationContext,
   type ChatConversationRow,
@@ -62,6 +66,13 @@ function fail(error: unknown, fallback: string): {
   if (error instanceof AIBusinessError) {
     return { success: false, message: error.message, code: error.code };
   }
+  if (error instanceof ChatConversationArchivedError) {
+    return {
+      success: false,
+      message: error.message,
+      code: "CONVERSATION_ARCHIVED",
+    };
+  }
   if (error instanceof ChatConversationNotFoundError) {
     return {
       success: false,
@@ -96,6 +107,7 @@ function snapshotOf(row: ChatConversationRow): ChatConversationSnapshot {
     lockKind: lock.kind,
     resolvedConnectionId: row.resolvedConnectionId,
     resolvedModel: row.resolvedModel,
+    archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
   };
 }
 
@@ -135,7 +147,11 @@ export const loadActiveChatConversation = async (
     const user = await requireUser();
     if (preferredId) {
       const preferred = await getOwnedChatConversation(user.id, preferredId);
-      if (preferred) return { success: true, data: snapshotOf(preferred) };
+      // An archived conversation never opens as the live draft — the
+      // Archive Center is the only way back to it.
+      if (preferred && !preferred.archivedAt) {
+        return { success: true, data: snapshotOf(preferred) };
+      }
     }
     const newest = await getNewestOwnedChatConversation(user.id);
     return { success: true, data: newest ? snapshotOf(newest) : null };
@@ -247,6 +263,68 @@ export const deleteChatConversation = async (
     return { success: true };
   } catch (error) {
     return fail(error, "Failed to delete the conversation.");
+  }
+};
+
+/**
+ * Reversible archive — the History entry point. Not delete: the transcript,
+ * context and summary stay put, hidden from every AI read path, until the
+ * user restores it from the Archive Center.
+ */
+export const archiveChatConversation = async (
+  conversationId: string,
+): Promise<{ success: boolean; message?: string; code?: string }> => {
+  try {
+    const user = await requireUser();
+    await archiveOwnedChatConversation(user.id, conversationId);
+    return { success: true };
+  } catch (error) {
+    return fail(error, "Failed to archive the conversation.");
+  }
+};
+
+export const restoreChatConversation = async (
+  conversationId: string,
+): Promise<
+  | { success: true }
+  | { success: false; message: string; code?: string }
+> => {
+  try {
+    const user = await requireUser();
+    await unarchiveOwnedChatConversation(user.id, conversationId);
+    return { success: true };
+  } catch (error) {
+    return fail(error, "Failed to restore the conversation.");
+  }
+};
+
+export const listArchivedChatConversations = async (input?: {
+  search?: string;
+}): Promise<{
+  success: boolean;
+  data?: Array<ChatConversationSummary & { archivedAt: string | null }>;
+  message?: string;
+  code?: string;
+}> => {
+  try {
+    const user = await requireUser();
+    const rows = await listArchivedChatConversationRows(
+      user.id,
+      input?.search,
+    );
+    return {
+      success: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        titleFallback: row.titleFallback,
+        archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    };
+  } catch (error) {
+    return fail(error, "Failed to list archived conversations.");
   }
 };
 

@@ -130,6 +130,9 @@ export async function condenseCareerDialogueSummary(
   };
   try {
     const snapshot = await deps.repository.load(input.userId, input.conversationId);
+    if (snapshot?.archived) {
+      return finish({ status: "skipped", reason: "archived" });
+    }
     if (snapshot?.lockInvalid) {
       // Managed binding drift or a provenance-less managed half-state —
       // surface the stable code, never re-resolve or auto-heal.

@@ -1608,6 +1608,8 @@
     "aiAssignErrInvalidPurpose": "未知的分配用途。",
     "aiAssignErrConnectionNotFound": "未找到连接。",
     "aiAssignErrArchived": "连接已归档。",
+    "aiAssignErrNotEntitled": "当前账号没有有效的托管 AI 权益，请先确认订阅状态再分配模型。",
+    "aiAssignErrModelNotAllowed": "该模型不在当前托管 AI 套餐范围内，请选择套餐支持的模型。",
     "aiAssignErrUnsupportedCombination": "该运行时不支持此账号服务商。",
     "aiAssignErrModelRequired": "请选择连接并输入模型 ID。",
     "aiAssignStructuredHint": "结构化输出要求已通过结构化执行验证的运行时。未验证运行时上的连接会被标记，且无法保存到该用途。",
@@ -1734,7 +1736,8 @@
       "audio": "音频",
       "bulkEdit": "批量修改",
       "dataPrivacy": "数据与隐私",
-      "about": "关于"
+      "about": "关于",
+      "archiveData": "归档数据"
     },
     "sectionUnavailable": "该设置页在当前版本中尚未提供。",
     "drawer": {
@@ -1834,7 +1837,19 @@
       "copyDiagnostics": "复制诊断信息",
       "diagnosticsCopied": "已复制",
       "copyDiagnosticsFailed": "复制诊断信息失败。"
-    }
+    },
+    "archiveDescription": "已归档的职位与对话在此只读保留。恢复后回到活跃列表，内容不会过期或被删除。",
+    "archiveSearchPlaceholder": "搜索归档内容",
+    "archiveJobsHeading": "已归档职位",
+    "archiveConversationsHeading": "已归档对话",
+    "archiveEmpty": "暂无归档内容。",
+    "archiveArchivedAt": "归档于 {date}",
+    "archiveRestore": "恢复",
+    "archiveRestored": "已恢复",
+    "archivedBadge": "已归档",
+    "archiveReadOnlyNotice": "此内容已归档，仅供查看。",
+    "archiveJobReadOnlyNotice": "该职位已归档，仅可查看。可在 设置 → 数据与支持 → 归档数据 中恢复。",
+    "archiveLegacyNotice": "当前实例使用 Legacy 职位数据，不支持可逆归档。启用 A+B 迁移后可使用职位归档。"
   },
   "developer": {
     "title": "开发者选项",
@@ -2056,7 +2071,12 @@
       "rateLimit": "这次请求没有发出，请再试一次。",
       "toolFailed": "这个操作没有完成。",
       "generic": "出了点问题，请再试一次。"
-    }
+    },
+    "historyArchive": "归档",
+    "historyArchiveTitle": "归档此对话？",
+    "historyArchiveDescription": "归档后将从历史中隐藏，AI 也无法再读取。可随时在 设置 → 归档数据 中恢复。",
+    "roleUser": "你",
+    "roleAssistant": "助手"
   },
   "errors": {
     "generic": "操作遇到问题，请重试",
@@ -2073,7 +2093,9 @@
     "careerEditorUnavailable": "当前应用状态下，此编辑器无法修改职位或简历。",
     "careerJobsUnavailable": "当前实例状态下无法读取职位申请数据。",
     "careerCoverLetterUnsupported": "暂时无法随职位保存求职信，请移除求职信后重试。",
-    "careerTagsUnsupported": "暂时无法随职位保存技能标签，请移除标签后重试。"
+    "careerTagsUnsupported": "暂时无法随职位保存技能标签，请移除标签后重试。",
+    "jobArchived": "该职位已归档，请在 设置 → 归档数据 中恢复后再修改。",
+    "conversationArchived": "该对话已归档，请在 设置 → 归档数据 中恢复后继续。"
   },
   "library": {
     "title": "基础字典",

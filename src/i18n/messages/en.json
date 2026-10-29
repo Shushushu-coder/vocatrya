@@ -1608,6 +1608,8 @@
     "aiAssignErrInvalidPurpose": "Unknown assignment purpose.",
     "aiAssignErrConnectionNotFound": "Connection not found.",
     "aiAssignErrArchived": "Connection is archived.",
+    "aiAssignErrNotEntitled": "Your account has no active Managed AI entitlement. Check your subscription before assigning a model.",
+    "aiAssignErrModelNotAllowed": "This model is not included in your Managed AI plan. Choose a model covered by your plan.",
     "aiAssignErrUnsupportedCombination": "This account provider is not supported on that runtime.",
     "aiAssignErrModelRequired": "Select a connection and enter a model ID.",
     "aiAssignStructuredHint": "Structured output requires a runtime verified for structured execution. Connections on unverified runtimes are marked and cannot be saved for this purpose.",
@@ -1734,7 +1736,8 @@
       "audio": "Audio",
       "bulkEdit": "Bulk Edit",
       "dataPrivacy": "Data & Privacy",
-      "about": "About"
+      "about": "About",
+      "archiveData": "Archived Data"
     },
     "sectionUnavailable": "This settings page is not available in this build yet.",
     "drawer": {
@@ -1834,7 +1837,19 @@
       "copyDiagnostics": "Copy diagnostics",
       "diagnosticsCopied": "Copied",
       "copyDiagnosticsFailed": "Could not copy diagnostics."
-    }
+    },
+    "archiveDescription": "Archived jobs and conversations are kept read-only here. Restore moves them back; nothing expires or is deleted.",
+    "archiveSearchPlaceholder": "Search archived items",
+    "archiveJobsHeading": "Archived jobs",
+    "archiveConversationsHeading": "Archived conversations",
+    "archiveEmpty": "Nothing archived yet.",
+    "archiveArchivedAt": "Archived {date}",
+    "archiveRestore": "Restore",
+    "archiveRestored": "Restored successfully",
+    "archivedBadge": "Archived",
+    "archiveReadOnlyNotice": "This content is archived and read-only.",
+    "archiveJobReadOnlyNotice": "This job is archived — view only. Restore it in Settings → Data & Support → Archived Data.",
+    "archiveLegacyNotice": "This instance uses the legacy job store, which has no reversible archive. Canonical job archive becomes available after the A+B migration is enabled."
   },
   "developer": {
     "title": "Developer Options",
@@ -2056,7 +2071,12 @@
       "rateLimit": "The request didn't go through. Try again.",
       "toolFailed": "That action didn't finish.",
       "generic": "Something went wrong. Try again."
-    }
+    },
+    "historyArchive": "Archive",
+    "historyArchiveTitle": "Archive this conversation?",
+    "historyArchiveDescription": "It disappears from History and the assistant can no longer read it. Restore it anytime in Settings → Archived Data.",
+    "roleUser": "You",
+    "roleAssistant": "Assistant"
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",
@@ -2073,7 +2093,9 @@
     "careerEditorUnavailable": "This editor cannot change jobs or resumes in the current app state.",
     "careerJobsUnavailable": "Job application data cannot be read in the current instance state.",
     "careerCoverLetterUnsupported": "A cover letter cannot be saved with this job yet. Remove the cover letter and try again.",
-    "careerTagsUnsupported": "Tags cannot be saved with this job yet. Remove the tags and try again."
+    "careerTagsUnsupported": "Tags cannot be saved with this job yet. Remove the tags and try again.",
+    "jobArchived": "This job is archived. Restore it from Settings → Archived Data to make changes.",
+    "conversationArchived": "This conversation is archived. Restore it from Settings → Archived Data to continue."
   },
   "library": {
     "title": "Library",

@@ -442,13 +442,16 @@ function attemptInRangeWhere(
   end: Date,
   endInclusive: boolean,
 ) {
+  // Submissions under an archived opportunity still happened — they derive
+  // uiStatus "archived" downstream, so archive removes the job from active
+  // stats without rewriting the historical application fact.
   return {
     userId,
     archivedAt: null,
     submittedAt: endInclusive
       ? { gte: start, lte: end }
       : { gte: start, lt: end },
-    jobOpportunity: { userId, archivedAt: null },
+    jobOpportunity: { userId },
   };
 }
 
@@ -481,7 +484,7 @@ export async function loadDashboardJobCounts(
           userId,
           archivedAt: null,
           submittedAt: { not: null },
-          jobOpportunity: { userId, archivedAt: null },
+          jobOpportunity: { userId },
         },
         _min: { submittedAt: true },
       }),
@@ -551,7 +554,7 @@ export async function loadJobsAppliedDateCounts(
         userId,
         archivedAt: null,
         submittedAt: { not: null },
-        jobOpportunity: { userId, archivedAt: null },
+        jobOpportunity: { userId },
       },
       _min: { submittedAt: true },
     });
