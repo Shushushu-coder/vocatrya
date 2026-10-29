@@ -161,6 +161,21 @@ it("generates DOCX on the server and serves its actual MIME type", async () => {
   expect(result.headers.get("Content-Type")).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   expect(Buffer.from(await result.arrayBuffer()).subarray(0, 2).toString()).toBe("PK");
 });
+it("accepts a DOCX POST framed the way the node runtime frames a bodyless request", async () => {
+  // In production every non-GET request exposes a req.body stream — even a
+  // bodyless browser POST — so the guard must inspect the stream's actual
+  // bytes rather than reject every non-null req.body.
+  const response = await POST(new NextRequest(`http://localhost/api/profile/resume-artifacts?versionId=${versionId}&format=DOCX`, {
+    method: "POST",
+    headers: { "content-length": "0" },
+    body: new ReadableStream({ start(controller) { controller.close(); } }),
+    // @ts-expect-error Node fetch requires duplex for stream bodies
+    duplex: "half",
+  }));
+  expect(response.status).toBe(201);
+  const artifact = await response.json();
+  expect(artifact.fileName).toMatch(/\.docx$/);
+});
 it("rejects client-supplied DOCX bytes and unsupported formats without writing an artifact", async () => {
   const count = await db.resumeArtifact.count({ where: { resumeVariantVersionId: versionId } });
   for (const format of ["DOCX", "HTML"]) {

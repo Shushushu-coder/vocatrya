@@ -16,8 +16,23 @@ export async function POST(req: NextRequest) {
     if (!versionId) return NextResponse.json({ error: "Version id is required" }, { status: 400 });
     const format = req.nextUrl.searchParams.get("format");
     if (format === "DOCX") {
-      // Server-generated only: reject uploaded bytes for this format.
-      if (req.body !== null) return NextResponse.json({ error: "DOCX must be generated on the server" }, { status: 400 });
+      // Server-generated only: reject uploaded bytes for this format. The
+      // node runtime wraps the request stream into req.body for every
+      // non-GET/HEAD method — even a bodyless POST — so the stream itself
+      // has to be inspected. Reading stops at the first byte, so this is
+      // bounded regardless of what a client dribbles in.
+      if (req.body !== null) {
+        const reader = req.body.getReader();
+        let empty = true;
+        try {
+          while (empty) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value.byteLength > 0) { empty = false; await reader.cancel(); }
+          }
+        } finally { reader.releaseLock(); }
+        if (!empty) return NextResponse.json({ error: "DOCX must be generated on the server" }, { status: 400 });
+      }
       const artifact = await new ResumeArtifactService(prisma, session.user.id).createDocxExport(versionId);
       return NextResponse.json(resumeArtifactDTO(artifact), { status: 201 });
     }
