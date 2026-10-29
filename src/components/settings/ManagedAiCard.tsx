@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { CheckCircle, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { useI18n } from "@/i18n";
 import {
+  disconnectManagedAiSession,
   getManagedAiOverview,
+  redeemManagedAiSession,
   type ManagedAiOverview,
 } from "@/actions/managedAi.actions";
 
@@ -27,6 +30,9 @@ function ManagedAiCard() {
   const { t } = useI18n();
   const [overview, setOverview] = useState<ManagedAiOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [redeemToken, setRedeemToken] = useState("");
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -46,6 +52,42 @@ function ManagedAiCard() {
     void refresh();
   }, [refresh]);
 
+  const redeem = async () => {
+    const token = redeemToken.trim();
+    if (!token || busy) return;
+    setBusy(true);
+    setRedeemError(null);
+    try {
+      const result = await redeemManagedAiSession({ token });
+      if (result.success) {
+        setRedeemToken("");
+        await refresh();
+      } else {
+        setRedeemError(result.code ?? result.message ?? "FAILED");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (busy) return;
+    setBusy(true);
+    setRedeemError(null);
+    try {
+      const result = await disconnectManagedAiSession();
+      if (!result.success) {
+        setRedeemError("MANAGED_RUNTIME_UNAVAILABLE");
+        return;
+      }
+      await refresh();
+    } catch {
+      setRedeemError("MANAGED_RUNTIME_UNAVAILABLE");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const connection = overview?.connection ?? null;
   const entitlement = overview?.entitlement ?? null;
   const usage = overview?.usage ?? null;
@@ -54,6 +96,8 @@ function ManagedAiCard() {
   const comingSoon = overview?.availability === "COMING_SOON";
   const periodStart = formatPeriod(entitlement?.periodStart ?? null);
   const periodEnd = formatPeriod(entitlement?.periodEnd ?? null);
+  const noEntitlement =
+    !!entitlement && entitlement.allowedModels.length === 0;
 
   return (
     <div className="space-y-4 rounded-lg border p-4">
@@ -79,6 +123,11 @@ function ManagedAiCard() {
         )}
       </div>
 
+      {redeemError && (
+        <p role="alert" className="text-destructive">
+          {t("settings.managedErrorCode", { code: redeemError })}
+        </p>
+      )}
       {loading && !overview ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -92,7 +141,7 @@ function ManagedAiCard() {
           </p>
         </div>
       ) : !connected ? (
-        <div className="rounded-md border border-dashed p-3 text-sm space-y-1">
+        <div className="rounded-md border border-dashed p-3 text-sm space-y-2">
           <div className="flex items-center gap-2">
             <XCircle className="h-4 w-4 text-muted-foreground" />
             <span className="font-medium">{t("settings.managedUnavailable")}</span>
@@ -102,6 +151,29 @@ function ManagedAiCard() {
               ? t("settings.managedErrorCode", { code: errorCode })
               : t("settings.managedUnavailableHint")}
           </p>
+          <p className="text-muted-foreground">
+            {t("settings.managedRedeemHint")}
+          </p>
+          <div className="flex items-center gap-2">
+            <Input
+              type="password"
+              value={redeemToken}
+              onChange={(event) => setRedeemToken(event.target.value)}
+              placeholder={t("settings.managedTokenPlaceholder")}
+              autoComplete="off"
+              spellCheck={false}
+              className="h-8 font-mono text-xs"
+              disabled={busy}
+            />
+            <Button
+              size="sm"
+              onClick={() => void redeem()}
+              disabled={busy || !redeemToken.trim()}
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {t("settings.managedConnect")}
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
@@ -111,7 +183,22 @@ function ManagedAiCard() {
               {connection?.displayName ?? "Vocatrya Managed AI"}
             </span>
             <Badge variant="secondary">{connection?.status}</Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-7 px-2 text-muted-foreground"
+              onClick={() => void disconnect()}
+              disabled={busy}
+            >
+              {t("settings.managedDisconnect")}
+            </Button>
           </div>
+
+          {overview?.hostedUserId && (
+            <p className="text-xs text-muted-foreground">
+              {t("settings.managedAccount")}: {overview.hostedUserId}
+            </p>
+          )}
 
           {errorCode && (
             <p className="text-sm text-destructive">
@@ -166,6 +253,12 @@ function ManagedAiCard() {
                 </>
               )}
             </dl>
+          )}
+
+          {noEntitlement && (
+            <p className="text-sm text-muted-foreground">
+              {t("settings.managedNoEntitlement")}
+            </p>
           )}
 
           {overview && overview.models.length > 0 && (

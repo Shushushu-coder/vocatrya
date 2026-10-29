@@ -9,28 +9,89 @@ import { managedAiProvenanceV1Schema, type ManagedAiProvenanceV1 } from "./manag
 // REASON: vocatrya.com is not registered. Internal Beta will use the
 // existing shucubed.xyz domain.
 export const TRUSTED_HOSTED_MANAGED_ENDPOINT = "https://managed.shucubed.xyz";
-export interface HostedSessionProvider { tokenForLocalUser(localUserId: string): Promise<string | null> }
+export interface HostedSessionProvider {
+  tokenForLocalUser(localUserId: string): Promise<string | null>;
+  /** Persists a hosted-issued session under OS protection. Providers without a write channel omit this — redemption fails closed there. */
+  saveSession?(localUserId: string, token: string): Promise<void>;
+  /** Explicit clearing fails on storage errors; expectedToken makes automatic rejection cleanup conditional. */
+  clearSession?(localUserId: string, expectedToken?: string): Promise<void>;
+}
+
+// Development-only store backing the redeem flow on plain-web dev runs (no
+// Electron broker). Same trust level as VOCATRYA_DEV_HOSTED_SESSION_TOKEN;
+// production builds never touch it. Symbol.for survives per-bundle module
+// duplication in the Next server.
+const DEV_SESSION_STORE_KEY = Symbol.for("vocatrya.managedDevSessions.v1");
+function devSessionStore(): Map<string, string | null> {
+  const scope = globalThis as unknown as Record<symbol, Map<string, string | null> | undefined>;
+  let store = scope[DEV_SESSION_STORE_KEY];
+  if (!store) { store = new Map(); scope[DEV_SESSION_STORE_KEY] = store; }
+  return store;
+}
+
 export class DesktopHostedSessionProvider implements HostedSessionProvider {
-  async tokenForLocalUser(localUserId: string): Promise<string | null> {
+  private broker(): { url: URL; token: string } | null {
     const base = process.env.VOCATRYA_HOSTED_SESSION_URL;
     const internalToken = process.env.VOCATRYA_DESKTOP_INTERNAL_TOKEN;
-    if (base && internalToken) {
-      const url = new URL(base);
-      if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new ManagedError("MANAGED_AUTH_REQUIRED");
-      url.pathname = "/session"; url.searchParams.set("localUserId", localUserId);
+    if (!base || !internalToken) return null;
+    const url = new URL(base);
+    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new ManagedError("MANAGED_AUTH_REQUIRED");
+    url.pathname = "/session";
+    return { url, token: internalToken };
+  }
+  async tokenForLocalUser(localUserId: string): Promise<string | null> {
+    const broker = this.broker();
+    if (broker) {
+      broker.url.searchParams.set("localUserId", localUserId);
       try {
-        const response = await fetch(url, { headers: { authorization: `Bearer ${internalToken}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+        const response = await fetch(broker.url, { headers: { authorization: `Bearer ${broker.token}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
         if (!response.ok) return null;
         const body = await response.json();
         return typeof body?.token === "string" && /^[A-Za-z0-9_-]{43}$/.test(body.token) ? body.token : null;
       } catch { return null; }
     }
+    if (process.env.NODE_ENV === "production") return null;
+    const store = devSessionStore();
+    if (store.has(localUserId)) {
+      const stored = store.get(localUserId);
+      return stored && /^[A-Za-z0-9_-]{43}$/.test(stored) ? stored : null;
+    }
     // Development-only delivery channel: an operator-provisioned hosted
     // token handed over through the environment (plain-web dev runs have no
     // Electron session broker). Still a real hosted session — the value is
     // never minted locally and production ignores this variable entirely.
-    const dev = process.env.NODE_ENV !== "production" ? process.env.VOCATRYA_DEV_HOSTED_SESSION_TOKEN : undefined;
+    const dev = process.env.VOCATRYA_DEV_HOSTED_SESSION_TOKEN;
     return dev && /^[A-Za-z0-9_-]{43}$/.test(dev) ? dev : null;
+  }
+  async saveSession(localUserId: string, token: string): Promise<void> {
+    const broker = this.broker();
+    if (!broker) {
+      if (process.env.NODE_ENV === "production") throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
+      devSessionStore().set(localUserId, token);
+      return;
+    }
+    try {
+      const response = await fetch(broker.url, { method: "PUT", redirect: "error", signal: AbortSignal.timeout(5000),
+        headers: { authorization: `Bearer ${broker.token}`, "content-type": "application/json" }, body: JSON.stringify({ localUserId, token }) });
+      if (!response.ok) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
+    } catch (error) { if (error instanceof ManagedError) throw error; throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"); }
+  }
+  async clearSession(localUserId: string, expectedToken?: string): Promise<void> {
+    const broker = this.broker();
+    if (!broker) {
+      if (process.env.NODE_ENV !== "production") {
+        const store = devSessionStore();
+        const current = store.has(localUserId) ? store.get(localUserId) : process.env.VOCATRYA_DEV_HOSTED_SESSION_TOKEN;
+        if (expectedToken === undefined || current === expectedToken) store.set(localUserId, null);
+      }
+      return;
+    }
+    broker.url.searchParams.set("localUserId", localUserId);
+    try {
+      const response = await fetch(broker.url, { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(5000),
+        headers: { authorization: `Bearer ${broker.token}`, "content-type": "application/json" }, body: JSON.stringify({ expectedToken }) });
+      if (!response.ok) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
+    } catch { throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"); }
   }
 }
 function endpoint(): string {
@@ -66,6 +127,10 @@ export class HostedManagedClient {
       if (!response.ok) {
         let code: unknown;
         try { const errorBody = await response.json(); const replay = receiptError(errorBody, (body as ManagedInvocation | undefined)?.invocationKey); if (replay) throw replay; code = errorBody?.code; } catch (error) { if (error instanceof ManagedError) throw error; /* no raw errors */ }
+        // An authoritative 401 means the stored credential is dead (expired
+        // or revoked): drop it so the surface reports "needs a session"
+        // instead of retrying a rejected token forever.
+        if (response.status === 401) await this.sessions.clearSession?.(userId, token).catch(() => undefined);
         throw new ManagedError((MANAGED_ERROR_CODES as readonly unknown[]).includes(code) ? code as typeof MANAGED_ERROR_CODES[number] : "MANAGED_RUNTIME_UNAVAILABLE");
       }
       return response;

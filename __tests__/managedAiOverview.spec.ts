@@ -324,6 +324,7 @@ describe("getManagedAiOverview", () => {
       entitlement: null,
       usage: null,
       models: [],
+      hostedUserId: null,
       errorCode: "MANAGED_RUNTIME_UNAVAILABLE",
     });
     expect(db.aIConnection.create).not.toHaveBeenCalled();
@@ -357,6 +358,7 @@ describe("getManagedAiOverview", () => {
           entitlement: null,
           usage: null,
           models: [],
+          hostedUserId: null,
           errorCode: null,
         },
       });

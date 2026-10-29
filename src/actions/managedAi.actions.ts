@@ -9,6 +9,7 @@ import {
 } from "@/lib/ai/assignments";
 import { bootstrapManagedAiForUser } from "@/lib/ai/managed-bootstrap";
 import {
+  DesktopHostedSessionProvider,
   HostedManagedClient,
   type ManagedEntitlement,
   type ManagedUsageSummary,
@@ -42,6 +43,11 @@ export interface ManagedAiOverview {
   /** Assignable models — catalog enabled/available/text-capable AND covered by the current entitlement. Empty when the entitlement cannot be read. */
   models: { modelKey: string; displayName: string; streaming: boolean; structuredOutput: boolean }[];
   /**
+   * The hosted account identity the stored session authenticates as —
+   * transient, never persisted locally. Null when no live session exists.
+   */
+  hostedUserId: string | null;
+  /**
    * The MANAGED_* error code when a Hosted read failed — rendered verbatim.
    * null means every read succeeded; the UI never fabricates entitlement data.
    */
@@ -64,12 +70,13 @@ export async function getManagedAiOverview(): Promise<{
     if (managedAiAvailability() !== "ENABLED") {
       return {
         success: true,
-        data: { availability: "COMING_SOON", connection: null, entitlement: null, usage: null, models: [], errorCode: null },
+        data: { availability: "COMING_SOON", connection: null, entitlement: null, usage: null, models: [], hostedUserId: null, errorCode: null },
       };
     }
     const client = new HostedManagedClient();
 
     let connection: ManagedAiOverview["connection"] = null;
+    let hostedUserId: string | null = null;
     try {
       const bootstrap = await bootstrapManagedAiForUser(user.id, client);
       connection = {
@@ -83,11 +90,29 @@ export async function getManagedAiOverview(): Promise<{
         select: { lastVerifiedAt: true },
       });
       connection.lastVerifiedAt = row?.lastVerifiedAt?.toISOString() ?? null;
+      hostedUserId = await client.identity(user.id).catch(() => null);
     } catch (error) {
       const mapped = error instanceof AIBusinessError ? error : managedBusinessError(error);
+      if (mapped.code === "MANAGED_AUTH_REQUIRED") {
+        // The hosted authority rejected the stored session (expired or
+        // revoked) — the connection row stops claiming CONNECTED so the
+        // resolver reports re-auth instead of a runnable managed source.
+        // Fail-soft: a local write hiccup never masks the authoritative 401.
+        await db.aIConnection.updateMany({
+          where: {
+            userId: user.id,
+            provider: "VOCATRYA",
+            backendKind: "MANAGED_GATEWAY",
+            authType: "MANAGED",
+            archivedAt: null,
+            status: "CONNECTED",
+          },
+          data: { status: "REAUTH_REQUIRED" },
+        }).catch(() => undefined);
+      }
       return {
         success: true,
-        data: { availability: "ENABLED", connection: null, entitlement: null, usage: null, models: [], errorCode: mapped.code },
+        data: { availability: "ENABLED", connection: null, entitlement: null, usage: null, models: [], hostedUserId: null, errorCode: mapped.code },
       };
     }
 
@@ -124,6 +149,7 @@ export async function getManagedAiOverview(): Promise<{
         entitlement: entitlement.value,
         usage: usage.value,
         models,
+        hostedUserId,
         errorCode,
       },
     };
@@ -168,6 +194,85 @@ export async function assignManagedBusinessAiSource(input: {
       return { success: false, code: error.code, message: error.message };
     }
     return handleError(error, "Failed to save Managed AI assignment") as {
+      success: boolean;
+      message: string;
+    };
+  }
+}
+
+/**
+ * User-facing session acquisition: the user pastes the hosted session
+ * credential that was issued with their subscription (operator-provisioned;
+ * never an operator token and never an upstream credential). The credential
+ * is validated against the Hosted authority BEFORE it is persisted — only a
+ * live session is written to the OS-backed store, then the system Managed
+ * connection is bootstrapped. Errors keep stable MANAGED_* codes.
+ */
+export async function redeemManagedAiSession(input: {
+  token: string;
+}): Promise<{
+  success: boolean;
+  code?: string;
+  message?: string;
+  data?: { hostedUserId: string };
+}> {
+  try {
+    const user = await requireUser();
+    if (managedAiAvailability() !== "ENABLED") {
+      return { success: false, code: MANAGED_NOT_LAUNCHED, message: "Managed AI is not available in this release" };
+    }
+    const token = typeof input?.token === "string" ? input.token.trim() : "";
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+      return { success: false, code: "MANAGED_AUTH_REQUIRED" };
+    }
+    // Probe the candidate credential against the Hosted authority without
+    // touching the stored session — a rejected paste drops nothing.
+    const probe = new HostedManagedClient({ tokenForLocalUser: async () => token });
+    let hostedUserId: string;
+    try {
+      hostedUserId = await probe.identity(user.id);
+    } catch (error) {
+      return { success: false, code: managedBusinessError(error).code };
+    }
+    await new DesktopHostedSessionProvider().saveSession(user.id, token);
+    await bootstrapManagedAiForUser(user.id);
+    return { success: true, data: { hostedUserId } };
+  } catch (error) {
+    if (error instanceof AIBusinessError) {
+      return { success: false, code: error.code, message: error.message };
+    }
+    return handleError(error, "Failed to connect Managed AI") as {
+      success: boolean;
+      message: string;
+    };
+  }
+}
+
+/**
+ * Drops the stored hosted session and marks the system connection
+ * DISCONNECTED. Clearing is allowed even while the release gate is closed —
+ * discarding a stale credential is always safe and never a fallback.
+ */
+export async function disconnectManagedAiSession(): Promise<{
+  success: boolean;
+  message?: string;
+}> {
+  try {
+    const user = await requireUser();
+    await new DesktopHostedSessionProvider().clearSession(user.id);
+    await db.aIConnection.updateMany({
+      where: {
+        userId: user.id,
+        provider: "VOCATRYA",
+        backendKind: "MANAGED_GATEWAY",
+        authType: "MANAGED",
+        archivedAt: null,
+      },
+      data: { status: "DISCONNECTED" },
+    });
+    return { success: true };
+  } catch (error) {
+    return handleError(error, "Failed to disconnect Managed AI") as {
       success: boolean;
       message: string;
     };

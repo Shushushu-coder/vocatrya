@@ -24,6 +24,30 @@ describe("OS-backed hosted session boundary", () => {
       store.clear("local-a"); expect(store.read("local-a")).toBeNull();
     } finally { await new Promise(resolve => server ? server.close(resolve) : resolve()); fs.rmSync(directory, { recursive: true, force: true }); }
   });
+  it("backend write/clear channel persists encrypted sessions and rejects malformed input", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));
+    let server;
+    try {
+      const store = createHostedSessionStore({ directory, safeStorage: storage() });
+      const broker = await startHostedSessionBroker({ token: "internal-test", store }); server = broker.server;
+      const headers = { authorization: "Bearer internal-test", "content-type": "application/json" };
+      const userToken = "b".repeat(42) + "c";
+      expect((await fetch(broker.url + "/session", { method: "PUT", headers, body: JSON.stringify({ localUserId: "local-a", token: userToken }) })).status).toBe(200);
+      const saved = path.join(directory, fs.readdirSync(directory)[0]);
+      expect(fs.readFileSync(saved).toString()).not.toContain(userToken);
+      expect(await (await fetch(broker.url + "/session?localUserId=local-a", { headers })).json()).toEqual({ token: userToken });
+      expect((await fetch(broker.url + "/session", { method: "PUT", body: JSON.stringify({ localUserId: "local-a", token: "c".repeat(43) }) })).status).toBe(401);
+      for (const body of [{ localUserId: "local-a", token: "short" }, { localUserId: "", token: userToken }, "nope"]) {
+        expect((await fetch(broker.url + "/session", { method: "PUT", headers, body: JSON.stringify(body) })).status).toBe(400);
+      }
+      expect((await fetch(broker.url + "/session", { method: "DELETE", headers })).status).toBe(400);
+      expect((await fetch(broker.url + "/session?localUserId=local-a", { method: "DELETE" })).status).toBe(401);
+      expect((await fetch(broker.url + "/session?localUserId=local-a", { method: "DELETE", headers })).status).toBe(200);
+      expect((await fetch(broker.url + "/session?localUserId=local-a", { headers })).status).toBe(401);
+      expect((await fetch(broker.url + "/session?localUserId=local-a", { method: "DELETE", headers })).status).toBe(200);
+      expect((await fetch(broker.url + "/session?localUserId=local-a", { method: "PATCH", headers })).status).toBe(404);
+    } finally { await new Promise(resolve => server ? server.close(resolve) : resolve()); fs.rmSync(directory, { recursive: true, force: true }); }
+  });
   it("fails closed with unavailable OS crypto, insecure fallback or corrupt encrypted token", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));
     try {
