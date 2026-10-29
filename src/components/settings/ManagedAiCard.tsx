@@ -77,7 +77,7 @@ function ManagedAiCard() {
     try {
       const result = await disconnectManagedAiSession();
       if (!result.success) {
-        setRedeemError("MANAGED_RUNTIME_UNAVAILABLE");
+        setRedeemError(result.code ?? "MANAGED_RUNTIME_UNAVAILABLE");
         return;
       }
       await refresh();

@@ -178,6 +178,7 @@ const db = vi.hoisted(() => ({
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     findUnique: vi.fn(),
   },
 }));
@@ -279,6 +280,7 @@ describe("getManagedAiOverview", () => {
     db.aIConnection.findFirst.mockResolvedValue(managedRow);
     db.aIConnection.findUnique.mockResolvedValue(managedRow);
     db.aIConnection.update.mockResolvedValue(managedRow);
+    db.aIConnection.updateMany.mockResolvedValue({ count: 1 });
     db.aIConnection.create.mockResolvedValue(managedRow);
   });
 
@@ -313,6 +315,36 @@ describe("getManagedAiOverview", () => {
     expect(result.data?.usage).toBeNull();
     expect(result.data?.errorCode).toBe("MANAGED_RUNTIME_UNAVAILABLE");
     expect(result.data?.entitlement?.planKey).toBe("starter");
+  });
+
+  it("drops the CONNECTED claim when a mid-read 401 revokes the session", async () => {
+    stub.usage.mockRejectedValue(new ManagedError("MANAGED_AUTH_REQUIRED"));
+    const result = await getManagedAiOverview();
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      availability: "ENABLED",
+      connection: null,
+      usage: null,
+      models: [],
+      hostedUserId: null,
+      errorCode: "MANAGED_AUTH_REQUIRED",
+    });
+    // Successful reads still surface their real data.
+    expect(result.data?.entitlement?.planKey).toBe("starter");
+    // The dead session's connection is moved to re-auth, not left CONNECTED.
+    expect(db.aIConnection.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "REAUTH_REQUIRED" } }),
+    );
+  });
+
+  it("prioritizes a later auth failure over an earlier transient read failure", async () => {
+    stub.entitlement.mockRejectedValue(new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"));
+    stub.usage.mockRejectedValue(new ManagedError("MANAGED_AUTH_REQUIRED"));
+    const result = await getManagedAiOverview();
+    expect(result.data).toMatchObject({ connection: null, models: [], errorCode: "MANAGED_AUTH_REQUIRED" });
+    expect(db.aIConnection.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "REAUTH_REQUIRED" } }),
+    );
   });
 
   it("keeps an enabled-but-unreachable Hosted distinct from coming soon", async () => {

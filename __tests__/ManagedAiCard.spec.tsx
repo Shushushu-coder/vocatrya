@@ -114,6 +114,13 @@ describe("ManagedAiCard", () => {
     expect(overview.get).toHaveBeenCalledTimes(1);
   });
 
+  it("surfaces the real failure code when disconnect fails", async () => {
+    overview.disconnect.mockResolvedValue({ success: false, code: "GATEWAY_TIMEOUT" });
+    shows(LAUNCHED);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "settings.managedDisconnect" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("GATEWAY_TIMEOUT");
+  });
+
   it("reports a temporary Hosted failure after launch as unavailable, not as coming soon", async () => {
     shows({ ...EMPTY, errorCode: "MANAGED_RUNTIME_UNAVAILABLE" });
     expect(await screen.findByText("settings.managedUnavailable")).toBeInTheDocument();

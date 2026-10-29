@@ -8,6 +8,7 @@ import {
   assignManagedBusinessSource,
 } from "@/lib/ai/assignments";
 import { bootstrapManagedAiForUser } from "@/lib/ai/managed-bootstrap";
+import { managedSessionLifecycle, withManagedSessionLock } from "@/lib/ai/managed-session-lifecycle";
 import {
   DesktopHostedSessionProvider,
   HostedManagedClient,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/ai/managed-client";
 import { managedBusinessError } from "@/lib/ai/managed-dispatch";
 import { AIBusinessError } from "@/lib/ai/connections";
-import type { ManagedModelDTO } from "@/lib/ai/managed-contract";
+import { ManagedError, type ManagedModelDTO } from "@/lib/ai/managed-contract";
 import {
   MANAGED_NOT_LAUNCHED,
   managedAiAvailability,
@@ -74,11 +75,36 @@ export async function getManagedAiOverview(): Promise<{
       };
     }
     const client = new HostedManagedClient();
+    let sessionRevision = managedSessionLifecycle(user.id).revision;
+
+    // An authoritative 401 means the stored credential is dead (expired or
+    // revoked) — the connection row stops claiming CONNECTED so the
+    // resolver reports re-auth instead of a runnable managed source.
+    // Fail-soft: a local write hiccup never masks the authoritative 401.
+    const markReauthRequired = () => withManagedSessionLock(user.id, async (state) => {
+      // A rejection from an older overview must not downgrade a session
+      // redeemed (or disconnected) while its Hosted reads were in flight.
+      if (state.revision !== sessionRevision) return;
+      await db.aIConnection.updateMany({
+        where: {
+          userId: user.id,
+          provider: "VOCATRYA",
+          backendKind: "MANAGED_GATEWAY",
+          authType: "MANAGED",
+          archivedAt: null,
+          status: "CONNECTED",
+        },
+        data: { status: "REAUTH_REQUIRED" },
+      }).catch(() => undefined);
+    });
 
     let connection: ManagedAiOverview["connection"] = null;
     let hostedUserId: string | null = null;
     try {
-      const bootstrap = await bootstrapManagedAiForUser(user.id, client);
+      const bootstrap = await withManagedSessionLock(user.id, async (state) => {
+        sessionRevision = state.revision;
+        return bootstrapManagedAiForUser(user.id, client);
+      });
       connection = {
         id: bootstrap.connectionId,
         displayName: bootstrap.displayName,
@@ -93,23 +119,7 @@ export async function getManagedAiOverview(): Promise<{
       hostedUserId = await client.identity(user.id).catch(() => null);
     } catch (error) {
       const mapped = error instanceof AIBusinessError ? error : managedBusinessError(error);
-      if (mapped.code === "MANAGED_AUTH_REQUIRED") {
-        // The hosted authority rejected the stored session (expired or
-        // revoked) — the connection row stops claiming CONNECTED so the
-        // resolver reports re-auth instead of a runnable managed source.
-        // Fail-soft: a local write hiccup never masks the authoritative 401.
-        await db.aIConnection.updateMany({
-          where: {
-            userId: user.id,
-            provider: "VOCATRYA",
-            backendKind: "MANAGED_GATEWAY",
-            authType: "MANAGED",
-            archivedAt: null,
-            status: "CONNECTED",
-          },
-          data: { status: "REAUTH_REQUIRED" },
-        }).catch(() => undefined);
-      }
+      if (mapped.code === "MANAGED_AUTH_REQUIRED") await markReauthRequired();
       return {
         success: true,
         data: { availability: "ENABLED", connection: null, entitlement: null, usage: null, models: [], hostedUserId: null, errorCode: mapped.code },
@@ -128,7 +138,28 @@ export async function getManagedAiOverview(): Promise<{
       read(() => client.usage(user.id)),
       read(() => client.catalog(user.id)),
     ]);
-    const errorCode = entitlement.errorCode ?? usage.errorCode ?? catalog.errorCode;
+    const errors = [entitlement.errorCode, usage.errorCode, catalog.errorCode];
+    const errorCode = errors.includes("MANAGED_AUTH_REQUIRED")
+      ? "MANAGED_AUTH_REQUIRED"
+      : errors.find((code) => code !== null) ?? null;
+    if (errorCode === "MANAGED_AUTH_REQUIRED") {
+      // The session died mid-read — the client dropped the stored credential,
+      // so the row must not keep claiming CONNECTED. Report the same re-auth
+      // surface the bootstrap-failure path produces.
+      await markReauthRequired();
+      return {
+        success: true,
+        data: {
+          availability: "ENABLED",
+          connection: null,
+          entitlement: entitlement.value,
+          usage: usage.value,
+          models: [],
+          hostedUserId: null,
+          errorCode,
+        },
+      };
+    }
     // Assignable = catalog-enabled AND inside the plan allow-list. Without a
     // readable entitlement nothing is presented as assignable — showing
     // catalog-level models anyway would overpromise what admission enforces.
@@ -234,12 +265,16 @@ export async function redeemManagedAiSession(input: {
     } catch (error) {
       return { success: false, code: managedBusinessError(error).code };
     }
-    await new DesktopHostedSessionProvider().saveSession(user.id, token);
-    await bootstrapManagedAiForUser(user.id);
+    await withManagedSessionLock(user.id, async (state) => {
+      await new DesktopHostedSessionProvider().saveSession(user.id, token);
+      state.revision += 1;
+      await bootstrapManagedAiForUser(user.id);
+    });
     return { success: true, data: { hostedUserId } };
   } catch (error) {
-    if (error instanceof AIBusinessError) {
-      return { success: false, code: error.code, message: error.message };
+    if (error instanceof AIBusinessError || error instanceof ManagedError) {
+      const mapped = managedBusinessError(error);
+      return { success: false, code: mapped.code, message: mapped.message };
     }
     return handleError(error, "Failed to connect Managed AI") as {
       success: boolean;
@@ -255,23 +290,31 @@ export async function redeemManagedAiSession(input: {
  */
 export async function disconnectManagedAiSession(): Promise<{
   success: boolean;
+  code?: string;
   message?: string;
 }> {
   try {
     const user = await requireUser();
-    await new DesktopHostedSessionProvider().clearSession(user.id);
-    await db.aIConnection.updateMany({
-      where: {
-        userId: user.id,
-        provider: "VOCATRYA",
-        backendKind: "MANAGED_GATEWAY",
-        authType: "MANAGED",
-        archivedAt: null,
-      },
-      data: { status: "DISCONNECTED" },
+    await withManagedSessionLock(user.id, async (state) => {
+      await new DesktopHostedSessionProvider().clearSession(user.id);
+      state.revision += 1;
+      await db.aIConnection.updateMany({
+        where: {
+          userId: user.id,
+          provider: "VOCATRYA",
+          backendKind: "MANAGED_GATEWAY",
+          authType: "MANAGED",
+          archivedAt: null,
+        },
+        data: { status: "DISCONNECTED" },
+      });
     });
     return { success: true };
   } catch (error) {
+    if (error instanceof AIBusinessError || error instanceof ManagedError) {
+      const mapped = managedBusinessError(error);
+      return { success: false, code: mapped.code, message: mapped.message };
+    }
     return handleError(error, "Failed to disconnect Managed AI") as {
       success: boolean;
       message: string;

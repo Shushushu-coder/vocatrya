@@ -674,9 +674,97 @@ describe("Managed AI real-HTTP loopback closed loop", () => {
       return realFetch(input, init);
     });
     try {
-      expect((await disconnectManagedAiSession()).success).toBe(false);
+      expect(await disconnectManagedAiSession()).toMatchObject({
+        success: false,
+        code: "MANAGED_RUNTIME_UNAVAILABLE",
+      });
       expect((await managedConnection()).status).toBe("CONNECTED");
       expect(sessionStore.read(seam.userId)).not.toBeNull();
+    } finally { spy.mockRestore(); }
+  });
+
+  it("reports re-auth when a mid-overview read gets an authoritative 401", async () => {
+    provision("hosted-midread-revoke", "starter");
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      // Session bootstrap and reads stay real; the usage read sees the
+      // revocation the authority would return for a dead credential.
+      if (String(input).endsWith("/v1/me/usage")) {
+        return new Response(JSON.stringify({ code: "MANAGED_AUTH_REQUIRED" }), { status: 401 });
+      }
+      return realFetch(input, init);
+    });
+    try {
+      const overview = await getManagedAiOverview();
+      expect(overview.data).toMatchObject({
+        availability: "ENABLED",
+        connection: null,
+        hostedUserId: null,
+        models: [],
+        errorCode: "MANAGED_AUTH_REQUIRED",
+      });
+      // Reads that did succeed still report their real data.
+      expect(overview.data?.entitlement?.planKey).toBe("starter");
+      // The dropped credential does not keep claiming CONNECTED.
+      expect(sessionStore.read(seam.userId)).toBeNull();
+      expect((await managedConnection()).status).toBe("REAUTH_REQUIRED");
+    } finally { spy.mockRestore(); }
+  });
+
+  it("keeps a newly redeemed session connected after an older overview receives a late 401", async () => {
+    provision("hosted-late-reject", "starter");
+    const oldToken = sessionStore.read(seam.userId);
+    const freshToken = store.issueSession("hosted-late-reject", Date.now() + 600_000);
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { entered = resolve; });
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/v1/me/usage") &&
+          new Headers(init?.headers).get("authorization") === `Bearer ${oldToken}`) {
+        entered();
+        await pending;
+        return Response.json({ code: "MANAGED_AUTH_REQUIRED" }, { status: 401 });
+      }
+      return realFetch(input, init);
+    });
+    const oldOverview = getManagedAiOverview();
+    try {
+      await waiting;
+      expect(await redeemManagedAiSession({ token: freshToken })).toMatchObject({ success: true });
+      release();
+      expect((await oldOverview).data?.errorCode).toBe("MANAGED_AUTH_REQUIRED");
+      expect(sessionStore.read(seam.userId)).toBe(freshToken);
+      expect((await managedConnection()).status).toBe("CONNECTED");
+    } finally {
+      release();
+      await oldOverview;
+      spy.mockRestore();
+    }
+  });
+
+  it("fails redemption visibly when session persistence is unavailable", async () => {
+    const token = store.issueSession("hosted-save-fail", Date.now() + 600_000);
+    store.setSubscription("hosted-save-fail", {
+      planKey: "starter",
+      status: "ACTIVE",
+      periodStart: Date.now() - 1000,
+      periodEnd: Date.now() + 600_000,
+    });
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (init?.method === "PUT") return new Response("{}", { status: 500 });
+      return realFetch(input, init);
+    });
+    try {
+      expect(await redeemManagedAiSession({ token })).toMatchObject({
+        success: false,
+        code: "MANAGED_RUNTIME_UNAVAILABLE",
+      });
+      // Nothing persisted, no connection row claiming a live session.
+      expect(sessionStore.read(seam.userId)).toBeNull();
+      await expect(managedConnection()).rejects.toThrow();
     } finally { spy.mockRestore(); }
   });
 
