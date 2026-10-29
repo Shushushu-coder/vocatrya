@@ -36,6 +36,7 @@ import {
 import { remapLegacyMigrationMapIds } from "./migrationMap";
 import { writeSnapshot } from "./snapshot";
 import { log } from "@/lib/telemetry";
+import { withRestoredJobReferences } from "@/lib/agent/restoredJobReferences";
 import { isResumeFilePath } from "@/lib/resumeFiles";
 import { BackupDataSchema, type BackupData, type BackupManifest } from "./schema";
 
@@ -418,6 +419,214 @@ function rowsFor(data: BackupData, model: BackupModel): Record<string, unknown>[
   return (data as unknown as Record<string, Record<string, unknown>[]>)[model];
 }
 
+// Conversation context items and historical tool results store entity ids at
+// fixed paths (conversationContext.ts isContextItem; agent tool result types).
+// IdMap is fully minted before any insert, including JobOpportunity, which is
+// later in INSERT_ORDER than ChatConversation. Only those paths are rewritten,
+// and only when the old id belongs to that entity set. Prose, code, message
+// ids, tool-call ids, label snapshots and unrecognized message payloads stay
+// unchanged. Separate restore provenance is added to context below.
+// A dangling id is left in place; malformed JSON is not parsed away.
+type EntityIdSets = {
+  job: ReadonlySet<string>;
+  resume: ReadonlySet<string>;
+  coverLetter: ReadonlySet<string>;
+};
+
+function mintedSourceIds(
+  data: BackupData,
+  models: readonly BackupModel[],
+  idMap: IdMap,
+  containsSensitiveData: boolean,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const model of models) {
+    if (model === "QuestionBank" || MODEL_SPECS[model].lookup) continue;
+    if (backupDataset(model) === "sensitive" && !containsSensitiveData) continue;
+    for (const row of rowsFor(data, model)) {
+      const id = row.id;
+      if (typeof id === "string" && idMap.get(id)) ids.add(id);
+    }
+  }
+  return ids;
+}
+
+function mappedEntityId(
+  value: unknown,
+  allowed: ReadonlySet<string>,
+  idMap: IdMap,
+): string | null {
+  if (typeof value !== "string" || !allowed.has(value)) return null;
+  const next = idMap.get(value);
+  if (!next || next === value) return null;
+  return next;
+}
+
+function remapField(
+  record: Record<string, unknown>,
+  key: string,
+  allowed: ReadonlySet<string>,
+  idMap: IdMap,
+): boolean {
+  const next = mappedEntityId(record[key], allowed, idMap);
+  if (!next) return false;
+  record[key] = next;
+  return true;
+}
+
+function remapRecordField(
+  parent: Record<string, unknown>,
+  key: string,
+  visit: (child: Record<string, unknown>) => boolean,
+): boolean {
+  const child = parent[key];
+  if (!child || typeof child !== "object" || Array.isArray(child)) return false;
+  return visit(child as Record<string, unknown>);
+}
+
+function remapObjectArrayIds(
+  parent: Record<string, unknown>,
+  key: string,
+  idKey: string,
+  allowed: ReadonlySet<string>,
+  idMap: IdMap,
+): boolean {
+  const list = parent[key];
+  if (!Array.isArray(list)) return false;
+  let changed = false;
+  for (const item of list) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    changed = remapField(item as Record<string, unknown>, idKey, allowed, idMap) || changed;
+  }
+  return changed;
+}
+
+function toolNameOf(part: Record<string, unknown>): string | null {
+  if (part.type === "dynamic-tool") {
+    return typeof part.toolName === "string" ? part.toolName : null;
+  }
+  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+    return part.type.slice("tool-".length);
+  }
+  return null;
+}
+
+function remapToolPart(
+  part: Record<string, unknown>,
+  maps: EntityIdSets,
+  idMap: IdMap,
+): boolean {
+  const name = toolNameOf(part);
+  if (!name) return false;
+  if (name === "get_job") {
+    const inputChanged = remapRecordField(part, "input", (input) =>
+      remapField(input, "jobId", maps.job, idMap));
+    const outputChanged = remapRecordField(part, "output", (output) =>
+      remapRecordField(output, "job", (job) => remapField(job, "id", maps.job, idMap)));
+    return inputChanged || outputChanged;
+  }
+  if (name === "list_jobs") {
+    return remapRecordField(part, "output", (output) =>
+      remapObjectArrayIds(output, "jobs", "id", maps.job, idMap));
+  }
+  if (name === "add_job") {
+    return remapRecordField(part, "output", (output) => {
+      const jobId = remapField(output, "jobId", maps.job, idMap);
+      const opportunityId = remapField(output, "jobOpportunityId", maps.job, idMap);
+      const duplicateId = remapRecordField(output, "duplicateOf", (duplicate) =>
+        remapField(duplicate, "id", maps.job, idMap));
+      return jobId || opportunityId || duplicateId;
+    });
+  }
+  if (name === "match_job" || name === "generate_cover_letter") {
+    return remapRecordField(part, "output", (output) => {
+      const jobId = remapField(output, "jobId", maps.job, idMap);
+      const resumeId = remapField(output, "resumeId", maps.resume, idMap);
+      const choices = remapObjectArrayIds(output, "resumes", "id", maps.resume, idMap);
+      const letterId = name === "generate_cover_letter"
+        ? remapField(output, "coverLetterId", maps.coverLetter, idMap)
+        : false;
+      return jobId || resumeId || choices || letterId;
+    });
+  }
+  if (name === "get_resume" || name === "review_resume") {
+    return remapRecordField(part, "output", (output) => {
+      const resumeId = remapField(output, "resumeId", maps.resume, idMap);
+      const choices = remapObjectArrayIds(output, "resumes", "id", maps.resume, idMap);
+      return resumeId || choices;
+    });
+  }
+  return false;
+}
+
+// Same predicate as isContextItem in conversationContext.ts. Items that fail
+// it are preserved and not scanned for similarly named fields.
+function isRemappableContextItem(value: unknown): value is {
+  kind: "job" | "resume";
+  entityId: string;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  return (
+    (item.kind === "job" || item.kind === "resume") &&
+    typeof item.entityId === "string" &&
+    item.entityId.length > 0 &&
+    typeof item.labelSnapshot === "string" &&
+    (item.source === "AUTO" || item.source === "MANUAL")
+  );
+}
+
+function remapConversationContext(
+  serialized: unknown,
+  jobIds: ReadonlySet<string>,
+  resumeIds: ReadonlySet<string>,
+  idMap: IdMap,
+): unknown {
+  if (typeof serialized !== "string") return serialized;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return serialized;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return serialized;
+  const record = parsed as Record<string, unknown>;
+  if (record.version !== 1 || !Array.isArray(record.items)) return serialized;
+  let changed = false;
+  for (const item of record.items) {
+    if (!isRemappableContextItem(item)) continue;
+    const allowed = item.kind === "job" ? jobIds : resumeIds;
+    changed = remapField(item as Record<string, unknown>, "entityId", allowed, idMap) || changed;
+  }
+  return changed ? JSON.stringify(parsed) : serialized;
+}
+
+function remapConversationMessages(
+  serialized: unknown,
+  maps: EntityIdSets,
+  idMap: IdMap,
+): unknown {
+  if (typeof serialized !== "string") return serialized;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return serialized;
+  }
+  if (!Array.isArray(parsed)) return serialized;
+  let changed = false;
+  for (const message of parsed) {
+    if (!message || typeof message !== "object" || Array.isArray(message)) continue;
+    const parts = (message as Record<string, unknown>).parts;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts) {
+      if (!part || typeof part !== "object" || Array.isArray(part)) continue;
+      changed = remapToolPart(part as Record<string, unknown>, maps, idMap) || changed;
+    }
+  }
+  return changed ? JSON.stringify(parsed) : serialized;
+}
+
 export async function importBackup(
   bytes: Buffer,
   userId: string,
@@ -480,6 +689,53 @@ export async function importBackup(
     if (MODEL_SPECS[model].lookup) continue;
     if (backupDataset(model) === "sensitive" && !containsSensitiveData) continue;
     for (const row of rowsFor(data, model)) idMap.mint(row.id as string);
+  }
+  const jobReferenceIds = mintedSourceIds(
+    data,
+    ["Job", "JobOpportunity"],
+    idMap,
+    containsSensitiveData,
+  );
+  const resumeReferenceIds = mintedSourceIds(
+    data,
+    ["Resume", "ResumeVariant"],
+    idMap,
+    containsSensitiveData,
+  );
+  const coverLetterReferenceIds = mintedSourceIds(
+    data,
+    ["CoverLetter"],
+    idMap,
+    containsSensitiveData,
+  );
+  const conversationReferenceIds: EntityIdSets = {
+    job: jobReferenceIds,
+    resume: resumeReferenceIds,
+    coverLetter: coverLetterReferenceIds,
+  };
+
+  // Capture every historically mentioned job, including prose and unknown
+  // tool payloads, before rewriting structured ids. Do this before imported
+  // file writes or destructive database work (the safety snapshot stays).
+  // An unrepresentable context fails
+  // closed rather than restoring history that can evade the archive guard.
+  const restoredConversations = new Map<string, { context: unknown; messages: unknown }>();
+  for (const row of rowsFor(data, "ChatConversation")) {
+    const source = JSON.stringify([row.context, row.messages]);
+    const references = [...jobReferenceIds]
+      .filter((id) => source.includes(id))
+      .map((id) => idMap.get(id)!);
+    const context = remapConversationContext(row.context, jobReferenceIds, resumeReferenceIds, idMap);
+    try {
+      restoredConversations.set(row.id as string, {
+        context: withRestoredJobReferences(context as string | null, references),
+        messages: remapConversationMessages(row.messages, conversationReferenceIds, idMap),
+      });
+    } catch {
+      throw new BackupError(
+        "Cannot safely restore conversation job references: invalid context. Import cancelled; nothing was changed. / 对话上下文无效，无法安全恢复职位关联，已取消导入，数据未更改。",
+      );
+    }
   }
 
   // Files are written before the transaction: a failed import leaves orphaned
@@ -679,6 +935,9 @@ export async function importBackup(
               payload.revision = 0;
               payload.activeRequestId = null;
               payload.activeRequestExpiresAt = null;
+              const restored = restoredConversations.get(row.id as string)!;
+              payload.context = restored.context;
+              payload.messages = restored.messages;
             }
             if (model === "TranscriptRevision") {
               if (payload.createdByUserId !== null && payload.createdByUserId !== undefined) {

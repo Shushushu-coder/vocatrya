@@ -1,4 +1,5 @@
 import { ConversationRequestError } from "./conversationRequest";
+import { restoredJobReferences, withRestoredJobReferences } from "./restoredJobReferences";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -192,9 +193,13 @@ export async function updateOwnedChatConversationContext(
   conversationId: string,
   context: AgentConversationContextV1,
 ): Promise<ChatConversationRow> {
+  const previous = await getOwnedChatConversation(userId, conversationId);
+  if (!previous) throw new ChatConversationNotFoundError();
   const updated = await prisma.chatConversation.updateMany({
-    where: { id: conversationId, userId, archivedAt: null },
-    data: { context: serializeConversationContext(context) },
+    where: { id: conversationId, userId, archivedAt: null, context: previous.context },
+    data: { context: withRestoredJobReferences(
+      serializeConversationContext(context), restoredJobReferences(previous.context),
+    ) },
   });
   if (updated.count !== 1) {
     const existing = await prisma.chatConversation.findFirst({
@@ -202,6 +207,7 @@ export async function updateOwnedChatConversationContext(
       select: { archivedAt: true },
     });
     if (!existing) throw new ChatConversationNotFoundError();
+    if (!existing.archivedAt) throw new ConversationRequestError("CONVERSATION_TURN_CONFLICT");
     throw new ChatConversationArchivedError();
   }
   const row = await getOwnedChatConversation(userId, conversationId);
