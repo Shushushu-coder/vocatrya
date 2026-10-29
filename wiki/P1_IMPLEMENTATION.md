@@ -20,12 +20,12 @@
 
 | Feature | P1 范围 | 实现状态 | 当前结论 |
 | --- | --- | --- | --- |
-| **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | 活动退役与独立任务分类已集成；隔离桌面验收待执行 |
-| **BD-ARCHIVE** | IN_SCOPE | MISSING | 职位/对话归档产品规则已确认，尚未实现 |
+| **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | 活动退役已集成；隔离桌面35/36通过，术语修复后待定向复验 |
+| **BD-ARCHIVE** | IN_SCOPE | MISSING | 实施合同提案已形成；八项产品决定待冻结，尚未实现 |
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
 | **AI-BYOK** | IN_SCOPE | PARTIAL | 凭据边界与真实信号超时分类修复已集成；真实 Key 业务调用未验收 |
 | **AI-MANAGED** | IN_SCOPE | MISSING | 面向用户的托管服务尚未交付 |
-| **RESUME-BUILDER** | IN_SCOPE | MISSING | v2 实施合同已集成，四项关键产品决定已批准；工作台未编码 |
+| **RESUME-BUILDER** | IN_SCOPE | MISSING | v2 合同与导入条目排除子成果已集成；完整工作台未实现 |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | 现有五工具保留；`match_job` 仅登记待合同裁定 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
@@ -36,7 +36,7 @@
 
 **2026-10-29 Owner 冻结备份策略**：旧备份包含非空 `Activity` 组时整包拒绝，在任何写入或清空前给出明确错误；空 `Activity: []` 组兼容剥离，旧 manifest 的 `Activity: 0` 不阻断导入。不实施受控跳过非空组。实现已随 `81f939b8` 集成；该决策不等于功能验收通过或真实库迁移获授权。
 
-- **优先级 P1；范围 IN_SCOPE；实现状态 IMPLEMENTED；`passes: false`。** Activity 页面、计时/休息、专属统计、模型及备份分组已移除；保留 ActivityType、Task.activityTypeId、任务分类与投递统计。新增 `20261029000000_retire_activity_table` 迁移，未改历史迁移、未执行真实库迁移。隔离合成库验证由 Coding Owner 完成；Windows Electron 验收尚未执行。
+- **优先级 P1；范围 IN_SCOPE；实现状态 IMPLEMENTED；`passes: false`。** Activity 页面、计时/休息、专属统计、模型及备份分组已移除；保留 ActivityType、Task.activityTypeId、任务分类与投递统计。新增 `20261029000000_retire_activity_table` 迁移，未改历史迁移、未执行真实库迁移。隔离合成库验证由 Coding Owner 完成；后续 Windows Electron 已记录35/36通过，术语补丁待定向复验。
 - **审计依据**：Owner 提供的《Vocatrya Job Activity Dependency Audit Report》，结论 `COMPLETE`，审计时 main HEAD 为 `879857587552c6c1ee9689695bca90ae474c449e`。核心证据：`Activity` 是独立的时间记录/休息系统；`Task.activityTypeId` 可选且引用 `ActivityType`；任务删除受到活动行检查的应用层阻断；Dashboard/Analytics 消费活动计数或时长，投递热力图色块实际来自投递数；Activity 备份休息字段有必填限制。**这是所提供审计结论，不代表本轮已访问并复核当前仓库**，实施前须重新核对实时 HEAD/Dirty 和实际调用点。
 
 **冻结的产品合同**
@@ -147,6 +147,10 @@
 共享设置宿主、工具注册/提示、Schema/备份、双语词典与简历格式各由实际任务指定唯一协调责任方；派工时重新核实仓库 HEAD、Dirty、工作树、测试环境和已有证据。原审计及历史里程碑是参考，不是最新代码事实。
 
 ## D. 完成口径与执行边界
+
+- 2026-10-29 本轮收尾集成：导入条目级排除使用独立可空选择签名列（新迁移 `20261029010000_resume_import_selection_signature`），与首次版本确认同事务写入，原始 AI 缓存不改；补齐导入双语、选择后数量摘要与任务分类术语。九个定向测试文件共 136 项、完整类型检查及改动文件 ESLint 通过，隔离 SQLite 旧行升级与失败原子性已覆盖；未运行真实 AI、生产构建、真实库迁移或修复后的桌面复验。
+- 活动退役原验收在 Windows Electron fresh-native/full（源码 `1410b8e0`）记录 35/36 项通过；D-1 术语补丁尚未进入新构建，不能据此将 `passes` 改为 true。证据保留在 `.worktrees/p1-activity-desktop-acceptance/.tmp/p1-activity-desktop-acceptance/evidence/`。本轮未获得新增生产构建授权，补丁桌面复验仍待执行。
+- [归档合同修订提案](./ARCHIVE_CONTRACT_PROPOSAL.md) 随本轮交付，统计、提醒、Legacy 等八项产品规则仍待 Owner 决定；不因文档集成启动归档开发或冻结推荐。
 
 - 2026-10-29 Main 组合验证：14 个定向测试文件、212 项通过，覆盖任务/分类、Dashboard、备份拒绝与往返、BYOK 截止/取消及 AI 运行时断言。重新生成 Prisma client 并刷新遗留活动页的 Next 路由类型后，完整非增量 TypeScript 检查通过；未运行生产构建或桌面/E2E。
 - `passes` **按七个 Feature 分别**认定：ACTIVITY-RETIRE 需要拆除与保留功能回归、备份/隔离迁移及桌面证据；BD-ARCHIVE 需要职位和对话归档/恢复与长期保留的验证；三条 AI 各自需要真实业务调用及隔离桌面体验；RESUME-BUILDER 需要解析、拖拽、版本、分页、导出的完整用户闭环；AGENT 保持原工具验收和待裁定扩展边界。

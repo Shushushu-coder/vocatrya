@@ -21,8 +21,12 @@ const db = new PrismaClient({ datasources: { db: { url: ctx.url } } });
 const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
 let userId: string;
 let connectionId: string;
-const input = () => ({ requestId: randomUUID(), name: "Synthetic Import", rawText: importRawText,
+const input = async () => {
+  const requestId = randomUUID();
+  await db.resumeImportAttempt.create({ data: { id: requestId, userId, requestSha: "test-sha", state: "EXECUTED", resultJson: JSON.stringify(importFixture) } });
+  return ({ requestId, name: "Synthetic Import", rawText: importRawText,
   parsed: structuredClone(importFixture), resolvedConnectionId: connectionId, resolvedModel: "test-model" });
+};
 const counts = async () => ({
   materials: await db.careerMaterialItem.count(), evidence: await db.careerEvidence.count(),
   variants: await db.resumeVariant.count(), versions: await db.resumeVariantVersion.count(),
@@ -51,12 +55,12 @@ it("preview inspection and discarding the client draft cause zero writes", async
 it("rolls back profile, catalog, material, evidence and variant on a real midway failure", async () => {
   const before = await counts();
   const failingDb = db.$extends({ query: { resumeExpression: { create() { throw new Error("forced midway failure"); } } } });
-  await expect(persistResumeImport(failingDb as unknown as PrismaClient, userId, input(), env)).rejects.toThrow("forced midway failure");
+  await expect(persistResumeImport(failingDb as unknown as PrismaClient, userId, await input(), env)).rejects.toThrow("forced midway failure");
   expect(await counts()).toEqual(before);
 });
 it("creates canonical facts, original expressions and evidence links atomically as DRAFT, preserving existing profile", async () => {
   await db.candidateProfile.create({ data: { userId, phone: "13800000000" } });
-  const request = input();
+  const request = await input();
   expect((await inspectResumeImport(db, userId, request.parsed)).conflicts).toEqual(["phone"]);
   const variant = await persistResumeImport(db, userId, request, env);
   const version = await new ResumeVariantService(db, userId, env).getVersion(variant.currentVersionId!);
@@ -103,11 +107,11 @@ it("creates canonical facts, original expressions and evidence links atomically 
   const advisoryChange = structuredClone(importFixture);
   advisoryChange.sections[1].items[0].uncertainty = "Different advisory wording";
   expect(await inspectResumeImport(db, userId, advisoryChange)).toMatchObject({ created: 0, reused: 4 });
-  await persistResumeImport(db, userId, input(), env);
+  await persistResumeImport(db, userId, await input(), env);
   expect(await counts()).toMatchObject({ materials: 4, evidence: 2, variants: 2, versions: 2 });
 });
 it("does not merge same company and role when dates/source differ", async () => {
-  const request = input();
+  const request = await input();
   request.rawText = request.rawText.replaceAll("2025.03", "2024.03");
   const item = request.parsed.sections[1].items[0];
   item.sourceText = item.sourceText.replace("2025.03", "2024.03");
@@ -119,7 +123,7 @@ it("does not merge same company and role when dates/source differ", async () => 
 });
 
 it("keeps imported frozen titles stable in actual Agent get/review tools after material rename", async () => {
-  const variant = await persistResumeImport(db, userId, input(), env);
+  const variant = await persistResumeImport(db, userId, await input(), env);
   const service = new ResumeVariantService(db, userId, env);
   const version = await service.getVersion(variant.currentVersionId!);
   const linked = version.sections.flatMap((section) => section.items).find((item) => item.careerMaterialItemId)!;

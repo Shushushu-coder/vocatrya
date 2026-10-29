@@ -34,6 +34,9 @@ it("uses raw source for assignment parsing and returns review with zero persiste
   const body = await response.json();
   expect(response.status).toBe(200);
   expect(body.parsed).toEqual(importFixture);
+  // I5: the preview emits a stable ref for every excludable item, bound to
+  // its position inside the signed parse result.
+  expect(body.previewRefs).toEqual(["s0.it0", "s1.it0", "s2.it0", "s3.it0"]);
   expect(mocks.execute.mock.calls[0][1].execution.prompt).toContain(importRawText);
   expect(mocks.execute.mock.calls[0][1].execution.prompt).not.toContain("CHANGED BY NORMALIZER");
   expect(mocks.execute.mock.calls[0][1].requestId).toBe("req-synthetic-1");
@@ -57,6 +60,25 @@ it("accepts only an owned signed approval for confirm", async () => {
   expect((await POST(confirm(approval))).status).toBe(409);
   expect((await POST(confirm("tampered"))).status).toBe(409);
   expect(mocks.persist).toHaveBeenCalledTimes(1);
+});
+it("forwards the exclusion selection to persist and maps selection errors to their codes", async () => {
+  const { approval } = await (await POST(upload())).json();
+  const confirm = (body: unknown) => new NextRequest("http://localhost/api/profile/resume-import", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  expect((await POST(confirm({ approval, excludedItemRefs: ["s1.it0"], excludeProfileImport: true }))).status).toBe(200);
+  expect(mocks.persist.mock.calls[0][2].selection).toEqual({ excludedItemRefs: ["s1.it0"], excludeProfileImport: true });
+  // A bare approval still confirms with the default keep-all selection.
+  expect((await POST(confirm({ approval }))).status).toBe(200);
+  expect(mocks.persist.mock.calls[1][2].selection).toEqual({ excludedItemRefs: undefined, excludeProfileImport: undefined });
+  for (const [code, status] of [["IMPORT_EXCLUSION_INVALID", 422], ["IMPORT_EXCLUSION_EMPTY", 422], ["IMPORT_CONFIRMATION_IMMUTABLE", 409]] as const) {
+    mocks.persist.mockRejectedValueOnce(new Error(code));
+    const response = await POST(confirm({ approval }));
+    expect(response.status).toBe(status);
+    expect((await response.json()).code).toBe(code);
+  }
+  // Confirm consumes the attempt only on success — never on a rejected selection.
+  expect(mocks.confirm).toHaveBeenCalledTimes(2);
 });
 it.each(["unsupported", "corrupt", "empty", "short", "long", "truncated", "malformed AI", "broken assignment", "missing assignment"])("fails %s safely with zero writes", async (kind) => {
   if (kind === "corrupt") mocks.extract.mockResolvedValue({ success: false, error: { code: "EXTRACTION_FAILED", message: "secret server path" } });
