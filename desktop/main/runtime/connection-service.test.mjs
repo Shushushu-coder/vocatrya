@@ -25,12 +25,24 @@ function runnerImpl(inv) {
     env: { ...inv.env },
     cwd: inv.cwd,
     executable: inv.executable,
+    stdinPipe: inv.stdinPipe,
+    onStdinReady: inv.onStdinReady,
   });
   const head = inv.args.join(" ");
   for (const { match, respond } of runnerScript) {
     if (match(head, inv)) return respond(inv);
   }
   throw new Error(`No fake runner response for: ${head}`);
+}
+
+// Drives an invocation's declared stdin transport with a stub stream and
+// returns what the child would have received plus the EOF flag.
+function driveStdin(inv) {
+  const stdin = { on() {}, ended: false, chunks: [],
+    write(c) { this.chunks.push(String(c)); },
+    end(c) { if (c !== undefined) this.chunks.push(String(c)); this.ended = true; } };
+  inv.onStdinReady(stdin);
+  return { prompt: stdin.chunks.join(""), ended: stdin.ended };
 }
 
 function respond(result) {
@@ -646,7 +658,12 @@ describe("runSmoke", () => {
     expect(inv.args[inv.args.indexOf("-s") + 1]).toBe("read-only");
     expect(inv.args).toContain("-m");
     expect(inv.args[inv.args.indexOf("-m") + 1]).toBe("gpt-5.5");
-    expect(inv.args[inv.args.length - 1]).toBe("Reply with exactly: VOCATRYA_CODEX_OK");
+    // `codex exec -` — the prompt rides piped stdin to EOF, never argv.
+    expect(inv.args[inv.args.length - 1]).toBe("-");
+    expect(inv.args).not.toContain("Reply with exactly: VOCATRYA_CODEX_OK");
+    const stdin = driveStdin(inv);
+    expect(stdin.prompt).toBe("Reply with exactly: VOCATRYA_CODEX_OK");
+    expect(stdin.ended).toBe(true);
     // The Vocatrya-owned work dir is cleaned afterwards.
     expect(fs.readdirSync(smokeWorkRoot)).toHaveLength(0);
   });

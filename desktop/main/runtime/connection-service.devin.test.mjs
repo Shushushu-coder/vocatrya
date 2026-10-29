@@ -614,7 +614,12 @@ describe("runSmoke (Devin)", () => {
 
     const inv = invocations.find((i) => i.args.join(" ").startsWith("-p "));
     expect(inv.args[0]).toBe("-p");
-    expect(inv.args[1]).toBe("Reply with exactly: VOCATRYA_DEVIN_OK");
+    // The prompt rides --prompt-file inside the fresh workDir — the file
+    // is already removed with the workDir, so only the path shape is
+    // asserted here; content coverage lives in devin.test.mjs.
+    expect(inv.args[1]).toBe("--prompt-file");
+    expect(inv.args[2].startsWith(inv.cwd)).toBe(true);
+    expect(inv.args[2].endsWith("prompt.txt")).toBe(true);
     expect(inv.args).toContain("--permission-mode");
     expect(inv.args).toContain("auto");
     expect(inv.args).toContain("--respect-workspace-trust");

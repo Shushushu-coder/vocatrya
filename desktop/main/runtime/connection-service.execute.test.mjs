@@ -1,7 +1,7 @@
 // Business TEXT_ONLY execution — desktop side. Verifies the executeText
 // operation against fake adapters/runner: ticket redemption, connection
-// status re-gate, managed env, fresh Vocatrya cwd, prompt-as-arg, and the
-// unified error taxonomy. No real runtime is spawned.
+// status re-gate, managed env, fresh Vocatrya cwd, prompt-via-stdin, and
+// the unified error taxonomy. No real runtime is spawned.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -27,12 +27,24 @@ function runnerImpl(inv) {
     env: { ...inv.env },
     cwd: inv.cwd,
     executable: inv.executable,
+    stdinPipe: inv.stdinPipe,
+    onStdinReady: inv.onStdinReady,
   });
   const head = inv.args.join(" ");
   for (const { match, respond } of runnerScript) {
     if (match(head, inv)) return respond(inv);
   }
   throw new Error(`No fake runner response for: ${head}`);
+}
+
+// Drives an invocation's declared stdin transport with a stub stream and
+// returns what the child would have received plus the EOF flag.
+function driveStdin(inv) {
+  const stdin = { on() {}, ended: false, chunks: [],
+    write(c) { this.chunks.push(String(c)); },
+    end(c) { if (c !== undefined) this.chunks.push(String(c)); this.ended = true; } };
+  inv.onStdinReady(stdin);
+  return { prompt: stdin.chunks.join(""), ended: stdin.ended };
 }
 
 function respond(result) {
@@ -163,8 +175,12 @@ describe("executeText", () => {
 
     const inv = invocations.find((i) => i.args.includes("exec"));
     expect(inv).toBeTruthy();
-    // Prompt rides as a plain args element — never inside a shell string.
-    expect(inv.args).toContain("Summarize this job");
+    // `codex exec -` — the prompt rides piped stdin to EOF, never inside
+    // argv or a shell string.
+    expect(inv.args).not.toContain("Summarize this job");
+    const stdin = driveStdin(inv);
+    expect(stdin.prompt).toBe("Summarize this job");
+    expect(stdin.ended).toBe(true);
     expect(inv.args).toContain("-m");
     expect(inv.args).toContain("gpt-5.5");
     // Fresh Vocatrya-owned cwd under the exec root; cleaned up afterwards.
@@ -629,8 +645,11 @@ describe("executeText structuredOutput contract", () => {
     // Vocatrya-owned path inside the (now cleaned) fresh exec cwd.
     expect(schemaPath.startsWith(execWorkRoot)).toBe(true);
     expect(schemaPath.endsWith("VocatryaProbe.schema.json")).toBe(true);
-    // The text invocation still ends with the prompt as the last arg.
-    expect(inv.args[inv.args.length - 1]).toBe("Summarize this job");
+    // The text invocation ends with `codex exec -`; the prompt arrives
+    // through piped stdin.
+    expect(inv.args[inv.args.length - 1]).toBe("-");
+    const stdin = driveStdin(inv);
+    expect(stdin.prompt).toBe("Summarize this job");
   });
 
   it("prompt-only runtime (opencode): same payload, plain text invocation, PROMPT_AND_VALIDATE", async () => {

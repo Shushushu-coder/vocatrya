@@ -319,18 +319,21 @@ describe("invocation builders", () => {
   });
 
   it("smoke pins permission-mode auto, no trust prompt, temp cwd, model", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-devin-wd-"));
     const inv = buildDevinPrintInvocation({
       executablePath: EXE,
       profileDir: dir,
       baseEnv: {},
-      workingDirectory: "C:\\temp\\smoke",
+      workingDirectory: workDir,
       model: "swe-2-high",
       prompt: "Reply with exactly: VOCATRYA_DEVIN_OK",
     });
     expect(inv.executable).toBe(EXE);
+    const promptPath = path.join(workDir, "prompt.txt");
     expect(inv.args).toEqual([
       "-p",
-      "Reply with exactly: VOCATRYA_DEVIN_OK",
+      "--prompt-file",
+      promptPath,
       "--permission-mode",
       "auto",
       "--respect-workspace-trust",
@@ -338,18 +341,26 @@ describe("invocation builders", () => {
       "--model",
       "swe-2-high",
     ]);
-    expect(inv.cwd).toBe("C:\\temp\\smoke");
+    // The prompt rides a file inside the workDir — never an argv element.
+    expect(inv.args).not.toContain("Reply with exactly: VOCATRYA_DEVIN_OK");
+    expect(fs.readFileSync(promptPath, "utf8")).toBe(
+      "Reply with exactly: VOCATRYA_DEVIN_OK",
+    );
+    expect(inv.cwd).toBe(workDir);
     expect(inv.env.USERPROFILE).toBe(path.join(dir, "home"));
+    fs.rmSync(workDir, { recursive: true, force: true });
   });
 
   it("smoke never emits cloud/auto-approve/sandbox-bypass flags", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-devin-wd-"));
     const inv = buildDevinPrintInvocation({
       executablePath: EXE,
       profileDir: dir,
       baseEnv: {},
-      workingDirectory: "C:\\temp\\smoke",
+      workingDirectory: workDir,
       prompt: "x",
     });
+    fs.rmSync(workDir, { recursive: true, force: true });
     const joined = inv.args.join(" ");
     expect(joined).not.toMatch(/--cloud|handoff|yolo|dangerous|bypass|acp/i);
     expect(inv.args).not.toContain("--sandbox");

@@ -707,6 +707,7 @@ describe("buildSmokeInvocation", () => {
 
   it("builds a minimal-permission headless run in the managed env", () => {
     const workDir = path.join(dir, "work");
+    fs.mkdirSync(workDir, { recursive: true });
     const inv = grokAdapter.buildSmokeInvocation({
       executablePath: "C:\\bin\\grok.exe",
       profileDir: dir,
@@ -716,8 +717,13 @@ describe("buildSmokeInvocation", () => {
     });
     expect(inv.executable).toBe("C:\\bin\\grok.exe");
     expect(inv.cwd).toBe(workDir);
-    expect(inv.args[0]).toBe("-p");
-    expect(inv.args[1]).toBe("Reply with exactly: VOCATRYA_GROK_OK");
+    // The prompt rides --prompt-file inside the workDir — never argv.
+    expect(inv.args[0]).toBe("--prompt-file");
+    const promptPath = inv.args[1];
+    expect(promptPath.startsWith(workDir)).toBe(true);
+    expect(fs.readFileSync(promptPath, "utf8")).toBe(
+      "Reply with exactly: VOCATRYA_GROK_OK",
+    );
     for (const flag of [
       "--output-format",
       "json",

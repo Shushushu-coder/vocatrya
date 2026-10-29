@@ -397,16 +397,26 @@ describe("smoke invocation", () => {
       expect(written).toEqual(
         expect.objectContaining(OPENCODE_SMOKE_CONFIG),
       );
-      // The invocation: run --pure --format json -m <model> <prompt>;
+      // The invocation: run --pure --format json -m <model>; the prompt
+      // rides piped stdin, never an argv element.
       // cwd is the temp work dir; env is the managed XDG set.
       expect(inv.args[0]).toBe("run");
       expect(inv.args).toContain("--pure");
       expect(inv.args).toContain("--format");
       expect(inv.args).not.toContain("--auto");
       expect(inv.args).not.toContain("--yolo");
-      expect(inv.args.slice(-1)[0]).toBe(
-        "Reply with exactly: VOCATRYA_OPENCODE_OK",
-      );
+      expect(inv.args).not.toContain("Reply with exactly: VOCATRYA_OPENCODE_OK");
+      expect(inv.stdinPipe).toBe(true);
+      const stdin = {
+        on() {},
+        end(c) {
+          this.chunk = c;
+          this.ended = true;
+        },
+      };
+      inv.onStdinReady(stdin);
+      expect(stdin.chunk).toBe("Reply with exactly: VOCATRYA_OPENCODE_OK");
+      expect(stdin.ended).toBe(true);
       expect(inv.cwd).toBe(workDir);
       expect(inv.env.XDG_DATA_HOME).toBe(`${profileDir}\\data`);
       expect(inv.env.GITHUB_TOKEN).toBeUndefined();

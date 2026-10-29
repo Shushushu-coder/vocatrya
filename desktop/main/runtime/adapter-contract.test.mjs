@@ -334,6 +334,53 @@ describe("adapter contract — smoke invariants", () => {
     fs.rmSync(workingDirectory, { recursive: true, force: true });
   });
 
+  // Business prompts can exceed the Windows command-line limit, so every
+  // adapter transports the prompt off-argv: piped stdin (stdinPipe +
+  // onStdinReady writer) or a --prompt-file inside the fresh workDir.
+  // This drives the declared transport and returns what the CLI would
+  // actually receive.
+  function collectPromptTransport(inv) {
+    if (typeof inv.onStdinReady === "function") {
+      expect(inv.stdinPipe, "stdin transport must pipe stdin").toBe(true);
+      const chunks = [];
+      const fakeStdin = {
+        on() {},
+        write(chunk) {
+          chunks.push(String(chunk));
+        },
+        end(chunk) {
+          if (chunk !== undefined) chunks.push(String(chunk));
+          this.ended = true;
+        },
+        ended: false,
+      };
+      inv.onStdinReady(fakeStdin);
+      expect(fakeStdin.ended, "stdin must reach EOF").toBe(true);
+      return { kind: "stdin", prompt: chunks.join("") };
+    }
+    const fileFlag = inv.args.indexOf("--prompt-file");
+    expect(
+      fileFlag,
+      "prompt must ride stdin or --prompt-file",
+    ).toBeGreaterThan(-1);
+    const promptPath = inv.args[fileFlag + 1];
+    return { kind: "file", promptPath, prompt: fs.readFileSync(promptPath, "utf8") };
+  }
+
+  function expectPromptTransport(inv, prompt, kind) {
+    // The prompt is never an argv element — never a shell string either.
+    expect(inv.args, `${kind} prompt leaked into argv`).not.toContain(prompt);
+    const transport = collectPromptTransport(inv);
+    expect(transport.prompt, `${kind} transport lost the prompt`).toBe(
+      prompt,
+    );
+    if (transport.kind === "file") {
+      // Prompt files live only inside the per-execution workDir — the
+      // service removes that directory wholesale after the run.
+      expect(transport.promptPath.startsWith(inv.cwd)).toBe(true);
+    }
+  }
+
   it("every smoke invocation runs in the Vocatrya temp cwd with a marker", () => {
     for (const kind of SIX) {
       const adapter = adapterFor(kind).forAccountProvider(
@@ -359,11 +406,12 @@ describe("adapter contract — smoke invariants", () => {
         baseEnv,
       });
       expect(inv.cwd, kind).toBe(workingDirectory);
-      // The marker prompt rides inside the args — never a shell string.
-      expect(
-        inv.args.some((a) => a.includes(adapter.smokeExpected)),
-        `${kind} marker missing`,
-      ).toBe(true);
+      // The marker prompt rides the declared stdin/file transport —
+      // never an args element or a shell string.
+      const transport = collectPromptTransport(inv);
+      expect(transport.prompt, `${kind} marker missing`).toContain(
+        adapter.smokeExpected,
+      );
       // No ambient provider credential reaches the managed env.
       for (const key of [
         "OPENAI_API_KEY",
@@ -405,8 +453,7 @@ describe("adapter contract — smoke invariants", () => {
       // cwd is always the caller's Vocatrya-owned temp dir — never a
       // profile dir or a user directory.
       expect(inv.cwd, kind).toBe(workingDirectory);
-      // The prompt travels as a plain args element, never a shell string.
-      expect(inv.args, `${kind} prompt missing`).toContain(prompt);
+      expectPromptTransport(inv, prompt, kind);
       for (const key of [
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -414,6 +461,36 @@ describe("adapter contract — smoke invariants", () => {
       ]) {
         expect(inv.env[key], `${kind} leaked ${key}`).toBeUndefined();
       }
+      fs.rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  it("a prompt beyond the Windows argv limit is transported intact", () => {
+    // ~80 KB — far beyond the ~32k CreateProcess command-line ceiling
+    // that made resume-import prompts fail spawn with ENAMETOOLONG.
+    const prompt = `Long resume payload ${"x".repeat(80 * 1024)} end`;
+    for (const kind of SIX) {
+      const adapter = adapterFor(kind).forAccountProvider(
+        BINDING_PROVIDER[kind],
+      );
+      const profileDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "vocatrya-contract-profile-"),
+      );
+      const inv = adapter.buildTextInvocation({
+        executable: "C:\\fake\\rt.exe",
+        profileDir,
+        workingDirectory,
+        model: "test-model",
+        accountProvider: BINDING_PROVIDER[kind],
+        baseEnv: { PATH: "C:\\Windows" },
+        prompt,
+      });
+      expectPromptTransport(inv, prompt, kind);
+      // Every argv element stays small — nothing approximates the prompt.
+      expect(
+        Math.max(...inv.args.map((a) => a.length)),
+        `${kind} oversized argv element`,
+      ).toBeLessThan(4096);
       fs.rmSync(profileDir, { recursive: true, force: true });
     }
   });

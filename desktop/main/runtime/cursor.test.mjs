@@ -252,6 +252,21 @@ describe("invocation builders", () => {
       expect(head).toContain("--sandbox enabled");
       expect(head).toContain("--model auto");
       expect(head).not.toContain("--force");
+      // The prompt rides piped stdin — never an argv element.
+      expect(smoke.args).not.toContain(
+        "Reply with exactly: VOCATRYA_CURSOR_OK",
+      );
+      expect(smoke.stdinPipe).toBe(true);
+      const stdin = {
+        on() {},
+        end(c) {
+          this.chunk = c;
+          this.ended = true;
+        },
+      };
+      smoke.onStdinReady(stdin);
+      expect(stdin.chunk).toBe("Reply with exactly: VOCATRYA_CURSOR_OK");
+      expect(stdin.ended).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -246,8 +246,15 @@ describe("codex invocation builders", () => {
       out,
       "-m",
       "gpt-5.5",
-      CODEX_SMOKE_PROMPT,
+      "-",
     ]);
+    // The prompt rides piped stdin (`codex exec -`), never an argv element.
+    expect(inv.args).not.toContain(CODEX_SMOKE_PROMPT);
+    expect(inv.stdinPipe).toBe(true);
+    const stdin = { on() {}, end(c) { this.chunk = c; this.ended = true; } };
+    inv.onStdinReady(stdin);
+    expect(stdin.chunk).toBe(CODEX_SMOKE_PROMPT);
+    expect(stdin.ended).toBe(true);
     expect(inv.cwd).toBe(wd);
     expect(inv.env.CODEX_HOME).toBe(PROFILE_DIR);
     // No broad-write or bypass flags ever appear.

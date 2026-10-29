@@ -33,6 +33,7 @@ const {
 const { terminateChildTree } = require("../runtime");
 const { serializeInlineSchema } = require("./structured-schema");
 const { createAnthropicStreamParser } = require("./streaming");
+const { writePromptFile } = require("./prompt-input");
 
 const GROK_BACKEND_KIND = "GROK_RUNTIME";
 const GROK_ACCOUNT_PROVIDER = "XAI";
@@ -576,6 +577,10 @@ async function listGrokModels({
 // nothing can ever prompt. On Windows the OS sandbox is a no-op (docs:
 // Landlock/Seatbelt only) — it is still requested because it refuses leader
 // mode and becomes enforced automatically on supported platforms.
+// The prompt rides `--prompt-file <file inside the fresh workDir>`
+// (verified in `grok --help` on 1.0.70; headless mode is entered when a
+// prompt file is given) — long business prompts never ride on the Windows
+// command line, and the file is removed with the workDir.
 function buildGrokPrintInvocation({
   executablePath,
   profileDir,
@@ -590,8 +595,8 @@ function buildGrokPrintInvocation({
       definition: grokDefinition(),
       profileDir,
     }),
-    "-p",
-    prompt,
+    "--prompt-file",
+    writePromptFile(workingDirectory, prompt),
     "--output-format",
     "json",
     "--no-auto-update",
@@ -761,7 +766,8 @@ const grokAdapter = {
   },
 
   // TEXT_ONLY business execution — same minimum-permission print
-  // invocation as smoke, caller-supplied prompt as a plain args element.
+  // invocation as smoke; the caller-supplied prompt rides --prompt-file
+  // inside the fresh workDir, never an argv element.
   buildTextInvocation({
     executablePath,
     profileDir,
@@ -788,7 +794,7 @@ const grokAdapter = {
   },
   createStreamParser: createAnthropicStreamParser,
   streamMechanism:
-    "grok -p --output-format streaming-messages-json --include-partial-messages",
+    "grok --prompt-file --output-format streaming-messages-json --include-partial-messages",
 
   // NATIVE_JSON_SCHEMA — `grok -p --json-schema <schema>` inline.
   buildStructuredInvocation(args) {
