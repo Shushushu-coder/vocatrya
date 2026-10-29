@@ -14,16 +14,23 @@ export class DesktopHostedSessionProvider implements HostedSessionProvider {
   async tokenForLocalUser(localUserId: string): Promise<string | null> {
     const base = process.env.VOCATRYA_HOSTED_SESSION_URL;
     const internalToken = process.env.VOCATRYA_DESKTOP_INTERNAL_TOKEN;
-    if (!base || !internalToken) return null;
-    const url = new URL(base);
-    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new ManagedError("MANAGED_AUTH_REQUIRED");
-    url.pathname = "/session"; url.searchParams.set("localUserId", localUserId);
-    try {
-      const response = await fetch(url, { headers: { authorization: `Bearer ${internalToken}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
-      if (!response.ok) return null;
-      const body = await response.json();
-      return typeof body?.token === "string" && /^[A-Za-z0-9_-]{43}$/.test(body.token) ? body.token : null;
-    } catch { return null; }
+    if (base && internalToken) {
+      const url = new URL(base);
+      if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new ManagedError("MANAGED_AUTH_REQUIRED");
+      url.pathname = "/session"; url.searchParams.set("localUserId", localUserId);
+      try {
+        const response = await fetch(url, { headers: { authorization: `Bearer ${internalToken}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+        if (!response.ok) return null;
+        const body = await response.json();
+        return typeof body?.token === "string" && /^[A-Za-z0-9_-]{43}$/.test(body.token) ? body.token : null;
+      } catch { return null; }
+    }
+    // Development-only delivery channel: an operator-provisioned hosted
+    // token handed over through the environment (plain-web dev runs have no
+    // Electron session broker). Still a real hosted session — the value is
+    // never minted locally and production ignores this variable entirely.
+    const dev = process.env.NODE_ENV !== "production" ? process.env.VOCATRYA_DEV_HOSTED_SESSION_TOKEN : undefined;
+    return dev && /^[A-Za-z0-9_-]{43}$/.test(dev) ? dev : null;
   }
 }
 function endpoint(): string {

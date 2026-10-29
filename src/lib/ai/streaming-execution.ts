@@ -490,6 +490,10 @@ export async function checkStreamingTurnReadiness(input: {
     const entry = catalog.models.find(entry => entry.modelKey === model);
     if (!entry?.available) fail(AI_BUSINESS_ERROR_CODES.MODEL_DISABLED, "Managed model unavailable");
     if (!entry.capabilities.streaming) fail(AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED, "Managed streaming unavailable");
+    // Parity with the assignment write gate: a streaming turn also runs the
+    // structured decision step — refuse before opening the stream, not
+    // mid-turn at the /v1/structured admission.
+    if (!entry.capabilities.structuredOutput) fail(AI_BUSINESS_ERROR_CODES.CAPABILITY_UNSUPPORTED, "Managed structured decisions unavailable");
     return;
   }
   if (classification === "BYOK") {
