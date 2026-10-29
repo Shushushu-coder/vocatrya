@@ -41,6 +41,8 @@ function runnerImpl(inv) {
     env: { ...inv.env },
     cwd: inv.cwd,
     executable: inv.executable,
+    stdinPipe: inv.stdinPipe,
+    onStdinReady: inv.onStdinReady,
   });
   const head = inv.args.join(" ");
   for (const { match, respond } of runnerScript) {
@@ -708,9 +710,16 @@ describe("runSmoke (Claude)", () => {
     );
     expect(inv.args).toContain("--model");
     expect(inv.args[inv.args.indexOf("--model") + 1]).toBe("sonnet");
-    expect(inv.args[inv.args.length - 1]).toBe(
+    // The prompt rides piped stdin — never an argv element.
+    expect(inv.args).not.toContain("Reply with exactly: VOCATRYA_CLAUDE_OK");
+    const stdin = { on() {}, ended: false, chunks: [],
+      write(c) { this.chunks.push(String(c)); },
+      end(c) { if (c !== undefined) this.chunks.push(String(c)); this.ended = true; } };
+    inv.onStdinReady(stdin);
+    expect(stdin.chunks.join("")).toBe(
       "Reply with exactly: VOCATRYA_CLAUDE_OK",
     );
+    expect(stdin.ended).toBe(true);
     expect(inv.args.join(" ")).not.toMatch(
       /dangerously-skip-permissions|bypassPermissions|acceptEdits/,
     );

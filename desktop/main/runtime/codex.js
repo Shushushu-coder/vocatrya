@@ -16,6 +16,7 @@ const {
 const { applyCodexProxyEnv } = require("./codex-proxy-env");
 const { classifyAuthProbeOutput } = require("./auth-probe");
 const { createCodexStreamParser } = require("./streaming");
+const { promptStdinWriter } = require("./prompt-input");
 
 const CODEX_BACKEND_KIND = "CODEX_RUNTIME";
 
@@ -168,6 +169,10 @@ function buildCodexModelsInvocation({
 // a Vocatrya-owned working directory, no session persistence, no git
 // requirement. The last agent message is written to outputFile inside that
 // directory so callers never scrape the human-readable log.
+// The prompt travels through piped stdin (`codex exec -`, verified in
+// `codex exec --help` on codex-cli 0.165.0 — "omit PROMPT or use `-` to
+// read instructions from stdin") so long business prompts never ride on
+// the Windows command line.
 function buildCodexExecInvocation({
   executablePath,
   profileDir,
@@ -200,12 +205,14 @@ function buildCodexExecInvocation({
   if (typeof model === "string" && model.length > 0) {
     args.push("-m", model);
   }
-  args.push(prompt);
+  args.push("-");
   return {
     executable: executablePath,
     args,
     cwd: workingDirectory,
     env: codexEnv({ profileDir, baseEnv }),
+    stdinPipe: true,
+    onStdinReady: promptStdinWriter(prompt),
   };
 }
 
@@ -391,7 +398,7 @@ const codexAdapter = {
 
   // TEXT_ONLY business execution — identical invocation shape to smoke
   // (read-only sandbox, ephemeral, Vocatrya-owned cwd), only the prompt
-  // differs. The prompt is an args element, never a shell string.
+  // differs. The prompt is written to piped stdin, never an argv element.
   buildTextInvocation({
     executablePath,
     profileDir,

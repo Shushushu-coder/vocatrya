@@ -16,6 +16,7 @@ const {
   buildRuntimeProcessEnvironment,
 } = require("./environment");
 const { classifyAuthProbeOutput } = require("./auth-probe");
+const { promptStdinWriter } = require("./prompt-input");
 
 const CLAUDE_BACKEND_KIND = "CLAUDE_RUNTIME";
 
@@ -176,6 +177,9 @@ function buildClaudeStatusInvocation({ executablePath, profileDir, baseEnv }) {
 //   --output-format json    machine-readable result envelope
 // cwd is a Vocatrya-owned empty temp dir; nothing user-owned is reachable
 // through tools because there are no tools.
+// The prompt is written to piped stdin — `claude -p` reads non-TTY stdin
+// to EOF as the prompt when no positional argument is given — so long
+// business prompts never ride on the Windows command line.
 function buildClaudePrintInvocation({
   executablePath,
   profileDir,
@@ -202,12 +206,13 @@ function buildClaudePrintInvocation({
   if (typeof model === "string" && model.length > 0) {
     args.push("--model", model);
   }
-  args.push(prompt);
   return {
     executable: executablePath,
     args,
     cwd: workingDirectory,
     env: claudeEnv({ profileDir, baseEnv }),
+    stdinPipe: true,
+    onStdinReady: promptStdinWriter(prompt),
   };
 }
 
@@ -222,8 +227,7 @@ function buildClaudeStreamingInvocation(args) {
   const formatIndex = nextArgs.indexOf("--output-format");
   if (formatIndex === -1) return invocation;
   nextArgs[formatIndex + 1] = "stream-json";
-  const promptIndex = nextArgs.length - 1;
-  nextArgs.splice(promptIndex, 0, "--verbose", "--include-partial-messages");
+  nextArgs.push("--verbose", "--include-partial-messages");
   return { ...invocation, args: nextArgs };
 }
 
@@ -238,8 +242,7 @@ function buildClaudeStructuredInvocation(args) {
   const serialized = serializeInlineSchema(args.schema);
   const invocation = buildClaudePrintInvocation(args);
   const nextArgs = invocation.args.slice();
-  // Insert before the trailing positional prompt element.
-  nextArgs.splice(nextArgs.length - 1, 0, "--json-schema", serialized);
+  nextArgs.push("--json-schema", serialized);
   return { ...invocation, args: nextArgs };
 }
 
@@ -504,7 +507,8 @@ const claudeAdapter = {
   },
 
   // TEXT_ONLY business execution — same locked-down print invocation as
-  // smoke, caller-supplied prompt as a plain args element.
+  // smoke; the caller-supplied prompt is written to piped stdin, never an
+  // argv element.
   buildTextInvocation({ executablePath, profileDir, baseEnv, workingDirectory, model, prompt }) {
     return buildClaudePrintInvocation({
       executablePath,

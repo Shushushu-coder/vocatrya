@@ -872,10 +872,11 @@ function createConnectionService({
   // Business TEXT_ONLY execution. Reached only through the authenticated
   // internal execution endpoint (backend → desktop), never through the
   // renderer IPC surface. The minted ticket is redeemed for the trusted
-  // connection binding; the prompt is business data that rides inside the
-  // adapter's locked-down one-shot invocation as a plain args element in a
-  // fresh Vocatrya-owned temp cwd. No install, login, reconnect, file
-  // access, or working-directory override is possible from here.
+  // connection binding; the prompt is business data that rides the
+  // adapter's locked-down one-shot invocation — piped stdin or a
+  // --prompt-file inside the fresh Vocatrya-owned temp cwd, never an argv
+  // element. No install, login, reconnect, file access, or
+  // working-directory override is possible from here.
   // `verificationProbe` is an in-process-only flag for the structured-output
   // validation harness (scripts/structured-output-probe.mts) — it lets the
   // probe exercise runtimes whose structuredOutput.verification is still

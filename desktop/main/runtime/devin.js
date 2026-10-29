@@ -37,6 +37,7 @@ const {
   buildRuntimeInvocationArgs,
   buildRuntimeProcessEnvironment,
 } = require("./environment");
+const { writePromptFile } = require("./prompt-input");
 
 const DEVIN_BACKEND_KIND = "DEVIN_RUNTIME";
 const DEVIN_ACCOUNT_PROVIDER = "DEVIN";
@@ -501,6 +502,11 @@ async function listDevinModels({
 // print mode cannot answer, and cwd is a fresh Vocatrya temp dir with no
 // project files. No cloud/handoff/ACP flags — this stays a local
 // short-task path.
+// The prompt rides `--prompt-file <file inside the fresh workDir>`
+// (verified in `devin --help` on 3000.11.228 and the documented
+// `devin -p --prompt-file <file>` headless form) — long business prompts
+// never ride on the Windows command line, and the file is removed with
+// the workDir.
 function buildDevinPrintInvocation({
   executablePath,
   profileDir,
@@ -512,7 +518,8 @@ function buildDevinPrintInvocation({
   writeManagedDevinConfig(profileDir);
   const args = [
     ...devinArgs({ profileDir, commandArgs: devinDefinition().commands.print }),
-    prompt,
+    "--prompt-file",
+    writePromptFile(workingDirectory, prompt),
     "--permission-mode",
     "auto",
     "--respect-workspace-trust",
@@ -610,7 +617,8 @@ const devinAdapter = {
   },
 
   // TEXT_ONLY business execution — same locked-down `devin -p` invocation
-  // as smoke, caller-supplied prompt as a plain args element.
+  // as smoke; the caller-supplied prompt rides a --prompt-file inside the
+  // fresh workDir, never an argv element.
   buildTextInvocation({
     executablePath,
     profileDir,

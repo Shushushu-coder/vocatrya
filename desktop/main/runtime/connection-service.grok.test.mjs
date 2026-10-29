@@ -667,7 +667,7 @@ describe("runSmoke (Grok)", () => {
   it("runs in a fresh temp cwd with every safety flag, then cleans up", async () => {
     runnerScript = [
       {
-        match: (h) => h.startsWith("-p "),
+        match: (h) => h.startsWith("--prompt-file "),
         respond: respond({
           stdout: JSON.stringify({
             text: "VOCATRYA_GROK_OK",
@@ -686,7 +686,14 @@ describe("runSmoke (Grok)", () => {
     expect(result.ok).toBe(true);
     expect(result.matched).toBe(true);
 
-    const smokeInv = invocations.find((i) => i.args[0] === "-p");
+    const smokeInv = invocations.find((i) => i.args[0] === "--prompt-file");
+    // The prompt file lives inside the fresh workDir (already removed
+    // with it); the prompt itself is never an argv element.
+    expect(smokeInv.args[1].startsWith(smokeInv.cwd)).toBe(true);
+    expect(smokeInv.args[1].endsWith("prompt.txt")).toBe(true);
+    expect(smokeInv.args).not.toContain(
+      "Reply with exactly: VOCATRYA_GROK_OK",
+    );
     expect(smokeInv.args).toEqual(
       expect.arrayContaining([
         "--output-format",
@@ -715,7 +722,7 @@ describe("runSmoke (Grok)", () => {
   it("omits -m when no model is supplied — the runtime default applies", async () => {
     runnerScript = [
       {
-        match: (h) => h.startsWith("-p "),
+        match: (h) => h.startsWith("--prompt-file "),
         respond: respond({
           stdout: JSON.stringify({ text: "VOCATRYA_GROK_OK" }),
         }),
@@ -726,7 +733,7 @@ describe("runSmoke (Grok)", () => {
       ticket: "t",
     });
     expect(result.ok).toBe(true);
-    const smokeInv = invocations.find((i) => i.args[0] === "-p");
+    const smokeInv = invocations.find((i) => i.args[0] === "--prompt-file");
     expect(smokeInv.args).not.toContain("-m");
   });
 });

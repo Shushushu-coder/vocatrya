@@ -391,8 +391,15 @@ describe("claude invocation builders", () => {
       "--safe-mode",
       "--model",
       "sonnet",
-      CLAUDE_SMOKE_PROMPT,
     ]);
+    // The prompt rides piped stdin (claude -p reads non-TTY stdin to
+    // EOF), never an argv element.
+    expect(inv.args).not.toContain(CLAUDE_SMOKE_PROMPT);
+    expect(inv.stdinPipe).toBe(true);
+    const stdin = { on() {}, end(c) { this.chunk = c; this.ended = true; } };
+    inv.onStdinReady(stdin);
+    expect(stdin.chunk).toBe(CLAUDE_SMOKE_PROMPT);
+    expect(stdin.ended).toBe(true);
     expect(inv.cwd).toBe(wd);
     assertSanitizedManagedEnv(inv.env, PROFILE_DIR);
     // No permission-bypass or tool-enabling flags ever appear.

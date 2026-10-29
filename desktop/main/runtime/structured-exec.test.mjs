@@ -71,7 +71,13 @@ describe("codex structured invocation", () => {
     expect(inv.args).toContain("-s");
     expect(inv.args).toContain("read-only");
     expect(inv.args).toContain("--ephemeral");
-    expect(inv.args[inv.args.length - 1]).toBe("the task");
+    // `codex exec -` — the prompt arrives through piped stdin.
+    expect(inv.args[inv.args.length - 1]).toBe("-");
+    expect(inv.args).not.toContain("the task");
+    const stdin = { on() {}, end(c) { this.chunk = c; this.ended = true; } };
+    inv.onStdinReady(stdin);
+    expect(stdin.chunk).toBe("the task");
+    expect(stdin.ended).toBe(true);
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 
@@ -106,13 +112,14 @@ describe("codex structured invocation", () => {
     expect(JSON.parse(fs.readFileSync(schemaPath, "utf8"))).toEqual(resumeSchema);
     expect(inv.args).toContain("-m");
     expect(inv.args).toContain("gpt-5.6-sol");
-    expect(inv.args[inv.args.length - 1]).toBe("Extract resume into schema");
+    expect(inv.args[inv.args.length - 1]).toBe("-");
+    expect(inv.args).not.toContain("Extract resume into schema");
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 });
 
 describe("claude structured invocation", () => {
-  it("adds --json-schema inline before the prompt", () => {
+  it("adds --json-schema inline and keeps the prompt on stdin", () => {
     const inv = buildClaudeStructuredInvocation({
       ...BASE,
       workingDirectory: tmpDir(),
@@ -124,7 +131,11 @@ describe("claude structured invocation", () => {
     const idx = inv.args.indexOf("--json-schema");
     expect(idx).toBeGreaterThan(-1);
     expect(JSON.parse(inv.args[idx + 1])).toEqual(SCHEMA);
-    expect(inv.args[inv.args.length - 1]).toBe("the task");
+    expect(JSON.parse(inv.args[inv.args.length - 1])).toEqual(SCHEMA);
+    expect(inv.args).not.toContain("the task");
+    const stdin = { on() {}, end(c) { this.chunk = c; this.ended = true; } };
+    inv.onStdinReady(stdin);
+    expect(stdin.chunk).toBe("the task");
     // The existing safety flags are untouched.
     expect(inv.args).toContain("--tools");
     expect(inv.args).toContain("--permission-mode");

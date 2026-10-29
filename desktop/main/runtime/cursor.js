@@ -35,6 +35,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { getRuntimeDefinition } = require("./registry");
 const { createCursorStreamParser } = require("./streaming");
+const { promptStdinWriter } = require("./prompt-input");
 const { resolveRuntimeBundle, bundleEntrypointArgs } = require("./detector");
 const {
   buildRuntimeInvocationArgs,
@@ -220,7 +221,9 @@ function buildCursorModelsInvocation({ executablePath, profileDir, baseEnv }) {
 // ask mode is read-only, the sandbox flag is enabled, project configs and
 // workspace context are excluded, auto-update is off, and cwd is a fresh
 // Vocatrya-owned temp dir. Never -f/--force/--yolo, never
-// approvalMode=unrestricted. The prompt is always a plain args element.
+// approvalMode=unrestricted. The prompt is written to piped stdin —
+// `agent -p` with no positional prompt reads non-TTY stdin to EOF — so
+// long business prompts never ride on the Windows command line.
 function buildCursorPrintInvocation({
   executablePath,
   profileDir,
@@ -242,13 +245,14 @@ function buildCursorPrintInvocation({
     "--disable-project-configs",
     "--exclude-workspace-context",
     ...(typeof model === "string" && model ? ["--model", model] : []),
-    prompt,
   ];
   return {
     executable: executablePath,
     args: cursorArgs({ executablePath, profileDir, commandArgs }),
     env: cursorEnv({ profileDir, baseEnv }),
     cwd: workingDirectory,
+    stdinPipe: true,
+    onStdinReady: promptStdinWriter(prompt),
   };
 }
 
@@ -491,7 +495,8 @@ const cursorAdapter = {
   },
 
   // TEXT_ONLY business execution — the same minimum-permission print
-  // invocation with the caller's prompt as a plain args element.
+  // invocation; the caller's prompt is written to piped stdin, never an
+  // argv element.
   buildTextInvocation(args) {
     return buildCursorPrintInvocation(args);
   },

@@ -29,6 +29,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { getRuntimeDefinition } = require("./registry");
 const { createOpencodeStreamParser } = require("./streaming");
+const { promptStdinWriter } = require("./prompt-input");
 const {
   buildRuntimeInvocationArgs,
   buildRuntimeProcessEnvironment,
@@ -513,8 +514,10 @@ function createOpencodeAdapter(providerConfig) {
   }
 
   // Locked-down one-shot `opencode run` — deny-all managed config, --pure,
-  // JSONL output, Vocatrya temp cwd. The prompt is always a plain args
-  // element, never a shell string.
+  // JSONL output, Vocatrya temp cwd. The prompt is written to piped stdin
+  // — `opencode run` reads non-TTY stdin as the message when no positional
+  // message is given — so long business prompts never ride on the Windows
+  // command line.
   function buildTextInvocation({
     executablePath,
     profileDir,
@@ -533,12 +536,13 @@ function createOpencodeAdapter(providerConfig) {
     if (typeof model === "string" && model.length > 0) {
       commandArgs.push("-m", model);
     }
-    commandArgs.push(prompt);
     return {
       executable: executablePath,
       args: opencodeArgs({ profileDir, commandArgs }),
       cwd: workingDirectory,
       env: opencodeEnv({ profileDir, baseEnv }),
+      stdinPipe: true,
+      onStdinReady: promptStdinWriter(prompt),
     };
   }
 
