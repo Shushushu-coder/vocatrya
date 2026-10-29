@@ -55,7 +55,7 @@ import { PlanAuthority } from "../services/managed-ai/src/plan";
 import type { ManagedPlanConfig } from "../services/managed-ai/src/plan";
 import { OperatorStore } from "../services/managed-ai/src/operator/store";
 import { createHostedServer } from "../services/managed-ai/src/http";
-import { HostedManagedClient } from "@/lib/ai/managed-client";
+import { DesktopHostedSessionProvider, HostedManagedClient } from "@/lib/ai/managed-client";
 import { executeAIConnectionText } from "@/lib/ai/execution";
 import {
   checkStreamingTurnReadiness,
@@ -65,7 +65,9 @@ import { executeStructuredForAssignment } from "@/lib/ai/structured-execution";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
 import {
   assignManagedBusinessAiSource,
+  disconnectManagedAiSession,
   getManagedAiOverview,
+  redeemManagedAiSession,
 } from "@/actions/managedAi.actions";
 
 // ---------------------------------------------------------------------------
@@ -644,6 +646,142 @@ describe("Managed AI real-HTTP loopback closed loop", () => {
     expect(managedAiAvailability()).toBe("ENABLED");
   });
 
+  it("keeps a newly redeemed session when an older request returns a delayed 401", async () => {
+    const provider = new DesktopHostedSessionProvider();
+    const old = "a".repeat(43);
+    const fresh = "b".repeat(43);
+    await provider.saveSession(seam.userId, old);
+    const delayed: typeof fetch = async () => {
+      await provider.saveSession(seam.userId, fresh);
+      return new Response(JSON.stringify({ code: "MANAGED_AUTH_REQUIRED" }), { status: 401 });
+    };
+    await expect(new HostedManagedClient(provider, base, delayed).identity(seam.userId))
+      .rejects.toMatchObject({ code: "MANAGED_AUTH_REQUIRED" });
+    expect(sessionStore.read(seam.userId)).toBe(fresh);
+    await provider.clearSession(seam.userId, fresh);
+    expect(sessionStore.read(seam.userId)).toBeNull();
+  });
+
+  it.each(["http", "network"])("fails explicit disconnect on %s deletion errors without changing connection status", async (failure) => {
+    provision("hosted-disconnect-error", "starter");
+    await getManagedAiOverview();
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (init?.method === "DELETE") {
+        if (failure === "network") throw new Error("synthetic broker outage");
+        return new Response("{}", { status: 500 });
+      }
+      return realFetch(input, init);
+    });
+    try {
+      expect(await disconnectManagedAiSession()).toMatchObject({
+        success: false,
+        code: "MANAGED_RUNTIME_UNAVAILABLE",
+      });
+      expect((await managedConnection()).status).toBe("CONNECTED");
+      expect(sessionStore.read(seam.userId)).not.toBeNull();
+    } finally { spy.mockRestore(); }
+  });
+
+  it("reports re-auth when a mid-overview read gets an authoritative 401", async () => {
+    provision("hosted-midread-revoke", "starter");
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      // Session bootstrap and reads stay real; the usage read sees the
+      // revocation the authority would return for a dead credential.
+      if (String(input).endsWith("/v1/me/usage")) {
+        return new Response(JSON.stringify({ code: "MANAGED_AUTH_REQUIRED" }), { status: 401 });
+      }
+      return realFetch(input, init);
+    });
+    try {
+      const overview = await getManagedAiOverview();
+      expect(overview.data).toMatchObject({
+        availability: "ENABLED",
+        connection: null,
+        hostedUserId: null,
+        models: [],
+        errorCode: "MANAGED_AUTH_REQUIRED",
+      });
+      // Reads that did succeed still report their real data.
+      expect(overview.data?.entitlement?.planKey).toBe("starter");
+      // The dropped credential does not keep claiming CONNECTED.
+      expect(sessionStore.read(seam.userId)).toBeNull();
+      expect((await managedConnection()).status).toBe("REAUTH_REQUIRED");
+    } finally { spy.mockRestore(); }
+  });
+
+  it("keeps a newly redeemed session connected after an older overview receives a late 401", async () => {
+    provision("hosted-late-reject", "starter");
+    const oldToken = sessionStore.read(seam.userId);
+    const freshToken = store.issueSession("hosted-late-reject", Date.now() + 600_000);
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { entered = resolve; });
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/v1/me/usage") &&
+          new Headers(init?.headers).get("authorization") === `Bearer ${oldToken}`) {
+        entered();
+        await pending;
+        return Response.json({ code: "MANAGED_AUTH_REQUIRED" }, { status: 401 });
+      }
+      return realFetch(input, init);
+    });
+    const oldOverview = getManagedAiOverview();
+    try {
+      await waiting;
+      expect(await redeemManagedAiSession({ token: freshToken })).toMatchObject({ success: true });
+      release();
+      expect((await oldOverview).data?.errorCode).toBe("MANAGED_AUTH_REQUIRED");
+      expect(sessionStore.read(seam.userId)).toBe(freshToken);
+      expect((await managedConnection()).status).toBe("CONNECTED");
+    } finally {
+      release();
+      await oldOverview;
+      spy.mockRestore();
+    }
+  });
+
+  it("fails redemption visibly when session persistence is unavailable", async () => {
+    const token = store.issueSession("hosted-save-fail", Date.now() + 600_000);
+    store.setSubscription("hosted-save-fail", {
+      planKey: "starter",
+      status: "ACTIVE",
+      periodStart: Date.now() - 1000,
+      periodEnd: Date.now() + 600_000,
+    });
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (init?.method === "PUT") return new Response("{}", { status: 500 });
+      return realFetch(input, init);
+    });
+    try {
+      expect(await redeemManagedAiSession({ token })).toMatchObject({
+        success: false,
+        code: "MANAGED_RUNTIME_UNAVAILABLE",
+      });
+      // Nothing persisted, no connection row claiming a live session.
+      expect(sessionStore.read(seam.userId)).toBeNull();
+      await expect(managedConnection()).rejects.toThrow();
+    } finally { spy.mockRestore(); }
+  });
+
+  it("suppresses the development environment token after disconnect until redemption", async () => {
+    vi.stubEnv("VOCATRYA_HOSTED_SESSION_URL", "");
+    vi.stubEnv("VOCATRYA_DESKTOP_INTERNAL_TOKEN", "");
+    vi.stubEnv("VOCATRYA_DEV_HOSTED_SESSION_TOKEN", "a".repeat(43));
+    const provider = new DesktopHostedSessionProvider();
+    const localId = "dev-disconnect-isolation";
+    expect(await provider.tokenForLocalUser(localId)).toBe("a".repeat(43));
+    await provider.clearSession(localId);
+    expect(await provider.tokenForLocalUser(localId)).toBeNull();
+    await provider.saveSession(localId, "b".repeat(43));
+    await provider.clearSession(localId, "a".repeat(43));
+    expect(await provider.tokenForLocalUser(localId)).toBe("b".repeat(43));
+  });
+
   it("accepts an operator-provisioned dev session token only when the broker is not wired", async () => {
     const token = store.issueSession("hosted-dev", Date.now() + 600_000);
     store.setSubscription("hosted-dev", {
@@ -670,6 +808,123 @@ describe("Managed AI real-HTTP loopback closed loop", () => {
     await expect(client.entitlement(seam.userId)).rejects.toMatchObject({
       code: "MANAGED_AUTH_REQUIRED",
     });
+  });
+
+  it("redeems a pasted hosted session, disconnects, and recovers after revocation", async () => {
+    // No stored session — the user-facing surface asks for a credential.
+    expect((await getManagedAiOverview()).data?.errorCode).toBe(
+      "MANAGED_AUTH_REQUIRED",
+    );
+    // Malformed paste fails closed without touching the store.
+    await expect(
+      redeemManagedAiSession({ token: "not-a-real-token" }),
+    ).resolves.toMatchObject({ success: false, code: "MANAGED_AUTH_REQUIRED" });
+    expect(sessionStore.read(seam.userId)).toBeNull();
+
+    // A hosted-issued token (operator-provisioned for a subscribed user)
+    // the user pastes into the card. The action validates it against the
+    // authority BEFORE persisting — the broker PUT is what lands here.
+    const token = store.issueSession("hosted-redeem", Date.now() + 600_000);
+    store.setSubscription("hosted-redeem", {
+      planKey: "starter",
+      status: "ACTIVE",
+      periodStart: Date.now() - 1000,
+      periodEnd: Date.now() + 600_000,
+    });
+    const redeemed = await redeemManagedAiSession({ token });
+    expect(redeemed).toMatchObject({
+      success: true,
+      data: { hostedUserId: "hosted-redeem" },
+    });
+    expect(sessionStore.read(seam.userId)).toBe(token);
+    expect(await managedConnection()).toMatchObject({ status: "CONNECTED" });
+
+    // A valid-format but unknown token is refused by the authority and the
+    // stored session is NOT clobbered — the probe never writes.
+    const rejected = await redeemManagedAiSession({ token: "z".repeat(43) });
+    expect(rejected).toMatchObject({
+      success: false,
+      code: "MANAGED_AUTH_REQUIRED",
+    });
+    expect(sessionStore.read(seam.userId)).toBe(token);
+
+    // The full product loop still runs on the redeemed session.
+    const overview = await getManagedAiOverview();
+    expect(overview.data?.hostedUserId).toBe("hosted-redeem");
+    expect(overview.data?.models.map((m) => m.modelKey)).toEqual([
+      "vocatrya-fast",
+    ]);
+    await assignManagedBusinessAiSource({
+      purpose: "MATCH_ANALYSIS",
+      modelKey: "vocatrya-fast",
+    });
+    const connection = await managedConnection();
+    await executeAIConnectionText(
+      execInput({ connectionId: connection.id, operationId: "redeem-op" }),
+    );
+    expect(
+      (await new HostedManagedClient().usage(seam.userId)).committedUnits,
+    ).toBe(1);
+
+    // Revocation server-side: the next authority read gets a real 401, the
+    // provider drops the stored token, the connection stops claiming
+    // CONNECTED, and the surface reports re-auth.
+    store.revokeSession(token);
+    const revoked = await getManagedAiOverview();
+    expect(revoked.data?.errorCode).toBe("MANAGED_AUTH_REQUIRED");
+    expect(sessionStore.read(seam.userId)).toBeNull();
+    expect(
+      (await managedConnection()).status,
+    ).toBe("REAUTH_REQUIRED");
+
+    // Recovery: redeem a fresh hosted-issued token for the same account —
+    // the connection comes back CONNECTED with live reads.
+    const fresh = store.issueSession("hosted-redeem", Date.now() + 600_000);
+    await expect(
+      redeemManagedAiSession({ token: fresh }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: { hostedUserId: "hosted-redeem" },
+    });
+    const recovered = await getManagedAiOverview();
+    expect(recovered.data?.connection?.status).toBe("CONNECTED");
+    expect(recovered.data?.entitlement?.planKey).toBe("starter");
+
+    // Disconnect: the stored credential is dropped and the connection is
+    // marked DISCONNECTED — the card goes back to the redeem prompt.
+    await expect(disconnectManagedAiSession()).resolves.toMatchObject({
+      success: true,
+    });
+    expect(sessionStore.read(seam.userId)).toBeNull();
+    expect((await managedConnection()).status).toBe("DISCONNECTED");
+    expect((await getManagedAiOverview()).data?.errorCode).toBe(
+      "MANAGED_AUTH_REQUIRED",
+    );
+  });
+
+  it("runs concurrent invocations through admission without ledger corruption", async () => {
+    provision("hosted-concurrent", "pro");
+    await assignManagedBusinessAiSource({
+      purpose: "MATCH_ANALYSIS",
+      modelKey: "vocatrya-fast",
+    });
+    const connection = await managedConnection();
+    // Six distinct operation identities in flight at once — admission is
+    // transactional, every one commits exactly once.
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        executeAIConnectionText(
+          execInput({
+            connectionId: connection.id,
+            operationId: `conc-${index}`,
+          }),
+        ),
+      ),
+    );
+    expect(results).toHaveLength(6);
+    expect(upstreamCalls).toHaveLength(6);
+    const usage = await new HostedManagedClient().usage(seam.userId);
+    expect(usage).toMatchObject({ committedUnits: 6, reservedUnits: 0 });
   });
 
   it("turn readiness refuses a managed model that cannot emit structured decisions", async () => {

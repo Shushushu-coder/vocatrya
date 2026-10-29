@@ -10,8 +10,8 @@ vi.mock("@/i18n", () => ({
     t: (key: string, vars?: Record<string, unknown>) => (vars ? `${key} ${JSON.stringify(vars)}` : key),
   }),
 }));
-const overview = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock("@/actions/managedAi.actions", () => ({ getManagedAiOverview: overview.get }));
+const overview = vi.hoisted(() => ({ get: vi.fn(), disconnect: vi.fn() }));
+vi.mock("@/actions/managedAi.actions", () => ({ getManagedAiOverview: overview.get, disconnectManagedAiSession: overview.disconnect }));
 
 const EMPTY: ManagedAiOverview = {
   availability: "ENABLED",
@@ -19,6 +19,7 @@ const EMPTY: ManagedAiOverview = {
   entitlement: null,
   usage: null,
   models: [],
+  hostedUserId: null,
   errorCode: null,
 };
 
@@ -104,12 +105,31 @@ describe("ManagedAiCard", () => {
     expect(screen.queryByText("settings.managedComingSoon")).not.toBeInTheDocument();
   });
 
+  it("shows failed disconnect without claiming the connection was cleared", async () => {
+    overview.disconnect.mockResolvedValue({ success: false });
+    shows(LAUNCHED);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "settings.managedDisconnect" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("MANAGED_RUNTIME_UNAVAILABLE");
+    expect(screen.getByText("CONNECTED")).toBeInTheDocument();
+    expect(overview.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces the real failure code when disconnect fails", async () => {
+    overview.disconnect.mockResolvedValue({ success: false, code: "GATEWAY_TIMEOUT" });
+    shows(LAUNCHED);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "settings.managedDisconnect" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("GATEWAY_TIMEOUT");
+  });
+
   it("reports a temporary Hosted failure after launch as unavailable, not as coming soon", async () => {
     shows({ ...EMPTY, errorCode: "MANAGED_RUNTIME_UNAVAILABLE" });
     expect(await screen.findByText("settings.managedUnavailable")).toBeInTheDocument();
     expect(screen.getByText(/MANAGED_RUNTIME_UNAVAILABLE/)).toBeInTheDocument();
     expect(screen.queryByText("settings.managedComingSoon")).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button"));
+    // The icon-only refresh button sits next to the new labelled Connect
+    // button — pick the one without text content.
+    const refresh = screen.getAllByRole("button").find((b) => !b.textContent)!;
+    await userEvent.setup().click(refresh);
     expect(overview.get).toHaveBeenCalledTimes(2);
   });
 });
