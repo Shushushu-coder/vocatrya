@@ -23,8 +23,8 @@
 | **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | 活动退役已集成；隔离桌面35/36通过，术语修复已集成；Owner 安排 P1 结束后人工检验 |
 | **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | 归档桌面37/37通过；最终备份引用/隔离修复定向84项通过，补丁桌面复验未执行 |
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
-| **AI-BYOK** | IN_SCOPE | PARTIAL | 凭据边界与真实信号超时分类修复已集成；真实 Key 业务调用未验收 |
-| **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP 闭环已补齐；真实网关、会话入口、订阅产品与桌面验收未完成 |
+| **AI-BYOK** | IN_SCOPE | PARTIAL | 凭据边界、超时分类及重新认证状态修复已集成；真实 Key 业务调用未验收 |
+| **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
 | **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | DOCX 修复已集成；原窗口 Electron fresh-native 49/50 通过，真实 AI 导入预览/排除仍阻塞 |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | 现有五工具保留；`match_job` 仅登记待合同裁定 |
 
@@ -98,7 +98,7 @@
 
 ### AI-MANAGED：Vocatrya 托管 AI
 
-- **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路已补齐，**面向用户的完整托管能力尚未交付**；真实网关、会话获取入口、订阅产品配置及桌面体验仍待完成，生产可用性保持 COMING_SOON。
+- **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路、用户会话兑换和断开入口已补齐，**面向用户的完整托管能力尚未交付**；真实网关、订阅产品配置及凭据发放流程、桌面体验仍待完成，生产可用性保持 COMING_SOON。
 - 托管服务必须由**部署/服务端保管上游网关凭据**；模型目录由服务端控制，稳定产品模型 Key 与上游模型 ID 分离；订阅/Entitlement 决定模型可用范围和用量，需具备配额、可靠用量记录、并发/异常恢复及用户可理解的状态。
 - 用户已向**青云 TOP 客服**询问中国市场相关接入并得到“没有问题”的商务回复；据此可继续推进方案，但不能替代获授权真实网关的技术测试、服务稳定性、额度记账和上线验收。
 - 先核对已有 Managed AI 工程阶段与真实环境准备状态，再在隔离 Beta 环境、真实授权网关/测试预算下执行业务 E2E；最后验收订阅权益、模型选择、额度边界、失败记账、三条 AI 路径隔离和 Windows Electron 用户体验。真实凭据/部署/目标数据库需要专项 Gate。
@@ -176,3 +176,10 @@
 - Main 组合回归 10 文件、150 项通过，覆盖归档、AI 路由、托管 HTTP 闭环、权益提示、DOCX、提醒、历史投递统计、备份往返和隔离迁移。完整非增量 TypeScript 检查零错误；改动 TypeScript 文件 ESLint 无错误，仅 `jobsAbReadPath.spec.ts` 两处原有无用抑制警告。
 - 原简历验收窗口 Windows Electron fresh-native 开发态记录 49/50 PASS、0 FAIL、1 BLOCKED，已核对日志及 PDF/DOCX 产物；真实 AI 导入预览/条目排除仍阻塞。证据位于 `.worktrees/resume-builder-acceptance/.tmp/resume-builder-acceptance/`。该证据不代表本次组合 Main 已重跑桌面验收。
 - 本次未运行新增生产构建、桌面/E2E、真实网关调用、部署或真实数据库迁移。归档桌面验收、托管真实环境/产品入口与简历真实 AI 导入仍待完成。保留三个分支、Worktree 与既有证据，不推送或清理。
+
+### 2026-10-29 三线修复与会话入口集成
+
+- Main 集成账号长输入/导入往返测试 `c9079a0f`、BYOK 凭据状态修复 `2e8dca6c`、托管会话入口 `83b12201` 及失败/并发修复 `3bd3e1d8`。六个账号适配器改用 stdin 或隔离 prompt 文件，避免 Windows argv 长度限制；保留已有版本与权限门控。
+- 合并前复核修复托管总览中临时错误掩盖后续 401、旧请求误降级新会话两处缺陷；生命周期锁与内存修订号按桌面单 Next 服务进程保护状态，不向 SQLite 写入凭据或会话代次。
+- 最终组合 Main 产品源码 `fb2d9b20`：运行时及 hosted-session 共 32 文件/537 项通过；托管总览/卡片/HTTP loopback、业务分配、简历导入往返及 BYOK 连接共 6 文件/101 项通过；完整非增量 TypeScript 检查、相关 ESLint 与差异检查通过。先前 A/B 组合另有 5 文件/105 项通过，计数含重叠，不累加。
+- HTTP loopback 使用合成上游及 safeStorage 桩，长输入使用合成子进程；未执行真实 AI、生产构建、Windows Electron/E2E、部署或真实库迁移。账号/简历真实导入、BYOK 真实 Key、托管真实网关与订阅发放仍待对应验证，相关 passes 保持 false。未推送或清理 Worktree。
