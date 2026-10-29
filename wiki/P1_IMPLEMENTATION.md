@@ -1,6 +1,6 @@
 # Vocatrya P1 增量实施计划
 
-> 更新日期：2026-10-29。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。本轮已集成活动退役（`81f939b8`）、AI 修复（`68212510`）及简历工作台合同（`06efa71b`）；功能验收与代码集成分别记录。
+> 更新日期：2026-10-29。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。本轮已集成活动退役（`81f939b8`）、AI 修复（`68212510`）及简历工作台合同（`06efa71b`）；本聊天另集成简历工作台实现（`559a2bce`）和归档合同冻结记录（`ce7c17b7`）。功能验收与代码集成分别记录。
 > 状态口径：`IMPLEMENTED` 表示相应业务主路径已有实现，`PARTIAL` 表示部分实现，`MISSING` 表示目标产品能力尚未完整实现。上述状态不代表用户验收完成；`passes: true` 仅在对应真实业务与必要数据/桌面 Gate 通过后设置。
 
 ## A. 范围、迁移关系与状态
@@ -16,7 +16,7 @@
 - 原 `RM-MATCH` 不再单列 P1 Feature。其候选 Agent `match_job` 记录到 `AGENT-CAPABILITIES`；**现有 canonical FAST_SCREENING/MatchAnalysisService 仍是独立可复用业务能力**，代码不因台账迁移被删除或改写。
 - `AGENT-CAPABILITIES` 其余能力与扩展决策保持现状，本次只调整匹配工具的台账归属。
 
-当前 **7 项**，其中 `IMPLEMENTED` 2 项、`PARTIAL` 2 项、`MISSING` 3 项；**全部 `passes: false`**：
+当前 **7 项**，其中 `IMPLEMENTED` 3 项、`PARTIAL` 2 项、`MISSING` 2 项；**全部 `passes: false`**：
 
 | Feature | P1 范围 | 实现状态 | 当前结论 |
 | --- | --- | --- | --- |
@@ -25,7 +25,7 @@
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
 | **AI-BYOK** | IN_SCOPE | PARTIAL | 凭据边界与真实信号超时分类修复已集成；真实 Key 业务调用未验收 |
 | **AI-MANAGED** | IN_SCOPE | MISSING | 面向用户的托管服务尚未交付 |
-| **RESUME-BUILDER** | IN_SCOPE | MISSING | v2 合同与导入条目排除子成果已集成；完整工作台未实现 |
+| **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 工作台、三级隐藏、版本/岗位、分页及 DOCX 已集成；Windows Electron 业务验收待执行 |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | 现有五工具保留；`match_job` 仅登记待合同裁定 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
@@ -106,9 +106,9 @@
 
 ### RESUME-BUILDER：结构化模块简历工作台（P1 核心）
 
-- 2026-10-29 集成 [工作台实施合同 v2](./RESUME_BUILDER_CONTRACT_PROPOSAL.md)（`06efa71b`）。Owner 已批准 `@dnd-kit`、DOCX 导出、篇幅软目标及本期条目级导入排除；AI 改写与粘贴导入后续再做。其余待决项不外推批准；分页仍需技术验证。依赖未安装，工作台未编码，保持 MISSING。
+- 2026-10-29 已集成 [工作台实施合同 v2](./RESUME_BUILDER_CONTRACT_PROPOSAL.md)（`06efa71b`）与本聊天批准的剩余六组规则；本次经用户明确授权，将 `codex/resume-builder @ 559a2bce` 的实现合并 Main。依赖已锁定：`@dnd-kit/core` 6.3.1、`sortable` 10.0.0、`utilities` 3.2.2、`docx` 9.15.0。AI 改写与粘贴导入继续延期。
 
-- **P1 / IN_SCOPE / MISSING / `passes: false`。** 现有 Career Material、Resume Variant 等基础能力不等于已实现新的模块化导入、拖拽工作台、分页与导出。实施前先对照真实 Schema、当前简历数据流与格式/导出能力作设计核查。
+- **P1 / IN_SCOPE / IMPLEMENTED / `passes: false`。** 本期两栏素材工作台、Section/Item/Expression 排序/隐藏恢复、素材与证据快照、版本对比/新草稿/岗位绑定、篇幅软目标与分页预览、服务端 DOCX 导出主链路已集成。161 项定向测试、真实字体 Chromium 分页 5 样例、浏览器组件 7 项、类型/lint、隔离库 61 条迁移与备份往返已有证据；集成源码与测试来源一致。本次没有执行 Windows Electron/E2E 或真实业务完整往返，未达成的验收条件继续保留，不将浏览器组件 Mock 证据视作功能验收。
 
 **冻结的两栏布局**：
 
@@ -162,3 +162,7 @@
 ### 2026-10-29 简历工作台本地开发交付（未集成）
 
 2026-10-29 本聊天本地开发交付：codex/resume-builder（.worktrees/resume-builder），基线 Main 051eeaf1 + 未提交修改。本期 T1–T4 已实现：左侧素材库/右侧编辑与实时预览、素材及单条证据拖入、键盘/指针排序、三级隐藏与溯源克隆、目标职位及版本差异/新草稿、篇幅软目标/CSS 分片预览、服务端 DOCX artifact/下载；T5 沿用已集成条目排除。新增 additive 迁移 20261029020000_resume_builder_visibility，备份 V7 兼容读取 V1–V6。15 个定向测试文件 161 项通过；随后最终编辑/导出 UI 34 项复测通过，类型检查与改动文件 ESLint 通过。独立 Chromium 分页 5 个固定样例（真实 Inter 字体、密集要点/超长条目/标题边界/隐藏内容/中英文）逐标记与块片段页号和 PDF 页数一致；7 项浏览器组件检查使用合成 graph/Action mock，仅证明 UI 交互，不作为真实持久化或桌面验收。持久化、拒绝写入、DOCX 重建与备份往返由隔离 SQLite 定向测试覆盖；独立空库 61 条迁移 deploy 与 REQUIRED_RAW_MIGRATION_INVARIANTS 通过。初次迁移检查因未指定 DATABASE_URL、首次 deploy 因隔离库文件尚未创建失败；创建空隔离库并指定其 URL 后通过，未访问真实库。代码尚未提交/合并 Main，未执行生产构建、Windows Electron/E2E、真实 AI 或真实数据库迁移；Main implementationStatus 与 passes 不因本地开发改为完成。
+
+### 2026-10-29 Main 集成闭环
+
+用户已明确授权提交与合并。合同记录提交 `ce7c17b7`，工作台来源提交 `559a2bce`；共享文档无冲突，合并源码与已验证来源一致，复用上文定向证据，未重复构建。RESUME-BUILDER 实现状态随本次合并更新为 IMPLEMENTED，所有 P1 passes 仍 false。归档功能仍 MISSING，仅合同冻结；活动退役剩余复验仍由用户安排 P1 结束后人工检验。保留 `codex/resume-builder` 分支与 Worktree，未推送、发布、操作真实数据库或清理其他任务。

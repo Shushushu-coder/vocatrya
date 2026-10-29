@@ -431,6 +431,20 @@ function migrateOpts() {
 }
 
 describe("Phase 4 v2 backup / restore round-trip", () => {
+  it("preserves builder visibility and lineage as values while remapping row identities", async () => {
+    const section = await prisma.resumeVariantSection.findFirstOrThrow({ where: { version: { resumeVariant: { userId } } }, include: { items: { include: { expressions: true } } } });
+    const hiddenAt = new Date("2026-10-29T00:00:00.000Z");
+    await prisma.resumeVariantSection.update({ where: { id: section.id }, data: { hiddenAt, originRefId: "section-lineage" } });
+    await prisma.resumeVariantSectionItem.update({ where: { id: section.items[0].id }, data: { hiddenAt, originRefId: "item-lineage" } });
+    await prisma.resumeExpression.update({ where: { id: section.items[0].expressions[0].id }, data: { hiddenAt, originRefId: "expression-lineage" } });
+    const { buffer } = await buildBackupZip(userId, "phase4@example.com");
+    await importBackup(buffer, userId, "phase4@example.com", true);
+    const restored = await prisma.resumeVariantSection.findFirstOrThrow({ where: { originRefId: "section-lineage", version: { resumeVariant: { userId } } }, include: { items: { include: { expressions: true } } } });
+    expect(restored.id).not.toBe(section.id); expect(restored.hiddenAt).toEqual(hiddenAt);
+    expect(restored.items[0].originRefId).toBe("item-lineage"); expect(restored.items[0].hiddenAt).toEqual(hiddenAt);
+    expect(restored.items[0].expressions.find((e) => e.originRefId === "expression-lineage")?.hiddenAt).toEqual(hiddenAt);
+  }, 120_000);
+
   it("restores old backup items without a snapshot as null, with no live title fallback", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
@@ -473,14 +487,14 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     }
   }, 120_000);
 
-  it("writes formatVersion 6 and omits DataMigrationRun", async () => {
+  it("writes formatVersion 7 and omits DataMigrationRun", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
     const manifest = JSON.parse(
       await zip.file("manifest.json")!.async("string"),
     );
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
-    expect(manifest.formatVersion).toBe(6);
+    expect(manifest.formatVersion).toBe(7);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(data).not.toHaveProperty("CandidateSensitiveInfo");
     expect(data).not.toHaveProperty("ResumeContactProfile");

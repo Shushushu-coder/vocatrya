@@ -16,7 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ art
     const encoded = encodeURIComponent(artifact.fileName).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
     return new NextResponse(new Uint8Array(bytes), {
       headers: {
-        "Content-Type": "application/pdf",
+        "Content-Type": artifact.format === "DOCX" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf",
         "Content-Disposition": `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",

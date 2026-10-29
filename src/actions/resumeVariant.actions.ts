@@ -1,4 +1,5 @@
 "use server";
+import { buildMaterialItemText } from "@/lib/career/applicationCopy";
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
@@ -525,6 +526,7 @@ export async function listResumeCareerMaterials(): Promise<ActionResult> {
       id: row.id,
       title: row.title,
       type: row.type,
+      summary: buildMaterialItemText({ ...row, evidence: [] }),
       evidence: (row.evidence ?? []).map((item) => ({
         id: item.id,
         kind: item.kind,
@@ -535,4 +537,67 @@ export async function listResumeCareerMaterials(): Promise<ActionResult> {
   } catch (error) {
     return handleError(error, "Failed to list career materials.");
   }
+}
+
+export async function setResumeContentHidden(input: { kind: "section" | "item" | "expression"; id: string; hidden: boolean }): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const data = await variantsFor(user.id).setHidden(input.kind, requireId(input.id, "CONTENT_NOT_FOUND"), input.hidden);
+    return { success: true, data };
+  } catch (error) { return handleError(error, "Failed to update visibility."); }
+}
+export async function attachResumeMaterial(input: { sectionId: string; materialId: string; evidenceId?: string }): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const data = await variantsFor(user.id).attachMaterialToSection(requireId(input.sectionId, "SECTION_NOT_FOUND"), requireId(input.materialId, "MATERIAL_NOT_FOUND"), input.evidenceId === undefined ? undefined : requireId(input.evidenceId, "EVIDENCE_NOT_FOUND"));
+    return { success: true, data };
+  } catch (error) { return handleError(error, "Failed to attach material."); }
+}
+export async function addResumeEvidence(input: { itemId: string; evidenceId: string }): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const data = await variantsFor(user.id).addEvidenceAsExpression(requireId(input.itemId, "ITEM_NOT_FOUND"), requireId(input.evidenceId, "EVIDENCE_NOT_FOUND"));
+    return { success: true, data };
+  } catch (error) { return handleError(error, "Failed to attach evidence."); }
+}
+export async function syncResumeMaterialTitle(itemId: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const data = await variantsFor(user.id).syncMaterialTitle(requireId(itemId, "ITEM_NOT_FOUND"));
+    return { success: true, data };
+  } catch (error) { return handleError(error, "Failed to sync material title."); }
+}
+export async function updateResumeLayout(input: { versionId: string; pageTarget: 1 | 2 | null }): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const data = await variantsFor(user.id).updateLayout(requireId(input.versionId, "VERSION_NOT_FOUND"), { template: "standard", pageTarget: input.pageTarget });
+    return { success: true, data };
+  } catch (error) { return handleError(error, "Failed to update layout."); }
+}
+export async function listResumeTargetJobs(): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertResumeV1Readable(prisma);
+    const data = await prisma.jobOpportunity.findMany({ where: { userId: user.id, archivedAt: null }, select: { id: true, title: true, company: { select: { label: true } } }, orderBy: [{ updatedAt: "desc" }, { id: "asc" }] });
+    return { success: true, data };
+  } catch (error) { return handleError(error, "Failed to list target jobs."); }
+}
+export async function updateResumeTargetJob(input: { versionId: string; jobId: string | null }): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const data = await variantsFor(user.id).updateTargetJob(requireId(input.versionId, "VERSION_NOT_FOUND"), optionalId(input.jobId));
+    revalidatePath(LIST_PATH);
+    return { success: true, data };
+  } catch (error) { return handleError(error, "Failed to update target job."); }
+}
+export async function compareResumeVersions(input: { beforeId: string; afterId: string }): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const service = variantsFor(user.id);
+    const before = await service.getVersion(requireId(input.beforeId, "VERSION_NOT_FOUND"));
+    const after = await service.getVersion(requireId(input.afterId, "VERSION_NOT_FOUND"));
+    if (before.resumeVariantId !== after.resumeVariantId) throw new CareerRuntimeError("VERSION_NOT_FOUND", "Versions must belong to the same resume");
+    const { diffResumeVersions } = await import("@/lib/career/resumeVersionDiff");
+    return { success: true, data: { changes: diffResumeVersions(before, after), before, after } };
+  } catch (error) { return handleError(error, "Failed to compare resume versions."); }
 }

@@ -12,6 +12,8 @@ vi.mock("@/i18n", () => {
 });
 vi.mock("@/lib/toast", () => ({ toastError: vi.fn(), toastSuccess: vi.fn() }));
 vi.mock("@/actions/resumeVariant.actions", () => ({
+  listResumeTargetJobs: vi.fn(async () => ({ success: true, data: [] })),
+  setResumeContentHidden: vi.fn(), attachResumeMaterial: vi.fn(), addResumeEvidence: vi.fn(), syncResumeMaterialTitle: vi.fn(), updateResumeLayout: vi.fn(), updateResumeTargetJob: vi.fn(), compareResumeVersions: vi.fn(), createBlankResumeDraft: vi.fn(),
   findReusableResumeExport: vi.fn(), freezeResumeVersion: vi.fn(),
   getResumeVariant: vi.fn(), getResumeVariantVersion: vi.fn(), listResumeVariantVersions: vi.fn(),
   cloneResumeVersionAsDraft: vi.fn(), createResumeExpression: vi.fn(), createResumeSection: vi.fn(),
@@ -26,6 +28,8 @@ const bridge = { printToPDF: vi.fn() };
 let downloadClick: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(actions.listResumeCareerMaterials).mockResolvedValue({ success: true, data: [] });
+  vi.mocked(actions.listResumeTargetJobs).mockResolvedValue({ success: true, data: [] });
   window.vocatryaResume = bridge;
   bridge.printToPDF.mockResolvedValue({ ok: true, bytes: pdf });
   vi.mocked(actions.findReusableResumeExport).mockResolvedValue({ success: true, data: null });
@@ -171,7 +175,7 @@ it("keeps the workspace frozen after export fails and retries without a second f
   await screen.findByRole("alert");
   expect(screen.getByRole("button", { name: "Create new draft" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Freeze version" })).not.toBeInTheDocument();
-  expect(screen.getAllByRole("textbox").every((input) => (input as HTMLInputElement).disabled)).toBe(true);
+  expect(screen.getAllByRole("textbox").filter((input) => input.getAttribute("aria-label") !== "Search materials or evidence").every((input) => (input as HTMLInputElement).disabled)).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Export PDF" }));
   await waitFor(() => expect(downloadClick).toHaveBeenCalledOnce());
   expect(actions.freezeResumeVersion).toHaveBeenCalledOnce();
@@ -209,4 +213,21 @@ it("signals readiness only after fonts resolve and clears it on unmount", async 
   expect(document.documentElement.dataset.resumePrintReady).toBe("version-1");
   unmount();
   expect(document.documentElement.dataset.resumePrintReady).toBeUndefined();
+});
+
+it("keeps the draft editable when saving before export fails", async () => {
+  const beforeExport = vi.fn(async () => false), onFrozen = vi.fn();
+  render(<ResumeExportControl versionId="version-1" status="DRAFT" archived={false} onFrozen={onFrozen} beforeExport={beforeExport} />);
+  fireEvent.click(screen.getByRole("button", { name: "Export PDF" }));
+  fireEvent.click(screen.getByRole("button", { name: "Freeze and export" }));
+  await waitFor(() => expect(beforeExport).toHaveBeenCalledOnce());
+  expect(actions.freezeResumeVersion).not.toHaveBeenCalled();
+  expect(bridge.printToPDF).not.toHaveBeenCalled(); expect(onFrozen).not.toHaveBeenCalled();
+});
+it("exports DOCX through server generation without using the Electron PDF bridge", async () => {
+  control();
+  fireEvent.click(screen.getByRole("button", { name: "Export DOCX" }));
+  await waitFor(() => expect(downloadClick).toHaveBeenCalledOnce());
+  expect(fetch).toHaveBeenNthCalledWith(1, "/api/profile/resume-artifacts?versionId=version-1&format=DOCX", { method: "POST" });
+  expect(bridge.printToPDF).not.toHaveBeenCalled();
 });

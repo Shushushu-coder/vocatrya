@@ -1553,6 +1553,8 @@ model ResumeVariantVersion {
 }
 
 model ResumeVariantSection {
+  hiddenAt DateTime?
+  originRefId String?
   id                     String  @id @default(uuid())
   resumeVariantVersionId String
   title                  String
@@ -1566,6 +1568,8 @@ model ResumeVariantSection {
 }
 
 model ResumeVariantSectionItem {
+  hiddenAt DateTime?
+  originRefId String?
   materialTitleSnapshot  String?
   id                     String  @id @default(uuid())
   resumeVariantSectionId String
@@ -1581,6 +1585,8 @@ model ResumeVariantSectionItem {
 }
 
 model ResumeExpression {
+  hiddenAt DateTime?
+  originRefId String?
   id                         String @id @default(uuid())
   resumeVariantSectionItemId String
 

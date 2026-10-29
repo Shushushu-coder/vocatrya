@@ -75,9 +75,9 @@ export class ResumeArtifactService {
     return version;
   }
 
-  private async existingExport(versionId: string) {
+  private async existingExport(versionId: string, format: "PDF" | "DOCX" = "PDF") {
     const rows = await this.db.resumeArtifact.findMany({
-      where: { resumeVariantVersionId: versionId, kind: "EXPORT", format: "PDF" },
+      where: { resumeVariantVersionId: versionId, kind: "EXPORT", format },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     for (const row of rows) {
@@ -148,13 +148,47 @@ export class ResumeArtifactService {
     finally { pendingExports.delete(key); }
   }
 
+  async createDocxExport(versionId: string) {
+    await assertResumeV1Writable(this.db, this.env);
+    const version = await this.ownedVersion(versionId);
+    if (version.status !== "FROZEN" && version.status !== "SUBMITTED") throw new CareerRuntimeError("VERSION_NOT_IMMUTABLE", "Freeze the resume version before exporting");
+    if (version.resumeVariant.archivedAt) throw new CareerRuntimeError("VARIANT_ARCHIVED", "Archived resumes cannot create exports");
+    const key = `${path.resolve(this.uploadsRoot)}:${this.userId}:${versionId}:DOCX`;
+    const pending = pendingExports.get(key);
+    if (pending) return pending;
+    const operation = (async () => {
+      const existing = await this.existingExport(versionId, "DOCX");
+      if (existing) return existing;
+      const { ResumeVariantService } = await import("./resumeVariantService");
+      const { buildResumeDocx } = await import("./resumeDocx");
+      const graph = await new ResumeVariantService(this.db, this.userId, this.env).getVersion(versionId);
+      const bytes = await buildResumeDocx(graph);
+      if (bytes.byteLength > MAX_RESUME_PDF_BYTES) throw new CareerRuntimeError("DOCX_TOO_LARGE", "Document exceeds the 20 MB limit");
+      const id = randomUUID();
+      const fileName = resumeExportFileName(version.headerSnapshot, version.resumeVariant.name).replace(/\.pdf$/, ".docx");
+      const storageKey = buildResumeArtifactStorageKey(id, fileName);
+      const target = resolveResumeArtifactStorageKey(storageKey, this.uploadsRoot), temporary = `${target}.tmp`;
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      try {
+        await fs.writeFile(temporary, bytes, { flag: "wx" });
+        await fs.rename(temporary, target);
+        return await this.db.resumeArtifact.create({ data: { id, resumeVariantVersionId: versionId, kind: "EXPORT", format: "DOCX", storageKey, fileName, sha256: createHash("sha256").update(bytes).digest("hex"), byteSize: bytes.byteLength } });
+      } catch (error) {
+        await Promise.all([fs.rm(temporary, { force: true }), fs.rm(target, { force: true })]);
+        throw error;
+      }
+    })();
+    pendingExports.set(key, operation);
+    try { return await operation; } finally { pendingExports.delete(key); }
+  }
+
   async openForDownload(artifactId: string) {
     await assertResumeV1Readable(this.db, this.env);
     if (typeof artifactId !== "string" || !artifactId.trim()) {
       throw new CareerRuntimeError("ARTIFACT_NOT_FOUND", "Resume artifact not found");
     }
     const artifact = await this.db.resumeArtifact.findFirst({
-      where: { id: artifactId, kind: "EXPORT", format: "PDF", version: { resumeVariant: { userId: this.userId } } },
+      where: { id: artifactId, kind: "EXPORT", format: { in: ["PDF", "DOCX"] }, version: { resumeVariant: { userId: this.userId } } },
     });
     if (!artifact) throw new CareerRuntimeError("ARTIFACT_NOT_FOUND", "Resume artifact not found");
     try {

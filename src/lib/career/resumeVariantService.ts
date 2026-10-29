@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { sha256Utf8 } from "./hash";
+import { parseResumeLayoutConfig, serializeResumeLayoutConfig } from "./resumeLayoutConfig";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { CareerRuntimeError } from "./errors";
 import { EVIDENCE_STATUS, RESUME_VERSION_STATUS } from "./identities";
@@ -403,6 +406,106 @@ export class ResumeVariantService {
     });
   }
 
+  async setHidden(kind: "section" | "item" | "expression", id: string, hidden: boolean) {
+    await this.gate();
+    if (typeof hidden !== "boolean" || !["section", "item", "expression"].includes(kind)) {
+      throw new CareerRuntimeError("INVALID_INPUT", "Invalid visibility input");
+    }
+    return this.db.$transaction(async (tx) => {
+      const target = kind === "section" ? { sections: { some: { id } } }
+        : kind === "item" ? { sections: { some: { items: { some: { id } } } } }
+        : { sections: { some: { items: { some: { expressions: { some: { id } } } } } } };
+      await this.guardDraftMutationInTransaction(tx, target);
+      const data = { hiddenAt: hidden ? new Date() : null };
+      if (kind === "section") return tx.resumeVariantSection.update({ where: { id }, data });
+      if (kind === "item") return tx.resumeVariantSectionItem.update({ where: { id }, data });
+      return tx.resumeExpression.update({ where: { id }, data });
+    });
+  }
+
+  async updateLayout(versionId: string, input: unknown) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { id: versionId });
+      const version = await this.requireOwnedEditableVersion(versionId, tx);
+      const config = parseResumeLayoutConfig(JSON.stringify(input));
+      return tx.resumeVariantVersion.update({ where: { id: versionId },
+        data: { layoutConfig: serializeResumeLayoutConfig(version.layoutConfig, config) } });
+    });
+  }
+
+  async updateTargetJob(versionId: string, jobId: string | null) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      const version = await this.requireOwnedVersion(versionId, tx);
+      this.assertNotArchived(version.resumeVariant.archivedAt);
+      // Target belongs to the variant; changing it never mutates frozen version content.
+      if (jobId) {
+        const job = await tx.jobOpportunity.findFirst({ where: { id: jobId, userId: this.userId, archivedAt: null }, select: { id: true } });
+        if (!job) throw new CareerRuntimeError("TARGET_JOB_NOT_FOUND", "Target job not found");
+      }
+      const changed = await tx.resumeVariant.updateMany({ where: { id: version.resumeVariant.id, userId: this.userId, archivedAt: null }, data: { targetJobOpportunityId: jobId } });
+      if (changed.count !== 1) throw new CareerRuntimeError("VARIANT_ARCHIVED", "Resume variant changed concurrently");
+      return tx.resumeVariant.findUniqueOrThrow({ where: { id: version.resumeVariant.id } });
+    });
+  }
+
+  async syncMaterialTitle(itemId: string) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { id: itemId } } } } });
+      const item = await this.requireOwnedEditableItem(itemId, tx);
+      if (!item.careerMaterialItemId) throw new CareerRuntimeError("MATERIAL_NOT_FOUND", "No linked material");
+      const material = await this.requireOwnedActiveMaterial(item.careerMaterialItemId, tx);
+      return tx.resumeVariantSectionItem.update({ where: { id: item.id }, data: { materialTitleSnapshot: material.title } });
+    });
+  }
+
+  /** Attach material and seed evidence snapshots atomically under the draft write lock. */
+  async attachMaterialToSection(sectionId: string, materialId: string, evidenceId?: string) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { id: sectionId } } });
+      const section = await this.requireOwnedEditableSection(sectionId, tx);
+      const material = await this.requireOwnedActiveMaterial(materialId, tx);
+      const existing = await tx.resumeVariantSectionItem.findFirst({ where: { resumeVariantSectionId: section.id, careerMaterialItemId: material.id } });
+      if (existing && !evidenceId) throw new CareerRuntimeError("MATERIAL_ALREADY_IN_SECTION", "Material already in section");
+      const evidence = await tx.careerEvidence.findMany({ where: { materialItemId: material.id, archivedAt: null, ...(evidenceId ? { id: evidenceId } : {}) }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+      if (evidenceId && evidence.length !== 1) throw new CareerRuntimeError("EVIDENCE_NOT_FOUND", "Evidence not found");
+      const item = existing ?? await tx.resumeVariantSectionItem.create({ data: {
+        resumeVariantSectionId: section.id, careerMaterialItemId: material.id, materialTitleSnapshot: material.title,
+        originRefId: randomUUID(), itemKind: RESUME_SECTION_ITEM_KINDS.has(material.type) ? material.type : "CUSTOM",
+        sortOrder: await this.nextSortOrder("resumeVariantSectionItem", { resumeVariantSectionId: section.id }, tx),
+      } });
+      for (const row of evidence) await this.seedEvidence(tx, item.id, row);
+      return item;
+    });
+  }
+
+  async addEvidenceAsExpression(itemId: string, evidenceId: string) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { id: itemId } } } } });
+      const item = await this.requireOwnedEditableItem(itemId, tx);
+      if (!item.careerMaterialItemId) throw new CareerRuntimeError("MATERIAL_NOT_FOUND", "No linked material");
+      await this.requireOwnedActiveMaterial(item.careerMaterialItemId, tx);
+      const evidence = await tx.careerEvidence.findFirst({ where: { id: evidenceId, materialItemId: item.careerMaterialItemId, archivedAt: null } });
+      if (!evidence) throw new CareerRuntimeError("EVIDENCE_NOT_FOUND", "Evidence not found");
+      return this.seedEvidence(tx, item.id, evidence);
+    });
+  }
+
+  private async seedEvidence(tx: Prisma.TransactionClient, itemId: string, evidence: { id: string; content: string; updatedAt: Date }) {
+    const duplicate = await tx.resumeExpression.findFirst({ where: { resumeVariantSectionItemId: itemId, evidenceLinks: { some: { careerEvidenceId: evidence.id } } } });
+    if (duplicate) return duplicate;
+    return tx.resumeExpression.create({ data: {
+      resumeVariantSectionItemId: itemId, originRefId: randomUUID(), kind: "BULLET", content: evidence.content,
+      evidenceStatus: EVIDENCE_STATUS.LINKED, sortOrder: await this.nextSortOrder("resumeExpression", { resumeVariantSectionItemId: itemId }, tx),
+      evidenceLinks: { create: { careerEvidenceId: evidence.id, evidenceContentSnapshot: evidence.content,
+        evidenceHashSnapshot: sha256Utf8(evidence.content), evidenceUpdatedAtSnapshot: evidence.updatedAt } },
+    } });
+  }
+
   async freeze(versionId: string) {
     await this.gate();
     return this.db.$transaction(async (tx) => {
@@ -596,6 +699,7 @@ export class ResumeVariantService {
       return tx.resumeVariantSection.create({
         data: {
           resumeVariantVersionId: version.id,
+          originRefId: randomUUID(),
           title,
           systemKind,
           sortOrder,
@@ -711,6 +815,7 @@ export class ResumeVariantService {
       return tx.resumeVariantSectionItem.create({
         data: {
           resumeVariantSectionId: section.id,
+          originRefId: randomUUID(),
           careerMaterialItemId,
           materialTitleSnapshot,
           itemKind: kind,
@@ -798,6 +903,7 @@ export class ResumeVariantService {
       return tx.resumeExpression.create({
         data: {
           resumeVariantSectionItemId: item.id,
+          originRefId: randomUUID(),
           content,
           kind,
           sortOrder,
@@ -1195,6 +1301,8 @@ export class ResumeVariantService {
             title: section.title,
             systemKind: section.systemKind,
             sortOrder: section.sortOrder,
+            hiddenAt: section.hiddenAt,
+            originRefId: section.originRefId ?? section.id,
           },
         });
         for (const item of section.items) {
@@ -1205,6 +1313,8 @@ export class ResumeVariantService {
               materialTitleSnapshot: item.materialTitleSnapshot,
               itemKind: item.itemKind,
               sortOrder: item.sortOrder,
+              hiddenAt: item.hiddenAt,
+              originRefId: item.originRefId ?? item.id,
             },
           });
           for (const expression of item.expressions) {
@@ -1214,6 +1324,8 @@ export class ResumeVariantService {
                 kind: expression.kind,
                 content: expression.content,
                 sortOrder: expression.sortOrder,
+                hiddenAt: expression.hiddenAt,
+                originRefId: expression.originRefId ?? expression.id,
                 evidenceStatus: expression.evidenceStatus,
               },
             });

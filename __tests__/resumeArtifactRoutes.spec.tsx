@@ -150,3 +150,22 @@ it("bounds chunked PDF uploads and rejects a non-PDF content type", async () => 
   expect(accepted.status).toBe(201);
   expect(await accepted.json()).toMatchObject({ byteSize: MAX_RESUME_PDF_BYTES });
 });
+
+it("generates DOCX on the server and serves its actual MIME type", async () => {
+  const response = await POST(new NextRequest(`http://localhost/api/profile/resume-artifacts?versionId=${versionId}&format=DOCX`, { method: "POST" }));
+  expect(response.status).toBe(201);
+  const artifact = await response.json();
+  expect(artifact.fileName).toMatch(/\.docx$/);
+  const result = await download(artifact.id);
+  expect(result.status).toBe(200);
+  expect(result.headers.get("Content-Type")).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  expect(Buffer.from(await result.arrayBuffer()).subarray(0, 2).toString()).toBe("PK");
+});
+it("rejects client-supplied DOCX bytes and unsupported formats without writing an artifact", async () => {
+  const count = await db.resumeArtifact.count({ where: { resumeVariantVersionId: versionId } });
+  for (const format of ["DOCX", "HTML"]) {
+    const response = await POST(new NextRequest(`http://localhost/api/profile/resume-artifacts?versionId=${versionId}&format=${format}`, { method: "POST", body: Buffer.from("PK client supplied") }));
+    expect(response.status).toBe(400);
+  }
+  expect(await db.resumeArtifact.count({ where: { resumeVariantVersionId: versionId } })).toBe(count);
+});
