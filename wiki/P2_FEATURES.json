@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "project": "Vocatrya",
+  "phase": "P2",
+  "updatedAt": "2026-10-29",
+  "baseline": {
+    "source": "2026-10-29 已确认的 P2 产品讨论；以 P1_FEATURES.json / P1_IMPLEMENTATION.md 为上游合同参考",
+    "gitRef": null,
+    "date": "2026-10-29"
+  },
+  "definitions": {
+    "scope": {
+      "IN_SCOPE": "P2 产品规划范围已确认，不代表任何代码、Schema、数据库、提交或部署授权。",
+      "OWNER_DECISION": "待 Owner 决定是否纳入 P2。",
+      "DEFERRED": "不属于当前 P2 首版范围。"
+    },
+    "designStatus": {
+      "CORE_CONFIRMED": "核心产品方向与交互原则已确认；细节如 openQuestions 所列仍需设计审查。",
+      "CONTRACT_PENDING": "目标已确认，关键数据/指标/交互合同尚待冻结。"
+    },
+    "implementationStatus": "NOT_ASSESSED 表示本 P2 文档未审计当前仓库或验证功能；不能据此判断模块全部缺失或已实现。实施状态须待只读代码审计后更新。",
+    "steps": "Feature 级交付和验收检查点；具体设计边界见 P2_IMPLEMENTATION.md。列入台账不代表执行授权。",
+    "passes": "只有对应真实用户可见流程、数据/权限契约及必要桌面验收实际通过并保留证据后才能置 true。产品设计确认、源码存在或测试单独通过都不等于验收。"
+  },
+  "features": [
+    {
+      "id": "JOURNEY-OVERVIEW",
+      "category": "Overview / UX",
+      "priority": "P2",
+      "relativePriority": "CORE",
+      "scope": "IN_SCOPE",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "P2 首页核心：在一张可滚动的概览页，以「准备 → 行动 → 复盘」讲清完整求职旅程，呈现主要功能入口、阶段进度、清晰的数据看板与 Vocatrya Agent 辅助入口；新用户与已有数据用户应有差异化呈现，但不强制线性流程。",
+      "confirmedDecisions": [
+        "三个阶段固定为准备（Voca Insight）→行动（Voca Pilot）→复盘（Voca Reflect），是场景导航而非强制门槛；用户可随时回到任一阶段。",
+        "首页为可滚动的统一概览，覆盖主要能力和可达入口，但不嵌入每个模块的全部复杂操作。",
+        "首次使用强调旅程理解和开始入口；有数据时强调下一步行动、进度与真实指标。",
+        "首页展示可主动打开的 Agent；不自动调用后台 AI。"
+      ],
+      "dependencies": [
+        "NEXT-ACTIONS",
+        "CAREER-INSIGHTS",
+        "MULTI-AGENT",
+        "P1 RESUME-BUILDER / AI 三路径 / 现有 Jobs、Tasks、Interview 功能的真实可用范围"
+      ],
+      "steps": [
+        "核对实际首页导航、数据来源和 P1 可用能力，为三个阶段映射真实页面与不可用状态。",
+        "实现新用户/有数据用户两类首页，覆盖主要功能路径、明确可点击的模块及 Agent 入口。",
+        "首页清楚区分手动工作台操作与用户主动触发的 Agent 辅助，不展示不存在的能力。",
+        "在桌面常见宽度和窄屏场景验证可读性、入口可达性、空态和有数据态；完成真实用户路径验收。"
+      ],
+      "openQuestions": [
+        "各阶段模块卡片/数据卡片的具体密度、排序与响应式断点。",
+        "“所有主要功能”的完整可达性映射须依据当时真实导航和模块审计确定。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "JOB-CONNECTIONS",
+      "category": "Cross-module / Data",
+      "priority": "P2",
+      "relativePriority": "HIGH",
+      "scope": "IN_SCOPE",
+      "designStatus": "CONTRACT_PENDING",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "围绕目标职位及实际申请记录建立关联视图：计划使用的简历版本、实际投递时的简历版本/不可变快照、面试轮次、面试题目和真实复盘可串联查看；避免重复录入和历史事实被后续修改覆盖。",
+      "confirmedDecisions": [
+        "区分“为职位准备的简历版本”和“某次申请实际提交的简历版本/材料”；后者应保留提交时事实，不随版本更新而漂移。",
+        "一个职位可有多次申请或多轮面试；题目、练习、真实面试复盘与具体上下文建立可追溯关联。",
+        "复用现有职位、申请、简历版本与面试业务服务；职位详情可作为关联信息入口，而非复制整套业务数据。"
+      ],
+      "dependencies": [
+        "P1 RESUME-BUILDER 的版本、导出与溯源合同",
+        "P1 已有 Job Opportunity / Application Attempt / 流程节点",
+        "INTERVIEW-DEBRIEF",
+        "既有 Interview Question/Practice 业务与授权边界"
+      ],
+      "steps": [
+        "只读核查现有职位、申请、简历版本、面试题目/练习的实体、生命周期、关联键、权限和备份兼容。",
+        "设计并审查职位/申请/简历版本/面试轮次/题目/复盘之间的正式关系，区分当前选择和不可变历史提交事实。",
+        "实现用户可理解的关联、查看、更换、解除与缺失数据处理；不隐式修改历史提交或既有面试事实。",
+        "验证多申请、多轮面试、简历改版、归档恢复、历史读取、跨模块权限与备份往返。"
+      ],
+      "openQuestions": [
+        "正式实体关系、关联基数、版本与实际投递快照的保存策略。",
+        "关联删除/归档/恢复、旧数据回填及迁移/备份兼容语义。",
+        "面试题目绑定职位、申请或面试轮次的具体层级及复用机制。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "INTERVIEW-DEBRIEF",
+      "category": "Interview / Reflection",
+      "priority": "P2",
+      "relativePriority": "HIGH",
+      "scope": "IN_SCOPE",
+      "designStatus": "CONTRACT_PENDING",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "新增针对真实发生的面试的逐轮复盘区域，关联职位/申请/面试轮次与当时提问，记录表现、收获、问题和后续改进；与现有模拟面试、题库、练习记录保持清晰区分。",
+      "confirmedDecisions": [
+        "真实面试复盘是单独的业务记录，不等同于模拟面试练习或 AI 生成的反馈。",
+        "允许同一求职机会存在多轮真实面试及各自复盘；能回到具体职位/申请上下文。",
+        "可引用题库/练习并记录真实面试中的新问题；改进事项可以按用户确认转入现有 Tasks。",
+        "不强制使用 AI；Voca Reflect 的总结/分析在用户主动触发后才发生。"
+      ],
+      "dependencies": [
+        "JOB-CONNECTIONS",
+        "现有 Interview Question Bank / Practice / Tasks",
+        "MULTI-AGENT 的 Voca Reflect 边界"
+      ],
+      "steps": [
+        "审查真实面试事件与现有面试练习、题库、申请流程的实际数据边界。",
+        "冻结逐轮复盘最低记录项、可选字段、关联及编辑/恢复语义，明确用户叙述和 AI 建议的来源区别。",
+        "支持记录、浏览、修改、关联问题与下一步练习/任务，保持无 AI 时可完整操作。",
+        "用多轮真实面试样例验证独立复盘、跨职位引用、历史查看与用户主动调用 Reflect 的界限。"
+      ],
+      "openQuestions": [
+        "复盘字段、真实面试状态/结果与申请状态的同步规则。",
+        "复盘的草稿/完成状态，以及后续修改的历史留痕要求。",
+        "题目与练习的引用/复制策略；敏感内容、附件和归档范围是否纳入本期。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "NEXT-ACTIONS",
+      "category": "Overview / Rules",
+      "priority": "P2",
+      "relativePriority": "HIGH",
+      "scope": "IN_SCOPE",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "根据现有真实业务数据使用确定性规则自动提供“下一步做什么”的引导；无简历、未配置 AI、尚未投递、已结束真实面试未复盘等状态触发对应模块入口。不运行 LLM，不做搜索推荐算法，不自动创建或执行 Agent 任务。",
+      "confirmedDecisions": [
+        "无简历→引导简历模块；未配置可用 AI→引导 AI 服务设置，但不阻止手动使用；尚未投递→引导添加/导入职位并准备投递。",
+        "已有结束的真实面试且尚未复盘→引导面试复盘及后续练习；其他建议须源于可核实的业务状态。",
+        "建议由确定性规则计算，展示真实的下一步与明确的业务入口；不得自动调用 AI 或代替用户写入业务数据。",
+        "可同时满足多条建议，具体展示顺序与去重合同尚待制定，不能将阶段理解为强制顺序。"
+      ],
+      "dependencies": [
+        "JOURNEY-OVERVIEW",
+        "JOB-CONNECTIONS",
+        "INTERVIEW-DEBRIEF",
+        "P1 RESUME-BUILDER / AI 服务真实状态",
+        "Tasks / Calendar 的现有可读数据"
+      ],
+      "steps": [
+        "核对可用的数据源及对“简历存在”“AI 可用”“已投递”“真实面试结束”“已复盘”的可验证判定。",
+        "落实纯规则的候选、优先级、去重、空态和时区边界；不依赖模型或职位搜索算法。",
+        "根据数据变化更新建议，点击进入实际业务模块或手动打开匹配 Agent，不自动发起 AI 或写入。",
+        "覆盖空账号、多条件同时命中、归档职位、无 AI、已完成真实面试及缺失数据等回归。"
+      ],
+      "openQuestions": [
+        "多条建议的排序、上限、暂时忽略/消除规则。",
+        "各数据状态与时间/时区的正式判定规则及归档数据是否参与。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "CAREER-INSIGHTS",
+      "category": "Overview / Analytics",
+      "priority": "P2",
+      "relativePriority": "MEDIUM",
+      "scope": "IN_SCOPE",
+      "designStatus": "CONTRACT_PENDING",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "建立简洁、可解释的求职数据看板，呈现职位、真实投递、面试、Offer、待跟进等主要业务指标；可逐步加入漏斗和阶段转化，口径先定义再展示，不能恢复已退役 Activity 计时/时长统计。",
+      "confirmedDecisions": [
+        "数据看板位于概览中并服务于用户判断下一步，而不是堆砌大量指标。",
+        "仅显示有可信业务来源的实际数据；空数据、样本不足和不适用的转化率必须清楚表达。",
+        "不引入 Activity 计时、效率评分、AI 自动职业评分；指标计算不需要 LLM。",
+        "职位归档不应无说明地抹去历史投递事实；具体累计/当前视图统计口径须冻结。"
+      ],
+      "dependencies": [
+        "JOURNEY-OVERVIEW",
+        "JOB-CONNECTIONS",
+        "P1 BD-ARCHIVE",
+        "现有 Jobs / Application / Interview / Tasks 数据"
+      ],
+      "steps": [
+        "盘点现有业务统计和来源，定义各指标的实体、分子分母、去重条件、时间窗口与归档口径。",
+        "优先交付清晰的基础计数，再在口径与数据充足时加入转化/漏斗。",
+        "落实点击下钻、空态、归档影响、时区边界及用户可理解的指标文案。",
+        "使用合成数据覆盖多次申请、多轮面试、不同申请状态、归档与零分母，并核对真实界面数值。"
+      ],
+      "openQuestions": [
+        "Offer、面试中、待跟进、转化率的精确定义和分析层级。",
+        "看板默认时间范围、历史/当前筛选和下钻范围。",
+        "是否在 P2 首版交付漏斗，以及数据不足时的显示策略。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "MULTI-AGENT",
+      "category": "Agent / UX",
+      "priority": "P2",
+      "relativePriority": "HIGH",
+      "scope": "IN_SCOPE",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "三个专业 Agent 对应准备/行动/复盘：Voca Insight（求职分析师）、Voca Pilot（全局助手）、Voca Reflect（复盘教练）。用户主动点击后在右侧打开 Agent 面板，顶部使用三个图标切换（hover 显示名称）；显示能力介绍与 4 条建议，建议点击只填入输入框，发送后才调用 AI。",
+      "confirmedDecisions": [
+        "Insight 对应准备与简历/JD/面试准备分析；Pilot 对应行动与全局检索、添加职位和经授权操作；Reflect 对应真实面试复盘与求职总结。阶段不是独占权限，用户可随时手动切换。",
+        "右侧 Agent 面板顶部使用三个图标切换并提供 hover 名称，不在面板左侧再放独立 Agent 选择列，以免挤压聊天宽度。",
+        "打开 Agent 显示简介与 4 条真实可用能力建议；点击建议仅填入输入框，由用户确认发送才执行。",
+        "从具体职位/简历/面试入口可携带明确上下文并展示当前对象；跨页面保留面板时必须防止旧上下文误用。",
+        "P2 不实现后台自动分析、不自动唤醒 Agent、不做搜索推荐算法或 Agent 自主协作。",
+        "复用 P1 现有五工具、canonical Match 业务服务和三条 AI 路径的授权/凭据边界；未完成的工具不得展示为已可执行。"
+      ],
+      "dependencies": [
+        "P1 AGENT-CAPABILITIES 的现有五工具和候选 match_job",
+        "P1 AI-ACCOUNT-LOGIN / AI-BYOK / AI-MANAGED 的实际可用状态",
+        "JOB-CONNECTIONS",
+        "INTERVIEW-DEBRIEF",
+        "JOURNEY-OVERVIEW"
+      ],
+      "steps": [
+        "核查真实 Agent 工具注册、各 AI 路径、用户权限、现有侧边栏和页面上下文的实现现状。",
+        "冻结三个角色各自可用工具白名单、提示词边界、上下文来源与切换/清空策略；只暴露已实现能力。",
+        "完成顶部图标+hover、聊天面板宽度、四条建议填入而非自动发送、主动 AI 执行和上下文显示。",
+        "验收三个 Agent 的入口/切换、不同页面上下文、跨页失效处理、写入确认、无 AI 连接态与不发生后台调用。"
+      ],
+      "openQuestions": [
+        "各角色具体工具白名单及 P1 match_job 是否/何时可调用，需代码核查后单独裁定。",
+        "跨 Agent 对话是否共享会话、消息历史与上下文快照的切换合同。",
+        "四条提示按当前可用能力与上下文动态生成的规则、桌面/窄屏响应式细节。"
+      ],
+      "passes": false
+    }
+  ]
+}
