@@ -76,6 +76,7 @@ export const PRODUCT_ERROR_CODES = [
   "AI_EXECUTION_FAILED",
   "AI_REQUEST_TOO_LARGE",
   "BACKEND_UNAVAILABLE",
+  "BYOK_CREDENTIAL_UNAVAILABLE",
 ] as const;
 
 export type ProductErrorCode = (typeof PRODUCT_ERROR_CODES)[number];
@@ -127,6 +128,8 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   AI_EXECUTION_FAILED: "AI 执行失败，请重试。",
   AI_REQUEST_TOO_LARGE: "请求内容过大。",
   BACKEND_UNAVAILABLE: "桌面运行时通道不可达。",
+  BYOK_CREDENTIAL_UNAVAILABLE:
+    "绑定的 API 密钥无法读取，请在设置 → 自定义 API Key（BYOK）中重新录入。",
 };
 
 function isSecretLike(value: string): boolean {

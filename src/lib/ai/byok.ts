@@ -206,6 +206,24 @@ export async function ensureByokConnectionsForUser(
     ) {
       continue;
     }
+    if (
+      existing.status === "REAUTH_REQUIRED" &&
+      existing.credentialRef === key.id
+    ) {
+      // This binding was explicitly proven unreadable in the current OS
+      // context (credential verify or a foreign user/machine): the ApiKey
+      // row exists but cannot serve — healing it to CONNECTED would lie.
+      // Only re-saving the key (upsertByokConnectionForApiKey) revives it.
+      // A stale binding (restored backup naming a key id that never
+      // landed here) still falls through and rebinds to the live row.
+      if (existing.archivedAt !== null) {
+        await dbClient.aIConnection.update({
+          where: { id: existing.id },
+          data: { archivedAt: null },
+        });
+      }
+      continue;
+    }
     await dbClient.aIConnection.update({
       where: { id: existing.id },
       data: {
