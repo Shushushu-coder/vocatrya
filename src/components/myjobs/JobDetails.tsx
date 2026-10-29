@@ -117,6 +117,10 @@ function JobDetails({
     abRolloutScope ?? "none",
   );
   const { freshNativeFull, jobMutationsEnabled } = useCareerSurfaces();
+  // Archived canonical job: the whole page is read-only (D1) — historical
+  // facts stay visible, every mutation affordance is removed, and restore
+  // lives in Settings → Archived Data.
+  const isArchived = job.abCompat?.uiStatus === "archived";
   const jobDetailTabs = freshNativeFull
     ? FRESH_FULL_JOB_DETAIL_TABS
     : showTimeline
@@ -187,12 +191,14 @@ function JobDetails({
   const onCoverLetter = () =>
     requestChat(`Write a cover letter for ${jobLabel}`);
 
-  useAutoMatch(onMatch, !freshNativeFull && jobMutationsEnabled);
+  useAutoMatch(onMatch, !freshNativeFull && jobMutationsEnabled && !isArchived);
 
   // Doubles as the busy gate: the header button, the empty state and
   // Regenerate all key on this one reason.
   const coverLetterBlockedReason =
-    !jobMutationsEnabled
+    isArchived
+      ? t("settings.archiveReadOnlyNotice")
+      : !jobMutationsEnabled
       ? t("career.jobsReadOnlyTitle")
       : job.descriptionCompleteness === "title-only"
         ? t("jobs.addDescriptionFirst")
@@ -237,6 +243,16 @@ function JobDetails({
   return (
     <>
       <div className="py-6 space-y-6">
+        {isArchived && (
+          <Card
+            className="flex items-center justify-between gap-3 p-4"
+            data-testid="job-archived-banner"
+          >
+            <p className="text-sm text-muted-foreground">
+              {t("settings.archiveJobReadOnlyNotice")}
+            </p>
+          </Card>
+        )}
         <JobDetailsHeader
           job={job}
           jobStatuses={jobStatuses}
@@ -244,6 +260,7 @@ function JobDetails({
           coverLetterBlockedReason={coverLetterBlockedReason}
           chatBusy={chatBusy}
           showAiActions={!freshNativeFull}
+          archived={isArchived}
           onBack={goBack}
           onMatch={onMatch}
           onCoverLetter={onCoverLetter}
@@ -262,7 +279,7 @@ function JobDetails({
           timeZone={timeZone}
         />
 
-        {showRestrictedResumePanel && (
+        {showRestrictedResumePanel && !isArchived && (
           <Card
             className="p-6"
             data-testid="restricted-submitted-resume-panel"
@@ -318,7 +335,7 @@ function JobDetails({
                 <ApplicationTimelineTab
                   jobId={job.id}
                   refreshKey={timelineRefreshKey}
-                  canMutate={canMutateTimeline}
+                  canMutate={canMutateTimeline && !isArchived}
                   companyName={job.Company?.label}
                   roleTitle={job.JobTitle?.label}
                 />
@@ -338,7 +355,7 @@ function JobDetails({
                   description={t("jobs.noMatchDescription")}
                   actionLabel={t("jobs.matchWithAi")}
                   onAction={onMatch}
-                  actionDisabled={chatBusy || !jobMutationsEnabled}
+                  actionDisabled={isArchived || chatBusy || !jobMutationsEnabled}
                   actionTitle={chatBusy ? t("jobs.assistantBusy") : undefined}
                 />
               )}
@@ -366,6 +383,7 @@ function JobDetails({
                 jobId={job.id}
                 openTrigger={noteOpenTrigger}
                 onCountChange={setNotesCount}
+                readOnly={isArchived}
               />
             </Card>
           </TabsContent>

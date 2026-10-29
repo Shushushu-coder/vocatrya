@@ -8,6 +8,7 @@ import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import ByokConnectionsCard from "@/components/settings/ByokConnectionsCard";
 import ManagedAiCard from "@/components/settings/ManagedAiCard";
 import InterviewAiSettings from "@/components/settings/InterviewAiSettings";
+import ArchiveSettings from "@/components/settings/ArchiveSettings";
 import DataSettings from "@/components/settings/DataSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import McpAccessSettings from "@/components/settings/McpAccessSettings";
@@ -237,6 +238,14 @@ function Settings() {
                     inside Data & Privacy; fresh-native surfaces still hide it. */}
                 {!freshNativeFull && <McpAccessSettings />}
               </div>
+            </SectionShell>
+          )}
+          {activeSection === "archive-data" && (
+            <SectionShell
+              id="archive-data"
+              title={text("settings.sections.archiveData", "Archived Data")}
+            >
+              <ArchiveSettings />
             </SectionShell>
           )}
           {activeSection === "about" && (

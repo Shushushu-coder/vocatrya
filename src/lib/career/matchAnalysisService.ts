@@ -349,7 +349,7 @@ export class MatchAnalysisService {
     resumeVariantVersionId?: string | null;
   }) {
     await this.gate();
-    await this.requireOwnedOpportunity(input.jobOpportunityId);
+    await this.requireWritableOpportunity(input.jobOpportunityId);
     const current = await this.db.matchAnalysis.findMany({
       where: {
         userId: this.userId,
@@ -372,10 +372,21 @@ export class MatchAnalysisService {
   private async requireOwnedOpportunity(jobOpportunityId: string) {
     const opportunity = await this.db.jobOpportunity.findFirst({
       where: { id: jobOpportunityId, userId: this.userId },
-      select: { id: true },
+      select: { id: true, archivedAt: true },
     });
     if (!opportunity) {
       throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
+    }
+    return opportunity;
+  }
+
+  private async requireWritableOpportunity(jobOpportunityId: string) {
+    const opportunity = await this.requireOwnedOpportunity(jobOpportunityId);
+    if (opportunity.archivedAt !== null) {
+      throw new CareerRuntimeError(
+        "OPPORTUNITY_ARCHIVED",
+        "This job is archived. Restore it to edit.",
+      );
     }
     return opportunity;
   }
@@ -384,7 +395,7 @@ export class MatchAnalysisService {
     jobOpportunityId: string,
     jobDescriptionParseId: string,
   ) {
-    await this.requireOwnedOpportunity(jobOpportunityId);
+    await this.requireWritableOpportunity(jobOpportunityId);
     const parse = await this.db.jobDescriptionParse.findFirst({
       where: {
         id: jobDescriptionParseId,

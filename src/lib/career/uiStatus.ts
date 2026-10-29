@@ -47,6 +47,19 @@ export function deriveUiStatus(input: {
   return "draft";
 }
 
+/**
+ * A+B job views carry `abCompat.uiStatus`; "archived" there is the canonical
+ * reversible archive — AI paths must treat it as absent. A Legacy Job's
+ * archived status value stays list-visible and readable (D1 boundary), so
+ * this check intentionally looks at abCompat only, not Status.value.
+ */
+export function isArchivedCanonicalJobView(job: {
+  abCompat?: { uiStatus?: string | null } | null;
+  [key: string]: unknown;
+}): boolean {
+  return job.abCompat?.uiStatus === "archived";
+}
+
 export function planUiStatusWrite(uiStatus: string): UiStatusWritePlan {
   switch (uiStatus.toLowerCase()) {
     case "expired":

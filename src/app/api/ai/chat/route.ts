@@ -1,4 +1,5 @@
 import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
+import { hasArchivedJobReference } from "@/lib/agent/archiveVisibility";
 import { generateId } from "ai";
 import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError, type ConversationRequest } from "@/lib/agent/conversationRequest";
 import { conversationCommitStream } from "@/lib/agent/conversationStream";
@@ -416,6 +417,11 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   const pastedText = resolvePastedText(messages);
   const conversation = await getOwnedChatConversation(userId, conversationId);
   if (!conversation) throw new ConversationRequestError("CONVERSATION_NOT_FOUND");
+  if (conversation.archivedAt || await hasArchivedJobReference(
+    prisma, userId, conversation.context, conversation.messages, request.messages,
+  )) {
+    throw new ConversationRequestError("CONVERSATION_ARCHIVED_CONTENT");
+  }
   let lock: ReturnType<typeof chatLockFromRow>;
   let managedTurn: import("@/lib/agent/accountTurn").ManagedTurnContext | undefined;
   try {

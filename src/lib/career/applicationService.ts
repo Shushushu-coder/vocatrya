@@ -92,11 +92,12 @@ export class ApplicationService {
     await assertFullAbWritable(tx, this.env);
     const opportunity = await tx.jobOpportunity.findFirst({
       where: { id: input.jobOpportunityId, userId: this.userId },
-      select: { id: true },
+      select: { id: true, archivedAt: true },
     });
     if (!opportunity) {
       throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
     }
+    this.assertOpportunityWritable(opportunity);
 
     return tx.applicationAttempt.create({
       data: {
@@ -147,7 +148,11 @@ export class ApplicationService {
     if (locked !== 1) throw new CareerRuntimeError("ATTEMPT_NOT_FOUND", "Application attempt not found");
     if (initial) await assertFullAbWritable(tx, this.env);
     else await assertResumeV1Writable(tx, this.env);
-    const attempt = await tx.applicationAttempt.findUniqueOrThrow({ where: { id: input.attemptId } });
+    const attempt = await tx.applicationAttempt.findUniqueOrThrow({
+      where: { id: input.attemptId },
+      include: { jobOpportunity: { select: { archivedAt: true } } },
+    });
+    this.assertOpportunityWritable(attempt.jobOpportunity);
     const firstSubmission = initial && attempt.currentStageCategory === ATTEMPT_STAGE.DRAFT &&
       attempt.outcome === ATTEMPT_OUTCOME.ACTIVE && attempt.submittedAt === null && attempt.archivedAt === null;
     if (initial && !firstSubmission && attempt.submittedAt === null) {
@@ -289,6 +294,7 @@ export class ApplicationService {
     return this.db.$transaction(async (tx) => {
       const source = await tx.applicationAttempt.findFirst({
         where: { id: input.sourceAttemptId, userId: this.userId },
+        include: { jobOpportunity: { select: { archivedAt: true } } },
       });
       if (!source) {
         throw new CareerRuntimeError(
@@ -296,10 +302,11 @@ export class ApplicationService {
           "Application attempt not found",
         );
       }
+      this.assertOpportunityWritable(source.jobOpportunity);
 
       const target = await tx.jobOpportunity.findFirst({
         where: { id: input.targetJobOpportunityId, userId: this.userId },
-        select: { id: true },
+        select: { id: true, archivedAt: true },
       });
       if (!target) {
         throw new CareerRuntimeError(
@@ -307,6 +314,7 @@ export class ApplicationService {
           "Opportunity not found",
         );
       }
+      this.assertOpportunityWritable(target);
 
       if (source.jobOpportunityId === target.id) {
         throw new CareerRuntimeError(
@@ -754,6 +762,11 @@ export class ApplicationService {
       if (locked !== 1) {
         throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
       }
+      const opportunity = await tx.jobOpportunity.findFirstOrThrow({
+        where: { id: input.jobOpportunityId },
+        select: { archivedAt: true },
+      });
+      this.assertOpportunityWritable(opportunity);
       const attempt = requestedAttemptId
         ? await this.requireOwnedAttemptForOpportunity(
             requestedAttemptId,
@@ -1131,6 +1144,7 @@ export class ApplicationService {
   ) {
     const attempt = await tx.applicationAttempt.findFirst({
       where: { id: attemptId, userId: this.userId },
+      include: { jobOpportunity: { select: { archivedAt: true } } },
     });
     if (!attempt) {
       throw new CareerRuntimeError("ATTEMPT_NOT_FOUND", "Application attempt not found");
@@ -1147,6 +1161,7 @@ export class ApplicationService {
         "Archived application attempts cannot accept process steps",
       );
     }
+    this.assertOpportunityWritable(attempt.jobOpportunity);
     return attempt;
   }
 
@@ -1206,10 +1221,16 @@ export class ApplicationService {
         id: stepId,
         applicationAttempt: { userId: this.userId },
       },
+      include: {
+        applicationAttempt: {
+          select: { jobOpportunity: { select: { archivedAt: true } } },
+        },
+      },
     });
     if (!existing) {
       throw new CareerRuntimeError("PROCESS_STEP_NOT_FOUND", "Process step not found");
     }
+    this.assertOpportunityWritable(existing.applicationAttempt.jobOpportunity);
     return existing;
   }
 
@@ -1236,10 +1257,23 @@ export class ApplicationService {
   private async requireOwnedAttempt(attemptId: string, tx: Prisma.TransactionClient = this.db) {
     const attempt = await tx.applicationAttempt.findFirst({
       where: { id: attemptId, userId: this.userId },
+      include: { jobOpportunity: { select: { archivedAt: true } } },
     });
     if (!attempt) {
       throw new CareerRuntimeError("ATTEMPT_NOT_FOUND", "Application attempt not found");
     }
+    this.assertOpportunityWritable(attempt.jobOpportunity);
     return attempt;
+  }
+
+  // Archived opportunities are fully read-only: no new attempts, no step
+  // writes, no submission/provenance writes, no transfers. Restore first.
+  private assertOpportunityWritable(opportunity: { archivedAt: Date | null }) {
+    if (opportunity.archivedAt !== null) {
+      throw new CareerRuntimeError(
+        "OPPORTUNITY_ARCHIVED",
+        "This job is archived. Restore it to edit.",
+      );
+    }
   }
 }

@@ -33,6 +33,7 @@ import {
   getJobTypeLabel,
   getWorkplaceTypeLabel,
 } from "@/models/job.model";
+import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "../CompanyLogo";
 import { useI18n, getLocalizedJobType, getLocalizedWorkplaceType } from "@/i18n";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
@@ -45,6 +46,8 @@ type JobDetailsHeaderProps = {
   chatBusy: boolean;
   /** Fresh + full hides deferred match/cover-letter affordances entirely. */
   showAiActions?: boolean;
+  /** Archived canonical job — the whole header is read-only (D1). */
+  archived?: boolean;
   onBack: () => void;
   onMatch: () => void;
   onCoverLetter: () => void;
@@ -61,6 +64,7 @@ export function JobDetailsHeader({
   coverLetterBlockedReason,
   chatBusy,
   showAiActions = true,
+  archived = false,
   onBack,
   onMatch,
   onCoverLetter,
@@ -108,7 +112,12 @@ export function JobDetailsHeader({
         </div>
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        {showAiActions && (
+        {archived && (
+          <Badge variant="secondary" data-testid="job-archived-badge">
+            {t("settings.archivedBadge")}
+          </Badge>
+        )}
+        {!archived && showAiActions && (
           <Button
             variant="outline"
             className="cursor-pointer"
@@ -122,7 +131,7 @@ export function JobDetailsHeader({
             </span>
           </Button>
         )}
-        {showAiActions && (
+        {!archived && showAiActions && (
           <Button
             variant="outline"
             className="cursor-pointer"
@@ -139,30 +148,34 @@ export function JobDetailsHeader({
             </span>
           </Button>
         )}
-        <Button
-          variant="outline"
-          onClick={onEdit}
-          data-testid="job-details-edit-btn"
-          disabled={!jobMutationsEnabled}
-        >
-          <Pencil className="h-4 w-4 sm:mr-2" />
-          <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            {t("common.edit")}
-          </span>
-        </Button>
-        <Button
-          variant="outline"
-          className="text-destructive hover:text-destructive"
-          onClick={onDelete}
-          data-testid="job-details-delete-btn"
-          disabled={!jobMutationsEnabled}
-        >
-          <Trash2 className="h-4 w-4 sm:mr-2" />
-          <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-            {t("common.delete")}
-          </span>
-        </Button>
-        <DropdownMenu>
+        {!archived && (
+          <Button
+            variant="outline"
+            onClick={onEdit}
+            data-testid="job-details-edit-btn"
+            disabled={!jobMutationsEnabled}
+          >
+            <Pencil className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+              {t("common.edit")}
+            </span>
+          </Button>
+        )}
+        {!archived && (
+          <Button
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={onDelete}
+            data-testid="job-details-delete-btn"
+            disabled={!jobMutationsEnabled}
+          >
+            <Trash2 className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+              {t("common.delete")}
+            </span>
+          </Button>
+        )}
+        {!archived && <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               aria-haspopup="true"
@@ -212,7 +225,7 @@ export function JobDetailsHeader({
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>}
       </div>
     </div>
   );

@@ -107,10 +107,16 @@ export const addNote = async (
       assertAbNoteWrites(runtime);
       const opportunity = await prisma.jobOpportunity.findFirst({
         where: { id: validated.jobId, userId: user.id },
-        select: { id: true },
+        select: { id: true, archivedAt: true },
       });
       if (!opportunity) {
         throw new Error("Job not found");
+      }
+      if (opportunity.archivedAt) {
+        throw new CareerRuntimeError(
+          "OPPORTUNITY_ARCHIVED",
+          "This job is archived. Restore it to edit.",
+        );
       }
       const note = await prisma.jobOpportunityNote.create({
         data: {
@@ -162,10 +168,16 @@ export const updateNote = async (
       assertAbNoteWrites(runtime);
       const existing = await prisma.jobOpportunityNote.findFirst({
         where: { id: validated.id, userId: user.id },
-        select: { id: true },
+        select: { id: true, jobOpportunity: { select: { archivedAt: true } } },
       });
       if (!existing) {
         throw new Error("Note not found");
+      }
+      if (existing.jobOpportunity.archivedAt) {
+        throw new CareerRuntimeError(
+          "OPPORTUNITY_ARCHIVED",
+          "This job is archived. Restore it to edit.",
+        );
       }
       const note = await prisma.jobOpportunityNote.update({
         where: { id: existing.id },
@@ -198,10 +210,16 @@ export const deleteNote = async (
       assertAbNoteWrites(runtime);
       const existing = await prisma.jobOpportunityNote.findFirst({
         where: { id: noteId, userId: user.id },
-        select: { id: true },
+        select: { id: true, jobOpportunity: { select: { archivedAt: true } } },
       });
       if (!existing) {
         throw new Error("Note not found");
+      }
+      if (existing.jobOpportunity.archivedAt) {
+        throw new CareerRuntimeError(
+          "OPPORTUNITY_ARCHIVED",
+          "This job is archived. Restore it to edit.",
+        );
       }
       await prisma.jobOpportunityNote.delete({
         where: { id: existing.id },

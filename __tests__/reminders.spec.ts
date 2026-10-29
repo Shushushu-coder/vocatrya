@@ -231,12 +231,17 @@ describe("reminder prefs and payload cleaning", () => {
   });
 
   it("computes a step reminder from the scheduled anchor minus lead time", () => {
-    const payload = computeProcessStepReminder(stepSource(), PREFS)!;
-    expect(payload.anchorAt).toEqual(new Date("2026-11-01T06:00:00.000Z"));
-    expect(payload.fireAt).toEqual(new Date("2026-11-01T05:30:00.000Z"));
-    expect(payload.title).toBe("Round 1");
-    expect(payload.body).toBe("Acme · Staff Engineer");
-    expect(payload.deepLink).toBe("/dashboard/myjobs/opp-1");
+    const desired = computeProcessStepReminder(stepSource(), PREFS);
+    expect(desired).toEqual({
+      kind: "deliver",
+      payload: {
+        anchorAt: new Date("2026-11-01T06:00:00.000Z"),
+        fireAt: new Date("2026-11-01T05:30:00.000Z"),
+        title: "Round 1",
+        body: "Acme · Staff Engineer",
+        deepLink: "/dashboard/myjobs/opp-1",
+      },
+    });
   });
 
   it.each([
@@ -258,6 +263,13 @@ describe("reminder prefs and payload cleaning", () => {
         },
       },
     ],
+  ])("cancels for %s", (_name, overrides) => {
+    expect(
+      computeProcessStepReminder(stepSource(overrides), PREFS),
+    ).toEqual({ kind: "cancel" });
+  });
+
+  it.each([
     [
       "archived opportunity",
       {
@@ -273,27 +285,50 @@ describe("reminder prefs and payload cleaning", () => {
         },
       },
     ],
-  ])("returns null for %s", (_name, overrides) => {
+    [
+      "archived attempt",
+      {
+        applicationAttempt: {
+          archivedAt: new Date(),
+          outcome: "ACTIVE",
+          jobOpportunity: {
+            id: "opp-1",
+            title: "Staff Engineer",
+            archivedAt: null,
+            company: { label: "Acme" },
+          },
+        },
+      },
+    ],
+  ])("suppresses for %s (revivable on restore)", (_name, overrides) => {
     expect(
       computeProcessStepReminder(stepSource(overrides), PREFS),
-    ).toBeNull();
+    ).toEqual({ kind: "suppress" });
   });
 
   it("computes a job-due reminder and rejects concluded jobs", () => {
-    const payload = computeJobDueReminder(jobSource(), PREFS)!;
-    expect(payload.title).toBe("申请截止提醒");
-    expect(payload.body).toBe("Staff Engineer · Acme");
-    expect(payload.deepLink).toBe("/dashboard/myjobs/job-1");
-    expect(computeJobDueReminder(jobSource({ dueDate: null }), PREFS)).toBeNull();
-    expect(
-      computeJobDueReminder(
-        jobSource({ Status: { value: "rejected" } }),
-        PREFS,
-      ),
-    ).toBeNull();
-    expect(
-      computeJobDueReminder(jobSource({ discoveryStatus: "dismissed" }), PREFS),
-    ).toBeNull();
+    const desired = computeJobDueReminder(jobSource(), PREFS);
+    expect(desired).toEqual({
+      kind: "deliver",
+      payload: {
+        anchorAt: jobSource().dueDate,
+        fireAt: new Date(
+          jobSource().dueDate!.getTime() - PREFS.leadMinutes * 60_000,
+        ),
+        title: "申请截止提醒",
+        body: "Staff Engineer · Acme",
+        deepLink: "/dashboard/myjobs/job-1",
+      },
+    });
+    for (const overrides of [
+      { dueDate: null },
+      { Status: { value: "rejected" } },
+      { discoveryStatus: "dismissed" },
+    ]) {
+      expect(
+        computeJobDueReminder(jobSource(overrides as any), PREFS),
+      ).toEqual({ kind: "cancel" });
+    }
   });
 });
 

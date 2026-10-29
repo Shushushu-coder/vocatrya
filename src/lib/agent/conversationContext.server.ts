@@ -3,6 +3,7 @@ import "server-only";
 import prisma from "@/lib/db";
 import { AIBusinessError } from "@/lib/ai/connections";
 import { getJob, listJobs } from "@/lib/career/jobsReadDispatch";
+import { isArchivedCanonicalJobView } from "@/lib/career/uiStatus";
 import {
   listAbResumeChoices,
   resolveResumeReadFamily,
@@ -31,6 +32,9 @@ async function loadOwnedJob(userId: string, entityId: string) {
   // One active read family. getJob does not fall back to the other table.
   const result = await getJob(prisma, userId, entityId);
   if (result.blocked || !result.job) return null;
+  // Archived canonical jobs are invisible to AI: the reference resolves to
+  // "not available" and no labelSnapshot is ever attached.
+  if (isArchivedCanonicalJobView(result.job)) return null;
   return { id: result.job.id, label: jobLabel(result.job) };
 }
 

@@ -449,7 +449,10 @@ describe("PHASE 5 dashboard + CSV", () => {
       range,
       FEATURE_ON,
     );
-    expect(counts.jobsApplied).toBe(3);
+    // D2: jobsApplied is the submission-fact metric — the archived job's
+    // submission still happened, so it counts. Interview/offer are
+    // current-state buckets and derive "archived" via deriveUiStatus.
+    expect(counts.jobsApplied).toBe(4);
     expect(counts.jobsInterview).toBe(1);
     expect(counts.jobsOffer).toBe(1);
 
@@ -465,7 +468,7 @@ describe("PHASE 5 dashboard + CSV", () => {
     ).toBe("interview");
   });
 
-  it("weekly chart and recent jobs exclude archived opportunities", async () => {
+  it("weekly chart keeps archived submissions as history while recent jobs exclude archived", async () => {
     const visible = await seedStatus("applied");
     const archived = await seedStatus("applied");
     await archiveOpportunity(prisma, userId, archived.id, FEATURE_ON);
@@ -476,7 +479,9 @@ describe("PHASE 5 dashboard + CSV", () => {
       FEATURE_ON,
     );
     const total = daily.reduce((sum, row) => sum + row.count, 0);
-    expect(total).toBe(1);
+    // D2: both submissions are historical facts — archiving the parent
+    // opportunity does not erase them from the applied-date chart.
+    expect(total).toBe(2);
     const recent = await loadRecentJobs(prisma, userId, 10, FEATURE_ON);
     expect(recent.map((row: { id: string }) => row.id)).toEqual([visible.id]);
   });

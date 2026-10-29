@@ -39,7 +39,6 @@ export type OpportunitySafeFields = {
   status?: string;
   notes?: string | null;
   closedAt?: Date | null;
-  archivedAt?: Date | null;
 };
 
 // A fresh bare Date is an explicitly supplied instant fact. Being exactly
@@ -172,14 +171,58 @@ export class OpportunityService {
     });
   }
 
-  async updateSafe(id: string, fields: OpportunitySafeFields) {
+  /**
+   * Reversible archive — the ONLY writer of archivedAt. Idempotent: archiving
+   * an already-archived row is a no-op success; a missing/foreign id still
+   * throws NOT_FOUND so callers can't distinguish ownership from absence.
+   * Reminder suppression runs in the caller's transaction.
+   */
+  async archive(id: string): Promise<boolean> {
     await this.gate();
+    const { count } = await this.db.jobOpportunity.updateMany({
+      where: { id, userId: this.userId, archivedAt: null },
+      data: { archivedAt: new Date() },
+    });
+    if (count === 0) await this.assertOwned(id);
+    return count > 0;
+  }
+
+  /** Reverse of archive. Idempotent the same way. */
+  async unarchive(id: string): Promise<boolean> {
+    await this.gate();
+    const { count } = await this.db.jobOpportunity.updateMany({
+      where: { id, userId: this.userId, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
+    if (count === 0) await this.assertOwned(id);
+    return count > 0;
+  }
+
+  private async assertOwned(id: string) {
     const existing = await this.db.jobOpportunity.findFirst({
       where: { id, userId: this.userId },
       select: { id: true },
     });
     if (!existing) {
       throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
+    }
+  }
+
+  async updateSafe(id: string, fields: OpportunitySafeFields) {
+    await this.gate();
+    const existing = await this.db.jobOpportunity.findFirst({
+      where: { id, userId: this.userId },
+      select: { id: true, archivedAt: true },
+    });
+    if (!existing) {
+      throw new CareerRuntimeError("OPPORTUNITY_NOT_FOUND", "Opportunity not found");
+    }
+    // Archived rows are read-only; unarchive() is the only way back.
+    if (existing.archivedAt) {
+      throw new CareerRuntimeError(
+        "OPPORTUNITY_ARCHIVED",
+        "This job is archived. Restore it to edit.",
+      );
     }
 
     const data: Prisma.JobOpportunityUpdateInput = {};
@@ -238,7 +281,6 @@ export class OpportunityService {
     if (fields.salaryText !== undefined) data.salaryText = fields.salaryText;
     if (fields.notes !== undefined) data.notes = fields.notes;
     if (fields.closedAt !== undefined) data.closedAt = fields.closedAt;
-    if (fields.archivedAt !== undefined) data.archivedAt = fields.archivedAt;
     if (fields.status !== undefined) {
       const status = fields.status.toUpperCase();
       assertOpportunityStatus(status);

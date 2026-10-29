@@ -1,4 +1,6 @@
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
+const archiveRows = vi.hoisted(() => ({ findMany: vi.fn(async () => [] as { id: string }[]) }));
+vi.mock("@/lib/db", () => ({ default: { jobOpportunity: archiveRows } }));
 vi.mock("next/server", () => ({
   NextResponse: {
     json: (data: unknown, init?: { status?: number }) => ({
@@ -159,6 +161,20 @@ describe("POST /api/ai/chat", () => {
   it("returns 401 without a session", async () => {
     (auth as any).mockResolvedValue(null);
     expect((await POST(req({ messages: [] }))).status).toBe(401);
+  });
+
+  it.each(["history", "context", "newMessage"])("blocks archived references in %s before any model call", async source => {
+    archiveRows.findMany.mockResolvedValueOnce([{ id: "archived-job-id" }]);
+    const body = { messages: [pasteMessage("follow up")] };
+    if (source === "history") body.messages.unshift({ id: "earlier", role: "assistant", parts: [{ type: "text", text: "archived-job-id private posting" }] } as any);
+    if (source === "context") conversationStore.row.context = JSON.stringify({ version: 1, items: [{ kind: "job", entityId: "archived-job-id", labelSnapshot: "private title", source: "MANUAL" }] });
+    if (source === "newMessage") body.messages[0].parts[0].text = "archived-job-id";
+    const response = await POST(req(body));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "CONVERSATION_ARCHIVED_CONTENT" });
+    expect(getModel).not.toHaveBeenCalled();
+    expect(streamText).not.toHaveBeenCalled();
+    expect(summaryHooks.scheduleCareerDialogueSummary).not.toHaveBeenCalled();
   });
 
   it("returns 429 using the chat bucket, not the shared one", async () => {

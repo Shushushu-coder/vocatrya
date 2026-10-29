@@ -122,6 +122,19 @@ export type ReminderPayload = {
   deepLink: string;
 };
 
+/**
+ * Desired reminder state — three outcomes, not a nullable payload:
+ * - deliver: the source wants a live PENDING reminder (create/retarget/revive)
+ * - suppress: the source is archived; pending reminders park as EXPIRED so a
+ *   later restore can revive them (EXPIRED is terminal for the claim path but
+ *   reconcilable), instead of CANCELLED which is permanent history
+ * - cancel: the source is gone/done/terminal; PENDING resolves to CANCELLED
+ */
+export type ReminderDesired =
+  | { kind: "deliver"; payload: ReminderPayload }
+  | { kind: "suppress" }
+  | { kind: "cancel" };
+
 export const processStepDeepLink = (jobOpportunityId: string): string =>
   `/dashboard/myjobs/${jobOpportunityId}`;
 
@@ -140,30 +153,38 @@ const JOB_DUE_TERMINAL_STATUS_VALUES = new Set([
 ]);
 
 /**
- * The desired reminder state for one process step, or null when the step
- * must not carry a live reminder (closed step, dead attempt/opportunity, or
- * no scheduled anchor). Pure so the cleaning rules stay unit-testable.
+ * The desired reminder state for one process step. Archive suppresses
+ * (revivable); everything else that must not carry a live reminder —
+ * closed step, dead attempt, or no scheduled anchor — cancels.
+ * Pure so the cleaning rules stay unit-testable.
  */
 export function computeProcessStepReminder(
   step: ProcessStepReminderSource,
   prefs: NotificationPrefs,
-): ReminderPayload | null {
-  if (!step.scheduledAt) return null;
+): ReminderDesired {
+  if (!step.scheduledAt) return { kind: "cancel" };
+  if (
+    step.applicationAttempt.archivedAt !== null ||
+    step.applicationAttempt.jobOpportunity.archivedAt !== null
+  ) {
+    return { kind: "suppress" };
+  }
   const open =
     step.completedAt === null &&
     step.status !== PROCESS_STEP_STATUS.COMPLETED &&
     step.status !== PROCESS_STEP_STATUS.CANCELLED &&
-    step.applicationAttempt.archivedAt === null &&
-    !isTerminalAttemptOutcome(step.applicationAttempt.outcome) &&
-    step.applicationAttempt.jobOpportunity.archivedAt === null;
-  if (!open) return null;
+    !isTerminalAttemptOutcome(step.applicationAttempt.outcome);
+  if (!open) return { kind: "cancel" };
   const opportunity = step.applicationAttempt.jobOpportunity;
   return {
-    anchorAt: step.scheduledAt,
-    fireAt: new Date(step.scheduledAt.getTime() - prefs.leadMinutes * 60_000),
-    title: step.label,
-    body: `${opportunity.company.label} · ${opportunity.title}`,
-    deepLink: processStepDeepLink(opportunity.id),
+    kind: "deliver",
+    payload: {
+      anchorAt: step.scheduledAt,
+      fireAt: new Date(step.scheduledAt.getTime() - prefs.leadMinutes * 60_000),
+      title: step.label,
+      body: `${opportunity.company.label} · ${opportunity.title}`,
+      deepLink: processStepDeepLink(opportunity.id),
+    },
   };
 }
 
@@ -171,16 +192,21 @@ export function computeProcessStepReminder(
 export function computeJobDueReminder(
   job: JobDueReminderSource,
   prefs: NotificationPrefs,
-): ReminderPayload | null {
-  if (!job.dueDate) return null;
-  if (JOB_DUE_TERMINAL_STATUS_VALUES.has(job.Status.value)) return null;
-  if (job.discoveryStatus === "dismissed") return null;
+): ReminderDesired {
+  if (!job.dueDate) return { kind: "cancel" };
+  if (JOB_DUE_TERMINAL_STATUS_VALUES.has(job.Status.value)) {
+    return { kind: "cancel" };
+  }
+  if (job.discoveryStatus === "dismissed") return { kind: "cancel" };
   return {
-    anchorAt: job.dueDate,
-    fireAt: new Date(job.dueDate.getTime() - prefs.leadMinutes * 60_000),
-    title: prefs.locale === "en" ? "Application deadline" : "申请截止提醒",
-    body: `${job.JobTitle.label} · ${job.Company.label}`,
-    deepLink: jobDueDeepLink(job.id),
+    kind: "deliver",
+    payload: {
+      anchorAt: job.dueDate,
+      fireAt: new Date(job.dueDate.getTime() - prefs.leadMinutes * 60_000),
+      title: prefs.locale === "en" ? "Application deadline" : "申请截止提醒",
+      body: `${job.JobTitle.label} · ${job.Company.label}`,
+      deepLink: jobDueDeepLink(job.id),
+    },
   };
 }
 

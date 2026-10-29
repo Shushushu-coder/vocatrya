@@ -14,7 +14,7 @@ import {
   type JobDueReminderSource,
   type NotificationPrefs,
   type ProcessStepReminderSource,
-  type ReminderPayload,
+  type ReminderDesired,
   type ReminderSourceType,
 } from "./shared";
 
@@ -74,27 +74,28 @@ type ReminderKey = {
 
 /**
  * Write-through state machine for one (user, source, target) record:
- * - no row + desired     → create PENDING
- * - PENDING + desired    → retarget to the current schedule
- * - PENDING + no desired → CANCELLED
- * - EXPIRED + desired    → revive to PENDING (a reschedule is a new
+ * - no row + deliver      → create PENDING
+ * - PENDING + deliver     → retarget to the current schedule
+ * - PENDING + cancel      → CANCELLED (permanent)
+ * - PENDING + suppress    → EXPIRED (archive park; a later deliver revives)
+ * - EXPIRED + deliver     → revive to PENDING (a reschedule is a new
  *   scheduling, not a rewrite of the stale record)
- * - FIRED / CANCELLED    → untouched: terminal history is never rewritten
- * - EXPIRED + no desired → stays EXPIRED
+ * - FIRED / CANCELLED     → untouched: terminal history is never rewritten
+ * - EXPIRED + cancel/suppress → stays EXPIRED
  */
 async function applyReminderDesired(
   db: ReminderDb,
   key: ReminderKey,
-  desired: ReminderPayload | null,
+  desired: ReminderDesired,
 ): Promise<void> {
   const existing = await db.reminder.findUnique({
     where: { userId_sourceType_targetId: key },
   });
   if (!existing) {
-    if (!desired) return;
+    if (desired.kind !== "deliver") return;
     try {
       await db.reminder.create({
-        data: { ...key, ...desired },
+        data: { ...key, ...desired.payload },
       });
     } catch (error) {
       if (!isUniqueConstraintViolation(error)) throw error;
@@ -110,11 +111,16 @@ async function applyReminderDesired(
   ) {
     return;
   }
-  if (!desired) {
+  if (desired.kind !== "deliver") {
     if (existing.status === REMINDER_STATUS.PENDING) {
       await db.reminder.updateMany({
         where: { id: existing.id, status: REMINDER_STATUS.PENDING },
-        data: { status: REMINDER_STATUS.CANCELLED },
+        data: {
+          status:
+            desired.kind === "suppress"
+              ? REMINDER_STATUS.EXPIRED
+              : REMINDER_STATUS.CANCELLED,
+        },
       });
     }
     return;
@@ -126,7 +132,7 @@ async function applyReminderDesired(
         in: [REMINDER_STATUS.PENDING, REMINDER_STATUS.EXPIRED],
       },
     },
-    data: { ...desired, status: REMINDER_STATUS.PENDING },
+    data: { ...desired.payload, status: REMINDER_STATUS.PENDING },
   });
 }
 
@@ -176,8 +182,41 @@ export async function syncProcessStepReminder(
   await applyReminderDesired(
     db,
     { userId, sourceType: REMINDER_SOURCE_TYPE.PROCESS_STEP, targetId: stepId },
-    step ? computeProcessStepReminder(step, prefs) : null,
+    step ? computeProcessStepReminder(step, prefs) : { kind: "cancel" },
   );
+}
+
+/**
+ * Recompute every scheduled step reminder under one opportunity — called
+ * inside the archive/restore write's transaction so archive suppression
+ * (PENDING→EXPIRED) and restore revival commit with the flag flip.
+ */
+export async function syncOpportunityStepReminders(
+  db: ReminderDb,
+  userId: string,
+  opportunityId: string,
+): Promise<void> {
+  const [steps, prefs] = await Promise.all([
+    db.applicationProcessStep.findMany({
+      where: {
+        applicationAttempt: { userId, jobOpportunityId: opportunityId },
+        scheduledAt: { not: null },
+      },
+      select: STEP_SYNC_SELECT,
+    }),
+    loadNotificationPrefs(db, userId),
+  ]);
+  for (const step of steps) {
+    await applyReminderDesired(
+      db,
+      {
+        userId,
+        sourceType: REMINDER_SOURCE_TYPE.PROCESS_STEP,
+        targetId: step.id,
+      },
+      computeProcessStepReminder(step, prefs),
+    );
+  }
 }
 
 /**
@@ -286,6 +325,21 @@ export async function claimDueReminders(
     });
     const claimed: Reminder[] = [];
     for (const row of due) {
+      // Reconcile may have loaded its source before archive committed. Never
+      // let that stale snapshot revive and deliver an archived source.
+      if (row.sourceType === REMINDER_SOURCE_TYPE.PROCESS_STEP) {
+        const step = await tx.applicationProcessStep.findFirst({
+          where: { id: row.targetId, applicationAttempt: { userId } },
+          select: STEP_SYNC_SELECT,
+        });
+        if (step && (step.applicationAttempt.archivedAt !== null ||
+          step.applicationAttempt.jobOpportunity.archivedAt !== null)) {
+          await applyReminderDesired(tx, {
+            userId, sourceType: REMINDER_SOURCE_TYPE.PROCESS_STEP, targetId: row.targetId,
+          }, { kind: "suppress" });
+          continue;
+        }
+      }
       const { count } = await tx.reminder.updateMany({
         where: { id: row.id, status: REMINDER_STATUS.PENDING },
         data: { status: REMINDER_STATUS.FIRED, firedAt: now },

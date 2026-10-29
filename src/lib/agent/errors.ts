@@ -35,6 +35,9 @@ export function mapAgentError(
   error: unknown,
   context: ErrorContext = {},
 ): string {
+  if (error instanceof ConversationRequestError && error.code === "CONVERSATION_ARCHIVED_CONTENT") {
+    return "This conversation references archived content and is unavailable to AI. Restore the referenced record or start a new conversation.";
+  }
   if (error instanceof ConversationRequestError) return error.code === "CONVERSATION_PERSISTENCE_FAILED" ? "The conversation could not be saved. Reload before continuing." : "This conversation has changed. Reload and try your action again.";
   const provider = context.provider ?? "the AI provider";
   const model = context.model;

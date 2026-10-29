@@ -25,10 +25,12 @@ export function AgentChatHistory({ onClose }: { onClose: () => void }) {
   const {
     conversationId,
     selectConversation,
+    archiveConversation,
     removeConversation,
     historyVersion,
   } = useAgentChat();
   const [rows, setRows] = useState<ChatConversationSummary[]>([]);
+  const [pendingArchive, setPendingArchive] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
@@ -103,6 +105,15 @@ export function AgentChatHistory({ onClose }: { onClose: () => void }) {
                           </span>
                         </button>
                         <Button
+                          aria-label={t("agent.historyArchive")}
+                          className="h-7 shrink-0 px-2 text-xs"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setPendingArchive(row.id)}
+                        >
+                          {t("agent.historyArchive")}
+                        </Button>
+                        <Button
                           aria-label={t("agent.historyDelete")}
                           className="h-7 shrink-0 px-2 text-xs"
                           size="sm"
@@ -121,30 +132,47 @@ export function AgentChatHistory({ onClose }: { onClose: () => void }) {
         )}
       </div>
       <AlertDialog
-        open={pendingDelete !== null}
+        open={pendingArchive !== null}
         onOpenChange={(next) => {
-          if (!next) setPendingDelete(null);
+          if (!next) setPendingArchive(null);
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("agent.historyDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogTitle>{t("agent.historyArchiveTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("agent.historyDeleteDescription")}
+              {t("agent.historyArchiveDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (!pendingDelete) return;
-                const id = pendingDelete;
-                setPendingDelete(null);
-                void removeConversation(id);
+                if (!pendingArchive) return;
+                const id = pendingArchive;
+                setPendingArchive(null);
+                void archiveConversation(id);
               }}
             >
-              {t("agent.historyDelete")}
+              {t("agent.historyArchive")}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("agent.historyDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("agent.historyDeleteDescription")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              if (!pendingDelete) return;
+              const id = pendingDelete;
+              setPendingDelete(null);
+              void removeConversation(id);
+            }}>{t("agent.historyDelete")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

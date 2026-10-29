@@ -4,7 +4,7 @@ import { isToolUIPart, type UIMessage } from "ai";
 import prisma from "@/lib/db";
 import { hasWriteReceipt, regenerateTailHasWriteReceipt } from "./writeReceipt";
 
-export type ConversationErrorCode = "CONVERSATION_NOT_FOUND" | "CONVERSATION_STALE_WRITE" | "CONVERSATION_TURN_CONFLICT" | "CONVERSATION_PERSISTENCE_FAILED";
+export type ConversationErrorCode = "CONVERSATION_NOT_FOUND" | "CONVERSATION_STALE_WRITE" | "CONVERSATION_TURN_CONFLICT" | "CONVERSATION_PERSISTENCE_FAILED" | "CONVERSATION_ARCHIVED" | "CONVERSATION_ARCHIVED_CONTENT";
 export class ConversationRequestError extends Error {
   constructor(readonly code: ConversationErrorCode) {
     super(code);
@@ -49,6 +49,9 @@ export async function admitConversationRequest(input: ConversationOperation & {
     const result = await db.$transaction(async tx => {
       const row = await tx.chatConversation.findFirst({ where: { id: input.conversationId, userId: input.userId } });
       if (!row) return { error: "CONVERSATION_NOT_FOUND" as const };
+      // Archived conversations are read-only for AI: no send/regenerate/
+      // approval admission, and no request may acquire the row.
+      if (row.archivedAt) return { error: "CONVERSATION_ARCHIVED" as const };
       const now = new Date();
       if (row.activeRequestId && (!row.activeRequestExpiresAt || row.activeRequestExpiresAt <= now)) {
         const cleaned = await tx.chatConversation.updateMany({
@@ -100,7 +103,7 @@ export async function admitConversationRequest(input: ConversationOperation & {
 }
 
 function ownedWhere(request: ConversationRequest) {
-  return { id: request.conversationId, userId: request.userId, revision: request.revision, activeRequestId: request.requestId, activeRequestExpiresAt: { gt: new Date() } };
+  return { id: request.conversationId, userId: request.userId, revision: request.revision, activeRequestId: request.requestId, activeRequestExpiresAt: { gt: new Date() }, archivedAt: null };
 }
 // Preserve durable terminal receipts when SDK completion contains an older part.
 export function mergeDurableMessages(durable: UIMessage[], incoming: UIMessage[]): UIMessage[] {

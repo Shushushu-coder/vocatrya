@@ -80,6 +80,8 @@ const ERROR_KEY: Record<string, string> = {
     "settings.aiAssignErrUnsupportedCombination",
   MODEL_UNAVAILABLE: "settings.aiAssignErrModelRequired",
   MANAGED_NOT_LAUNCHED: "settings.aiAssignManagedComingSoon",
+  NOT_ENTITLED: "settings.aiAssignErrNotEntitled",
+  MODEL_NOT_ALLOWED: "settings.aiAssignErrModelNotAllowed",
 };
 
 // Purposes whose execution path is structured output. Connections whose

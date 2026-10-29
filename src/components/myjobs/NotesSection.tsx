@@ -15,12 +15,15 @@ type NotesSectionProps = {
   jobId: string;
   openTrigger?: number;
   onCountChange?: (count: number) => void;
+  /** Archived job — notes render but add/edit/delete stay hidden (D1). */
+  readOnly?: boolean;
 };
 
 export function NotesSection({
   jobId,
   openTrigger,
   onCountChange,
+  readOnly,
 }: NotesSectionProps) {
   const { t } = useI18n();
   const { jobMutationsEnabled } = useCareerSurfaces();
@@ -90,16 +93,18 @@ export function NotesSection({
                 ? t("jobs.notesCountOne")
                 : t("jobs.notesCountMany", { count: notes.length })}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1"
-            onClick={handleAddNote}
-            disabled={!jobMutationsEnabled}
-          >
-            <PlusCircle className="h-3.5 w-3.5" />
-            {t("jobs.newNote")}
-          </Button>
+          {!readOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={handleAddNote}
+              disabled={!jobMutationsEnabled}
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              {t("jobs.newNote")}
+            </Button>
+          )}
         </div>
         <div className="mt-3 space-y-3">
           {notes.length === 0 ? (
@@ -111,6 +116,7 @@ export function NotesSection({
                 note={note}
                 onEdit={handleEdit}
                 onDelete={handleDeleteClick}
+                readOnly={readOnly}
               />
             ))
           )}

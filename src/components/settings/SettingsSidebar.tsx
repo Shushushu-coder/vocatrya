@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Archive,
   Bell,
   Bot,
   Database,
@@ -31,6 +32,7 @@ export type SettingsSection =
   | "dictionary"
   | "resume-variants"
   | "data-privacy"
+  | "archive-data"
   | "about";
 
 export interface SettingsSectionMeta {
@@ -94,6 +96,7 @@ export const SETTINGS_SECTION_GROUPS: readonly SettingsSectionGroup[] = [
     fallbackLabel: "Data & Support",
     sections: [
       { id: "data-privacy", labelKey: "settings.sections.dataPrivacy", fallbackLabel: "Data & Privacy", icon: Database },
+      { id: "archive-data", labelKey: "settings.sections.archiveData", fallbackLabel: "Archived Data", icon: Archive },
       { id: "about", labelKey: "settings.sections.about", fallbackLabel: "About", icon: Info },
     ],
   },
