@@ -16,16 +16,16 @@
 - 原 `RM-MATCH` 不再单列 P1 Feature。其候选 Agent `match_job` 记录到 `AGENT-CAPABILITIES`；**现有 canonical FAST_SCREENING/MatchAnalysisService 仍是独立可复用业务能力**，代码不因台账迁移被删除或改写。
 - `AGENT-CAPABILITIES` 其余能力与扩展决策保持现状，本次只调整匹配工具的台账归属。
 
-当前 **7 项**，其中 `IMPLEMENTED` 3 项、`PARTIAL` 2 项、`MISSING` 2 项；**全部 `passes: false`**：
+当前 **7 项**，其中 `IMPLEMENTED` 4 项、`PARTIAL` 3 项、`MISSING` 0 项；**全部 `passes: false`**：
 
 | Feature | P1 范围 | 实现状态 | 当前结论 |
 | --- | --- | --- | --- |
 | **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | 活动退役已集成；隔离桌面35/36通过，术语修复已集成；Owner 安排 P1 结束后人工检验 |
-| **BD-ARCHIVE** | IN_SCOPE | MISSING | 八项产品规则已冻结（AI 完全不可读归档内容）；尚未实现 |
+| **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | 职位/对话归档与恢复、只读中心和 AI 隔离已集成；桌面验收待执行 |
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
 | **AI-BYOK** | IN_SCOPE | PARTIAL | 凭据边界与真实信号超时分类修复已集成；真实 Key 业务调用未验收 |
-| **AI-MANAGED** | IN_SCOPE | MISSING | 面向用户的托管服务尚未交付 |
-| **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 工作台、三级隐藏、版本/岗位、分页及 DOCX 已集成；Windows Electron 业务验收待执行 |
+| **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP 闭环已补齐；真实网关、会话入口、订阅产品与桌面验收未完成 |
+| **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | DOCX 修复已集成；原窗口 Electron fresh-native 49/50 通过，真实 AI 导入预览/排除仍阻塞 |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | 现有五工具保留；`match_job` 仅登记待合同裁定 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
@@ -73,11 +73,11 @@
 
 ### BD-ARCHIVE：设置 → 数据与支持 → 归档数据
 
-- **P1 / IN_SCOPE / MISSING / `passes: false`。** 首批只覆盖 **职位**和 **AI 对话历史**；简历、面试题库、面试练习数据及其他类型**不在首批**。过去所说的「全品类基础数据归档」不再是本项交付范围。
+- **P1 / IN_SCOPE / IMPLEMENTED / `passes: false`。** 首批只覆盖 **职位**和 **AI 对话历史**；简历、面试题库、面试练习数据及其他类型**不在首批**。过去所说的「全品类基础数据归档」不再是本项交付范围。
 - 归档是可逆的**可见性管理**：将归档内容从常规工作视图隐藏，通过设置中的归档数据入口集中查询并恢复；原始记录、职位及其申请关联事实、对话消息及用户归属不应因归档而被物理删除。
 - **长期保留、随时恢复、无自动到期**；不建设 30 天回收站、不在后台自动清理归档数据。现有**删除确认**继续存在；归档、恢复与永久删除应有不同的操作与文案，不将删除伪装成归档。
 - 完成验收须覆盖归档前后列表可见性、独立用户数据隔离、恢复后内容一致、申请历史/历史对话引用完整性、备份往返及隔离 Windows Electron 真实交互。
-- **2026-10-29 合同已冻结**：保留历史投递事实；归档抑制提醒、恢复后沿用 24h 补发窗口；本期只读查看/恢复，不新增永久删除和普通列表归档筛选；AI 完全不可读取归档对象及历史引用快照。其他七项按推荐，详见 ARCHIVE_CONTRACT_PROPOSAL.md。本聊天未实施归档功能。
+- **2026-10-29 合同已冻结并实现集成**：保留历史投递事实；归档抑制提醒、恢复后沿用 24h 补发窗口；本期只读查看/恢复，不新增永久删除和普通列表归档筛选；AI 完全不可读取归档对象及历史引用快照。历史引用涉及归档职位的对话与摘要禁止送入模型，用户可恢复职位或另开对话。原有对话删除入口保留。详见 ARCHIVE_CONTRACT_PROPOSAL.md；Windows Electron 归档验收仍待执行。
 
 ### AI-ACCOUNT-LOGIN：账号登录型 AI
 
@@ -97,7 +97,7 @@
 
 ### AI-MANAGED：Vocatrya 托管 AI
 
-- **P1 / IN_SCOPE / MISSING / `passes: false`。** MISSING 指**面向用户的完整托管能力尚未交付**，不宣称仓库中没有任何既有托管 AI 设计/基础设施。
+- **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路已补齐，**面向用户的完整托管能力尚未交付**；真实网关、会话获取入口、订阅产品配置及桌面体验仍待完成，生产可用性保持 COMING_SOON。
 - 托管服务必须由**部署/服务端保管上游网关凭据**；模型目录由服务端控制，稳定产品模型 Key 与上游模型 ID 分离；订阅/Entitlement 决定模型可用范围和用量，需具备配额、可靠用量记录、并发/异常恢复及用户可理解的状态。
 - 用户已向**青云 TOP 客服**询问中国市场相关接入并得到“没有问题”的商务回复；据此可继续推进方案，但不能替代获授权真实网关的技术测试、服务稳定性、额度记账和上线验收。
 - 先核对已有 Managed AI 工程阶段与真实环境准备状态，再在隔离 Beta 环境、真实授权网关/测试预算下执行业务 E2E；最后验收订阅权益、模型选择、额度边界、失败记账、三条 AI 路径隔离和 Windows Electron 用户体验。真实凭据/部署/目标数据库需要专项 Gate。
@@ -163,6 +163,15 @@
 
 2026-10-29 本聊天本地开发交付：codex/resume-builder（.worktrees/resume-builder），基线 Main 051eeaf1 + 未提交修改。本期 T1–T4 已实现：左侧素材库/右侧编辑与实时预览、素材及单条证据拖入、键盘/指针排序、三级隐藏与溯源克隆、目标职位及版本差异/新草稿、篇幅软目标/CSS 分片预览、服务端 DOCX artifact/下载；T5 沿用已集成条目排除。新增 additive 迁移 20261029020000_resume_builder_visibility，备份 V7 兼容读取 V1–V6。15 个定向测试文件 161 项通过；随后最终编辑/导出 UI 34 项复测通过，类型检查与改动文件 ESLint 通过。独立 Chromium 分页 5 个固定样例（真实 Inter 字体、密集要点/超长条目/标题边界/隐藏内容/中英文）逐标记与块片段页号和 PDF 页数一致；7 项浏览器组件检查使用合成 graph/Action mock，仅证明 UI 交互，不作为真实持久化或桌面验收。持久化、拒绝写入、DOCX 重建与备份往返由隔离 SQLite 定向测试覆盖；独立空库 61 条迁移 deploy 与 REQUIRED_RAW_MIGRATION_INVARIANTS 通过。初次迁移检查因未指定 DATABASE_URL、首次 deploy 因隔离库文件尚未创建失败；创建空隔离库并指定其 URL 后通过，未访问真实库。代码尚未提交/合并 Main，未执行生产构建、Windows Electron/E2E、真实 AI 或真实数据库迁移；Main implementationStatus 与 passes 不因本地开发改为完成。
 
-### 2026-10-29 Main 集成闭环
+### 2026-10-29 工作台首次 Main 集成记录（历史）
 
 用户已明确授权提交与合并。合同记录提交 `ce7c17b7`，工作台来源提交 `559a2bce`；共享文档无冲突，合并源码与已验证来源一致，复用上文定向证据，未重复构建。RESUME-BUILDER 实现状态随本次合并更新为 IMPLEMENTED，所有 P1 passes 仍 false。归档功能仍 MISSING，仅合同冻结；活动退役剩余复验仍由用户安排 P1 结束后人工检验。保留 `codex/resume-builder` 分支与 Worktree，未推送、发布、操作真实数据库或清理其他任务。
+
+### 2026-10-29 三窗口收口与 Main 集成
+
+- 已获提交及集成授权。归档来源 `5df3ce9a`，托管 AI 本地补齐来源 `e63d51df`，DOCX 运行时修复来源 `7ec2415a`，均已合入 Main。BD-ARCHIVE 更新为 IMPLEMENTED，AI-MANAGED 更新为 PARTIAL；七项 `passes` 均保持 false。
+- 三项收口：备份版本陈旧断言由 V6 对齐 V7；补齐 `NOT_ENTITLED` / `MODEL_NOT_ALLOWED` 的分配错误中英文提示及组件回归；按锁文件补齐 Main 缺失依赖、重新生成 Prisma Client，纠正原先“39 个基线代码错误”的环境判断。组合检查另移除 DOCX 测试中不再必要的类型抑制注释。
+- 归档合并前复审补强：历史工具结果、上下文及摘要含归档职位引用时禁止送入 AI；提醒领取事务内复核父对象归档状态，防止陈旧 reconcile 复活送达；原有对话永久删除入口与归档并存。补修后原窗口 111 项定向测试及类型/lint 检查通过。
+- Main 组合回归 10 文件、150 项通过，覆盖归档、AI 路由、托管 HTTP 闭环、权益提示、DOCX、提醒、历史投递统计、备份往返和隔离迁移。完整非增量 TypeScript 检查零错误；改动 TypeScript 文件 ESLint 无错误，仅 `jobsAbReadPath.spec.ts` 两处原有无用抑制警告。
+- 原简历验收窗口 Windows Electron fresh-native 开发态记录 49/50 PASS、0 FAIL、1 BLOCKED，已核对日志及 PDF/DOCX 产物；真实 AI 导入预览/条目排除仍阻塞。证据位于 `.worktrees/resume-builder-acceptance/.tmp/resume-builder-acceptance/`。该证据不代表本次组合 Main 已重跑桌面验收。
+- 本次未运行新增生产构建、桌面/E2E、真实网关调用、部署或真实数据库迁移。归档桌面验收、托管真实环境/产品入口与简历真实 AI 导入仍待完成。保留三个分支、Worktree 与既有证据，不推送或清理。

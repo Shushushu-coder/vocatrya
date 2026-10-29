@@ -169,7 +169,6 @@ it("accepts a DOCX POST framed the way the node runtime frames a bodyless reques
     method: "POST",
     headers: { "content-length": "0" },
     body: new ReadableStream({ start(controller) { controller.close(); } }),
-    // @ts-expect-error Node fetch requires duplex for stream bodies
     duplex: "half",
   }));
   expect(response.status).toBe(201);
