@@ -196,6 +196,48 @@ describe("BYOK connection lifecycle", () => {
     await ensureByokConnectionsForUser(userId);
     expect((await byokConnectionRow()).status).toBe("DISCONNECTED");
   });
+
+  it("keeps REAUTH_REQUIRED when the bound key exists but was proven unreadable", async () => {
+    // The explicit credential verify marks the connection when the ApiKey
+    // row exists but cannot be opened in this OS context. The read-path
+    // heal must not silently flip it back — only re-saving the key does.
+    const key = await saveApiKeyRow("deepseek", "sk-byok-test-1234");
+    await upsertByokConnectionForApiKey({ userId, apiKey: key });
+    const connection = await byokConnectionRow();
+    await prisma.aIConnection.update({
+      where: { id: connection.id },
+      data: { status: "REAUTH_REQUIRED" },
+    });
+    await ensureByokConnectionsForUser(userId);
+    const after = await byokConnectionRow();
+    expect(after.status).toBe("REAUTH_REQUIRED");
+    expect(after.credentialRef).toBe(key.id);
+    // The user re-entering the key is the only CONNECTED recovery.
+    await upsertByokConnectionForApiKey({ userId, apiKey: key });
+    expect((await byokConnectionRow()).status).toBe("CONNECTED");
+  });
+
+  it("revives a REAUTH_REQUIRED row whose binding is stale against the live key", async () => {
+    // Restored-backup shape: the connection names a key id that never
+    // existed here, while a live same-provider key does — the heal
+    // rebinds and marks CONNECTED, same as any pre-bridge row.
+    const key = await saveApiKeyRow("deepseek", "sk-byok-test-1234");
+    await prisma.aIConnection.create({
+      data: {
+        userId,
+        provider: "DEEPSEEK",
+        backendKind: "LOCAL_BYOK",
+        authType: "API_KEY",
+        displayName: "DeepSeek (API key)",
+        status: "REAUTH_REQUIRED",
+        credentialRef: randomUUID(),
+      },
+    });
+    await ensureByokConnectionsForUser(userId);
+    const connection = await byokConnectionRow();
+    expect(connection.status).toBe("CONNECTED");
+    expect(connection.credentialRef).toBe(key.id);
+  });
 });
 
 describe("resolveByokCredential — strict binding, fail closed", () => {
