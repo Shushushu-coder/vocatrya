@@ -39,7 +39,7 @@ export interface ManagedAiOverview {
   /** Real Hosted authority reads — null when the service cannot be reached. */
   entitlement: ManagedEntitlement | null;
   usage: ManagedUsageSummary | null;
-  /** Assignable catalog models (enabled + available, text-capable). */
+  /** Assignable models — catalog enabled/available/text-capable AND covered by the current entitlement. Empty when the entitlement cannot be read. */
   models: { modelKey: string; displayName: string; streaming: boolean; structuredOutput: boolean }[];
   /**
    * The MANAGED_* error code when a Hosted read failed — rendered verbatim.
@@ -104,8 +104,12 @@ export async function getManagedAiOverview(): Promise<{
       read(() => client.catalog(user.id)),
     ]);
     const errorCode = entitlement.errorCode ?? usage.errorCode ?? catalog.errorCode;
+    // Assignable = catalog-enabled AND inside the plan allow-list. Without a
+    // readable entitlement nothing is presented as assignable — showing
+    // catalog-level models anyway would overpromise what admission enforces.
+    const allowedModels = new Set(entitlement.value?.allowedModels ?? []);
     const models = (catalog.value?.models ?? [])
-      .filter((model: ManagedModelDTO) => model.enabled && model.available && model.capabilities.text)
+      .filter((model: ManagedModelDTO) => model.enabled && model.available && model.capabilities.text && allowedModels.has(model.modelKey))
       .map((model: ManagedModelDTO) => ({
         modelKey: model.modelKey,
         displayName: model.displayName,

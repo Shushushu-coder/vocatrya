@@ -601,6 +601,30 @@ async function assertManagedAssignmentModel(
       "The Managed model cannot emit the structured decisions Career Dialogue needs",
     );
   }
+  // The plan allow-list is the entitlement authority — a catalog model the
+  // subscription does not cover would be saved-but-unrunnable, surfacing
+  // only later as MODEL_NOT_ALLOWED at admission. Refuse it at write time
+  // with the same codes the Hosted authority uses, never as a plausible
+  // assignment.
+  let entitlement;
+  try {
+    entitlement = await client.entitlement(userId);
+  } catch (error) {
+    const mapped = managedBusinessError(error);
+    throw new AssignmentWriteError(mapped.code, mapped.message);
+  }
+  if (entitlement.allowedModels.length === 0) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.NOT_ENTITLED,
+      "The account has no active Managed AI entitlement",
+    );
+  }
+  if (!entitlement.allowedModels.includes(modelKey)) {
+    throw new AssignmentWriteError(
+      AI_BUSINESS_ERROR_CODES.MODEL_NOT_ALLOWED,
+      "The Managed model is not covered by the subscription plan",
+    );
+  }
 }
 
 /**
