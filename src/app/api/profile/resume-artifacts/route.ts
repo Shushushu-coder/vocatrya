@@ -14,6 +14,14 @@ export async function POST(req: NextRequest) {
     await assertResumeV1Writable(prisma);
     const versionId = req.nextUrl.searchParams.get("versionId");
     if (!versionId) return NextResponse.json({ error: "Version id is required" }, { status: 400 });
+    const format = req.nextUrl.searchParams.get("format");
+    if (format === "DOCX") {
+      // Server-generated only: reject uploaded bytes for this format.
+      if (req.body !== null) return NextResponse.json({ error: "DOCX must be generated on the server" }, { status: 400 });
+      const artifact = await new ResumeArtifactService(prisma, session.user.id).createDocxExport(versionId);
+      return NextResponse.json(resumeArtifactDTO(artifact), { status: 201 });
+    }
+    if (format && format !== "PDF") return NextResponse.json({ error: "Unsupported format" }, { status: 400 });
     if (req.headers.get("content-type")?.split(";")[0] !== "application/pdf") {
       return NextResponse.json({ error: "PDF body is required", code: "PDF_INVALID" }, { status: 400 });
     }

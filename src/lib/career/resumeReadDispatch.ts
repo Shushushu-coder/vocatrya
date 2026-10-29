@@ -25,13 +25,15 @@ const VARIANT_VERSION_SELECT = {
     orderBy: { sortOrder: "asc" as const },
     select: {
       title: true,
+      hiddenAt: true,
       items: {
         orderBy: { sortOrder: "asc" as const },
         select: {
           materialTitleSnapshot: true,
+          hiddenAt: true,
           expressions: {
             orderBy: { sortOrder: "asc" as const },
-            select: { content: true },
+            select: { content: true, hiddenAt: true },
           },
         },
       },

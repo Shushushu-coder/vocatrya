@@ -1,12 +1,14 @@
 import { parseResumeHeaderSnapshot } from "./resumeHeaderSnapshot";
 
 export type ResumeVariantTextItem = {
+  hiddenAt?: Date | string | null;
   materialTitleSnapshot?: string | null;
   careerMaterialItem?: { title: string | null } | null;
-  expressions: Array<{ content: string }>;
+  expressions: Array<{ content: string; hiddenAt?: Date | string | null }>;
 };
 
 export type ResumeVariantTextSection = {
+  hiddenAt?: Date | string | null;
   title: string;
   items: ResumeVariantTextItem[];
 };
@@ -37,13 +39,16 @@ export function projectResumeVariantText(source: ResumeVariantTextSource): strin
   }
 
   for (const section of source.sections) {
+    if (section.hiddenAt) continue;
     const lines: string[] = [];
     const title = section.title.trim();
     if (title) lines.push(`## ${title}`);
     for (const item of section.items) {
+      if (item.hiddenAt) continue;
       const itemTitle = item.materialTitleSnapshot?.trim();
       if (itemTitle) lines.push(itemTitle);
       for (const expression of item.expressions) {
+        if (expression.hiddenAt) continue;
         const content = expression.content.trim();
         if (content) lines.push(content);
       }

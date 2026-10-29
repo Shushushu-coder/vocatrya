@@ -1,14 +1,18 @@
 "use client";
+import "./ResumePreview.css";
 import { parseResumeHeaderSnapshot } from "@/lib/career/resumeHeaderSnapshot";
 import { useI18n } from "@/i18n";
 
 type Expression = {
+  kind?: string;
+  hiddenAt?: Date | string | null;
   id: string;
   content: string;
   sortOrder: number;
 };
 
 type Item = {
+  hiddenAt?: Date | string | null;
   id: string;
   expressions: Expression[];
   materialTitleSnapshot?: string | null;
@@ -16,6 +20,7 @@ type Item = {
 };
 
 type Section = {
+  hiddenAt?: Date | string | null;
   id: string;
   title: string;
   items: Item[];
@@ -54,20 +59,20 @@ export function ResumePreview({ headerSnapshot, sections, print = false }: Resum
         ) : null}
       </header>
       <div className="mt-6 space-y-5">
-        {sections.map((section) => (
-          <section key={section.id}>
-            <h3 className="border-b pb-1 text-sm font-semibold uppercase tracking-wide">
+        {sections.filter((section) => !section.hiddenAt).map((section) => (
+          <section key={section.id} data-resume-block={section.id}>
+            <h3 data-resume-block={`${section.id}-title`} className="border-b pb-1 text-sm font-semibold uppercase tracking-wide">
               {section.title}
             </h3>
             <div className="mt-3 space-y-3">
-              {section.items.map((item) => (
-                <div key={item.id} className={print ? "resume-print-item" : undefined}>
+              {section.items.filter((item) => !item.hiddenAt).map((item) => (
+                <div key={item.id} data-resume-block={item.id} className="resume-print-item">
                   {item.materialTitleSnapshot ? (
                     <p className="text-sm font-medium">{item.materialTitleSnapshot}</p>
                   ) : null}
                   <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                    {item.expressions.filter((expression) => !print || expression.content.trim()).map((expression) => (
-                      <li key={expression.id} className="whitespace-pre-wrap">
+                    {item.expressions.filter((expression) => !expression.hiddenAt && (!print || expression.content.trim())).map((expression) => (
+                      <li data-resume-block={expression.id} key={expression.id} className={`whitespace-pre-wrap ${expression.kind === "BODY" ? "list-none -ml-5" : ""}`}>
                         {expression.content}
                       </li>
                     ))}

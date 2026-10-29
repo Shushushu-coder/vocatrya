@@ -1,0 +1,6 @@
+/* Disable optical sizing/kerning so screen and PDF use matching variable-font line breaks. */
+.resume-print { width: 180mm; max-width: none; font-optical-sizing: none; font-kerning: none; color: #000; background: #fff; color-scheme: light; overflow-wrap: anywhere; }
+.resume-print .text-muted-foreground { color: #555; }
+.resume-print-item { break-inside: avoid; page-break-inside: avoid; }
+.resume-print h3 { break-after: avoid; }
+.resume-fragment-columns { width: 180mm; height: 267mm; columns: 180mm; column-gap: 0; column-fill: auto; zoom: 1; }

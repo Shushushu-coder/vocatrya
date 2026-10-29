@@ -11,8 +11,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 6;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6] as const;
+export const BACKUP_FORMAT_VERSION = 7;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -26,6 +26,7 @@ export const ManifestSchema = z.object({
     z.literal(4),
     z.literal(5),
     z.literal(6),
+    z.literal(7),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -919,6 +920,8 @@ const ResumeVariantVersion = z.object({
 });
 
 const ResumeVariantSection = z.object({
+  hiddenAt: optDt.optional(),
+  originRefId: optStr.optional(),
   id,
   resumeVariantVersionId: id,
   title: str,
@@ -927,6 +930,8 @@ const ResumeVariantSection = z.object({
 });
 
 const ResumeVariantSectionItem = z.object({
+  hiddenAt: optDt.optional(),
+  originRefId: optStr.optional(),
   id,
   resumeVariantSectionId: id,
   careerMaterialItemId: optId,
@@ -936,6 +941,8 @@ const ResumeVariantSectionItem = z.object({
 });
 
 const ResumeExpression = z.object({
+  hiddenAt: optDt.optional(),
+  originRefId: optStr.optional(),
   id,
   resumeVariantSectionItemId: id,
   kind: str,

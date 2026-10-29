@@ -28,6 +28,8 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 vi.mock("@/actions/resumeVariant.actions", () => ({
+  listResumeTargetJobs: vi.fn(async () => ({ success: true, data: [] })),
+  setResumeContentHidden: vi.fn(), attachResumeMaterial: vi.fn(), addResumeEvidence: vi.fn(), syncResumeMaterialTitle: vi.fn(), updateResumeLayout: vi.fn(), updateResumeTargetJob: vi.fn(), compareResumeVersions: vi.fn(), createBlankResumeDraft: vi.fn(),
   archiveResumeVariant: vi.fn(),
   cloneResumeVersionAsDraft: vi.fn(),
   createResumeExpression: vi.fn(),
@@ -284,7 +286,7 @@ describe("Resume Variant V1 product polish UI", () => {
     });
 
     render(<ResumeVariantWorkspace variantId="var-1" />);
-    expect(await screen.findByText("Shipped a campus tool")).toBeInTheDocument();
+    expect((await screen.findAllByText("Shipped a campus tool")).length).toBeGreaterThan(0);
     expect(screen.getByText(/Not linked to supporting facts/)).toBeInTheDocument();
     expect(screen.getByText(/Add resume wording/)).toBeInTheDocument();
     expect(screen.queryByText("UNLINKED")).not.toBeInTheDocument();
@@ -339,7 +341,7 @@ describe("Resume Variant V1 product polish UI", () => {
         <ResumeVariantWorkspace variantId="var-1" />
       </I18nProvider>,
     );
-    expect(await screen.findByText("完成校园工具")).toBeInTheDocument();
+    expect((await screen.findAllByText("完成校园工具")).length).toBeGreaterThan(0);
     expect(screen.getByText(/未关联事实依据/)).toBeInTheDocument();
     expect(screen.queryByText("UNLINKED")).not.toBeInTheDocument();
   });

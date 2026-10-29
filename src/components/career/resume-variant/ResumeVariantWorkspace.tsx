@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,12 @@ import { useSaveStatus } from "@/context/SaveStatusContext";
 import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
 import { useI18n } from "@/i18n";
 import { ResumePreview } from "./ResumePreview";
+import { ResumeVersionDiffView } from "./ResumeVersionDiffView";
+import { ResumePagedPreview } from "./ResumePagedPreview";
+import { ResumeBuilderDnd, BuilderSortable, BuilderSortableGroup, ResumeMaterialLibrary, type BuilderDrop, type LibraryDrag } from "./ResumeBuilderDnd";
+import { parseResumeLayoutConfig } from "@/lib/career/resumeLayoutConfig";
+import type { ResumeDiffChange } from "@/lib/career/resumeVersionDiff";
+import { setResumeContentHidden, attachResumeMaterial, addResumeEvidence, syncResumeMaterialTitle, updateResumeLayout, listResumeTargetJobs, updateResumeTargetJob, compareResumeVersions, createBlankResumeDraft } from "@/actions/resumeVariant.actions";
 import { ResumeExportControl } from "./ResumeExportControl";
 
 const MATERIAL_TYPE_ORDER = [
@@ -65,6 +71,8 @@ type VersionSummary = {
 };
 
 type ExpressionRow = {
+  hiddenAt?: string | Date | null;
+  originRefId?: string | null;
   id: string;
   kind: string;
   content: string;
@@ -74,6 +82,8 @@ type ExpressionRow = {
 };
 
 type ItemRow = {
+  hiddenAt?: string | Date | null;
+  originRefId?: string | null;
   materialTitleSnapshot: string | null;
   id: string;
   itemKind: string;
@@ -89,6 +99,8 @@ type ItemRow = {
 };
 
 type SectionRow = {
+  hiddenAt?: string | Date | null;
+  originRefId?: string | null;
   id: string;
   title: string;
   systemKind: string | null;
@@ -97,6 +109,7 @@ type SectionRow = {
 };
 
 type VersionGraph = {
+  layoutConfig: string | null;
   id: string;
   status: string;
   headerSnapshot: string | null;
@@ -140,7 +153,17 @@ export function ResumeVariantWorkspace({
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [version, setVersion] = useState<VersionGraph | null>(null);
-  const [preview, setPreview] = useState(false);
+  const headerDirty = useRef(false);
+  const headerRevision = useRef(0);
+  const [exportBusy, setExportBusy] = useState(false);
+  const loadedVersion = useRef<string | null>(null);
+  const loadSequence = useRef(0);
+  const [liveExpressions, setLiveExpressions] = useState<Record<string, string>>({});
+  const [liveTitles, setLiveTitles] = useState<Record<string, string>>({});
+  const [jobs, setJobs] = useState<{ id: string; title: string; company: { label: string } | null }[]>([]);
+  const [targetJob, setTargetJob] = useState("");
+  const [compareId, setCompareId] = useState("");
+  const [comparison, setComparison] = useState<{ changes: ResumeDiffChange[]; before: VersionGraph; after: VersionGraph } | null>(null);
   const [headerForm, setHeaderForm] = useState({
     fullName: "",
     headline: "",
@@ -166,10 +189,12 @@ export function ResumeVariantWorkspace({
 
   const load = useCallback(
     async (preferredVersionId?: string) => {
+      const sequence = ++loadSequence.current;
       const [variantResult, versionList] = await Promise.all([
         getResumeVariant(variantId),
         listResumeVariantVersions(variantId),
       ]);
+      if (sequence !== loadSequence.current) return;
       if (!variantResult.success || !versionList.success) {
         setLoadError(true);
         toastError(
@@ -184,6 +209,7 @@ export function ResumeVariantWorkspace({
       };
       const list = (versionList.data as VersionSummary[]) ?? [];
       setVariantName(summary.name);
+      setTargetJob((variantResult.data as { targetJobOpportunityId?: string | null }).targetJobOpportunityId ?? "");
       setVersions(list);
       // Fail closed (defense-in-depth): an explicitly requested version that
       // is missing from this variant list must surface a safe load error
@@ -209,14 +235,18 @@ export function ResumeVariantWorkspace({
         return;
       }
       const graph = await getResumeVariantVersion(nextId);
+      if (sequence !== loadSequence.current) return;
       if (!graph.success) {
         toastError(graph.message);
         return;
       }
       const loaded = graph.data as VersionGraph;
       setVersion(loaded);
+      const changedVersion = loadedVersion.current !== loaded.id;
+      if (changedVersion) { setLiveExpressions({}); setLiveTitles({}); setComparison(null); headerDirty.current = false; }
+      loadedVersion.current = loaded.id;
       const header = parseResumeHeaderSnapshot(loaded.headerSnapshot);
-      setHeaderForm({
+      if (!headerDirty.current) setHeaderForm({
         fullName: header.fullName ?? "",
         headline: header.headline ?? "",
         email: header.email ?? "",
@@ -232,8 +262,15 @@ export function ResumeVariantWorkspace({
     void load(initialVersionId);
   }, [load, initialVersionId]);
 
+  useEffect(() => {
+    let active = true;
+    void listResumeCareerMaterials().then((result) => { if (active && result.success) setMaterials((result.data as MaterialOption[]) ?? []); });
+    void listResumeTargetJobs().then((result) => { if (active && result.success) setJobs(result.data as typeof jobs); });
+    return () => { active = false; };
+  }, []);
   const editable = Boolean(
     version &&
+      !exportBusy &&
       version.status === "DRAFT" &&
       !version.resumeVariant.archivedAt &&
       version.submittedAttempts.length === 0,
@@ -250,6 +287,8 @@ export function ResumeVariantWorkspace({
     return [...groups.entries()].filter(([, list]) => list.length > 0);
   }, [materials]);
 
+  const previewHeader = useMemo(() => JSON.stringify({ ...headerForm, links: headerForm.links.split(/\r?\n/).filter(Boolean) }), [headerForm]);
+  const previewSections = useMemo(() => version?.sections.map((section) => ({ ...section, title: liveTitles[section.id] ?? section.title, items: section.items.map((item) => ({ ...item, expressions: item.expressions.map((expression) => ({ ...expression, content: liveExpressions[expression.id] ?? expression.content })) })) })) ?? [], [version, liveTitles, liveExpressions]);
   const saveStatus = useSaveStatus();
   // announce="status" routes success to the quiet shell indicator instead of a
   // toast — used by implicit saves (blur edits, reorders). Create/delete/
@@ -276,6 +315,47 @@ export function ResumeVariantWorkspace({
     else await load();
   };
 
+  const applyBuilder = async (action: Promise<{ success: boolean; message?: string }>) => {
+    if (await run(action, t("resumeVariants.saveSuccess"))) await reloadSelected();
+  };
+  const sortBuilder = async (target: BuilderDrop, orderedIds: string[]) => {
+    await applyBuilder(target.kind === "section" ? reorderResumeSections({ versionId: target.parentId, orderedIds }) : target.kind === "item" ? reorderResumeSectionItems({ sectionId: target.parentId, orderedIds }) : reorderResumeExpressions({ itemId: target.parentId, orderedIds }));
+  };
+  const attachBuilder = async (source: LibraryDrag, target: BuilderDrop) => {
+    if (source.evidenceId && target.kind === "item" && target.materialId === source.materialId) await applyBuilder(addResumeEvidence({ itemId: target.id, evidenceId: source.evidenceId }));
+    else {
+      const section = version?.sections.find((s) => s.id === target.id || s.items.some((i) => i.id === target.id || i.expressions.some((e) => e.id === target.id)));
+      if (section) await applyBuilder(attachResumeMaterial({ sectionId: section.id, materialId: source.materialId, evidenceId: source.evidenceId }));
+    }
+  };
+  const visibility = (kind: "section" | "item" | "expression", id: string, hidden: boolean) => <Button size="sm" variant="ghost" onClick={() => void applyBuilder(setResumeContentHidden({ kind, id, hidden: !hidden }))}>{t(hidden ? "resumeBuilder.show" : "resumeBuilder.hide")}</Button>;
+
+  const flushDraft = async (): Promise<boolean> => {
+    if (!version || !editable) return true;
+    if (headerDirty.current) {
+      if (!(await run(updateResumeHeaderSnapshot({ versionId: version.id, ...headerForm, links: headerForm.links.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) }), t("resumeVariants.saveSuccess")))) return false;
+      headerDirty.current = false;
+    }
+    for (const section of version.sections) {
+      const title = liveTitles[section.id];
+      if (title !== undefined && title !== section.title) {
+        if (!title.trim()) { toastError(t("resumeVariants.sectionTitlePlaceholder")); return false; }
+        if (!(await run(updateResumeSection({ sectionId: section.id, title }), t("resumeVariants.saveSuccess")))) return false;
+        setLiveTitles((current) => { if (current[section.id] !== title) return current; const next = { ...current }; delete next[section.id]; return next; });
+      }
+      for (const item of section.items) for (const expression of item.expressions) {
+        const content = liveExpressions[expression.id];
+        if (content !== undefined && content !== expression.content) {
+          if (!content.trim()) { toastError(t("resumeVariants.expressionPlaceholder")); return false; }
+          if (!(await run(updateResumeExpression({ expressionId: expression.id, content }), t("resumeVariants.saveSuccess")))) return false;
+          setLiveExpressions((current) => { if (current[expression.id] !== content) return current; const next = { ...current }; delete next[expression.id]; return next; });
+        }
+      }
+    }
+    await reloadSelected(version.id);
+    return true;
+  };
+
   const openMaterialPicker = async (sectionId: string) => {
     const result = await listResumeCareerMaterials();
     if (!result.success) {
@@ -288,6 +368,7 @@ export function ResumeVariantWorkspace({
 
   const saveHeader = async () => {
     if (!version) return;
+    const revision = headerRevision.current;
     const ok = await run(
       updateResumeHeaderSnapshot({
         versionId: version.id,
@@ -304,7 +385,7 @@ export function ResumeVariantWorkspace({
       t("resumeVariants.saveSuccess"),
       "toast",
     );
-    if (ok) await reloadSelected(version.id);
+    if (ok) { if (revision === headerRevision.current) headerDirty.current = false; await reloadSelected(version.id); }
   };
 
   const addSection = async () => {
@@ -330,6 +411,7 @@ export function ResumeVariantWorkspace({
       const ok = await run(deleteResumeSectionItem(confirm.id), t("resumeVariants.saveSuccess"), "toast");
       if (ok) await reloadSelected(version.id);
     } else {
+      if (!(await flushDraft())) return;
       const ok = await run(freezeResumeVersion(confirm.id), t("resumeVariants.freezeSuccess"), "toast");
       if (ok) await reloadSelected(confirm.id);
     }
@@ -373,17 +455,11 @@ export function ResumeVariantWorkspace({
           {/* Autosave feedback sits inside the editor's own action row rather
               than a window-wide status bar. */}
           <SaveStatusIndicator />
-          <ResumeExportControl key={version.id} versionId={version.id} status={version.status}
+          <ResumeExportControl key={version.id} versionId={version.id} status={version.status} beforeExport={flushDraft} onBusyChange={setExportBusy}
             archived={Boolean(version.resumeVariant.archivedAt)} onFrozen={(id) => {
               setVersion((current) => current?.id === id ? { ...current, status: "FROZEN" } : current);
               setVersions((current) => current.map((row) => row.id === id ? { ...row, status: "FROZEN" } : row));
             }} />
-          <Button
-            variant={preview ? "default" : "outline"}
-            onClick={() => setPreview((value) => !value)}
-          >
-            {preview ? t("resumeVariants.editor") : t("resumeVariants.preview")}
-          </Button>
           {editable ? (
             <Button variant="outline" onClick={() => setConfirm({ kind: "freeze", id: version.id })}>
               {t("resumeVariants.freeze")}
@@ -391,6 +467,7 @@ export function ResumeVariantWorkspace({
           ) : version.status === "FROZEN" || version.status === "SUBMITTED" ? (
             <Button
               onClick={async () => {
+                if (!(await flushDraft())) return;
                 const ok = await run(
                   cloneResumeVersionAsDraft(version.id),
                   t("resumeVariants.cloneSuccess"),
@@ -411,7 +488,7 @@ export function ResumeVariantWorkspace({
             key={row.id}
             size="sm"
             variant={row.id === version.id ? "default" : "outline"}
-            onClick={() => void load(row.id)}
+            onClick={async () => { if (await flushDraft()) await load(row.id); }}
           >
             {t("resumeVariants.versionNumber", { number: row.versionNumber })}
             {" · "}
@@ -421,10 +498,27 @@ export function ResumeVariantWorkspace({
         ))}
       </div>
 
-      {preview ? (
-        <ResumePreview headerSnapshot={version.headerSnapshot} sections={version.sections} />
-      ) : (
-        <>
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border p-3">
+        <label className="text-sm">{t("resumeBuilder.targetJob")}<select className="ml-2 max-w-xs rounded border bg-background p-2" value={targetJob} disabled={Boolean(version.resumeVariant.archivedAt)} onChange={(e) => void applyBuilder(updateResumeTargetJob({ versionId: version.id, jobId: e.target.value || null }))}>
+          <option value="">{t("resumeBuilder.noTargetJob")}</option>
+          {targetJob && !jobs.some((job) => job.id === targetJob) && <option value={targetJob}>{t("resumeBuilder.unavailableJob")}</option>}
+          {jobs.map((job) => <option key={job.id} value={job.id}>{job.company?.label ? `${job.company.label} · ` : ""}{job.title}</option>)}
+        </select></label>
+        <label className="text-sm">{t("resumeBuilder.template")}<select className="ml-2 rounded border bg-background p-2" disabled><option>{t("resumeBuilder.standardTemplate")}</option></select></label>
+        <label className="text-sm">{t("resumeBuilder.pageTarget")}<select className="ml-2 rounded border bg-background p-2" value={parseResumeLayoutConfig(version.layoutConfig).pageTarget ?? ""} disabled={!editable} onChange={(e) => void applyBuilder(updateResumeLayout({ versionId: version.id, pageTarget: e.target.value === "1" ? 1 : e.target.value === "2" ? 2 : null }))}>
+          <option value="">{t("resumeBuilder.unlimitedPages")}</option><option value="1">1</option><option value="2">2</option>
+        </select></label>
+        <Button variant="outline" disabled={Boolean(version.resumeVariant.archivedAt)} onClick={async () => { if (!(await flushDraft())) return; if (await run(createBlankResumeDraft(variantId), t("resumeVariants.saveSuccess"))) await load(); }}>{t("resumeBuilder.blankDraft")}</Button>
+        <Button variant="outline" disabled={Boolean(version.resumeVariant.archivedAt)} onClick={async () => { if (!(await flushDraft())) return; if (await run(cloneResumeVersionAsDraft(version.id), t("resumeVariants.cloneSuccess"))) await load(); }}>{t("resumeBuilder.cloneVersion")}</Button>
+        <label className="text-sm">{t("resumeBuilder.compare")}<select aria-label={t("resumeBuilder.compare")} className="ml-2 rounded border bg-background p-2" value={compareId} onChange={(e) => { setCompareId(e.target.value); setComparison(null); }}><option value="">—</option>{versions.filter((v) => v.id !== version.id).map((v) => <option key={v.id} value={v.id}>v{v.versionNumber}</option>)}</select></label>
+        <Button variant="outline" disabled={!compareId} onClick={async () => { const result = await compareResumeVersions({ beforeId: compareId, afterId: version.id }); if (result.success) setComparison(result.data as typeof comparison); else toastError(result.message); }}>{t("resumeBuilder.compare")}</Button>
+      </div>
+      <ResumeBuilderDnd disabled={!editable} onSort={sortBuilder} onAttach={attachBuilder}>
+      <div className="grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <ResumeMaterialLibrary materials={materials} sections={version.sections} disabled={!editable} onAdd={(source, sectionId) => void applyBuilder(attachResumeMaterial({ sectionId, materialId: source.materialId, evidenceId: source.evidenceId }))} />
+        <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
+        <div className="min-w-0 space-y-4">
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t("resumeVariants.headerTitle")}</CardTitle>
@@ -448,7 +542,7 @@ export function ResumeVariantWorkspace({
                     value={headerForm[key]}
                     disabled={!editable}
                     onChange={(event) =>
-                      setHeaderForm((current) => ({ ...current, [key]: event.target.value }))
+                      { headerDirty.current = true; headerRevision.current += 1; setHeaderForm((current) => ({ ...current, [key]: event.target.value })); }
                     }
                   />
                 </label>
@@ -461,7 +555,7 @@ export function ResumeVariantWorkspace({
                   value={headerForm.links}
                   disabled={!editable}
                   onChange={(event) =>
-                    setHeaderForm((current) => ({ ...current, links: event.target.value }))
+                    { headerDirty.current = true; headerRevision.current += 1; setHeaderForm((current) => ({ ...current, links: event.target.value })); }
                   }
                 />
                 <span className="mt-1 block text-xs text-muted-foreground">
@@ -493,13 +587,14 @@ export function ResumeVariantWorkspace({
           {version.sections.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("resumeVariants.noSections")}</p>
           ) : (
-            version.sections.map((section, sectionIndex) => (
-              <Card key={section.id}>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+            <BuilderSortableGroup ids={version.sections.map((s) => s.id)}>{version.sections.map((section, sectionIndex) => (
+              <BuilderSortable key={section.id} disabled={!editable} hidden={Boolean(section.hiddenAt)} data={{ id: section.id, kind: "section", parentId: version.id, orderedIds: version.sections.map((s) => s.id) }}><Card>
+                <CardHeader className="flex flex-col gap-2 space-y-0">
                   {editable ? (
                     <Input
                       className="max-w-md font-medium"
-                      defaultValue={section.title}
+                      value={liveTitles[section.id] ?? section.title}
+                      onChange={(e) => setLiveTitles((current) => ({ ...current, [section.id]: e.target.value }))}
                       onBlur={(event) => {
                         const title = event.target.value.trim();
                         if (!title || title === section.title) return;
@@ -507,7 +602,7 @@ export function ResumeVariantWorkspace({
                           updateResumeSection({ sectionId: section.id, title }),
                           t("resumeVariants.saveSuccess"),
                         ).then((ok) => {
-                          if (ok) void reloadSelected(version.id);
+                          if (ok) { setLiveTitles((current) => { if (current[section.id]?.trim() !== title) return current; const next = { ...current }; delete next[section.id]; return next; }); void reloadSelected(version.id); }
                         });
                       }}
                     />
@@ -515,7 +610,8 @@ export function ResumeVariantWorkspace({
                     <CardTitle className="text-base">{section.title}</CardTitle>
                   )}
                   {editable ? (
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
+                      {visibility("section", section.id, Boolean(section.hiddenAt))}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -569,8 +665,8 @@ export function ResumeVariantWorkspace({
                   ) : null}
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {section.items.map((item, itemIndex) => (
-                    <div key={item.id} className="rounded-md border p-3">
+                  <BuilderSortableGroup ids={section.items.map((i) => i.id)}>{section.items.map((item, itemIndex) => (
+                    <BuilderSortable key={item.id} disabled={!editable} hidden={Boolean(item.hiddenAt)} data={{ id: item.id, kind: "item", parentId: section.id, materialId: item.careerMaterialItemId, orderedIds: section.items.map((i) => i.id) }}><div className="rounded-md border p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <p className="font-medium">
@@ -642,6 +738,8 @@ export function ResumeVariantWorkspace({
                               >
                                 {t("resumeVariants.moveDown")}
                               </Button>
+                              {visibility("item", item.id, Boolean(item.hiddenAt))}
+                              {item.careerMaterialItemId && <Button size="sm" variant="ghost" onClick={() => void applyBuilder(syncResumeMaterialTitle(item.id))}>{t("resumeBuilder.syncTitle")}</Button>}
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -660,11 +758,12 @@ export function ResumeVariantWorkspace({
                             {t("resumeVariants.noExpressions")}
                           </p>
                         ) : (
-                          item.expressions.map((expression, expressionIndex) => (
-                            <div key={expression.id} className="rounded-md bg-muted/40 p-2">
+                          <BuilderSortableGroup ids={item.expressions.map((e) => e.id)}>{item.expressions.map((expression, expressionIndex) => (
+                            <BuilderSortable key={expression.id} disabled={!editable} hidden={Boolean(expression.hiddenAt)} data={{ id: expression.id, kind: "expression", parentId: item.id, orderedIds: item.expressions.map((e) => e.id) }}><div className="rounded-md bg-muted/40 p-2">
                               {editable ? (
                                 <Textarea
-                                  defaultValue={expression.content}
+                                  value={liveExpressions[expression.id] ?? expression.content}
+                                  onChange={(e) => setLiveExpressions((current) => ({ ...current, [expression.id]: e.target.value }))}
                                   onBlur={(event) => {
                                     const content = event.target.value.trim();
                                     if (!content || content === expression.content) return;
@@ -675,7 +774,7 @@ export function ResumeVariantWorkspace({
                                       }),
                                       t("resumeVariants.saveSuccess"),
                                     ).then((ok) => {
-                                      if (ok) void reloadSelected(version.id);
+                                      if (ok) { setLiveExpressions((current) => { if (current[expression.id]?.trim() !== content) return current; const next = { ...current }; delete next[expression.id]; return next; }); void reloadSelected(version.id); }
                                     });
                                   }}
                                 />
@@ -696,6 +795,7 @@ export function ResumeVariantWorkspace({
                                 )}
                                 {editable ? (
                                   <>
+                                    {visibility("expression", expression.id, Boolean(expression.hiddenAt))}
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -783,8 +883,8 @@ export function ResumeVariantWorkspace({
                                   </>
                                 ) : null}
                               </div>
-                            </div>
-                          ))
+                            </div></BuilderSortable>
+                          ))}</BuilderSortableGroup>
                         )}
                         {editable ? (
                           <div className="flex flex-wrap gap-2">
@@ -821,8 +921,8 @@ export function ResumeVariantWorkspace({
                           </div>
                         ) : null}
                       </div>
-                    </div>
-                  ))}
+                    </div></BuilderSortable>
+                  ))}</BuilderSortableGroup>
 
                   {editable ? (
                     <div className="flex flex-wrap gap-2">
@@ -851,11 +951,19 @@ export function ResumeVariantWorkspace({
                     </div>
                   ) : null}
                 </CardContent>
-              </Card>
-            ))
+              </Card></BuilderSortable>
+            ))}</BuilderSortableGroup>
           )}
-        </>
-      )}
+        </div>
+        <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[85vh] lg:overflow-y-auto"><ResumePagedPreview headerSnapshot={previewHeader} sections={previewSections} pageTarget={parseResumeLayoutConfig(version.layoutConfig).pageTarget} /></div>
+        </div>
+      </div>
+      </ResumeBuilderDnd>
+      <Dialog open={comparison !== null} onOpenChange={(open) => { if (!open) setComparison(null); }}><DialogContent className="!max-w-[95vw] max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{t("resumeBuilder.compare")}</DialogTitle></DialogHeader>
+        {comparison && <><p className="text-xs text-muted-foreground">{t("resumeBuilder.auditHint")}</p>
+        <ResumeVersionDiffView changes={comparison.changes} />
+        <div className="grid gap-3 lg:grid-cols-2"><ResumePreview headerSnapshot={comparison.before.headerSnapshot} sections={comparison.before.sections} /><ResumePreview headerSnapshot={comparison.after.headerSnapshot} sections={comparison.after.sections} /></div></>}
+      </DialogContent></Dialog>
 
       {editable ? (
         <p className="text-xs text-muted-foreground">{t("resumeVariants.freezeHint")}</p>
@@ -891,9 +999,9 @@ export function ResumeVariantWorkspace({
                     onClick={() => {
                       if (!materialSectionId) return;
                       void run(
-                        createResumeSectionItem({
+                        attachResumeMaterial({
                           sectionId: materialSectionId,
-                          careerMaterialItemId: material.id,
+                          materialId: material.id,
                         }),
                         t("resumeVariants.saveSuccess"),
                         "toast",
@@ -996,7 +1104,7 @@ export function ResumeVariantWorkspace({
         alertDescription={
           confirm?.kind === "freeze"
             ? t("resumeVariants.freezeConfirmDescription")
-            : undefined
+            : t("resumeBuilder.deleteWarning")
         }
         actionLabel={
           confirm?.kind === "freeze" ? t("resumeVariants.freeze") : t("common.delete")

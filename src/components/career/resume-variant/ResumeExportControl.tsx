@@ -8,28 +8,33 @@ import { useI18n } from "@/i18n";
 type Artifact = { id: string; fileName: string };
 type Stage = "exportFreezing" | "exportLookingUp" | "exportRendering" | "exportSaving" | "exportDownloading";
 
-export function ResumeExportControl({ versionId, status, archived, onFrozen }: {
+export function ResumeExportControl({ versionId, status, archived, onFrozen, beforeExport, onBusyChange }: {
   versionId: string;
   status: string;
   archived: boolean;
   onFrozen: (versionId: string) => void;
+  beforeExport?: () => Promise<boolean>;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const { t } = useI18n();
   const [desktop, setDesktop] = useState(false);
+  const [format, setFormat] = useState<"PDF" | "DOCX">("PDF");
   const [confirm, setConfirm] = useState(false);
   const [stage, setStage] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
   useEffect(() => { setDesktop(typeof window.vocatryaResume?.printToPDF === "function"); }, []);
 
-  const exportPDF = async () => {
+  const exportPDF = async (selectedFormat: "PDF" | "DOCX" = format) => {
     const bridge = window.vocatryaResume;
-    if (busy.current || !bridge) return;
+    if (busy.current || (selectedFormat === "PDF" && !bridge)) return;
     busy.current = true;
+    onBusyChange?.(true);
     setConfirm(false);
     setError(null);
     let failure = "exportLookupFailed";
     try {
+      if (beforeExport && !(await beforeExport())) return;
       if (status === "DRAFT" && !archived) {
         failure = "exportFreezeFailed";
         setStage("exportFreezing");
@@ -40,14 +45,19 @@ export function ResumeExportControl({ versionId, status, archived, onFrozen }: {
       }
       failure = "exportLookupFailed";
       setStage("exportLookingUp");
-      const reusable = await findReusableResumeExport(versionId);
+      const reusable = selectedFormat === "PDF" ? await findReusableResumeExport(versionId) : { success: true as const, data: null };
       if (!reusable.success) throw new Error(reusable.message);
       let artifact = reusable.data as Artifact | null;
       if (!artifact) {
         if (archived) { failure = "exportArchivedUnavailable"; throw new Error(); }
         failure = "exportRenderFailed";
         setStage("exportRendering");
-        const rendered = await bridge.printToPDF(versionId);
+        if (selectedFormat === "DOCX") {
+          const response = await fetch(`/api/profile/resume-artifacts?versionId=${encodeURIComponent(versionId)}&format=DOCX`, { method: "POST" });
+          if (!response.ok) throw new Error();
+          artifact = await response.json() as Artifact;
+        } else {
+        const rendered = await bridge!.printToPDF(versionId);
         if (!rendered.ok) {
           failure = rendered.code === "timeout" ? "exportRenderTimeout" : "exportRenderFailed";
           throw new Error();
@@ -60,6 +70,7 @@ export function ResumeExportControl({ versionId, status, archived, onFrozen }: {
         });
         if (!response.ok) throw new Error();
         artifact = await response.json() as Artifact;
+        }
       }
       failure = "exportDownloadFailed";
       setStage("exportDownloading");
@@ -81,6 +92,7 @@ export function ResumeExportControl({ versionId, status, archived, onFrozen }: {
       setError(t(`resumeVariants.${failure}`));
     } finally {
       busy.current = false;
+      onBusyChange?.(false);
       setStage(null);
     }
   };
@@ -89,11 +101,16 @@ export function ResumeExportControl({ versionId, status, archived, onFrozen }: {
   return (
     <div className="space-y-1">
       <Button variant="outline" disabled={!desktop || stage !== null || (!archived && !supportedStatus)} onClick={() => {
+        setFormat("PDF");
         if (status === "DRAFT" && !archived) setConfirm(true);
-        else void exportPDF();
+        else void exportPDF("PDF");
       }}>
         {stage ? t(`resumeVariants.${stage}`) : t(archived ? "resumeVariants.downloadExport" : "resumeVariants.exportPDF")}
       </Button>
+      {!archived && <Button variant="outline" disabled={stage !== null || !supportedStatus} onClick={() => {
+        setFormat("DOCX");
+        if (status === "DRAFT") setConfirm(true); else void exportPDF("DOCX");
+      }}>{t("resumeBuilder.exportDocx")}</Button>}
       {!desktop && <p className="text-xs text-muted-foreground">{t("resumeVariants.exportDesktopOnly")}</p>}
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
       <DeleteAlertDialog pageTitle="" open={confirm} onOpenChange={setConfirm}
