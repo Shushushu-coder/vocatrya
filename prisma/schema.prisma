@@ -1661,6 +1661,9 @@ model ResumeImportAttempt {
   /// the Hosted invocation ledger returns receipts, not payloads.
   resultJson String?
 
+  /// First successful confirm selection; NULL on pre-feature rows.
+  confirmedSelectionSha String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

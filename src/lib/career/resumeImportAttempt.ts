@@ -101,6 +101,20 @@ function assertSameImport(
   }
 }
 
+/** Signature committed with the first successful confirm; null on pre-feature rows. */
+export async function readConfirmedImportSelectionSha(
+  db: AttemptDb,
+  userId: string,
+  requestId: string,
+): Promise<string | null> {
+  const row = await db.resumeImportAttempt.findFirst({
+    where: { id: requestId, userId },
+    select: { confirmedSelectionSha: true },
+  });
+  if (!row) throw new Error("IMPORT_ATTEMPT_REQUIRED");
+  return row.confirmedSelectionSha;
+}
+
 function replayedResult(attempt: {
   id: string;
   /** Callers only reach this branch when a result was persisted. */
