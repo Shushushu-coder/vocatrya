@@ -2128,6 +2128,11 @@
       "generic": "出了点问题，请再试一次。"
     }
   },
+  "agentAnswer": {
+    "copy": "复制回答",
+    "copied": "已复制",
+    "copyFailed": "复制失败，请重试。"
+  },
   "errors": {
     "generic": "操作遇到问题，请重试",
     "unauthorized": "未登录或登录已失效",

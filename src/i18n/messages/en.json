@@ -2128,6 +2128,11 @@
       "generic": "Something went wrong. Try again."
     }
   },
+  "agentAnswer": {
+    "copy": "Copy answer",
+    "copied": "Copied",
+    "copyFailed": "Copy failed. Please try again."
+  },
   "errors": {
     "generic": "Something went wrong. Please try again.",
     "unauthorized": "Not authenticated. Please sign in.",
