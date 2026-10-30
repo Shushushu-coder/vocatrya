@@ -2,8 +2,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
@@ -23,6 +21,16 @@ import {
   MaterialNotesField,
   MaterialTextField,
 } from "./MaterialAutosaveField";
+import {
+  focusFirstRegionField,
+  INPUT_PREF_REGION_ATTR,
+  useInputPreferences,
+} from "@/lib/inputPreferences";
+import {
+  StructuredCheckbox,
+  StructuredInput,
+  StructuredTextarea,
+} from "./StructuredField";
 import {
   detailFieldDraft,
   detailFieldWire,
@@ -112,6 +120,7 @@ export function MaterialRecordsSection({
   onChanged,
 }: MaterialRecordsSectionProps) {
   const { t } = useI18n();
+  const inputPrefs = useInputPreferences();
   const [materialType, setMaterialType] = useState<string>(
     creatableTypes[0] ?? "CUSTOM",
   );
@@ -273,7 +282,8 @@ export function MaterialRecordsSection({
           ))
         )}
         <div className="mt-2 flex flex-col gap-1">
-          <Input
+          <StructuredInput
+            required
             placeholder={t("applicationProfile.evidenceContent")}
             value={evidenceForms[item.id]?.content ?? ""}
             onChange={(e) =>
@@ -287,7 +297,7 @@ export function MaterialRecordsSection({
             }
           />
           <div className="flex gap-1">
-            <Input
+            <StructuredInput
               placeholder={t("applicationProfile.evidenceMetric")}
               value={evidenceForms[item.id]?.metric ?? ""}
               onChange={(e) =>
@@ -356,7 +366,7 @@ export function MaterialRecordsSection({
 
     const fieldPrefix = `material-${item.id}`;
     return (
-      <Card key={item.id}>
+      <Card key={item.id} {...{ [INPUT_PREF_REGION_ATTR]: true }}>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-sm">
             <span className="mr-2 font-normal text-muted-foreground">
@@ -365,6 +375,20 @@ export function MaterialRecordsSection({
             <span>{item.title}</span>
           </CardTitle>
           <div className="flex gap-1">
+            {inputPrefs.autoFocus && (
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid={`${fieldPrefix}-start-fill`}
+                onClick={(e) =>
+                  focusFirstRegionField(
+                    e.currentTarget.closest(`[${INPUT_PREF_REGION_ATTR}]`),
+                  )
+                }
+              >
+                {t("inputPrefs.startFill")}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -551,7 +575,7 @@ export function MaterialRecordsSection({
           </CardContent>
         </Card>
       )}
-      <Card>
+      <Card {...{ [INPUT_PREF_REGION_ATTR]: true }}>
         <CardHeader>
           <CardTitle className="text-base">
             {t("applicationProfile.addMaterial")}
@@ -575,7 +599,8 @@ export function MaterialRecordsSection({
               ? t("applicationProfile.materialLanguage")
               : t("applicationProfile.materialTitle")}
           </label>
-          <Input
+          <StructuredInput
+            required
             value={materialForm.title}
             onChange={(e) =>
               setMaterialForm((f) => ({ ...f, title: e.target.value }))
@@ -587,7 +612,7 @@ export function MaterialRecordsSection({
                 <label className="text-sm">
                   {t("applicationProfile.materialInstitution")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.institution}
                   onChange={(e) =>
                     setMaterialForm((f) => ({
@@ -601,7 +626,7 @@ export function MaterialRecordsSection({
                 <label className="text-sm">
                   {t("applicationProfile.materialDegree")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.degree}
                   onChange={(e) =>
                     setMaterialForm((f) => ({ ...f, degree: e.target.value }))
@@ -612,7 +637,7 @@ export function MaterialRecordsSection({
                 <label className="text-sm">
                   {t("applicationProfile.materialFieldOfStudy")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.fieldOfStudy}
                   onChange={(e) =>
                     setMaterialForm((f) => ({
@@ -626,7 +651,7 @@ export function MaterialRecordsSection({
                 <label className="text-sm">
                   {t("applicationProfile.materialGpa")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.gpaValue}
                   onChange={(e) =>
                     setMaterialForm((f) => ({ ...f, gpaValue: e.target.value }))
@@ -637,7 +662,7 @@ export function MaterialRecordsSection({
                 <label className="text-sm">
                   {t("applicationProfile.materialGpaScale")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.gpaScale}
                   onChange={(e) =>
                     setMaterialForm((f) => ({ ...f, gpaScale: e.target.value }))
@@ -648,7 +673,7 @@ export function MaterialRecordsSection({
                 <label className="text-sm">
                   {t("applicationProfile.materialRank")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.rankText}
                   onChange={(e) =>
                     setMaterialForm((f) => ({ ...f, rankText: e.target.value }))
@@ -664,7 +689,7 @@ export function MaterialRecordsSection({
                     ? t("applicationProfile.materialLanguageExam")
                     : t("applicationProfile.materialOrganization")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.organization}
                   onChange={(e) =>
                     setMaterialForm((f) => ({
@@ -680,7 +705,7 @@ export function MaterialRecordsSection({
                     ? t("applicationProfile.materialLanguageScore")
                     : t("applicationProfile.materialRole")}
                 </label>
-                <Input
+                <StructuredInput
                   value={materialForm.role}
                   onChange={(e) =>
                     setMaterialForm((f) => ({ ...f, role: e.target.value }))
@@ -694,7 +719,7 @@ export function MaterialRecordsSection({
               <label className="text-sm">
                 {t("applicationProfile.materialStartDate")}
               </label>
-              <Input
+              <StructuredInput
                 type="date"
                 value={materialForm.startDate}
                 onChange={(e) =>
@@ -706,7 +731,7 @@ export function MaterialRecordsSection({
               <label className="text-sm">
                 {t("applicationProfile.materialEndDate")}
               </label>
-              <Input
+              <StructuredInput
                 type="date"
                 value={materialForm.endDate}
                 onChange={(e) =>
@@ -716,8 +741,7 @@ export function MaterialRecordsSection({
             </div>
             <div className="flex items-end gap-2">
               <label className="text-sm">
-                <input
-                  type="checkbox"
+                <StructuredCheckbox
                   checked={materialForm.isCurrent}
                   onChange={(e) =>
                     setMaterialForm((f) => ({
@@ -733,7 +757,7 @@ export function MaterialRecordsSection({
           <label className="text-sm font-medium">
             {t("applicationProfile.materialNotes")}
           </label>
-          <Textarea
+          <StructuredTextarea
             value={materialForm.notes}
             onChange={(e) =>
               setMaterialForm((f) => ({ ...f, notes: e.target.value }))

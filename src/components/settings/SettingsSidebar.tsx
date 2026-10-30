@@ -11,6 +11,7 @@ import {
   Palette,
   Settings2,
   SlidersHorizontal,
+  TextCursorInput,
   Volume2,
 } from "lucide-react";
 import { Button } from "../ui/button";
@@ -26,6 +27,7 @@ export type SettingsSection =
   | "ai-assignments"
   | "shortcuts"
   | "audio"
+  | "input"
   | "dictionary"
   | "resume-variants"
   | "data-privacy"
@@ -74,6 +76,7 @@ export const SETTINGS_SECTION_GROUPS: readonly SettingsSectionGroup[] = [
     sections: [
       { id: "shortcuts", labelKey: "settings.sections.shortcuts", fallbackLabel: "Shortcuts", icon: Keyboard },
       { id: "audio", labelKey: "settings.sections.audio", fallbackLabel: "Audio", icon: Volume2 },
+      { id: "input", labelKey: "inputPrefs.navLabel", fallbackLabel: "Input Preferences", icon: TextCursorInput },
     ],
   },
   {

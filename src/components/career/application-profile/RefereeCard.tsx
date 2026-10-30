@@ -2,9 +2,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n";
 import { toastError, toastSuccess } from "@/lib/toast";
+import {
+  focusFirstRegionField,
+  INPUT_PREF_REGION_ATTR,
+  useInputPreferences,
+} from "@/lib/inputPreferences";
+import { assertEmail, assertPhone } from "@/lib/career/candidateProfileValidation";
+import { StructuredInput } from "./StructuredField";
 import {
   archiveCandidateReferee,
   copyCandidateRefereeField,
@@ -69,6 +75,8 @@ type RefereeFieldKey = (typeof REFEREE_FIELD_KEYS)[number];
 // each field copies through its own explicit copy action (D15/D16, §9).
 export function RefereeCard() {
   const { t } = useI18n();
+  const inputPrefs = useInputPreferences();
+  const formRegionRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<RefereeRow[]>([]);
   const [revealedId, setRevealedId] = useState<string | null>(null);
@@ -105,6 +113,16 @@ export function RefereeCard() {
   useEffect(() => {
     if (open) void load();
   }, [open, load]);
+
+  const formOpen = creating || editingId !== null;
+
+  // Auto-focus preference: opening the create/edit form is the explicit
+  // continuous edit entry, so the first editable field takes focus (AC-09).
+  useEffect(() => {
+    if (formOpen && inputPrefs.autoFocus) {
+      focusFirstRegionField(formRegionRef.current);
+    }
+  }, [formOpen, inputPrefs.autoFocus]);
 
   async function handleReveal(id: string) {
     const seq = ++readSeq.current;
@@ -221,8 +239,6 @@ export function RefereeCard() {
     return (row as unknown as Record<string, string | null>)[key] ?? null;
   }
 
-  const formOpen = creating || editingId !== null;
-
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -300,15 +316,29 @@ export function RefereeCard() {
             </div>
           ))}
           {formOpen ? (
-            <div className="flex flex-col gap-2 rounded-md border p-3">
+            <div
+              className="flex flex-col gap-2 rounded-md border p-3"
+              ref={formRegionRef}
+              {...{ [INPUT_PREF_REGION_ATTR]: true }}
+            >
               {REFEREE_FIELD_KEYS.map((key) => (
                 <div key={key} className="flex flex-col gap-1">
                   <label className="text-sm font-medium">
                     {t(`applicationProfile.referee${key.charAt(0).toUpperCase()}${key.slice(1)}`)}
                     {key === "name" ? " *" : ""}
                   </label>
-                  <Input
+                  <StructuredInput
                     value={form[key]}
+                    required={key === "name"}
+                    validate={(value) => {
+                      try {
+                        if (key === "email") assertEmail(value);
+                        if (key === "phone") assertPhone(value);
+                        return true;
+                      } catch {
+                        return false;
+                      }
+                    }}
                     disabled={saving}
                     data-testid={`referee-input-${key}`}
                     onChange={(e) =>

@@ -14,6 +14,7 @@ import McpAccessSettings from "@/components/settings/McpAccessSettings";
 import NotificationsSettings from "@/components/settings/NotificationsSettings";
 import ShortcutsSettings from "@/components/settings/ShortcutsSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
+import InputPreferencesSettings from "@/components/settings/InputPreferencesSettings";
 import AboutSettings from "@/components/settings/AboutSettings";
 import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 import { ResumeVariantList } from "@/components/career/resume-variant/ResumeVariantList";
@@ -204,6 +205,12 @@ function Settings() {
             // AudioSettings renders its own page-level title.
             <SectionShell id="audio">
               <AudioSettings />
+            </SectionShell>
+          )}
+          {activeSection === "input" && (
+            // InputPreferencesSettings renders its own page-level title.
+            <SectionShell id="input">
+              <InputPreferencesSettings />
             </SectionShell>
           )}
           {activeSection === "dictionary" && (

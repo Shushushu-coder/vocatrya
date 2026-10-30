@@ -136,22 +136,22 @@ describe("ApplicationProfileWorkspace per-field autosave", () => {
   it("keeps the draft on failure and retries on demand", async () => {
     mockedUpdate.mockImplementationOnce(async () => ({
       success: false,
-      message: "INVALID_EMAIL",
+      message: "WRITE_FAILED",
     }));
     await renderWorkspace();
-    fireEvent.change(fieldInput("email"), { target: { value: "bad-value" } });
+    fireEvent.change(fieldInput("email"), { target: { value: "draft@example.com" } });
     fireEvent.blur(fieldInput("email"));
 
     await waitFor(() =>
       expect(fieldStatus("email").textContent).toContain("Save failed"),
     );
     // The rejected draft stays in the input instead of reverting.
-    expect(fieldInput("email")).toHaveValue("bad-value");
+    expect(fieldInput("email")).toHaveValue("draft@example.com");
     expect(profileStore.current.email).toBe("lin@example.com");
 
     fireEvent.click(screen.getByTestId("profile-field-email-retry"));
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(2));
-    expect(mockedUpdate).toHaveBeenLastCalledWith({ email: "bad-value" });
+    expect(mockedUpdate).toHaveBeenLastCalledWith({ email: "draft@example.com" });
     await waitFor(() =>
       expect(fieldStatus("email").textContent).toContain("Saved"),
     );
