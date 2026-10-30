@@ -73,15 +73,15 @@
       "category": "Settings / AI",
       "priority": "P1",
       "scope": "IN_SCOPE",
-      "implementationStatus": "PARTIAL",
-      "description": "P1 三条独立 AI 路径之一：用户自带 API Key（BYOK）。已有部分连接/模型分配与隔离基础，但真实 API Key 到业务调用的端到端路径尚未测试通过，不得标记为可用或已验收。",
+      "implementationStatus": "IMPLEMENTED",
+      "description": "P1 三条独立 AI 路径之一：用户自带 API Key（BYOK）。连接、模型目录/分配、凭据隔离及真实业务调用已接通，并已使用获授权 DeepSeek 测试 Key 完成隔离 Windows Electron 验收；账号登录与托管服务仍独立判断、独立验收。",
       "steps": [
         "核查现有 BYOK 连接与模型目录/分配逻辑、密钥保存和权限边界；对未配置、错误密钥、不可用模型展示真实状态。",
         "在经授权的真实 API Key 和支持的服务商上完成实际业务调用，包括所需的结构化输出/流式能力、错误恢复与模型分配生效；不得用模拟请求或连接测试代替。",
         "核验 BYOK 不泄露密钥、不与账号登录或托管服务串用凭据/额度，并在实际桌面用户界面验证；独立记录结果与 passes。"
       ],
-      "passes": false,
-      "implementationNotes": "原 SET-AI-SERVICES 已记录账号登录/BYOK 隔离和诚实可用状态，但没有覆盖 BYOK 真实业务调用与 Windows Electron 完整验收。PARTIAL 表示已有基础设施而非已证明 BYOK 可用。 2026-10-29 Main 集成 68212510：凭据故障提示、测试凭据代理显式隔离及真实截止超时分类修复，18项执行回归覆盖 one-shot/streaming 的真实信号截止与取消；真实 API Key 调用及 Windows Electron 验收未执行，PARTIAL 和 passes:false 保持。 2026-10-29 Main 集成 2e8dca6c：自愈保留绑定当前 Key 的 REAUTH_REQUIRED，陈旧绑定仍可重绑；面试错误明确引导重新录入不可读凭据。真实 Key 业务调用与 Windows Electron 验收未执行，PARTIAL/passes:false 保持。 2026-10-30 Main 集成 43d9795b（merge a8009d64）：云端验证器和模型列表查询增加有界超时、输入规整、异常脱敏及 Gemini Key 编码；OpenRouter 改用官方认证 GET /api/v1/key。独立审查通过，直接相关 3 文件/30 项、ESLint、类型检查通过；真实 Key、Windows Electron 和完整业务调用仍 NOT_RUN，PARTIAL/passes:false 保持。"
+      "passes": true,
+      "implementationNotes": "原 SET-AI-SERVICES 已记录账号登录/BYOK 隔离和诚实可用状态，但没有覆盖 BYOK 真实业务调用与 Windows Electron 完整验收。PARTIAL 表示已有基础设施而非已证明 BYOK 可用。 2026-10-29 Main 集成 68212510：凭据故障提示、测试凭据代理显式隔离及真实截止超时分类修复，18项执行回归覆盖 one-shot/streaming 的真实信号截止与取消；真实 API Key 调用及 Windows Electron 验收未执行，PARTIAL 和 passes:false 保持。 2026-10-29 Main 集成 2e8dca6c：自愈保留绑定当前 Key 的 REAUTH_REQUIRED，陈旧绑定仍可重绑；面试错误明确引导重新录入不可读凭据。真实 Key 业务调用与 Windows Electron 验收未执行，PARTIAL/passes:false 保持。 2026-10-30 Main 集成 43d9795b（merge a8009d64）：云端验证器和模型列表查询增加有界超时、输入规整、异常脱敏及 Gemini Key 编码；OpenRouter 改用官方认证 GET /api/v1/key。独立审查通过，直接相关 3 文件/30 项、ESLint、类型检查通过；真实 Key、Windows Electron 和完整业务调用仍 NOT_RUN，PARTIAL/passes:false 保持。 2026-10-30 验收闭环：在 Main 673e3460 的独立 Worktree 中复用已集成实现，零产品代码修改。隔离服务环境使用获授权 DeepSeek 测试 Key 完成 29/29，覆盖真实模型目录、deepseek-flash 结构化与增量流式业务调用、分配、不配置/错误 Key/不可用模型、截止与取消、断连恢复、严格凭据绑定及泄露扫描。随后从同一源码执行生产 Next 构建和桌面装配，在 Windows Electron fresh-native/AB_ENABLED/full 中完成 17/17 阶段：应用凭据入口写入 safeStorage/DPAPI os:v1 信封，真实 Job Match 与 Chat、模型溯源、无静默回退、失败恢复、两次 quit IPC 退出重开及持久化均通过。明文临时 Key 已移除，Worktree 干净且无残留进程。证据位于 .worktrees/p1-byok-e2e-closure/.tmp/p1-byok-e2e-closure/；实际有 25 张截图。真实外部调用仅覆盖 DeepSeek/deepseek-flash，OpenRouter、Gemini、OpenAI 本轮仅做错误 Key/保留字符验证与既有单测，不外推为这些服务商的真实业务 E2E；未强制制造真实额度错误，未执行安装包、发布或真实用户数据迁移。据此 implementationStatus 更新为 IMPLEMENTED，passes 更新为 true。"
     },
     {
       "id": "AI-MANAGED",

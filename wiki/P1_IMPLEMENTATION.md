@@ -1,6 +1,6 @@
 # Vocatrya P1 增量实施计划
 
-> 更新日期：2026-10-30。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）与 `match_job` 合同提案（`90a1a6af`，merge `264b463d`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。功能验收与代码集成分别记录。
+> 更新日期：2026-10-30。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）与 `match_job` 合同提案（`90a1a6af`，merge `264b463d`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。BYOK 已在 Main `673e3460` 的相同集成代码上完成 DeepSeek 真实服务与 Windows Electron fresh-native/full 验收，零产品代码修改。功能验收与代码集成分别记录。
 > 状态口径：`IMPLEMENTED` 表示相应业务主路径已有实现，`PARTIAL` 表示部分实现，`MISSING` 表示目标产品能力尚未完整实现。上述状态不代表用户验收完成；`passes: true` 仅在对应真实业务与必要数据/桌面 Gate 通过后设置。
 
 ## A. 范围、迁移关系与状态
@@ -16,14 +16,14 @@
 - 原 `RM-MATCH` 不再单列 P1 Feature。其候选 Agent `match_job` 记录到 `AGENT-CAPABILITIES`；**现有 canonical FAST_SCREENING/MatchAnalysisService 仍是独立可复用业务能力**，代码不因台账迁移被删除或改写。
 - `AGENT-CAPABILITIES` 其余能力与扩展决策保持现状，本次只调整匹配工具的台账归属。
 
-当前 **7 项**，其中 `IMPLEMENTED` 4 项、`PARTIAL` 3 项、`MISSING` 0 项；**2 项 `passes: true`、5 项 `passes: false`**：
+当前 **7 项**，其中 `IMPLEMENTED` 5 项、`PARTIAL` 2 项、`MISSING` 0 项；**3 项 `passes: true`、4 项 `passes: false`**：
 
 | Feature | P1 范围 | 实现状态 | 当前结论 |
 | --- | --- | --- | --- |
 | **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 38/38，通过 |
 | **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 55/55，通过 |
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
-| **AI-BYOK** | IN_SCOPE | PARTIAL | 验证与模型查询超时/错误脱敏已收口；真实 Key 业务调用未验收 |
+| **AI-BYOK** | IN_SCOPE | IMPLEMENTED | DeepSeek 真实 Key 服务链路 29/29、Windows Electron fresh-native/full 17/17 通过 |
 | **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
 | **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | DOCX 修复已集成；原窗口 Electron fresh-native 49/50 通过，真实 AI 导入预览/排除仍阻塞 |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | `match_job` canonical 合同提案已集成；D1–D6 待 Owner 裁定，未实现 |
@@ -92,10 +92,9 @@
 
 - 2026-10-29 集成 `68212510`：补充 BYOK 凭据故障操作指引、隔离测试代理环境，修复真实截止信号被误判成普通取消的问题；18 项 BYOK 执行测试覆盖 one-shot/streaming 截止与取消。真实 API Key 业务调用未执行，保持 PARTIAL 与 `passes: false`。
 - 2026-10-30 Main 集成 `43d9795b`（merge `a8009d64`）：云端验证器及模型列表查询增加有界超时，输入 trim/长度与 malformed body 校验、未知异常脱敏、Gemini Key URL 编码；OpenRouter 改用官方认证的 `GET /api/v1/key`，不再以公开模型目录误判无效 Key。合并前独立审查通过；直接相关 3 文件/30 项、改动 ESLint 与完整类型检查通过。扩展 24 文件集合中 23 文件/308 项通过，唯一失败为既有 `settingsPage.spec.tsx` 未纳入已集成的“归档数据”设置入口，与 BYOK Diff 无关。真实 Key Gate、Windows Electron 和完整业务调用仍 NOT_RUN，保持 PARTIAL / `passes:false`。
+- 2026-10-30 验收闭环：在 Main `673e3460` 的独立 Worktree 中复用已集成实现，零产品代码修改。隔离服务环境使用获授权 DeepSeek 测试 Key 完成 29/29，覆盖真实目录、`deepseek-flash` 结构化与增量流式业务调用、模型分配、诚实失败、截止/取消、断连恢复、严格凭据绑定及泄露扫描。随后从同一源码执行生产 Next 构建与桌面装配，在 Windows Electron fresh-native/AB_ENABLED/full 中完成 17/17 阶段，覆盖 safeStorage/DPAPI `os:v1` 信封、真实 Job Match/Chat、模型溯源、无静默回退、失败恢复、两次 quit IPC 退出重开及持久化。明文临时 Key 已移除，Worktree 干净、无残留进程；证据位于 `.worktrees/p1-byok-e2e-closure/.tmp/p1-byok-e2e-closure/`，实际 25 张截图。真实外部调用只覆盖 DeepSeek；OpenRouter、Gemini、OpenAI 本轮仅做错误 Key/保留字符验证及既有单测，不外推为这些服务商真实业务 E2E。未执行安装包、发布或真实用户数据迁移。
 
-- **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 配置、模型分配及账号/BYOK 隔离的基础已有记录，但**尚未证实真实 API Key 能成功执行实际业务调用**。
-- 核查密钥存储/访问边界、连接和模型选择的真实状态，验证未配置、无效 Key、模型不可用、额度/网络错误等情况不虚报可用。
-- 使用明确授权的真实服务商 API Key，验证实际已接入的流式/结构化业务能力与模型分配在桌面端生效；记录失败恢复、用户反馈及密钥不泄露的证据。Mock、连接探测或账号登录成功不能替代 BYOK 验收。
+- **P1 / IN_SCOPE / IMPLEMENTED / `passes: true`。** 已证实获授权 DeepSeek API Key 能在隔离服务和 Windows Electron 中执行真实结构化与流式业务调用，模型分配、凭据保护、失败恢复及账号/托管路径隔离符合合同。该结论限于本轮真实覆盖的 DeepSeek/`deepseek-flash`；其他服务商仍按各自实际证据判断。
 
 ### AI-MANAGED：Vocatrya 托管 AI
 
