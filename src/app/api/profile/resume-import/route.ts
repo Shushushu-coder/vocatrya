@@ -12,6 +12,7 @@ import { CANONICAL_IMPORT_PROMPT } from "@/lib/ai/resume-import/canonicalPrompt"
 import { safeImportName, validateResumeImport } from "@/lib/career/resumeImportContract";
 import { canonicalImportJsonSchema } from "@/lib/ai/resume-import/canonicalSchema";
 import { inspectResumeImport, persistResumeImport } from "@/lib/career/canonicalResumeImport";
+import { importPreviewRefs } from "@/lib/career/resumeImportSelection";
 import { issueImportApproval, readImportApproval } from "@/lib/career/resumeImportApproval";
 import {
   executeDurableResumeImport,
@@ -43,15 +44,24 @@ export async function POST(req: NextRequest) {
 
   if (req.headers.get("content-type")?.includes("application/json")) {
     try {
-      const { approval } = await req.json();
+      const { approval, excludedItemRefs, excludeProfileImport } = await req.json();
       const input = readImportApproval(approval, userId);
-      const variant = await persistResumeImport(prisma, userId, input);
+      const variant = await persistResumeImport(prisma, userId, {
+        ...input,
+        selection: { excludedItemRefs, excludeProfileImport },
+      });
       await markResumeImportConfirmed(prisma, userId, input.requestId);
       return NextResponse.json({ variantId: variant.id });
     } catch (error) {
       if (error instanceof AIBusinessError) {
         return fail(error.code, structuredErrorStatus(error.code));
       }
+      // Selection errors are caller-correctable 4xx, not generic save conflicts.
+      const code = error instanceof Error ? error.message : "";
+      if (code === "IMPORT_EXCLUSION_INVALID" || code === "IMPORT_EXCLUSION_EMPTY") {
+        return fail(code, 422);
+      }
+      if (code === "IMPORT_CONFIRMATION_IMMUTABLE") return fail(code, 409);
       return fail("SAVE_FAILED", 409);
     }
   }
@@ -117,7 +127,7 @@ export async function POST(req: NextRequest) {
     const approval = issueImportApproval({ userId, name, rawText, parsed,
       resolvedConnectionId: result.resolvedConnectionId, resolvedModel: result.resolvedModel,
       managedAiProvenance: result.managedAiProvenance }, result.attemptId);
-    return NextResponse.json({ parsed, rawText, name, summary, approval });
+    return NextResponse.json({ parsed, rawText, name, summary, approval, previewRefs: importPreviewRefs(parsed) });
   } catch (error) {
     if (error instanceof AIBusinessError) {
       return fail(error.code, structuredErrorStatus(error.code));

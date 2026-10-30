@@ -101,6 +101,53 @@ function assertSameImport(
   }
 }
 
+/**
+ * I6 confirmed-selection bookkeeping. The contract reserves a dedicated
+ * `confirmedSelectionSha` column (§8.1, owned by the schema window); until
+ * it lands, the signature rides inside `resultJson` as an envelope written
+ * atomically with the first successful confirm. The cached payload is kept
+ * verbatim under `result`, so post-confirm preview retries still replay the
+ * exact model output the signature was issued for.
+ */
+const CONFIRMED_SELECTION_KEY = "confirmedSelectionSha";
+
+export function decodeResumeImportResultJson(resultJson: string | null): {
+  value: unknown;
+  confirmedSelectionSha: string | null;
+} {
+  const raw: unknown = JSON.parse(resultJson ?? "null");
+  if (raw && typeof raw === "object" && !Array.isArray(raw) &&
+      CONFIRMED_SELECTION_KEY in (raw as Record<string, unknown>)) {
+    const envelope = raw as Record<string, unknown>;
+    const sha = envelope[CONFIRMED_SELECTION_KEY];
+    return {
+      value: envelope.result,
+      confirmedSelectionSha: typeof sha === "string" ? sha : null,
+    };
+  }
+  return { value: raw, confirmedSelectionSha: null };
+}
+
+export function encodeResumeImportResultJson(
+  value: unknown,
+  confirmedSelectionSha: string,
+): string {
+  return JSON.stringify({ result: value, confirmedSelectionSha });
+}
+
+/** Signature committed by the first successful confirm; null on pre-feature rows. */
+export async function readConfirmedImportSelectionSha(
+  db: AttemptDb,
+  userId: string,
+  requestId: string,
+): Promise<string | null> {
+  const row = await db.resumeImportAttempt.findFirst({
+    where: { id: requestId, userId },
+    select: { resultJson: true },
+  });
+  return row ? decodeResumeImportResultJson(row.resultJson).confirmedSelectionSha : null;
+}
+
 function replayedResult(attempt: {
   id: string;
   /** Callers only reach this branch when a result was persisted. */
@@ -113,7 +160,7 @@ function replayedResult(attempt: {
     kind: "ok",
     attemptId: attempt.id,
     replayed: true,
-    value: JSON.parse(attempt.resultJson ?? "null"),
+    value: decodeResumeImportResultJson(attempt.resultJson).value,
     resolvedConnectionId: attempt.resolvedConnectionId ?? "",
     resolvedModel: attempt.resolvedModel ?? "",
     managedAiProvenance: attempt.managedAiProvenance,

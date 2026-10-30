@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { managedLockFromRow } from "@/lib/ai/managed-provenance";
 import { assertResumeV1Writable } from "./capabilities";
 import { hashEvidenceContent } from "./resumeProvenanceService";
@@ -6,6 +7,19 @@ import { buildResumeHeaderSnapshot } from "./resumeHeaderSnapshot";
 import { resolveCompany } from "@/lib/jobs/resolve";
 import { ResumeVariantService } from "./resumeVariantService";
 import { importDate, importProfileFields, validateResumeImport, type ParsedResumeImport, type ResumeImportItem } from "./resumeImportContract";
+import {
+  canonicalImportSelection,
+  isDefaultImportSelection,
+  resolveImportSelection,
+  selectImportSubset,
+  type ImportSelectionPayload,
+  type ResolvedImportSelection,
+} from "./resumeImportSelection";
+import {
+  decodeResumeImportResultJson,
+  encodeResumeImportResultJson,
+  readConfirmedImportSelectionSha,
+} from "./resumeImportAttempt";
 
 type ImportDb = PrismaClient | Prisma.TransactionClient;
 const detailKeys = {
@@ -70,14 +84,26 @@ async function createMaterial(tx: Prisma.TransactionClient, userId: string, item
   } });
 }
 
+/** sha256 over the canonical selection — the I6 replay signature. */
+const confirmedSelectionSha = (selection: ResolvedImportSelection) =>
+  createHash("sha256").update(canonicalImportSelection(selection)).digest("hex");
+
 export async function persistResumeImport(db: PrismaClient, userId: string, input: {
   requestId: string; name: string; rawText: string; parsed: ParsedResumeImport;
   resolvedConnectionId: string; resolvedModel: string;
   /** Signed Managed provenance from preview execution — persisted verbatim. */
   managedAiProvenance?: string | null;
+  /** Raw confirm selection payload — validated against the signed parse. */
+  selection?: ImportSelectionPayload;
 }, env?: NodeJS.ProcessEnv) {
   await assertResumeV1Writable(db, env);
+  // I5 step 1: the COMPLETE signed result must validate verbatim — an
+  // exclusion can never launder a malformed item out of the check.
   const parsed = validateResumeImport(input.parsed, input.rawText);
+  // I5 step 2: only then validate the selection and derive the subset.
+  const selection = resolveImportSelection(parsed, input.selection);
+  const kept = selectImportSubset(parsed, selection);
+  const selectionSha = confirmedSelectionSha(selection);
   if (input.managedAiProvenance) {
     // Confirm must never persist a binding whose provenance contradicts
     // the locked pair — decode order is identical to every other lock.
@@ -88,21 +114,35 @@ export async function persistResumeImport(db: PrismaClient, userId: string, inpu
     });
   }
   const replay = () => db.resumeVariant.findFirst({ where: { id: input.requestId, userId } });
+  // I6: an existing variant is the committed selection. Same signature (or
+  // the legacy default-only case) replays; a different one refuses rather
+  // than quietly swapping the confirmed result.
+  const assertReplayable = async () => {
+    const stored = await readConfirmedImportSelectionSha(db, userId, input.requestId);
+    if (stored === selectionSha || (stored === null && isDefaultImportSelection(selection))) return;
+    throw new Error("IMPORT_CONFIRMATION_IMMUTABLE");
+  };
   const previous = await replay();
-  if (previous) return previous;
+  if (previous) {
+    await assertReplayable();
+    return previous;
+  }
   try {
     return await new ResumeVariantService(db, userId, env).createImportedDraft({
       id: input.requestId, name: input.name, resolvedConnectionId: input.resolvedConnectionId, resolvedModel: input.resolvedModel,
       managedAiProvenance: input.managedAiProvenance ?? null,
     }, async (tx, versionId) => {
       const existingProfile = await tx.candidateProfile.findUnique({ where: { userId } });
-      const fill: Record<string, string> = {};
-      for (const field of importProfileFields) {
-        if (!existingProfile?.[field] && parsed.profile[field]) fill[field] = parsed.profile[field];
+      let profile = existingProfile;
+      if (!selection.excludeProfileImport) {
+        const fill: Record<string, string> = {};
+        for (const field of importProfileFields) {
+          if (!existingProfile?.[field] && parsed.profile[field]) fill[field] = parsed.profile[field];
+        }
+        profile = await tx.candidateProfile.upsert({ where: { userId },
+          create: { userId, ...fill }, update: fill });
       }
-      const profile = await tx.candidateProfile.upsert({ where: { userId },
-        create: { userId, ...fill }, update: fill });
-      for (const [sectionOrder, section] of parsed.sections.entries()) {
+      for (const [sectionOrder, section] of kept.sections.entries()) {
         const createdSection = await tx.resumeVariantSection.create({ data: {
           resumeVariantVersionId: versionId, title: section.title, sortOrder: sectionOrder,
           systemKind: "CUSTOM",
@@ -139,12 +179,36 @@ export async function persistResumeImport(db: PrismaClient, userId: string, inpu
           }
         }
       }
+      // Record the confirmed selection atomically with the version commit,
+      // so a racing confirm that loses the primary key reads the signature
+      // the winner actually persisted. The cached model payload is preserved
+      // verbatim inside the envelope for post-confirm preview retries.
+      const attempt = await tx.resumeImportAttempt.findUnique({
+        where: { id: input.requestId },
+        select: { userId: true, resultJson: true },
+      });
+      // Fail closed: persisting a version without its durable attempt row
+      // (or over a foreign one) would leave an un-replayable variant whose
+      // selection was never recorded — the transaction rolls back instead.
+      if (!attempt || attempt.userId !== userId) {
+        throw new Error("IMPORT_ATTEMPT_REQUIRED");
+      }
+      const stored = decodeResumeImportResultJson(attempt.resultJson);
+      if (stored.confirmedSelectionSha !== selectionSha) {
+        await tx.resumeImportAttempt.update({
+          where: { id: input.requestId },
+          data: { resultJson: encodeResumeImportResultJson(stored.value, selectionSha) },
+        });
+      }
       return buildResumeHeaderSnapshot(profile);
     });
   } catch (error) {
     // A competing confirm can win the primary-key race. No staging table needed.
     const winner = await replay();
-    if (winner) return winner;
+    if (winner) {
+      await assertReplayable();
+      return winner;
+    }
     throw error;
   }
 }

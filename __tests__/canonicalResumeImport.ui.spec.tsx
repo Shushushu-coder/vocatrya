@@ -82,3 +82,35 @@ it("save failure keeps the review available for an idempotent retry", async () =
   expect(screen.getByTestId("canonical-import-review")).toBeInTheDocument();
   expect(screen.getByText("canonicalImport.confirm")).toBeEnabled();
 });
+it("keeps all items checked by default and sends the unchecked refs with confirm", async () => {
+  mocks.fetch.mockResolvedValueOnce({ ok: true, json: async () => preview })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ variantId: "v" }) });
+  render(<CanonicalResumeImport />); choose(); await screen.findByTestId("canonical-import-review");
+  const boxes = screen.getAllByRole("checkbox");
+  // Profile exclusion first, then one checkbox per parsed item — all kept.
+  expect(boxes).toHaveLength(5);
+  for (const box of boxes.slice(1)) expect(box).toBeChecked();
+  fireEvent.click(boxes[1]);
+  fireEvent.click(boxes[3]);
+  fireEvent.click(screen.getByText("canonicalImport.confirm"));
+  await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+  const body = JSON.parse(String(mocks.fetch.mock.calls[1][1].body));
+  expect(body.excludedItemRefs).toEqual(["s0.it0", "s2.it0"]);
+  expect(body.excludeProfileImport).toBe(false);
+});
+it("excludes the profile backfill via its own flag and blocks an all-excluded confirm", async () => {
+  mocks.fetch.mockResolvedValueOnce({ ok: true, json: async () => preview });
+  render(<CanonicalResumeImport />); choose(); await screen.findByTestId("canonical-import-review");
+  const boxes = screen.getAllByRole("checkbox");
+  fireEvent.click(boxes[0]);
+  for (const box of boxes.slice(1)) fireEvent.click(box);
+  expect(screen.getByText("canonicalImport.confirm")).toBeDisabled();
+  // Un-excluding one item re-enables confirm and ships the profile flag.
+  mocks.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ variantId: "v" }) });
+  fireEvent.click(boxes[2]);
+  fireEvent.click(screen.getByText("canonicalImport.confirm"));
+  await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+  const body = JSON.parse(String(mocks.fetch.mock.calls[1][1].body));
+  expect(body.excludedItemRefs).toEqual(["s0.it0", "s2.it0", "s3.it0"]);
+  expect(body.excludeProfileImport).toBe(true);
+});
