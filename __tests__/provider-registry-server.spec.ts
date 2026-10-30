@@ -21,8 +21,11 @@ describe("PROVIDER_VERIFIERS – openrouter", () => {
 
     expect(result).toEqual({ success: true });
     expect(global.fetch).toHaveBeenCalledWith(
-      "https://openrouter.ai/api/v1/models",
-      { headers: { Authorization: "Bearer sk-or-valid" } },
+      "https://openrouter.ai/api/v1/key",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer sk-or-valid" },
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -32,6 +35,12 @@ describe("PROVIDER_VERIFIERS – openrouter", () => {
     const result = await PROVIDER_VERIFIERS.openrouter("sk-or-bad-key");
 
     expect(result).toEqual({ success: false, error: "Invalid API key" });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://openrouter.ai/api/v1/key",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer sk-or-bad-key" },
+      }),
+    );
   });
 
   it("returns status-based error message on 500", async () => {
@@ -67,6 +76,30 @@ describe("PROVIDER_VERIFIERS – openrouter", () => {
         headers: { Authorization: "Bearer sk-or-my-secret-key" },
       }),
     );
+  });
+});
+
+describe("PROVIDER_VERIFIERS – fetch bound", () => {
+  it.each(["openai", "deepseek", "openrouter", "gemini"] as const)(
+    "%s passes an AbortSignal to fetch",
+    async (provider) => {
+      global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+      await PROVIDER_VERIFIERS[provider]("sk-test-key");
+
+      const init = (global.fetch as any).mock.calls[0][1];
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    },
+  );
+
+  it("gemini URL-encodes the key so a reserved character cannot corrupt the query", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    await PROVIDER_VERIFIERS.gemini("key&with=reserved#chars");
+
+    const url = (global.fetch as any).mock.calls[0][0];
+    expect(url).toContain(`key=${encodeURIComponent("key&with=reserved#chars")}`);
+    expect(url).not.toContain("key&with=reserved#chars");
   });
 });
 

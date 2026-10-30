@@ -55,7 +55,10 @@ describe("GET /api/ai/openrouter/models", () => {
     expect(data).toEqual(mockModels);
     expect(global.fetch).toHaveBeenCalledWith(
       "https://openrouter.ai/api/v1/models",
-      { headers: { Authorization: "Bearer sk-or-valid" } },
+      expect.objectContaining({
+        headers: { Authorization: "Bearer sk-or-valid" },
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 

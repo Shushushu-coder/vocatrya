@@ -26,6 +26,7 @@ export const PROVIDER_VERIFIERS: Record<
   openai: async (key) => {
     const res = await fetch("https://api.openai.com/v1/models", {
       headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(APP_CONSTANTS.AI_PROVIDER_FETCH_TIMEOUT_MS),
     });
     if (!res.ok)
       return {
@@ -39,8 +40,11 @@ export const PROVIDER_VERIFIERS: Record<
   },
 
   openrouter: async (key) => {
-    const res = await fetch("https://openrouter.ai/api/v1/models", {
+    // The public model catalog returns 200 without authentication. Validate
+    // against the authenticated current-key endpoint instead.
+    const res = await fetch("https://openrouter.ai/api/v1/key", {
       headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(APP_CONSTANTS.AI_PROVIDER_FETCH_TIMEOUT_MS),
     });
     if (!res.ok)
       return {
@@ -56,6 +60,7 @@ export const PROVIDER_VERIFIERS: Record<
   deepseek: async (key) => {
     const res = await fetch("https://api.deepseek.com/models", {
       headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(APP_CONSTANTS.AI_PROVIDER_FETCH_TIMEOUT_MS),
     });
     if (!res.ok)
       return {
@@ -104,8 +109,12 @@ export const PROVIDER_VERIFIERS: Record<
   },
 
   gemini: async (key) => {
+    // encodeURIComponent keeps a reserved character (&, #, %) from
+    // silently corrupting the query or making the URL unparseable — an
+    // unparseable-URL TypeError would echo the key-bearing URL back.
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
+      { signal: AbortSignal.timeout(APP_CONSTANTS.AI_PROVIDER_FETCH_TIMEOUT_MS) },
     );
     if (!res.ok)
       return {

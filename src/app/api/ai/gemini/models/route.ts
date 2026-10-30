@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { resolveApiKey } from "@/lib/api-key-resolver";
+import { APP_CONSTANTS } from "@/lib/constants";
 import { log } from "@/lib/telemetry";
 
 export async function GET() {
@@ -18,7 +19,10 @@ export async function GET() {
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+      {
+        signal: AbortSignal.timeout(APP_CONSTANTS.AI_PROVIDER_FETCH_TIMEOUT_MS),
+      },
     );
 
     if (!response.ok) {

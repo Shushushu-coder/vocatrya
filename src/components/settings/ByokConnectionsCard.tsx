@@ -125,14 +125,15 @@ function ByokConnectionsCard() {
   };
 
   const handleVerifyAndSave = async (provider: ApiKeyProvider) => {
-    if (!inputValue.trim()) return;
+    const key = inputValue.trim();
+    if (!key) return;
 
     setVerifying(true);
     try {
       const verifyRes = await fetch("/api/settings/api-keys/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, key: inputValue }),
+        body: JSON.stringify({ provider, key }),
       });
       const verifyData = await verifyRes.json();
 
@@ -144,7 +145,7 @@ function ByokConnectionsCard() {
       const providerConfig = PROVIDERS.find((p) => p.id === provider);
       const saveResult = await saveApiKey({
         provider,
-        key: inputValue,
+        key,
         sensitive: providerConfig?.sensitive ?? true,
       });
       if (saveResult.success) {
