@@ -39,6 +39,8 @@ This project follows a [Code of Conduct](./CODE_OF_CONDUCT.md). By participating
 
 ## Getting Started
 
+当前交付产品是 Windows Electron 桌面应用。桌面源码启动、隔离数据与窗口 E2E 见 [desktop/E2E.md](desktop/E2E.md)。下面的 Next.js server 步骤仅用于 Web 页面开发；浏览器运行成功不等于桌面验收通过。
+
 ### Prerequisites
 
 - Node.js 20+
@@ -266,8 +268,12 @@ Tests live in `__tests__/` and should be co-located where possible. Mock externa
 
 ### E2E Tests (Playwright)
 
+先选择宿主：`npm run test:e2e:desktop` 验证真实 Windows Electron 窗口，包含 fresh-native 新账号注册、侧边栏、顶部标题栏和退出重开；`npm run test:e2e:web` 验证浏览器共享页面逻辑。`test:e2e` 保留为 Web 兼容别名。`test:desktop:unit`（旧名 `test:desktop`）是 Vitest 主进程测试；`desktop:smoke` 只是启动截图冒烟，均不能替代桌面 UI E2E。完整桌面流程及故障定位见 [desktop/E2E.md](desktop/E2E.md)。
+
+以下配置说明仅针对 **Web 浏览器 E2E**；迁移完成的测试库可能仍处于 Legacy，不能据此验收当前 fresh-native 桌面界面。
+
 ```bash
-npm run test:e2e
+npm run test:e2e:web
 ```
 
 E2E tests live in `e2e/`. Both `npm run test:e2e` and direct

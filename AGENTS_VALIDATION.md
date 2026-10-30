@@ -16,6 +16,8 @@
 - **DateTime**：涉及日期语义时检查 DateOnly/Instant、时区和历史未知精度，不改写既有事实。
 - **业务链路**：职位、投递、流程、任务或 Upcoming 变更，只检查真正受影响的 Legacy/Canonical/Agent 消费者。
 - **Electron / AI**：涉及 IPC、生命周期、凭据或权限时，验证相关调用与必要的失败分支，不绕过安全边界。
+- **桌面用户路径**：默认验收宿主是 Windows Electron。Web 可用于共享页面逻辑的定向回归；`test:e2e:web` 是浏览器测试，`test:desktop:unit` 是主进程单元测试，两者均不能证明真实桌面窗口通过。桌面注册/导航/退出重开入口为 `npm run test:e2e:desktop`，准备、隔离和故障定位见 `desktop/E2E.md`。
+- **运行身份**：核对当前源码与构建来源、真实 Electron preload/标题栏、隔离数据目录以及 fresh-native 状态。Migration 完成但仍为 Legacy 的库不能用于当前新用户桌面验收。桌面连接失败应报告阻塞，不自动降级为浏览器验收。
 - 真实用户数据库、已安装应用、生产服务及不可逆操作仍按 `AGENTS.md` 单独授权；验证通过不代表获得授权。
 
 ## 3. Execute & Stop
@@ -28,5 +30,6 @@
 ## 4. Report
 
 - 任务回复简述：**影响**（主要消费者）、**验证**（实际检查与 PASS/FAIL）、**遗留**（关键 NOT_RUN/BLOCKED 或剩余风险）。
+- E2E 结果同时注明宿主（Web/Electron）、运行模式（fresh-native/Legacy）及是否完成真实应用退出重开；代理直连诊断结果单列，不能冒充原始环境通过。
 - 未执行的检查不得声称通过；不创建独立验证报告、证据目录或新的 Gate。
 - 仅当出现重要、可复现的回归经验时补充本指南或相应测试。

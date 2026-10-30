@@ -3,7 +3,8 @@
 ## 1. Project
 
 - Vocatrya 是面向中国求职市场的 local-first 职业与求职管理软件，技术栈为 Next.js、TypeScript、Prisma、SQLite、Electron。
-- 优先交付可用的 Windows MVP，保留 Web-first 架构。
+- 当前主要交付形态是 Windows Electron 桌面应用；Next.js 承担内部界面与本地后端，保留 Web 架构和浏览器开发能力。
+- 用户要求“打开应用、实测、E2E、验收”且未指定宿主时，默认在隔离环境验证 Windows Electron 桌面端。浏览器检查属于辅助验证，不能替代桌面验收；不因此要求每次修改都运行完整桌面 E2E。
 
 ## 2. Coding Principles
 
@@ -52,6 +53,8 @@
 - 默认**最小充分验证**：按实际风险与受影响消费者选择定向检查，先核对项目已有命令；不默认全量测试、Build、E2E、独立 Review 或多轮 Gate。
 - 涉及共享契约、跨模块业务、持久化、并发/异步、认证安全、Migration/备份、Electron 运行时，或影响不清且有实质风险时，按需阅读 `AGENTS_VALIDATION.md`；阅读不自动触发额外测试。
 - 用户可见行为按需核对实际路径；持久化使用隔离数据验证保存与重新打开。Mock 或代码存在不等于功能验收。
+- 实测前确认提交/当前修改、构建来源、宿主（Web/Electron）及运行模式（fresh-native/Legacy）。当前新用户桌面流程应为 fresh-native；仅执行 Migration 不代表已激活。测试入口与边界见 `desktop/E2E.md`。
 - 高风险变更保留必要的兼容、失败恢复与安全验证；验证不能替代操作授权。
 - 已有证据充分时停止；真实失败只做相关修复或说明阻塞，不为无关问题扩项。
 - 完成后简短报告：修改、实际验证、未完成验收或阻塞、Git/Worktree 状态。不生成额外审计报告。
+- 报告 E2E 时注明实际宿主和运行模式；仅浏览器通过时明确“Web 验证通过，Windows Electron 未执行/阻塞”，不得统称桌面 E2E 通过。

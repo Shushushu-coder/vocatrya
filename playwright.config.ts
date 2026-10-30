@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import { configureE2EDatabase, resolveE2EDatabase } from "./e2e/support/database";
 
+// Browser-only regression configuration. It neither launches Electron nor
+// proves desktop/fresh-native acceptance; see desktop/E2E.md for that entry.
 const database = configureE2EDatabase();
 const port = Number(process.env.E2E_PORT ?? "3737");
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
