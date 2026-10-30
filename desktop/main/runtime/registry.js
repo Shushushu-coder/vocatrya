@@ -101,6 +101,14 @@ const RUNTIME_DEFINITIONS = Object.freeze([
           args: ["update"],
         },
       ],
+      // Upstream latest-version source: the official npm package's
+      // `latest` dist-tag (registry.npmjs.org/@openai%2Fcodex/latest).
+      check: { kind: "npm-latest", package: "@openai/codex" },
+      // Real downgrade path for npm-global installs: pin the certified
+      // version back. Standalone-installer users re-run the installer
+      // once a certified build is promoted — the command is honest
+      // metadata, never executed here.
+      recovery: { kind: "npm-pin", package: "@openai/codex" },
     },
     versionProbe: { args: ["--version"] },
     authProbe: {
@@ -204,6 +212,10 @@ const RUNTIME_DEFINITIONS = Object.freeze([
           args: ["update"],
         },
       ],
+      // Upstream latest-version source: the official npm package's
+      // `latest` dist-tag (registry.npmjs.org/@anthropic-ai%2Fclaude-code/latest).
+      check: { kind: "npm-latest", package: "@anthropic-ai/claude-code" },
+      recovery: { kind: "npm-pin", package: "@anthropic-ai/claude-code" },
     },
     versionProbe: { args: ["--version"] },
     authProbe: {
@@ -414,6 +426,25 @@ const RUNTIME_DEFINITIONS = Object.freeze([
           args: ["update"],
         },
       ],
+      // Upstream latest-version source: the vendor channel pointer —
+      // a plain-text document naming the promoted build (verified
+      // 2026-10-28 → "1.0.70"). x.ai fronts a GCS bucket; the direct
+      // bucket URL is the documented fallback from install.ps1.
+      check: {
+        kind: "channel-file",
+        channel: "stable",
+        urls: [
+          "https://x.ai/cli/stable",
+          "https://storage.googleapis.com/grok-build-public-artifacts/cli/stable",
+        ],
+      },
+      // install.ps1 accepts -Version, so a pinned reinstall is a real
+      // downgrade path (usage line verified in the published script).
+      recovery: {
+        kind: "script-version-arg",
+        command:
+          "& ([scriptblock]::Create((irm https://x.ai/cli/install.ps1))) -Version {version}",
+      },
     },
     versionProbe: { args: ["version"] },
     // Verified against grok 1.0.34/1.0.41: there is NO `login status` /
@@ -552,6 +583,10 @@ const RUNTIME_DEFINITIONS = Object.freeze([
           args: ["upgrade"],
         },
       ],
+      // Upstream latest-version source: the official npm package's
+      // `latest` dist-tag (registry.npmjs.org/opencode-ai/latest).
+      check: { kind: "npm-latest", package: "opencode-ai" },
+      recovery: { kind: "npm-pin", package: "opencode-ai" },
     },
     versionProbe: { args: ["--version"] },
     authProbe: {
@@ -757,6 +792,17 @@ const RUNTIME_DEFINITIONS = Object.freeze([
           args: ["update"],
         },
       ],
+      // Upstream latest-version source: the official Windows install
+      // script is generated per release and pins the published build
+      // (`$version = '2026.10.22-27dcf5f'`) — the same document the
+      // install method pipes into iex.
+      check: {
+        kind: "install-script",
+        url: "https://cursor.com/install?win32=true",
+      },
+      // No documented pinned-version Windows installer — honest absence
+      // of a scripted downgrade path.
+      recovery: { kind: "none" },
     },
     versionProbe: {
       args: ["--version"],
@@ -834,6 +880,10 @@ const RUNTIME_DEFINITIONS = Object.freeze([
           args: ["upgrade", "GitHub.Copilot"],
         },
       ],
+      // Upstream latest-version source: the official npm package's
+      // `latest` dist-tag (registry.npmjs.org/@github%2Fcopilot/latest).
+      check: { kind: "npm-latest", package: "@github/copilot" },
+      recovery: { kind: "npm-pin", package: "@github/copilot" },
     },
     versionProbe: { args: ["--version"] },
     authProbe: {
@@ -970,6 +1020,21 @@ const RUNTIME_DEFINITIONS = Object.freeze([
           args: ["update"],
         },
       ],
+      // Upstream latest-version source: the promoted-build manifest the
+      // official setup.ps1 itself reads (verified 2026-10-28 →
+      // {"version":"3000.11.228", platforms:{…}}).
+      check: {
+        kind: "json-manifest",
+        url: "https://static.devin.ai/cli/current/manifest.json",
+        field: "version",
+      },
+      // The build system publishes per-version setup scripts
+      // (cli/<version>/setup.ps1 per the published setup template), so a
+      // pinned reinstall is a real downgrade path.
+      recovery: {
+        kind: "pinned-setup",
+        command: "irm https://static.devin.ai/cli/{version}/setup.ps1 | iex",
+      },
     },
     versionProbe: { args: ["--version"] },
     authProbe: {

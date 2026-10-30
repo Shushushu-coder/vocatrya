@@ -11,6 +11,7 @@ import {
 } from "@/actions/aiConnection.actions";
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
 import type { AccountRuntimeCapabilities } from "@/lib/ai/runtime/capabilities";
+import type { RuntimeUpdateCheckResult } from "@/lib/ai/runtime/update-check";
 
 // Implemented account-login backends. Each entry pins the account provider
 // options it offers — the server re-validates the provider/runtime pairing
@@ -119,6 +120,26 @@ const OP_DONE_KEY: Record<string, string> = {
   verify: "settings.aiConnVerifyDone",
 };
 
+// Update-check verdict labels — the online check's verdict axis, separate
+// from the local install state above.
+const UPDATE_CHECK_STATUS_KEY: Record<string, string> = {
+  UP_TO_DATE: "runtimeUpdate.upToDate",
+  UPDATE_AVAILABLE: "runtimeUpdate.updateAvailable",
+  AHEAD_OF_CHANNEL: "runtimeUpdate.aheadOfChannel",
+  CHECK_FAILED: "runtimeUpdate.checkFailed",
+  UNSUPPORTED: "runtimeUpdate.unsupported",
+  NOT_RUN: "runtimeUpdate.notRun",
+  CURRENT_UNKNOWN: "runtimeUpdate.currentUnknown",
+  UNCOMPARABLE: "runtimeUpdate.uncomparable",
+};
+
+const UPDATE_SOURCE_KEY: Record<string, string> = {
+  "npm-latest": "runtimeUpdate.sourceNpm",
+  "channel-file": "runtimeUpdate.sourceChannel",
+  "json-manifest": "runtimeUpdate.sourceManifest",
+  "install-script": "runtimeUpdate.sourceInstallScript",
+};
+
 const ERROR_KEY: Record<string, string> = {
   RUNTIME_NOT_INSTALLED: "settings.aiConnErrRuntimeNotInstalled",
   RUNTIME_BROKEN: "settings.aiConnErrRuntimeBroken",
@@ -166,8 +187,14 @@ function AiConnectionsCard() {
   const [installInfo, setInstallInfo] = useState<
     Partial<Record<BackendKind, InstallMethod[]>>
   >({});
-  const [updateInfo, setUpdateInfo] = useState<
-    Partial<Record<BackendKind, InstallMethod[]>>
+  const [updateChecks, setUpdateChecks] = useState<
+    Partial<Record<BackendKind, RuntimeUpdateCheckResult>>
+  >({});
+  const [updateBusy, setUpdateBusy] = useState<
+    Partial<Record<BackendKind, boolean>>
+  >({});
+  const [updateIpcFailed, setUpdateIpcFailed] = useState<
+    Partial<Record<BackendKind, boolean>>
   >({});
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -186,6 +213,32 @@ function AiConnectionsCard() {
       );
     }
   }, []);
+
+  // The single online update-check path — the automatic mount-time check
+  // and the manual recheck share it. force bypasses the upstream cache;
+  // the check is read-only and never runs an installer or updater.
+  const runUpdateCheck = useCallback(
+    async (backendKind: BackendKind, force: boolean) => {
+      const runtime = window.vocatryaRuntime;
+      if (!runtime || typeof runtime.checkUpdate !== "function") return;
+      setUpdateBusy((prev) => ({ ...prev, [backendKind]: true }));
+      setUpdateIpcFailed((prev) => ({ ...prev, [backendKind]: false }));
+      try {
+        const result = await runtime.checkUpdate(backendKind, { force });
+        setUpdateChecks((prev) => ({ ...prev, [backendKind]: result }));
+      } catch {
+        setUpdateChecks((prev) => {
+          const next = { ...prev };
+          delete next[backendKind];
+          return next;
+        });
+        setUpdateIpcFailed((prev) => ({ ...prev, [backendKind]: true }));
+      } finally {
+        setUpdateBusy((prev) => ({ ...prev, [backendKind]: false }));
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -220,8 +273,8 @@ function AiConnectionsCard() {
               version: status.version,
             },
           }));
-          // Install/update metadata is fetched only when the runtime state
-          // needs it — a READY runtime never pays for it.
+          // Install metadata is fetched only when the runtime state needs
+          // it — a READY runtime never pays for it.
           if (status.state === "NOT_INSTALLED" || status.state === "BROKEN") {
             void window.vocatryaRuntime
               ?.getInstallInfo(backend.backendKind)
@@ -233,25 +286,33 @@ function AiConnectionsCard() {
               )
               .catch(() => undefined);
           }
-          if (status.state === "UPDATE_AVAILABLE") {
-            void window.vocatryaRuntime
-              ?.getUpdateInfo(backend.backendKind)
-              .then((info) =>
-                setUpdateInfo((prev) => ({
-                  ...prev,
-                  [backend.backendKind]: info.methods,
-                })),
-              )
-              .catch(() => undefined);
+          // Automatic online update check for every installed runtime —
+          // the same service path as the manual recheck below.
+          if (status.installed) {
+            void runUpdateCheck(backend.backendKind, false);
           }
         })
         .catch(() => undefined);
     }
-  }, [bridgeAvailable, refresh]);
+  }, [bridgeAvailable, refresh, runUpdateCheck]);
 
   const errorMessage = useCallback(
     (code?: string) =>
       t((code && ERROR_KEY[code]) || "settings.aiConnErrGeneric"),
+    [t],
+  );
+
+  // Update-check failure detail: the service reports stable codes —
+  // NETWORK / TIMEOUT / INVALID_RESPONSE / HTTP_<status>.
+  const updateErrorText = useCallback(
+    (error: string) => {
+      if (error.startsWith("HTTP_")) {
+        return t("runtimeUpdate.errHttp", { status: error.slice(5) });
+      }
+      if (error === "TIMEOUT") return t("runtimeUpdate.errTimeout");
+      if (error === "INVALID_RESPONSE") return t("runtimeUpdate.errInvalid");
+      return t("runtimeUpdate.errNetwork");
+    },
     [t],
   );
 
@@ -416,6 +477,9 @@ function AiConnectionsCard() {
         );
         const runtimeName = runtime?.displayName ?? backend.backendKind;
         const isConnecting = busy === `connect:${backend.backendKind}`;
+        const update = updateChecks[backend.backendKind];
+        const updateChecking = updateBusy[backend.backendKind] === true;
+        const updateFailed = updateIpcFailed[backend.backendKind] === true;
         return (
           <section
             key={backend.backendKind}
@@ -481,19 +545,139 @@ function AiConnectionsCard() {
                 ))}
               </div>
             )}
-            {runtimeState?.state === "UPDATE_AVAILABLE" && (
+            {/* Online update check — the UPDATE_AVAILABLE verdict comes
+                from a real upstream comparison (effectiveState), never
+                from the local probe alone. Checking never installs or
+                updates anything; failures are reported as failures and
+                never as "up to date". */}
+            {(runtimeState?.state === "READY" ||
+              runtimeState?.state === "BROKEN") && (
               <div className="rounded-md border border-dashed p-2 text-sm space-y-1">
-                <p className="text-muted-foreground">
-                  {t("settings.aiConnUpdateAvailable")}
-                </p>
-                {(updateInfo[backend.backendKind] ?? []).map((method) => (
-                  <p
-                    key={`${method.kind}:${method.executable}`}
-                    className="text-muted-foreground"
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">
+                    {update
+                      ? `${t("runtimeUpdate.currentVersion")} ${
+                          update.currentVersion
+                            ? `v${update.currentVersion}`
+                            : t("runtimeUpdate.versionUnknown")
+                        } · ${t("runtimeUpdate.availableVersion")} ${
+                          update.check.latestVersion
+                            ? `v${update.check.latestVersion}`
+                            : "—"
+                        }`
+                      : updateChecking
+                        ? t("runtimeUpdate.checking")
+                        : t("runtimeUpdate.notRun")}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={updateChecking}
+                    onClick={() =>
+                      void runUpdateCheck(backend.backendKind, true)
+                    }
                   >
-                    {method.summary}
+                    {updateChecking ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1 h-3 w-3" />
+                    )}
+                    {t("runtimeUpdate.recheck")}
+                  </Button>
+                </div>
+                {update && (
+                  <p className="text-muted-foreground">
+                    {t(
+                      UPDATE_CHECK_STATUS_KEY[update.check.status] ??
+                        "runtimeUpdate.checkFailed",
+                    )}
+                    {update.check.error
+                      ? ` (${updateErrorText(update.check.error)})`
+                      : ""}
+                    {update.check.source
+                      ? ` · ${t(
+                          UPDATE_SOURCE_KEY[update.check.source] ??
+                            "runtimeUpdate.sourceUnknown",
+                        )}`
+                      : ""}
+                    {update.check.checkedAt
+                      ? ` · ${t("runtimeUpdate.lastChecked", {
+                          at: new Date(
+                            update.check.checkedAt,
+                          ).toLocaleString(),
+                        })}`
+                      : ""}
                   </p>
-                ))}
+                )}
+                {updateFailed && !update && (
+                  <p className="text-muted-foreground">
+                    {t("runtimeUpdate.checkFailed")} ·{" "}
+                    {t("runtimeUpdate.checkFailedHint")}
+                  </p>
+                )}
+                {update &&
+                  update.compatibility.current !== null &&
+                  update.check.status !== "NOT_RUN" && (
+                    <p className="text-muted-foreground">
+                      {update.compatibility.current === "VERIFIED"
+                        ? t("runtimeUpdate.compatVerifiedCurrent", {
+                            version: update.currentVersion ?? "",
+                          })
+                        : update.compatibility.current === "UNVERIFIED"
+                          ? t("runtimeUpdate.compatUnverifiedCurrent", {
+                              certified:
+                                update.compatibility.certifiedVersions.join(
+                                  ", ",
+                                ),
+                            })
+                          : t("runtimeUpdate.compatNoBaseline")}
+                    </p>
+                  )}
+                {update?.check.status === "UPDATE_AVAILABLE" && (
+                  <>
+                    <p className="text-muted-foreground">
+                      {t("runtimeUpdate.updateHint")}
+                    </p>
+                    {update.compatibility.available === "VERIFIED" ? (
+                      <p className="text-muted-foreground">
+                        {t("runtimeUpdate.verifiedAvailableHint")}
+                      </p>
+                    ) : update.compatibility.available === "UNVERIFIED" ? (
+                      <p className="text-muted-foreground">
+                        {t("runtimeUpdate.unverifiedAvailableHint", {
+                          certified:
+                            update.compatibility.certifiedVersions.join(", "),
+                        })}
+                      </p>
+                    ) : null}
+                    {update.methods.map((method) => (
+                      <p
+                        key={`${method.kind}:${method.executable}`}
+                        className="text-muted-foreground"
+                      >
+                        {method.summary}
+                      </p>
+                    ))}
+                    {update.recovery?.command ? (
+                      <p className="text-muted-foreground">
+                        {t("runtimeUpdate.recoveryCommand", {
+                          version: update.recovery.version,
+                          command: update.recovery.command,
+                        })}
+                      </p>
+                    ) : update.recovery &&
+                      update.compatibility.available === "UNVERIFIED" ? (
+                      <p className="text-muted-foreground">
+                        {t("runtimeUpdate.recoveryNone")}
+                      </p>
+                    ) : null}
+                  </>
+                )}
+                {update?.check.status === "CHECK_FAILED" && (
+                  <p className="text-muted-foreground">
+                    {t("runtimeUpdate.checkFailedHint")}
+                  </p>
+                )}
               </div>
             )}
 

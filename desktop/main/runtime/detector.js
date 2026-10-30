@@ -163,8 +163,9 @@ function probeRuntimeVersion(
 // detectRuntime(backendKind, deps) →
 //   { backendKind, runtimeVendor, state, installed, executablePath?, version? }
 // state ∈ NOT_INSTALLED | READY | UPDATE_AVAILABLE | BROKEN
-// UPDATE_AVAILABLE is only produced once an update-check implementation lands;
-// the state machine already carries it.
+// The synchronous local probe never produces UPDATE_AVAILABLE — that
+// verdict is computed by update-check.js's online comparison, which
+// reports it as effectiveState on top of this local state.
 function detectRuntime(backendKind, deps = {}) {
   const definition = getRuntimeDefinition(backendKind);
   if (!definition) {
