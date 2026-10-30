@@ -71,13 +71,79 @@ describe("POST /api/settings/api-keys/verify", () => {
     expect(data.error).toBe("Cannot connect to openai service");
   });
 
-  it("passes through other verifier error messages", async () => {
-    mockVerifier.mockRejectedValue(new Error("Invalid API key"));
+  it("does not expose unexpected verifier error details", async () => {
+    mockVerifier.mockRejectedValue(
+      new Error("request failed for https://provider.invalid?key=secret-value"),
+    );
 
     const res = await POST(req({ provider: "openai", key: "sk-bad" }));
     const data = await res.json();
 
     expect(data.success).toBe(false);
-    expect(data.error).toBe("Invalid API key");
+    expect(data.error).toBe("Verification failed. Check the key and try again");
+    expect(JSON.stringify(data)).not.toContain("secret-value");
+  });
+
+  it("returns 400 on a malformed JSON body", async () => {
+    const res = await POST({
+      json: async () => {
+        throw new Error("unexpected token");
+      },
+    } as any);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when the key is blank, oversized, or not a string", async () => {
+    for (const body of [
+      { provider: "openai", key: "   " },
+      { provider: "openai", key: 42 },
+      { provider: "openai", key: "k".repeat(4097) },
+    ]) {
+      const res = await POST(req(body));
+      expect(res.status).toBe(400);
+    }
+    expect(mockVerifier).not.toHaveBeenCalled();
+  });
+
+  it("trims surrounding whitespace before calling the verifier", async () => {
+    mockVerifier.mockResolvedValue({ success: true });
+
+    const res = await POST(req({ provider: "openai", key: "  sk-live\n" }));
+    const data = await res.json();
+
+    expect(data.success).toBe(true);
+    expect(mockVerifier).toHaveBeenCalledWith("sk-live");
+  });
+
+  it("maps a verifier-side timeout to the same friendly message", async () => {
+    mockVerifier.mockRejectedValue(
+      Object.assign(new Error("The operation timed out"), {
+        name: "TimeoutError",
+      }),
+    );
+
+    const res = await POST(req({ provider: "openai", key: "sk-live" }));
+    const data = await res.json();
+
+    expect(data.success).toBe(false);
+    expect(data.error).toContain("did not respond in time");
+  });
+
+  it("bounds a hanging verifier instead of pending forever", async () => {
+    vi.useFakeTimers();
+    try {
+      mockVerifier.mockReturnValue(new Promise(() => {}));
+
+      const pending = POST(req({ provider: "openai", key: "sk-live" }));
+      await vi.advanceTimersByTimeAsync(21_000);
+      const res = await pending;
+      const data = await res.json();
+
+      expect(data.success).toBe(false);
+      expect(data.error).toContain("did not respond in time");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -64,6 +64,12 @@ export const APP_CONSTANTS = {
   AI_OLLAMA_LIST_TIMEOUT_MS: 5_000,
   AI_OLLAMA_GENERATE_TIMEOUT_MS: 10_000,
 
+  // Cloud provider fetch bound — BYOK key verification and model catalog
+  // listing. A hung provider endpoint must neither stall the request nor
+  // hold the socket open; the settings verify route additionally races an
+  // outer bound above this value.
+  AI_PROVIDER_FETCH_TIMEOUT_MS: 15_000,
+
   // Ollama context window (covers prompt + generation combined). Defaults to
   // 2048; even 4096 overflows for a full resume plus the system prompt and the
   // verbatim JSON output — truncating the tail of generation (e.g. the last
