@@ -1,6 +1,6 @@
 # Vocatrya P1 增量实施计划
 
-> 更新日期：2026-10-29。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。本轮已集成活动退役（`81f939b8`）、AI 修复（`68212510`）及简历工作台合同（`06efa71b`）；本聊天另集成简历工作台实现（`559a2bce`）和归档合同冻结记录（`ce7c17b7`）。功能验收与代码集成分别记录。
+> 更新日期：2026-10-30。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）与 `match_job` 合同提案（`90a1a6af`，merge `264b463d`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。功能验收与代码集成分别记录。
 > 状态口径：`IMPLEMENTED` 表示相应业务主路径已有实现，`PARTIAL` 表示部分实现，`MISSING` 表示目标产品能力尚未完整实现。上述状态不代表用户验收完成；`passes: true` 仅在对应真实业务与必要数据/桌面 Gate 通过后设置。
 
 ## A. 范围、迁移关系与状态
@@ -16,17 +16,17 @@
 - 原 `RM-MATCH` 不再单列 P1 Feature。其候选 Agent `match_job` 记录到 `AGENT-CAPABILITIES`；**现有 canonical FAST_SCREENING/MatchAnalysisService 仍是独立可复用业务能力**，代码不因台账迁移被删除或改写。
 - `AGENT-CAPABILITIES` 其余能力与扩展决策保持现状，本次只调整匹配工具的台账归属。
 
-当前 **7 项**，其中 `IMPLEMENTED` 4 项、`PARTIAL` 3 项、`MISSING` 0 项；**全部 `passes: false`**：
+当前 **7 项**，其中 `IMPLEMENTED` 4 项、`PARTIAL` 3 项、`MISSING` 0 项；**2 项 `passes: true`、5 项 `passes: false`**：
 
 | Feature | P1 范围 | 实现状态 | 当前结论 |
 | --- | --- | --- | --- |
-| **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | 活动退役已集成；隔离桌面35/36通过，术语修复已集成；Owner 安排 P1 结束后人工检验 |
-| **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | 归档桌面37/37通过；最终备份引用/隔离修复定向84项通过，补丁桌面复验未执行 |
+| **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 38/38，通过 |
+| **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 55/55，通过 |
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
-| **AI-BYOK** | IN_SCOPE | PARTIAL | 凭据边界、超时分类及重新认证状态修复已集成；真实 Key 业务调用未验收 |
+| **AI-BYOK** | IN_SCOPE | PARTIAL | 验证与模型查询超时/错误脱敏已收口；真实 Key 业务调用未验收 |
 | **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
 | **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | DOCX 修复已集成；原窗口 Electron fresh-native 49/50 通过，真实 AI 导入预览/排除仍阻塞 |
-| **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | 现有五工具保留；`match_job` 仅登记待合同裁定 |
+| **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | `match_job` canonical 合同提案已集成；D1–D6 待 Owner 裁定，未实现 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
 
@@ -36,7 +36,7 @@
 
 **2026-10-29 Owner 冻结备份策略**：旧备份包含非空 `Activity` 组时整包拒绝，在任何写入或清空前给出明确错误；空 `Activity: []` 组兼容剥离，旧 manifest 的 `Activity: 0` 不阻断导入。不实施受控跳过非空组。实现已随 `81f939b8` 集成；该决策不等于功能验收通过或真实库迁移获授权。
 
-- **优先级 P1；范围 IN_SCOPE；实现状态 IMPLEMENTED；`passes: false`。** Activity 页面、计时/休息、专属统计、模型及备份分组已移除；保留 ActivityType、Task.activityTypeId、任务分类与投递统计。新增 `20261029000000_retire_activity_table` 迁移，未改历史迁移、未执行真实库迁移。隔离合成库验证由 Coding Owner 完成；后续 Windows Electron 已记录35/36通过，术语补丁待定向复验。
+- **优先级 P1；范围 IN_SCOPE；实现状态 IMPLEMENTED；`passes: true`。** Activity 页面、计时/休息、专属统计、模型及备份分组已移除；保留 ActivityType、Task.activityTypeId、任务分类与投递统计。新增 `20261029000000_retire_activity_table` 迁移，未改历史迁移、未执行真实库迁移。2026-10-30 在 Main `39a5a1d3` 的 Windows Electron fresh-native/full 生产构建 `Jtz89Wr0azHP7RnkA_zTH` 中完成 38/38 联合定向复验，包含此前 D-1 任务分类术语补丁、隔离迁移、非空旧 Activity 备份写前拒绝、空组恢复、任务分类及保留业务回归；未操作真实用户库。
 - **审计依据**：Owner 提供的《Vocatrya Job Activity Dependency Audit Report》，结论 `COMPLETE`，审计时 main HEAD 为 `879857587552c6c1ee9689695bca90ae474c449e`。核心证据：`Activity` 是独立的时间记录/休息系统；`Task.activityTypeId` 可选且引用 `ActivityType`；任务删除受到活动行检查的应用层阻断；Dashboard/Analytics 消费活动计数或时长，投递热力图色块实际来自投递数；Activity 备份休息字段有必填限制。**这是所提供审计结论，不代表本轮已访问并复核当前仓库**，实施前须重新核对实时 HEAD/Dirty 和实际调用点。
 
 **冻结的产品合同**
@@ -73,7 +73,7 @@
 
 ### BD-ARCHIVE：设置 → 数据与支持 → 归档数据
 
-- **P1 / IN_SCOPE / IMPLEMENTED / `passes: false`。** 首批只覆盖 **职位**和 **AI 对话历史**；简历、面试题库、面试练习数据及其他类型**不在首批**。过去所说的「全品类基础数据归档」不再是本项交付范围。
+- **P1 / IN_SCOPE / IMPLEMENTED / `passes: true`。** 首批只覆盖 **职位**和 **AI 对话历史**；简历、面试题库、面试练习数据及其他类型**不在首批**。过去所说的「全品类基础数据归档」不再是本项交付范围。2026-10-30 在 Main `39a5a1d3` 的同一 Windows Electron fresh-native/full 构建中完成 55/55 联合定向复验，覆盖归档中心查看/恢复、跨用户隔离、投递与对话引用保持、提醒抑制及 24h 补发、AI fail-closed 守卫与最终备份引用往返；未调用真实外部 AI，模型调用前 409 守卫证据不外推为真实模型 E2E。
 - 归档是可逆的**可见性管理**：将归档内容从常规工作视图隐藏，通过设置中的归档数据入口集中查询并恢复；原始记录、职位及其申请关联事实、对话消息及用户归属不应因归档而被物理删除。
 - **长期保留、随时恢复、无自动到期**；不建设 30 天回收站、不在后台自动清理归档数据。现有**删除确认**继续存在；归档、恢复与永久删除应有不同的操作与文案，不将删除伪装成归档。
 - 完成验收须覆盖归档前后列表可见性、独立用户数据隔离、恢复后内容一致、申请历史/历史对话引用完整性、备份往返及隔离 Windows Electron 真实交互。
@@ -91,6 +91,7 @@
 ### AI-BYOK：用户自带 API Key
 
 - 2026-10-29 集成 `68212510`：补充 BYOK 凭据故障操作指引、隔离测试代理环境，修复真实截止信号被误判成普通取消的问题；18 项 BYOK 执行测试覆盖 one-shot/streaming 截止与取消。真实 API Key 业务调用未执行，保持 PARTIAL 与 `passes: false`。
+- 2026-10-30 Main 集成 `43d9795b`（merge `a8009d64`）：云端验证器及模型列表查询增加有界超时，输入 trim/长度与 malformed body 校验、未知异常脱敏、Gemini Key URL 编码；OpenRouter 改用官方认证的 `GET /api/v1/key`，不再以公开模型目录误判无效 Key。合并前独立审查通过；直接相关 3 文件/30 项、改动 ESLint 与完整类型检查通过。扩展 24 文件集合中 23 文件/308 项通过，唯一失败为既有 `settingsPage.spec.tsx` 未纳入已集成的“归档数据”设置入口，与 BYOK Diff 无关。真实 Key Gate、Windows Electron 和完整业务调用仍 NOT_RUN，保持 PARTIAL / `passes:false`。
 
 - **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 配置、模型分配及账号/BYOK 隔离的基础已有记录，但**尚未证实真实 API Key 能成功执行实际业务调用**。
 - 核查密钥存储/访问边界、连接和模型选择的真实状态，验证未配置、无效 Key、模型不可用、额度/网络错误等情况不虚报可用。
@@ -130,6 +131,7 @@
 ### AGENT-CAPABILITIES：保留既有五工具；登记候选 `match_job`
 
 - **P1 / OWNER_DECISION / PARTIAL / `passes: false`。** 本轮不重新规划其他 Agent 扩展。已记录的 fresh-native/full 五项工具仍为：`list_jobs`、`get_job`、`add_job`、`get_resume`、`review_resume`。`add_job` 需用户确认且不代表实际投递；`review_resume` 不自动保存至 Resume Variant。`match_job`、`generate_cover_letter` 仍未在当前生产模式开放。
+- 2026-10-30 Main 集成 [`AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md`](./AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md)（`90a1a6af`，merge `264b463d`）：合同区分源码事实、推荐与待决定，保留 D1–D6 Owner 裁定；补充 AI 前 durable tool-execution reservation、稳定 operationKey 与分析唯一绑定，关闭分析已写而 conversation receipt 未写的崩溃重复窗口。该文件是提案，不代表 `match_job` 已实现或获准实施；状态保持 OWNER_DECISION / PARTIAL / `passes:false`。
 - 原 **RM-MATCH 的 P1 台账归属**改为本 Feature 下的 **候选 Agent Tool：`match_job`**，当前仅登记，**不是 Tool 已接通、执行授权或新增功能验收通过**。其余 Agent 能力范围保持待裁定，不因本次记录自动加入职位更新、投递流程或简历写入工具。
 - **不迁移/删除独立业务服务**：canonical 职位详情已有 FAST_SCREENING 最小链路：素材来源选择 → `MATCH_ANALYSIS` 分配 → 结构化执行 → `MatchAnalysisService` 持久化 → 历史读取与 stale 标记。此前已有 fastScreening 12 项、matchAnalysis 8 项定向测试及类型/ESLint 证据；**真实生产连接 E2E 与隔离 Windows Electron 验收仍未完成**。FAST_SCREENING 是当前匹配业务模式，MATCH_ANALYSIS 是该路径使用的 AI 分配能力，不应混淆为 Agent 工具。
 - 将来如批准 `match_job`，应复用该独立 canonical 服务，使用经确认的职位与简历版本输入，验证权限、持久化、历史读取和失败语义；可受益于 RESUME-BUILDER 的结构化版本。不能直接解除旧 Legacy `match_job` 门控，也不能只修改提示词就宣称支持匹配。Deep Match 不在已交付能力中。
@@ -150,7 +152,7 @@
 ## D. 完成口径与执行边界
 
 - 2026-10-29 本轮收尾集成：导入条目级排除使用独立可空选择签名列（新迁移 `20261029010000_resume_import_selection_signature`），与首次版本确认同事务写入，原始 AI 缓存不改；补齐导入双语、选择后数量摘要与任务分类术语。九个定向测试文件共 136 项、完整类型检查及改动文件 ESLint 通过，隔离 SQLite 旧行升级与失败原子性已覆盖；未运行真实 AI、生产构建、真实库迁移或修复后的桌面复验。
-- 活动退役原验收在 Windows Electron fresh-native/full（源码 `1410b8e0`）记录 35/36 项通过；D-1 术语补丁尚未进入新构建，不能据此将 `passes` 改为 true。证据保留在 `.worktrees/p1-activity-desktop-acceptance/.tmp/p1-activity-desktop-acceptance/evidence/`。本轮未获得新增生产构建授权，补丁桌面复验仍待执行。
+- 2026-10-30 活动退役与归档最终补丁在 Main `39a5a1d3`、构建 `Jtz89Wr0azHP7RnkA_zTH` 的 Windows Electron fresh-native/full 中联合复验：ACTIVITY-RETIRE 38/38、BD-ARCHIVE 55/55 均 PASS。证据位于 `.worktrees/p1-activity-archive-recheck/.tmp/p1-activity-archive-recheck/`；宿主进程均经 quit IPC 正常退出，无残留进程。该定向复验未覆盖真实外部 AI、真实用户库、安装包/系统自启或完整桌面 E2E，不将其外推到其他 Feature。
 - [归档合同修订提案](./ARCHIVE_CONTRACT_PROPOSAL.md) 随本轮交付，2026-10-29 Owner 已冻结八项规则：七项采用推荐，D6 改为 AI 完全不可读归档内容，含历史引用、消息、摘要与快照。本轮只冻结合同，不启动归档开发。
 
 - 2026-10-29 Main 组合验证：14 个定向测试文件、212 项通过，覆盖任务/分类、Dashboard、备份拒绝与往返、BYOK 截止/取消及 AI 运行时断言。重新生成 Prisma client 并刷新遗留活动页的 Next 路由类型后，完整非增量 TypeScript 检查通过；未运行生产构建或桌面/E2E。
