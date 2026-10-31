@@ -1,6 +1,6 @@
 # Vocatrya P1 增量实施计划
 
-> 更新日期：2026-10-30。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）与 `match_job` 合同提案（`90a1a6af`，merge `264b463d`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。BYOK 已在 Main `673e3460` 的相同集成代码上完成 DeepSeek 真实服务与 Windows Electron fresh-native/full 验收，零产品代码修改。功能验收与代码集成分别记录。
+> 更新日期：2026-10-31。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）与 `match_job` 合同提案（`90a1a6af`，merge `264b463d`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。BYOK 已在 Main `673e3460` 的相同集成代码上完成 DeepSeek 真实服务与 Windows Electron fresh-native/full 验收，零产品代码修改。功能验收与代码集成分别记录。
 > 状态口径：`IMPLEMENTED` 表示相应业务主路径已有实现，`PARTIAL` 表示部分实现，`MISSING` 表示目标产品能力尚未完整实现。上述状态不代表用户验收完成；`passes: true` 仅在对应真实业务与必要数据/桌面 Gate 通过后设置。
 
 ## A. 范围、迁移关系与状态
@@ -25,7 +25,7 @@
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
 | **AI-BYOK** | IN_SCOPE | IMPLEMENTED | DeepSeek 真实 Key 服务链路 29/29、Windows Electron fresh-native/full 17/17 通过 |
 | **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
-| **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | DOCX 修复已集成；原窗口 Electron fresh-native 49/50 通过，真实 AI 导入预览/排除仍阻塞 |
+| **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 四项工作台修订及 B7 已集成；Windows Electron fresh-native/full 最低验收闭环，`passes: true` |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | `match_job` canonical 合同提案已集成；D1–D6 待 Owner 裁定，未实现 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
@@ -109,7 +109,7 @@
 
 - 2026-10-29 已集成 [工作台实施合同 v2](./RESUME_BUILDER_CONTRACT_PROPOSAL.md)（`06efa71b`）与本聊天批准的剩余六组规则；本次经用户明确授权，将 `codex/resume-builder @ 559a2bce` 的实现合并 Main。依赖已锁定：`@dnd-kit/core` 6.3.1、`sortable` 10.0.0、`utilities` 3.2.2、`docx` 9.15.0。AI 改写与粘贴导入继续延期。
 
-- **P1 / IN_SCOPE / IMPLEMENTED / `passes: false`。** 本期两栏素材工作台、Section/Item/Expression 排序/隐藏恢复、素材与证据快照、版本对比/新草稿/岗位绑定、篇幅软目标与分页预览、服务端 DOCX 导出主链路已集成。161 项定向测试、真实字体 Chromium 分页 5 样例、浏览器组件 7 项、类型/lint、隔离库 61 条迁移与备份往返已有证据；集成源码与测试来源一致。本次没有执行 Windows Electron/E2E 或真实业务完整往返，未达成的验收条件继续保留，不将浏览器组件 Mock 证据视作功能验收。
+- **P1 / IN_SCOPE / IMPLEMENTED / `passes: true`。** 本期两栏素材工作台、Section/Item/Expression 排序/隐藏恢复、素材与证据快照、版本对比/新草稿/岗位绑定、篇幅软目标与分页预览、服务端 DOCX 导出主链路已集成。161 项定向测试、真实字体 Chromium 分页 5 样例、浏览器组件 7 项、类型/lint、隔离库 61 条迁移与备份往返已有证据；集成源码与测试来源一致。本次没有执行 Windows Electron/E2E 或真实业务完整往返，未达成的验收条件继续保留，不将浏览器组件 Mock 证据视作功能验收。
 
 **冻结的两栏布局**：
 
@@ -125,7 +125,18 @@
 4. **篇幅与排版**：支持一页/两页等篇幅目标、实时溢出提示和稳定分页；顶部统一管理版本、模板与排版。首版优先受控模板而不是完全自由画布。
 5. **导出与外部精修**：可导出可用简历文件（目标为 PDF 和可编辑文档）；用户可在导出后自行细修排版。要求预览与导出分页尽可能一致，不能只展示假分页或“导出”空入口。
 
-**最低验收**：选用真实形态的简历样例，在隔离 Windows Electron 中完成导入→解析校对→拖拽/局部编辑→创建岗位版本→恢复/对比→篇幅校验→导出并打开；验证素材完整性、旧版本不可被静默覆盖、导出内容与预览一致。具体 JSON Schema、解析支持格式、可编辑导出格式及排版引擎应先设计/审查，不把这些设计决策冒充已实现事实。
+**最低验收**：选用真实形态的简历样例，在隔离 Windows Electron 中完成导入→解析校对→拖拽/局部编辑→创建岗位版本→恢复/对比→篇幅校验→导出并打开；验证素材完整性、旧版本正文不被静默改写、导出内容与预览一致。具体 JSON Schema、解析支持格式、可编辑导出格式及排版引擎应先设计/审查，不把这些设计决策冒充已实现事实。
+
+**2026-10-30 现行行为**（细则见 [工作台合同](./RESUME_BUILDER_CONTRACT_PROPOSAL.md) 文首同日修订；`passes` 仍 false）：
+
+- 草稿中的条目可以拖到其他分节，或用「移动到分节」移入。同一职业素材不能在目标分节重复出现。
+- 预览栏可以拖拽或方向键调整宽度，也可以隐藏。宽度和隐藏记在本机，不进版本。
+- Word 导出与打印预览对齐联系方式/链接分行、分节大写、非正文项目符号和姓名字号。分页仍以导出 PDF 为准。
+- 草稿、已冻结、已投递可以改状态。改回草稿不改写正文。这些版本可以删除，除非已被申请或深度匹配引用。删光版本后可以新建空白草稿。
+- 同日早些时候，在与 Main `9bbe0ecc` 产品树一致的 `673e3460` 装配上，隔离 Electron fresh-native/full 用 DeepSeek `deepseek-flash` 完成真实导入预览、排除 `Contoso Lumen Internship`、确认保留 `Northwind Atlas Frontend`，以及退出后重开。证据在 `.worktrees/p1-resume-ai-import-acceptance/.tmp/p1-resume-ai-import-acceptance/RESULT.md`。该装配不含上述四项修订。用户随后在该装配上确认检查 1–5 通过。AI 改写和粘贴导入仍不在本期。
+
+
+- **2026-10-31 集成与验收收口**：四项修订及 B7 设备级偏好快照纳入 Main。结合此前通过项，Windows Electron fresh-native / AB_ENABLED / full 本轮 B7 在端口 63829→62016、同一隔离 data/config 下完整退出重开恢复隐藏及宽度，C7–C9 全过；C6 为驱动竞态且数据库正确。当前冻结范围最低验收满足。证据 `.worktrees/resume-preview-persistence-fix/.tmp/resume-preview-revalidation/evidence/results.json`。独立审查无必须修复项；historicalIntegrity 两个既有返回形状失败未扩项。未重复构建/桌面验收，未操作真实库。
 
 ### AGENT-CAPABILITIES：保留既有五工具；登记候选 `match_job`
 

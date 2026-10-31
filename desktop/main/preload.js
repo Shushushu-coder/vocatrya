@@ -14,15 +14,15 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 // A small synchronous snapshot keeps the existing immediate preference API.
-// The main process accepts only four validated values, never a path or key.
-function inputPreferenceRequest(channel, raw) {
+// The main process accepts only validated snapshot values, never a path or key.
+function preferenceRequest(channel, raw) {
   const result = ipcRenderer.sendSync(channel, raw);
-  if (!result?.ok) throw new Error("Input preferences storage unavailable");
+  if (!result?.ok) throw new Error("Preferences storage unavailable");
   return result.value;
 }
 contextBridge.exposeInMainWorld("vocatryaInputPreferences", {
-  read: () => inputPreferenceRequest("inputPreferences:read"),
-  write: (raw) => inputPreferenceRequest("inputPreferences:write", raw),
+  read: () => preferenceRequest("inputPreferences:read"),
+  write: (raw) => preferenceRequest("inputPreferences:write", raw),
 });
 
 // Mark Electron-hosted documents before first paint so CSS can reveal the
@@ -60,6 +60,10 @@ contextBridge.exposeInMainWorld("vocatryaWindow", {
 
 contextBridge.exposeInMainWorld("vocatryaResume", {
   printToPDF: (versionId) => ipcRenderer.invoke("resume:printToPDF", versionId),
+  // Resume preview pane hidden/width snapshot — a device preference stored
+  // beside input preferences so it survives the ephemeral backend port.
+  readPreviewPreferences: () => preferenceRequest("resumePreviewPreferences:read"),
+  writePreviewPreferences: (raw) => preferenceRequest("resumePreviewPreferences:write", raw),
 });
 
 const RUNTIME_CHANNELS = Object.freeze({

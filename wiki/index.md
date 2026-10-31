@@ -10,7 +10,7 @@
 | [`MVP_IMPLEMENTATION.md`](./MVP_IMPLEMENTATION.md) | **MVP 当前实施台账**：已交付工作包、剩余系统自启验收、延期提醒、合同与证据索引；历史开发缺口不作为当前待办。 | 理解 MVP 范围、工作包依赖、文件归属或追溯集成情况时。 |
 | [`P1_FEATURES.json`](./P1_FEATURES.json) | **P1 功能状态与验收清单**：七项工作覆盖活动退役、归档、三条 AI 路径、结构化简历工作台及 Agent 能力，分别记录范围、状态与验收条件。 | 核对 P1 范围、实施缺口与验收状态时。 |
 | [`P1_IMPLEMENTATION.md`](./P1_IMPLEMENTATION.md) | **P1 实施台账**：七项工作的产品合同、现状、剩余事项、真实能力边界、依赖及验收要求。 | 裁定范围、选择 P1 任务或安排其验收时；登记不自动授权开发。 |
-| [`RESUME_BUILDER_CONTRACT_PROPOSAL.md`](./RESUME_BUILDER_CONTRACT_PROPOSAL.md) | **结构化简历工作台实施合同 v2**：数据、导入校对、版本 Diff、分页与导出；四项关键产品决定已批准，其余提案与技术验证边界分别标明。 | 进入简历工作台编码前核对范围、已批决定和技术不变量。 |
+| [`RESUME_BUILDER_CONTRACT_PROPOSAL.md`](./RESUME_BUILDER_CONTRACT_PROPOSAL.md) | **结构化简历工作台实施合同 v2**：数据、导入校对、版本 Diff、分页与导出；2026-10-29 本期规则已批准。2026-10-30 修订覆盖跨分节移动、预览宽度/隐藏、DOCX 与预览对齐，以及冻结后的状态调整和版本删除。 | 进入简历工作台编码前核对范围、已批决定和技术不变量。文首同日修订优先于文中旧句。 |
 | [`CAREER_SCHEMA_CONTRACT_PROPOSAL.md`](./CAREER_SCHEMA_CONTRACT_PROPOSAL.md) | **职业资料 Schema 冻结合同**（2026-10-27 已批准）：CP-SCHEMA、CP-RECORDS、CP-PRIVACY 的字段和模型基线、派生规则、备份兼容、D1–D18 决策；文首含已集成 Main 的 BD-LINKS 补充合同（`CareerSkillDetail.tagId` 真实 FK、Backup V6）。 | 实施或修改职业资料、关联数据、隐私和备份相关工作包前。 |
 | [`DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`](./DATETIME_CONSUMER_CONTRACT_PROPOSAL.md) | **DateTime 消费者冻结合同**（2026-10-27 已批准）：P-TZ、P-PROC、P-JO、P-TASK 对 `src/lib/datetime` 的消费规则，包括 `DateOnly`、`Instant`、精度/时区、历史 `unknown`、排序分页、CSV 和文件 Owner 交接。 | 实施或修改时间语义及相关业务消费者前。 |
 

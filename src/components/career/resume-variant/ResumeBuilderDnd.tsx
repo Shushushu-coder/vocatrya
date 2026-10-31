@@ -9,10 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 export type BuilderDrop = { kind: "section" | "item" | "expression"; id: string; parentId: string; orderedIds: string[]; materialId?: string | null };
 export type LibraryDrag = { kind: "material"; materialId: string; evidenceId?: string };
-export function ResumeBuilderDnd({ children, disabled, onSort, onAttach }: { children: ReactNode; disabled: boolean; onSort: (target: BuilderDrop, ids: string[]) => Promise<void>; onAttach: (source: LibraryDrag, target: BuilderDrop) => Promise<void> }) {
+export function ResumeBuilderDnd({ children, disabled, onSort, onAttach, onMoveItem }: { children: ReactNode; disabled: boolean; onSort: (target: BuilderDrop, ids: string[]) => Promise<void>; onAttach: (source: LibraryDrag, target: BuilderDrop) => Promise<void>; onMoveItem: (itemId: string, targetSectionId: string, beforeItemId: string | null) => Promise<void> }) {
   const candidatesFor = (source: BuilderDrop | LibraryDrag | undefined, target: BuilderDrop | undefined) => {
     if (!source || !target) return false;
     if (source.kind === "material") return target.kind === "section" || Boolean(source.evidenceId && target.kind === "item" && target.materialId === source.materialId);
+    if (source.kind === "item") {
+      if (target.kind === "item") return true;
+      return target.kind === "section" && target.id !== source.parentId;
+    }
     return target.kind === source.kind && target.parentId === source.parentId;
   };
   const keyboardCoordinates: typeof sortableKeyboardCoordinates = (event, args) => {
@@ -44,7 +48,10 @@ export function ResumeBuilderDnd({ children, disabled, onSort, onAttach }: { chi
     const candidates = args.droppableContainers.filter((c) => candidatesFor(source, c.data.current as BuilderDrop | undefined));
     if (args.pointerCoordinates) {
       const underPointer = pointerWithin({ ...args, droppableContainers: candidates.filter((c) => c.id !== args.active.id) });
-      if (underPointer.length) return underPointer;
+      if (underPointer.length) {
+        const itemHit = underPointer.find((container) => (container.data?.current as BuilderDrop | undefined)?.kind === "item");
+        return itemHit ? [itemHit] : underPointer;
+      }
     }
     return closestCenter({ ...args, droppableContainers: candidates });
   };
@@ -56,6 +63,8 @@ export function ResumeBuilderDnd({ children, disabled, onSort, onAttach }: { chi
     setBusy(true);
     try {
       if (source.kind === "material") await onAttach(source, target);
+      else if (source.kind === "item" && target.kind === "item" && source.parentId !== target.parentId) await onMoveItem(source.id, target.parentId, target.id);
+      else if (source.kind === "item" && target.kind === "section" && source.parentId !== target.id) await onMoveItem(source.id, target.id, null);
       else if (source.kind === target.kind && source.parentId === target.parentId) {
         const from = source.orderedIds.indexOf(source.id), to = source.orderedIds.indexOf(target.id);
         if (from >= 0 && to >= 0) await onSort(source, arrayMove(source.orderedIds, from, to));

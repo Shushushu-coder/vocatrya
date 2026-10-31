@@ -15,6 +15,7 @@ vi.mock("@/actions/resumeVariant.actions", () => ({
   listResumeTargetJobs: vi.fn(async () => ({ success: true, data: [] })),
   setResumeContentHidden: vi.fn(), attachResumeMaterial: vi.fn(), addResumeEvidence: vi.fn(), syncResumeMaterialTitle: vi.fn(), updateResumeLayout: vi.fn(), updateResumeTargetJob: vi.fn(), compareResumeVersions: vi.fn(), createBlankResumeDraft: vi.fn(),
   findReusableResumeExport: vi.fn(), freezeResumeVersion: vi.fn(),
+  moveResumeSectionItem: vi.fn(), setResumeVersionStatus: vi.fn(), deleteResumeVersion: vi.fn(),
   getResumeVariant: vi.fn(), getResumeVariantVersion: vi.fn(), listResumeVariantVersions: vi.fn(),
   cloneResumeVersionAsDraft: vi.fn(), createResumeExpression: vi.fn(), createResumeSection: vi.fn(),
   createResumeSectionItem: vi.fn(), deleteResumeExpression: vi.fn(), deleteResumeSection: vi.fn(),
@@ -24,7 +25,11 @@ vi.mock("@/actions/resumeVariant.actions", () => ({
 }));
 const artifact = { id: "artifact-1", fileName: "张三_校园.pdf" };
 const pdf = new Uint8Array([37, 80, 68, 70, 45]);
-const bridge = { printToPDF: vi.fn() };
+const bridge = {
+  printToPDF: vi.fn(),
+  readPreviewPreferences: vi.fn(() => null),
+  writePreviewPreferences: vi.fn((raw: string) => raw),
+};
 let downloadClick: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.resetAllMocks();
@@ -89,7 +94,7 @@ it("confirms read-only/new-draft consequences before freezing and exporting", as
   const { button, onFrozen } = control("DRAFT");
   fireEvent.click(button);
   const dialog = screen.getByRole("alertdialog");
-  expect(dialog).toHaveTextContent("This version will become read-only. Further edits require creating a new draft.");
+  expect(dialog).toHaveTextContent("This version will become read-only. You can set the status back to draft to edit it, or create a new draft.");
   expect(actions.freezeResumeVersion).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole("button", { name: "Freeze and export" }));
   await waitFor(() => expect(downloadClick).toHaveBeenCalledOnce());

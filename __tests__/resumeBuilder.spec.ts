@@ -8,6 +8,8 @@ import { parseResumeLayoutConfig } from "@/lib/career/resumeLayoutConfig";
 import { BackupDataSchema, ManifestSchema, BACKUP_FORMAT_VERSION } from "@/lib/backup/schema";
 import { readAbResumeVariant } from "@/lib/career/resumeReadDispatch";
 import mammoth from "mammoth";
+import JSZip from "jszip";
+import { buildResumeDocx } from "@/lib/career/resumeDocx";
 import { PrismaClient } from "@prisma/client";
 import {
   AB_MIGRATION_STATUS,
@@ -219,12 +221,72 @@ describe("resume builder persistence and boundaries", () => {
     expect(a.id).toBe(b.id); expect(a.format).toBe("DOCX");
     const download = await artifacts.openForDownload(a.id);
     const text = (await mammoth.extractRawText({ buffer: download.bytes })).value;
-    expect(text).toContain("可编辑中文正文"); expect(text).toContain(section.title);
+    expect(text).toContain("可编辑中文正文"); expect(text).toContain(section.title.toLocaleUpperCase());
     expect(text).not.toContain("Shipped compilers"); expect(text).not.toContain("Hidden section");
     await expect(new ResumeArtifactService(prisma, otherUserId, FEATURE_ON, root).openForDownload(a.id)).rejects.toMatchObject({ code: "ARTIFACT_NOT_FOUND" });
     fs.unlinkSync(path.join(root, a.storageKey));
     const regenerated = await artifacts.createDocxExport(versionId);
     expect(regenerated.id).not.toBe(a.id);
     expect((await artifacts.openForDownload(regenerated.id)).bytes.byteLength).toBeGreaterThan(100);
+  });
+
+  it("moves a section item into another section and rejects a duplicate material", async () => {
+    const { service, versionId, section, item } = await seedGraph();
+    const other = await service.createSection({ versionId, title: "Projects" });
+    const anchor = await service.createSectionItem({ sectionId: other.id, itemKind: RESUME_SECTION_ITEM_KIND.MANUAL });
+    await service.moveSectionItem(item.id, other.id, anchor.id);
+    const moved = (await service.getVersion(versionId)).sections.find((row) => row.id === other.id)!;
+    expect(moved.items.map((row) => row.id)).toEqual([item.id, anchor.id]);
+    expect((await service.getVersion(versionId)).sections.find((row) => row.id === section.id)!.items).toHaveLength(0);
+    const material = await materials().create({ type: "PROJECT", title: "Once" });
+    const first = await service.attachMaterialToSection(section.id, material.id);
+    await service.moveSectionItem(first.id, other.id, null);
+    const second = await service.attachMaterialToSection(section.id, material.id);
+    await expect(service.moveSectionItem(second.id, other.id, null)).rejects.toMatchObject({ code: "MATERIAL_ALREADY_IN_SECTION" });
+    await service.freeze(versionId);
+    await expect(service.moveSectionItem(item.id, section.id, null)).rejects.toMatchObject({ code: "VERSION_IMMUTABLE" });
+  });
+
+  it("changes status after freeze and deletes frozen and draft versions", async () => {
+    const { service, variant, versionId } = await seedGraph();
+    const content = (await service.getVersion(versionId)).sections[0].items[0].expressions[0].content;
+    await service.freeze(versionId);
+    const unfrozen = await service.setStatus(versionId, "DRAFT");
+    expect(unfrozen.status).toBe("DRAFT");
+    expect(unfrozen.frozenAt).not.toBeNull();
+    expect((await service.getVersion(versionId)).sections[0].items[0].expressions[0].content).toBe(content);
+    await service.setStatus(versionId, "SUBMITTED");
+    await service.setStatus(versionId, "FROZEN");
+    expect((await service.getVersion(versionId)).status).toBe("FROZEN");
+    const cloned = await service.cloneAsDraft(versionId);
+    expect(cloned.parentVersionId).toBe(versionId);
+    await service.deleteVersion(versionId);
+    const remaining = await service.getVersion(cloned.id);
+    expect(remaining.parentVersionId).toBeNull();
+    expect((await service.getVariant(variant.id)).currentVersionId).toBe(cloned.id);
+    const opportunity = await new OpportunityService(prisma, userId, FEATURE_ON).create({ companyId, title: "Cited job" });
+    await prisma.applicationAttempt.create({ data: { userId, jobOpportunityId: opportunity.id, channelLabel: "Site", submittedResumeVersionId: cloned.id } });
+    await expect(service.setStatus(cloned.id, "FROZEN")).rejects.toMatchObject({ code: "SUBMITTED_RESUME_PROVENANCE" });
+    await expect(service.deleteVersion(cloned.id)).rejects.toMatchObject({ code: "SUBMITTED_RESUME_PROVENANCE" });
+    await prisma.applicationAttempt.deleteMany({ where: { submittedResumeVersionId: cloned.id } });
+    await service.deleteVersion(cloned.id);
+    expect(await service.listVariantVersions(variant.id)).toEqual([]);
+    expect((await service.getVariant(variant.id)).currentVersionId).toBeNull();
+  });
+
+  it("keeps docx contact, links, section case and bullets aligned with the print preview", async () => {
+    const bytes = await buildResumeDocx({
+      headerSnapshot: JSON.stringify({ fullName: "Ada Lovelace", headline: "Engineer", email: "ada@example.test", phone: "123", links: [{ url: "https://example.test" }] }),
+      sections: [{ title: "Experience", items: [{ materialTitleSnapshot: "Analytical Engine", expressions: [{ kind: "BODY", content: "Intro line" }, { kind: "BULLET", content: "Built it" }] }] }],
+    });
+    const xml = await JSZip.loadAsync(bytes).then((zip) => zip.file("word/document.xml")!.async("string"));
+    const paragraphs = xml.split(/<w:p[\s>]/).slice(1);
+    const contact = paragraphs.find((paragraph) => paragraph.includes("ada@example.test"));
+    expect(contact).toBeTruthy();
+    expect(contact).not.toContain("https://example.test");
+    expect(xml).toContain("EXPERIENCE");
+    expect(xml).toContain('w:val="36"');
+    expect(paragraphs.find((paragraph) => paragraph.includes("Intro line"))).not.toContain("<w:numPr");
+    expect(paragraphs.find((paragraph) => paragraph.includes("Built it"))).toContain("<w:numPr");
   });
 });
