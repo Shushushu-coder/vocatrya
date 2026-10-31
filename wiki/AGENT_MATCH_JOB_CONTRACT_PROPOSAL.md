@@ -1,7 +1,7 @@
 # AGENT `match_job` 工具合同提案（P1 AGENT-CAPABILITIES）
 
 - 基线：`main @ 39a5a1d3`；分支 `codex/p1-match-job-contract`；工作树 `.worktrees/p1-match-job-contract`。
-- 状态：**提案，待 Owner 裁定**。本文只形成合同与事实核对，不代表功能已实现，不授权提交、合并、部署、真实数据操作或真实 AI 调用。
+- 状态：**D1–D6 已获 Owner 批准；尚未授权实施**。本文只形成合同与事实核对，不代表功能已实现，不授权提交、合并、部署、真实数据操作或真实 AI 调用。
 - 依据：`wiki/P1_FEATURES.json`、`wiki/P1_IMPLEMENTATION.md`（AGENT-CAPABILITIES 节，只读）及基线源码只读核查。本仓库无 `.codegraph`。
 - 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐】**＝本合同建议；**【待决定】**＝需 Owner 冻结的产品规则。标注不一致处以 P1 台账与本文件决策清单为准。
 
@@ -101,7 +101,7 @@
 3. `loadPreferenceSnapshot`（`:188-219`）：求职偏好 7 字段快照+文本。
 4. 素材源：`{kind:"career-profile"}` → `buildCareerProfileMaterial`（CareerMaterial 列表全文）；`{kind:"resume-version",versionId}` → `buildResumeVersionMaterial` → `ResumeVariantService.getVersion` + `projectResumeVariantText`（`:255-280`）。空素材且无偏好 → `MATCH_INSUFFICIENT_MATERIAL`（`:488-495`）。
 5. `ensureRawTextParse`（`:306-341`）：`inputHash = hash(schemaVersion+parserVersion"jd-raw-text-v1"+jdContentHash)`；同哈希复用既有 `JobDescriptionParse`，否则**创建行并回写 `jobDescriptionVersion.currentParseId`**（注意：这是写操作）。
-6. `executeStructuredForAssignment`（`structured-execution.ts:137-255`）：`purpose:"MATCH_ANALYSIS"`，schema `FAST_SCREENING_RESULT_SCHEMA`（required `verdict`+`reasons`，`verdict∈{PASS,BORDERLINE,FAIL}`，可选 `hardRequirements/coreMatch/preferenceMatch`，`additionalProperties:false`，`fastScreening.ts:52-63`）；`runId=randomUUID()` → `operationId:"match-analysis:${runId}"`、`managedResource:{business:"MATCH_ANALYSIS",resourceKey:"match-analysis:${runId}"}`（`:502-522`）；注释声明**每次运行铸造新身份，重击不会重放旧收据**（`:515-516`）。
+6. `executeStructuredForAssignment`（`src/lib/ai/structured-execution.ts:137-255`）：`purpose:"MATCH_ANALYSIS"`，schema `FAST_SCREENING_RESULT_SCHEMA`（required 包含全部五键，`verdict∈{PASS,BORDERLINE,FAIL}`，`hardRequirements/coreMatch/preferenceMatch` 必须出现但可为 null（2026-10-31 strict schema 修复），`additionalProperties:false`，`fastScreening.ts:52-63`）；`runId=randomUUID()` → `operationId:"match-analysis:${runId}"`、`managedResource:{business:"MATCH_ANALYSIS",resourceKey:"match-analysis:${runId}"}`（`:502-522`）；注释声明**每次运行铸造新身份，重击不会重放旧收据**（`:515-516`）。
 7. 执行结果：`NOT_CONFIGURED`→`{failed,"NOT_CONFIGURED"}`；非 OK→`{failed, executed.code, issueSummary}`（`:526-535`）。
 8. `MatchAnalysisService.createFastScreening`（`matchAnalysisService.ts:108-191`）：写 `MatchAnalysis`（`status=COMPLETED`、`resumeVariantVersionId:null`、provider/model/`resolvedConnectionId`/`managedAiProvenance` 快照）+ `FastScreeningDetail`（`inputSnapshot=canonicalize(hashInput)`，含完整素材/偏好快照文本）。
 9. `markSupersededAnalysesStale`（`fastScreening.ts:364-400`）：对同机会非 stale `FAST_SCREENING` 行，按各自 `inputSnapshot` 比较 `jdContentHash`/`careerMaterialSnapshot`/`preferenceSnapshot`，差异→对应 `JD_CHANGED/CAREER_MATERIAL_CHANGED/PREFERENCE_CHANGED`；**输入相同则旧行保持非 stale**（不判重，允许重复新鲜行）。
@@ -140,8 +140,8 @@
 - 归档简历：选项面（`listSubmittableVersions`/`listAbResumeChoices`/`readAbResumeVariant`）过滤 `archivedAt:null`；但 `getVersion` 不校验→**直接喂 ARCHIVED 版本/归档 variant 的版本仍可作为 source 跑**（§3.4）。
 - Agent 侧归档：`getJobForAgent` 归档 canonical 职位 → `no_job`（`canonicalJobRead.ts:94-95`，`uiStatus.ts:50-61`）；会话引用归档职位 → 整轮 `CONVERSATION_ARCHIVED_CONTENT`（§2.4）；归档会话 → `CONVERSATION_ARCHIVED`。
 - 模式：受限模式（`LEGACY_ONLY`/`AB_READY_DISABLED`/`BLOCKED`/非 full scope）下 `assertFullAbWritable`/`assertMatchSurfaceEnabled` 全部失败关闭（`capabilities.ts:130-148`；`matchAnalysis.actions.ts:32-40`）。`MatchAnalysisService` 读同样被 `assertFullAbWritable` 拦。
-- 模型分配：`resolveBusinessAIConfig`（`assignments.ts:213-280`）顺序 `MATCH_ANALYSIS assignment → GLOBAL_DEFAULT → NOT_CONFIGURED`；`classifyAssignment`（`:123-202`）显式失效→`INVALID_ASSIGNMENT`（`ASSIGNED_CONNECTION_UNAVAILABLE/REAUTH_REQUIRED/CONNECTION_DISCONNECTED/CONNECTION_ERROR/RUNTIME_NOT_AVAILABLE/UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION/MODEL_UNAVAILABLE`），**不回退**到全局默认或 legacy 路径（`structured-execution.ts:156-171`）。
-- 执行失败语义：`executeStructuredForAssignment` 已支持 `timeoutMs`/`signal` 参数（`structured-execution.ts:54-55`）但 **`runFastScreening` 目前不透传**——canonical 运行当前不可被取消、无显式超时预算；`FAILED` 结果带 `code+issueSummary`（字段路径级摘要，不含原始模型输出，`:94-101`）。
+- 模型分配：`resolveBusinessAIConfig`（`assignments.ts:213-280`）顺序 `MATCH_ANALYSIS assignment → GLOBAL_DEFAULT → NOT_CONFIGURED`；`classifyAssignment`（`:123-202`）显式失效→`INVALID_ASSIGNMENT`（`ASSIGNED_CONNECTION_UNAVAILABLE/REAUTH_REQUIRED/CONNECTION_DISCONNECTED/CONNECTION_ERROR/RUNTIME_NOT_AVAILABLE/UNSUPPORTED_PROVIDER_RUNTIME_COMBINATION/MODEL_UNAVAILABLE`），**不回退**到全局默认或 legacy 路径（`src/lib/ai/structured-execution.ts:156-171`）。
+- 执行失败语义：`executeStructuredForAssignment` 已支持 `timeoutMs`/`signal` 参数（`src/lib/ai/structured-execution.ts:54-55`）但 **`runFastScreening` 目前不透传**——canonical 运行当前不可被取消、无显式超时预算；`FAILED` 结果带 `code+issueSummary`（字段路径级摘要，不含原始模型输出，`:94-101`）。
 - Managed 侧：`managedResource`+`operationId` 构成持久操作身份；`INVOCATION_*` 状态码已在 `mapAgentError`（`errors.ts:108-114`）与面板 `CONNECTION_CODES` 桶中定义。
 
 ### 3.6 未交付项边界【源码事实】
@@ -177,7 +177,7 @@ z.object({
 1. `requireOwnedOpportunity(userId, pageJobId)`：缺失/跨用户 → `no_job`；`archivedAt!==null` → `unavailable{code:"OPPORTUNITY_ARCHIVED"}`（**执行前检查**，避免 §3.5 的“先写 parse+烧 AI 再失败”缺陷）。
 2. 若 `resumeTitle` 非空：按 `selectAbResume` 语义对 `listAbResumeChoices`（或等价非归档 variant 列表）做 exact→substring 匹配；
    - 零命中 → `needs_selection{resumes:[{id,title}]}`（沿用现有返回形状）；
-   - 命中 variant → 取其 `currentVersionId` 对应版本，若不在 `{DRAFT,FROZEN,SUBMITTED}` 则取该 variant 最新 submittable 版本（与 `listSubmittableVersions` 过滤集一致）；无可递交版本 → `unavailable{code:"VERSION_NOT_SUBMITTABLE"}`（新增码）或回退 `needs_selection`——见待决定 D5。
+   - 命中 variant → 取其 `currentVersionId` 对应版本，若不在 `{DRAFT,FROZEN,SUBMITTED}` 则取该 variant 最新 submittable 版本（与 `listSubmittableVersions` 过滤集一致）；无可递交版本 → `unavailable{code:"VERSION_NOT_SUBMITTABLE"}`（新增码）——见已批准 D5。
    - source = `{kind:"resume-version", versionId}`。
 3. 若 `resumeTitle` 为空：source = `{kind:"career-profile"}`。
 4. 调 `runFastScreening`（§4.4）；其 `MATCH_JD_MISSING`/`MATCH_INSUFFICIENT_MATERIAL` 等 `failed` 码原样透传为结果码。
@@ -189,7 +189,7 @@ z.object({
   - 该工具**不经过 `runNestedGeneration`**——无 token 级流式（结构化 one-shot），`data-nested-stream` 不产生；UI 呈现为“运行中 → 结果卡”。`AGENT_NESTED_TOOLS` 中的 `match_job` 成员资格需随实现再确认（无瞬态流语义），`AGENT_CHAT_TERMINAL_TOOLS` 保留（终轮语义不变）。
   - 并发：`nestedGuard` 语义需在 canonical 侧等价保留（同一步内 review_resume+match_job 两个 180s 调用会串行爆 300s 回合预算）——实现细节，合同要求“同一回合至多一个重型 AI 子调用并发”。
 - **运行身份与持久化幂等**：不能直接由客户端 `requestId` 或模型 `toolCallId` 计算恢复身份——客户端重试和重新生成工具调用时二者都可能变化。Agent 路径必须在发起 AI 前，以服务器已持久化的原始会话轮次身份（例如 originating user-message id / admitted turn revision）+ `toolName` + canonical input hash，在短事务中创建或取得一条 durable tool-execution reservation；该记录持有服务器生成且唯一的 `operationKey`、状态和最终 `analysisId`。`operationKey` 同时用于 `operationId`/`managedResource.resourceKey` 和 canonical 分析持久化；`MatchAnalysis` 通过唯一外键/唯一操作身份与该执行记录绑定。崩溃恢复先按原始持久轮次查找 `PENDING/COMPLETED` 执行记录：已完成则返回同一 `MatchAnalysis`，未完成则用同一 `operationKey` 恢复，不得创建第二行。不同显式用户轮次使用不同 reservation，仍各自产生新历史。不能只依赖 Managed `INVOCATION_REPLAYED`，因为它只防重复调用/计费，不能单独防止重复数据库写入。若现有会话模型无法在免审批路径提供稳定、可恢复的原始轮次身份，则 D3 必须选择“需要审批”，并在审批持久化时预留执行记录；不能同时宣称免审批和崩溃幂等。面板保留现有随机 `runId` 语义。
-- **超时与取消**：合同要求把 `signal`（= 工具 `execute` 的 `abortSignal`，即 `turnSignal`）与 `timeoutMs` 透传进 `executeStructuredForAssignment`（其已支持两参，`structured-execution.ts:54-55`）；推荐 `timeoutMs = AI_JOB_MATCH_TIMEOUT_MS`（180s，legacy match 同预算），上限受 300s 回合预算自然约束。取消/超时→`failed{code}`，不持久化。
+- **超时与取消**：合同要求把 `signal`（= 工具 `execute` 的 `abortSignal`，即 `turnSignal`）与 `timeoutMs` 透传进 `executeStructuredForAssignment`（其已支持两参，`src/lib/ai/structured-execution.ts:54-55`）；推荐 `timeoutMs = AI_JOB_MATCH_TIMEOUT_MS`（180s，legacy match 同预算），上限受 300s 回合预算自然约束。取消/超时→`failed{code}`，不持久化。
 - **版本校验补强**：`getVersion` 不查 archived/status（§3.4/3.5）→ 工具必须在 §4.3-2 以 submittable 集过滤后**再校验**解析出的 `versionId`（variant 未归档 ∧ status∈`{DRAFT,FROZEN,SUBMITTED}`），不允许任何路径跑 ARCHIVED 版本或归档 variant。
 
 ### 4.5 写入语义、历史与 stale【推荐】
@@ -199,7 +199,7 @@ z.object({
 - 历史读取**不进入本工具合同**：结果只携带本次 `analysis`；完整历史留在职位页 `MatchAnalysisPanel`（复用边界 §4.9）。结果可附 `historyCount`（可选字段）——若实现需 `listAnalysesForOpportunity` 计数，成本一次查询；推荐保留为可选。
 - `FastScreeningDetail.inputSnapshot` 含完整素材/偏好文本——**结果中永不回传**（见 §4.7 输出）。
 
-### 4.6 确认策略（needsApproval）【推荐，列为待决定 D3】
+### 4.6 确认策略（needsApproval）【已批准 D3】
 
 - **推荐：`needsApproval` 恒真**（canonical 路径）。依据：
   - `add_job` 先例——“the gate exists to stop writes the user has not seen”（`tools/getResume.ts:20-21` 注释语义）；canonical 运行无 token 流可“看着落地”，Legacy `match_job`/`review_resume` 免确认的理由（`tools/matchJob.ts:48-49`）不成立。
@@ -257,7 +257,7 @@ z.object({
 | 连接/运行时/额度/结构化执行失败 | `failed{code, detail?}`（复用面板 CONNECTION/QUOTA/STRUCTURED 分桶） |
 | 取消/超时 | `failed{AI_EXECUTION_TIMEOUT}` |
 | 用户拒绝 approval | AI SDK `output-denied` 状态由结果卡渲染“已取消”（现有机制） |
-| 版本不可递交（归档 variant/ARCHIVED 版本） | `unavailable{VERSION_NOT_SUBMITTABLE}`（新码）或并入 `needs_selection`——待决定 D5 |
+| 版本不可递交（归档 variant/ARCHIVED 版本） | `unavailable{VERSION_NOT_SUBMITTABLE}`（新码）——已批准 D5 |
 
 ### 4.9 与职位详情 FAST_SCREENING 的复用边界【推荐】
 
@@ -279,7 +279,11 @@ z.object({
 10. 会话上下文引用归档职位时整轮拒绝（`hasArchivedJobReference`）——工具无需重复实现，但失败呈现依赖该上游码。
 11. conversation receipt 与 `MatchAnalysis` 无法跨 AI 调用放进同一长事务；必须在 AI 前以持久化原始轮次身份预留 tool-execution 记录，再通过其稳定 `operationKey` + 唯一约束关闭“分析已写、receipt 未写”的崩溃窗口。完成时执行记录与 `analysisId` 同事务关联；唯一冲突时读取并返回既有完成结果；同 Key 不同输入视为 turn conflict。客户端新 `requestId` 或模型新 `toolCallId` 不是恢复身份。
 
-## 6. 待 Owner 裁定清单（最小集）
+## 6. Owner 决策记录（D1–D6 已批准，2026-10-31 同步）
+
+Owner 已批准下表全部推荐；备选项仅保留为历史上下文，不是未决选项。D1 仅 freshNativeFull；D2 仅会话上下文职位，无 jobId；D3 needsApproval 恒真；D4 缺省 career-profile；D5 VERSION_NOT_SUBMITTABLE；D6 每次显式请求新分析行，同一执行的崩溃恢复仍须幂等。
+
+仅冻结产品决定，未授权 match_job 编码。AI 前 durable reservation、stable operationKey 和分析唯一绑定的具体持久化设计仍待实施合同；当前 MatchAnalysis 没有 operationKey 唯一列或外键，不得假定现有结构已满足。
 
 | # | 问题 | 推荐 | 备选 |
 |---|---|---|---|
@@ -294,4 +298,4 @@ z.object({
 
 - 【源码事实】七工具构造、fresh-native 删二、五项开放工具契约、Legacy `match_job` 全链（legacy Job/Resume、`Job.matchData` 覆盖、无 approval、checkpoint 幂等、terminal）、canonical `FAST_SCREENING` 十步链、`MatchAnalysisService` 全方法 `assertFullAbWritable` 门+归属/归档/stale、Resume Variant/Version 结构化与绑定、`MATCH_ANALYSIS` 分配解析顺序、面板=唯一 canonical UI（仅 freshNativeFull）。
 - 【推荐】工具名 `match_job` 保留；canonical 实现仅挂 `freshNativeFull`；输入仅 `resumeTitle?`；服务端解析职位（上下文）与版本（具名→submittable）；复用 `runFastScreening`+`operationKey/signal/timeoutMs` 注入；写 `MatchAnalysis` 历史；结果判别联合含 `verdict`+四段+provenance+`saved:true`；确认卡前置（D3）；幂等=AI 前按持久化原始轮次预留 durable tool-execution、稳定 operationKey 与分析唯一绑定、receipt 重放返回同一行，不同显式请求按 D6 决定是否复用。
-- 【待决定】D1 注册范围、D2 职位输入面、D3 approval、D4 默认素材源、D5 不可递交版本处理、D6 同输入去重。
+- 【已批准】D1–D6 全部采用 §6 推荐；【实施待定】durable reservation 与分析唯一绑定的持久化结构。未授权编码，工具未开放。
