@@ -135,6 +135,7 @@ describe("agent chat system prompt", () => {
       "get_resume",
       "review_resume",
       "match_job",
+      "match_job_canonical",
       "generate_cover_letter",
     ]);
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("list_jobs");

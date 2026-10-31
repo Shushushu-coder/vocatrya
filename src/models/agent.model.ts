@@ -171,6 +171,46 @@ export type AgentMatchJobResult =
   | { status: "unreadable"; what: "job" | "resume"; title: string; reason: string }
   | { status: "generation_failed"; jobTitle: string; reason: string };
 
+// The canonical (fresh-native/full) match_job result — a FAST_SCREENING
+// verdict, never a legacy score. It parallels the legacy union above rather
+// than extending it: the canonical tool does not stream nested tokens, does
+// not return body text, and names its failures with stable codes the result
+// card maps to messages. `source` records which material actually fed the
+// run; `analysisId` is the durable MatchAnalysis row the run appended to the
+// job's match history.
+export type AgentCanonicalMatchJobResult =
+  | {
+      status: "ok";
+      analysisId: string;
+      jobId: string;
+      jobTitle: string;
+      company: string;
+      source:
+        | { kind: "career-profile" }
+        | {
+            kind: "resume-version";
+            variantId: string;
+            resumeTitle: string;
+            versionId: string;
+            versionNumber: number;
+          };
+      verdict: string;
+      reasons: string | null;
+      hardRequirements: string | null;
+      coreMatch: string | null;
+      preferenceMatch: string | null;
+      provider: string | null;
+      model: string | null;
+      completedAt: string | null;
+      saved: true;
+      historyCount?: number;
+    }
+  | { status: "no_job" }
+  | { status: "needs_selection"; resumes: { id: string; title: string }[] }
+  | { status: "no_resumes" }
+  | { status: "unavailable"; code: string; reason: string }
+  | { status: "failed"; code: string; detail?: string | null };
+
 // What generate_cover_letter returns to the model AND to the result card. The
 // letter body is here so a follow-up ("make it shorter") answers from it; the
 // resume text and the job description are not.

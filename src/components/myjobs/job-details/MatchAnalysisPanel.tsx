@@ -92,11 +92,14 @@ const QUOTA_CODES = new Set([
   "AI_REQUEST_TOO_LARGE",
 ]);
 
-function errorMessageKey(code: string): string {
+export function errorMessageKey(code: string): string {
   switch (code) {
     case "MATCH_JD_MISSING":
     case "MATCH_INSUFFICIENT_MATERIAL":
     case "NOT_CONFIGURED":
+    case "VERSION_NOT_SUBMITTABLE":
+    case "MATCH_UNAVAILABLE":
+    case "OPPORTUNITY_ARCHIVED":
       return `matchAnalysis.errors.${code}`;
     default:
       break;
@@ -110,7 +113,7 @@ function errorMessageKey(code: string): string {
   return "matchAnalysis.errors.generic";
 }
 
-function verdictVariant(verdict: string | undefined): {
+export function verdictVariant(verdict: string | undefined): {
   variant: "default" | "secondary" | "destructive" | "outline";
   className?: string;
 } {
@@ -126,7 +129,7 @@ function verdictVariant(verdict: string | undefined): {
   }
 }
 
-function verdictLabel(
+export function verdictLabel(
   verdict: string | null | undefined,
   t: (key: string) => string,
 ): string {

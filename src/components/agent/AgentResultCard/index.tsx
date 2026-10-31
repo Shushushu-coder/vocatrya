@@ -9,6 +9,7 @@ import { MatchJobResult } from "./MatchJobResult";
 import { CoverLetterResult } from "./CoverLetterResult";
 import type {
   AgentAddJobResult,
+  AgentCanonicalMatchJobResult,
   AgentCoverLetterResult,
   AgentGetJobResult,
   AgentGetResumeResult,
@@ -75,7 +76,9 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
     ) : toolName === "review_resume" ? (
       <ReviewResumeResult output={part.output as AgentReviewResumeResult} />
     ) : toolName === "match_job" ? (
-      <MatchJobResult output={part.output as AgentMatchJobResult} />
+      <MatchJobResult
+        output={part.output as AgentMatchJobResult | AgentCanonicalMatchJobResult}
+      />
     ) : toolName === "generate_cover_letter" ? (
       <CoverLetterResult output={part.output as AgentCoverLetterResult} />
     ) : null;
