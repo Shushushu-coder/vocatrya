@@ -111,7 +111,7 @@ export async function resolveResumeForAgent(
   return { status: "needs_selection", resumes: titles };
 }
 
-function selectAbResume(
+export function selectAbResume(
   titles: { id: string; title: string }[],
   opts: { title?: string; pageResumeId?: string },
 ):

@@ -31,6 +31,12 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   // durable identity is the client request id (resource/operation keys are
   // derived from it), and the settled output lands in ResumeVariantVersion.
   "ResumeImportAttempt",
+  // Durable per-turn Agent tool-execution reservation (match_job): a
+  // runtime recovery ledger, not user state. The settled outcome lands in
+  // MatchAnalysis (backed up); restoring executions would resurrect
+  // reservations whose persisted turn semantics no longer hold. Rows still
+  // present on the same install keep dedupe/replay working.
+  "AgentToolExecution",
 ] as const;
 
 export const BACKED_UP_PRISMA_MODELS: readonly BackupModel[] = INSERT_ORDER;

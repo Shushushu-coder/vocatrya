@@ -1,6 +1,7 @@
 import { buildAgentTools } from "@/lib/agent/tools";
 import {
   AGENT_CHAT_FRESH_FULL_SECTIONS,
+  AGENT_TOOL_DESCRIPTIONS,
   buildAgentChatSystemPrompt,
   buildPageContextMessage,
 } from "@/lib/agent/prompt";
@@ -15,7 +16,7 @@ const toolCtx = {
 };
 
 describe("buildAgentTools under fresh + full", () => {
-  it("registers canonical reads plus add_job, and hides match and cover letter", () => {
+  it("registers canonical reads, add_job and canonical match_job; hides cover letter", () => {
     const tools = buildAgentTools({ ...toolCtx, freshNativeFull: true });
     expect(Object.keys(tools)).toEqual([
       "add_job",
@@ -23,7 +24,14 @@ describe("buildAgentTools under fresh + full", () => {
       "get_job",
       "get_resume",
       "review_resume",
+      "match_job",
     ]);
+    // Canonical match_job always requires approval — the product decision
+    // D3: every run crosses the durable approval boundary.
+    expect(tools.match_job.needsApproval).toBe(true);
+    expect(tools.match_job.description).toBe(
+      AGENT_TOOL_DESCRIPTIONS.match_job_canonical,
+    );
   });
 
   it("keeps add_job canonical for migrated full without hiding match or cover letter", () => {
@@ -73,10 +81,12 @@ describe("buildAgentTools under fresh + full", () => {
 describe("fresh + full system prompt", () => {
   const prompt = buildAgentChatSystemPrompt("en", { freshNativeFull: true });
 
-  it("advertises add_job and still declines match and cover letter", () => {
+  it("advertises add_job and canonical match_job, still declines cover letter", () => {
     expect(prompt).toContain("add_job");
     expect(AGENT_CHAT_FRESH_FULL_SECTIONS.capabilities).toContain("add_job");
-    for (const name of ["match_job", "generate_cover_letter"]) {
+    expect(prompt).toContain("match_job");
+    expect(AGENT_CHAT_FRESH_FULL_SECTIONS.capabilities).toContain("match_job");
+    for (const name of ["generate_cover_letter"]) {
       expect(prompt).not.toContain(name);
       expect(AGENT_CHAT_FRESH_FULL_SECTIONS.capabilities).not.toContain(name);
       expect(AGENT_CHAT_FRESH_FULL_SECTIONS.limitations).not.toContain(name);
@@ -85,6 +95,7 @@ describe("fresh + full system prompt", () => {
     expect(prompt).toMatch(/match analysis/i);
     expect(prompt).toMatch(/cover letter/i);
     expect(prompt).toMatch(/does not submit an application/i);
+    expect(prompt).toMatch(/exactly six capabilities/i);
   });
 
   it("keeps the canonical read tools advertised", () => {
@@ -117,12 +128,12 @@ describe("fresh + full system prompt", () => {
 });
 
 describe("fresh + full page context", () => {
-  it("does not steer the model toward match or cover-letter tools", () => {
+  it("steers a job page toward match_job but never toward cover letter", () => {
     const jobPage = buildPageContextMessage(
       { jobId: "job-1" },
       { freshNativeFull: true },
     );
-    expect(jobPage).not.toContain("match_job");
+    expect(jobPage).toContain("match_job");
     expect(jobPage).not.toContain("generate_cover_letter");
 
     const jobsList = buildPageContextMessage(
@@ -130,7 +141,7 @@ describe("fresh + full page context", () => {
       { freshNativeFull: true },
     );
     expect(jobsList).toContain("add_job");
-    expect(jobsList).not.toContain("match");
+    expect(jobsList).toContain("open the job they mean");
     expect(jobsList).not.toContain("cover letter");
   });
 

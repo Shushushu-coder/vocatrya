@@ -55,6 +55,7 @@ model User {
   matchAnalyses          MatchAnalysis[]
   legacyMigrationMaps    LegacyMigrationMap[]
   dataMigrationRuns      DataMigrationRun[]
+  agentToolExecutions    AgentToolExecution[]
 
   // Phase 3A Interview transplant (additive backrelations only).
   interviewSessions   InterviewSession[]
@@ -702,6 +703,10 @@ model ChatConversation {
   // Disposable transcript-compression cache. Deleting the row never
   // removes career facts. Cascade follows the conversation.
   conversationSummary    ConversationSummary?
+  // Durable Agent tool-execution reservations bound to this conversation's
+  // persisted turns. Follows the conversation — an execution without its
+  // transcript is unrecoverable anyway.
+  agentToolExecutions    AgentToolExecution[]
 
   @@index([userId, updatedAt])
   @@index([userId, archivedAt])
@@ -1724,6 +1729,10 @@ model MatchAnalysis {
   fastScreeningDetail     FastScreeningDetail?
   deepMatchDetail         DeepMatchDetail?
   evidenceLinks           MatchEvidenceLink[]
+  // The durable Agent execution this analysis completed, when it was
+  // produced by match_job. Unique on the execution side — one analysis can
+  // settle at most one execution.
+  agentToolExecution      AgentToolExecution?
 
   @@index([jobOpportunityId, analysisType, isStale])
   @@index([userId, analysisType, isStale])
@@ -1742,6 +1751,56 @@ model FastScreeningDetail {
   createdAt        DateTime @default(now())
 
   matchAnalysis MatchAnalysis @relation(fields: [matchAnalysisId], references: [id], onDelete: Cascade)
+}
+
+/// Durable Agent tool-execution reservation (match_job). Created on the
+/// first approved execute of a persisted turn: the dedupe identity is the
+/// originating user-message id, never the client requestId or the model's
+/// toolCallId. `operationKey` is the server-minted stable business operation
+/// identity that Managed replay and crash recovery reuse. A PENDING row on
+/// the same turn resumes under the same operationKey; a PENDING row whose
+/// turn was superseded is swept to ABORTED by the next acquire and is never
+/// resumed — a dead turn cannot come back.
+///
+/// matchAnalysisId is the database-level unique binding that closes the
+/// "model finished but the receipt/result never landed" window: completing
+/// the execution and persisting the analysis commit atomically, so a retry
+/// replays instead of writing a second analysis row. SetNull on analysis
+/// delete keeps restore wipes honest without resurrecting the link.
+model AgentToolExecution {
+  id              String   @id @default(uuid())
+  userId          String
+  conversationId  String
+  toolName        String
+  // Originating persisted user-message id — the turn identity. Together
+  // with (conversationId, toolName) it is the execution's dedupe key: a new
+  // explicit user turn mints a new execution while every retry of the same
+  // turn lands on this row.
+  turnKey         String
+  // Canonical hash of the validated tool input — the same turn re-proposing
+  // a different input is a turn conflict, never a second execution.
+  inputHash       String
+  operationKey    String   @unique
+  // PENDING — live reservation; COMPLETED — analysis linked; FAILED —
+  // terminal non-analysis outcome recorded in resultJson; ABORTED —
+  // superseded turn swept by a later acquire.
+  status          String   @default("PENDING")
+  matchAnalysisId String?  @unique
+  failureCode     String?
+  // Serialized tool result for terminal outcomes. A COMPLETED row missing
+  // it sits in the crash window between the analysis+link commit and this
+  // write — replay rebuilds the result from the analysis row.
+  resultJson      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation  ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  matchAnalysis MatchAnalysis?   @relation(fields: [matchAnalysisId], references: [id], onDelete: SetNull)
+
+  @@unique([conversationId, toolName, turnKey])
+  @@index([userId, status])
 }
 
 model DeepMatchDetail {

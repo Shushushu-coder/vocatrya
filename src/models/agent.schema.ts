@@ -91,6 +91,18 @@ export const AgentMatchJobSchema = z.object({
 
 export type AgentMatchJobInput = z.infer<typeof AgentMatchJobSchema>;
 
+// The canonical (fresh-native) variant: same shape and the same "no job id"
+// rule, but an omitted resume resolves to the career profile, not a resume —
+// the description must not promise behavior the canonical source picker does
+// not have.
+export const AgentCanonicalMatchJobSchema = z.object({
+  resumeTitle: z.string().optional().describe("The title of the resume variant to match against, as the user referred to it. Omit this entirely if the user did not name one — the app then matches against their career profile instead of a resume variant."),
+});
+
+export type AgentCanonicalMatchJobInput = z.infer<
+  typeof AgentCanonicalMatchJobSchema
+>;
+
 // No job field of any kind, for the same reason AgentMatchJobSchema has none:
 // the letter is written for the job the user is viewing, and the id comes from
 // server-held page context.

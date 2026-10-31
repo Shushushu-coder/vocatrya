@@ -8,6 +8,7 @@ import { buildGetJobTool } from "./getJob";
 import { buildGetResumeTool } from "./getResume";
 import { buildReviewResumeTool } from "./reviewResume";
 import { buildMatchJobTool } from "./matchJob";
+import { buildCanonicalMatchJobTool } from "./canonicalMatchJob";
 import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
 
 // The three nested tools deliberately break the "a tool touches neither the
@@ -24,9 +25,10 @@ export function buildAgentTools(ctx: {
   modelName: string;
   writer: UIMessageStreamWriter;
   /**
-   * Trusted fresh + full A+B: match_job and generate_cover_letter have no
-   * canonical implementation and stay unregistered. add_job stays and writes
-   * a canonical job opportunity.
+   * Trusted fresh + full A+B: match_job registers its canonical variant
+   * (session-bound job, durable execution, always approval-gated) and
+   * generate_cover_letter has no canonical implementation and stays
+   * unregistered. add_job stays and writes a canonical job opportunity.
    */
   freshNativeFull?: boolean;
   /**
@@ -77,7 +79,12 @@ export function buildAgentTools(ctx: {
   };
 
   if (ctx.freshNativeFull) {
-    delete tools.match_job;
+    tools.match_job = buildCanonicalMatchJobTool({
+      userId: ctx.userId,
+      pageJobId: ctx.pageContext?.jobId,
+      request: ctx.request,
+      guard: nestedGuard,
+    });
     delete tools.generate_cover_letter;
   }
   return tools;

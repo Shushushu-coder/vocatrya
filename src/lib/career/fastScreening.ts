@@ -471,6 +471,19 @@ export async function runFastScreening(
   },
   deps: ExecuteAIConnectionTextDeps = {},
   env?: NodeJS.ProcessEnv,
+  options?: {
+    /**
+     * Durable AgentToolExecution.operationKey. When set it becomes the
+     * managed operationId/resourceKey (crash recovery re-runs under the
+     * same identity and replays instead of double-billing) and the
+     * persisted analysis completes that execution row in the same
+     * transaction. Absent means a standalone run — a fresh identity per
+     * call, exactly what the job-detail button does today.
+     */
+    executionKey?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  },
 ): Promise<FastScreeningRunResult> {
   const opportunity = await requireOwnedOpportunity(
     db,
@@ -509,7 +522,9 @@ export async function runFastScreening(
     careerMaterialSnapshot: material.snapshot,
     preferenceSnapshot: preference.snapshot,
   };
-  const runId = randomUUID();
+  // A standalone run mints a fresh identity; an Agent execution reuses its
+  // reserved operationKey so crash recovery replays the same operation.
+  const operationKey = options?.executionKey ?? `match-analysis:${randomUUID()}`;
 
   const executed = await executeStructuredForAssignment(
     {
@@ -524,11 +539,13 @@ export async function runFastScreening(
       schemaName: FAST_SCREENING_SCHEMA_NAME,
       // Each run is its own durable operation + binding resource: retries
       // mint a fresh identity, a re-click can never replay an old receipt.
-      operationId: `match-analysis:${runId}`,
+      operationId: operationKey,
       managedResource: {
         business: MANAGED_BUSINESS,
-        resourceKey: `match-analysis:${runId}`,
+        resourceKey: operationKey,
       },
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
     },
     deps,
   );
@@ -573,6 +590,7 @@ export async function runFastScreening(
     managedAiProvenance: executed.managedAiProvenance
       ? JSON.stringify(executed.managedAiProvenance)
       : null,
+    agentToolExecutionKey: options?.executionKey,
   });
 
   await markSupersededAnalysesStale({

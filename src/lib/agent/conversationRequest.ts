@@ -36,6 +36,7 @@ export type ConversationRequest = {
 };
 
 const fail = (code: ConversationErrorCode): never => { throw new ConversationRequestError(code); };
+const APPROVAL_BOUND_TOOL_RECEIPTS = new Set(["add_job", "match_job"]);
 export function pendingApprovals(messages: UIMessage[]) {
   return messages.flatMap(message => message.parts.filter(isToolUIPart)
     .filter(part => part.state === "approval-requested").map(part => ({ message, part })));
@@ -136,7 +137,10 @@ export async function checkpointConversationTool<T>(request: ConversationRequest
       if (previousReceipt.type !== `tool-${receipt.toolName}` || JSON.stringify(previousReceipt.input) !== JSON.stringify(receipt.input)) return fail("CONVERSATION_TURN_CONFLICT");
       return { output: previousReceipt.output as T, messages };
     }
-    if (request.operation === "approval" && receipt.toolName === "add_job" && receipt.toolCallId !== request.approvalToolCallId) return fail("CONVERSATION_TURN_CONFLICT");
+    // Approval-gated tools bind their execution to the admitted approval's
+    // own toolCall: a stale or re-proposed call id on a different turn must
+    // not inherit the earlier approval.
+    if (request.operation === "approval" && APPROVAL_BOUND_TOOL_RECEIPTS.has(receipt.toolName) && receipt.toolCallId !== request.approvalToolCallId) return fail("CONVERSATION_TURN_CONFLICT");
     const output = await mutate(tx);
     let message = messages.find(m => m.id === request.responseMessageId);
     if (!message) { message = { id: request.responseMessageId, role: "assistant", parts: [] }; messages.push(message); }

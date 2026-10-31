@@ -83,6 +83,22 @@ function AddJobBody({
   );
 }
 
+function MatchJobBody({ input }: { input: Record<string, unknown> }) {
+  const { t } = useI18n();
+  const resumeTitle = text(input.resumeTitle);
+  return (
+    <div className="mt-1">
+      <Row
+        label={t("matchAnalysis.sourceLabel")}
+        value={resumeTitle ?? t("matchAnalysis.sourceCareerProfile")}
+      />
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t("agent.matchApprovalHint")}
+      </p>
+    </div>
+  );
+}
+
 export function AgentApprovalCard({
   part,
   pastedText,
@@ -113,6 +129,8 @@ export function AgentApprovalCard({
     switch (toolName) {
       case "add_job":
         return <AddJobBody input={input} pastedText={pastedText} />;
+      case "match_job":
+        return <MatchJobBody input={input} />;
       default:
         return null;
     }

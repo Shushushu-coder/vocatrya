@@ -124,6 +124,10 @@ export class MatchAnalysisService {
     analysisSchemaVersion?: string;
     resolvedConnectionId?: string | null;
     managedAiProvenance?: string | null;
+    // Durable Agent execution this run settles: the analysis row and the
+    // execution's COMPLETED + matchAnalysisId link commit in one
+    // transaction, closing the "AI finished but nothing persisted" window.
+    agentToolExecutionKey?: string;
   }) {
     await this.gate();
     if (input.resumeVariantVersionId) {
@@ -183,6 +187,27 @@ export class MatchAnalysisService {
           reasons: input.payload.reasons ?? null,
         },
       });
+      if (input.agentToolExecutionKey) {
+        const linked = await tx.agentToolExecution.updateMany({
+          where: {
+            operationKey: input.agentToolExecutionKey,
+            status: "PENDING",
+          },
+          data: {
+            status: "COMPLETED",
+            matchAnalysisId: analysis.id,
+            completedAt,
+          },
+        });
+        if (linked.count !== 1) {
+          // The reservation is already settled or was swept — persisting
+          // the analysis anyway would create a second history row.
+          throw new CareerRuntimeError(
+            "TOOL_EXECUTION_CONFLICT",
+            "match_job execution is no longer pending",
+          );
+        }
+      }
       return tx.matchAnalysis.findUniqueOrThrow({
         where: { id: analysis.id },
         include: { fastScreeningDetail: true },
