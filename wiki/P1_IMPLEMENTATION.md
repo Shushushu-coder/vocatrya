@@ -1,6 +1,6 @@
 # Vocatrya P1 增量实施计划
 
-> 更新日期：2026-10-31。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）与 `match_job` 合同提案（`90a1a6af`，merge `264b463d`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。BYOK 已在 Main `673e3460` 的相同集成代码上完成 DeepSeek 真实服务与 Windows Electron fresh-native/full 验收，零产品代码修改。功能验收与代码集成分别记录。
+> 更新日期：2026-10-31。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）、`match_job` 合同提案（`90a1a6af`，merge `264b463d`）与 canonical `match_job` 实现（`67a3adf6`，merge `393155fc`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。BYOK 已在 Main `673e3460` 的相同集成代码上完成 DeepSeek 真实服务与 Windows Electron fresh-native/full 验收，零产品代码修改。功能验收与代码集成分别记录。
 > 状态口径：`IMPLEMENTED` 表示相应业务主路径已有实现，`PARTIAL` 表示部分实现，`MISSING` 表示目标产品能力尚未完整实现。上述状态不代表用户验收完成；`passes: true` 仅在对应真实业务与必要数据/桌面 Gate 通过后设置。
 
 ## A. 范围、迁移关系与状态
@@ -26,7 +26,7 @@
 | **AI-BYOK** | IN_SCOPE | IMPLEMENTED | DeepSeek 真实 Key 服务链路 29/29、Windows Electron fresh-native/full 17/17 通过 |
 | **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
 | **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 四项工作台修订及 B7 已集成；Windows Electron fresh-native/full 最低验收闭环，`passes: true` |
-| **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | `match_job` canonical 合同提案已集成；D1–D6 已批准推荐；持久化实施设计待定，未授权编码 |
+| **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | canonical `match_job` 已合入 freshNativeFull；未做真实 AI / 桌面验收，`passes: false` |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
 
@@ -138,14 +138,14 @@
 
 - **2026-10-31 集成与验收收口**：四项修订及 B7 设备级偏好快照纳入 Main。结合此前通过项，Windows Electron fresh-native / AB_ENABLED / full 本轮 B7 在端口 63829→62016、同一隔离 data/config 下完整退出重开恢复隐藏及宽度，C7–C9 全过；C6 为驱动竞态且数据库正确。当前冻结范围最低验收满足。证据 `.worktrees/resume-preview-persistence-fix/.tmp/resume-preview-revalidation/evidence/results.json`。独立审查无必须修复项；historicalIntegrity 两个既有返回形状失败未扩项。未重复构建/桌面验收，未操作真实库。
 
-### AGENT-CAPABILITIES：保留既有五工具；登记候选 `match_job`
+### AGENT-CAPABILITIES：fresh-native/full 六工具；canonical `match_job` 已集成
 
-- **P1 / OWNER_DECISION / PARTIAL / `passes: false`。** 本轮不重新规划其他 Agent 扩展。已记录的 fresh-native/full 五项工具仍为：`list_jobs`、`get_job`、`add_job`、`get_resume`、`review_resume`。`add_job` 需用户确认且不代表实际投递；`review_resume` 不自动保存至 Resume Variant。`match_job`、`generate_cover_letter` 仍未在当前生产模式开放。
-- 2026-10-30 Main 集成 [`AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md`](./AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md)（`90a1a6af`，merge `264b463d`）：合同区分源码事实、推荐与待决定；2026-10-31 同步 Owner 已批准 D1–D6 全部推荐；补充 AI 前 durable tool-execution reservation、稳定 operationKey 与分析唯一绑定，关闭分析已写而 conversation receipt 未写的崩溃重复窗口。该文件是提案，不代表 `match_job` 已实现或获准实施；状态保持 OWNER_DECISION / PARTIAL / `passes:false`。
-- 原 **RM-MATCH 的 P1 台账归属**改为本 Feature 下的 **候选 Agent Tool：`match_job`**，当前仅登记，**不是 Tool 已接通、执行授权或新增功能验收通过**。其余 Agent 能力范围保持待裁定，不因本次记录自动加入职位更新、投递流程或简历写入工具。
-- **不迁移/删除独立业务服务**：canonical 职位详情已有 FAST_SCREENING 最小链路：素材来源选择 → `MATCH_ANALYSIS` 分配 → 结构化执行 → `MatchAnalysisService` 持久化 → 历史读取与 stale 标记。此前已有 fastScreening 12 项、matchAnalysis 8 项定向测试及类型/ESLint 证据；**真实生产连接 E2E 与隔离 Windows Electron 验收仍未完成**。FAST_SCREENING 是当前匹配业务模式，MATCH_ANALYSIS 是该路径使用的 AI 分配能力，不应混淆为 Agent 工具。
-- 将来如批准 `match_job`，应复用该独立 canonical 服务，使用经确认的职位与简历版本输入，验证权限、持久化、历史读取和失败语义；可受益于 RESUME-BUILDER 的结构化版本。不能直接解除旧 Legacy `match_job` 门控，也不能只修改提示词就宣称支持匹配。Deep Match 不在已交付能力中。
-- 现有五工具的真实连接与批准边界仍按既定验收执行；其他 Agent 新工具**暂不讨论**。Activity 已决定退役，不再将读取 Activity 列为未来待增工具。
+- **P1 / OWNER_DECISION / PARTIAL / `passes: false`。** 本轮不重新规划其他 Agent 扩展。`add_job` 需用户确认且不代表实际投递；`review_resume` 不自动保存至 Resume Variant。`generate_cover_letter` 仍未在 freshNativeFull 开放。
+- 2026-10-30 Main 集成 [`AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md`](./AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md)（`90a1a6af`，merge `264b463d`）：合同区分源码事实、推荐与待决定；2026-10-31 同步 Owner 已批准 D1–D6 全部推荐。
+- **2026-10-31 Main 集成 canonical `match_job`**（`67a3adf6`，merge `393155fc`）：仅 `freshNativeFull` 用 canonical 实现替换 `match_job`；输入不接收 `jobId`（会话职位）；`needsApproval` 恒真；缺省 career-profile 简历；`VERSION_NOT_SUBMITTABLE` 拒绝；每次显式用户轮次新分析行。新增 `AgentToolExecution`（去重键 `(conversationId, toolName, turnKey)`，`turnKey` 为持久化用户消息 ID；`operationKey` 唯一；`matchAnalysisId` 唯一；分析行与 `PENDING→COMPLETED` 同事务）。Legacy `match_job` 保留给非 freshNativeFull 运行时。原窗口报告 `tsc`、相关 ESLint、48 项定向测试、隔离 SQLite `migrate deploy` 与 `db:verify-migration-invariants` 通过。未跑完整 Build、Windows Electron E2E、真实 AI 或真实库迁移。
+- 原 **RM-MATCH 的 P1 台账归属**仍在本 Feature。其余 Agent 能力范围保持待裁定，不因本次实现自动加入职位更新、投递流程或简历写入工具。
+- **不迁移/删除独立业务服务**：canonical 职位详情 FAST_SCREENING 最小链路继续由 `match_job` 复用。Deep Match 不在已交付能力中。
+- 现有工具的真实连接与批准边界仍按既定验收执行；其他 Agent 新工具**暂不讨论**。Activity 已决定退役，不再将读取 Activity 列为未来待增工具。
 
 ## C. 依赖、未决实施合同与所有权
 
@@ -155,7 +155,7 @@
 | BD-ARCHIVE | 与职位/对话列表、统计口径、引用与用户数据隔离相关；应明确归档状态的持久化、恢复冲突和备份行为，不自动变成 30 天清理/回收站。 |
 | AI 三路径 | 可共用业务 AI 执行接口与 Settings 的 Model Assignment，但认证、凭据、用量、能力验证及每条路径的验收独立；Managed AI 的服务端部署/网关/预算须另设 Gate。 |
 | RESUME-BUILDER | 先核查当前 Resume/Career Material/Variant 契约，明确结构化 JSON Schema、文件格式和导出/分页合同；不以旧匹配功能存在代替简历编辑器验收。 |
-| AGENT `match_job` | 复用独立 canonical Match 服务；不因为从 RM-MATCH 台账移动而更改/删除其服务，亦不把候选 Tool 当作可用工具。 |
+| AGENT `match_job` | freshNativeFull 已接通 canonical 实现并复用独立 Match 服务；Legacy 路径未改。未完成真实 AI / 桌面验收，不得把 `passes` 置 true。 |
 
 共享设置宿主、工具注册/提示、Schema/备份、双语词典与简历格式各由实际任务指定唯一协调责任方；派工时重新核实仓库 HEAD、Dirty、工作树、测试环境和已有证据。原审计及历史里程碑是参考，不是最新代码事实。
 
@@ -198,4 +198,8 @@
 
 ### 2026-10-31 match_job 决策同步
 
-Owner 已批准 D1–D6：仅 freshNativeFull、仅会话职位（不接收 jobId）、needsApproval 恒真、缺省 career-profile、VERSION_NOT_SUBMITTABLE、每次显式请求新行；同一执行崩溃恢复仍须幂等。durable reservation + stable operationKey + 分析唯一绑定的具体持久化设计待实施合同，当前 MatchAnalysis 无 operationKey 唯一列/外键。仅更新决策，未授权实施，AGENT-CAPABILITIES 保持 OWNER_DECISION / PARTIAL / passes:false。
+Owner 已批准 D1–D6：仅 freshNativeFull、仅会话职位（不接收 jobId）、needsApproval 恒真、缺省 career-profile、VERSION_NOT_SUBMITTABLE、每次显式请求新行；同一执行崩溃恢复仍须幂等。
+
+### 2026-10-31 canonical match_job 与 P2 合同提案 Main 集成
+
+用户授权提交并合并。来源：`codex/p1-match-job-implementation` @ `67a3adf6`（merge `393155fc`）、`codex/p2-job-interview-contract` @ `22465ae3`（merge `72f69163`）、`codex/p2-overview-contract` @ `680b3879`（merge `8fb2fd32`）。AGENT-CAPABILITIES 保持 OWNER_DECISION / PARTIAL / `passes: false`。P2 两份合同仍为提案，未冻结、未编码。未推送、未部署、未操作真实库。

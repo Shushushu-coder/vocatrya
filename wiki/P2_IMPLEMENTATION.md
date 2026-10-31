@@ -1,9 +1,9 @@
 # Vocatrya P2 产品设计与增量实施基线 V1
 
-> **更新日期**：2026-10-29  
+> **更新日期**：2026-10-31  
 > **定位**：P2 — Career Journey & Workspace Integration（求职旅程与跨模块工作台整合）。  
 > **依据**：2026-10-28 至 2026-10-29 已确认的 P2 产品讨论，以及同目录的 [P1_FEATURES.json](./P1_FEATURES.json) 和 [P1_IMPLEMENTATION.md](./P1_IMPLEMENTATION.md) 所记录的上游 P1 范围。  
-> **证据边界**：这是产品设计基线，**未重新读取 Vocatrya 当前 Git 仓库、Schema 或运行中的应用**。P1 文档中的实现状态不能自动外推为 P2 实际代码状态。下文将已确认的产品原则与尚未冻结的技术合同明确区分。
+> **证据边界**：产品设计基线原文未重新读取仓库。2026-10-31 已合入两份源码复核后的合同提案：[首页/下一步](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md)、[职位/复盘](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md)。提案未冻结，不授权 P2 编码。P1 文档中的实现状态不能自动外推为 P2 实际代码状态。
 
 ## A. P2 目标、范围与台账
 
@@ -19,14 +19,16 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 | Feature | P2 相对优先级 | 设计状态 | 核心交付 | 实现/验收口径 |
 | --- | --- | --- | --- | --- |
-| **JOURNEY-OVERVIEW** | CORE | 核心已确认，细节待定 | 三阶段旅程、一页主要入口、新旧用户状态 | 未审计 / 未验收 |
-| **JOB-CONNECTIONS** | HIGH | 数据合同待定 | 职位与申请、简历版本、题目、轮次和复盘联动 | 未审计 / 未验收 |
-| **INTERVIEW-DEBRIEF** | HIGH | 数据合同待定 | 真实面试逐轮复盘与经验沉淀 | 未审计 / 未验收 |
-| **NEXT-ACTIONS** | HIGH | 核心已确认，细节待定 | 从真实业务数据计算下一步引导 | 未审计 / 未验收 |
+| **JOURNEY-OVERVIEW** | CORE | 核心已确认；合同提案未冻结 | 三阶段旅程、一页主要入口、新旧用户状态 | 已源码复核 / 未编码 / 未验收 |
+| **JOB-CONNECTIONS** | HIGH | 联合合同提案未冻结 | 职位与申请、简历版本、题目、轮次和复盘联动 | 已源码复核 / 未编码 / 未验收 |
+| **INTERVIEW-DEBRIEF** | HIGH | 联合合同提案未冻结 | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / 未编码 / 未验收 |
+| **NEXT-ACTIONS** | HIGH | 核心已确认；合同提案未冻结 | 从真实业务数据计算下一步引导 | 已源码复核 / 未编码 / 未验收 |
 | **CAREER-INSIGHTS** | MEDIUM | 指标口径待定 | 简明求职看板与可信统计 | 未审计 / 未验收 |
 | **MULTI-AGENT** | HIGH | 核心交互已确认，工具待定 | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 未审计 / 未验收 |
 
 对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。全部 `implementationStatus: NOT_ASSESSED`、`passes: false`：**没有进行代码审计不等于全部功能缺失**；产品确认也不等于工程通过。
+
+**2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。Owner 交叉项：面试合同 D6 与概览合同 D3 对「已结束」谓词推荐不一致，冻结前须单点裁定。CAREER-INSIGHTS 与 MULTI-AGENT 仍无专项合同。
 
 ### A3. 明确不纳入本阶段
 
@@ -142,7 +144,7 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 | Agent | 旅程定位 | 负责的场景 | 技术边界 |
 | --- | --- | --- | --- |
-| **Voca Insight** · 求职分析师 | 准备 | 简历、JD、职位匹配与面试准备的深度分析 | 基于已授权且实际可用的简历/匹配/题目工具；不可宣称尚未接通的 `match_job` |
+| **Voca Insight** · 求职分析师 | 准备 | 简历、JD、职位匹配与面试准备的深度分析 | 基于已授权且实际可用的简历/匹配/题目工具；freshNativeFull 下 canonical `match_job` 已接通但仍未验收，不得在首页写成已验收能力 |
 | **Voca Pilot** · 全局助手 | 行动 | 检索与管理工作台、添加职位、经确认的操作 | 复用当前已可用工具与写入确认边界；不自动实际投递 |
 | **Voca Reflect** · 复盘教练 | 复盘 | 整理真实面试经历，提炼经验与改进方向 | 只有在复盘数据/工具真实支持时才提供对应可执行建议 |
 
@@ -155,7 +157,7 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 5. 从具体职位、简历或面试进入时，可附带**明确且可见的当前对象上下文**；从首页直接打开时不凭空选择目标。面板跨页面可保留，但页面、对象、Agent 切换时要展示/清除过期上下文，防止误操作。
 6. 阶段入口只是默认推荐，用户在任何阶段均可手动切换任一 Agent。三个 Agent **不要求**三个独立模型，不允许后台自主协作或定时分析。
 
-**已有 P1 边界须保留**：P1 记录的 fresh-native/full 五项 Agent 工具是 `list_jobs`、`get_job`、`add_job`、`get_resume`、`review_resume`；候选 `match_job` 尚待工具合同裁定，独立 canonical FAST_SCREENING/MatchAnalysisService 必须继续作为复用业务能力。三个 Agent 的每个工具是否可用、具体 Provider 下是否支持相关运行方式、是否允许写入，**均必须按新阶段的真实代码与业务验证收敛**。不能因设置三个角色就默认新增能力已经存在。
+**已有 P1 边界须保留**：P1 记录的 fresh-native/full 工具现为 `list_jobs`、`get_job`、`add_job`、`get_resume`、`review_resume`、canonical `match_job`（需批准，未验收）。独立 canonical FAST_SCREENING/MatchAnalysisService 必须继续作为复用业务能力。三个 Agent 的每个工具是否可用、具体 Provider 下是否支持相关运行方式、是否允许写入，**均必须按新阶段的真实代码与业务验证收敛**。不能因设置三个角色就默认新增能力已经存在。
 
 **待冻结**：三个角色的工具白名单与系统提示、跨 Agent 的会话/上下文隔离与切换方式、4 条建议的确定性选择规则及不可用时的降级内容、宽屏/窄屏面板尺寸。不能先决定任意跨 Agent 历史共享或跨用户数据访问。
 

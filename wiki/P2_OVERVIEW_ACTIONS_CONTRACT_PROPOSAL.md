@@ -3,7 +3,8 @@
 - 基线：`main @ 96e896e3`（2026-10-31 逐条源码复核；首版基线 `39a5a1d3`，2026-10-29）
 - 状态：**提案，未经 Owner 冻结**。除【源码事实】外，所有布局、规则数值、排序与判定均为【推荐方案】；标注【待决定】的条目需 Owner 裁定后才能按冻结合同实施。本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作。
 - 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议，未冻结；**【待决定】**＝需 Owner 裁定的产品规则。
-- 上游依据：`wiki/P2_IMPLEMENTATION.md`（P2 产品设计基线，已确认原则）与 `wiki/P2_FEATURES.json`；归档语义遵循已冻结的 `ARCHIVE_CONTRACT_PROPOSAL.md`；日期/时区语义遵循已冻结的 `DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`；`match_job` 状态依据 `AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md`（D1–D6 已批准，未授权编码）。
+- 上游依据：`wiki/P2_IMPLEMENTATION.md`（P2 产品设计基线，已确认原则）与 `wiki/P2_FEATURES.json`；归档语义遵循已冻结的 `ARCHIVE_CONTRACT_PROPOSAL.md`；日期/时区语义遵循已冻结的 `DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`；`match_job` 合同 D1–D6 已批准。
+- **2026-10-31 同日 Main 合入**：canonical `match_job` 实现（`67a3adf6`，merge `393155fc`）已在 freshNativeFull 注册。§1.5「canonical 尚未实现 / 未授权编码」以 P1 台账为准。§9 D3「已结束」推荐口径与 [`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) §13 D6 不一致，冻结前须由 Owner 单点裁定。
 
 ## 0. 范围与边界
 

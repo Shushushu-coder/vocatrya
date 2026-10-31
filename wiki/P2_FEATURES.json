@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "Vocatrya",
   "phase": "P2",
-  "updatedAt": "2026-10-29",
+  "updatedAt": "2026-10-31",
   "baseline": {
     "source": "2026-10-29 已确认的 P2 产品讨论；以 P1_FEATURES.json / P1_IMPLEMENTATION.md 为上游合同参考",
     "gitRef": null,
@@ -54,6 +54,7 @@
         "各阶段模块卡片/数据卡片的具体密度、排序与响应式断点。",
         "“所有主要功能”的完整可达性映射须依据当时真实导航和模块审计确定。"
       ],
+      "implementationNotes": "2026-10-31 Main 集成 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md（680b3879，merge 8fb2fd32）：对 96e896e3 做了源码复核；D1–D9 待 Owner 冻结。implementationStatus 仍为 NOT_ASSESSED（未编码）。passes:false。",
       "passes": false
     },
     {
@@ -87,6 +88,7 @@
         "关联删除/归档/恢复、旧数据回填及迁移/备份兼容语义。",
         "面试题目绑定职位、申请或面试轮次的具体层级及复用机制。"
       ],
+      "implementationNotes": "2026-10-31 Main 集成 P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md（22465ae3，merge 72f69163）：源码核实实体树已存在；最小 Schema 缺口为 reflectionCompletedAt 与 ReflectionItem.sourceQuestionId/sourceKind，待 D1–D12 冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。",
       "passes": false
     },
     {
@@ -120,6 +122,7 @@
         "复盘的草稿/完成状态，以及后续修改的历史留痕要求。",
         "题目与练习的引用/复制策略；敏感内容、附件和归档范围是否纳入本期。"
       ],
+      "implementationNotes": "2026-10-31 与 JOB-CONNECTIONS 共用联合合同提案。复盘读写服务已存在；完成标记与题库回链待 Owner 裁定后增量。D6「已结束」与 NEXT-ACTIONS 合同 D3 推荐口径冲突，冻结前须单点裁定。implementationStatus 仍为 NOT_ASSESSED。passes:false。",
       "passes": false
     },
     {
@@ -154,6 +157,7 @@
         "多条建议的排序、上限、暂时忽略/消除规则。",
         "各数据状态与时间/时区的正式判定规则及归档数据是否参与。"
       ],
+      "implementationNotes": "2026-10-31 与 JOURNEY-OVERVIEW 共用 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md。R1–R6 推荐规则与 D1–D9 待冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。",
       "passes": false
     },
     {
@@ -221,7 +225,7 @@
         "验收三个 Agent 的入口/切换、不同页面上下文、跨页失效处理、写入确认、无 AI 连接态与不发生后台调用。"
       ],
       "openQuestions": [
-        "各角色具体工具白名单及 P1 match_job 是否/何时可调用，需代码核查后单独裁定。",
+        "各角色具体工具白名单及 P1 canonical match_job（已合入、未验收）是否在 Insight 建议中暴露，需单独裁定。",
         "跨 Agent 对话是否共享会话、消息历史与上下文快照的切换合同。",
         "四条提示按当前可用能力与上下文动态生成的规则、桌面/窄屏响应式细节。"
       ],

@@ -1,7 +1,7 @@
 # AGENT `match_job` 工具合同提案（P1 AGENT-CAPABILITIES）
 
 - 基线：`main @ 39a5a1d3`；分支 `codex/p1-match-job-contract`；工作树 `.worktrees/p1-match-job-contract`。
-- 状态：**D1–D6 已获 Owner 批准；尚未授权实施**。本文只形成合同与事实核对，不代表功能已实现，不授权提交、合并、部署、真实数据操作或真实 AI 调用。
+- 状态：**D1–D6 已获 Owner 批准；canonical 实现已于 2026-10-31 合入 Main**（`67a3adf6`，merge `393155fc`）。freshNativeFull 注册 canonical `match_job`（需批准、复用 FAST_SCREENING / MatchAnalysisService、`AgentToolExecution` 台账）。尚未完成真实 AI 调用与 Windows Electron 验收；`AGENT-CAPABILITIES` 保持 OWNER_DECISION / PARTIAL / `passes: false`。下文部分【源码事实】仍描述合入前的基线 `39a5a1d3`，与当前 Main 不一致处以 P1 台账为准。
 - 依据：`wiki/P1_FEATURES.json`、`wiki/P1_IMPLEMENTATION.md`（AGENT-CAPABILITIES 节，只读）及基线源码只读核查。本仓库无 `.codegraph`。
 - 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐】**＝本合同建议；**【待决定】**＝需 Owner 冻结的产品规则。标注不一致处以 P1 台账与本文件决策清单为准。
 

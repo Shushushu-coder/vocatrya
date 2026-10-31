@@ -2,6 +2,7 @@
 
 - **状态**：提案（Proposal），待 Owner 裁定 §13 决策表后冻结
 - **基线**：`main @ 96e896e3`（本提案引用的所有"源码事实"均以此基线的实际代码核实）
+- **交叉项**：§13 D6「已结束」推荐仅 `status === COMPLETED`，与 [`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) §9 D3 推荐（`completedAt`∨COMPLETED∨逾期末关闭）冲突；冻结前须由 Owner 单点裁定，供 NEXT-ACTIONS 消费同一谓词。
 - **覆盖 Feature**：`JOB-CONNECTIONS`、`INTERVIEW-DEBRIEF`（`wiki/P2_FEATURES.json`，当前 `implementationStatus: NOT_ASSESSED`）
 - **上游已冻结合同**：`wiki/RESUME_BUILDER_CONTRACT_PROPOSAL.md`、`wiki/ARCHIVE_CONTRACT_PROPOSAL.md`、`wiki/DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`
 - **本文件性质**：合同提案，不是实现计划；不含代码修改、Migration、i18n 或测试变更
