@@ -51,7 +51,17 @@ const MANAGED_BUSINESS = "MATCH_ANALYSIS";
 
 const FAST_SCREENING_RESULT_SCHEMA: StructuredOutputSchema = {
   type: "object",
-  required: ["verdict", "reasons"],
+  // Strict-schema compliant (same rule AGENT_DECISION_SCHEMA follows):
+  // native-schema transports (codex --output-schema → OpenAI strict
+  // response_format) require every `properties` key in `required` —
+  // optional fields stay required and express "absent" as null.
+  required: [
+    "verdict",
+    "reasons",
+    "hardRequirements",
+    "coreMatch",
+    "preferenceMatch",
+  ],
   additionalProperties: false,
   properties: {
     verdict: { type: "string", enum: ["PASS", "BORDERLINE", "FAIL"] },

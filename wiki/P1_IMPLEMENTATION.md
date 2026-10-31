@@ -22,7 +22,7 @@
 | --- | --- | --- | --- |
 | **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 38/38，通过 |
 | **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 55/55，通过 |
-| **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
+| **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | Codex 账号真实流式、错误恢复、MATCH_ANALYSIS 和 Electron 重开验收通过，`passes: true` |
 | **AI-BYOK** | IN_SCOPE | IMPLEMENTED | DeepSeek 真实 Key 服务链路 29/29、Windows Electron fresh-native/full 17/17 通过 |
 | **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
 | **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 四项工作台修订及 B7 已集成；Windows Electron fresh-native/full 最低验收闭环，`passes: true` |
@@ -84,9 +84,9 @@
 
 - 2026-10-29 集成 `68212510`：测试认证版本断言对齐已认证的 Codex 0.165.0，未放宽精确版本门控；代码/隔离测试证据已核对，真实账号业务与 Windows Electron 完整验收仍待完成。
 
-- **P1 / IN_SCOPE / IMPLEMENTED / `passes: false`。** 用户已经实际试用并确认相关聊天功能可用；但服务级探测与部分人工操作**不等于完整业务/UI 验收**。
+- **P1 / IN_SCOPE / IMPLEMENTED / `passes: true`。** 用户已经实际试用并确认相关聊天功能可用；但服务级探测与部分人工操作**不等于完整业务/UI 验收**。
 - 原 `SET-AI-SERVICES` 的有效证据归属本项：Codex CLI 0.164.0 与 0.165.0 分别完成经授权的流式 4 项及结构化 9/9 desktop connection-service 认证；保留精确版本门控。相关 UI/环境状态问题已修复，159 项定向测试、类型检查和 ESLint 通过；隔离 Electron fresh-native/full 构建 `G79eH1Wz4YriE8lYq4jPN` 已核对模型与发送按钮，用户反馈聊天复制/重新生成可用。
-- 剩余：在真实账号连接下验证连接/模型分配、已支持业务的流式与结构化执行、错误恢复、刷新和隔离 Windows Electron 的完整用户路径；证据只覆盖已验证的具体运行时和版本，不外推到 BYOK 或托管 AI。
+- 2026-10-31 收口：上述连接/分配、真实流式、usage-limit 后恢复、结构化 MATCH_ANALYSIS、刷新及完整退出重开均已在隔离 Windows Electron fresh-native / AB_ENABLED / full 验证。集成 strict schema 全键 required 修复，保留三字段 nullable；真实调用 ChatGPT-via-Codex / gpt-6-astra 一次，COMPLETED 记录及空值落库正确，无 BYOK/Hosted 回退。证据 `.worktrees/account-match-schema-fix/.tmp/account-match-schema-revalidation/results.json`；末尾 diag-note 纠正仅失败路径才输出的 executeText 日志探针。独立审查无必须修复项，passes=true 仅覆盖实际运行时/模型。
 
 ### AI-BYOK：用户自带 API Key
 

@@ -183,6 +183,45 @@ const VERDICT = {
   preferenceMatch: "Role is in the preferred cities.",
 };
 
+// OpenAI strict response_format (what `codex exec --output-schema`
+// enforces server-side): at every object node, `required` must list
+// every key in `properties` and `additionalProperties` must be false —
+// "optional" is expressed with nullable type unions, never missing keys.
+function assertStrictSchemaShape(node: unknown, path = "$") {
+  expect(node, `${path} is a schema node`).toBeTypeOf("object");
+  if (node === null || typeof node !== "object" || Array.isArray(node)) {
+    return;
+  }
+  const record = node as Record<string, unknown>;
+  if (record.properties !== undefined) {
+    const properties = record.properties as Record<string, unknown>;
+    const required = Array.isArray(record.required) ? record.required : [];
+    for (const key of Object.keys(properties)) {
+      expect(required, `${path}.required misses "${key}"`).toContain(key);
+    }
+    expect(
+      record.additionalProperties,
+      `${path}.additionalProperties`,
+    ).toBe(false);
+    for (const [key, child] of Object.entries(properties)) {
+      assertStrictSchemaShape(child, `${path}.properties.${key}`);
+    }
+  }
+  if (record.items !== undefined) {
+    assertStrictSchemaShape(record.items, `${path}.items`);
+  }
+  if (
+    record.additionalProperties !== undefined &&
+    typeof record.additionalProperties === "object" &&
+    record.additionalProperties !== null
+  ) {
+    assertStrictSchemaShape(
+      record.additionalProperties,
+      `${path}.additionalProperties`,
+    );
+  }
+}
+
 function depsForFetch(fetchImpl: typeof fetch) {
   return {
     dbClient: prisma as never,
@@ -261,6 +300,107 @@ describe("runFastScreening", () => {
     for (const forbidden of ["executable", "args", "env", "cwd"]) {
       expect(bodies[0]).not.toHaveProperty(forbidden);
     }
+  });
+
+  it("sends a strict-compliant structured schema on the wire", async () => {
+    const opportunity = await createOpportunity();
+    await setJd(opportunity.id, "JD exists");
+    await createSkillMaterial();
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "m");
+
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return okResponse(VERDICT);
+    };
+
+    const result = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl,
+    );
+    expect(result.kind).toBe("ok");
+    expect(bodies).toHaveLength(1);
+
+    // The acceptance regression: the desktop writes this exact schema into
+    // the codex --output-schema file; OpenAI strict rejects any object
+    // whose `required` omits a `properties` key (hardRequirements et al).
+    const wire = bodies[0].structuredOutput as {
+      schemaName?: unknown;
+      schema?: unknown;
+    };
+    expect(wire.schemaName).toBe("vocatrya_fast_screening_v1");
+    assertStrictSchemaShape(wire.schema);
+    expect(
+      (wire.schema as { required: string[] }).required,
+    ).toEqual(
+      expect.arrayContaining([
+        "hardRequirements",
+        "coreMatch",
+        "preferenceMatch",
+      ]),
+    );
+  });
+
+  it("persists null optional fields exactly as the strict contract emits them", async () => {
+    const opportunity = await createOpportunity();
+    await setJd(opportunity.id, "JD exists");
+    await createSkillMaterial();
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "m");
+    const fetchImpl: typeof fetch = async () =>
+      okResponse({
+        verdict: "BORDERLINE",
+        reasons: "Partial overlap on the core stack.",
+        hardRequirements: null,
+        coreMatch: "Some backend overlap.",
+        preferenceMatch: null,
+      });
+
+    const result = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl,
+    );
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    const detail = result.analysis.fastScreeningDetail;
+    expect(detail?.verdict).toBe("BORDERLINE");
+    expect(detail?.hardRequirements).toBeNull();
+    expect(detail?.coreMatch).toBe("Some backend overlap.");
+    expect(detail?.preferenceMatch).toBeNull();
+
+    const persisted = await prisma.matchAnalysis.findUniqueOrThrow({
+      where: { id: result.analysis.id },
+      include: { fastScreeningDetail: true },
+    });
+    expect(persisted.fastScreeningDetail?.hardRequirements).toBeNull();
+    expect(persisted.fastScreeningDetail?.preferenceMatch).toBeNull();
+  });
+
+  it("a provider-side rejection still fails honestly and persists nothing", async () => {
+    const opportunity = await createOpportunity();
+    await setJd(opportunity.id, "JD exists");
+    await createSkillMaterial();
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "m");
+
+    // A server-side rejection (e.g. the OpenAI 400) surfaces through the
+    // desktop as INFERENCE_FAILED → AI_EXECUTION_FAILED — a retryable
+    // failure, never a persisted analysis.
+    const fetchImpl: typeof fetch = async () => failResponse("INFERENCE_FAILED");
+    const result = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl,
+    );
+
+    expect(result.kind).toBe("failed");
+    if (result.kind !== "failed") return;
+    expect(result.code).toBe("AI_EXECUTION_FAILED");
+    expect(await prisma.matchAnalysis.count()).toBe(0);
   });
 
   it("reuses the same parse row on a second run against unchanged JD", async () => {
