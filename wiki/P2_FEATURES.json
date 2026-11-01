@@ -16,7 +16,8 @@
     },
     "designStatus": {
       "CORE_CONFIRMED": "核心产品方向与交互原则已确认；细节如 openQuestions 所列仍需设计审查。",
-      "CONTRACT_PENDING": "目标已确认，关键数据/指标/交互合同尚待冻结。"
+      "CONTRACT_PENDING": "目标已确认，关键数据/指标/交互合同尚待冻结。",
+      "CONTRACT_FROZEN": "合同决策项已于 2026-11-01 经 Owner 裁定冻结，可按冻结合同实施；不含提交、发布等额外授权。"
     },
     "implementationStatus": "NOT_ASSESSED 表示本 P2 文档未审计当前仓库或验证功能；不能据此判断模块全部缺失或已实现。实施状态须待只读代码审计后更新。",
     "steps": "Feature 级交付和验收检查点；具体设计边界见 P2_IMPLEMENTATION.md。列入台账不代表执行授权。",
@@ -29,7 +30,7 @@
       "priority": "P2",
       "relativePriority": "CORE",
       "scope": "IN_SCOPE",
-      "designStatus": "CORE_CONFIRMED",
+      "designStatus": "CONTRACT_FROZEN",
       "implementationStatus": "NOT_ASSESSED",
       "description": "P2 首页核心：在一张可滚动的概览页，以「准备 → 行动 → 复盘」讲清完整求职旅程，呈现主要功能入口、阶段进度、清晰的数据看板与 Vocatrya Agent 辅助入口；新用户与已有数据用户应有差异化呈现，但不强制线性流程。",
       "confirmedDecisions": [
@@ -54,7 +55,7 @@
         "各阶段模块卡片/数据卡片的具体密度、排序与响应式断点。",
         "“所有主要功能”的完整可达性映射须依据当时真实导航和模块审计确定。"
       ],
-      "implementationNotes": "2026-10-31 Main 集成 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md（680b3879，merge 8fb2fd32）：对 96e896e3 做了源码复核；D1–D9 待 Owner 冻结。implementationStatus 仍为 NOT_ASSESSED（未编码）。passes:false。 2026-11-01 集成合同收敛：以 main@23178a4c 复核现状，首页/下一步仍为提案；布局可独立开发，R6 真实数据依赖复盘领域接口与共同裁定，不使用内容存在性临时替代显式完成标记。未编码或新增功能验收。",
+      "implementationNotes": "2026-10-31 Main 集成 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md（680b3879，merge 8fb2fd32）：对 96e896e3 做了源码复核；D1–D9 待 Owner 冻结。implementationStatus 仍为 NOT_ASSESSED（未编码）。passes:false。 2026-11-01 集成合同收敛：以 main@23178a4c 复核现状，首页/下一步仍为提案；布局可独立开发，R6 真实数据依赖复盘领域接口与共同裁定，不使用内容存在性临时替代显式完成标记。未编码或新增功能验收。 2026-11-01 Owner 裁定冻结 §9 D1–D9（全部按推荐/协调建议生效；D3 与面试合同 §13 D6 同次裁定，附随子项见合同 §10）：旅程区在前、purpose＝CAREER_DIALOGUE（存储态口径）、仅 COMPLETED 计入待复盘、3 条+N、不做 dismiss、dataState 扩展素材/版本、Agent 槽位单入口 open()、分家族口径且 R3 按未归档职位=0、R4 活跃未投递。备料 .tmp/p2-overview-actions-decision-prep/，合并表 .tmp/p2-decision-merge/owner-decision-pack.md。未编码，passes:false。",
       "passes": false
     },
     {
@@ -63,7 +64,7 @@
       "priority": "P2",
       "relativePriority": "HIGH",
       "scope": "IN_SCOPE",
-      "designStatus": "CONTRACT_PENDING",
+      "designStatus": "CONTRACT_FROZEN",
       "implementationStatus": "NOT_ASSESSED",
       "description": "围绕目标职位及实际申请记录建立关联视图：计划使用的简历版本、实际投递时的简历版本/不可变快照、面试轮次、面试题目和真实复盘可串联查看；避免重复录入和历史事实被后续修改覆盖。",
       "confirmedDecisions": [
@@ -88,7 +89,7 @@
         "关联删除/归档/恢复、旧数据回填及迁移/备份兼容语义。",
         "面试题目绑定职位、申请或面试轮次的具体层级及复用机制。"
       ],
-      "implementationNotes": "2026-10-31 Main 集成 P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md（22465ae3，merge 72f69163）：源码核实实体树已存在；最小 Schema 缺口为 reflectionCompletedAt 与 ReflectionItem.sourceQuestionId/sourceKind，待 D1–D12 冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同更新：复核既有实体和缺口；聚合视图可与复盘核心并行，共享文件唯一 Owner/顺序交接。D1–D12 尚未冻结，未编码或新增验收。",
+      "implementationNotes": "2026-10-31 Main 集成 P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md（22465ae3，merge 72f69163）：源码核实实体树已存在；最小 Schema 缺口为 reflectionCompletedAt 与 ReflectionItem.sourceQuestionId/sourceKind，待 D1–D12 冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同更新：复核既有实体和缺口；聚合视图可与复盘核心并行，共享文件唯一 Owner/顺序交接。D1–D12 尚未冻结，未编码或新增验收。 2026-11-01 Owner 裁定冻结 §13 D1–D12 全部按推荐生效（见合同 §18）：复用 Step+Detail 零新实体、reflectionCompletedAt 显式列、自由编辑、快照+sourceQuestionId/sourceKind 回链、复用两时间列、仅 COMPLETED 计入待复盘（含 EVIDENCED 非 COMPLETED、终态 Attempt 轮次计入）、元数据列不接线、复盘→Task 预填、删除级联文案、Attempt.archivedAt 不产品化、不加 Session 显式链、保持自由文本；附随裁定题库软删、归档期只读查看纳入范围、归档职位禁建练习。备料 .tmp/p2-job-interview-decision-prep/（含交付物自校）。未编码，passes:false。",
       "passes": false
     },
     {
@@ -97,7 +98,7 @@
       "priority": "P2",
       "relativePriority": "HIGH",
       "scope": "IN_SCOPE",
-      "designStatus": "CONTRACT_PENDING",
+      "designStatus": "CONTRACT_FROZEN",
       "implementationStatus": "NOT_ASSESSED",
       "description": "新增针对真实发生的面试的逐轮复盘区域，关联职位/申请/面试轮次与当时提问，记录表现、收获、问题和后续改进；与现有模拟面试、题库、练习记录保持清晰区分。",
       "confirmedDecisions": [
@@ -122,7 +123,7 @@
         "复盘的草稿/完成状态，以及后续修改的历史留痕要求。",
         "题目与练习的引用/复制策略；敏感内容、附件和归档范围是否纳入本期。"
       ],
-      "implementationNotes": "2026-10-31 与 JOB-CONNECTIONS 共用联合合同提案。复盘读写服务已存在；完成标记与题库回链待 Owner 裁定后增量。D6「已结束」与 NEXT-ACTIONS 合同 D3 推荐口径冲突，冻结前须单点裁定。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同收敛：复盘核心包含 additive Schema/Migration/备份、完成标记和来源追溯、统一待复盘读取接口与必要 UI；明确 minute 精度和无 N+1。G-AI1 归档职位 AI 草稿读取缺口已核实但本次未修复；D1–D12 待裁定，未编码或验收。 2026-11-01 Main 集成 G-AI1 修复 8b09faf1：AI 草稿入口拒绝归档 Attempt/职位；配置解析后复查归属、存在性与归档状态，再组装请求；CareerRuntimeError.code 透传。4 文件/59 项定向测试、完整 tsc 与改动 ESLint 通过。守卫为调用执行层前的状态快照，不持有覆盖 Provider 请求期间的归档锁；保存守卫不作为模型输入保护证据。真实 AI、Windows Electron 和完整 E2E 未执行；不代表 P2 复盘合同冻结或功能验收通过，passes:false。",
+      "implementationNotes": "2026-10-31 与 JOB-CONNECTIONS 共用联合合同提案。复盘读写服务已存在；完成标记与题库回链待 Owner 裁定后增量。D6「已结束」与 NEXT-ACTIONS 合同 D3 推荐口径冲突，冻结前须单点裁定。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同收敛：复盘核心包含 additive Schema/Migration/备份、完成标记和来源追溯、统一待复盘读取接口与必要 UI；明确 minute 精度和无 N+1。G-AI1 归档职位 AI 草稿读取缺口已核实但本次未修复；D1–D12 待裁定，未编码或验收。 2026-11-01 Main 集成 G-AI1 修复 8b09faf1：AI 草稿入口拒绝归档 Attempt/职位；配置解析后复查归属、存在性与归档状态，再组装请求；CareerRuntimeError.code 透传。4 文件/59 项定向测试、完整 tsc 与改动 ESLint 通过。守卫为调用执行层前的状态快照，不持有覆盖 Provider 请求期间的归档锁；保存守卫不作为模型输入保护证据。真实 AI、Windows Electron 和完整 E2E 未执行；不代表 P2 复盘合同冻结或功能验收通过，passes:false。 2026-11-01 Owner 裁定冻结 §13 D1–D12 全部按推荐生效（联合合同 §18，与 JOB-CONNECTIONS 同一份冻结记录）：复盘完成标记显式列、来源回链、仅 COMPLETED 计入待复盘、删除级联文案、复盘→Task 预填等；附随裁定题库软删、归档期复盘只读查看纳入本期、归档职位禁建练习会话、非 USER 步不提供完成入口。备料 .tmp/p2-job-interview-decision-prep/。未编码，passes:false。",
       "passes": false
     },
     {
@@ -131,7 +132,7 @@
       "priority": "P2",
       "relativePriority": "HIGH",
       "scope": "IN_SCOPE",
-      "designStatus": "CORE_CONFIRMED",
+      "designStatus": "CONTRACT_FROZEN",
       "implementationStatus": "NOT_ASSESSED",
       "description": "根据现有真实业务数据使用确定性规则自动提供“下一步做什么”的引导；无简历、未配置 AI、尚未投递、已结束真实面试未复盘等状态触发对应模块入口。不运行 LLM，不做搜索推荐算法，不自动创建或执行 Agent 任务。",
       "confirmedDecisions": [
@@ -157,7 +158,7 @@
         "多条建议的排序、上限、暂时忽略/消除规则。",
         "各数据状态与时间/时区的正式判定规则及归档数据是否参与。"
       ],
-      "implementationNotes": "2026-10-31 与 JOURNEY-OVERVIEW 共用 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md。R1–R6 推荐规则与 D1–D9 待冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 合同收敛：D3 与面试 D6 统一协调建议为仅 COMPLETED，过期未完成仅提示确认状态；尚未批准。R6 消费唯一 AwaitingReflectionResult，完成标记依 D2 裁定，领域接口未就绪时静默并记录未覆盖。未编码或验收。",
+      "implementationNotes": "2026-10-31 与 JOURNEY-OVERVIEW 共用 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md。R1–R6 推荐规则与 D1–D9 待冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 合同收敛：D3 与面试 D6 统一协调建议为仅 COMPLETED，过期未完成仅提示确认状态；尚未批准。R6 消费唯一 AwaitingReflectionResult，完成标记依 D2 裁定，领域接口未就绪时静默并记录未覆盖。未编码或验收。 2026-11-01 Owner 裁定冻结 §9 D1–D9 全部按推荐/协调建议生效（合同 §10；D3 与面试 §13 D6 同次裁定）：仅 COMPLETED 计入待复盘、R6 等待 §7.3 读模型落地、规则确定性不调用 LLM。备料 .tmp/p2-overview-actions-decision-prep/。未编码，passes:false。",
       "passes": false
     },
     {
@@ -166,7 +167,7 @@
       "priority": "P2",
       "relativePriority": "MEDIUM",
       "scope": "IN_SCOPE",
-      "designStatus": "CONTRACT_PENDING",
+      "designStatus": "CONTRACT_FROZEN",
       "implementationStatus": "NOT_ASSESSED",
       "description": "建立简洁、可解释的求职数据看板，呈现职位、真实投递、面试、Offer、待跟进等主要业务指标；可逐步加入漏斗和阶段转化，口径先定义再展示，不能恢复已退役 Activity 计时/时长统计。",
       "confirmedDecisions": [
@@ -192,7 +193,7 @@
         "看板默认时间范围、历史/当前筛选和下钻范围。",
         "是否在 P2 首版交付漏斗，以及数据不足时的显示策略。"
       ],
-      "implementationNotes": "2026-11-01 Main 集成 P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md（1525fc92，源码核查基线 main@b3219dc2）：计数指标 M1–M8 与条件 M9、归档/账户时区/多次申请口径、运行模式降级及 D1–D9 推荐已记录。集成审查修正用户范围、Offer 派生优先级、原始投递日期分桶和未截断计数；合同未冻结，统计产品代码未修改，implementationStatus 保持 NOT_ASSESSED、passes:false。G1 等既有统计缺口仅记录，未修复。",
+      "implementationNotes": "2026-11-01 Main 集成 P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md（1525fc92，源码核查基线 main@b3219dc2）：计数指标 M1–M8 与条件 M9、归档/账户时区/多次申请口径、运行模式降级及 D1–D9 推荐已记录。集成审查修正用户范围、Offer 派生优先级、原始投递日期分桶和未截断计数；合同未冻结，统计产品代码未修改，implementationStatus 保持 NOT_ASSESSED、passes:false。G1 等既有统计缺口仅记录，未修复。 2026-11-01 Owner 裁定冻结 §8 D1–D9 全部按推荐生效（合同 §9 冻结记录）：M2 双单位、M4a/M4b 拆分+legacy 降级、M5 当前 Offer 口径+offer-declined 标签改中性、G1 随本包修复、转化类全延期、M6 四桶合计+未截断计数新查询、归档排除+脚注、M9 就绪后接入（剩余前置为 §7.3 读模型）；附随裁定 G6 顺手修、G4 死字段不启用。备料 .tmp/p2-career-insights-decision-prep/。未编码，passes:false。",
       "passes": false
     },
     {
@@ -201,7 +202,7 @@
       "priority": "P2",
       "relativePriority": "HIGH",
       "scope": "IN_SCOPE",
-      "designStatus": "CORE_CONFIRMED",
+      "designStatus": "CONTRACT_FROZEN",
       "implementationStatus": "NOT_ASSESSED",
       "description": "三个专业 Agent 对应准备/行动/复盘：Voca Insight（求职分析师）、Voca Pilot（全局助手）、Voca Reflect（复盘教练）。用户主动点击后在右侧打开 Agent 面板，顶部使用三个图标切换（hover 显示名称）；显示能力介绍与 4 条建议，建议点击只填入输入框，发送后才调用 AI。",
       "confirmedDecisions": [
@@ -230,7 +231,7 @@
         "跨 Agent 对话是否共享会话、消息历史与上下文快照的切换合同。",
         "四条提示按当前可用能力与上下文动态生成的规则、桌面/窄屏响应式细节。"
       ],
-      "implementationNotes": "2026-11-01 新增 P2_MULTI_AGENT_CONTRACT_PROPOSAL.md（基线 main@23178a4c）：核实六/七工具运行时分叉、会话锁/上下文、建议点击即发送现状；推荐每角色独立会话槽、持久角色、建议只填入、Reflect 文本教练降级。D1–D10 待批准。canonical match_job 的 P1 既有验收不外推三角色功能验收；未编码或验收。",
+      "implementationNotes": "2026-11-01 新增 P2_MULTI_AGENT_CONTRACT_PROPOSAL.md（基线 main@23178a4c）：核实六/七工具运行时分叉、会话锁/上下文、建议点击即发送现状；推荐每角色独立会话槽、持久角色、建议只填入、Reflect 文本教练降级。D1–D10 待批准。canonical match_job 的 P1 既有验收不外推三角色功能验收；未编码或验收。 2026-11-01 Owner 裁定冻结 §9 D1–D10 全部按推荐生效（合同 §14）：每角色独立会话槽、ChatConversation.agentRole 可空列+迁移+备份字段（唯一 Schema/备份 Owner 与复盘包顺序交接）、历史徽标、统一 CAREER_DIALOGUE、match_job 列入 Insight 建议（按白名单∩运行时注册集生成）、Pilot 不含 get_resume、收缩优先级、无 AI 时建议可填入禁发送（fillComposer）、页面 CTA 保持打开+发送（?match=1 归显式请求）、V1 不加失效徽标。备料 .tmp/p2-multi-agent-decision-prep/。未编码，passes:false。",
       "passes": false
     }
   ]

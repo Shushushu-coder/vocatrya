@@ -1,10 +1,10 @@
 # MULTI-AGENT 实施合同提案（Voca Insight / Pilot / Reflect 三角色与右侧 Agent 面板）
 
 - 基线：`main @ 23178a4c`（2026-11-01 逐条源码复核）
-- 状态：**提案，未经 Owner 冻结**。除【源码事实】外，所有角色边界、交互与存储方案均为【推荐方案】；标注【待决定】的条目需 Owner 裁定后才能按冻结合同实施。本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作。
+- 状态：**已冻结（2026-11-01 Owner 裁定 §9 D1–D10，见 §14 冻结记录）**。【推荐方案】已按裁定生效；本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作——实施仍须各自任务授权。
 - 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议，未冻结；**【待决定】**＝需 Owner 裁定的产品/工程规则。
 - 上游依据：`wiki/P2_IMPLEMENTATION.md` §C6（MULTI-AGENT 已确认交互与待冻结项）与 `wiki/P2_FEATURES.json`；P1 `AGENT-CAPABILITIES`（canonical `match_job` 已合入 `67a3adf6`、D1–D6 已批准，P1 台账已记录 Windows Electron fresh-native/full 真实 AI 验收通过（2bfee169）；结论限于实际覆盖运行时/模型）；归档语义遵循已冻结 `ARCHIVE_CONTRACT_PROPOSAL.md`；窗口二合同 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §11 AI 边界；首页合同 `P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §6 Agent 槽位。
-- **交叉项（记录，不在本合同裁定）**：① 首页合同 §9 D7（V1 阶段卡 Agent 槽位=单入口现有助手）在本 Feature 落地后由同一槽位传入角色——首页结构不需改动，实施时按 §6.2 接口协调。② 窗口二合同 §13 D6「已结束」与首页合同 §9 D3 协调建议已对齐但未批准，由 Owner 同一次裁定；本合同 V1 不消费该谓词（无复盘读工具）。③ canonical `match_job` 已注册且有验收证据，是否进入 Insight 建议见 §9 D5。
+- **交叉项（记录，不在本合同裁定）**：① 首页合同 §9 D7（V1 阶段卡 Agent 槽位=单入口现有助手）在本 Feature 落地后由同一槽位传入角色——首页结构不需改动，实施时按 §6.2 接口协调。② 窗口二合同 §13 D6「已结束」与首页合同 §9 D3 已于 2026-11-01 同次裁定生效（仅 `status === "COMPLETED"` 计入待复盘）；本合同 V1 不消费该谓词（无复盘读工具）。③ canonical `match_job` 已注册且有验收证据，是否进入 Insight 建议见 §9 D5。
 
 ## 0. 范围与边界
 
@@ -280,4 +280,21 @@
 
 ## 13. 授权声明
 
-本提案仅为评审与冻结候选；标注【推荐方案】/【待决定】的内容**不是已冻结决定**，实施前须经 Owner 逐项裁定 §9 决策表。本文件不构成代码修改、Schema/Migration、提交、合并、推送、发布、真实数据操作或真实 AI/凭据调用授权。
+§9 D1–D10 已于 2026-11-01 经 Owner 逐项裁定冻结（见 §14）。本文件不构成代码修改、Schema/Migration、提交、合并、推送、发布、真实数据操作或真实 AI/凭据调用授权——实施仍须各自任务授权。
+
+## 14. Owner 裁定冻结记录（2026-11-01）
+
+Owner 于 2026-11-01 逐项裁定 §9 D1–D10，全部按推荐项生效。裁定依据：只读源码备料（`.tmp/p2-multi-agent-decision-prep/`）与合并总表（`.tmp/p2-decision-merge/owner-decision-pack.md`），核实基线 `main @ 55d5a4a9`。
+
+| # | 裁定结果 |
+| --- | --- |
+| D1 | (a)：每角色独立会话槽——角色于创建时固化，槽间不共享会话/草稿/上下文 |
+| D2 | (a)：`ChatConversation.agentRole` 可空列 + additive migration + 备份字段（唯一 Schema/备份 Owner，与复盘包顺序交接；旧行/旧备份 NULL→「通用」） |
+| D3 | (a)：统一历史列表 + 角色徽标 |
+| D4 | (a)：三角色统一 `CAREER_DIALOGUE` 锁 purpose |
+| D5 | (a)：canonical `match_job` 列入 Insight 建议（文案"运行匹配分析"）；建议按"白名单∩运行时注册集"生成——legacy 运行时的 `match_job` 为旧语义无批准，文案须按运行时区分；P1 验收边界（fresh-native/full + DeepSeek BYOK）不外推到其他路径 |
+| D6 | (a)：Pilot 白名单不含 `get_resume` |
+| D7 | (a)：窄宽收缩顺序 图标组>角色名>Identity>历史/新对话>展开/关闭 |
+| D8 | (a)：无 AI 配置时建议条可点击填入、发送键禁用 + 诚实横幅（新增 `fillComposer` 通道） |
+| D9 | (a)：页面级 CTA（`startChat`/`startReview`/`useAutoMatch`）保持"打开+发送"；`?match=1`（职位列表 Match 按钮显式点击产生）归类为"显式请求"路径；`useAutoMatch` 维持 legacy-only |
+| D10 | (a)：V1 不加上下文失效徽标 |

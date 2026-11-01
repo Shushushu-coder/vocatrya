@@ -3,7 +3,7 @@
 > **更新日期**：2026-11-01
 > **定位**：P2 — Career Journey & Workspace Integration（求职旅程与跨模块工作台整合）。  
 > **依据**：2026-10-28 至 2026-10-29 已确认的 P2 产品讨论，以及同目录的 [P1_FEATURES.json](./P1_FEATURES.json) 和 [P1_IMPLEMENTATION.md](./P1_IMPLEMENTATION.md) 所记录的上游 P1 范围。  
-> **证据边界**：产品设计基线原文未重新读取仓库。2026-11-01 对照 main@23178a4c 更新两份提案并新增第三份：[首页/下一步](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md)、[职位/复盘](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md)、[三 Agent 面板](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)。提案未冻结，不授权 P2 编码。P1 文档中的实现状态不能自动外推为 P2 实际代码状态。
+> **证据边界**：产品设计基线原文未重新读取仓库。2026-11-01 对照 main@23178a4c 更新两份提案并新增第三份：[首页/下一步](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md)、[职位/复盘](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md)、[三 Agent 面板](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)。**2026-11-01 四份合同提案（含 [CAREER-INSIGHTS](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md)）已经 Owner 逐项裁定冻结**，裁定记录见各合同文末冻结节；实施按各包任务授权执行，不代表已编码。P1 文档中的实现状态不能自动外推为 P2 实际代码状态。
 
 ## A. P2 目标、范围与台账
 
@@ -19,16 +19,18 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 | Feature | P2 相对优先级 | 设计状态 | 核心交付 | 实现/验收口径 |
 | --- | --- | --- | --- | --- |
-| **JOURNEY-OVERVIEW** | CORE | 核心已确认；合同提案未冻结 | 三阶段旅程、一页主要入口、新旧用户状态 | 已源码复核 / 未编码 / 未验收 |
-| **JOB-CONNECTIONS** | HIGH | 联合合同提案未冻结 | 职位与申请、简历版本、题目、轮次和复盘联动 | 已源码复核 / 未编码 / 未验收 |
-| **INTERVIEW-DEBRIEF** | HIGH | 联合合同提案未冻结 | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / G-AI1 已修，P2 增量未编码 / 未验收 |
-| **NEXT-ACTIONS** | HIGH | 核心已确认；合同提案未冻结 | 从真实业务数据计算下一步引导 | 已源码复核 / 未编码 / 未验收 |
-| **CAREER-INSIGHTS** | MEDIUM | 专项合同提案未冻结 | 简明求职看板与可信统计 | 已源码复核 / 未编码 / 未验收 |
-| **MULTI-AGENT** | HIGH | 核心交互已确认；合同提案未冻结 | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 已源码复核 / 未编码 / 未验收 |
+| **JOURNEY-OVERVIEW** | CORE | 合同已冻结（2026-11-01，D1–D9） | 三阶段旅程、一页主要入口、新旧用户状态 | 已源码复核 / 未编码 / 未验收 |
+| **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 已源码复核 / 未编码 / 未验收 |
+| **INTERVIEW-DEBRIEF** | HIGH | 联合合同已冻结（D1–D12） | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / G-AI1 已修，P2 增量未编码 / 未验收 |
+| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 已源码复核 / 未编码 / 未验收 |
+| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 已源码复核 / 未编码 / 未验收 |
+| **MULTI-AGENT** | HIGH | 合同已冻结（D1–D10） | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 已源码复核 / 未编码 / 未验收 |
 
 对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。全部 `implementationStatus: NOT_ASSESSED`、`passes: false`：**没有进行代码审计不等于全部功能缺失**；产品确认也不等于工程通过。
 
 **2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。2026-11-01 已收敛两份提案并新增 [MULTI-AGENT 合同](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)（D1–D10）。面试 D6 与概览 D3 已统一协调建议为仅 COMPLETED 计入待复盘、过期未完成仅提示确认状态；仍须 Owner 同一次批准，不代表已冻结。若 D2-a 显式完成标记获批，首页 R6 等待领域接口，不用内容存在性过渡。Schema/备份和双语词典各指定唯一 Owner，跨包顺序交接；Electron 重型验证仍串行。2026-11-01 另集成 [CAREER-INSIGHTS 合同提案](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md)（核查基线 main@b3219dc2，D1–D9 待裁定），指标主表面复用 analytics、首页 O5 共享读模型，M9 等待复盘领域接口。G-AI1 既有归档隔离缺口已独立修复集成（8b09faf1），不再列为 P-A 重复开发任务；验证与并发边界见 P2_FEATURES.json 的 INTERVIEW-DEBRIEF implementationNotes，不代表 P2 功能验收。
+
+**2026-11-01 合同冻结**：四份合同提案的全部决策项经 Owner 逐项裁定、按推荐/协调建议生效——概览 D1–D9、职位/复盘 D1–D12（含题库软删、归档期复盘只读查看纳入范围、归档职位禁建练习等附随裁定）、洞察 D1–D9、多 Agent D1–D10。跨合同链「面试已结束」谓词（概览 D3＝面试 D6）同次裁定：仅 `COMPLETED` 计入待复盘，EVIDENCED 按非 COMPLETED，未归档终态 Attempt 的 COMPLETED 轮次计入；洞察 M9 剩余前置为 §7.3 `listAwaitingReflectionInterviews` 读模型落地。裁定依据为四窗口只读源码备料与合并总表（`.tmp/p2-*-decision-prep/`、`.tmp/p2-decision-merge/owner-decision-pack.md`，核实基线 main@55d5a4a9）；冻结记录见各合同文末。合同冻结仅解锁实施排期，编码仍按各包任务授权执行。
 
 ### A3. 明确不纳入本阶段
 
@@ -182,15 +184,15 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 ## E. 设计未决事项与后续 Gate
 
-以下事项目前**不得当作已冻结设计**，但**不阻碍建立 P2 台账**：
+以下事项原列为不得当作已冻结设计；**2026-11-01 已经四份合同提案逐项裁定冻结**（裁定结果见各合同文末冻结节），本清单保留为裁定覆盖面的对照记录：
 
-1. **数据关联合同**：实体/外键、提交快照、真实面试轮次、题目引用、归档/恢复影响，以及 Schema/Backup/迁移边界。
-2. **统计口径**：职位/申请/面试/Offer 的实体粒度、转化率分子分母、时间范围、归档数据处理。
-3. **Agent 业务合同**：三个角色的实际工具白名单、上下文隔离/会话切换、写入审批、四条提示的能力门控和特定 Provider 可用性。
-4. **首页布局细节**：模块入口映射、信息密度、下一步建议的规则优先级与上限、桌面及窄屏交互。
-5. **真实面试复盘 Schema**：字段必填性、面试结果与申请状态边界、记录版本/修改史与题目复用方式。
+1. **数据关联合同**：已由职位/复盘联合合同 D1–D12 冻结（实体复用、提交快照不可变、复盘列增量、归档/删除语义、迁移/备份边界）。
+2. **统计口径**：已由 CAREER-INSIGHTS 合同 D1–D9 冻结（双单位、M4 拆分、Offer 当前口径、归档脚注、转化类延期）。
+3. **Agent 业务合同**：已由 MULTI-AGENT 合同 D1–D10 冻结（会话槽、agentRole 存储、CAREER_DIALOGUE 锁、白名单、建议填入、CTA 语义）。
+4. **首页布局细节**：已由概览/下一步合同 D1–D9 冻结（区块顺序、建议上限、dismiss、dataState 扩展、Agent 槽位、家族口径）。
+5. **真实面试复盘 Schema**：已由联合合同 D2/D3/D12 冻结（显式完成标记列、自由编辑、自由文本+逐题结构）。
 
-**建议的 Gate 顺序（仅为规划，不是开工授权）**：先对照真实代码做只读模块/数据盘点 → 冻结上述高风险合同 → 按功能工作包分阶段实施 → 使用合成数据验证关联/统计/权限 → 在隔离桌面环境完成端到端用户故事及不同首页状态验收。每个阶段遵守当时实际代码与数据安全边界。
+**Gate 进度**：只读模块/数据盘点与高风险合同冻结已完成；下一步为按功能工作包分阶段实施（各包独立任务授权）→ 合成数据验证关联/统计/权限 → 隔离桌面环境端到端用户故事及不同首页状态验收。每个阶段遵守当时实际代码与数据安全边界。
 
 **验收总原则**：产品设计已确认不等于功能完成。只有六个 Feature 对应的真实用户路径、权限、数据一致性、空态/有数据态、Agent 非自动调用约束及必要 Windows Electron 验收实际通过，才可分别将 `passes` 标为 `true`，且应保留证据。未测事项不标记通过。
 

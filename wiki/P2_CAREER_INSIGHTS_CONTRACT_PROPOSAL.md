@@ -1,10 +1,10 @@
 # CAREER-INSIGHTS 统计合同提案（P2 求职数据看板）
 
 - 基线：`main @ b3219dc2`（2026-11-01 逐条源码核查；核查 Worktree `.worktrees/p2-career-insights-contract`，分支 `codex/p2-career-insights-contract`，核查时无未提交修改）
-- 状态：**提案，未经 Owner 冻结**。除【源码事实】外，所有指标口径、展示规则与文件归属均为【推荐方案】；标注【待决定】的条目需 Owner 裁定后才能按冻结合同实施。本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作。
+- 状态：**已冻结（2026-11-01 Owner 裁定 §8 D1–D9，见 §9 冻结记录）**。【推荐方案】已按裁定生效；本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作——实施仍须各自任务授权。
 - 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议，未冻结；**【待决定】**＝需 Owner 裁定的产品规则。
 - 上游依据：`wiki/P2_IMPLEMENTATION.md` §C5 与 `wiki/P2_FEATURES.json` CAREER-INSIGHTS（CONTRACT_PENDING / MEDIUM）；归档语义遵循已冻结 `ARCHIVE_CONTRACT_PROPOSAL.md`（D1–D8，2026-10-29）；日期/时区/精度语义遵循已冻结 `DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`（D1–D9，2026-10-27）。
-- **跨合同待裁定项**：「已结束、待复盘」统一谓词由 `P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §9 D3 与 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §13 D6 同一次裁定（两合同协调建议均为仅 `status === "COMPLETED"`，尚未批准）。本合同不重复拥有该谓词：M9「待复盘面试」仅在裁定生效且 §7.3 `listAwaitingReflectionInterviews` 读模型落地后接入，裁定前该指标记为未覆盖、不在看板展示占位。
+- **跨合同项**：「已结束、待复盘」统一谓词由 `P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §9 D3 与 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §13 D6 于 2026-11-01 同次裁定生效（仅 `status === "COMPLETED"`）。本合同不重复拥有该谓词：M9「待复盘面试」在裁定生效且 §7.3 `listAwaitingReflectionInterviews` 读模型落地后接入，落地前该指标记为未覆盖、不在看板展示占位。
 
 ## 0. 范围与边界
 
@@ -316,4 +316,22 @@
 
 ---
 
-**授权声明**：本提案仅为评审与冻结候选；标注【推荐方案】/【待决定】的内容**不是已冻结决定**，实施前须经 Owner 逐项裁定 §8 决策表。本文件 §8 D2（M4 中 EVIDENCED 处理）与 §8 D9（M9 接入）依赖跨合同裁定——`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §13 D2/D6 与 `P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §9 D3 须在同一次裁定中生效后方可实施对应部分。本文件不构成代码修改、Schema/Migration、提交、合并、推送、发布或真实数据操作授权。
+**授权声明**：§8 D1–D9 已于 2026-11-01 经 Owner 逐项裁定冻结；§8 D2（M4 中 EVIDENCED 处理）与 §8 D9（M9 接入）的跨合同前置（`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §13 D2/D6、`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §9 D3）已同次裁定生效，M9 剩余前置为 §7.3 读模型落地。本文件不构成代码修改、Schema/Migration、提交、合并、推送、发布或真实数据操作授权——实施仍须各自任务授权。
+
+## 9. Owner 裁定冻结记录（2026-11-01）
+
+Owner 于 2026-11-01 逐项裁定 §8 D1–D9，全部按推荐项生效。裁定依据：只读源码备料（`.tmp/p2-career-insights-decision-prep/`）与合并总表（`.tmp/p2-decision-merge/owner-decision-pack.md`），核实基线 `main @ 55d5a4a9`。
+
+| # | 裁定结果 |
+| --- | --- |
+| D1 | A："已投递"以职位级为主 + Attempt 级申请次数辅助指标并列（ab）；legacy 降级为同职位级标注 |
+| D2 | A：M4a 已完成轮次 + M4b 计划中轮次（ab）；legacy 降级"面试中职位数"并标注；`EVIDENCED` 按非 COMPLETED 不计入（随面试 §13 D6 裁定）；`statInterviews` 标签随本项 i18n 包改为不误导口径；migrated-full 用户 M4a 系统性偏低以脚注披露（G7） |
+| D3 | A：M5＝"当前 Offer 阶段机会"（现 `isOfferUiStatus`），文案含"当前"；`offer-declined` 分布标签改中性（"已撤回/已结束"方向），只改显示层不改映射语义 |
+| D4 | A：G1 随本包统一修复（applied7d/趋势/热力图按账户时区）；不改共享 `getLocalDayRange`（首页包共用），applied7d 所在文件跨包交接一次 |
+| D5 | A：看板默认维持现状组合（计数＝当前快照/全部时间；趋势＝7d/30d 切换） |
+| D6 | A：首版转化类数字全部延期，不交付任一比例指标 |
+| D7 | A：M6＝overdue+today+next7 合计 + 逾期计数；blocked 下仅 Task 部分并加范围标注；新增未截断计数查询 |
+| D8 | A：累计指标按活跃口径排除归档 + 脚注"不含已归档职位" |
+| D9 | A：M9 就绪后接入——§2.10 三条件缺一不可，未就绪不渲染不占位、验收记未覆盖；跨合同前置已裁定生效，剩余前置为 §7.3 读模型落地 |
+
+**附随裁定**：`JobsCalendar` `minValue={2}` 分档重叠（G6）列为实现期顺手修正；`jobsInterview`/`jobsOffer`/`priorJobs` 死字段（G4）本期不启用。

@@ -1,8 +1,8 @@
 # P2 JOB-CONNECTIONS + INTERVIEW-DEBRIEF 联合数据与产品合同（提案 v2 收敛稿）
 
-- **状态**：提案（Proposal），待 Owner 裁定 §13 决策表后冻结；推荐与协调建议均不构成批准
+- **状态**：**已冻结**（2026-11-01 Owner 裁定 §13 D1–D12 及附随子项，见 §18 冻结记录）；实施仍须各自任务授权
 - **基线**：`main @ 23178a4c`（v2 复核基线，全部"源码事实"已按此基线重新核实；v1 基线 `96e896e3`——两基线间本合同相关源码无实质变化：增量为 canonical `match_job` 的 `AgentToolExecution`（备份排除）、managed recharge、About 面移除、`ChatConversation.archivedAt` 索引）
-- **交叉项**：§13 D6「已结束」推荐仅 `status === COMPLETED` 计入待复盘、过期未关闭只提示确认状态；与首页合同 §9 D3 的协调建议已对齐，但尚未获 Owner 批准；冻结前须由 Owner 单点裁定，供 NEXT-ACTIONS 消费同一谓词（协调建议见 §7.4）
+- **交叉项**：§13 D6「已结束」＝仅 `status === COMPLETED` 计入待复盘、过期未关闭只提示确认状态；已与首页合同 §9 D3 于 2026-11-01 同次裁定生效（附随子项见 §18），NEXT-ACTIONS 消费同一谓词
 - **覆盖 Feature**：`JOB-CONNECTIONS`、`INTERVIEW-DEBRIEF`（`wiki/P2_FEATURES.json`，当前 `implementationStatus: NOT_ASSESSED`）
 - **上游已冻结合同**：`wiki/RESUME_BUILDER_CONTRACT_PROPOSAL.md`、`wiki/ARCHIVE_CONTRACT_PROPOSAL.md`（含 D6「AI 不得读取任何归档内容」）、`wiki/DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`
 - **2026-11-01 集成补记**：G-AI1 已由 `8b09faf1` 独立修复。下文基线源码事实中的“未过滤归档”保留为历史核查，现状以 §11.2 为准；P-A 不重复实现该修复，其余提案仍待裁定。
@@ -480,3 +480,31 @@ D1–D12 裁定冻结 ─→ P-A（复盘核心，含 Schema/备份）─┬→ 
 ## 17. 附：推荐数据方案一句话
 
 > 复用 `JobOpportunity → ApplicationAttempt → ProcessStep(INTERVIEW) → InterviewDetail → ReflectionItem` 现有树与 `submitted*` 不可变首绑；唯一 Schema 增量为 `InterviewDetail.reflectionCompletedAt` 与 `ReflectionItem.sourceQuestionId/sourceKind`（快照仍为唯一真相）；复盘是用户叙述可自由编辑、不驱动申请状态、AI 只产草稿；归档/恢复不改写任何历史字段；"待复盘"= `COMPLETED` 且完成标记为空（§7.1），首页经 `listAwaitingReflectionInterviews` 消费，过期未关闭仅提示确认。
+
+---
+
+## 18. Owner 裁定冻结记录（2026-11-01）
+
+Owner 于 2026-11-01 逐项裁定 §13 D1–D12，全部按推荐项生效。裁定依据：只读源码备料（`.tmp/p2-job-interview-decision-prep/`，含交付物自校）与合并总表（`.tmp/p2-decision-merge/owner-decision-pack.md`），核实基线 `main @ 55d5a4a9`。
+
+| # | 裁定结果 |
+| --- | --- |
+| D1 | (a)：复用 `ApplicationProcessStep`（category=INTERVIEW）+ 1:1 `ApplicationInterviewDetail`；零 Schema/迁移/备份 |
+| D2 | (a)：`InterviewDetail.reflectionCompletedAt DateTime?` 显式列；服务端置 `new Date()`/NULL，不接受客户端时间；老行 NULL 不回填，"有内容未标记"显示草稿态；备份字段 optional、`BACKUP_FORMAT_VERSION` 7→8；additive migration |
+| D3 | (a)：自由编辑，`updatedAt` 即最后保存时间；完成标记可取消恢复草稿态；不锁定、不建 revision 表 |
+| D4 | (a)：快照为主 + `ReflectionItem.sourceQuestionId`（FK→Question，onDelete: Restrict）+ `sourceKind`（独立值集 `REFLECTION_ITEM_SOURCE_KIND`，NULL＝手输/未知）；备份同步两字段；单条 additive migration |
+| D5 | (a)：复用 `scheduledAt`+`completedAt`，不加 `occurredAt` |
+| D6 | (a)（与概览合同 §9 D3 同次裁定生效）：仅 `status === "COMPLETED"` 计入待复盘；过期未关闭仅 §7.2 确认提示；`EVIDENCED` 按非 COMPLETED；未归档终态 Attempt 的 COMPLETED 轮次计入；谓词实现为 §7.3 `listAwaitingReflectionInterviews` |
+| D7 | (b)：元数据列保留不接线（按现 Schema 实为 `interviewFormat`/`roundLabel`/`locationText`/`interviewerNames`/`durationMinutes`/`structuredData` 六列） |
+| D8 | (a)：UI"转为任务"预填创建 `Task`，无回链列 |
+| D9 | (a)：保持可删，删除确认按 `step.category===INTERVIEW && detail 存在` 分支明示级联复盘 |
+| D10 | (a)：`Attempt.archivedAt` 本期不产品化（非空＝不可用、无写路径） |
+| D11 | (a)：不加列，按 job+JD 聚合展示 |
+| D12 | (a)：保持 `reflectionText` 自由文本 + items{questionText,answerNotes} |
+
+**附随裁定**：
+
+- **题库删除 UX（随 D4 生效）**：采用软删——`Question` 已有 `deletedAt`/`isActive` 列，删除置位并补齐 `getQuestionsList`/`getQuestionById` 过滤；软删状态不随备份往返为既存事实，Owner 已知情。被复盘引用的题删除后回链失效、快照内容保留（A6 文案）。
+- **归档期复盘只读查看纳入本期范围**：服务读路径 `getInterviewReflection` 已不查 `archivedAt`（归档下可读）、写路径正确拒绝；需补 UI 只读入口/只读对话框形态，随 D9/D10 同期实施。
+- **归档职位不允许新建练习会话（随 D11 声明口径）**：实现期在 `resolveJobJdContext` 补 `archivedAt` 检查，对齐 §11.1"AI/上下文仅取未归档"。
+- **非 USER 步无"标记完成"UI 入口（V1）**：迁移 `EVIDENCED` 轮次如需进入待复盘，可新建 USER INTERVIEW 步标记完成（与概览合同 §10 附随裁定一致）。

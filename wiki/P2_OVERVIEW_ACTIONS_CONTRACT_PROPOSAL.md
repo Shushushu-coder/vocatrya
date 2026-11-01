@@ -1,10 +1,10 @@
 # JOURNEY-OVERVIEW / NEXT-ACTIONS 实施合同提案（P2 首页与下一步建议）
 
 - 基线：`main @ 23178a4c`（2026-11-01 逐条源码复核刷新；前版基线 `96e896e3` 2026-10-31、首版 `39a5a1d3` 2026-10-29）
-- 状态：**提案，未经 Owner 冻结**。除【源码事实】外，所有布局、规则数值、排序与判定均为【推荐方案】；标注【待决定】的条目需 Owner 裁定后才能按冻结合同实施。本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作。
+- 状态：**已冻结（2026-11-01 Owner 裁定 §9 D1–D9，结果与附随子项见 §10 冻结记录）**。【推荐方案】已按裁定生效；本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作——实施仍须各自任务授权。
 - 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议，未冻结；**【待决定】**＝需 Owner 裁定的产品规则。
 - 上游依据：`wiki/P2_IMPLEMENTATION.md`（P2 产品设计基线，已确认原则）与 `wiki/P2_FEATURES.json`；归档语义遵循已冻结的 `ARCHIVE_CONTRACT_PROPOSAL.md`；日期/时区语义遵循已冻结的 `DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`；`match_job` 状态依据 `wiki/P1_FEATURES.json` AGENT-CAPABILITIES 台账——canonical 实现已集成并有 Windows Electron 真实 AI 验收记录（见 §1.5）。
-- **跨合同待裁定项**：「面试已结束、待复盘」统一谓词见 §9 D3。本合同已按协调建议与 [`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) §13 D6 对齐——**协调建议：仅 `status === "COMPLETED"` 计入待复盘；排期已过但未完成不计入，仅提示确认状态。该建议尚未获 Owner 批准，两份合同一致标记为待裁定，任何一方不得按冻结口径实施。**
+- **跨合同待裁定项**：「面试已结束、待复盘」统一谓词见 §9 D3。本合同已按协调建议与 [`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) §13 D6 对齐——**协调建议：仅 `status === "COMPLETED"` 计入待复盘；排期已过但未完成不计入，仅提示确认状态。该协调建议已于 2026-11-01 与面试合同 §13 D6 同次裁定生效（含 EVIDENCED 与终态 Attempt 附随子项，见 §10）。**
 
 ## 0. 范围与边界
 
@@ -312,4 +312,25 @@
 
 ---
 
-**授权声明**：本提案仅为评审与冻结候选；标注【推荐方案】/【待决定】的内容**不是已冻结决定**，实施前须经 Owner 逐项裁定。§9 D3 为跨合同项，须与 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §13 D6 同一次裁定。本文件不构成代码修改、Schema/Migration、提交、合并、推送、发布或真实数据操作授权。
+**授权声明**：§9 D1–D9 已于 2026-11-01 经 Owner 逐项裁定冻结（§9 D3 与 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §13 D6 同次裁定生效），实施按 §10 冻结记录执行。本文件不构成代码修改、Schema/Migration、提交、合并、推送、发布或真实数据操作授权——实施仍须各自任务授权。
+
+## 10. Owner 裁定冻结记录（2026-11-01）
+
+Owner 于 2026-11-01 逐项裁定 §9 D1–D9，全部按推荐/协调建议生效。裁定依据：只读源码备料（`.tmp/p2-overview-actions-decision-prep/`）与合并总表（`.tmp/p2-decision-merge/owner-decision-pack.md`），核实基线 `main @ 55d5a4a9`。
+
+| # | 裁定结果 |
+| --- | --- |
+| D1 | A：O2 旅程区在前、O3 建议区在后 |
+| D2 | A：purpose＝`CAREER_DIALOGUE`；RESOLVED 为**存储态**判定，R2/R7 文案按"配置层面可用"表述，不承诺服务实时可用 |
+| D3 | A（与面试合同 §13 D6 同次裁定生效）：仅 `status === "COMPLETED"` 计入待复盘；排期已过未完成不计入，仅提示确认状态 |
+| D4 | A：建议上限 3 条 + "+N" 计数 |
+| D5 | A：V1 不做 dismiss 机制 |
+| D6 | A：`getOverviewDataState` 判定域扩展 +CareerMaterialItem + ResumeVariant(ab)/Resume(legacy)；不加 ChatConversation |
+| D7 | A：阶段卡 Agent 槽位为单入口复用 `useAgentChat().open()`——只打开面板，不建会话、不发消息 |
+| D8 | A：两分支各按本家族口径（ab＝`APPLIED_ATTEMPT_WHERE`，legacy＝`Job.applied`）；R3「无职位」按"未归档职位＝0"判定（`loadJobsExistence` 计含归档行，需独立谓词） |
+| D9 | A：R4 候选＝活跃未归档且未投递职位 |
+
+**附随裁定（随 D3 生效，两合同同步）**：
+
+- `EVIDENCED`（迁移合成步，不在 `PROCESS_STEP_STATUS` 常量集）按"非 COMPLETED"处理：不计入待复盘；V1 **不提供**非 USER 步"标记完成"UI 入口——迁移轮次如需进入待复盘，可新建 USER INTERVIEW 步标记完成。
+- 未归档终态 Attempt（REJECTED/WITHDRAWN/HIRED/TRANSFERRED）下的 COMPLETED 轮次**计入**待复盘：`listAwaitingReflectionInterviews` 仅过滤 Attempt/Job `archivedAt`，不加 `outcome` 过滤（与 upcoming 读模型的 `outcome∈{ACTIVE,OFFER}` 为不同读模型，并存不冲突）。
