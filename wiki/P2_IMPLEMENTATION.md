@@ -21,14 +21,14 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 | --- | --- | --- | --- | --- |
 | **JOURNEY-OVERVIEW** | CORE | 核心已确认；合同提案未冻结 | 三阶段旅程、一页主要入口、新旧用户状态 | 已源码复核 / 未编码 / 未验收 |
 | **JOB-CONNECTIONS** | HIGH | 联合合同提案未冻结 | 职位与申请、简历版本、题目、轮次和复盘联动 | 已源码复核 / 未编码 / 未验收 |
-| **INTERVIEW-DEBRIEF** | HIGH | 联合合同提案未冻结 | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / 未编码 / 未验收 |
+| **INTERVIEW-DEBRIEF** | HIGH | 联合合同提案未冻结 | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / G-AI1 已修，P2 增量未编码 / 未验收 |
 | **NEXT-ACTIONS** | HIGH | 核心已确认；合同提案未冻结 | 从真实业务数据计算下一步引导 | 已源码复核 / 未编码 / 未验收 |
-| **CAREER-INSIGHTS** | MEDIUM | 指标口径待定 | 简明求职看板与可信统计 | 未审计 / 未验收 |
+| **CAREER-INSIGHTS** | MEDIUM | 专项合同提案未冻结 | 简明求职看板与可信统计 | 已源码复核 / 未编码 / 未验收 |
 | **MULTI-AGENT** | HIGH | 核心交互已确认；合同提案未冻结 | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 已源码复核 / 未编码 / 未验收 |
 
 对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。全部 `implementationStatus: NOT_ASSESSED`、`passes: false`：**没有进行代码审计不等于全部功能缺失**；产品确认也不等于工程通过。
 
-**2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。2026-11-01 已收敛两份提案并新增 [MULTI-AGENT 合同](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)（D1–D10）。面试 D6 与概览 D3 已统一协调建议为仅 COMPLETED 计入待复盘、过期未完成仅提示确认状态；仍须 Owner 同一次批准，不代表已冻结。若 D2-a 显式完成标记获批，首页 R6 等待领域接口，不用内容存在性过渡。Schema/备份和双语词典各指定唯一 Owner，跨包顺序交接；Electron 重型验证仍串行。CAREER-INSIGHTS 尚无专项合同。G-AI1（复盘 AI 草稿未过滤归档职位）已记录为既有待修缺口，本次仅文档收敛未修产品代码。
+**2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。2026-11-01 已收敛两份提案并新增 [MULTI-AGENT 合同](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)（D1–D10）。面试 D6 与概览 D3 已统一协调建议为仅 COMPLETED 计入待复盘、过期未完成仅提示确认状态；仍须 Owner 同一次批准，不代表已冻结。若 D2-a 显式完成标记获批，首页 R6 等待领域接口，不用内容存在性过渡。Schema/备份和双语词典各指定唯一 Owner，跨包顺序交接；Electron 重型验证仍串行。2026-11-01 另集成 [CAREER-INSIGHTS 合同提案](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md)（核查基线 main@b3219dc2，D1–D9 待裁定），指标主表面复用 analytics、首页 O5 共享读模型，M9 等待复盘领域接口。G-AI1 既有归档隔离缺口已独立修复集成（8b09faf1），不再列为 P-A 重复开发任务；验证与并发边界见 P2_FEATURES.json 的 INTERVIEW-DEBRIEF implementationNotes，不代表 P2 功能验收。
 
 ### A3. 明确不纳入本阶段
 
@@ -126,6 +126,8 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 **验收重点**：新账号、无 AI、有职位未投递、结束真实面试未复盘、多状态同时成立、用户归档/恢复、数据变化后的同步刷新。不得因打开首页产生 AI 调用或业务写入。
 
 ### C5. CAREER-INSIGHTS — 清楚且可信的数据看板
+
+专项口径、源码核查、Owner 交接与待裁定项见 [统计合同提案](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md)，提案尚未冻结。
 
 **已确认**：使用少量高价值指标辅助决策，避免复杂的评分墙。候选基础指标包括职位数、实际投递次数/申请数、面试相关机会、Offer、待跟进事项；漏斗与转化率在定义清楚后再交付。
 

@@ -5,6 +5,7 @@
 - **交叉项**：§13 D6「已结束」推荐仅 `status === COMPLETED` 计入待复盘、过期未关闭只提示确认状态；与首页合同 §9 D3 的协调建议已对齐，但尚未获 Owner 批准；冻结前须由 Owner 单点裁定，供 NEXT-ACTIONS 消费同一谓词（协调建议见 §7.4）
 - **覆盖 Feature**：`JOB-CONNECTIONS`、`INTERVIEW-DEBRIEF`（`wiki/P2_FEATURES.json`，当前 `implementationStatus: NOT_ASSESSED`）
 - **上游已冻结合同**：`wiki/RESUME_BUILDER_CONTRACT_PROPOSAL.md`、`wiki/ARCHIVE_CONTRACT_PROPOSAL.md`（含 D6「AI 不得读取任何归档内容」）、`wiki/DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`
+- **2026-11-01 集成补记**：G-AI1 已由 `8b09faf1` 独立修复。下文基线源码事实中的“未过滤归档”保留为历史核查，现状以 §11.2 为准；P-A 不重复实现该修复，其余提案仍待裁定。
 - **本文件性质**：合同提案，不是实现计划；不含代码修改、Migration、i18n 或测试变更
 
 **标注约定**：
@@ -360,7 +361,7 @@ interface AwaitingReflectionResult {
 
 ### 11.2 归档与权限
 
-- 父 `JobOpportunity.archivedAt` 非空的上下文**不得进入** AI/Agent 输入（归档合同 D6「AI 不得读归档」）——当前 `generateInterviewReflectionDraft` 的 step 查询未过滤父机会归档为**已核实缺口 G-AI1**，实施时与 D2/D4 同包修复；修复前该行为视为越界读。
+- 父 `JobOpportunity.archivedAt` 非空的上下文**不得进入** AI/Agent 输入（归档合同 D6「AI 不得读归档」）。**G-AI1 已独立修复集成**（8b09faf1）：入口及配置解析后检查归属/存在性与两级归档状态，再组装模型请求；归档错误码透传。该保护是执行层调用前的快照检查，不是 Provider 全生命周期锁；验证及未覆盖边界见 P2_FEATURES.json 的 INTERVIEW-DEBRIEF 记录。
 - 全部读/写维持 `userId` 链式校验；无跨用户共享面。
 
 ### 11.3 生成与落库边界
@@ -384,7 +385,7 @@ interface AwaitingReflectionResult {
 | `DateOnly`/`Instant`、未知精度展示 `unknown`、`undefined` 不触碰原字段 | 沿用；"已结束"谓词不依赖 `scheduledAt` 精度 |
 | 未设账户时区用运行时系统时区且不回写 | 沿用；本合同不新增时区写路径 |
 | 投递引用永久防改写 | 沿用；新增 `sourceQuestionId` 选 `Restrict` 与之一致 |
-| AI 不得读归档（归档合同 §9 D6） | **已核实缺口**：`generateInterviewReflectionDraft` 读未过滤父机会 `archivedAt`（G-AI1，§11.2，P-A 修复） |
+| AI 不得读归档（归档合同 §9 D6） | G-AI1 已独立集成（8b09faf1），现有守卫与边界见 §11.2 |
 
 跨合同共同待裁定一项：§7.4「已结束」谓词口径 vs 概览合同 §9 D3——Owner 单点裁定后两合同对齐，不算两合同各自实现的自由。其余未发现冲突。
 
@@ -417,16 +418,16 @@ interface AwaitingReflectionResult {
 
 | 包 | 成果 | 主要文件 | 依赖 |
 |---|---|---|---|
-| **P-A INTERVIEW-DEBRIEF 复盘核心（单一 Owner）** | D2-a/D4-a 裁定列 + additive migration + 备份字段/FK/版本 bump；save DTO 扩展（`reflectionCompleted`/`sourceQuestionId`/`sourceKind`）；§7.1 谓词 + §7.3 `listAwaitingReflectionInterviews` 读取模型（首页契约提供方）；对话框 UI（完成标记/题库引用/可选练习导入）；G-AI1 AI 读归档过滤修复；INTERVIEW 删除级联警示；复盘→Task 预填入口 | `prisma/schema.prisma`、`prisma/migrations/<new>/`、`src/lib/backup/schema.ts`、`src/lib/backup/ordering.ts`、`src/lib/career/interviewReflection.ts`、`src/lib/career/applicationService.ts`、`src/lib/career/upcomingReadModel.ts`（新读模型同层）、`src/lib/career/interviewReflectionAi.ts`、`src/components/myjobs/job-details/InterviewReflectionDialog.tsx`、`ApplicationTimelineTab.tsx`、`TaskForm.tsx`/Task 创建入口 | 必须先冻结 D1–D12；无其他包前置 |
+| **P-A INTERVIEW-DEBRIEF 复盘核心（单一 Owner）** | D2-a/D4-a 裁定列 + additive migration + 备份字段/FK/版本 bump；save DTO 扩展（`reflectionCompleted`/`sourceQuestionId`/`sourceKind`）；§7.1 谓词 + §7.3 `listAwaitingReflectionInterviews` 读取模型（首页契约提供方）；对话框 UI（完成标记/题库引用/可选练习导入）；保留已集成 G-AI1 归档守卫；INTERVIEW 删除级联警示；复盘→Task 预填入口 | `prisma/schema.prisma`、`prisma/migrations/<new>/`、`src/lib/backup/schema.ts`、`src/lib/backup/ordering.ts`、`src/lib/career/interviewReflection.ts`、`src/lib/career/applicationService.ts`、`src/lib/career/upcomingReadModel.ts`（新读模型同层）、`src/lib/career/interviewReflectionAi.ts`、`src/components/myjobs/job-details/InterviewReflectionDialog.tsx`、`ApplicationTimelineTab.tsx`、`TaskForm.tsx`/Task 创建入口 | 必须先冻结 D1–D12；无其他包前置 |
 | **P-B JOB-CONNECTIONS 聚合视图** | 职位详情"计划 vs 实际投递"对照：计划绑定 Variant、每 Attempt 的提交版本/artifact/JD 版本摘要、该职位练习会话计数 | `src/lib/career/applicationTimeline.ts`（DTO 扩展）、`src/lib/career/jobOpportunityAdapter.ts`（include）、`src/components/myjobs/job-details/ApplicationTimelineTab.tsx`、`SubmittedResumePanel.tsx`（小改或新增对照面板） | 不依赖 P-A 新列（只读现有字段），可与 P-A 并行 |
 | **P-C 首页/NEXT-ACTIONS 消费（概览合同 Owner）** | "待复盘面试"卡片/计数接入 §7.3 读取模型；§7.2 过期确认提示入口 | 概览侧首页组件与 NEXT-ACTIONS 组装（概览合同文件集） | **可先行**：UI 壳、空态、加载态、路由接线不依赖本合同；**必须等 P-A**：真实数据接入需 §7.3 读取模型落地 + D6 口径裁定 |
-| **P-D Agent 复盘生成（后续批次）** | Agent 读取 §11.1 上下文产出草稿 | `interviewReflectionAi.ts` 复用/扩展 | 必须等：P-A 完成（G-AI1 修复 + 完成标记语义）+ §11.1 冻结 |
+| **P-D Agent 复盘生成（后续批次）** | Agent 读取 §11.1 上下文产出草稿 | `interviewReflectionAi.ts` 复用/扩展 | 必须等：P-A 完成（完成标记语义；G-AI1 已独立集成）+ §11.1 冻结 |
 
 ### 14.2 串行/并行与单一 Owner
 
 - **必须先完成**：D1–D12 裁定 → P-A 启动（其 Schema/备份/migration 段为**单一 Owner**，含 `prisma/schema.prisma` 与 `src/lib/backup/*`，作为业务交付的一部分，不单独派技术包）。
 - **可与首页并行**：P-C 的 UI 壳/空态/加载态/路由接线；P-B 聚合视图（只读现有列）。
-- **必须等待**：P-C 真实"待复盘"数据（等 P-A 读取模型 + D6 裁定）；P-A 内部复盘 UI/写路径（等 D2/D4 列语义，同包内顺序）；题库引用 UI（等 D4-a）；P-D Agent（等 §11.1 冻结 + G-AI1）。
+- **必须等待**：P-C 真实"待复盘"数据（等 P-A 读取模型 + D6 裁定）；P-A 内部复盘 UI/写路径（等 D2/D4 列语义，同包内顺序）；题库引用 UI（等 D4-a）；P-D Agent（等 §11.1 冻结；G-AI1 已独立集成）。
 - **共享物理文件唯一 Owner**：`ApplicationTimelineTab.tsx` 同时被 P-A（删除警示）与 P-B（对照面板）触及——不按 hunk 分两个 Owner 并行改；指定唯一 Owner（建议归 P-B，P-A 的警示文案作为顺序交接的第二个改动）或由主协调裁定顺序。`src/i18n/messages` 由主协调指定一名 Owner，各包提 key 清单合入；`wiki/P2_FEATURES.json`/`P2_IMPLEMENTATION.md` 仅 Main 集成 Owner 在集成后更新。
 - **测试归属**：各包自带定向验证（隔离 DB migration、服务不变量、组件测试），不拆独立"测试包"。
 
@@ -468,7 +469,7 @@ D1–D12 裁定冻结 ─→ P-A（复盘核心，含 Schema/备份）─┬→ 
 | `ProcessStep.status = "EVIDENCED"` | migrator 写入，但不在 `PROCESS_STEP_STATUS` 常量（`PENDING/IN_PROGRESS/COMPLETED/CANCELLED`） | 兼容值语义："已发生"是否纳入"已结束"判定；是否应入常量 |
 | `ApplicationAttempt.archivedAt` | 列存在无写路径 | 语义归属（本合同按"保留，本期不产品化"处理） |
 | `InterviewSession` `ARCHIVED`/`archivedAt`/`statusBeforeArchive` | 枚举+列存在；持久化 patch 类型可写但全仓无调用方（无产品化归档路径） | 是否属归档合同后续批次（本合同按"本期不产品化"处理） |
-| `generateInterviewReflectionDraft` 归档过滤 | step 查询未过滤父机会 `archivedAt` | 已核实缺口 G-AI1，随 P-A 修复（§11.2），非待决项 |
+| `generateInterviewReflectionDraft` 归档过滤 | step 查询未过滤父机会 `archivedAt` | G-AI1 已独立集成，P-A 保留守卫（§11.2），不重复开发 |
 | `InterviewDetail` 元数据列 | 存在无写路径 | D7 裁定 |
 | `ApplicationAssessmentDetail`/`ApplicationOfferDetail` 写路径 | 未见 | 与 INTERVIEW 平行，不在本合同范围 |
 | `Question.deletedAt/isActive` | interview planning 读侧过滤已核实；`getQuestionsList` 未过滤；写侧仅硬删除（被 `QuestionInstance` 引用的题 `Restrict` 阻止） | D4-a 裁定时需一并定题库删除 UX |

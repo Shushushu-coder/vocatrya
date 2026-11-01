@@ -122,7 +122,7 @@
         "复盘的草稿/完成状态，以及后续修改的历史留痕要求。",
         "题目与练习的引用/复制策略；敏感内容、附件和归档范围是否纳入本期。"
       ],
-      "implementationNotes": "2026-10-31 与 JOB-CONNECTIONS 共用联合合同提案。复盘读写服务已存在；完成标记与题库回链待 Owner 裁定后增量。D6「已结束」与 NEXT-ACTIONS 合同 D3 推荐口径冲突，冻结前须单点裁定。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同收敛：复盘核心包含 additive Schema/Migration/备份、完成标记和来源追溯、统一待复盘读取接口与必要 UI；明确 minute 精度和无 N+1。G-AI1 归档职位 AI 草稿读取缺口已核实但本次未修复；D1–D12 待裁定，未编码或验收。",
+      "implementationNotes": "2026-10-31 与 JOB-CONNECTIONS 共用联合合同提案。复盘读写服务已存在；完成标记与题库回链待 Owner 裁定后增量。D6「已结束」与 NEXT-ACTIONS 合同 D3 推荐口径冲突，冻结前须单点裁定。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同收敛：复盘核心包含 additive Schema/Migration/备份、完成标记和来源追溯、统一待复盘读取接口与必要 UI；明确 minute 精度和无 N+1。G-AI1 归档职位 AI 草稿读取缺口已核实但本次未修复；D1–D12 待裁定，未编码或验收。 2026-11-01 Main 集成 G-AI1 修复 8b09faf1：AI 草稿入口拒绝归档 Attempt/职位；配置解析后复查归属、存在性与归档状态，再组装请求；CareerRuntimeError.code 透传。4 文件/59 项定向测试、完整 tsc 与改动 ESLint 通过。守卫为调用执行层前的状态快照，不持有覆盖 Provider 请求期间的归档锁；保存守卫不作为模型输入保护证据。真实 AI、Windows Electron 和完整 E2E 未执行；不代表 P2 复盘合同冻结或功能验收通过，passes:false。",
       "passes": false
     },
     {
@@ -192,6 +192,7 @@
         "看板默认时间范围、历史/当前筛选和下钻范围。",
         "是否在 P2 首版交付漏斗，以及数据不足时的显示策略。"
       ],
+      "implementationNotes": "2026-11-01 Main 集成 P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md（1525fc92，源码核查基线 main@b3219dc2）：计数指标 M1–M8 与条件 M9、归档/账户时区/多次申请口径、运行模式降级及 D1–D9 推荐已记录。集成审查修正用户范围、Offer 派生优先级、原始投递日期分桶和未截断计数；合同未冻结，统计产品代码未修改，implementationStatus 保持 NOT_ASSESSED、passes:false。G1 等既有统计缺口仅记录，未修复。",
       "passes": false
     },
     {

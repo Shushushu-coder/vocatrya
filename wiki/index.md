@@ -19,11 +19,13 @@
 | [`AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md`](./AGENT_MATCH_JOB_CONTRACT_PROPOSAL.md) | **Agent `match_job` 合同**：D1–D6 已批准；canonical 实现已合入 Main（freshNativeFull，需批准）。尚未完成真实 AI 与桌面验收。 | 修改 Agent 匹配工具、执行台账或 MatchAnalysis 绑定前。 |
 | [`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) | **P2 首页与下一步建议合同提案**（未冻结）：JOURNEY-OVERVIEW / NEXT-ACTIONS 的页面组织、规则与 D1–D9。 | 实施首页或下一步建议前；不得把推荐方案当冻结设计。 |
 | [`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) | **P2 职位关联与面试复盘联合合同提案**（未冻结）：JOB-CONNECTIONS / INTERVIEW-DEBRIEF 的实体树、缺口与 D1–D12。 | 实施职位关联、真实面试复盘或相关 Schema 增量前。 |
+| [`P2_MULTI_AGENT_CONTRACT_PROPOSAL.md`](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md) | **P2 三 Agent 面板合同提案**（未冻结）：角色、会话隔离、工具白名单、建议填入与 D1–D10。 | 实施角色切换和聊天面板前。 |
+| [`P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md`](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md) | **P2 求职数据看板合同提案**（未冻结）：计数、归档/时区口径、模式降级与 D1–D9。 | 裁定统计口径或实施看板前。 |
 
 ## 使用原则
 
 - **先按任务读取**：普通功能开发不必通读整个 `wiki/`。先查对应 Feature；仅当涉及范围、依赖或领域约束时再打开相关文档。
 - **状态与验收分离**：代码已实现、已集成 Main，不等于最终验收通过。`passes: true` 只能在该 Feature 指定的用户验收步骤全部通过后设置；`passes: false` 也不代表尚未编码。
 - **状态单一 Owner**：`MVP_FEATURES.json`、`P1_FEATURES.json` 与 `P2_FEATURES.json` 均由 Main 集成 Owner 维护；每个 Feature 仅在所属清单记录，执行 Agent 不直接争用状态文件。
-- **合同优先**：简历、职业资料、DateTime、归档合同已获批准，不能按“待讨论草案”处理。`match_job` 合同 D1–D6 已批准且实现已合入。两份 P2 合同提案仍待 Owner 冻结；涉及相应工作包时遵守已冻结约束及文件 Owner/交接顺序；如需改变合同，先明确提出变更。
+- **合同优先**：简历、职业资料、DateTime、归档合同已获批准，不能按“待讨论草案”处理。`match_job` 合同 D1–D6 已批准且实现已合入。四份 P2 合同提案仍待 Owner 冻结；涉及相应工作包时遵守已冻结约束及文件 Owner/交接顺序；如需改变合同，先明确提出变更。
 - **避免重复记录**：Feature 状态以所属 MVP/P1/P2 JSON 为准；当前实施安排以对应 IMPLEMENTATION 文档为准，历史实施证据见 Feature 的 implementationNotes；具体领域决策以对应合同为准。不要把同一进度复制到多个文件。
