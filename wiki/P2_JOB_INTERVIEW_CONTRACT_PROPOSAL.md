@@ -5,7 +5,7 @@
 - **交叉项**：§13 D6「已结束」＝仅 `status === COMPLETED` 计入待复盘、过期未关闭只提示确认状态；已与首页合同 §9 D3 于 2026-11-01 同次裁定生效（附随子项见 §18），NEXT-ACTIONS 消费同一谓词
 - **覆盖 Feature**：`JOB-CONNECTIONS`、`INTERVIEW-DEBRIEF`（`wiki/P2_FEATURES.json`，当前 `implementationStatus: NOT_ASSESSED`）
 - **上游已冻结合同**：`wiki/RESUME_BUILDER_CONTRACT_PROPOSAL.md`、`wiki/ARCHIVE_CONTRACT_PROPOSAL.md`（含 D6「AI 不得读取任何归档内容」）、`wiki/DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`
-- **2026-11-01 集成补记**：G-AI1 已由 `8b09faf1` 独立修复。下文基线源码事实中的“未过滤归档”保留为历史核查，现状以 §11.2 为准；P-A 不重复实现该修复，其余提案仍待裁定。
+- **2026-11-01 集成补记**：G-AI1 已由 `8b09faf1` 独立修复。下文基线源码事实中的“未过滤归档”保留为历史核查，现状以 §11.2 为准；P-A 不重复实现该修复；其余决策项已于同日经 Owner 裁定冻结（§18）。
 - **本文件性质**：合同提案，不是实现计划；不含代码修改、Migration、i18n 或测试变更
 
 **标注约定**：
@@ -387,7 +387,7 @@ interface AwaitingReflectionResult {
 | 投递引用永久防改写 | 沿用；新增 `sourceQuestionId` 选 `Restrict` 与之一致 |
 | AI 不得读归档（归档合同 §9 D6） | G-AI1 已独立集成（8b09faf1），现有守卫与边界见 §11.2 |
 
-跨合同共同待裁定一项：§7.4「已结束」谓词口径 vs 概览合同 §9 D3——Owner 单点裁定后两合同对齐，不算两合同各自实现的自由。其余未发现冲突。
+跨合同项已裁定（2026-11-01 与概览合同 §9 D3 同次生效）：§7.4「已结束」谓词＝仅 `COMPLETED`，两合同已对齐，不构成各自实现的自由。其余未发现冲突。
 
 ---
 

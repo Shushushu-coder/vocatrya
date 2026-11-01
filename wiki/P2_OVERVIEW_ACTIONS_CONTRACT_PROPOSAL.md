@@ -2,9 +2,9 @@
 
 - 基线：`main @ 23178a4c`（2026-11-01 逐条源码复核刷新；前版基线 `96e896e3` 2026-10-31、首版 `39a5a1d3` 2026-10-29）
 - 状态：**已冻结（2026-11-01 Owner 裁定 §9 D1–D9，结果与附随子项见 §10 冻结记录）**。【推荐方案】已按裁定生效；本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作——实施仍须各自任务授权。
-- 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议，未冻结；**【待决定】**＝需 Owner 裁定的产品规则。
+- 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议（已于 2026-11-01 经 Owner 裁定生效，见 §10）；**【待决定】**＝裁定前的待决标记（均已裁定）。
 - 上游依据：`wiki/P2_IMPLEMENTATION.md`（P2 产品设计基线，已确认原则）与 `wiki/P2_FEATURES.json`；归档语义遵循已冻结的 `ARCHIVE_CONTRACT_PROPOSAL.md`；日期/时区语义遵循已冻结的 `DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`；`match_job` 状态依据 `wiki/P1_FEATURES.json` AGENT-CAPABILITIES 台账——canonical 实现已集成并有 Windows Electron 真实 AI 验收记录（见 §1.5）。
-- **跨合同待裁定项**：「面试已结束、待复盘」统一谓词见 §9 D3。本合同已按协调建议与 [`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) §13 D6 对齐——**协调建议：仅 `status === "COMPLETED"` 计入待复盘；排期已过但未完成不计入，仅提示确认状态。该协调建议已于 2026-11-01 与面试合同 §13 D6 同次裁定生效（含 EVIDENCED 与终态 Attempt 附随子项，见 §10）。**
+- **跨合同项（已裁定）**：「面试已结束、待复盘」统一谓词见 §9 D3。本合同已按协调建议与 [`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) §13 D6 对齐——**协调建议：仅 `status === "COMPLETED"` 计入待复盘；排期已过但未完成不计入，仅提示确认状态。该协调建议已于 2026-11-01 与面试合同 §13 D6 同次裁定生效（含 EVIDENCED 与终态 Attempt 附随子项，见 §10）。**
 
 ## 0. 范围与边界
 
@@ -165,11 +165,11 @@
 | 有职位未投递 | jobs=ab：`APPLIED_ATTEMPT_WHERE` 无命中；legacy：`job.count({applied:true})=0` | jobs 家族判定；两种家族"未投递"含义不同（§4.2） | 现有能力 |
 | 目标职位缺简历版本 | `ResumeVariant.targetJobOpportunityId` 绑定关系（读 `listVariants`/`getVariant` 已返回 `targetJobTitle`；写 `updateTargetJob`+工作台下拉已存在） | jobs=ab 且 resume=ab（实际＝AB_ENABLED+full） | 关系与写路径现有，**缺聚合读模型** |
 | 即将发生的真实面试 | `listUpcomingApplicationEvents` 中 category=INTERVIEW 的 PROCESS_STEP | jobs=ab；legacy 无 ProcessStep | 现有能力（事件已含 category） |
-| 已结束未复盘面试 | INTERVIEW 步"已结束"且按领域完成谓词判定尚未完成复盘 | jobs=ab；落地复盘写需 AB_ENABLED+full | **缺口：新读模型（§4.7）；「已结束」谓词待裁定（§9 D3）** |
+| 已结束未复盘面试 | INTERVIEW 步"已结束"且按领域完成谓词判定尚未完成复盘 | jobs=ab；落地复盘写需 AB_ENABLED+full | **缺口：新读模型（§4.7）；「已结束」谓词已裁定＝仅 COMPLETED（§9 D3/§10）** |
 | 待复盘计数徽标（可选） | 同上新读的计数 | 同 R6 | 缺口（随 R6/§4.7） |
 | Agent 可用性 | `resolveChatCreationLock`/preflight（CAREER_DIALOGUE） | 无家族依赖 | 现有能力（AgentChatProvider 已做 preflight） |
 
-## 4. NEXT-ACTIONS 规则合同【推荐方案，全部待冻结】
+## 4. NEXT-ACTIONS 规则合同【已冻结：2026-11-01 裁定】
 
 ### 4.1 候选规则（按建议优先级排序）
 
@@ -180,14 +180,14 @@
 | R3 | 无任何职位记录；或有职位但无一条"已投递"（jobs=ab：`APPLIED_ATTEMPT_WHERE` 无命中；legacy：`applied=false` 全部） | 添加/导入目标职位并记录第一次投递 | `/dashboard/myjobs?add-job=true`（无职位且 jobMutationsEnabled）或 `/dashboard/myjobs`（有职位未投递） | jobs 家族判定；add-job 深链需 jobMutationsEnabled |
 | R4 | 存在活跃职位（未归档、非终态）且**没有** `ResumeVariant.targetJobOpportunityId` 指向它 | 为目标职位绑定或新建简历版本 | `/dashboard/profile/resumes` | jobs=ab 且 resume=ab（实际＝AB_ENABLED+full）；每职位一条去重（§4.3） |
 | R5 | upcoming 事件中存在 category=INTERVIEW 的 PROCESS_STEP（attentionAt < +7d 或已逾期） | 准备即将进行的真实面试；**排期已过未完成的轮次只提示确认状态**（协调建议，随 §9 D3） | `/dashboard/myjobs/{jobOpportunityId}?tab=timeline`（多轮时取最近一条） | jobs=ab（含 AB_READY_DISABLED——只读引导不需要写权） |
-| R6 | 存在"已结束"的 INTERVIEW 步且按领域完成谓词判定尚未完成复盘（判定见 §4.2，谓词待裁定 §9 D3） | 复盘刚结束的真实面试 | `/dashboard/myjobs/{jobOpportunityId}?tab=timeline` | jobs=ab 且复盘写可用（AB_ENABLED+full；AB_READY_DISABLED 下推荐静默，见 §9 D3） |
+| R6 | 存在"已结束"的 INTERVIEW 步且按领域完成谓词判定尚未完成复盘（判定见 §4.2，谓词已裁定 §9 D3＝仅 COMPLETED） | 复盘刚结束的真实面试 | `/dashboard/myjobs/{jobOpportunityId}?tab=timeline` | jobs=ab 且复盘写可用（AB_ENABLED+full；AB_READY_DISABLED 下推荐静默，见 §9 D3） |
 | R7 | `AIBusinessAssignment` 存在但解析为 `INVALID_ASSIGNMENT` | AI 连接需要修复（不影响手动使用） | `/dashboard/settings?section=ai-services` | 无；与 R2 互斥 |
 
 规则性质全部为**普通模块导航**；点击只走路由，不打开 Agent、不发送消息、不写业务数据。
 
-### 4.2 关键判定定义【推荐方案，待 Owner 冻结】
+### 4.2 关键判定定义【已冻结：2026-11-01 裁定】
 
-- **"已结束"真实面试（R6）——跨合同待裁定谓词**：协调建议＝**仅 `step.status === "COMPLETED"` 计入待复盘**（用户显式标记结束，`completedAt`/`completedAtPrecision` 随 `completeProcessStep` 同写）；`CANCELLED` 一律不算；`PENDING/IN_PROGRESS` 不计；`scheduledAt < now` 但**未完成**的步不计入待复盘——只作为"确认该轮面试状态"的弱提示（呈现位置建议复用 R5-upcoming 条目文案，不产生"待复盘"断言）；迁移产生的 `EVIDENCED` 状态在语义确认前按"非 COMPLETED"处理（不误报）。本合同原推荐口径（completedAt∨COMPLETED∨逾期未关闭）**不再作为推荐**，仅为裁定备选 B 保留在 §9 D3。
+- **"已结束"真实面试（R6）——已裁定谓词（§9 D3＝A，2026-11-01）**：**仅 `step.status === "COMPLETED"` 计入待复盘**（用户显式标记结束，`completedAt`/`completedAtPrecision` 随 `completeProcessStep` 同写）；`CANCELLED` 一律不算；`PENDING/IN_PROGRESS` 不计；`scheduledAt < now` 但**未完成**的步不计入待复盘——只作为"确认该轮面试状态"的弱提示（呈现位置复用 R5-upcoming 条目文案，不产生"待复盘"断言）；迁移产生的 `EVIDENCED` 状态按"非 COMPLETED"处理（已裁定）。本合同原推荐口径（completedAt∨COMPLETED∨逾期未关闭）为裁定备选 B，未采纳。
 - **"已复盘"**：双口径随面试合同 D2 裁定——D2-a 落地（`reflectionCompletedAt`）→ `interviewDetail.reflectionCompletedAt NOT NULL`；仅在 Owner 明确选择 D2-b 时 → `interviewDetail` 存在且（`reflectionText` 非空白 OR `reflectionItems` 至少 1 条）。仅 D2-b 下空 detail（无 text 无 items）视为未复盘；D2-a 仅看完成标记，标记非空时即使内容清空仍完成。当前 save 对不存在 detail 的空保存早退，不代表已完成 detail 的内容/标记会被清除。两种口径是互斥方案，由 INTERVIEW-DEBRIEF 合同单一拥有。裁定前或 D2-a 已批准但字段/接口未落地时，R6 记为未覆盖并静默，不允许启用内容存在性过渡口径；首页只消费领域结果（§4.7）。
 - **"有即将面试"（R5）**：直接复用 `listUpcomingApplicationEvents` 过滤 `category===INTERVIEW`；不新造语义。COMPLETED 步天然不在 upcoming（§1.3 推论），故"已结束"与"即将发生"按构造互斥，无需额外去重规则。
 - **"AI 可用"（R2）**：见 §9 D2。
@@ -294,9 +294,9 @@
 - **隔离库读模型验证**：种子数据覆盖 R1–R7 命中、归档排除、多实体去重、「已结束/已复盘」谓词（含 detail 缺失与空 detail 行）。
 - **明确 NOT_RUN（除非另行授权）**：生产 Build、真实 Electron、完整 E2E、真实 AI、真实数据操作——桌面/集中验收由主协调窗口按既有授权另行指定执行者。本包无 AI 调用路径，无需真实 AI 验证。
 
-## 9. 待 Owner 裁定问题清单
+## 9. Owner 裁定问题清单（2026-11-01 已逐项裁定，结果见 §10）
 
-每项给互斥选项与本合同推荐；裁定后即可按冻结合同实施。未列入的问题（如区块内具体卡片文案、空态隐藏 vs 安静文案）不影响实现结构，已按推荐口径写入正文。
+每项给互斥选项与本合同推荐；裁定结果已生效，按冻结合同实施。未列入的问题（如区块内具体卡片文案、空态隐藏 vs 安静文案）不影响实现结构，按推荐口径实施。
 
 | # | 问题 | 选项（互斥） | 本合同推荐 | 影响 |
 | --- | --- | --- | --- | --- |

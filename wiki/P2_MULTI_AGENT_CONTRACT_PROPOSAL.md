@@ -2,8 +2,8 @@
 
 - 基线：`main @ 23178a4c`（2026-11-01 逐条源码复核）
 - 状态：**已冻结（2026-11-01 Owner 裁定 §9 D1–D10，见 §14 冻结记录）**。【推荐方案】已按裁定生效；本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作——实施仍须各自任务授权。
-- 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议，未冻结；**【待决定】**＝需 Owner 裁定的产品/工程规则。
-- 上游依据：`wiki/P2_IMPLEMENTATION.md` §C6（MULTI-AGENT 已确认交互与待冻结项）与 `wiki/P2_FEATURES.json`；P1 `AGENT-CAPABILITIES`（canonical `match_job` 已合入 `67a3adf6`、D1–D6 已批准，P1 台账已记录 Windows Electron fresh-native/full 真实 AI 验收通过（2bfee169）；结论限于实际覆盖运行时/模型）；归档语义遵循已冻结 `ARCHIVE_CONTRACT_PROPOSAL.md`；窗口二合同 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §11 AI 边界；首页合同 `P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §6 Agent 槽位。
+- 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议（已于 2026-11-01 经 Owner 裁定生效，见 §14）；**【待决定】**＝裁定前的待决标记（均已裁定）。
+- 上游依据：`wiki/P2_IMPLEMENTATION.md` §C6（MULTI-AGENT 已确认交互与已冻结项）与 `wiki/P2_FEATURES.json`；P1 `AGENT-CAPABILITIES`（canonical `match_job` 已合入 `67a3adf6`、D1–D6 已批准，P1 台账已记录 Windows Electron fresh-native/full 真实 AI 验收通过（2bfee169）；结论限于实际覆盖运行时/模型）；归档语义遵循已冻结 `ARCHIVE_CONTRACT_PROPOSAL.md`；窗口二合同 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §11 AI 边界；首页合同 `P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §6 Agent 槽位。
 - **交叉项（记录，不在本合同裁定）**：① 首页合同 §9 D7（V1 阶段卡 Agent 槽位=单入口现有助手）在本 Feature 落地后由同一槽位传入角色——首页结构不需改动，实施时按 §6.2 接口协调。② 窗口二合同 §13 D6「已结束」与首页合同 §9 D3 已于 2026-11-01 同次裁定生效（仅 `status === "COMPLETED"` 计入待复盘）；本合同 V1 不消费该谓词（无复盘读工具）。③ canonical `match_job` 已注册且有验收证据，是否进入 Insight 建议见 §9 D5。
 
 ## 0. 范围与边界
@@ -88,7 +88,7 @@
 - **当前没有任何读取复盘/轮次的 Agent 工具**：`get_job` 只返回职位摘要+JD（§1.2），不含 Attempt/Step/InterviewDetail。
 - 窗口二合同 §11 AI 边界（仍为提案；既有归档禁读规则已冻结，本合同遵守）：AI/Agent 可在 `userId` scope 内读职位/Attempt/Step/detail/复盘/JD/提交简历摘要；产出草稿停在客户端、用户确认后走既有写路径；**不得**写 `reflectionText`/items、置 `reflectionCompletedAt`、改 `submitted*`/`submittedAt`、改 Step `status/completedAt`、替用户完成复盘或标记面试结束。
 
-## 2. 三角色合同【推荐方案，全部待冻结】
+## 2. 三角色合同【已冻结：2026-11-01 裁定】
 
 ### 2.1 角色定义（固定顺序：准备→行动→复盘）
 
@@ -271,12 +271,12 @@
 
 | 项 | 现状 | 需要 |
 | --- | --- | --- |
-| 「已结束」谓词双合同口径 | 两合同均推荐仅 COMPLETED，尚未批准 | Owner 同一次裁定两处；本合同 V1 不消费 |
+| 「已结束」谓词双合同口径 | 已于 2026-11-01 同次裁定生效（仅 COMPLETED） | 本合同 V1 不消费 |
 | agentRole 备份兼容 | ChatConversation 已在备份内（backup/schema.ts、ordering.ts MODEL_SPECS）；D2-a 若获批必须同步角色字段 | 新格式保留角色；仅旧行/旧格式缺字段兼容 NULL；唯一 Schema/备份 Owner 随 migration 一并实现 |
 | 角色名/图标/副标题文案 | 未定稿 | 实现期 i18n 双语定稿 |
 | Reflect 复盘读工具（如 `get_interview_reflection`） | 不存在 | 不在本合同；未来单独工具合同+窗口二 Owner |
 | `seedExchange` 去留 | 仅空态加职位建议使用 | 建议改填入后由实现决定 |
-| 首页阶段卡槽位（D7-A 单入口） | 首页合同推荐 V1 单入口，D7 尚未裁定 | MULTI-AGENT 落地时同槽位改传 `open({role})`，协调首页 Owner |
+| 首页阶段卡槽位（D7-A 单入口） | 首页合同 D7 已裁定为 A（单入口） | MULTI-AGENT 落地时同槽位改传 `open({role})`，协调首页 Owner |
 
 ## 13. 授权声明
 

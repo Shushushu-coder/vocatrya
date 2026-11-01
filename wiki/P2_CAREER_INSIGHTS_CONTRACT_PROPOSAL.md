@@ -2,7 +2,7 @@
 
 - 基线：`main @ b3219dc2`（2026-11-01 逐条源码核查；核查 Worktree `.worktrees/p2-career-insights-contract`，分支 `codex/p2-career-insights-contract`，核查时无未提交修改）
 - 状态：**已冻结（2026-11-01 Owner 裁定 §8 D1–D9，见 §9 冻结记录）**。【推荐方案】已按裁定生效；本文件不授权代码修改、Schema/Migration、提交、合并、部署或真实数据操作——实施仍须各自任务授权。
-- 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议，未冻结；**【待决定】**＝需 Owner 裁定的产品规则。
+- 标注约定：**【源码事实】**＝当前代码实际行为（附文件:行）；**【推荐方案】**＝本合同建议（已于 2026-11-01 经 Owner 裁定生效，见 §9）；**【待决定】**＝裁定前的待决标记（均已裁定）。
 - 上游依据：`wiki/P2_IMPLEMENTATION.md` §C5 与 `wiki/P2_FEATURES.json` CAREER-INSIGHTS（CONTRACT_PENDING / MEDIUM）；归档语义遵循已冻结 `ARCHIVE_CONTRACT_PROPOSAL.md`（D1–D8，2026-10-29）；日期/时区/精度语义遵循已冻结 `DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`（D1–D9，2026-10-27）。
 - **跨合同项**：「已结束、待复盘」统一谓词由 `P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md` §9 D3 与 `P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md` §13 D6 于 2026-11-01 同次裁定生效（仅 `status === "COMPLETED"`）。本合同不重复拥有该谓词：M9「待复盘面试」在裁定生效且 §7.3 `listAwaitingReflectionInterviews` 读模型落地后接入，落地前该指标记为未覆盖、不在看板展示占位。
 
@@ -104,7 +104,7 @@
 | G8 | `loadJobsBoardTotals.interviews` 不过滤 step status，CANCELLED 也计入 | `jobsReadDispatch.ts:663-673` | "面试次数"虚高于实际发生的面试 |
 | G9 | `InterviewSession`（练习）与真实面试无混淆路径——**非缺陷**，确认隔离 | 窗口二 §8 | 统计口径不会误把练习当真实面试 |
 
-## 2. 首版指标合同【推荐方案，全部待冻结】
+## 2. 首版指标合同【已冻结：2026-11-01 裁定】
 
 设计原则：首版只交付**计数类**指标——单位、来源、去重可严格定义；转化率/漏斗全部延期（§3）。每项指标给：单位、数据来源（按家族）、过滤与去重、归档口径、时间窗口与时区、零值/缺失/失败展示。
 
@@ -298,9 +298,9 @@
 | 首页 O5 卡片组合 | 现三卡；追加哪些指标 | 首页 Owner 随 O5 裁定；本合同只供读函数 |
 | G6 热力图 `minValue=2` | 1 与 ≥2 同档渲染 | 实现期顺手修正（minValue=1 或动态），不构成独立裁定项 |
 
-## 8. 待 Owner 裁定问题清单
+## 8. Owner 裁定问题清单（2026-11-01 已逐项裁定，结果见 §9）
 
-每项给互斥选项与本合同推荐；裁定后即可按冻结合同实施。
+每项给互斥选项与本合同推荐；裁定结果已生效，按冻结合同实施。
 
 | # | 问题 | 选项（互斥） | 本合同推荐 | 影响 |
 | --- | --- | --- | --- | --- |
