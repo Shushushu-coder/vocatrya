@@ -200,6 +200,22 @@ describe("orderTasksByDue — §5.2 total order", () => {
     ]);
   });
 
+  it("recalculates shared calendar days when the account zone changes", () => {
+    const calendar = row("calendar", { dueOn: "2026-10-25", duePrecision: "dateOnly" });
+    const otherCalendar = row("other-calendar", { dueOn: "2026-10-25", duePrecision: "dateOnly" });
+    const instant = row("instant", { dueDate: "2026-10-25T20:00:00.000Z" });
+    const rows = [instant, otherCalendar, calendar];
+    expect(orderTasksByDue(rows, SH).map((r) => r.id)).toEqual([
+      "calendar", "other-calendar", "instant",
+    ]);
+    expect(orderTasksByDue(rows, "America/Los_Angeles").map((r) => r.id)).toEqual([
+      "instant", "calendar", "other-calendar",
+    ]);
+    expect(orderTasksByDue(rows, SH).map((r) => r.id)).toEqual([
+      "calendar", "other-calendar", "instant",
+    ]);
+  });
+
   it("same key → priority desc → id asc", () => {
     const mk = (id: string, priority: number) =>
       row(id, { dueOn: "2026-06-15", duePrecision: "dateOnly" }, priority);
