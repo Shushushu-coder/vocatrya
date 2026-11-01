@@ -253,10 +253,34 @@ export interface InterviewReflectionDraftDeps {
   createOperationId?: (stepId: string) => string;
 }
 
+function assertDraftSourceActive(step: {
+  applicationAttempt: {
+    archivedAt: Date | null;
+    jobOpportunity: { archivedAt: Date | null };
+  };
+} | null): asserts step is NonNullable<typeof step> {
+  if (!step) {
+    throw new CareerRuntimeError("PROCESS_STEP_NOT_FOUND", "Process step not found");
+  }
+  if (step.applicationAttempt.archivedAt !== null) {
+    throw new CareerRuntimeError(
+      "ATTEMPT_ARCHIVED",
+      "This application is archived. Restore it to edit.",
+    );
+  }
+  if (step.applicationAttempt.jobOpportunity.archivedAt !== null) {
+    throw new CareerRuntimeError(
+      "OPPORTUNITY_ARCHIVED",
+      "This job is archived. Restore it to edit.",
+    );
+  }
+}
+
 /**
- * Resolve CAREER_REFLECTION and generate one draft. The step must belong
- * to the user and be an INTERVIEW step — same ownership and category
- * gates as the manual reflection read path.
+ * Resolve CAREER_REFLECTION and generate one draft. Ownership, interview
+ * category and archive state are checked before resolution. Archive state
+ * is checked again after resolution, before assembling the model request.
+ * This is a dispatch check, not a lock held during the provider request.
  */
 export async function generateInterviewReflectionDraft(
   input: {
@@ -295,11 +319,13 @@ export async function generateInterviewReflectionDraft(
       applicationAttempt: {
         select: {
           channelLabel: true,
+          archivedAt: true,
           jobOpportunity: {
             select: {
               title: true,
               locationText: true,
               employmentType: true,
+              archivedAt: true,
               company: { select: { label: true } },
               currentJdVersion: { select: { rawContent: true } },
             },
@@ -315,12 +341,7 @@ export async function generateInterviewReflectionDraft(
       },
     },
   });
-  if (!step) {
-    throw new CareerRuntimeError(
-      "PROCESS_STEP_NOT_FOUND",
-      "Process step not found",
-    );
-  }
+  assertDraftSourceActive(step);
   assertInterviewReflectionStep(step.category);
 
   const resolution = await resolveBusinessAIConfig(
@@ -333,6 +354,24 @@ export async function generateInterviewReflectionDraft(
   if (resolution.status !== "RESOLVED") {
     return { status: "NOT_CONFIGURED" };
   }
+
+  // Resolution awaits connection/settings reads. Do not send the earlier
+  // content snapshot if its source was archived or removed in the meantime.
+  const currentSource = await db.applicationProcessStep.findFirst({
+    where: {
+      id: input.applicationProcessStepId,
+      applicationAttempt: { userId: input.userId },
+    },
+    select: {
+      applicationAttempt: {
+        select: {
+          archivedAt: true,
+          jobOpportunity: { select: { archivedAt: true } },
+        },
+      },
+    },
+  });
+  assertDraftSourceActive(currentSource);
 
   const opportunity = step.applicationAttempt.jobOpportunity;
   const jdText =

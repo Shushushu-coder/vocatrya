@@ -96,6 +96,10 @@ export async function generateInterviewReflectionDraft(input: {
     if (error instanceof AIBusinessError) {
       return { success: false, code: error.code, message: error.message };
     }
-    return handleError(error, "Failed to generate interview reflection draft.");
+    const result = handleError(error, "Failed to generate interview reflection draft.");
+    if (error instanceof CareerRuntimeError) {
+      return { success: false, code: error.code, message: result.message };
+    }
+    return result;
   }
 }

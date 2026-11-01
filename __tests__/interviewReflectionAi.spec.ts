@@ -71,10 +71,12 @@ function stepFixture() {
     },
     applicationAttempt: {
       channelLabel: "BOSS直聘",
+      archivedAt: null as Date | null,
       jobOpportunity: {
         title: "推荐算法工程师",
         locationText: "上海",
         employmentType: "全职",
+        archivedAt: null as Date | null,
         company: { label: "Acme" },
         currentJdVersion: { rawContent: "当前 JD 内容" },
       },
@@ -133,6 +135,7 @@ const MODEL_OUTPUT = JSON.stringify({
 function fakeDb(overrides: {
   step?: unknown;
   assignments?: unknown[];
+  onAssignmentRead?: () => void;
 }): NonNullable<InterviewReflectionDraftDeps["dbClient"]> {
   return {
     applicationProcessStep: {
@@ -141,7 +144,10 @@ function fakeDb(overrides: {
       ),
     },
     aIBusinessAssignment: {
-      findMany: vi.fn(async () => overrides.assignments ?? []),
+      findMany: vi.fn(async () => {
+        overrides.onAssignmentRead?.();
+        return overrides.assignments ?? [];
+      }),
     },
     aIConnection: {
       findFirst: vi.fn(async () => null),
@@ -304,6 +310,75 @@ describe("generateInterviewReflectionDraft (lib)", () => {
     ).rejects.toBeInstanceOf(AIBusinessError);
   });
 
+  it("rejects an archived opportunity before resolving or executing", async () => {
+    const execText = vi.fn(async (_input: { prompt: string }) => ({ text: MODEL_OUTPUT }));
+    const step = stepFixture();
+    step.applicationAttempt.jobOpportunity.archivedAt = new Date(
+      "2026-10-21T00:00:00.000Z",
+    );
+    const db = fakeDb({ step, assignments: [assignmentRow()] })!;
+    await expect(
+      generateInterviewReflectionDraft(
+        { userId: "user-1", applicationProcessStepId: "step-1" },
+        { dbClient: db, execText },
+      ),
+    ).rejects.toMatchObject({
+      name: "CareerRuntimeError",
+      code: "OPPORTUNITY_ARCHIVED",
+    });
+    expect(execText).not.toHaveBeenCalled();
+    expect(db.aIBusinessAssignment.findMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects an archived application attempt before resolving or executing", async () => {
+    const execText = vi.fn(async (_input: { prompt: string }) => ({ text: MODEL_OUTPUT }));
+    const step = stepFixture();
+    step.applicationAttempt.archivedAt = new Date("2026-10-21T00:00:00.000Z");
+    const db = fakeDb({ step, assignments: [assignmentRow()] })!;
+    await expect(
+      generateInterviewReflectionDraft(
+        { userId: "user-1", applicationProcessStepId: "step-1" },
+        { dbClient: db, execText },
+      ),
+    ).rejects.toMatchObject({
+      name: "CareerRuntimeError",
+      code: "ATTEMPT_ARCHIVED",
+    });
+    expect(execText).not.toHaveBeenCalled();
+    expect(db.aIBusinessAssignment.findMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["opportunity", "OPPORTUNITY_ARCHIVED"],
+    ["attempt", "ATTEMPT_ARCHIVED"],
+    ["removed step", "PROCESS_STEP_NOT_FOUND"],
+  ])("rejects a %s changed during AI configuration resolution", async (source, code) => {
+    const execText = vi.fn(async (_input: { prompt: string }) => ({ text: MODEL_OUTPUT }));
+    const initial = stepFixture();
+    const updated = stepFixture();
+    if (source === "opportunity") {
+      updated.applicationAttempt.jobOpportunity.archivedAt = new Date();
+    } else {
+      updated.applicationAttempt.archivedAt = new Date();
+    }
+    const db = fakeDb({
+      step: initial,
+      assignments: [assignmentRow()],
+      onAssignmentRead: () => {
+        vi.mocked(db.applicationProcessStep.findFirst).mockResolvedValueOnce(
+          (source === "removed step" ? null : updated) as never,
+        );
+      },
+    });
+    await expect(
+      generateInterviewReflectionDraft(
+        { userId: "user-1", applicationProcessStepId: "step-1" },
+        { dbClient: db, execText },
+      ),
+    ).rejects.toMatchObject({ code });
+    expect(execText).not.toHaveBeenCalled();
+  });
+
   it("rejects a non-interview step before resolving or executing", async () => {
     const execText = vi.fn(async (_input: { prompt: string }) => ({ text: MODEL_OUTPUT }));
     const assignments = [assignmentRow()];
@@ -399,6 +474,26 @@ describe("generateInterviewReflectionDraft (action)", () => {
       data: { status: "NOT_CONFIGURED" },
     });
     expect(execSeam).not.toHaveBeenCalled();
+  });
+
+  it("surfaces OPPORTUNITY_ARCHIVED and never executes for an archived job", async () => {
+    resolveRuntime.mockResolvedValue({
+      mode: CAREER_RUNTIME_MODE.AB_READY_DISABLED,
+    } as never);
+    const step = stepFixture();
+    step.applicationAttempt.jobOpportunity.archivedAt = new Date(
+      "2026-10-21T00:00:00.000Z",
+    );
+    dbFindFirst.mockResolvedValue(step);
+    const result = await generateDraftAction({
+      applicationProcessStepId: "step-1",
+    });
+    expect(result).toMatchObject({
+      success: false,
+      code: "OPPORTUNITY_ARCHIVED",
+    });
+    expect(execSeam).not.toHaveBeenCalled();
+    expect(dbAssignmentFindMany).not.toHaveBeenCalled();
   });
 
   it("executes through the shared seam and returns the draft in AB_ENABLED full scope", async () => {
