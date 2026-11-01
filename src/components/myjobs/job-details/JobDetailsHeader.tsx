@@ -93,6 +93,7 @@ export function JobDetailsHeader({
         </Button>
         <CompanyLogo
           logoUrl={job.Company?.logoUrl}
+          name={job.Company?.label}
           className="h-10 w-10 min-w-10"
         />
         <div className="flex-1 min-w-0">

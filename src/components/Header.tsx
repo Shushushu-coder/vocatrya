@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { PanelLeft, Briefcase } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 
 import { Button } from "./ui/button";
+import { VocatryaMark } from "@/components/brand/VocatryaMark";
 import {
   Sheet,
   SheetClose,
@@ -55,9 +56,9 @@ function Header() {
             <SheetClose asChild>
               <Link
                 href="/dashboard"
-                className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
+                className="flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
               >
-                <Briefcase className="h-5 w-5 transition-all group-hover:scale-110" />
+                <VocatryaMark size={20} />
                 <span className="sr-only">{t("common.appTitle")}</span>
               </Link>
             </SheetClose>

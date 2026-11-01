@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import SigninForm from "./SigninForm";
 import SignupForm from "./SignupForm";
+import { VocatryaMark } from "@/components/brand/VocatryaMark";
 import { useI18n } from "@/i18n";
 
 type AuthMode = "signin" | "signup";
@@ -19,6 +20,7 @@ export default function AuthCard({ mode }: AuthCardProps) {
     <div className="mx-auto w-full max-w-md px-4">
       {/* App branding */}
       <div className="mb-8 text-center">
+        <VocatryaMark size={40} className="mx-auto mb-3" />
         <h1 className="text-3xl font-bold tracking-tight">Vocatrya</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t("common.appTagline")}

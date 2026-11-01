@@ -33,6 +33,7 @@ import { toastSuccess, toastError } from "@/lib/toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { BoardCell } from "./BoardCell";
+import { CompanyLogo } from "@/components/myjobs/CompanyLogo";
 import { useI18n } from "@/i18n";
 
 type CompaniesTableProps = {
@@ -144,15 +145,10 @@ function CompaniesTable({
             return (
               <TableRow key={company.id}>
                 <TableCell className="hidden sm:table-cell">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    alt={t("companies.companyLogo")}
-                    className="w-8 h-8 rounded-md object-cover"
-                    src={company.logoUrl || "/images/vocatrya-logo.svg"}
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "/images/vocatrya-logo.svg";
-                    }}
+                  <CompanyLogo
+                    logoUrl={company.logoUrl}
+                    name={company.label}
+                    className="h-8 w-8"
                   />
                 </TableCell>
                 <TableCell className="max-w-[16rem] font-medium">

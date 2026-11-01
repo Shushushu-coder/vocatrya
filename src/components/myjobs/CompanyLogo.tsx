@@ -1,28 +1,49 @@
 "use client";
-import { cn } from "@/lib/utils";
+import { Building2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  companyAvatarPaletteClass,
+  companyAvatarText,
+} from "@/lib/company-avatar";
 import { useI18n } from "@/i18n";
+import { cn } from "@/lib/utils";
 
-// Falls back to the app mark both when the company has no logo and when the
-// stored URL 404s; onerror is cleared first so a broken fallback can't loop.
+// One accessible name on the root covers every render state — loaded logo,
+// letter avatar and neutral icon — so nothing inside announces a second time.
+// Radix Avatar owns the image load/error state machine: the fallback shows
+// while the image is pending and whenever it fails.
 export function CompanyLogo({
   logoUrl,
+  name,
   className,
 }: {
   logoUrl?: string | null;
+  name?: string | null;
   className?: string;
 }) {
   const { t } = useI18n();
+  const letters = companyAvatarText(name);
+  const trimmedName = name?.trim();
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      alt={t("jobs.companyLogoAlt")}
-      className={cn("rounded-md object-cover", className)}
-      src={logoUrl || "/images/vocatrya-logo.svg"}
-      onError={(e) => {
-        e.currentTarget.onerror = null;
-        e.currentTarget.src = "/images/vocatrya-logo.svg";
-      }}
-    />
+    <Avatar
+      role="img"
+      aria-label={trimmedName || t("jobs.companyLogoAlt")}
+      className={cn("rounded-md", className)}
+    >
+      {logoUrl ? (
+        <AvatarImage src={logoUrl} alt="" className="object-cover" />
+      ) : null}
+      <AvatarFallback
+        className={cn(
+          "rounded-md text-sm font-semibold",
+          letters
+            ? companyAvatarPaletteClass(name)
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        {letters || <Building2 className="h-1/2 w-1/2" />}
+      </AvatarFallback>
+    </Avatar>
   );
 }

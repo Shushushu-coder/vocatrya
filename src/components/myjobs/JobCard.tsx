@@ -41,6 +41,7 @@ export function JobCard({
       <div className="flex items-start gap-3">
         <CompanyLogo
           logoUrl={job.Company?.logoUrl}
+          name={job.Company?.label}
           className="h-10 w-10 min-w-10"
         />
         <div className="min-w-0 flex-1">

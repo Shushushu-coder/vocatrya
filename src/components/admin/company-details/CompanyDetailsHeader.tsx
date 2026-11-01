@@ -75,6 +75,7 @@ export function CompanyDetailsHeader({
         </Button>
         <CompanyLogo
           logoUrl={company.logoUrl}
+          name={company.label}
           className="h-10 w-10 min-w-10"
         />
         <div className="flex-1 min-w-0">
