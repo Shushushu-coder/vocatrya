@@ -4,6 +4,7 @@ import {
   Archive,
   Bell,
   Bot,
+  CreditCard,
   Database,
   Files,
   Library,
@@ -26,6 +27,7 @@ export type SettingsSection =
   | "appearance"
   | "ai-services"
   | "ai-assignments"
+  | "subscription"
   | "shortcuts"
   | "audio"
   | "input"
@@ -69,6 +71,7 @@ export const SETTINGS_SECTION_GROUPS: readonly SettingsSectionGroup[] = [
     sections: [
       { id: "ai-services", labelKey: "settings.sections.aiServices", fallbackLabel: "AI Services", icon: Bot },
       { id: "ai-assignments", labelKey: "settings.sections.aiAssignments", fallbackLabel: "AI Assignments", icon: SlidersHorizontal },
+      { id: "subscription", labelKey: "settings.sections.subscription", fallbackLabel: "Subscription", icon: CreditCard },
     ],
   },
   {

@@ -99,6 +99,10 @@
 ### AI-MANAGED：Vocatrya 托管 AI
 
 - **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路、用户会话兑换和断开入口已补齐，**面向用户的完整托管能力尚未交付**；真实网关、订阅产品配置及凭据发放流程、桌面体验仍待完成，生产可用性保持 COMING_SOON。
+- **2026-10-31 隔离真实网关 Beta 复验**：本机 hosted 服务（127.0.0.1:8787）+ `.private/managed-upstream.env` 真实上游凭据，beta-user-1 会话与 beta plan；`ManagedAiUsage` 实记 text×2/stream/structured 共 4 条，3 条 SUCCEEDED 含真实 token 计数，1 条 FAILED 仍 COMMITTED 计费。证据 `.tmp/managed-beta/`。会话仍由 `provision-session` 手工发放、dev env 注入，非用户产品链路。
+- **2026-11-01 Owner 决定**：订阅形态为「订阅充值」设置页——Key 填入 + 无 Key 联系客服备注，不做支付闭环；`VOCATRYA_HOSTED_ENDPOINT` loopback 为 operator beta 通道，生产构建（含 Windows Electron）由此放行 managed 链路进入充值页验收，非 loopback 值不改变发布门。桌面验收待执行，`PARTIAL`/`passes:false` 保持。
+- **2026-11-01 Windows Electron 验收通过**（`.worktrees/managed-recharge` 未提交构建，fresh-native，生产模式后端 + loopback hosted 127.0.0.1:8787）：注册登录 → 设置「订阅充值」页；错误格式 Key（非 43 字符）正确拒绝 `MANAGED_AUTH_REQUIRED` 且不落盘；beta 会话 Key 兑换后 CONNECTED——托管账号 beta-user-1、订阅 ACTIVE、套餐 beta、已用额度 4/1000（与 hosted 账本一致）；会话经 safeStorage 写入 `hosted-sessions/<sha256>.dat` 74B 密文（DB/备份无明文），`AIConnection` 行 status=CONNECTED/credentialRef=null。证据 `.worktrees/managed-recharge/.tmp/managed-recharge/`。待办：错误格式与网关拒绝同码 `MANAGED_AUTH_REQUIRED` 的 UX 区分；dev 启动下 `hosted-sessions` 落在 `.codex-tmp/desktop-poc` 而非 `VOCATRYA_DESKTOP_DATA_ROOT`（packaged 路径正确），交桌面入口 Owner。
+- **2026-11-01 端到端 managed 调用补充**（同实例，GLOBAL_DEFAULT → managed deepseek-flash）：Electron Agent 面板发消息 → `/api/ai/chat` → hosted 网关 → 上游真实回复渲染（「你好，我是 Vocatrya 助手…」）；hosted 账本新增 2 条 CAREER_DIALOGUE usage（SUCCEEDED/COMMITTED，真实 token 3219/16 与 932/43，committedUnits 4→6，CAREER_DIALOGUE binding 按需铸造）；应用侧 `ChatConversation` 落库且 `managedAiProvenance` 记录 managedBindingId 全链路溯源；重启应用后会话/连接保持 CONNECTED（safeStorage 持久化生效）。此前发送无请求的根因：preflight 未就绪时按钮禁用下 force-click 不产生提交，非缺陷。
 - 托管服务必须由**部署/服务端保管上游网关凭据**；模型目录由服务端控制，稳定产品模型 Key 与上游模型 ID 分离；订阅/Entitlement 决定模型可用范围和用量，需具备配额、可靠用量记录、并发/异常恢复及用户可理解的状态。
 - 用户已向**青云 TOP 客服**询问中国市场相关接入并得到“没有问题”的商务回复；据此可继续推进方案，但不能替代获授权真实网关的技术测试、服务稳定性、额度记账和上线验收。
 - 先核对已有 Managed AI 工程阶段与真实环境准备状态，再在隔离 Beta 环境、真实授权网关/测试预算下执行业务 E2E；最后验收订阅权益、模型选择、额度边界、失败记账、三条 AI 路径隔离和 Windows Electron 用户体验。真实凭据/部署/目标数据库需要专项 Gate。

@@ -45,6 +45,23 @@ describe("desktop runtime helpers", () => {
     expect(env.VOCATRYA_AB_ROLLOUT_SCOPE).toBeUndefined();
   });
 
+  it("passes the operator hosted-endpoint channel through to the backend env", () => {
+    const env = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: { VOCATRYA_HOSTED_ENDPOINT: "http://127.0.0.1:8787" },
+      secret: "temporary",
+    });
+    expect(env.VOCATRYA_HOSTED_ENDPOINT).toBe("http://127.0.0.1:8787");
+    const absent = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: {},
+      secret: "temporary",
+    });
+    expect(Object.prototype.hasOwnProperty.call(absent, "VOCATRYA_HOSTED_ENDPOINT")).toBe(false);
+  });
+
   it("passes explicit AB flags through and omits absent ones", () => {
     const absent = buildBackendEnvironment({
       port: 45678,

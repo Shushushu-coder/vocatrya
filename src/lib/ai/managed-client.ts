@@ -1,4 +1,5 @@
 import "server-only";
+import { isLoopbackHostedEndpoint } from "./managed-availability";
 import { ManagedError, MANAGED_ERROR_CODES, type ManagedInvocationReceipt, type ManagedInvocation, type ManagedTextResult, type ManagedStreamEvent, type ManagedModelDTO } from "./managed-contract";
 import { managedAiProvenanceV1Schema, type ManagedAiProvenanceV1 } from "./managed-provenance";
 
@@ -95,8 +96,28 @@ export class DesktopHostedSessionProvider implements HostedSessionProvider {
   }
 }
 function endpoint(): string {
-  const dev = process.env.NODE_ENV !== "production" ? process.env.VOCATRYA_DEV_HOSTED_ENDPOINT : undefined;
-  return dev ?? TRUSTED_HOSTED_MANAGED_ENDPOINT;
+  const production = process.env.NODE_ENV === "production";
+  if (!production) {
+    const dev = process.env.VOCATRYA_DEV_HOSTED_ENDPOINT;
+    if (dev) return dev;
+  }
+  // VOCATRYA_HOSTED_ENDPOINT is the operator channel: a loopback value marks
+  // the local Hosted broker and is honored in every build, production
+  // included. A remote value is an override of the pinned release authority,
+  // so only non-production builds may use it (https required by the
+  // constructor contract below either way).
+  const configured = process.env.VOCATRYA_HOSTED_ENDPOINT;
+  if (configured) {
+    if (isLoopbackHostedEndpoint(configured)) return configured;
+    if (!production) {
+      try {
+        if (new URL(configured).protocol === "https:") return configured;
+      } catch {
+        // Unparseable override falls through to the pinned authority.
+      }
+    }
+  }
+  return TRUSTED_HOSTED_MANAGED_ENDPOINT;
 }
 function receiptError(body: unknown, invocationKey?: string): ManagedError | null {
   if (!body || typeof body !== "object") return null;
@@ -113,8 +134,8 @@ export class HostedManagedClient {
   private readonly base: string;
   constructor(private readonly sessions: HostedSessionProvider = new DesktopHostedSessionProvider(), base = endpoint(), private readonly fetchImpl: typeof fetch = fetch) {
     const url = new URL(base);
-    const devLoopback = process.env.NODE_ENV !== "production" && url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
-    if ((url.protocol !== "https:" && !devLoopback) || url.username || url.password || url.search || url.hash) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
+    const loopback = url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+    if ((url.protocol !== "https:" && !loopback) || url.username || url.password || url.search || url.hash) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
     this.base = url.toString().replace(/\/$/, "");
   }
   private async request(userId: string, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
