@@ -84,7 +84,10 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
   }
 
   // Preserve non-secret configuration knobs without copying credentials into the child environment.
-  for (const key of ["OLLAMA_BASE_URL", "OTEL_SERVICE_NAME"]) {
+  // VOCATRYA_HOSTED_ENDPOINT is the operator beta channel: a loopback URL the
+  // backend reads as "local Hosted broker" — it lifts the Managed release
+  // gate only when loopback, so an inherited remote value degrades safely.
+  for (const key of ["OLLAMA_BASE_URL", "OTEL_SERVICE_NAME", "VOCATRYA_HOSTED_ENDPOINT"]) {
     if (baseEnv[key]) env[key] = baseEnv[key];
   }
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA"]) {

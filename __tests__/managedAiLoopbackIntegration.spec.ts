@@ -646,6 +646,28 @@ describe("Managed AI real-HTTP loopback closed loop", () => {
     expect(managedAiAvailability()).toBe("ENABLED");
   });
 
+  it("lifts the gate for a loopback VOCATRYA_HOSTED_ENDPOINT in every build, including production", async () => {
+    const { managedAiAvailability } = await import(
+      "@/lib/ai/managed-availability"
+    );
+    vi.stubEnv("VOCATRYA_DEV_MANAGED_AVAILABILITY", "");
+    // The operator beta channel is what Windows Electron acceptance uses —
+    // a loopback broker lifts the release gate even in production.
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VOCATRYA_HOSTED_ENDPOINT", base);
+    expect(managedAiAvailability()).toBe("ENABLED");
+    // A remote endpoint is an override of the pinned release authority: the
+    // release gate must ignore it in production and stay closed.
+    for (const remote of [
+      "https://managed.shucubed.xyz",
+      "http://10.0.0.2:8787",
+      "not-a-url",
+    ]) {
+      vi.stubEnv("VOCATRYA_HOSTED_ENDPOINT", remote);
+      expect(managedAiAvailability()).toBe("COMING_SOON");
+    }
+  });
+
   it("keeps a newly redeemed session when an older request returns a delayed 401", async () => {
     const provider = new DesktopHostedSessionProvider();
     const old = "a".repeat(43);

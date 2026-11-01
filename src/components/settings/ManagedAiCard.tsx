@@ -3,13 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { CheckCircle, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { useI18n } from "@/i18n";
 import {
   disconnectManagedAiSession,
   getManagedAiOverview,
-  redeemManagedAiSession,
   type ManagedAiOverview,
 } from "@/actions/managedAi.actions";
 
@@ -30,7 +28,6 @@ function ManagedAiCard() {
   const { t } = useI18n();
   const [overview, setOverview] = useState<ManagedAiOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [redeemToken, setRedeemToken] = useState("");
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -51,24 +48,6 @@ function ManagedAiCard() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  const redeem = async () => {
-    const token = redeemToken.trim();
-    if (!token || busy) return;
-    setBusy(true);
-    setRedeemError(null);
-    try {
-      const result = await redeemManagedAiSession({ token });
-      if (result.success) {
-        setRedeemToken("");
-        await refresh();
-      } else {
-        setRedeemError(result.code ?? result.message ?? "FAILED");
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const disconnect = async () => {
     if (busy) return;
@@ -154,24 +133,15 @@ function ManagedAiCard() {
           <p className="text-muted-foreground">
             {t("settings.managedRedeemHint")}
           </p>
-          <div className="flex items-center gap-2">
-            <Input
-              type="password"
-              value={redeemToken}
-              onChange={(event) => setRedeemToken(event.target.value)}
-              placeholder={t("settings.managedTokenPlaceholder")}
-              autoComplete="off"
-              spellCheck={false}
-              className="h-8 font-mono text-xs"
-              disabled={busy}
-            />
+          <div>
             <Button
               size="sm"
-              onClick={() => void redeem()}
-              disabled={busy || !redeemToken.trim()}
+              variant="outline"
+              onClick={() => {
+                window.location.hash = "subscription";
+              }}
             >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              {t("settings.managedConnect")}
+              {t("settings.managedGoRecharge")}
             </Button>
           </div>
         </div>

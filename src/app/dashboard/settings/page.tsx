@@ -7,6 +7,7 @@ import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import ByokConnectionsCard from "@/components/settings/ByokConnectionsCard";
 import ManagedAiCard from "@/components/settings/ManagedAiCard";
+import ManagedRechargeCard from "@/components/settings/ManagedRechargeCard";
 import InterviewAiSettings from "@/components/settings/InterviewAiSettings";
 import ArchiveSettings from "@/components/settings/ArchiveSettings";
 import DataSettings from "@/components/settings/DataSettings";
@@ -194,6 +195,14 @@ function Settings() {
                 <AiAssignmentsCard />
                 <InterviewAiSettings />
               </div>
+            </SectionShell>
+          )}
+          {activeSection === "subscription" && (
+            <SectionShell
+              id="subscription"
+              title={text("settings.sections.subscription", "Subscription")}
+            >
+              <ManagedRechargeCard />
             </SectionShell>
           )}
           {activeSection === "shortcuts" && (

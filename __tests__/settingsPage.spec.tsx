@@ -1,5 +1,5 @@
-// Settings host shell: five nav groups with twelve entries, `general` as the
-// default page, owner components mounted per section, honest unavailable
+// Settings host shell: five nav groups with fourteen entries, `general` as
+// the default page, owner components mounted per section, honest unavailable
 // states for pages whose components have not landed, and the legacy MCP /
 // Interview compat surfaces kept reachable in their new homes.
 import * as React from "react";
@@ -22,6 +22,9 @@ vi.mock("@/components/settings/GeneralSettings", () => ({
 }));
 vi.mock("@/components/settings/ManagedAiCard", () => ({
   default: () => <div data-testid="managed-ai-card" />,
+}));
+vi.mock("@/components/settings/ManagedRechargeCard", () => ({
+  default: () => <div data-testid="managed-recharge-card" />,
 }));
 vi.mock("@/components/settings/AiConnectionsCard", () => ({
   default: () => <div data-testid="ai-connections-card" />,
@@ -67,12 +70,14 @@ const EXPECTED_SECTION_ORDER = [
   "Appearance",
   "AI Services",
   "AI Assignments",
+  "Subscription",
   "Shortcuts",
   "Audio",
   "Input Preferences",
   "Bulk Edit",
   "Resume Variants",
   "Data & Privacy",
+  "Archived Data",
   "About",
 ];
 
@@ -85,7 +90,7 @@ describe("Settings page — V1 navigation shell", () => {
     window.history.replaceState(null, "", "/dashboard/settings");
   });
 
-  it("renders twelve sections in five groups", () => {
+  it("renders fourteen sections in five groups", () => {
     render(<Settings />);
     const names = navButtons().map((button) => button.textContent);
     expect(names).toEqual(EXPECTED_SECTION_ORDER);
@@ -197,6 +202,7 @@ describe("Settings page — V1 navigation shell", () => {
     ["Shortcuts", "shortcuts-settings"],
     ["Audio", "audio-settings"],
     ["Input Preferences", "input-preferences-settings"],
+    ["Subscription", "managed-recharge-card"],
     ["About", "about-settings"],
   ] as const)(
     "the %s entry mounts its delivered owner component",

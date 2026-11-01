@@ -19,7 +19,7 @@ function recordingFetch(handler: (request: Request) => Promise<Response> | Respo
   return { requests, impl };
 }
 
-beforeEach(() => { delete process.env.VOCATRYA_DEV_HOSTED_ENDPOINT; });
+beforeEach(() => { delete process.env.VOCATRYA_DEV_HOSTED_ENDPOINT; delete process.env.VOCATRYA_HOSTED_ENDPOINT; });
 afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("BETA2_MANAGED_ENDPOINT_SHUCUBED contract", () => {
@@ -79,6 +79,30 @@ describe("BETA2_MANAGED_ENDPOINT_SHUCUBED contract", () => {
   });
   it("honours the controlled loopback dev override only outside production", async () => {
     vi.stubEnv("VOCATRYA_DEV_HOSTED_ENDPOINT", "http://127.0.0.1:8787");
+    const { requests, impl } = recordingFetch(() => Response.json({ hostedUserId: "hosted-a" }));
+    const client = new HostedManagedClient(sessions, undefined, impl);
+    await client.identity("local-a");
+    expect(new URL(requests[0].url).origin).toBe("http://127.0.0.1:8787");
+  });
+  it("honours a loopback VOCATRYA_HOSTED_ENDPOINT in production — the operator broker channel", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VOCATRYA_HOSTED_ENDPOINT", "http://127.0.0.1:8787");
+    const { requests, impl } = recordingFetch(() => Response.json({ hostedUserId: "hosted-a" }));
+    const client = new HostedManagedClient(sessions, undefined, impl);
+    await client.identity("local-a");
+    expect(new URL(requests[0].url).origin).toBe("http://127.0.0.1:8787");
+  });
+  it("ignores a non-loopback VOCATRYA_HOSTED_ENDPOINT in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VOCATRYA_HOSTED_ENDPOINT", SUPERSEDED);
+    const { requests, impl } = recordingFetch(() => Response.json({ hostedUserId: "hosted-a" }));
+    const client = new HostedManagedClient(sessions, undefined, impl);
+    await client.identity("local-a");
+    expect(new URL(requests[0].url).origin).toBe(CANONICAL);
+  });
+  it("prefers the dev override over the operator channel outside production", async () => {
+    vi.stubEnv("VOCATRYA_DEV_HOSTED_ENDPOINT", "http://127.0.0.1:8787");
+    vi.stubEnv("VOCATRYA_HOSTED_ENDPOINT", "http://127.0.0.1:9999");
     const { requests, impl } = recordingFetch(() => Response.json({ hostedUserId: "hosted-a" }));
     const client = new HostedManagedClient(sessions, undefined, impl);
     await client.identity("local-a");
