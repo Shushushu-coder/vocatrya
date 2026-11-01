@@ -86,13 +86,13 @@
 
 - **P1 / IN_SCOPE / IMPLEMENTED / `passes: true`。** 用户已经实际试用并确认相关聊天功能可用；但服务级探测与部分人工操作**不等于完整业务/UI 验收**。
 - 原 `SET-AI-SERVICES` 的有效证据归属本项：Codex CLI 0.164.0 与 0.165.0 分别完成经授权的流式 4 项及结构化 9/9 desktop connection-service 认证；保留精确版本门控。相关 UI/环境状态问题已修复，159 项定向测试、类型检查和 ESLint 通过；隔离 Electron fresh-native/full 构建 `G79eH1Wz4YriE8lYq4jPN` 已核对模型与发送按钮，用户反馈聊天复制/重新生成可用。
-- 2026-10-31 收口：上述连接/分配、真实流式、usage-limit 后恢复、结构化 MATCH_ANALYSIS、刷新及完整退出重开均已在隔离 Windows Electron fresh-native / AB_ENABLED / full 验证。集成 strict schema 全键 required 修复，保留三字段 nullable；真实调用 ChatGPT-via-Codex / gpt-6-astra 一次，COMPLETED 记录及空值落库正确，无 BYOK/Hosted 回退。证据 `.worktrees/account-match-schema-fix/.tmp/account-match-schema-revalidation/results.json`；末尾 diag-note 纠正仅失败路径才输出的 executeText 日志探针。独立审查无必须修复项，passes=true 仅覆盖实际运行时/模型。
+- 2026-10-31 收口：上述连接/分配、真实流式、usage-limit 后恢复、结构化 MATCH_ANALYSIS、刷新及完整退出重开均已在隔离 Windows Electron fresh-native / AB_ENABLED / full 验证。集成 strict schema 全键 required 修复，保留三字段 nullable；真实调用 ChatGPT-via-Codex / gpt-6-astra 一次，COMPLETED 记录及空值落库正确，无 BYOK/Hosted 回退。证据 `.tmp/worktree-closure/retained/account-match-schema-fix/.tmp/account-match-schema-revalidation/results.json`；末尾 diag-note 纠正仅失败路径才输出的 executeText 日志探针。独立审查无必须修复项，passes=true 仅覆盖实际运行时/模型。
 
 ### AI-BYOK：用户自带 API Key
 
 - 2026-10-29 集成 `68212510`：补充 BYOK 凭据故障操作指引、隔离测试代理环境，修复真实截止信号被误判成普通取消的问题；18 项 BYOK 执行测试覆盖 one-shot/streaming 截止与取消。真实 API Key 业务调用未执行，保持 PARTIAL 与 `passes: false`。
 - 2026-10-30 Main 集成 `43d9795b`（merge `a8009d64`）：云端验证器及模型列表查询增加有界超时，输入 trim/长度与 malformed body 校验、未知异常脱敏、Gemini Key URL 编码；OpenRouter 改用官方认证的 `GET /api/v1/key`，不再以公开模型目录误判无效 Key。合并前独立审查通过；直接相关 3 文件/30 项、改动 ESLint 与完整类型检查通过。扩展 24 文件集合中 23 文件/308 项通过，唯一失败为既有 `settingsPage.spec.tsx` 未纳入已集成的“归档数据”设置入口，与 BYOK Diff 无关。真实 Key Gate、Windows Electron 和完整业务调用仍 NOT_RUN，保持 PARTIAL / `passes:false`。
-- 2026-10-30 验收闭环：在 Main `673e3460` 的独立 Worktree 中复用已集成实现，零产品代码修改。隔离服务环境使用获授权 DeepSeek 测试 Key 完成 29/29，覆盖真实目录、`deepseek-flash` 结构化与增量流式业务调用、模型分配、诚实失败、截止/取消、断连恢复、严格凭据绑定及泄露扫描。随后从同一源码执行生产 Next 构建与桌面装配，在 Windows Electron fresh-native/AB_ENABLED/full 中完成 17/17 阶段，覆盖 safeStorage/DPAPI `os:v1` 信封、真实 Job Match/Chat、模型溯源、无静默回退、失败恢复、两次 quit IPC 退出重开及持久化。明文临时 Key 已移除，Worktree 干净、无残留进程；证据位于 `.worktrees/p1-byok-e2e-closure/.tmp/p1-byok-e2e-closure/`，实际 25 张截图。真实外部调用只覆盖 DeepSeek；OpenRouter、Gemini、OpenAI 本轮仅做错误 Key/保留字符验证及既有单测，不外推为这些服务商真实业务 E2E。未执行安装包、发布或真实用户数据迁移。
+- 2026-10-30 验收闭环：在 Main `673e3460` 的独立 Worktree 中复用已集成实现，零产品代码修改。隔离服务环境使用获授权 DeepSeek 测试 Key 完成 29/29，覆盖真实目录、`deepseek-flash` 结构化与增量流式业务调用、模型分配、诚实失败、截止/取消、断连恢复、严格凭据绑定及泄露扫描。随后从同一源码执行生产 Next 构建与桌面装配，在 Windows Electron fresh-native/AB_ENABLED/full 中完成 17/17 阶段，覆盖 safeStorage/DPAPI `os:v1` 信封、真实 Job Match/Chat、模型溯源、无静默回退、失败恢复、两次 quit IPC 退出重开及持久化。明文临时 Key 已移除，Worktree 干净、无残留进程；证据位于 `.tmp/worktree-closure/retained/p1-byok-e2e-closure/.tmp/p1-byok-e2e-closure/`，实际 25 张截图。真实外部调用只覆盖 DeepSeek；OpenRouter、Gemini、OpenAI 本轮仅做错误 Key/保留字符验证及既有单测，不外推为这些服务商真实业务 E2E。未执行安装包、发布或真实用户数据迁移。
 
 - **P1 / IN_SCOPE / IMPLEMENTED / `passes: true`。** 已证实获授权 DeepSeek API Key 能在隔离服务和 Windows Electron 中执行真实结构化与流式业务调用，模型分配、凭据保护、失败恢复及账号/托管路径隔离符合合同。该结论限于本轮真实覆盖的 DeepSeek/`deepseek-flash`；其他服务商仍按各自实际证据判断。
 
@@ -101,7 +101,7 @@
 - **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路、用户会话兑换和断开入口已补齐，**面向用户的完整托管能力尚未交付**；真实网关、订阅产品配置及凭据发放流程、桌面体验仍待完成，生产可用性保持 COMING_SOON。
 - **2026-10-31 隔离真实网关 Beta 复验**：本机 hosted 服务（127.0.0.1:8787）+ `.private/managed-upstream.env` 真实上游凭据，beta-user-1 会话与 beta plan；`ManagedAiUsage` 实记 text×2/stream/structured 共 4 条，3 条 SUCCEEDED 含真实 token 计数，1 条 FAILED 仍 COMMITTED 计费。证据 `.tmp/managed-beta/`。会话仍由 `provision-session` 手工发放、dev env 注入，非用户产品链路。
 - **2026-11-01 Owner 决定**：订阅形态为「订阅充值」设置页——Key 填入 + 无 Key 联系客服备注，不做支付闭环；`VOCATRYA_HOSTED_ENDPOINT` loopback 为 operator beta 通道，生产构建（含 Windows Electron）由此放行 managed 链路进入充值页验收，非 loopback 值不改变发布门。桌面验收待执行，`PARTIAL`/`passes:false` 保持。
-- **2026-11-01 Windows Electron 验收通过**（`.worktrees/managed-recharge` 未提交构建，fresh-native，生产模式后端 + loopback hosted 127.0.0.1:8787）：注册登录 → 设置「订阅充值」页；错误格式 Key（非 43 字符）正确拒绝 `MANAGED_AUTH_REQUIRED` 且不落盘；beta 会话 Key 兑换后 CONNECTED——托管账号 beta-user-1、订阅 ACTIVE、套餐 beta、已用额度 4/1000（与 hosted 账本一致）；会话经 safeStorage 写入 `hosted-sessions/<sha256>.dat` 74B 密文（DB/备份无明文），`AIConnection` 行 status=CONNECTED/credentialRef=null。证据 `.worktrees/managed-recharge/.tmp/managed-recharge/`。待办：错误格式与网关拒绝同码 `MANAGED_AUTH_REQUIRED` 的 UX 区分；dev 启动下 `hosted-sessions` 落在 `.codex-tmp/desktop-poc` 而非 `VOCATRYA_DESKTOP_DATA_ROOT`（packaged 路径正确），交桌面入口 Owner。
+- **2026-11-01 Windows Electron 验收通过**（`.worktrees/managed-recharge` 未提交构建，fresh-native，生产模式后端 + loopback hosted 127.0.0.1:8787）：注册登录 → 设置「订阅充值」页；错误格式 Key（非 43 字符）正确拒绝 `MANAGED_AUTH_REQUIRED` 且不落盘；beta 会话 Key 兑换后 CONNECTED——托管账号 beta-user-1、订阅 ACTIVE、套餐 beta、已用额度 4/1000（与 hosted 账本一致）；会话经 safeStorage 写入 `hosted-sessions/<sha256>.dat` 74B 密文（DB/备份无明文），`AIConnection` 行 status=CONNECTED/credentialRef=null。证据 `.tmp/worktree-closure/retained/managed-recharge/.tmp/managed-recharge/`。待办：错误格式与网关拒绝同码 `MANAGED_AUTH_REQUIRED` 的 UX 区分；dev 启动下 `hosted-sessions` 落在 `.codex-tmp/desktop-poc` 而非 `VOCATRYA_DESKTOP_DATA_ROOT`（packaged 路径正确），交桌面入口 Owner。
 - **2026-11-01 端到端 managed 调用补充**（同实例，GLOBAL_DEFAULT → managed deepseek-flash）：Electron Agent 面板发消息 → `/api/ai/chat` → hosted 网关 → 上游真实回复渲染（「你好，我是 Vocatrya 助手…」）；hosted 账本新增 2 条 CAREER_DIALOGUE usage（SUCCEEDED/COMMITTED，真实 token 3219/16 与 932/43，committedUnits 4→6，CAREER_DIALOGUE binding 按需铸造）；应用侧 `ChatConversation` 落库且 `managedAiProvenance` 记录 managedBindingId 全链路溯源；重启应用后会话/连接保持 CONNECTED（safeStorage 持久化生效）。此前发送无请求的根因：preflight 未就绪时按钮禁用下 force-click 不产生提交，非缺陷。
 - 托管服务必须由**部署/服务端保管上游网关凭据**；模型目录由服务端控制，稳定产品模型 Key 与上游模型 ID 分离；订阅/Entitlement 决定模型可用范围和用量，需具备配额、可靠用量记录、并发/异常恢复及用户可理解的状态。
 - 用户已向**青云 TOP 客服**询问中国市场相关接入并得到“没有问题”的商务回复；据此可继续推进方案，但不能替代获授权真实网关的技术测试、服务稳定性、额度记账和上线验收。
@@ -137,10 +137,10 @@
 - 预览栏可以拖拽或方向键调整宽度，也可以隐藏。宽度和隐藏记在本机，不进版本。
 - Word 导出与打印预览对齐联系方式/链接分行、分节大写、非正文项目符号和姓名字号。分页仍以导出 PDF 为准。
 - 草稿、已冻结、已投递可以改状态。改回草稿不改写正文。这些版本可以删除，除非已被申请或深度匹配引用。删光版本后可以新建空白草稿。
-- 同日早些时候，在与 Main `9bbe0ecc` 产品树一致的 `673e3460` 装配上，隔离 Electron fresh-native/full 用 DeepSeek `deepseek-flash` 完成真实导入预览、排除 `Contoso Lumen Internship`、确认保留 `Northwind Atlas Frontend`，以及退出后重开。证据在 `.worktrees/p1-resume-ai-import-acceptance/.tmp/p1-resume-ai-import-acceptance/RESULT.md`。该装配不含上述四项修订。用户随后在该装配上确认检查 1–5 通过。AI 改写和粘贴导入仍不在本期。
+- 同日早些时候，在与 Main `9bbe0ecc` 产品树一致的 `673e3460` 装配上，隔离 Electron fresh-native/full 用 DeepSeek `deepseek-flash` 完成真实导入预览、排除 `Contoso Lumen Internship`、确认保留 `Northwind Atlas Frontend`，以及退出后重开。证据在 `.tmp/worktree-closure/retained/p1-resume-ai-import-acceptance/.tmp/p1-resume-ai-import-acceptance/RESULT.md`。该装配不含上述四项修订。用户随后在该装配上确认检查 1–5 通过。AI 改写和粘贴导入仍不在本期。
 
 
-- **2026-10-31 集成与验收收口**：四项修订及 B7 设备级偏好快照纳入 Main。结合此前通过项，Windows Electron fresh-native / AB_ENABLED / full 本轮 B7 在端口 63829→62016、同一隔离 data/config 下完整退出重开恢复隐藏及宽度，C7–C9 全过；C6 为驱动竞态且数据库正确。当前冻结范围最低验收满足。证据 `.worktrees/resume-preview-persistence-fix/.tmp/resume-preview-revalidation/evidence/results.json`。独立审查无必须修复项；historicalIntegrity 两个既有返回形状失败未扩项。未重复构建/桌面验收，未操作真实库。
+- **2026-10-31 集成与验收收口**：四项修订及 B7 设备级偏好快照纳入 Main。结合此前通过项，Windows Electron fresh-native / AB_ENABLED / full 本轮 B7 在端口 63829→62016、同一隔离 data/config 下完整退出重开恢复隐藏及宽度，C7–C9 全过；C6 为驱动竞态且数据库正确。当前冻结范围最低验收满足。证据 `.tmp/worktree-closure/retained/resume-preview-persistence-fix/.tmp/resume-preview-revalidation/evidence/results.json`。独立审查无必须修复项；historicalIntegrity 两个既有返回形状失败未扩项。未重复构建/桌面验收，未操作真实库。
 
 ### AGENT-CAPABILITIES：fresh-native/full 六工具；canonical `match_job` 已集成
 
@@ -166,7 +166,7 @@
 ## D. 完成口径与执行边界
 
 - 2026-10-29 本轮收尾集成：导入条目级排除使用独立可空选择签名列（新迁移 `20261029010000_resume_import_selection_signature`），与首次版本确认同事务写入，原始 AI 缓存不改；补齐导入双语、选择后数量摘要与任务分类术语。九个定向测试文件共 136 项、完整类型检查及改动文件 ESLint 通过，隔离 SQLite 旧行升级与失败原子性已覆盖；未运行真实 AI、生产构建、真实库迁移或修复后的桌面复验。
-- 2026-10-30 活动退役与归档最终补丁在 Main `39a5a1d3`、构建 `Jtz89Wr0azHP7RnkA_zTH` 的 Windows Electron fresh-native/full 中联合复验：ACTIVITY-RETIRE 38/38、BD-ARCHIVE 55/55 均 PASS。证据位于 `.worktrees/p1-activity-archive-recheck/.tmp/p1-activity-archive-recheck/`；宿主进程均经 quit IPC 正常退出，无残留进程。该定向复验未覆盖真实外部 AI、真实用户库、安装包/系统自启或完整桌面 E2E，不将其外推到其他 Feature。
+- 2026-10-30 活动退役与归档最终补丁在 Main `39a5a1d3`、构建 `Jtz89Wr0azHP7RnkA_zTH` 的 Windows Electron fresh-native/full 中联合复验：ACTIVITY-RETIRE 38/38、BD-ARCHIVE 55/55 均 PASS。证据位于 `.tmp/worktree-closure/retained/p1-activity-archive-recheck/.tmp/p1-activity-archive-recheck/`；宿主进程均经 quit IPC 正常退出，无残留进程。该定向复验未覆盖真实外部 AI、真实用户库、安装包/系统自启或完整桌面 E2E，不将其外推到其他 Feature。
 - [归档合同修订提案](./ARCHIVE_CONTRACT_PROPOSAL.md) 随本轮交付，2026-10-29 Owner 已冻结八项规则：七项采用推荐，D6 改为 AI 完全不可读归档内容，含历史引用、消息、摘要与快照。本轮只冻结合同，不启动归档开发。
 
 - 2026-10-29 Main 组合验证：14 个定向测试文件、212 项通过，覆盖任务/分类、Dashboard、备份拒绝与往返、BYOK 截止/取消及 AI 运行时断言。重新生成 Prisma client 并刷新遗留活动页的 Next 路由类型后，完整非增量 TypeScript 检查通过；未运行生产构建或桌面/E2E。
@@ -190,7 +190,7 @@
 - 三项收口：备份版本陈旧断言由 V6 对齐 V7；补齐 `NOT_ENTITLED` / `MODEL_NOT_ALLOWED` 的分配错误中英文提示及组件回归；按锁文件补齐 Main 缺失依赖、重新生成 Prisma Client，纠正原先“39 个基线代码错误”的环境判断。组合检查另移除 DOCX 测试中不再必要的类型抑制注释。
 - 归档合并前复审补强：历史工具结果、上下文及摘要含归档职位引用时禁止送入 AI；提醒领取事务内复核父对象归档状态，防止陈旧 reconcile 复活送达；原有对话永久删除入口与归档并存。补修后原窗口 111 项定向测试及类型/lint 检查通过。
 - Main 组合回归 10 文件、150 项通过，覆盖归档、AI 路由、托管 HTTP 闭环、权益提示、DOCX、提醒、历史投递统计、备份往返和隔离迁移。完整非增量 TypeScript 检查零错误；改动 TypeScript 文件 ESLint 无错误，仅 `jobsAbReadPath.spec.ts` 两处原有无用抑制警告。
-- 原简历验收窗口 Windows Electron fresh-native 开发态记录 49/50 PASS、0 FAIL、1 BLOCKED，已核对日志及 PDF/DOCX 产物；真实 AI 导入预览/条目排除仍阻塞。证据位于 `.worktrees/resume-builder-acceptance/.tmp/resume-builder-acceptance/`。该证据不代表本次组合 Main 已重跑桌面验收。
+- 原简历验收窗口 Windows Electron fresh-native 开发态记录 49/50 PASS、0 FAIL、1 BLOCKED，已核对日志及 PDF/DOCX 产物；真实 AI 导入预览/条目排除仍阻塞。证据位于 `.tmp/worktree-closure/retained/resume-builder-acceptance/.tmp/resume-builder-acceptance/`。该证据不代表本次组合 Main 已重跑桌面验收。
 - 本次未运行新增生产构建、桌面/E2E、真实网关调用、部署或真实数据库迁移。归档桌面验收、托管真实环境/产品入口与简历真实 AI 导入仍待完成。保留三个分支、Worktree 与既有证据，不推送或清理。
 
 ### 2026-10-29 三线修复与会话入口集成

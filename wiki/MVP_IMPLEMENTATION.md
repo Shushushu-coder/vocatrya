@@ -94,7 +94,7 @@ Task 的 5,000 条合成数据性能记录为平均 309.0ms、最大 549.2ms/页
 - 2026-10-27 集中验收覆盖职业资料、职位、流程、日期、基础数据、简历与备份；2026-10-28 补齐旧库升级、受限模式及输入偏好/聊天相关证据。各 Feature 的确切源码、构建标识和证据路径保留在 JSON 的 implementationNotes，不混用不同阶段产物。
 - 用户于 2026-10-28 确认“输入偏好与资料页精简收口我已经人工验收了”及“B也验收了，可以复制和重新生成聊天”。结合此前定向证据，SET-INPUT-PREFERENCES、AGENT-CHAT-UX 已置 `passes: true`；人工试用未提供新增构建标识，不补造来源。
 - 旧库合成升级证据包含 55→57 条迁移及 COMPLETED/AB_ENABLED/resume_v1；不是 fresh-native。标准/敏感备份、技能引用与附件字节恢复有对应隔离证据。
-- 已有临时证据保留在原记录位置，如 `.tmp/final-acceptance`、`.tmp/compat-closure`、`.worktrees/input-runtime-acceptance/.tmp/input-runtime-acceptance/`；本次未移动或清理证据。
+- 已有临时证据保留在以下位置，如 `.tmp/final-acceptance`、`.tmp/compat-closure`、`.tmp/worktree-closure/retained/input-runtime-acceptance/.tmp/input-runtime-acceptance/`；Worktree 收尾时相关证据目录已转存至 `.tmp/worktree-closure/retained/`，内容保留。
 - 系统自启仍待发布阶段验收；文档拆分不等于整个产品发布放行。Commit、Merge、Push、Release、真实数据和系统设置变更仍各需相应授权。
 - 本次仅整理文档、迁移 Feature 记录，不运行新构建、桌面/E2E 或产品测试。
 
