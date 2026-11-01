@@ -1,9 +1,9 @@
 # Vocatrya P2 产品设计与增量实施基线 V1
 
-> **更新日期**：2026-10-31  
+> **更新日期**：2026-11-01
 > **定位**：P2 — Career Journey & Workspace Integration（求职旅程与跨模块工作台整合）。  
 > **依据**：2026-10-28 至 2026-10-29 已确认的 P2 产品讨论，以及同目录的 [P1_FEATURES.json](./P1_FEATURES.json) 和 [P1_IMPLEMENTATION.md](./P1_IMPLEMENTATION.md) 所记录的上游 P1 范围。  
-> **证据边界**：产品设计基线原文未重新读取仓库。2026-10-31 已合入两份源码复核后的合同提案：[首页/下一步](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md)、[职位/复盘](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md)。提案未冻结，不授权 P2 编码。P1 文档中的实现状态不能自动外推为 P2 实际代码状态。
+> **证据边界**：产品设计基线原文未重新读取仓库。2026-11-01 对照 main@23178a4c 更新两份提案并新增第三份：[首页/下一步](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md)、[职位/复盘](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md)、[三 Agent 面板](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)。提案未冻结，不授权 P2 编码。P1 文档中的实现状态不能自动外推为 P2 实际代码状态。
 
 ## A. P2 目标、范围与台账
 
@@ -24,11 +24,11 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 | **INTERVIEW-DEBRIEF** | HIGH | 联合合同提案未冻结 | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / 未编码 / 未验收 |
 | **NEXT-ACTIONS** | HIGH | 核心已确认；合同提案未冻结 | 从真实业务数据计算下一步引导 | 已源码复核 / 未编码 / 未验收 |
 | **CAREER-INSIGHTS** | MEDIUM | 指标口径待定 | 简明求职看板与可信统计 | 未审计 / 未验收 |
-| **MULTI-AGENT** | HIGH | 核心交互已确认，工具待定 | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 未审计 / 未验收 |
+| **MULTI-AGENT** | HIGH | 核心交互已确认；合同提案未冻结 | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 已源码复核 / 未编码 / 未验收 |
 
 对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。全部 `implementationStatus: NOT_ASSESSED`、`passes: false`：**没有进行代码审计不等于全部功能缺失**；产品确认也不等于工程通过。
 
-**2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。Owner 交叉项：面试合同 D6 与概览合同 D3 对「已结束」谓词推荐不一致，冻结前须单点裁定。CAREER-INSIGHTS 与 MULTI-AGENT 仍无专项合同。
+**2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。2026-11-01 已收敛两份提案并新增 [MULTI-AGENT 合同](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)（D1–D10）。面试 D6 与概览 D3 已统一协调建议为仅 COMPLETED 计入待复盘、过期未完成仅提示确认状态；仍须 Owner 同一次批准，不代表已冻结。若 D2-a 显式完成标记获批，首页 R6 等待领域接口，不用内容存在性过渡。Schema/备份和双语词典各指定唯一 Owner，跨包顺序交接；Electron 重型验证仍串行。CAREER-INSIGHTS 尚无专项合同。G-AI1（复盘 AI 草稿未过滤归档职位）已记录为既有待修缺口，本次仅文档收敛未修产品代码。
 
 ### A3. 明确不纳入本阶段
 
@@ -144,7 +144,7 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 | Agent | 旅程定位 | 负责的场景 | 技术边界 |
 | --- | --- | --- | --- |
-| **Voca Insight** · 求职分析师 | 准备 | 简历、JD、职位匹配与面试准备的深度分析 | 基于已授权且实际可用的简历/匹配/题目工具；freshNativeFull 下 canonical `match_job` 已接通但仍未验收，不得在首页写成已验收能力 |
+| **Voca Insight** · 求职分析师 | 准备 | 简历、JD、职位匹配与面试准备的深度分析 | 基于已授权且实际可用的简历/匹配/题目工具；freshNativeFull 下 canonical `match_job` 已接通且 P1 记录真实 AI/Electron 验收通过，结论限于实际覆盖运行时/模型；三角色能力仍须按白名单与运行时交集核实 |
 | **Voca Pilot** · 全局助手 | 行动 | 检索与管理工作台、添加职位、经确认的操作 | 复用当前已可用工具与写入确认边界；不自动实际投递 |
 | **Voca Reflect** · 复盘教练 | 复盘 | 整理真实面试经历，提炼经验与改进方向 | 只有在复盘数据/工具真实支持时才提供对应可执行建议 |
 
@@ -157,7 +157,9 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 5. 从具体职位、简历或面试进入时，可附带**明确且可见的当前对象上下文**；从首页直接打开时不凭空选择目标。面板跨页面可保留，但页面、对象、Agent 切换时要展示/清除过期上下文，防止误操作。
 6. 阶段入口只是默认推荐，用户在任何阶段均可手动切换任一 Agent。三个 Agent **不要求**三个独立模型，不允许后台自主协作或定时分析。
 
-**已有 P1 边界须保留**：P1 记录的 fresh-native/full 工具现为 `list_jobs`、`get_job`、`add_job`、`get_resume`、`review_resume`、canonical `match_job`（需批准，未验收）。独立 canonical FAST_SCREENING/MatchAnalysisService 必须继续作为复用业务能力。三个 Agent 的每个工具是否可用、具体 Provider 下是否支持相关运行方式、是否允许写入，**均必须按新阶段的真实代码与业务验证收敛**。不能因设置三个角色就默认新增能力已经存在。
+**已有 P1 边界须保留**：P1 记录的 fresh-native/full 工具现为 `list_jobs`、`get_job`、`add_job`、`get_resume`、`review_resume`、canonical `match_job`（恒需批准；P1 记录实际路径验收通过）。独立 canonical FAST_SCREENING/MatchAnalysisService 必须继续作为复用业务能力。三个 Agent 的每个工具是否可用、具体 Provider 下是否支持相关运行方式、是否允许写入，**均必须按新阶段的真实代码与业务验证收敛**。不能因设置三个角色就默认新增能力已经存在。
+
+专项推荐与决策表见 [MULTI-AGENT 合同](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)，目前均为提案。
 
 **待冻结**：三个角色的工具白名单与系统提示、跨 Agent 的会话/上下文隔离与切换方式、4 条建议的确定性选择规则及不可用时的降级内容、宽屏/窄屏面板尺寸。不能先决定任意跨 Agent 历史共享或跨用户数据访问。
 

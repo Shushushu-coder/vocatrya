@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "Vocatrya",
   "phase": "P2",
-  "updatedAt": "2026-10-31",
+  "updatedAt": "2026-11-01",
   "baseline": {
     "source": "2026-10-29 已确认的 P2 产品讨论；以 P1_FEATURES.json / P1_IMPLEMENTATION.md 为上游合同参考",
     "gitRef": null,
@@ -54,7 +54,7 @@
         "各阶段模块卡片/数据卡片的具体密度、排序与响应式断点。",
         "“所有主要功能”的完整可达性映射须依据当时真实导航和模块审计确定。"
       ],
-      "implementationNotes": "2026-10-31 Main 集成 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md（680b3879，merge 8fb2fd32）：对 96e896e3 做了源码复核；D1–D9 待 Owner 冻结。implementationStatus 仍为 NOT_ASSESSED（未编码）。passes:false。",
+      "implementationNotes": "2026-10-31 Main 集成 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md（680b3879，merge 8fb2fd32）：对 96e896e3 做了源码复核；D1–D9 待 Owner 冻结。implementationStatus 仍为 NOT_ASSESSED（未编码）。passes:false。 2026-11-01 集成合同收敛：以 main@23178a4c 复核现状，首页/下一步仍为提案；布局可独立开发，R6 真实数据依赖复盘领域接口与共同裁定，不使用内容存在性临时替代显式完成标记。未编码或新增功能验收。",
       "passes": false
     },
     {
@@ -88,7 +88,7 @@
         "关联删除/归档/恢复、旧数据回填及迁移/备份兼容语义。",
         "面试题目绑定职位、申请或面试轮次的具体层级及复用机制。"
       ],
-      "implementationNotes": "2026-10-31 Main 集成 P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md（22465ae3，merge 72f69163）：源码核实实体树已存在；最小 Schema 缺口为 reflectionCompletedAt 与 ReflectionItem.sourceQuestionId/sourceKind，待 D1–D12 冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。",
+      "implementationNotes": "2026-10-31 Main 集成 P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md（22465ae3，merge 72f69163）：源码核实实体树已存在；最小 Schema 缺口为 reflectionCompletedAt 与 ReflectionItem.sourceQuestionId/sourceKind，待 D1–D12 冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同更新：复核既有实体和缺口；聚合视图可与复盘核心并行，共享文件唯一 Owner/顺序交接。D1–D12 尚未冻结，未编码或新增验收。",
       "passes": false
     },
     {
@@ -122,7 +122,7 @@
         "复盘的草稿/完成状态，以及后续修改的历史留痕要求。",
         "题目与练习的引用/复制策略；敏感内容、附件和归档范围是否纳入本期。"
       ],
-      "implementationNotes": "2026-10-31 与 JOB-CONNECTIONS 共用联合合同提案。复盘读写服务已存在；完成标记与题库回链待 Owner 裁定后增量。D6「已结束」与 NEXT-ACTIONS 合同 D3 推荐口径冲突，冻结前须单点裁定。implementationStatus 仍为 NOT_ASSESSED。passes:false。",
+      "implementationNotes": "2026-10-31 与 JOB-CONNECTIONS 共用联合合同提案。复盘读写服务已存在；完成标记与题库回链待 Owner 裁定后增量。D6「已结束」与 NEXT-ACTIONS 合同 D3 推荐口径冲突，冻结前须单点裁定。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 联合合同收敛：复盘核心包含 additive Schema/Migration/备份、完成标记和来源追溯、统一待复盘读取接口与必要 UI；明确 minute 精度和无 N+1。G-AI1 归档职位 AI 草稿读取缺口已核实但本次未修复；D1–D12 待裁定，未编码或验收。",
       "passes": false
     },
     {
@@ -157,7 +157,7 @@
         "多条建议的排序、上限、暂时忽略/消除规则。",
         "各数据状态与时间/时区的正式判定规则及归档数据是否参与。"
       ],
-      "implementationNotes": "2026-10-31 与 JOURNEY-OVERVIEW 共用 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md。R1–R6 推荐规则与 D1–D9 待冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。",
+      "implementationNotes": "2026-10-31 与 JOURNEY-OVERVIEW 共用 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md。R1–R6 推荐规则与 D1–D9 待冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 合同收敛：D3 与面试 D6 统一协调建议为仅 COMPLETED，过期未完成仅提示确认状态；尚未批准。R6 消费唯一 AwaitingReflectionResult，完成标记依 D2 裁定，领域接口未就绪时静默并记录未覆盖。未编码或验收。",
       "passes": false
     },
     {
@@ -229,6 +229,7 @@
         "跨 Agent 对话是否共享会话、消息历史与上下文快照的切换合同。",
         "四条提示按当前可用能力与上下文动态生成的规则、桌面/窄屏响应式细节。"
       ],
+      "implementationNotes": "2026-11-01 新增 P2_MULTI_AGENT_CONTRACT_PROPOSAL.md（基线 main@23178a4c）：核实六/七工具运行时分叉、会话锁/上下文、建议点击即发送现状；推荐每角色独立会话槽、持久角色、建议只填入、Reflect 文本教练降级。D1–D10 待批准。canonical match_job 的 P1 既有验收不外推三角色功能验收；未编码或验收。",
       "passes": false
     }
   ]
