@@ -1,4 +1,5 @@
 "use server";
+import fs from "node:fs/promises";
 import { buildMaterialItemText } from "@/lib/career/applicationCopy";
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
@@ -13,7 +14,7 @@ import { CandidateProfileService } from "@/lib/career/candidateProfileService";
 import { CareerMaterialService } from "@/lib/career/careerMaterialService";
 import { ResumeProvenanceService } from "@/lib/career/resumeProvenanceService";
 import { ResumeVariantService } from "@/lib/career/resumeVariantService";
-import { ResumeArtifactService, resumeArtifactDTO } from "@/lib/career/resumeArtifactService";
+import { ResumeArtifactService, resumeArtifactDTO, resolveResumeArtifactStorageKey } from "@/lib/career/resumeArtifactService";
 import { buildResumeHeaderSnapshot } from "@/lib/career/resumeHeaderSnapshot";
 import type { ActionResult } from "@/models/action.model";
 
@@ -238,6 +239,50 @@ export async function cloneResumeVersionAsDraft(
   }
 }
 
+export async function setResumeVersionStatus(input: {
+  versionId: string;
+  status: string;
+}): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertResumeV1Writable(prisma as never);
+    const status = requireId(input?.status, "INVALID_STATUS");
+    if (status !== "DRAFT" && status !== "FROZEN" && status !== "SUBMITTED") {
+      throw new CareerRuntimeError("INVALID_STATUS", "Invalid version status");
+    }
+    const data = await variantsFor(user.id).setStatus(
+      requireId(input?.versionId, "VERSION_NOT_FOUND"),
+      status,
+    );
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to update resume version status.");
+  }
+}
+
+export async function deleteResumeVersion(versionId: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertResumeV1Writable(prisma as never);
+    const { artifactStorageKeys, ...data } = await variantsFor(user.id).deleteVersion(
+      requireId(versionId, "VERSION_NOT_FOUND"),
+    );
+    for (const storageKey of artifactStorageKeys) {
+      try {
+        await fs.rm(resolveResumeArtifactStorageKey(storageKey), { force: true });
+      } catch {
+        // The artifact row is already gone; leftover export bytes are removed
+        // best-effort and must not fail the version delete.
+      }
+    }
+    revalidatePath(LIST_PATH);
+    revalidatePath(workspacePath(data.resumeVariantId));
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to delete resume version.");
+  }
+}
+
 export async function freezeResumeVersion(versionId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
@@ -407,6 +452,28 @@ export async function deleteResumeSectionItem(itemId: string): Promise<ActionRes
     return { success: true, data };
   } catch (error) {
     return handleError(error, "Failed to delete resume item.");
+  }
+}
+
+export async function moveResumeSectionItem(input: {
+  itemId: string;
+  targetSectionId: string;
+  beforeItemId?: string | null;
+}): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await assertResumeV1Writable(prisma as never);
+    const beforeItemId = input?.beforeItemId == null || input.beforeItemId === ""
+      ? null
+      : requireId(input.beforeItemId, "ITEM_NOT_FOUND");
+    const data = await variantsFor(user.id).moveSectionItem(
+      requireId(input?.itemId, "ITEM_NOT_FOUND"),
+      requireId(input?.targetSectionId, "SECTION_NOT_FOUND"),
+      beforeItemId,
+    );
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "Failed to move resume item.");
   }
 }
 

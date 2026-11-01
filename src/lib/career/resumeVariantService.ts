@@ -520,6 +520,98 @@ export class ResumeVariantService {
     });
   }
 
+  /**
+   * Status is adjustable for DRAFT, FROZEN, and SUBMITTED. Returning to DRAFT
+   * does not rewrite content and keeps frozenAt. Content writes stay blocked
+   * until the version is a draft again. A version cited by an application cannot
+   * change status.
+   */
+  async setStatus(versionId: string, status: "DRAFT" | "FROZEN" | "SUBMITTED") {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      const version = await this.requireOwnedVersion(versionId, tx);
+      this.assertNotArchived(version.resumeVariant.archivedAt);
+      if (version.status === status) return version;
+      if (version.status === RESUME_VERSION_STATUS.ARCHIVED) {
+        throw new CareerRuntimeError("VERSION_IMMUTABLE", "Archived version status cannot change");
+      }
+      if (await this.isSubmittedReference(versionId, tx)) {
+        throw new CareerRuntimeError("SUBMITTED_RESUME_PROVENANCE", "Versions referenced by an application cannot change status");
+      }
+      if (status === RESUME_VERSION_STATUS.SUBMITTED) return this.markSubmittedInTransaction(tx, versionId);
+      const changed = await tx.resumeVariantVersion.updateMany({
+        where: { id: versionId, status: version.status },
+        data: {
+          status,
+          ...(status === RESUME_VERSION_STATUS.FROZEN && version.status === RESUME_VERSION_STATUS.DRAFT && version.frozenAt === null
+            ? { frozenAt: new Date() }
+            : {}),
+        },
+      });
+      if (changed.count !== 1) throw new CareerRuntimeError("VERSION_IMMUTABLE", "Resume version changed concurrently");
+      return this.requireOwnedVersion(versionId, tx);
+    });
+  }
+
+  /** Deletes a version with no submission provenance or deep-match references. */
+  async deleteVersion(versionId: string) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      const version = await this.requireOwnedVersion(versionId, tx);
+      this.assertNotArchived(version.resumeVariant.archivedAt);
+      if (await this.isSubmittedReference(versionId, tx)) {
+        throw new CareerRuntimeError("SUBMITTED_RESUME_PROVENANCE", "Versions referenced by an application cannot be deleted");
+      }
+      const deepMatch = await tx.matchAnalysis.findFirst({
+        where: { resumeVariantVersionId: versionId },
+        select: { id: true },
+      });
+      if (deepMatch) {
+        throw new CareerRuntimeError("VERSION_REFERENCED", "This version is referenced by a match analysis and cannot be deleted");
+      }
+      const children = await tx.resumeVariantVersion.findMany({
+        where: { parentVersionId: versionId },
+        select: { id: true },
+      });
+      for (const child of children) {
+        await tx.resumeVariantVersion.update({
+          where: { id: child.id },
+          data: { parentVersionId: child.id === version.parentVersionId ? null : version.parentVersionId },
+        });
+      }
+      await tx.matchEvidenceLink.updateMany({
+        where: { resumeExpression: { sectionItem: { section: { resumeVariantVersionId: versionId } } } },
+        data: { resumeExpressionId: null },
+      });
+      let nextVersionId = version.resumeVariant.currentVersionId === versionId ? null : version.resumeVariant.currentVersionId;
+      if (version.resumeVariant.currentVersionId === versionId) {
+        const sibling = await tx.resumeVariantVersion.findFirst({
+          where: { resumeVariantId: version.resumeVariant.id, id: { not: versionId } },
+          orderBy: [{ versionNumber: "desc" }, { id: "asc" }],
+          select: { id: true },
+        });
+        nextVersionId = sibling?.id ?? null;
+        await tx.resumeVariant.update({
+          where: { id: version.resumeVariant.id },
+          data: { currentVersionId: nextVersionId },
+        });
+      }
+      // Artifact rows cascade with the version; their storage keys are returned
+      // so the caller can remove the orphaned export bytes after commit.
+      const artifacts = await tx.resumeArtifact.findMany({
+        where: { resumeVariantVersionId: versionId },
+        select: { storageKey: true },
+      });
+      await tx.resumeVariantVersion.delete({ where: { id: versionId } });
+      return {
+        id: versionId,
+        resumeVariantId: version.resumeVariant.id,
+        nextVersionId,
+        artifactStorageKeys: artifacts.map((artifact) => artifact.storageKey),
+      };
+    });
+  }
+
   async markSubmitted(versionId: string) {
     await this.gate();
     return this.db.$transaction((tx) => this.markSubmittedInTransaction(tx, versionId));
@@ -878,6 +970,53 @@ export class ResumeVariantService {
     });
   }
 
+  async moveSectionItem(itemId: string, targetSectionId: string, beforeItemId?: string | null) {
+    await this.gate();
+    return this.db.$transaction(async (tx) => {
+      await this.guardDraftMutationInTransaction(tx, { sections: { some: { items: { some: { id: itemId } } } } }, "ITEM_NOT_FOUND");
+      const item = await this.requireOwnedEditableItem(itemId, tx);
+      const target = await this.requireOwnedEditableSection(targetSectionId, tx);
+      if (item.section.version.id !== target.version.id) {
+        throw new CareerRuntimeError("SECTION_NOT_FOUND", "Target section is not in this version");
+      }
+      if (item.resumeVariantSectionId !== target.id && item.careerMaterialItemId) {
+        const duplicate = await tx.resumeVariantSectionItem.findFirst({
+          where: {
+            resumeVariantSectionId: target.id,
+            careerMaterialItemId: item.careerMaterialItemId,
+            id: { not: item.id },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new CareerRuntimeError("MATERIAL_ALREADY_IN_SECTION", "This career material is already in the section");
+        }
+      }
+      const sourceSectionId = item.resumeVariantSectionId;
+      const orderedIds = async (sectionId: string) => (await tx.resumeVariantSectionItem.findMany({
+        where: { resumeVariantSectionId: sectionId },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        select: { id: true },
+      })).map((row) => row.id).filter((id) => id !== item.id);
+      const sourceIds = await orderedIds(sourceSectionId);
+      const targetIds = sourceSectionId === target.id ? sourceIds : await orderedIds(target.id);
+      const insertAt = beforeItemId ? targetIds.indexOf(beforeItemId) : targetIds.length;
+      if (beforeItemId && insertAt < 0) throw new CareerRuntimeError("ITEM_NOT_FOUND", "Insert position not found");
+      targetIds.splice(insertAt, 0, item.id);
+      const write = async (sectionId: string, ids: string[]) => {
+        for (const [index, id] of ids.entries()) {
+          await tx.resumeVariantSectionItem.update({
+            where: { id },
+            data: { sortOrder: index, ...(id === item.id ? { resumeVariantSectionId: sectionId } : {}) },
+          });
+        }
+      };
+      if (sourceSectionId !== target.id) await write(sourceSectionId, sourceIds);
+      await write(target.id, targetIds);
+      return tx.resumeVariantSectionItem.findUniqueOrThrow({ where: { id: item.id } });
+    });
+  }
+
   async createExpression(input: {
     itemId: string;
     content: string;
@@ -1011,7 +1150,12 @@ export class ResumeVariantService {
 
   private async isSubmittedReference(versionId: string, tx: Prisma.TransactionClient = this.db): Promise<boolean> {
     const attempt = await tx.applicationAttempt.findFirst({
-      where: { submittedResumeVersionId: versionId },
+      where: {
+        OR: [
+          { submittedResumeVersionId: versionId },
+          { submittedResumeArtifact: { resumeVariantVersionId: versionId } },
+        ],
+      },
       select: { id: true },
     });
     return attempt != null;

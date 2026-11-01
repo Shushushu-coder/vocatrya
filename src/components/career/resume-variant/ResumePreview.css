@@ -4,3 +4,6 @@
 .resume-print-item { break-inside: avoid; page-break-inside: avoid; }
 .resume-print h3 { break-after: avoid; }
 .resume-fragment-columns { width: 180mm; height: 267mm; columns: 180mm; column-gap: 0; column-fill: auto; zoom: 1; }
+@media (min-width: 1024px) {
+  .resume-preview-pane { width: var(--resume-preview-width); max-width: 70%; }
+}

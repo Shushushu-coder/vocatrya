@@ -15,6 +15,15 @@
 
 Owner 在本聊天批准剩余六组推荐规则：D1 三级隐藏；D4 CSS 分片方案先验证、PDF 为权威且未达一致性不算分页验收；D7 手动同步素材标题；D9 evidence 使用 BULLET、导入保持 BODY；D10 本期不接 JD 版本绑定及版本归档；D11 手写内容删除前提示仅存本版本。D8 的 AI 改写继续延期，本期不新增 AI 专用字段。此前 D2/D3/D5/D6 批准继续有效。以上冻结覆盖本期实施，早期“其余未批准”表述保留为历史记录，以本补充为准。
 
+## 2026-10-30 工作台体验修订
+
+Owner 在手动验收中确认结构检查 1–5 通过，并要求按下列规则改工作台。本节覆盖同日已编码行为；与上文或 §4/§6/§7/§11 冲突时以本节为准。`passes` 不因本节改为 true。代码在 Main `9bbe0ecc` 工作区，尚未提交，也未在新的生产装配上重跑 Electron。
+
+- **跨分节移动。** 草稿版本中，已放入简历的条目可以拖到另一个分节，或拖到该分节里的某条素材之前；条目上的「移动到分节」把条目追加到目标分节末尾。同一 `careerMaterialItemId` 在目标分节已存在时拒绝，错误码 `MATERIAL_ALREADY_IN_SECTION`。表达式仍只在所属条目内排序。非草稿的正文写入继续走 `guardDraftMutationInTransaction`。
+- **预览宽度与隐藏。** 编辑区与预览同屏，预览栏可拖拽或用左右方向键调整宽度（最小 280px，最大视口 70%），并可隐藏后再显示。选择记在本地 `vocatrya.resumePreview`，不写入版本图。
+- **DOCX 与打印预览对齐。** 分页权威仍是导出 PDF（D4 不变）。Word 正文改为：联系方式与链接分行；分节标题按预览做大写；除 `kind === "BODY"` 外的表述使用项目符号；姓名 18pt，其余正文 10.5pt；页面保持 A4、15mm 边距。隐藏内容仍不进入导出。
+- **版本状态与删除。** `DRAFT` / `FROZEN` / `SUBMITTED` 可以互相调整。改回 `DRAFT` 只改状态，保留 `frozenAt`，不改写正文；正文在再次成为草稿之前仍不可原地修改。`ARCHIVED` 状态与已归档 Variant 仍不可这样调整。已被 `ApplicationAttempt.submittedResumeVersionId` 或提交 artifact 引用的版本不能改状态，也不能删除（`SUBMITTED_RESUME_PROVENANCE`）。`MatchAnalysis.resumeVariantVersionId` 指向该版本时不能删除（`VERSION_REFERENCED`）。删除前把子版本的 `parentVersionId` 改到被删版本的父版本，必要时改 `currentVersionId`，并清空指向本版本表达式的 `MatchEvidenceLink.resumeExpressionId`。删掉最后一个版本后，工作台提供新建空白草稿。素材库记录不因删除版本而删除。本节取代 §11「不新增任何物理删除路径」对**版本行**的限制；分节、条目和表述的原有删除保留。
+
 本聊天已授权开始工作台实施及必要隔离开发验证，不包含 Commit/Merge、真实库迁移、发布或完整桌面 E2E。单一 Builder Owner 为当前窗口，Schema/新 Migration/备份与双语词典由本窗口统一落地；旧 Activity Owner 的已完成分工不阻塞新任务。不改历史迁移，不覆盖其他 Worktree。
 
 ## 0. 目的与范围
@@ -144,7 +153,7 @@ Owner 在本聊天批准剩余六组推荐规则：D1 三级隐藏；D4 CSS 分�
 
 - **顶部控制条**（单行可换行）：版本切换（`listVariantVersions` + `?version=` 深链）/新建草稿（`createBlankDraft`、`cloneAsDraft`）；目标职位绑定（新 `updateResumeVariantTargetJob` + JobOpportunity 选择器，仅未归档 Variant 可改；不影响版本图）；模板（`layoutConfig.template`，v1 白名单仅 `standard`）；篇幅（`layoutConfig.pageTarget`，1|2）；导出（`ResumeExportControl` 扩 DOCX）；冻结/克隆入口与状态标签（现状语义保留）。
 - **左栏·素材模块库**（新 `MaterialLibraryPanel`）：按 `MATERIAL_TYPE_ORDER` 分组 + 搜索过滤；每卡显示 title/type/detail 摘要（新增 list DTO 字段）/evidence 计数，展开可见逐条 evidence；拖拽整卡=§3 R5，拖拽单条 evidence=§3 R6；归档素材不出现（现有 `archivedAt` 过滤）；提供"管理素材"链接到职业资料页（复用现状）。
-- **右栏·编辑与实时预览**：编辑模式保留现有 Section/Item/Expression 编辑能力并增加拖拽手柄与隐藏开关；预览始终与编辑同屏（替换当前 preview 开关为分栏），内容即 §7 分页预览组件；只读/冻结态全栏只读 + 克隆新草稿按钮（现状语义）。
+- **右栏·编辑与实时预览**：编辑模式保留现有 Section/Item/Expression 编辑能力并增加拖拽手柄与隐藏开关；预览与编辑同屏，宽度可调、可隐藏（2026-10-30 修订）。条目可在分节之间移动。冻结后正文仍不可原地改；状态可在草稿、已冻结、已投递之间调整，版本可删除，限制见文首 2026-10-30 修订。克隆新草稿仍然可用。
 - **状态与并发**：沿用 `editable` 判定（DRAFT+未归档+未被 Attempt 引用）与服务端 `guardDraftMutationInTransaction`；乐观 UI 仅用于拖拽重排，失败回滚（reorder 已全序校验）。
 
 【建议方案】拖拽实现：**推荐 `@dnd-kit/core` + `@dnd-kit/sortable`（+`utilities`）**——支持跨容器拖拽（素材→section、条间排序）、键盘可及性好、React 19 兼容；**新依赖仅提案不安装**，批准后由指定 Owner 执行 `npm add`（需核对发布日期与版本固定）。备选：HTML5 原生 DnD（零依赖但跨容器/可及性成本高）。详见 §10 D2。
@@ -189,9 +198,9 @@ Owner 在本聊天批准剩余六组推荐规则：D1 三级隐藏；D4 CSS 分�
   - **覆盖场景**：排序变化 = 对匹配成功集合比较 sortOrder 序列输出 moved；MANUAL 内容被编辑 → 指纹变化 → 呈 remove+add（"编辑"与"删除重建"本质不可区分，UI 相邻呈现即可）；增删 = 无对应键集合；originRefId 匹配的行改内容 → 内容差异正常显示。保证最常见路径（克隆→局部小改）不产生"整页删除/新增"噪声。
   - **投影模式区分（不变量）**：Diff 服务产出两套投影——`projection`（过滤 hiddenAt，与预览/导出/AI 文本投影同一口径）与 **`audit`**（包含隐藏行并标注 hidden/unhidden 变化）。版本 Diff 是所有者对自己数据的审计视图（授权 = 同用户所有权校验，不新增权限面），默认 audit 口径以呈现"隐藏/恢复"这类编辑动作。
   - UI 双栏对照 + 变更标记，仅只读展示不回写。
-- **V4 回退**：产品语义 = `cloneAsDraft(老版本)` 生成新 DRAFT 并置 `currentVersionId`（已有行为）；UI 命名"以此版本新建草稿"，不改写历史版本；不提供"回退指针"类操作（保持历史不可变）。
+- **V4 回退**：产品语义 = `cloneAsDraft(老版本)` 生成新 DRAFT 并置 `currentVersionId`（已有行为）；UI 命名"以此版本新建草稿"。历史正文不因状态切换被改写。2026-10-30 修订允许调整 `DRAFT`/`FROZEN`/`SUBMITTED`，并允许删除未被申请或深度匹配引用的版本；这不是回退指针。
 - **V5 AI 修改**：AI 产出经 `cloneAsDraft` 落到**新 DRAFT**（`createdVia:"AI"` 新枚举值 + provenance 三列），永不在原地写、不写 FROZEN/SUBMITTED；Diff 视图（V3 audit 口径）作为用户审阅入口。**AI 改写执行路径为后续待批包（§9）**，本合同只冻结数据与语义。
-- **V6 旧版本保护**：现有全部不变量保留——FROZEN/SUBMITTED/ARCHIVED 拒绝写；`submittedAttempts` 引用版本拒绝写（`SUBMITTED_RESUME_PROVENANCE`）；`ApplicationAttempt` 绑定字段不可变；`Restrict` FK 兜底；`editVersion` 对不可变版本自动克隆而非改写。
+- **V6 旧版本保护**：非草稿拒绝**正文**原地写入；`submittedAttempts` 引用版本拒绝正文写入和状态/删除（`SUBMITTED_RESUME_PROVENANCE`）；`ApplicationAttempt` 绑定字段不可变；`Restrict` FK 兜底；`editVersion` 对不可变版本自动克隆而非改写。状态切换与版本删除的例外只以 2026-10-30 修订为准。
 
 ## 7. 篇幅、分页与导出合同（对应要求 6）
 
@@ -327,4 +336,4 @@ Owner 在本聊天批准剩余六组推荐规则：D1 三级隐藏；D4 CSS 分�
 - 打印页与 Diff 仅读，不引入任何版本写路径；`/resume-print` 仅 FROZEN/SUBMITTED 现状保留（DRAFT 打印不在本合同范围）。
 - 分页预览测量子树禁用 CSS `zoom`；页线绘制须等待 `document.fonts.ready`。
 - i18n 与台账文件只归主协调窗口；各包不自行改 `P1_FEATURES.json` 状态。
-- 任何物理删除路径不新增；"删除"在素材域=归档，在版本域=删版本行（语义不同需文案区分）。
+- 素材域的“删除”仍是归档。版本域可以删除未被申请或深度匹配引用的版本行，见 2026-10-30 修订；分节、条目和表述的删除只影响该版本。

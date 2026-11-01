@@ -239,6 +239,14 @@ interface Window {
       { ok: true; bytes: Uint8Array } |
       { ok: false; code: "timeout" | "load_failed" | "print_failed" | "invalid_version_id" | "untrusted_sender" }
     >;
+    /**
+     * Resume preview pane preference snapshot ({hidden, width}) held in the
+     * app-owned device config file — survives the backend's ephemeral port.
+     * `read` returns the stored snapshot string or null; `write` persists a
+     * validated snapshot and returns it. Both throw when storage fails.
+     */
+    readPreviewPreferences(): string | null;
+    writePreviewPreferences(raw: string): string;
   };
   vocatryaWindow?: { setTheme(theme: "light" | "dark", preference: "light" | "dark" | "system"): Promise<void> };
   vocatryaRuntime?: VocatryaRuntimeBridge;

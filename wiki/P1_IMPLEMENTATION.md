@@ -25,7 +25,7 @@
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | 已测试可用，完整业务/UI 验收未覆盖 |
 | **AI-BYOK** | IN_SCOPE | IMPLEMENTED | DeepSeek 真实 Key 服务链路 29/29、Windows Electron fresh-native/full 17/17 通过 |
 | **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
-| **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | DOCX 修复已集成；原窗口 Electron fresh-native 49/50 通过，真实 AI 导入预览/排除仍阻塞 |
+| **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 真实 AI 导入预览/排除/重开已在 `673e3460` 装配通过；2026-10-30 四项工作台修订已编码，未在新装配上复验，`passes` 仍 false |
 | **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | `match_job` canonical 合同提案已集成；D1–D6 待 Owner 裁定，未实现 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
@@ -125,7 +125,15 @@
 4. **篇幅与排版**：支持一页/两页等篇幅目标、实时溢出提示和稳定分页；顶部统一管理版本、模板与排版。首版优先受控模板而不是完全自由画布。
 5. **导出与外部精修**：可导出可用简历文件（目标为 PDF 和可编辑文档）；用户可在导出后自行细修排版。要求预览与导出分页尽可能一致，不能只展示假分页或“导出”空入口。
 
-**最低验收**：选用真实形态的简历样例，在隔离 Windows Electron 中完成导入→解析校对→拖拽/局部编辑→创建岗位版本→恢复/对比→篇幅校验→导出并打开；验证素材完整性、旧版本不可被静默覆盖、导出内容与预览一致。具体 JSON Schema、解析支持格式、可编辑导出格式及排版引擎应先设计/审查，不把这些设计决策冒充已实现事实。
+**最低验收**：选用真实形态的简历样例，在隔离 Windows Electron 中完成导入→解析校对→拖拽/局部编辑→创建岗位版本→恢复/对比→篇幅校验→导出并打开；验证素材完整性、旧版本正文不被静默改写、导出内容与预览一致。具体 JSON Schema、解析支持格式、可编辑导出格式及排版引擎应先设计/审查，不把这些设计决策冒充已实现事实。
+
+**2026-10-30 现行行为**（细则见 [工作台合同](./RESUME_BUILDER_CONTRACT_PROPOSAL.md) 文首同日修订；`passes` 仍 false）：
+
+- 草稿中的条目可以拖到其他分节，或用「移动到分节」移入。同一职业素材不能在目标分节重复出现。
+- 预览栏可以拖拽或方向键调整宽度，也可以隐藏。宽度和隐藏记在本机，不进版本。
+- Word 导出与打印预览对齐联系方式/链接分行、分节大写、非正文项目符号和姓名字号。分页仍以导出 PDF 为准。
+- 草稿、已冻结、已投递可以改状态。改回草稿不改写正文。这些版本可以删除，除非已被申请或深度匹配引用。删光版本后可以新建空白草稿。
+- 同日早些时候，在与 Main `9bbe0ecc` 产品树一致的 `673e3460` 装配上，隔离 Electron fresh-native/full 用 DeepSeek `deepseek-flash` 完成真实导入预览、排除 `Contoso Lumen Internship`、确认保留 `Northwind Atlas Frontend`，以及退出后重开。证据在 `.worktrees/p1-resume-ai-import-acceptance/.tmp/p1-resume-ai-import-acceptance/RESULT.md`。该装配不含上述四项修订。用户随后在该装配上确认检查 1–5 通过。AI 改写和粘贴导入仍不在本期。
 
 ### AGENT-CAPABILITIES：保留既有五工具；登记候选 `match_job`
 

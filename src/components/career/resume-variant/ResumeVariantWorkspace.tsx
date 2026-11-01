@@ -20,7 +20,9 @@ import {
   deleteResumeExpression,
   deleteResumeSection,
   deleteResumeSectionItem,
+  deleteResumeVersion,
   freezeResumeVersion,
+  moveResumeSectionItem,
   getResumeVariant,
   getResumeVariantVersion,
   listResumeCareerMaterials,
@@ -29,6 +31,7 @@ import {
   reorderResumeSectionItems,
   reorderResumeSections,
   replaceResumeExpressionEvidence,
+  setResumeVersionStatus,
   updateResumeExpression,
   updateResumeHeaderSnapshot,
   updateResumeSection,
@@ -42,6 +45,7 @@ import { useI18n } from "@/i18n";
 import { ResumePreview } from "./ResumePreview";
 import { ResumeVersionDiffView } from "./ResumeVersionDiffView";
 import { ResumePagedPreview } from "./ResumePagedPreview";
+import { ResumePreviewPane } from "./ResumePreviewPane";
 import { ResumeBuilderDnd, BuilderSortable, BuilderSortableGroup, ResumeMaterialLibrary, type BuilderDrop, type LibraryDrag } from "./ResumeBuilderDnd";
 import { parseResumeLayoutConfig } from "@/lib/career/resumeLayoutConfig";
 import type { ResumeDiffChange } from "@/lib/career/resumeVersionDiff";
@@ -182,10 +186,11 @@ export function ResumeVariantWorkspace({
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([]);
   const [expressionDrafts, setExpressionDrafts] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<{
-    kind: "section" | "item" | "freeze";
+    kind: "section" | "item" | "freeze" | "version";
     id: string;
   } | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
 
   const load = useCallback(
     async (preferredVersionId?: string) => {
@@ -224,6 +229,7 @@ export function ResumeVariantWorkspace({
         return;
       }
       setLoadError(false);
+      setWorkspaceReady(true);
       const nextId =
         preferredVersionId ??
         summary.currentVersionId ??
@@ -321,6 +327,9 @@ export function ResumeVariantWorkspace({
   const sortBuilder = async (target: BuilderDrop, orderedIds: string[]) => {
     await applyBuilder(target.kind === "section" ? reorderResumeSections({ versionId: target.parentId, orderedIds }) : target.kind === "item" ? reorderResumeSectionItems({ sectionId: target.parentId, orderedIds }) : reorderResumeExpressions({ itemId: target.parentId, orderedIds }));
   };
+  const moveBuilderItem = async (itemId: string, targetSectionId: string, beforeItemId: string | null) => {
+    await applyBuilder(moveResumeSectionItem({ itemId, targetSectionId, beforeItemId }));
+  };
   const attachBuilder = async (source: LibraryDrag, target: BuilderDrop) => {
     if (source.evidenceId && target.kind === "item" && target.materialId === source.materialId) await applyBuilder(addResumeEvidence({ itemId: target.id, evidenceId: source.evidenceId }));
     else {
@@ -410,6 +419,9 @@ export function ResumeVariantWorkspace({
     } else if (confirm.kind === "item") {
       const ok = await run(deleteResumeSectionItem(confirm.id), t("resumeVariants.saveSuccess"), "toast");
       if (ok) await reloadSelected(version.id);
+    } else if (confirm.kind === "version") {
+      const ok = await run(deleteResumeVersion(confirm.id), t("resumeVariants.deleteVersionSuccess"), "toast");
+      if (ok) await load();
     } else {
       if (!(await flushDraft())) return;
       const ok = await run(freezeResumeVersion(confirm.id), t("resumeVariants.freezeSuccess"), "toast");
@@ -430,8 +442,17 @@ export function ResumeVariantWorkspace({
   }
 
   if (!version) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    if (!workspaceReady) return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <div className="space-y-3">
+        <Link className="text-sm text-primary underline" href="/dashboard/profile/resumes">{t("resumeVariants.backToList")}</Link>
+        <p className="text-sm text-muted-foreground">{t("resumeVariants.noVersions")}</p>
+        <Button onClick={() => { void run(createBlankResumeDraft(variantId), t("resumeVariants.saveSuccess"), "toast").then((ok) => { if (ok) void load(); }); }}>{t("resumeBuilder.blankDraft")}</Button>
+      </div>
+    );
   }
+  const statusLocked = Boolean(version.resumeVariant.archivedAt) || version.submittedAttempts.length > 0 || version.status === "ARCHIVED";
+  const canChangeStatus = !statusLocked;
 
   const evidenceMaterial = evidenceExpression?.materialId
     ? materials.find((row) => row.id === evidenceExpression.materialId) ??
@@ -450,6 +471,29 @@ export function ResumeVariantWorkspace({
             {t(statusKey(version.status))}
             {editable ? "" : ` · ${t("resumeVariants.readOnly")}`}
           </p>
+          {canChangeStatus ? (
+            <label className="mt-2 block text-sm">{t("resumeVariants.versionStatus")}
+              <select
+                aria-label={t("resumeVariants.versionStatus")}
+                className="ml-2 rounded border bg-background p-2"
+                value={version.status}
+                onChange={(event) => {
+                  const status = event.target.value;
+                  if (status === version.status) return;
+                  void (async () => {
+                    if (!(await flushDraft())) return;
+                    if (await run(setResumeVersionStatus({ versionId: version.id, status }), t("resumeVariants.statusChanged"), "toast")) await reloadSelected(version.id);
+                  })();
+                }}
+              >
+                <option value="DRAFT">{t("resumeVariants.statusDraft")}</option>
+                <option value="FROZEN">{t("resumeVariants.statusFrozen")}</option>
+                <option value="SUBMITTED">{t("resumeVariants.statusSubmitted")}</option>
+              </select>
+            </label>
+          ) : version.submittedAttempts.length > 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">{t("resumeVariants.statusLockedHint")}</p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Autosave feedback sits inside the editor's own action row rather
@@ -510,14 +554,15 @@ export function ResumeVariantWorkspace({
         </select></label>
         <Button variant="outline" disabled={Boolean(version.resumeVariant.archivedAt)} onClick={async () => { if (!(await flushDraft())) return; if (await run(createBlankResumeDraft(variantId), t("resumeVariants.saveSuccess"))) await load(); }}>{t("resumeBuilder.blankDraft")}</Button>
         <Button variant="outline" disabled={Boolean(version.resumeVariant.archivedAt)} onClick={async () => { if (!(await flushDraft())) return; if (await run(cloneResumeVersionAsDraft(version.id), t("resumeVariants.cloneSuccess"))) await load(); }}>{t("resumeBuilder.cloneVersion")}</Button>
+        <Button variant="outline" disabled={statusLocked} onClick={() => setConfirm({ kind: "version", id: version.id })}>{t("resumeVariants.deleteVersion")}</Button>
         <label className="text-sm">{t("resumeBuilder.compare")}<select aria-label={t("resumeBuilder.compare")} className="ml-2 rounded border bg-background p-2" value={compareId} onChange={(e) => { setCompareId(e.target.value); setComparison(null); }}><option value="">—</option>{versions.filter((v) => v.id !== version.id).map((v) => <option key={v.id} value={v.id}>v{v.versionNumber}</option>)}</select></label>
         <Button variant="outline" disabled={!compareId} onClick={async () => { const result = await compareResumeVersions({ beforeId: compareId, afterId: version.id }); if (result.success) setComparison(result.data as typeof comparison); else toastError(result.message); }}>{t("resumeBuilder.compare")}</Button>
       </div>
-      <ResumeBuilderDnd disabled={!editable} onSort={sortBuilder} onAttach={attachBuilder}>
+      <ResumeBuilderDnd disabled={!editable} onSort={sortBuilder} onAttach={attachBuilder} onMoveItem={moveBuilderItem}>
       <div className="grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
         <ResumeMaterialLibrary materials={materials} sections={version.sections} disabled={!editable} onAdd={(source, sectionId) => void applyBuilder(attachResumeMaterial({ sectionId, materialId: source.materialId, evidenceId: source.evidenceId }))} />
-        <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
-        <div className="min-w-0 space-y-4">
+        <div className="flex min-w-0 flex-col items-stretch gap-4 lg:flex-row">
+        <div className="min-w-0 flex-1 space-y-4">
 
           <Card>
             <CardHeader>
@@ -738,6 +783,16 @@ export function ResumeVariantWorkspace({
                               >
                                 {t("resumeVariants.moveDown")}
                               </Button>
+                              {version.sections.length > 1 ? (
+                                <label className="text-xs">{t("resumeVariants.moveToSection")}
+                                  <select aria-label={t("resumeVariants.moveToSection")} className="ml-1 rounded border bg-background p-1" value={section.id} onChange={(event) => {
+                                    const targetSectionId = event.target.value;
+                                    if (targetSectionId && targetSectionId !== section.id) void applyBuilder(moveResumeSectionItem({ itemId: item.id, targetSectionId, beforeItemId: null }));
+                                  }}>
+                                    {version.sections.map((row) => <option key={row.id} value={row.id}>{row.title}</option>)}
+                                  </select>
+                                </label>
+                              ) : null}
                               {visibility("item", item.id, Boolean(item.hiddenAt))}
                               {item.careerMaterialItemId && <Button size="sm" variant="ghost" onClick={() => void applyBuilder(syncResumeMaterialTitle(item.id))}>{t("resumeBuilder.syncTitle")}</Button>}
                               <Button
@@ -955,7 +1010,7 @@ export function ResumeVariantWorkspace({
             ))}</BuilderSortableGroup>
           )}
         </div>
-        <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[85vh] lg:overflow-y-auto"><ResumePagedPreview headerSnapshot={previewHeader} sections={previewSections} pageTarget={parseResumeLayoutConfig(version.layoutConfig).pageTarget} /></div>
+        <ResumePreviewPane><ResumePagedPreview headerSnapshot={previewHeader} sections={previewSections} pageTarget={parseResumeLayoutConfig(version.layoutConfig).pageTarget} /></ResumePreviewPane>
         </div>
       </div>
       </ResumeBuilderDnd>
@@ -1099,12 +1154,16 @@ export function ResumeVariantWorkspace({
             ? t("resumeVariants.freezeConfirmTitle")
             : confirm?.kind === "section"
               ? t("resumeVariants.deleteSectionConfirm")
-              : t("resumeVariants.deleteItemConfirm")
+              : confirm?.kind === "version"
+                ? t("resumeVariants.deleteVersionConfirm")
+                : t("resumeVariants.deleteItemConfirm")
         }
         alertDescription={
           confirm?.kind === "freeze"
             ? t("resumeVariants.freezeConfirmDescription")
-            : t("resumeBuilder.deleteWarning")
+            : confirm?.kind === "version"
+              ? t("resumeVariants.deleteVersionDescription")
+              : t("resumeBuilder.deleteWarning")
         }
         actionLabel={
           confirm?.kind === "freeze" ? t("resumeVariants.freeze") : t("common.delete")

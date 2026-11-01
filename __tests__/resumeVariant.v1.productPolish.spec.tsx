@@ -15,6 +15,9 @@ import {
   listSubmittableResumeVersions,
   cloneResumeVersionAsDraft,
   freezeResumeVersion,
+  moveResumeSectionItem,
+  setResumeVersionStatus,
+  deleteResumeVersion,
 } from "@/actions/resumeVariant.actions";
 import { getApplicationTimeline } from "@/actions/application.actions";
 
@@ -40,6 +43,9 @@ vi.mock("@/actions/resumeVariant.actions", () => ({
   deleteResumeSection: vi.fn(),
   deleteResumeSectionItem: vi.fn(),
   freezeResumeVersion: vi.fn(),
+  moveResumeSectionItem: vi.fn(),
+  setResumeVersionStatus: vi.fn(),
+  deleteResumeVersion: vi.fn(),
   getResumeVariant: vi.fn(),
   getResumeVariantVersion: vi.fn(),
   listResumeCareerMaterials: vi.fn(),
@@ -147,14 +153,41 @@ describe("Resume Variant V1 product polish UI", () => {
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Freeze this version?")).toBeInTheDocument();
     expect(dialog.textContent).toMatch(/read-only/i);
-    expect(dialog.textContent).toMatch(/new draft/i);
-    expect(dialog.textContent).toMatch(/not deleted/i);
+    expect(dialog.textContent).toMatch(/draft/i);
+    expect(dialog.textContent).toMatch(/delete this version/i);
     expect(dialog.textContent).not.toMatch(/permanently delete/i);
     expect(dialog.textContent).not.toMatch(/removed from the system/i);
     const confirm = within(dialog).getByRole("button", { name: "Freeze version" });
     expect(confirm.className).toContain("bg-primary");
     expect(confirm.className).not.toContain("bg-destructive");
     expect(freezeVersion).not.toHaveBeenCalled();
+  });
+
+  it("moves an item to another section, changes a frozen status, and hides the preview", async () => {
+    getVariant.mockResolvedValue({ success: true, data: { name: "Campus", currentVersionId: "ver-1" } });
+    listVersions.mockResolvedValue({ success: true, data: [{ id: "ver-1", versionNumber: 1, status: "DRAFT", currentVersion: true }] });
+    getVersion.mockResolvedValue({ success: true, data: draftGraph({
+      sections: [
+        { id: "sec-a", title: "Experience", systemKind: null, sortOrder: 0, items: [{ id: "item-1", itemKind: "MANUAL", careerMaterialItemId: null, materialTitleSnapshot: "Compiler", sortOrder: 0, careerMaterialItem: null, expressions: [] }] },
+        { id: "sec-b", title: "Projects", systemKind: null, sortOrder: 1, items: [] },
+      ],
+    }) });
+    vi.mocked(moveResumeSectionItem).mockResolvedValue({ success: true });
+    vi.mocked(setResumeVersionStatus).mockResolvedValue({ success: true });
+    const user = userEvent.setup();
+    render(<ResumeVariantWorkspace variantId="var-1" />);
+    await user.selectOptions(await screen.findByLabelText("Move to section"), "sec-b");
+    await waitFor(() => expect(moveResumeSectionItem).toHaveBeenCalledWith({ itemId: "item-1", targetSectionId: "sec-b", beforeItemId: null }));
+    await user.selectOptions(screen.getByLabelText("Version status"), "FROZEN");
+    await waitFor(() => expect(setResumeVersionStatus).toHaveBeenCalledWith({ versionId: "ver-1", status: "FROZEN" }));
+    await user.click(screen.getByRole("button", { name: "Hide preview" }));
+    expect(screen.queryByTestId("resume-paged-preview")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show preview" }));
+    const pane = screen.getByTestId("resume-preview-pane");
+    const separator = screen.getByRole("separator", { name: "Drag to resize the preview" });
+    separator.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(pane.style.getPropertyValue("--resume-preview-width")).toBe("504px");
   });
 
   it("preselects a historical version without cloning or jumping to current draft", async () => {

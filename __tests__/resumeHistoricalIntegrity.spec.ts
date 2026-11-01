@@ -155,6 +155,7 @@ describe("atomic immutable mutation boundary", { timeout: 20_000 }, () => {
       () => s.createSectionItem({ sectionId: g.section.id }),
       () => s.updateSectionItem({ itemId: g.item.id, itemKind: "MANUAL" }),
       () => s.deleteSectionItem(g.item.id), () => s.reorderSectionItems(g.section.id, [g.item.id]),
+      () => s.moveSectionItem(g.item.id, g.section.id, null),
       () => s.createExpression({ itemId: g.item.id, content: "Changed" }),
       () => s.updateExpression({ expressionId: g.expression.id, content: "Changed" }),
       () => s.deleteExpression(g.expression.id), () => s.reorderExpressions(g.item.id, [g.expression.id]),
