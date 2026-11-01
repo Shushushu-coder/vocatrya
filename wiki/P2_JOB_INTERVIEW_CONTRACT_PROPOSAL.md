@@ -1,9 +1,10 @@
-# P2 JOB-CONNECTIONS + INTERVIEW-DEBRIEF 联合数据与产品合同（提案）
+# P2 JOB-CONNECTIONS + INTERVIEW-DEBRIEF 联合数据与产品合同（提案 v2 收敛稿）
 
-- **状态**：提案（Proposal），待 Owner 裁定 §13 决策表后冻结
-- **基线**：`main @ 96e896e3`（本提案引用的所有"源码事实"均以此基线的实际代码核实）
+- **状态**：提案（Proposal），待 Owner 裁定 §13 决策表后冻结；推荐与协调建议均不构成批准
+- **基线**：`main @ 23178a4c`（v2 复核基线，全部"源码事实"已按此基线重新核实；v1 基线 `96e896e3`——两基线间本合同相关源码无实质变化：增量为 canonical `match_job` 的 `AgentToolExecution`（备份排除）、managed recharge、About 面移除、`ChatConversation.archivedAt` 索引）
+- **交叉项**：§13 D6「已结束」推荐仅 `status === COMPLETED` 计入待复盘、过期未关闭只提示确认状态；与 [`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) §9 D3 推荐（`completedAt`∨COMPLETED∨逾期未关闭计入）不一致；冻结前须由 Owner 单点裁定，供 NEXT-ACTIONS 消费同一谓词（协调建议见 §7.4）
 - **覆盖 Feature**：`JOB-CONNECTIONS`、`INTERVIEW-DEBRIEF`（`wiki/P2_FEATURES.json`，当前 `implementationStatus: NOT_ASSESSED`）
-- **上游已冻结合同**：`wiki/RESUME_BUILDER_CONTRACT_PROPOSAL.md`、`wiki/ARCHIVE_CONTRACT_PROPOSAL.md`、`wiki/DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`
+- **上游已冻结合同**：`wiki/RESUME_BUILDER_CONTRACT_PROPOSAL.md`、`wiki/ARCHIVE_CONTRACT_PROPOSAL.md`（含 D6「AI 不得读取任何归档内容」）、`wiki/DATETIME_CONSUMER_CONTRACT_PROPOSAL.md`
 - **本文件性质**：合同提案，不是实现计划；不含代码修改、Migration、i18n 或测试变更
 
 **标注约定**：
@@ -83,6 +84,9 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 | `InterviewSession`：`status`（含 `ARCHIVED`）+`archivedAt`/`statusBeforeArchive` 存在但**无写路径**；`jobOpportunityId+jobDescriptionVersionId` 可选成对（必须同时给/同时不给，JD 必须属于该职位，复合 FK `Restrict`） | `schema.prisma`；`src/lib/interview`（无 `ARCHIVED` 写入路径，已核实） |
 | `QuestionInstance`：`displayedText`（当时展示文本快照）+`sourceQuestionId`（可空 `Restrict`）+`sourceKind`+`referenceAnswerSnapshot` | `schema.prisma` `QuestionInstance` |
 | `Reminder`：`PROCESS_STEP`（scheduledAt）/`JOB_DUE` 派生写穿；归档抑制 | `applicationService`；`upcomingReadModel` |
+| `Question` 对复盘条目**无反关系**（D4-a 需同时加 `reflectionItems` back-relation）；`deletedAt/isActive` 仅 interview planning 读侧过滤，`getQuestionsList` 未过滤、写侧仅硬删除 | `schema.prisma`；`question.actions.ts`；`hostQueries.ts` |
+| `generateInterviewReflectionDraft` 的 step 查询**未过滤父机会 `archivedAt`**——归档职位下 AI 草稿仍可生成（读放行与归档合同 D6「AI 不得读归档」不一致，记为缺口 G-AI1） | `interviewReflectionAi.ts` step 查询；归档合同 §9 D6 |
+| `InterviewSession` 归档：`vocatryaInterviewPersistence.updateSessionForUser` patch 类型含 `archivedAt/statusBeforeArchive` 但**全仓无调用方写入**——无产品化归档路径；读侧 `isArchivedRow`/`SESSION_ARCHIVED` 已存在 | `src/lib/interview` |
 
 ### 2.2 服务层不变量（`src/lib/career/applicationService.ts` 等）
 
@@ -115,7 +119,10 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 
 - 职位详情 `ApplicationTimelineTab`：Attempt 列表（渠道/提交时间/阶段/结果/`transferredFrom`/`submittedResume` 摘要）+ Step 表 + 增删改/完成/取消/转移入口；INTERVIEW Step 有复盘入口（`canMutate` 时）；归档职位显示只读 banner。
 - `SubmittedResumePanel` / `ApplicationResumeBindingPanel`：每 Attempt 展示/绑定提交简历版本。
-- `InterviewReflectionDialog`：手动问答行（`questionText`+`answerNotes`）+整体 `reflectionText`；AI 生成→审阅→Apply→Save，落库前全在客户端。
+- `InterviewReflectionDialog`：手动问答行（`questionText`+`answerNotes`）+整体 `reflectionText`；AI 生成→审阅→Apply→Save，落库前全在客户端；**无完成标记 UI**。
+- 删除 Step 的 `DeleteAlertDialog` 文案不区分 `category`（`jobs.deleteProcessStepDescription` 只提计划/截止/备注/结果，不提示复盘级联）。
+- `getTimeline` DTO 仅含 `submittedResume`（版本行摘要）——不含 `submittedResumeArtifact`、`submittedAgainstJdVersion`、计划绑定 Variant 与各 Step 的复盘状态；聚合视图所需数据缺口在 IP-A。
+- Task 创建：`?add-task=true` 仅打开 `TaskForm`；表单无「以给定初始值新建」的预填入口（复盘→Task 预填需新增，见 §13 D8）。
 - `ResumeVariantWorkspace`：`targetJob` 选择（归档禁用）；`ResumeVariantList` 显示 `targetJobTitle`。
 - `/dashboard/interview`：练习会话列表带 `jobTitle·companyName`；`/new` 必须成对选择 job+JD；与真实面试时间线分离。
 - `/dashboard/questions`：题库 CRUD（硬删除）。
@@ -127,19 +134,19 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 | # | 合同需求 | 源码已有能力 | 真实缺口 | 推荐增量（最小） |
 |---|---|---|---|---|
 | C1 | 职位→投递→轮次链 | 完整实体树 + Timeline 读模型 + UI | 无（结构层面） | 无新增实体；仅 §5 形式化语义 |
-| C2 | 计划 vs 实际材料区分 | `targetJobOpportunityId`（计划，可变）+三个 `submitted*`（实际，不可变） | 职位详情未聚合展示"计划用哪版/实际投了哪版/对哪份 JD/导出物"对照 | UI 聚合视图（IP-1），不加列 |
+| C2 | 计划 vs 实际材料区分 | `targetJobOpportunityId`（计划，可变）+三个 `submitted*`（实际，不可变） | 职位详情未聚合展示"计划用哪版/实际投了哪版/对哪份 JD/导出物"对照 | UI 聚合视图（P-B），不加列 |
 | C3 | 提交后引用不可变 | 服务强制首绑不可换绑 + `Restrict` FK + SUBMITTED 版本不可编辑 + JD 版本不可变 | 无 | 无；合同形式化 |
 | C4 | `submitted*` 字段是否满足 | 满足"简历版本+导出物+JD"追溯 | 无 cover letter 等其他材料字段 | 本期不加（非目标）；导出物字节不进备份的语义沿用 |
 | C5 | 真实面试轮次实体 | `ProcessStep(INTERVIEW)` + 0..1 `InterviewDetail` 已闭环 | 无（结构层面） | 推荐复用，不新增实体（D1） |
 | C6 | 面试问题防篡改 | `questionText` 快照（不受题库编辑影响） | 无题库/练习来源回链；无法区分"题库题/临场记录/练习过的题" | 可空 `sourceQuestionId`+`sourceKind`（D4）；快照仍是唯一展示真相 |
-| C7 | 复盘草稿/完成状态 | 仅 `reflectionText`+items 存在性可推断"有无内容" | 无显式完成标记；"待复盘"判定只能猜 | `reflectionCompletedAt` 显式列（D2）或派生谓词 |
+| C7 | 复盘草稿/完成状态 | 仅 `reflectionText`+items 存在性可推断"有无内容" | 无显式完成标记；"待复盘"判定只能猜 | `reflectionCompletedAt` 显式列（D2）或派生谓词；首页读取契约见 §7 |
 | C8 | 复盘修改历史 | `updatedAt` 时间戳；保存为整组替换 | 无版本留痕 | 推荐不加 revision 表，复盘是用户叙述可编辑（D3） |
-| C9 | 复盘→改进动作 | 无链路 | "改进事项转入现有 Tasks"无路径 | 用户确认的预填创建 Task，不加回链列（D8） |
+| C9 | 复盘→改进动作 | 无链路 | "改进事项转入现有 Tasks"无路径；`TaskForm` 无预填入口 | 用户确认的预填创建 Task（深链+表单初始值），不加回链列（D8） |
 | C10 | 真实 vs 模拟边界 | `InterviewSession` 独立域，job+JD 成对链接 | 复盘↔练习会话无显式链（按职位聚合可看） | 不加链接列，按 job+JD 聚合展示（D11） |
-| C11 | 归档/恢复/删除 | 职位归档→子树只读（复盘 save 被拒、get 放行）；Step 删除 Cascade | 删除含复盘 Step 无额外警示；`Attempt.archivedAt` 无写路径 | 删除警示文案；Attempt 独立归档本期不产品化（D9/D10） |
-| C12 | 时间/精度语义 | Step 三组 frozen 三元组 + `unknown` 精度展示 | "面试实际发生时间"语义未定；"已结束、待复盘"判定未定义 | 复用 `scheduledAt`/`completedAt` 不加列（D5）；确定性谓词（D6） |
-| C13 | 旧数据/备份 | 迁移不伪造材料；备份已含全部相关模型 | 若加新列需 additive migration+备份可选字段 | 单条 additive migration+备份字段+版本 bump（IP-0） |
-| C14 | AI/Agent 边界 | AI 复盘已 draft-only，服务端不落库 | 无正式合同化表述 | §11 边界条款（现状已满足，合同确认） |
+| C11 | 归档/恢复/删除 | 职位归档→子树只读（复盘 save 被拒、get 放行）；Step 删除 Cascade | 删除 INTERVIEW Step 的确认文案不提示复盘级联；`Attempt.archivedAt` 无写路径；AI 草稿读未过滤归档（G-AI1） | INTERVIEW 删除警示文案；AI 读过滤补齐；Attempt 独立归档本期不产品化（D9/D10） |
+| C12 | 时间/精度语义 | Step 三组 frozen 三元组 + `unknown` 精度展示 | "面试实际发生时间"语义未定；"已结束、待复盘"判定未定义 | 复用 `scheduledAt`/`completedAt` 不加列（D5）；确定性谓词与读取契约（D6，§7） |
+| C13 | 旧数据/备份 | 迁移不伪造材料；备份已含全部相关模型 | 若加新列需 additive migration+备份可选字段 | 单条 additive migration+备份字段+版本 bump（P-A 内） |
+| C14 | AI/Agent 边界 | AI 复盘已 draft-only，服务端不落库 | 无正式合同化表述；草稿读未排除归档父机会（G-AI1） | §11 边界条款 + IP-B 归档过滤修复 |
 | C15 | InterviewDetail 元数据列 | `interviewFormat/roundLabel/locationText/interviewerNames/durationMinutes` 存在 | **无写路径**（additive-only 预留） | 本期保留不接线（D7）；AI prompt 已读 |
 | C16 | 复盘可写时机 | 任意 INTERVIEW Step（含未关闭/EVIDENCED/SYSTEM 来源）可写 | —— | 保留现状：预记录允许（§6.4） |
 
@@ -169,7 +176,7 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 | 语义 | "打算/正在准备" | "当时真实投出的版本+文件+针对的 JD" |
 | 追溯键 | Variant id（家族）+ 动态版本 | 版本行 id（不可再编辑的快照行）+ artifact `sha256` + JD version id |
 
-结论：**现有 `submittedResumeVersionId`/`submittedResumeArtifactId`/`submittedAgainstJdVersionId` 已满足合同**（含自动绑 `currentJdVersionId`、artifact↔version 一致性、Restrict 防删）。唯一缺口在**展示层**——职位详情未把"计划 vs 实际"聚合成可对照视图，属 IP-1 的 UI 增量，不加列。
+结论：**现有 `submittedResumeVersionId`/`submittedResumeArtifactId`/`submittedAgainstJdVersionId` 已满足合同**（含自动绑 `currentJdVersionId`、artifact↔version 一致性、Restrict 防删）。唯一缺口在**展示层**——职位详情未把"计划 vs 实际"聚合成可对照视图，属 P-B 的 UI 增量，不加列。
 
 ### 4.3 投递后不可变清单（合同形式化）
 
@@ -207,8 +214,8 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 - 整体复盘：`ApplicationInterviewDetail.reflectionText`（自由文本）。
 - 逐题：`ApplicationInterviewReflectionItem { questionText*, answerNotes, sortOrder }`，`questionText` 非空。
 - 保存语义：整组替换（传入 id 的 upsert + 删除未传入项 + 更新 `reflectionText`，单事务）——**复盘是用户叙述，可整组重编**。
-- `[增量]`（D2-a 裁定时）：`ApplicationInterviewDetail.reflectionCompletedAt DateTime?`——显式"已完成复盘"标记；`NULL` = 草稿/未标记。
-- `[增量]`（D4-a 裁定时）：`ApplicationInterviewReflectionItem.sourceQuestionId String? → Question` + `sourceKind`（`QUESTION_BANK`/`AD_HOC`/`PRACTICE_SESSION`，新值集）。
+- `[增量]`（D2-a 裁定时）：`ApplicationInterviewDetail.reflectionCompletedAt DateTime?`——显式"已完成复盘"标记；`NULL` = 草稿/未标记。存量行一律 `NULL`，不回填（§10）。
+- `[增量]`（D4-a 裁定时）：`ApplicationInterviewReflectionItem.sourceQuestionId String? → Question`（`Restrict`，`Question` 侧需同时加 `reflectionItems` back-relation）+ `sourceKind String?`，值集 `REFLECTION_ITEM_SOURCE_KIND = { QUESTION_BANK, AD_HOC, PRACTICE_SESSION }`——复盘条目独立值集，不与 `QuestionInstance.sourceKind`（`USER_PROVIDED/QUESTION_BANK/AI_GENERATED/TEMPLATE`）混用；`PRACTICE_SESSION` 项的 `sourceQuestionId` 自 `QuestionInstance` 继承。
 
 ### 6.2 问题来源与快照（回答合同问题 6）
 
@@ -216,7 +223,7 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 
 - `questionText` 必填快照是**唯一展示真相**——题库后续编辑、删除、恢复都不改写复盘里已保存的文本。
 - `sourceQuestionId`（可空）记录"此题来自题库某题"的来源回链；`sourceKind` 区分 `AD_HOC`（临场记录）/`QUESTION_BANK`/`PRACTICE_SESSION`（从练习会话带入 `QuestionInstance.displayedText`）。
-- 删除语义：若 D4-a，推荐 `Restrict`——被复盘引用的题不可物理删除（与 `submitted*` 引用同一先例）；题库"删除"对用户呈现为被阻止并说明原因。题库如需"下架"语义，用 `isActive/deletedAt` 软删（读侧已过滤）——`[待核实]`：当前 `question.actions` 的删除是硬删除，软删无写路径，需 D4 一并裁定删除 UX。
+- 删除语义：若 D4-a，推荐 `Restrict`——被复盘引用的题不可物理删除（与 `submitted*` 引用同一先例）；题库"删除"对用户呈现为被阻止并说明原因。题库如需"下架"语义，用 `isActive/deletedAt` 软删（interview planning 读侧已过滤；`getQuestionsList` 未过滤，启用软删需一并补过滤）——已核实：当前 `question.actions` 删除为硬删除、无软删写路径，需 D4 一并裁定删除 UX（被引用题的拒绝提示文案）。
 
 **从练习会话导入**（可选产品增强，非必须）：复盘对话框提供"带入练习过的题"——copy `QuestionInstance.displayedText → questionText`，继承 `sourceQuestionId`。不加表，仅 UI+服务读取。
 
@@ -224,6 +231,8 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 
 - **可写时机**：任意 INTERVIEW Step（含未关闭、`EVIDENCED`、非 USER 来源）均可写复盘——保留现状，支持"提前列提纲/临场记录"。归档职位下整体只读。
 - **状态**（依 D2）：推荐显式 `reflectionCompletedAt`——`NULL`=草稿/未标记；非空=用户确认完成。若 D2-b（派生），完成 = detail 存在且（`reflectionText` 非空或 items ≥1）。
+- **完成标记写路径**（D2-a）：`saveInterviewReflection` 输入扩展 `reflectionCompleted: boolean`——「保存并标记完成 / 保存为草稿」是同一事务内的同一写路径；`reflectionCompletedAt` 由服务端置 `new Date()` 或 `NULL`，不接受客户端时间。已标记完成后再次保存默认保留标记；「取消完成」为显式 UI 动作置 `NULL`。空保存沿用现有早退语义；已标完成的复盘被清空内容时仍保留标记（有标记无内容是合法但无意义的用户选择，谓词按 §7 判其"已复盘"）。
+- **旧数据默认值**（D2-a）：存量行一律 `reflectionCompletedAt = NULL`（=未标记/草稿），不回填推断；UI 对"有内容未标记"的老数据显示"草稿·未标记完成"，用户一次保存即可标记（§10）。
 - **修改历史**（D3）：推荐**不加** revision 表——复盘是用户叙述而非系统事实，允许自由重编；`updatedAt` 已提供最近修改时间。若 Owner 要求留痕，后续可加 `ApplicationInterviewReflectionRevision` 附录表（本合同不展开）。
 - **完成后重开**（D3）：推荐允许自由编辑，不清除 `reflectionCompletedAt`；"取消完成标记"作为显式 UI 动作（置 NULL）。复盘不锁定。
 - **是否驱动申请状态**：**不驱动**。复盘完成不写 `Attempt.currentStageCategory/outcome`、不改 Step `status/result`；这些仍是用户显式管理的事实。UI 可提示但不得自动写。
@@ -236,24 +245,63 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 
 ---
 
-## 7. "已结束、待复盘"确定性判定（回答合同问题 10）
+## 7. "已结束、待复盘"确定性判定与首页读取契约（回答合同问题 10）
 
-**定义（谓词，供概览/NEXT-ACTIONS 消费，本合同只定义判定不实现概览）**：
+### 7.1 确定性谓词（供概览/NEXT-ACTIONS 消费，本合同只定义判定不实现概览）
 
 ```
-待复盘(interviewStep) :=
+awaitingReflection(interviewStep) :=
     step.category === "INTERVIEW"
- ∧  step.status === "COMPLETED"          -- 用户显式标记结束（completedAt/completedAtPrecision 同写）
- ∧  复盘未完成:
-       D2-a:  step.interviewDetail.reflectionCompletedAt IS NULL
-       D2-b:  step.interviewDetail IS NULL
-              OR (reflectionText 空白 AND reflectionItems 为空)
+ ∧  step.status === "COMPLETED"              -- 用户显式标记结束（completedAt/completedAtPrecision 同写）
+ ∧  reflectionComplete(step.interviewDetail) === false
 ```
+
+`reflectionComplete(detail)` 依 D2 裁定：
+
+- D2-a：`detail.reflectionCompletedAt IS NOT NULL`
+- D2-b：`detail` 存在且（`reflectionText` 非空白或 `reflectionItems >= 1`）
 
 - `CANCELLED` 不计"已结束"（面试未发生）；`PENDING/IN_PROGRESS` 不计。
-- **不**用 `scheduledAt < now` 推断"已结束"——用户可能未标记完成；`scheduledAt` 过期可以作为弱提示，但不进入确定性谓词（D6 可裁定是否纳入弱提示）。
+- **不**用 `scheduledAt < now` 推断"已结束"——用户可能未标记完成；过期未关闭只走 §7.2 弱提示，不进确定性谓词。
 - `[待核实]` 迁移产生的 `status: "EVIDENCED"` 不在 `PROCESS_STEP_STATUS` 常量内：若其语义确认为"该阶段已发生"，谓词应纳入；裁定前按"非 COMPLETED"处理（不误报）。
-- 时间精度：谓词只依赖 `status`（枚举）与 `reflectionCompletedAt`（instant），**不依赖** `scheduledAt` 精度——历史未知精度不影响判定。
+- 时间精度：谓词只依赖 `status`（枚举）与完成标记（instant），**不依赖** `scheduledAt` 精度——历史未知精度不影响判定。
+
+### 7.2 过期未关闭：确认提示，不计入
+
+`category=INTERVIEW` 且 `status` 未关闭（`PENDING/IN_PROGRESS`）且 `scheduledAt` 为 `exact` 精度且 `< now`（账户时区判定，DATETIME 合同）的 Step **不进入** `awaitingReflection`，但产生一条弱提示"该面试时间已过，确认是否已结束？"——用户确认 → 标记 `COMPLETED` 后才可能进入待复盘；用户标记 `CANCELLED` 则终结。DateOnly/未知精度的 `scheduledAt` **不触发**该提示（不过度猜测）。
+
+### 7.3 首页读取契约（DTO 形状，概览 Owner 消费）
+
+新读模型 `listAwaitingReflectionInterviews(userId)`（建议落 `upcomingReadModel` 同层，服务侧实现）：
+
+```ts
+interface AwaitingReflectionInterviewItem {
+  stepId: string;
+  attemptId: string;
+  jobOpportunityId: string;
+  jobTitle: string;
+  companyName: string;
+  stepTitle: string;
+  roundLabel: string | null;        // InterviewDetail.roundLabel
+  scheduledAt: string | null;       // ISO；渲染按精度走 DATETIME 合同
+  scheduledAtPrecision: StepDateTimePrecision;
+  completedAt: string | null;
+  completedAtPrecision: StepDateTimePrecision;
+  hasReflectionDraft: boolean;      // detail 存在且有内容但完成标记为空（D2-a）
+}
+interface AwaitingReflectionResult {
+  items: AwaitingReflectionInterviewItem[];   // 按 completedAt desc
+  overdueUnclosedCount: number;               // §7.2 弱提示计数
+}
+```
+
+- 过滤：`userId` 链式校验 + 父 `JobOpportunity.archivedAt IS NULL`（归档职位的待复盘**不进首页聚合**；职位详情内仍只读可见）。
+- N+1：一次 join 查询（Step ⋈ Attempt ⋈ Opportunity ⋈ detail），不分步拉取。
+- 消费方：概览/NEXT-ACTIONS 只读本结果，不自行重算谓词。
+
+### 7.4 与概览合同的交叉协调（Owner 单点裁定）
+
+概览合同 §9 D3「已结束」推荐 `completedAt ∨ status=COMPLETED ∨ 过期未关闭`（宽口径），与本节推荐 `status=COMPLETED`（窄口径）**不一致**。两合同各自保留推荐；冻结前由 Owner 裁定一个口径写入 §7.1，概览合同随之对齐——NEXT-ACTIONS 只能消费同一个判定结果，不允许两模块各算各的。
 
 ---
 
@@ -264,7 +312,7 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 | 事实性质 | 真实发生的事（用户记录） | 练习产物 |
 | 挂载 | `ApplicationAttempt → ProcessStep(INTERVIEW) → InterviewDetail` | `InterviewSession`（可选 job+JD 成对链接） |
 | 问题 | `ReflectionItem.questionText`（快照）+可选 `sourceQuestionId` | `QuestionInstance.displayedText`（快照）+`sourceQuestionId`+`sourceKind` |
-| 状态机 | Step `PENDING/IN_PROGRESS/COMPLETED/CANCELLED`（+复盘完成标记） | `DRAFT/IN_PROGRESS/COACHING/COMPLETED/ARCHIVED`（`ARCHIVED`/`archivedAt` 存在但**无写路径**——本期不产品化，`[待核实]` 语义归属归档合同后续批次） |
+| 状态机 | Step `PENDING/IN_PROGRESS/COMPLETED/CANCELLED`（+复盘完成标记） | `DRAFT/IN_PROGRESS/COACHING/COMPLETED/ARCHIVED`（`ARCHIVED`/`archivedAt`/`statusBeforeArchive` 存在；持久化 patch 类型可写但**全仓无调用方**——无产品化归档路径，本期不产品化，`[待核实]` 语义归属归档合同后续批次） |
 | 复盘归属 | `reflectionText`+items | 练习无"复盘"概念（`AnswerAttempt`/评估属于练习域） |
 
 - 复盘**不引用** `InterviewSession`/`QuestionInstance` 作为主数据（D11 推荐不加链接列）；两域只在职位+JD 维度聚合展示（"为这个职位练过哪些会话/投过哪些 Attempt/面过几轮"）。
@@ -279,7 +327,8 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 - **跨用户隔离**：所有读写经 `userId` 链式校验（`requireOwnedStep`/`requireOwnedAttempt`/`assertOwnedOpportunity`）；复盘/AI 草稿同样 scope；备份按用户导出。**无跨用户共享面**。
 - **删除策略**：
   - `submitted*` 引用的版本/artifact/JD version：`Restrict` FK 物理防删（现状）。
-  - `ProcessStep` 删除：仅 `source === "USER"`；Cascade 删 detail+items。D9 推荐保持可删，删除确认文案明示"将同时删除该轮复盘"；备选"有复盘禁删"。
+  - `ProcessStep` 删除：仅 `source === "USER"`；Cascade 删 detail+items。D9 推荐保持可删+强化确认；备选"有复盘禁删"。INTERVIEW Step 删除确认文案必须额外明示"将同时删除该轮的面试详情与 N 条复盘问答"（`DeleteAlertDialog` 现按统一文案，需按 `category`/detail 存在性加分支）；非 INTERVIEW Step 文案不变。
+  - `InterviewDetail` 无独立删除入口（只随 Step 级联）——清空复盘内容保留空 detail，行存在性不作"有无复盘"信号（§6.3）。
   - `Question`：若 D4-a（Restrict 回链），被复盘引用的题不可物理删除；未引用题维持现状删除路径。
   - `InterviewSession`：无删除/归档写路径（`[待核实]`），本合同不要求新增。
 - **Legacy**：`Interview`/`JobContact` `DO_NOT_MAP` 不迁移；迁移不伪造提交材料/面试历史——新列回填规则见 §10。
@@ -303,9 +352,20 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 
 ## 11. Agent / AI 边界（回答合同问题 12）
 
+### 11.1 可读上下文（userId scope，未归档）
+
+未来 Agent 生成复盘草稿可读取：职位行（title/company/status）、Attempt（`submittedAt`/`currentStageCategory`/`outcome`/`submitted*` 引用 + 提交物摘要——`ResumeVersion.contentJson` 或 artifact 提取文本的**裁剪摘要**，非全量）、Step 全链、InterviewDetail+items、JD 版本（`parsedJson`/`rawContent` 裁剪）、该 job+JD 下练习会话的存在性与计数（不默认喂全文）。沿用 `interviewReflectionAi` 的 `clip()`/字段白名单模式——**只取生成所需字段**。
+
+### 11.2 归档与权限
+
+- 父 `JobOpportunity.archivedAt` 非空的上下文**不得进入** AI/Agent 输入（归档合同 D6「AI 不得读归档」）——当前 `generateInterviewReflectionDraft` 的 step 查询未过滤父机会归档为**已核实缺口 G-AI1**，实施时与 D2/D4 同包修复；修复前该行为视为越界读。
+- 全部读/写维持 `userId` 链式校验；无跨用户共享面。
+
+### 11.3 生成与落库边界
+
 - **现状已满足**（合同确认并形式化）：`generateInterviewReflectionDraft` 只产草稿、服务端不落库；持久化必经用户 Apply+Save 走 `saveInterviewReflection`。
-- 任何 AI/Agent（含未来 Voca Reflect）**不得**：直接写 `reflectionText`/items、置 `reflectionCompletedAt`、改 `submitted*`/`submittedAt`、改 Step `status/completedAt`、替用户"完成"复盘或标记面试结束。
-- AI/Agent **可以**：读取（在 `userId` scope 内）职位/Attempt/Step/detail/复盘/JD/提交简历摘要；产出建议文本/问题候选/复盘草稿——全部停在客户端草稿态，用户显式确认后走现有写路径。
+- 任何 AI/Agent（含未来 Voca Reflect）**不得**：直接写 `reflectionText`/items、置 `reflectionCompletedAt`、改 `submitted*`/`submittedAt`、改 Step `status/completedAt`、替用户"完成"复盘或标记面试结束、创建 `Task`/`JobOpportunity`/`ApplicationAttempt`/`ProcessStep`/`InterviewDetail` 行。
+- AI/Agent **可以**：产出建议文本/问题候选/复盘草稿——全部停在客户端草稿态，用户显式确认后走现有写路径（含复盘→Task 预填，§13 D8）。
 - `CAREER_REFLECTION` 用途与 TEXT_ONLY 边界沿用；新增 AI 能力需走既有 purpose 注册与 `NOT_CONFIGURED` 诚实态模式。
 
 ---
@@ -321,8 +381,9 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 | `DateOnly`/`Instant`、未知精度展示 `unknown`、`undefined` 不触碰原字段 | 沿用；"已结束"谓词不依赖 `scheduledAt` 精度 |
 | 未设账户时区用运行时系统时区且不回写 | 沿用；本合同不新增时区写路径 |
 | 投递引用永久防改写 | 沿用；新增 `sourceQuestionId` 选 `Restrict` 与之一致 |
+| AI 不得读归档（归档合同 §9 D6） | **已核实缺口**：`generateInterviewReflectionDraft` 读未过滤父机会 `archivedAt`（G-AI1，§11.2，IP-B 修复） |
 
-未发现冲突。
+待裁定冲突一项：§7.4「已结束」谓词口径 vs 概览合同 §9 D3——Owner 单点裁定后两合同对齐，不算两合同各自实现的自由。其余未发现冲突。
 
 ---
 
@@ -335,7 +396,7 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 | D3 | 复盘可编辑性/留痕 | (a) 自由编辑+`updatedAt`，完成后可重编；(b) 完成后锁定+显式重开；(c) revision 历史表 | **(a)** | (a) 复盘是用户叙述，最简；(b) 增加状态复杂度；(c) 新表+备份+UI，范围扩大（可后续追加） |
 | D4 | 面试问题↔题库 | (a) 快照+可空 `sourceQuestionId`/`sourceKind`（`Restrict`）；(b) 纯快照不加引用；(c) 仅引用不快照 | **(a)** | (a) 可回溯"哪题来自题库/练习"，编辑题库不篡改历史；(b) 丢来源但已满足防篡改；(c) 题库编辑会改写历史——**不可接受** |
 | D5 | 面试实际发生时间 | (a) 复用 `scheduledAt`（计划/可调）+`completedAt`（标记结束时刻），不加列；(b) 新增 `occurredAt` 三元组 | **(a)** | (a) 零 Schema，scheduledAt 可由用户改到实际时间；(b) 第三套时间语义，迁移/UI 成本 |
-| D6 | "已结束、待复盘"判定 | (a) 仅 `status === "COMPLETED"`（§7 谓词）；(b) 再纳入 `scheduledAt` 过期弱提示；(c) 用户手动标记"待复盘" | **(a)**，(b) 可作展示层补充 | (a) 确定性最强；(b) 会误报未标记完成的轮次，仅适合提示不计数；(c) 放弃自动化 |
+| D6 | "已结束、待复盘"判定 | (a) 仅 `status === "COMPLETED"`（§7.1 谓词）；(b) 过期未关闭也计入（宽口径）；(c) 用户手动标记"待复盘" | **(a)**；过期未关闭另设 §7.2 确认提示，不计入 | (a) 确定性最强、与协调建议一致；(b) 与概览合同 D3 推荐一致但会误报未标记完成的轮次——**与概览口径冲突，须 Owner 单点裁定后两合同对齐**（§7.4）；(c) 放弃自动化 |
 | D7 | `InterviewDetail` 元数据列接线 | (a) 本期接线编辑面；(b) 保留不接线；(c) 删除列 | **(b)** | (b) 最小增量，AI prompt 已可读；(a) 扩大 UI 范围可后续单独排期；(c) 破坏已部署列的备份兼容 |
 | D8 | 复盘→改进任务 | (a) UI"转为任务"预填创建 `Task`，不加回链列；(b) `Task` 加 `sourceType/sourceId` 回链；(c) 不做 | **(a)** | (a) 用户确认即建，零 Schema；(b) 需动共享 Task 模型；(c) 不满足 P2"改进转入 Tasks"决定 |
 | D9 | 含复盘 Step 的删除 | (a) 保持可删+删除确认明示级联复盘；(b) 有复盘则禁删（先清空复盘）；(c) 复盘独立归档 | **(a)** | (a) 尊重用户数据自主，成本最低；(b) 增加删除摩擦；(c) 引入新状态维度 |
@@ -343,36 +404,38 @@ User 1─N JobOpportunity ─┬─ 1─N JobDescriptionVersion（rawContent 创
 | D11 | `InterviewSession`↔真实轮次显式链 | (a) 不加列，按 job+JD 聚合展示；(b) `InterviewSession.applicationProcessStepId` 可空链 | **(a)** | (a) 零 Schema，聚合已可达；(b) 需处理 Step 删除/转移一致性，收益小 |
 | D12 | 复盘字段结构 | (a) 保持 `reflectionText` 自由文本+逐题 `answerNotes`；(b) 拆结构化字段（表现/改进/行动） | **(a)** | (a) 最小增量，AI 草稿已产分段自由文本；(b) 便于机器消费但增加 Schema/UI，可由 Voca Reflect 阶段再评估 |
 
-**裁定后冻结点**：D2/D4 决定是否进 IP-0 的 Schema 增量；其余为产品语义冻结，不动 Schema。
+**裁定后冻结点**：D2/D4 决定是否进 P-A 的 Schema 增量；其余为产品语义冻结，不动 Schema。
 
 ---
 
 ## 14. 冻结后的实施包、依赖与 Owner
 
-### 14.1 包划分（按用户成果，不按前端/后端/测试拆）
+### 14.1 包划分（按用户成果；Schema/Migration/备份并入业务交付，不设纯技术包）
 
 | 包 | 成果 | 主要文件 | 依赖 |
 |---|---|---|---|
-| **IP-0 Schema/备份/迁移（单一 Owner）** | D2-a/D4-a 裁定列 + additive migration + 备份字段/FK/版本 bump | `prisma/schema.prisma`、`prisma/migrations/<new>/`、`src/lib/backup/schema.ts`、`src/lib/backup/ordering.ts` | 必须先冻结 D2/D4；**阻塞 IP-2** |
-| **IP-1 JOB-CONNECTIONS 聚合视图** | 职位详情"计划 vs 实际投递"对照：计划绑定 Variant、每 Attempt 的提交版本/artifact/JD 版本摘要、该职位练习会话计数 | `src/lib/career/applicationTimeline.ts`（DTO 扩展）、`src/lib/career/jobOpportunityAdapter.ts`（include）、`src/components/myjobs/job-details/ApplicationTimelineTab.tsx`、`SubmittedResumePanel.tsx`（小改或新增对照面板） | 不依赖 IP-0（只读现有列），可与 IP-2 并行 |
-| **IP-2 INTERVIEW-DEBRIEF 核心** | 复盘完成标记写路径、`sourceQuestionId/sourceKind` 读写、"已结束待复盘"谓词服务、对话框 UI（完成标记/题库引用/可选练习导入） | `src/lib/career/interviewReflection.ts`、`src/lib/career/applicationService.ts`（save/get/谓词）、`src/components/myjobs/job-details/InterviewReflectionDialog.tsx`、`src/lib/career/interviewReflectionAi.ts`（prompt 按需） | **依赖 IP-0**（新列） |
-| **IP-3 收尾联动** | 删除级联警示文案、复盘→Task 预填创建、归档中心只读核对 | `ApplicationTimelineTab.tsx`、Task 创建入口（实施时定位）、`job-details` 归档 banner 核对 | 依赖 IP-2 的谓词/字段 |
+| **P-A INTERVIEW-DEBRIEF 复盘核心（单一 Owner）** | D2-a/D4-a 裁定列 + additive migration + 备份字段/FK/版本 bump；save DTO 扩展（`reflectionCompleted`/`sourceQuestionId`/`sourceKind`）；§7.1 谓词 + §7.3 `listAwaitingReflectionInterviews` 读取模型（首页契约提供方）；对话框 UI（完成标记/题库引用/可选练习导入）；G-AI1 AI 读归档过滤修复；INTERVIEW 删除级联警示；复盘→Task 预填入口 | `prisma/schema.prisma`、`prisma/migrations/<new>/`、`src/lib/backup/schema.ts`、`src/lib/backup/ordering.ts`、`src/lib/career/interviewReflection.ts`、`src/lib/career/applicationService.ts`、`src/lib/career/upcomingReadModel.ts`（新读模型同层）、`src/lib/career/interviewReflectionAi.ts`、`src/components/myjobs/job-details/InterviewReflectionDialog.tsx`、`ApplicationTimelineTab.tsx`、`TaskForm.tsx`/Task 创建入口 | 必须先冻结 D1–D12；无其他包前置 |
+| **P-B JOB-CONNECTIONS 聚合视图** | 职位详情"计划 vs 实际投递"对照：计划绑定 Variant、每 Attempt 的提交版本/artifact/JD 版本摘要、该职位练习会话计数 | `src/lib/career/applicationTimeline.ts`（DTO 扩展）、`src/lib/career/jobOpportunityAdapter.ts`（include）、`src/components/myjobs/job-details/ApplicationTimelineTab.tsx`、`SubmittedResumePanel.tsx`（小改或新增对照面板） | 不依赖 P-A 新列（只读现有字段），可与 P-A 并行 |
+| **P-C 首页/NEXT-ACTIONS 消费（概览合同 Owner）** | "待复盘面试"卡片/计数接入 §7.3 读取模型；§7.2 过期确认提示入口 | 概览侧首页组件与 NEXT-ACTIONS 组装（概览合同文件集） | **可先行**：UI 壳、空态、加载态、路由接线不依赖本合同；**必须等 P-A**：真实数据接入需 §7.3 读取模型落地 + D6 口径裁定 |
+| **P-D Agent 复盘生成（后续批次）** | Agent 读取 §11.1 上下文产出草稿 | `interviewReflectionAi.ts` 复用/扩展 | 必须等：P-A 完成（G-AI1 修复 + 完成标记语义）+ §11.1 冻结 |
 
 ### 14.2 串行/并行与单一 Owner
 
-- **必须先完成**：D2/D4 裁定 → IP-0（Schema/备份/Migration **单一 Owner**，含 `prisma/schema.prisma` 与 `src/lib/backup/*`）。
-- **可并行**：IP-1（只读现有列）与 IP-2 可并行；IP-1 与 IP-2 若同触 `ApplicationTimelineTab.tsx`/`applicationService.ts`，按"共享文件单一 Owner"归并——建议 `applicationService.ts` 归 IP-2 Owner，`ApplicationTimelineTab.tsx` 的展示扩展归 IP-1 Owner、复盘相关改动归 IP-2 Owner，按 hunk 划分或顺序提交。
-- **共享文件单一 Owner**：`prisma/schema.prisma`+`src/lib/backup/*`（IP-0）；`src/i18n`/`messages`（由主协调指定一名 Owner，各包提 key 清单合入）；`wiki/P2_FEATURES.json`/`P2_IMPLEMENTATION.md`（仅 Main 集成 Owner 在集成后更新）。
+- **必须先完成**：D1–D12 裁定 → P-A 启动（其 Schema/备份/migration 段为**单一 Owner**，含 `prisma/schema.prisma` 与 `src/lib/backup/*`，作为业务交付的一部分，不单独派技术包）。
+- **可与首页并行**：P-C 的 UI 壳/空态/加载态/路由接线；P-B 聚合视图（只读现有列）。
+- **必须等待**：P-C 真实"待复盘"数据（等 P-A 读取模型 + D6 裁定）；P-A 内部复盘 UI/写路径（等 D2/D4 列语义，同包内顺序）；题库引用 UI（等 D4-a）；P-D Agent（等 §11.1 冻结 + G-AI1）。
+- **共享物理文件唯一 Owner**：`ApplicationTimelineTab.tsx` 同时被 P-A（删除警示）与 P-B（对照面板）触及——不按 hunk 分两个 Owner 并行改；指定唯一 Owner（建议归 P-B，P-A 的警示文案作为顺序交接的第二个改动）或由主协调裁定顺序。`src/i18n/messages` 由主协调指定一名 Owner，各包提 key 清单合入；`wiki/P2_FEATURES.json`/`P2_IMPLEMENTATION.md` 仅 Main 集成 Owner 在集成后更新。
 - **测试归属**：各包自带定向验证（隔离 DB migration、服务不变量、组件测试），不拆独立"测试包"。
 
 ### 14.3 建议依赖顺序
 
 ```
-D 项裁定冻结 → IP-0（Schema/备份）→ IP-2（复盘核心）┐
-              └─────────────────→ IP-1（聚合视图）──┴→ IP-3（联动收尾）→ 集成/验收
+D1–D12 裁定冻结 ─→ P-A（复盘核心，含 Schema/备份）─┬→ P-C 数据接入（概览 Owner 消费 §7.3）
+                 ├→ P-D（Agent 生成，后续批次）
+                 └─ P-B（聚合视图，可与 P-A 并行启动，注意共享文件顺序交接）
 ```
 
-（若 D2-b/D4-b 裁定——即不加列——则 IP-0 仅含合同冻结，IP-1/IP-2 可完全并行。）
+（若 D2-b/D4-b 裁定——即不加列——P-A 的 Schema/备份段为空包，其余不变；P-C 谓词改用 D2-b 派生定义。）
 
 ---
 
@@ -388,7 +451,10 @@ D 项裁定冻结 → IP-0（Schema/备份）→ IP-2（复盘核心）┐
 | A6 | **备份/恢复回环** | 导出含新列与 `sourceQuestionId` 重写；恢复后回链指向恢复库内 Question；旧版本备份恢复后新列 NULL |
 | A7 | **删除拒绝** | 删 `submitted*` 引用对象被拒（Restrict）；删被复盘引用的题库题（D4-a）被拒；非 USER 来源 Step 不可删 |
 | A8 | **谓词确定性** | CANCELLED/PENDING 不计"已结束"；`EVIDENCED`（待核实口径确认后）按裁定处理；`scheduledAt` 未知精度不影响判定 |
-| A9 | **AI 边界** | AI 生成后未确认不落库；确认后走 `saveInterviewReflection`；`NOT_CONFIGURED` 诚实态 |
+| A9 | **AI 边界** | AI 生成后未确认不落库；确认后走 `saveInterviewReflection`；`NOT_CONFIGURED` 诚实态；归档职位下 AI 草稿请求被拒（G-AI1 修复后） |
+| A10 | **首页谓词/读模型** | `listAwaitingReflectionInterviews` 只返回 COMPLETED 且复盘未完成项；归档职位不计入；`overdueUnclosedCount` 与谓词分离；与概览 NEXT-ACTIONS 消费同一结果 |
+| A11 | **复盘→Task 预填** | 入口仅用户显式触发；TaskForm 以初始值新建；保存走现有 Task 写路径；无自动创建/回链 |
+| A12 | **复盘完成标记** | "有内容未标记"老数据显示草稿态；标记/取消标记/再编辑保存语义符合 §6.3 |
 
 ---
 
@@ -398,14 +464,15 @@ D 项裁定冻结 → IP-0（Schema/备份）→ IP-2（复盘核心）┐
 |---|---|---|
 | `ProcessStep.status = "EVIDENCED"` | migrator 写入，但不在 `PROCESS_STEP_STATUS` 常量（`PENDING/IN_PROGRESS/COMPLETED/CANCELLED`） | 兼容值语义："已发生"是否纳入"已结束"判定；是否应入常量 |
 | `ApplicationAttempt.archivedAt` | 列存在无写路径 | 语义归属（本合同按"保留，本期不产品化"处理） |
-| `InterviewSession` `ARCHIVED`/`archivedAt`/`statusBeforeArchive` | 枚举+列存在无写路径 | 是否属归档合同后续批次（本合同按"本期不产品化"处理） |
+| `InterviewSession` `ARCHIVED`/`archivedAt`/`statusBeforeArchive` | 枚举+列存在；持久化 patch 类型可写但全仓无调用方（无产品化归档路径） | 是否属归档合同后续批次（本合同按"本期不产品化"处理） |
+| `generateInterviewReflectionDraft` 归档过滤 | step 查询未过滤父机会 `archivedAt` | 已核实缺口 G-AI1，随 P-A 修复（§11.2），非待决项 |
 | `InterviewDetail` 元数据列 | 存在无写路径 | D7 裁定 |
 | `ApplicationAssessmentDetail`/`ApplicationOfferDetail` 写路径 | 未见 | 与 INTERVIEW 平行，不在本合同范围 |
-| `Question.deletedAt/isActive` | 读侧（interview planning）过滤已核实；写侧无软删路径，UI 删除为硬删除（Restrict 阻止已引用题） | D4-a 裁定时需一并定题库删除 UX |
+| `Question.deletedAt/isActive` | interview planning 读侧过滤已核实；`getQuestionsList` 未过滤；写侧仅硬删除（被 `QuestionInstance` 引用的题 `Restrict` 阻止） | D4-a 裁定时需一并定题库删除 UX |
 | `INTERVIEW_SESSION`/`QUESTION` 等在 upcoming/概览中的消费面 | 未全量核实 | NEXT-ACTIONS（另一合同）的职责，本合同只提供谓词 |
 
 ---
 
 ## 17. 附：推荐数据方案一句话
 
-> 复用 `JobOpportunity → ApplicationAttempt → ProcessStep(INTERVIEW) → InterviewDetail → ReflectionItem` 现有树与 `submitted*` 不可变首绑；唯一 Schema 增量为 `InterviewDetail.reflectionCompletedAt` 与 `ReflectionItem.sourceQuestionId/sourceKind`（快照仍为唯一真相）；复盘是用户叙述可自由编辑、不驱动申请状态、AI 只产草稿；归档/恢复不改写任何历史字段。
+> 复用 `JobOpportunity → ApplicationAttempt → ProcessStep(INTERVIEW) → InterviewDetail → ReflectionItem` 现有树与 `submitted*` 不可变首绑；唯一 Schema 增量为 `InterviewDetail.reflectionCompletedAt` 与 `ReflectionItem.sourceQuestionId/sourceKind`（快照仍为唯一真相）；复盘是用户叙述可自由编辑、不驱动申请状态、AI 只产草稿；归档/恢复不改写任何历史字段；"待复盘"= `COMPLETED` 且完成标记为空（§7.1），首页经 `listAwaitingReflectionInterviews` 消费，过期未关闭仅提示确认。
