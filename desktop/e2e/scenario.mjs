@@ -118,13 +118,7 @@ export async function checkNavigation(page, origin) {
   await expect(
     sidebar.getByRole("button", { name: "收起侧边栏", exact: true }),
   ).toBeVisible();
-  await sidebar
-    .getByRole("button", { name: "帮助与反馈", exact: true })
-    .click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  console.log("PASS sidebar collapse/expand and help dialog");
+  console.log("PASS sidebar collapse/expand");
 }
 
 export async function checkReopen(page, origin, identity) {

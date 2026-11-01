@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PowerIcon, ArrowUpCircle } from "lucide-react";
+import { PowerIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -20,10 +20,8 @@ interface ProfileDropdownProps {
   user: any;
   expanded: boolean;
   signOutAction: () => void;
-  // Owned by the sidebar so one fetch/dialog serves both the
-  // Help entry and this menu's update-available item.
+  // Owned by the sidebar so one fetch serves the update badge.
   version?: AppVersionInfo | null;
-  onOpenSupport?: () => void;
 }
 
 export function ProfileDropdown({
@@ -31,7 +29,6 @@ export function ProfileDropdown({
   expanded,
   signOutAction,
   version,
-  onOpenSupport,
 }: ProfileDropdownProps) {
   const { t } = useI18n();
   const label = user?.email ?? t("nav.userMenu");
@@ -90,16 +87,6 @@ export function ProfileDropdown({
         </Tooltip>
         <DropdownMenuContent side="right" align="end">
           <DropdownMenuLabel>{label}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {version?.updateAvailable && (
-            <DropdownMenuItem
-              onClick={() => onOpenSupport?.()}
-              className="cursor-pointer text-primary focus:text-primary"
-            >
-              <ArrowUpCircle className="w-5 mr-2" />
-              {t("nav.updateAvailable")}
-            </DropdownMenuItem>
-          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild className="cursor-pointer">
             <form action={signOutAction}>

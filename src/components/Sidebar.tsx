@@ -1,18 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { CircleHelp, Settings, type LucideProps } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Settings } from "lucide-react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { VocatryaMark } from "@/components/brand/VocatryaMark";
 import { APP_CONSTANTS, SIDEBAR_LINKS } from "@/lib/constants";
 import NavLink from "./NavLink";
 import { ProfileDropdown } from "./ProfileDropdown";
-import { SupportDialog } from "./SupportDialog";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
@@ -23,58 +16,16 @@ import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { isFreshFullHiddenNavRoute } from "@/lib/career/freshSurfacePolicy";
 import { getSidebarNavLabel } from "./Header";
 
-// Same row geometry as NavLink (fixed 56px icon cell + fading label) so the
-// utility entries line up with the business nav in both rail states.
-function SidebarAction({
-  label,
-  Icon,
-  onClick,
-  expanded,
-}: {
-  label: string;
-  Icon: React.ComponentType<LucideProps>;
-  onClick: () => void;
-  expanded: boolean;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={label}
-          className="navlink h-10 w-full text-muted-foreground hover:text-foreground"
-        >
-          <span className="flex h-full w-14 shrink-0 items-center justify-center">
-            <Icon className="h-6 w-6 shrink-0" strokeWidth={1.5} />
-          </span>
-          <span
-            className={cn(
-              "truncate text-sm transition-opacity duration-200",
-              expanded ? "opacity-100 delay-100" : "opacity-0",
-            )}
-          >
-            {label}
-          </span>
-        </button>
-      </TooltipTrigger>
-      {!expanded && <TooltipContent side="right">{label}</TooltipContent>}
-    </Tooltip>
-  );
-}
-
 function SidebarFooter({
   user,
   expanded,
   signOutAction,
   version,
-  onOpenSupport,
 }: {
   user: CurrentUser | null;
   expanded: boolean;
   signOutAction: () => void;
   version: ReturnType<typeof useAppVersion>;
-  onOpenSupport: () => void;
 }) {
   const { t } = useI18n();
   const path = usePathname();
@@ -93,7 +44,6 @@ function SidebarFooter({
         expanded={expanded}
         signOutAction={signOutAction}
         version={version}
-        onOpenSupport={onOpenSupport}
       />
     </div>
   );
@@ -111,8 +61,6 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
     useSidebar();
   const { freshNativeFull } = useCareerSurfaces();
   const version = useAppVersion();
-  const [supportOpen, setSupportOpen] = useState(false);
-  const openSupport = () => setSupportOpen(true);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -156,15 +104,6 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
           </span>
         </div>
 
-        <div className="shrink-0 border-b py-2">
-          <SidebarAction
-            label={t("nav.helpFeedback")}
-            Icon={CircleHelp}
-            onClick={openSupport}
-            expanded={expanded}
-          />
-        </div>
-
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto py-2">
           {SIDEBAR_LINKS.map((item) => {
             // Only show dev-only items in development mode
@@ -192,12 +131,6 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
           user={user}
           expanded={expanded}
           signOutAction={signOutAction}
-          version={version}
-          onOpenSupport={openSupport}
-        />
-        <SupportDialog
-          open={supportOpen}
-          onOpenChange={setSupportOpen}
           version={version}
         />
 

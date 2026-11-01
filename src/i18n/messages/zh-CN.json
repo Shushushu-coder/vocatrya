@@ -174,11 +174,6 @@
     "login": "登录",
     "showPassword": "显示密码",
     "hidePassword": "隐藏密码",
-    "version": "版本",
-    "aboutCopyright": "关于与版权",
-    "updateAvailableVersion": "{version} 现已发布",
-    "derivedFrom": "© {year} Vocatrya。基于 JobSync（© 2024–{year} gsync）衍生。",
-    "upstreamBase": "上游项目：",
     "showingRange": "显示第 {from}–{to} 条",
     "showingRangeOf": "显示第 {from}–{to} 条，共 {total} 条",
     "jobsLabel": "个职位",
@@ -243,7 +238,6 @@
     "library": "基础字典",
     "developer": "开发者选项",
     "settings": "设置",
-    "support": "关于与帮助",
     "updateAvailable": "发现新版本",
     "logout": "退出登录",
     "userMenu": "用户菜单",
@@ -252,7 +246,6 @@
     "closeAssistant": "收起助手",
     "goBack": "后退",
     "goForward": "前进",
-    "helpFeedback": "帮助与反馈",
     "keyboardShortcuts": "键盘快捷键"
   },
   "shortcuts": {

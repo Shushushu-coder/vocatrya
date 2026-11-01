@@ -174,11 +174,6 @@
     "login": "Login",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
-    "version": "Version",
-    "aboutCopyright": "About & Copyright",
-    "updateAvailableVersion": "{version} is available",
-    "derivedFrom": "© {year} Vocatrya. Derived from JobSync (© 2024–{year} gsync).",
-    "upstreamBase": "Upstream base:",
     "showingRange": "Showing {from} to {to}",
     "showingRangeOf": "Showing {from} to {to} of {total}",
     "jobsLabel": "jobs",
@@ -243,7 +238,6 @@
     "library": "Library",
     "developer": "Developer Options",
     "settings": "Settings",
-    "support": "Support",
     "updateAvailable": "Update available",
     "logout": "Logout",
     "userMenu": "User menu",
@@ -252,7 +246,6 @@
     "closeAssistant": "Close assistant",
     "goBack": "Back",
     "goForward": "Forward",
-    "helpFeedback": "Help & feedback",
     "keyboardShortcuts": "Keyboard shortcuts"
   },
   "shortcuts": {
