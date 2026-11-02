@@ -119,8 +119,12 @@ function CompaniesTable({
             <TableHead>{t("companies.companyName")}</TableHead>
             {scope === "watchlist" ? (
               <>
-                <TableHead>{t("library.board")}</TableHead>
-                <TableHead>{t("common.jobs")}</TableHead>
+                <TableHead className="whitespace-nowrap">
+                  {t("library.board")}
+                </TableHead>
+                <TableHead className="whitespace-nowrap">
+                  {t("common.jobs")}
+                </TableHead>
                 <TableHead>{t("library.watched")}</TableHead>
               </>
             ) : (
@@ -128,10 +132,18 @@ function CompaniesTable({
                 <TableHead className="hidden sm:table-cell">
                   {t("library.value")}
                 </TableHead>
-                <TableHead>{t("library.totalJobs")}</TableHead>
-                <TableHead>{t("library.jobsApplied")}</TableHead>
-                <TableHead>{t("library.rejected")}</TableHead>
-                <TableHead>{t("library.contacts")}</TableHead>
+                <TableHead className="whitespace-nowrap">
+                  {t("library.totalJobs")}
+                </TableHead>
+                <TableHead className="whitespace-nowrap">
+                  {t("library.jobsApplied")}
+                </TableHead>
+                <TableHead className="whitespace-nowrap">
+                  {t("library.rejected")}
+                </TableHead>
+                <TableHead className="whitespace-nowrap">
+                  {t("library.contacts")}
+                </TableHead>
               </>
             )}
             <TableHead>{t("common.actions")}</TableHead>
