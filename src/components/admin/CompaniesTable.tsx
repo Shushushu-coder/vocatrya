@@ -178,7 +178,7 @@ function CompaniesTable({
                     <TableCell>
                       <BoardCell company={company} />
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium tabular-nums">
                       {company._count?.jobsTotal ?? 0}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
@@ -196,7 +196,7 @@ function CompaniesTable({
                         {company.value}
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium tabular-nums">
                       {company._count?.jobsTotal ? (
                         <Link
                           href={`/dashboard/myjobs?company=${encodeURIComponent(company.value)}`}
@@ -208,7 +208,7 @@ function CompaniesTable({
                         (company._count?.jobsTotal ?? 0)
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium tabular-nums">
                       {company._count?.jobsApplied ? (
                         <Link
                           href={`/dashboard/myjobs?company=${encodeURIComponent(company.value)}&applied=true`}
@@ -220,12 +220,12 @@ function CompaniesTable({
                         (company._count?.jobsApplied ?? 0)
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium tabular-nums">
                       {/* Not computed under the A+B read family — a neutral
                           dash, never a fake zero. */}
                       {company._count?.jobsRejected ?? "—"}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium tabular-nums">
                       {company._count?.contacts ?? 0}
                     </TableCell>
                   </>

@@ -136,7 +136,7 @@ function Settings() {
 
   return (
     <div className="col-span-3 flex min-w-0 flex-col">
-      <h3 className="mb-4 text-2xl font-semibold leading-none tracking-tight break-words">
+      <h3 className="mb-4 text-2xl font-semibold leading-tight tracking-tight break-words">
         {t("settings.title")}
       </h3>
       {/* Query the main container, not the viewport. The app sidebar and a

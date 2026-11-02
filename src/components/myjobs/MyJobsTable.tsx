@@ -58,7 +58,7 @@ function MyJobsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[56px] text-center">
+            <TableHead className="w-[56px] text-center whitespace-nowrap">
               {t("jobs.rowNumber")}
             </TableHead>
             <TableHead className="hidden md:table-cell">{t("jobs.dateApplied")}</TableHead>
