@@ -471,6 +471,23 @@
         "AC-15/16（2026-10-28 用户修订）：沿用设置视觉体系，保留回车行为、进入编辑选区两项下拉及自动聚焦一项开关；窄窗口可用，中英文完整。"
       ],
       "passes": true
+    },
+    {
+      "id": "BRAND-01",
+      "category": "Brand / UX",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-11-02 Batch 1 品牌一致性优化集成并验收：feat/brand-batch1 经 fast-forward 纳入本地 Main，commit 4c680ee703b3e59f350118382aceaff97a10e7d6（14 文件，741+/25-）。移动端 Header 统一静态 A1.5 Optical Mark；AuthCard 登录/注册展示 A1.5 Master Mark；企业 Logo 缺失统一 Letter Avatar fallback（新增 src/lib/company-avatar.ts，贯通职位卡片、公司详情、职位详情与公司列表）；非方形企业图片恢复 object-fit: cover 不变形；中英文与 Light/Dark 适配。独立 Diff Review 与 P2 聚焦复审 PASS；Vitest 4 个新增文件 37/37、Chromium E2E 5/5、TypeScript/ESLint PASS；Windows Electron 验收 BATCH1_WINDOWS_ELECTRON_ACCEPTED。集成后最小回归：tsc --noEmit、Batch1 37/37、定向 ESLint 8 个生产文件、JobCard/CompanyDetails/JobDetails 相关回归 87/87 均 PASS。已集成本地 Main；尚未 Push、Release 或 Deploy。",
+      "description": "品牌一致性：移动端 Header 与 AuthCard 使用统一 A1.5 品牌 Mark，企业 Logo 缺失时以统一 Letter Avatar 兜底，非方形企业图片正确裁切，中英文与明暗主题下呈现一致。",
+      "steps": [
+        "移动端 Header 展示静态 A1.5 Optical Mark，与整体品牌标识一致。",
+        "登录/注册 AuthCard 展示静态 A1.5 Master Mark。",
+        "无 Logo 企业在职位卡片、公司详情、职位详情及公司列表中统一显示 Letter Avatar fallback。",
+        "非方形企业图片以 object-fit: cover 裁切，不拉伸变形。",
+        "中英文与 Light/Dark 主题下品牌 Mark 与企业 Logo 呈现一致。"
+      ],
+      "passes": true
     }
   ]
 }
