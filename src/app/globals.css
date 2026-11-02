@@ -29,9 +29,27 @@ html[data-desktop="true"] .header-global-actions {
   display: none;
 }
 
+/* Bundled offline CJK fallback (Noto Sans SC v2.004-H2, OFL). Exposed under a
+   private family alias and ranked after the system Chinese families so an
+   installed Noto is never picked ahead of YaHei/PingFang on machines that have
+   them; it only paints when the system stack has no CJK glyph. */
+@font-face {
+  font-family: "Vocatrya Han";
+  src: url("/fonts/NotoSansSC-VF.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 @theme inline {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif,
+  --font-sans: var(--font-inter), "Microsoft YaHei UI", "Microsoft YaHei",
+    "PingFang SC", "Vocatrya Han", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Same Western mono order as the Tailwind default; the Chinese families sit
+     before `monospace` so CJK text in mono contexts doesn't fall to NSimSun. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Vocatrya Han", monospace;
 
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));

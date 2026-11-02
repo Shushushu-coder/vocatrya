@@ -82,6 +82,9 @@ export function generateNotices({
   if (fs.existsSync(sharpWinLicense)) {
     copyLicense(sharpWinLicense, path.join(outputDir, "SHARP-WIN32-LICENSE.txt"), "sharp-win32-x64");
   }
+  // Bundled fonts (Inter, Noto Sans SC / "Vocatrya Han") are both SIL OFL 1.1;
+  // the unmodified license text ships with the font files in public/fonts/.
+  copyLicense(path.join(root, "public", "fonts", "OFL.txt"), path.join(outputDir, "FONT-OFL.txt"), "font OFL");
   const nodeNoticePath = path.join(outputDir, "NODE-LICENSE.txt");
   if (nodeLicensePath && fs.existsSync(nodeLicensePath)) {
     if (path.resolve(nodeLicensePath) !== path.resolve(nodeNoticePath)) {
@@ -132,6 +135,15 @@ export function generateNotices({
     "",
     "=== sharp / libvips (Windows x64 native runtime) ===",
     "See SHARP-LICENSE.txt and SHARP-WIN32-LICENSE.txt when present.",
+    "",
+    "=== Inter (bundled UI font, Inter-Variable.woff2) ===",
+    "Copyright 2016 The Inter Project Authors (https://rsms.me/inter/).",
+    "Licensed under the SIL Open Font License, Version 1.1. See FONT-OFL.txt.",
+    "",
+    "=== Noto Sans SC (bundled CJK fallback font, family alias \"Vocatrya Han\") ===",
+    "NotoSansSC-VF.woff2, Version 2.004-H2, wght 100-900 variable font.",
+    "Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name \"Source\".",
+    "Licensed under the SIL Open Font License, Version 1.1. See FONT-OFL.txt.",
     "",
     "=== Bundled npm packages (name, version, license field from package.json) ===",
     ...merged.map((item) => `${item.name}@${item.version} — ${item.license}`),
