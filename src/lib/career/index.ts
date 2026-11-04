@@ -111,6 +111,11 @@ export type {
   SubmittedResumeBindingAttemptDTO,
   SubmittedResumeBindingsDTO,
   TransferredFromDTO,
+  SubmittedArtifactDTO,
+  SubmittedJdVersionDTO,
+  AttemptSubmissionMaterialsDTO,
+  PlannedResumeVariantDTO,
+  JobConnectionsDTO,
 } from "./applicationTimeline";
 export { declaredStepPrecision } from "./applicationTimeline";
 export {

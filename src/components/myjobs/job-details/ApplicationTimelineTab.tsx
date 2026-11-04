@@ -32,11 +32,14 @@ import {
   getApplicationTimeline,
   updateApplicationProcessStep,
 } from "@/actions/application.actions";
+import { getJobConnections } from "@/actions/jobConnections.actions";
 import { SubmittedResumePanel } from "@/components/career/resume-variant/SubmittedResumePanel";
+import { JobConnectionsSummary } from "./JobConnectionsSummary";
 import type {
   ApplicationAttemptTimelineDTO,
   ApplicationProcessStepDTO,
   ApplicationTimelineDTO,
+  JobConnectionsDTO,
 } from "@/lib/career/applicationTimeline";
 import {
   isTerminalAttemptOutcome,
@@ -130,6 +133,7 @@ export function ApplicationTimelineTab({
   const copy = useCopy();
   const router = useRouter();
   const [timeline, setTimeline] = useState<ApplicationTimelineDTO | null>(null);
+  const [connections, setConnections] = useState<JobConnectionsDTO | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [attemptDialogOpen, setAttemptDialogOpen] = useState(false);
   const [transferAttempt, setTransferAttempt] =
@@ -156,12 +160,28 @@ export function ApplicationTimelineTab({
     [timeline],
   );
 
+  // The timeline and the P-B connections aggregation load in parallel: they
+  // are two independent reads of the same job (the submitted-resume summary
+  // stays on the timeline DTO, the rest of the comparison rides the
+  // connections DTO). A failed connections read degrades to absent — it must
+  // not take the timeline down with it.
   const loadTimeline = useCallback(async () => {
-    const result = await getApplicationTimeline(jobId);
-    if (result.success) {
-      setTimeline(result.data ?? null);
+    const [timelineResult, connectionsResult] = await Promise.all([
+      getApplicationTimeline(jobId),
+      getJobConnections(jobId),
+    ]);
+    if (timelineResult.success) {
+      setTimeline(timelineResult.data ?? null);
     } else {
-      toastError(result.message);
+      toastError(timelineResult.message);
+    }
+    if (connectionsResult.success) {
+      setConnections(connectionsResult.data ?? null);
+    } else {
+      setConnections(null);
+      if (timelineResult.success) {
+        toastError(connectionsResult.message);
+      }
     }
   }, [jobId]);
 
@@ -169,13 +189,26 @@ export function ApplicationTimelineTab({
   // dashboard/upcoming surface mounted alongside the tab re-reads its model.
   const reloadAfterMutation = useCallback(async () => {
     router.refresh();
-    const result = await getApplicationTimeline(jobId);
-    if (result.success) {
-      setTimeline(result.data ?? null);
-    } else {
-      toastError(result.message);
+    await loadTimeline();
+  }, [router, loadTimeline]);
+
+  const materialsByAttempt = useMemo(() => {
+    const map = new Map<string, JobConnectionsDTO["attemptMaterials"][number]>();
+    for (const row of connections?.attemptMaterials ?? []) {
+      map.set(row.attemptId, row);
     }
-  }, [router, jobId]);
+    return map;
+  }, [connections]);
+
+  const plannedVariantIds = useMemo(
+    () =>
+      new Set(
+        (connections?.plannedResumeVariants ?? []).map(
+          (variant) => variant.id,
+        ),
+      ),
+    [connections],
+  );
 
   useEffect(() => {
     void loadTimeline();
@@ -472,6 +505,9 @@ export function ApplicationTimelineTab({
   if (timeline.attempts.length === 0) {
     return (
       <>
+        {connections ? (
+          <JobConnectionsSummary connections={connections} />
+        ) : null}
         <JobTabEmptyState
           icon={CalendarClock}
           title={t("jobs.timelineEmptyTitle")}
@@ -527,6 +563,9 @@ export function ApplicationTimelineTab({
           </Button>
         </div>
       )}
+      {connections ? (
+        <JobConnectionsSummary connections={connections} />
+      ) : null}
       {timeline.attempts.map((attempt) => (
         <section
           key={attempt.id}
@@ -614,9 +653,39 @@ export function ApplicationTimelineTab({
               <SubmittedResumePanel
                 attemptId={attempt.id}
                 submittedResume={attempt.submittedResume}
+                submissionFacts={
+                  connections
+                    ? {
+                        artifact:
+                          materialsByAttempt.get(attempt.id)
+                            ?.submittedArtifact ?? null,
+                        submittedAgainstJdVersion:
+                          materialsByAttempt.get(attempt.id)
+                            ?.submittedAgainstJdVersion ?? null,
+                        currentJdVersion: connections.currentJdVersion,
+                        submitted: attempt.submittedAt != null,
+                      }
+                    : undefined
+                }
                 canMutate={canMutate}
                 onBound={loadTimeline}
               />
+              {attempt.submittedResume && connections ? (
+                <p
+                  className="mt-1 text-xs text-muted-foreground"
+                  data-testid="submitted-vs-planned"
+                >
+                  {plannedVariantIds.has(attempt.submittedResume.resumeVariantId)
+                    ? copy("jobs.submittedIsPlannedVariant", {
+                        "zh-CN": "属于计划绑定简历",
+                        en: "From a planned resume",
+                      })
+                    : copy("jobs.submittedNotPlannedVariant", {
+                        "zh-CN": "非计划绑定简历",
+                        en: "Not a planned resume",
+                      })}
+                </p>
+              ) : null}
             </div>
           </div>
 
