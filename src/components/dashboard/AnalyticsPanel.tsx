@@ -11,6 +11,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { usePersistedTabIndex } from "@/hooks/usePersistedTabIndex";
 import { useI18n, getLocalizedJobStatus } from "@/i18n";
 import type { DashboardJobsReadResult } from "@/actions/dashboard/shared";
+import type { InsightTrendWindow } from "@/actions/dashboard/insights";
 import type { JobStatusCount } from "@/lib/career/jobsReadDispatch";
 import JobsUnavailableNotice from "./JobsUnavailableNotice";
 
@@ -47,12 +48,14 @@ const TAB_VALUES = ["trend", "status"] as const;
 const WINDOW_VALUES = ["7d", "30d"] as const;
 const CHART_HEIGHT = 220;
 
-type TrendDatum = { day: string; value: number };
-
 type AnalyticsPanelProps = {
-  trend7: DashboardJobsReadResult<TrendDatum[]>;
-  trend30: DashboardJobsReadResult<TrendDatum[]>;
+  trend7: DashboardJobsReadResult<InsightTrendWindow>;
+  trend30: DashboardJobsReadResult<InsightTrendWindow>;
   statusDist: DashboardJobsReadResult<JobStatusCount[]>;
+  /** ab/legacy family — labels family-dependent units honestly (e.g. the
+   *  neutral offer-declined bucket wording only applies to the ab-derived
+   *  distribution). Null when the jobs read is blocked. */
+  family?: "ab" | "legacy" | null;
 };
 
 const NIVO_THEME = {
@@ -80,6 +83,7 @@ export default function AnalyticsPanel({
   trend7,
   trend30,
   statusDist,
+  family = null,
 }: AnalyticsPanelProps) {
   const { t, formatNumber } = useI18n();
   const [tabIndex, selectTab] = usePersistedTabIndex(
@@ -161,12 +165,21 @@ export default function AnalyticsPanel({
               <div className="flex justify-center py-6">
                 <JobsUnavailableNotice className="max-w-md" />
               </div>
-            ) : trend.data.every((d) => d.value === 0) ? (
-              <EmptyNote>{t("dashboard.noApplicationsInWindow")}</EmptyNote>
             ) : (
-              <div style={{ height: CHART_HEIGHT }} className="min-w-0">
+              <>
+                <p className="px-2 pb-1 text-xs text-muted-foreground">
+                  {t("dashboard.trendWindowTotal", {
+                    count: trend.data.total,
+                  })}
+                </p>
+                {trend.data.days.every((d) => d.value === 0) ? (
+                  <EmptyNote>
+                    {t("dashboard.noApplicationsInWindow")}
+                  </EmptyNote>
+                ) : (
+                  <div style={{ height: CHART_HEIGHT }} className="min-w-0">
                 <ResponsiveBar
-                  data={trend.data}
+                  data={trend.data.days}
                   keys={["value"]}
                   indexBy="day"
                   animate={!reduceMotion}
@@ -208,7 +221,7 @@ export default function AnalyticsPanel({
                     tickValues: Array.from(
                       {
                         length:
-                          Math.max(0, ...trend.data.map((d) => d.value)) + 1,
+                          Math.max(0, ...trend.data.days.map((d) => d.value)) + 1,
                       },
                       (_, i) => i,
                     ),
@@ -240,12 +253,18 @@ export default function AnalyticsPanel({
                     </div>
                   )}
                 />
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
 
           <TabsContent value="status">
-            <StatusDistribution statusDist={statusDist} theme={theme} />
+            <StatusDistribution
+              statusDist={statusDist}
+              theme={theme}
+              family={family}
+            />
           </TabsContent>
         </Tabs>
       </CardHeader>
@@ -256,9 +275,11 @@ export default function AnalyticsPanel({
 function StatusDistribution({
   statusDist,
   theme,
+  family,
 }: {
   statusDist: DashboardJobsReadResult<JobStatusCount[]>;
   theme: "light" | "dark";
+  family: "ab" | "legacy" | null;
 }) {
   const { t, formatNumber } = useI18n();
   if (statusDist.blocked) {
@@ -275,7 +296,13 @@ function StatusDistribution({
   }
   const slices = entries.map((entry, index) => ({
     id: entry.status,
-    label: getLocalizedJobStatus(entry.status, t) || entry.status,
+    // D3: in the A+B distribution "offer-declined" is a WITHDRAWN mapping —
+    // the label stays neutral instead of claiming an offer was declined. The
+    // legacy value is a user-picked status, so it keeps its own wording.
+    label:
+      family === "ab" && entry.status === "offer-declined"
+        ? t("dashboard.statusOfferDeclinedNeutral")
+        : getLocalizedJobStatus(entry.status, t) || entry.status,
     value: entry.count,
     color: STATUS_COLORS[theme][index % STATUS_COLORS[theme].length],
   }));

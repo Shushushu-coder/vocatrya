@@ -55,7 +55,7 @@ export default function JobsCalendar({
           to={`${year}-12-31`}
           emptyColor={resolvedTheme === "light" ? "#eeeeee" : "#30363d"}
           colors={["#90e0ef", "#48cae4", "#00b4d8", "#0096c7", "#0077b6"]}
-          minValue={2}
+          minValue={1}
           margin={{ top: 20, right: 0, bottom: 20, left: 0 }}
           yearSpacing={40}
           monthBorderColor={borderColor}

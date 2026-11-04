@@ -9,6 +9,10 @@ import type {
   OverviewStats,
   OverviewReminder,
 } from "@/actions/dashboard.actions";
+import type {
+  CareerInsightsData,
+  CareerInsightsPayload,
+} from "@/actions/dashboard/insights";
 
 vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
@@ -144,37 +148,101 @@ describe("RecentUpdates", () => {
 });
 
 describe("BoardTotals", () => {
-  it("renders all-time totals", () => {
+  const abInsights = (
+    data?: CareerInsightsData,
+  ): CareerInsightsPayload => ({
+    blocked: false,
+    openTasks: 3,
+    followUps: { total: 4, overdueCount: 1, tasksOnly: false },
+    data: data ?? {
+      family: "ab",
+      migratedOrigin: false,
+      board: {
+        total: 9,
+        inProgress: 6,
+        appliedPositions: 5,
+        appliedAttempts: 7,
+        interview: { scope: "rounds", completedRounds: 2, scheduledRounds: 1 },
+        offersCurrent: 1,
+      },
+      statusDistribution: [],
+      trend7: { days: [], total: 0 },
+      trend30: { days: [], total: 0 },
+      calendarByYear: {},
+    },
+  });
+
+  it("renders the insight metrics including round and task cards", () => {
+    render(<BoardTotals insights={abInsights()} />);
+    expect(screen.getByTestId("board-total-total")).toHaveTextContent("9");
+    expect(screen.getByTestId("board-total-inProgress")).toHaveTextContent("6");
+    expect(screen.getByTestId("board-total-applied")).toHaveTextContent("5");
+    expect(screen.getByTestId("board-total-interviews")).toHaveTextContent("2");
+    expect(
+      screen.getByTestId("board-total-interviewScheduled"),
+    ).toHaveTextContent("1");
+    expect(screen.getByTestId("board-total-offers")).toHaveTextContent("1");
+    expect(screen.getByTestId("board-total-followUps")).toHaveTextContent("4");
+    expect(screen.getByTestId("board-total-openTasks")).toHaveTextContent("3");
+  });
+
+  it("labels the legacy interview card as a position count", () => {
     render(
       <BoardTotals
-        totals={ok({
-          total: 9,
-          applied: 5,
-          interviews: 2,
-          offers: 1,
-          inProgress: 6,
+        insights={abInsights({
+          family: "legacy",
+          migratedOrigin: false,
+          board: {
+            total: 9,
+            inProgress: 6,
+            appliedPositions: 5,
+            appliedAttempts: null,
+            interview: { scope: "positions", interviewingPositions: 3 },
+            offersCurrent: 1,
+          },
+          statusDistribution: [],
+          trend7: { days: [], total: 0 },
+          trend30: { days: [], total: 0 },
+          calendarByYear: {},
         })}
       />,
     );
-    expect(screen.getByTestId("board-total-total")).toHaveTextContent("9");
-    expect(screen.getByTestId("board-total-applied")).toHaveTextContent("5");
-    expect(screen.getByTestId("board-total-interviews")).toHaveTextContent("2");
-    expect(screen.getByTestId("board-total-offers")).toHaveTextContent("1");
+    expect(screen.getByTestId("board-total-interviews")).toHaveTextContent("3");
+    expect(
+      screen.queryByTestId("board-total-interviewScheduled"),
+    ).not.toBeInTheDocument();
   });
 
-  it("renders the notice and em-dashes when blocked", () => {
-    render(<BoardTotals totals={blocked as any} />);
+  it("renders the notice and em-dashes when blocked, keeping task metrics", () => {
+    render(
+      <BoardTotals
+        insights={{
+          blocked: true,
+          code: "JOBS_READ_UNAVAILABLE",
+          message: "blocked",
+          openTasks: 2,
+          followUps: { total: 1, overdueCount: 0, tasksOnly: true },
+        }}
+      />,
+    );
     expect(screen.getByTestId("jobs-unavailable-notice")).toBeInTheDocument();
     expect(screen.getByTestId("board-total-total")).toHaveTextContent("—");
+    expect(screen.getByTestId("board-total-applied")).toHaveTextContent("—");
+    // Family-independent metrics stay real even when the jobs read is down.
+    expect(screen.getByTestId("board-total-followUps")).toHaveTextContent("1");
+    expect(screen.getByTestId("board-total-openTasks")).toHaveTextContent("2");
   });
 });
 
 describe("AnalyticsPanel", () => {
-  const trend = ok([
-    { day: "Mon", value: 0 },
-    { day: "Tue", value: 2 },
-    { day: "Wed", value: 1 },
-  ]);
+  const trend = ok({
+    days: [
+      { day: "Mon", value: 0 },
+      { day: "Tue", value: 2 },
+      { day: "Wed", value: 1 },
+    ],
+    total: 3,
+  });
   const statusDist = ok([
     { status: "applied", count: 3 },
     { status: "interview", count: 1 },
@@ -210,7 +278,9 @@ describe("AnalyticsPanel", () => {
   });
 
   it("shows a compact note instead of an empty chart", () => {
-    renderPanel({ trend7: ok([{ day: "Mon", value: 0 }]) });
+    renderPanel({
+      trend7: ok({ days: [{ day: "Mon", value: 0 }], total: 0 }),
+    });
     expect(screen.getByTestId("analytics-empty-note")).toHaveTextContent(
       "No applications in this window",
     );
