@@ -9,12 +9,12 @@ import {
 } from "@/lib/datetime";
 import { getUserTimeZone } from "@/lib/userSettings/timeZone.server";
 import {
-  loadDashboardJobCounts,
   loadJobsBoardTotals,
   loadJobsExistence,
   loadUpcomingJobDeadlines,
   resolveJobsReadFamily,
 } from "@/lib/career/jobsReadDispatch";
+import { countFirstAppliedInWindowDays } from "@/lib/career/careerInsightsReadModel";
 import { resolveResumeReadFamily } from "@/lib/career/resumeReadDispatch";
 import {
   isUpcomingOverdue,
@@ -22,7 +22,7 @@ import {
   UPCOMING_EVENT_KIND,
 } from "@/lib/career/upcomingReadModel";
 import { requireUser } from "../shared";
-import { getLocalDayRange, jobsReadOrBlocked } from "./shared";
+import { jobsReadOrBlocked } from "./shared";
 
 // The headline numbers on the overview page. Jobs-family metrics are
 // mode-aware through jobsReadOrBlocked: a blocked family reports absent
@@ -38,16 +38,28 @@ const OPEN_TASK_STATUSES = ["complete", "cancelled"];
 
 export const getOverviewStats = async (): Promise<OverviewStats> => {
   const user = await requireUser();
-  const { start, end } = getLocalDayRange(6);
-  const { start: priorStart } = getLocalDayRange(13);
+  // Applied-in-window is an account-zone fact (G1/D4): the insights read
+  // model owns the bucketing — never the host-zone getLocalDayRange.
+  const timeZone = await getUserTimeZone(user.id);
 
   const [jobsResult, openTasks] = await Promise.all([
     jobsReadOrBlocked(async () => {
-      const [totals, window] = await Promise.all([
+      const { family } = await resolveJobsReadFamily(prisma);
+      const [totals, applied7d] = await Promise.all([
+        // A blocked family rejects inside loadJobsBoardTotals before the
+        // applied count resolves, so the placeholder is never surfaced.
         loadJobsBoardTotals(prisma, user.id),
-        loadDashboardJobCounts(prisma, user.id, { start, end, priorStart }),
+        family === "blocked"
+          ? Promise.resolve(0)
+          : countFirstAppliedInWindowDays(
+              prisma,
+              user.id,
+              family,
+              timeZone,
+              7,
+            ),
       ]);
-      return { inProgress: totals.inProgress, applied7d: window.jobsApplied };
+      return { inProgress: totals.inProgress, applied7d };
     }),
     prisma.task.count({
       where: { userId: user.id, status: { notIn: OPEN_TASK_STATUSES } },

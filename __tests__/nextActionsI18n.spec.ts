@@ -1,30 +1,47 @@
 // @vitest-environment node
 //
-// NEXT-ACTIONS/JOURNEY-OVERVIEW i18n fragment parity (frozen contract §8):
-// the unmerged fragments under .tmp/p2-overview-actions/ must carry identical
-// key sets in zh-CN and en, identical {placeholder} sets per key, and cover
-// every dashboard.* key the two components reference. When the coordinating
-// window merges the fragments into src/i18n/messages/, this spec should be
-// repointed at the dictionaries.
+// NEXT-ACTIONS/JOURNEY-OVERVIEW i18n parity (frozen contract §8): the keys
+// this package contributed to the shared dictionaries must carry identical
+// {placeholder} sets per key in zh-CN and en, and cover every dashboard.* key
+// the two components reference.
 import fs from "node:fs";
 import path from "node:path";
-import zhFragment from "../.tmp/p2-overview-actions/i18n.zh-CN.json";
-import enFragment from "../.tmp/p2-overview-actions/i18n.en.json";
+import zhMessages from "../src/i18n/messages/zh-CN.json";
+import enMessages from "../src/i18n/messages/en.json";
 
-function flatten(fragment: Record<string, unknown>): Record<string, string> {
+function flatten(
+  node: Record<string, unknown>,
+  prefix = "",
+): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [namespace, entries] of Object.entries(fragment)) {
-    for (const [key, value] of Object.entries(
-      entries as Record<string, string>,
-    )) {
-      out[`${namespace}.${key}`] = value;
+  for (const [key, value] of Object.entries(node)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "string") {
+      out[path] = value;
+    } else if (value && typeof value === "object") {
+      Object.assign(out, flatten(value as Record<string, unknown>, path));
     }
   }
   return out;
 }
 
-const zh = flatten(zhFragment);
-const en = flatten(enFragment);
+const zhAll = flatten(zhMessages);
+const enAll = flatten(enMessages);
+
+// The package's owned keys: journey cards plus next-actions copy. Shared
+// dictionary keys contributed by other packages are out of scope here.
+const OWNED_PREFIXES = ["dashboard.journey", "dashboard.nextAction"];
+
+const zh = Object.fromEntries(
+  Object.entries(zhAll).filter(([key]) =>
+    OWNED_PREFIXES.some((prefix) => key.startsWith(prefix)),
+  ),
+);
+const en = Object.fromEntries(
+  Object.entries(enAll).filter(([key]) =>
+    OWNED_PREFIXES.some((prefix) => key.startsWith(prefix)),
+  ),
+);
 
 function placeholders(text: string): string[] {
   return [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();

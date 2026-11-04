@@ -11,7 +11,7 @@ import {
   type NextActionItem,
 } from "@/lib/career/nextActionsContract";
 import type { NextActionsData } from "@/actions/dashboard/nextActions";
-import enFragment from "../.tmp/p2-overview-actions/i18n.en.json";
+import enMessages from "../src/i18n/messages/en.json";
 
 const mocks = vi.hoisted(() => ({
   open: vi.fn(),
@@ -38,13 +38,16 @@ vi.mock("@/context/CareerSurfacesContext", () => ({
 }));
 
 const dict: Record<string, string> = {};
-for (const [namespace, entries] of Object.entries(enFragment)) {
-  for (const [key, value] of Object.entries(
-    entries as Record<string, string>,
-  )) {
-    dict[`${namespace}.${key}`] = value;
+const collect = (node: Record<string, unknown>, prefix = ""): void => {
+  for (const [key, value] of Object.entries(node)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "string") dict[path] = value;
+    else if (value && typeof value === "object") {
+      collect(value as Record<string, unknown>, path);
+    }
   }
-}
+};
+collect(enMessages);
 
 vi.mock("@/i18n", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@/i18n")>();

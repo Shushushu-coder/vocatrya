@@ -269,6 +269,31 @@ async function loadFirstAppliedDayCounts(
     .sort((a, b) => compareDateOnly(a.date, b.date));
 }
 
+/**
+ * M3 window member count for the overview O5 card: positions whose
+ * first-application day falls in the last `days` account-zone days
+ * including today. Same facts and account-zone bucketing as the analytics
+ * trend (G1/D4) — callers must not substitute the host-zone
+ * getLocalDayRange window.
+ */
+export async function countFirstAppliedInWindowDays(
+  db: PrismaClient,
+  userId: string,
+  family: InsightsFamily,
+  timeZone: string,
+  days: number,
+  now?: Date,
+): Promise<number> {
+  const today = todayDateOnly(timeZone, now ?? new Date());
+  const start = addDaysToDateOnly(today, -(days - 1));
+  const byDay = await loadFirstAppliedDayCounts(db, userId, family, timeZone);
+  let total = 0;
+  for (const row of byDay) {
+    if (compareDateOnly(row.date, start) >= 0) total += row.count;
+  }
+  return total;
+}
+
 function windowDaySeries(
   byDay: ApplicationDayCount[],
   today: DateOnlyString,
