@@ -8,6 +8,7 @@ import {
   ApplicationService,
   ATTEMPT_OUTCOME,
   bucketUpcomingApplicationEvents,
+  listAwaitingReflectionInterviews,
   listUpcomingApplicationEvents,
   OpportunityService,
   OPPORTUNITY_STATUS,
@@ -571,5 +572,236 @@ describe("Upcoming after ProcessStep delete", () => {
         (row) => row.jobOpportunityId === opportunity.id,
       ),
     ).toBe(false);
+  });
+});
+
+describe("listAwaitingReflectionInterviews (§7)", () => {
+  async function seedInterview(input: {
+    title?: string;
+    status?: string;
+    completedAt?: Date | null;
+    archivedJob?: boolean;
+    archivedAttempt?: boolean;
+    outcome?: string;
+    scheduledAt?: Date | null;
+    scheduledAtPrecision?: string | null;
+    detail?: { text?: string | null; items?: number; completedAt?: Date | null };
+    ownerId?: string;
+  }) {
+    const ownerId = input.ownerId ?? userId;
+    const { applications } = services(ownerId);
+    const ownCompany =
+      ownerId === userId
+        ? companyId
+        : (
+            await prisma.company.findFirstOrThrow({
+              where: { createdBy: ownerId },
+            })
+          ).id;
+    const opportunity = await new OpportunityService(
+      prisma,
+      ownerId,
+      FEATURE_ON,
+    ).create({ companyId: ownCompany, title: input.title ?? "Role" });
+    const attempt = await applications.createAttempt({
+      jobOpportunityId: opportunity.id,
+      channelLabel: "A",
+    });
+    const step = await applications.createUserProcessStep({
+      jobOpportunityId: opportunity.id,
+      category: PROCESS_STEP_CATEGORY.INTERVIEW,
+      label: "Interview",
+      scheduledAt: input.scheduledAt ?? null,
+    });
+    if (input.status || input.completedAt !== undefined || input.scheduledAtPrecision !== undefined) {
+      await prisma.applicationProcessStep.update({
+        where: { id: step.id },
+        data: {
+          status: input.status ?? step.status,
+          completedAt:
+            input.completedAt === undefined ? step.completedAt : input.completedAt,
+          scheduledAtPrecision:
+            input.scheduledAtPrecision === undefined
+              ? step.scheduledAtPrecision
+              : input.scheduledAtPrecision,
+        },
+      });
+    }
+    if (input.detail) {
+      const detail = await prisma.applicationInterviewDetail.create({
+        data: {
+          applicationProcessStepId: step.id,
+          reflectionText: input.detail.text ?? null,
+          reflectionCompletedAt: input.detail.completedAt ?? null,
+        },
+      });
+      for (let i = 0; i < (input.detail.items ?? 0); i++) {
+        await prisma.applicationInterviewReflectionItem.create({
+          data: {
+            applicationInterviewDetailId: detail.id,
+            questionText: `Q${i}`,
+            sortOrder: (i + 1) * 10,
+          },
+        });
+      }
+    }
+    if (input.outcome) {
+      await applications.recordOutcome(attempt.id, input.outcome);
+    }
+    if (input.archivedJob) {
+      await prisma.jobOpportunity.update({
+        where: { id: opportunity.id },
+        data: { archivedAt: new Date() },
+      });
+    }
+    if (input.archivedAttempt) {
+      await prisma.applicationAttempt.update({
+        where: { id: attempt.id },
+        data: { archivedAt: new Date() },
+      });
+    }
+    return { opportunity, attempt, step };
+  }
+
+  it("lists only COMPLETED INTERVIEW steps without a completion mark", async () => {
+    const awaiting = await seedInterview({ status: PROCESS_STEP_STATUS.COMPLETED });
+    await seedInterview({ status: PROCESS_STEP_STATUS.PENDING });
+    await seedInterview({ status: PROCESS_STEP_STATUS.IN_PROGRESS });
+    await seedInterview({ status: PROCESS_STEP_STATUS.CANCELLED });
+    await seedInterview({ status: "EVIDENCED" });
+    await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      detail: { text: "done", completedAt: new Date() },
+    });
+    const { applications } = services();
+    const nonInterview = await applications.createUserProcessStep({
+      jobOpportunityId: (await createOpportunity({ title: "Other" })).id,
+      category: PROCESS_STEP_CATEGORY.ASSESSMENT,
+      label: "Test",
+    });
+    await prisma.applicationProcessStep.update({
+      where: { id: nonInterview.id },
+      data: { status: PROCESS_STEP_STATUS.COMPLETED },
+    });
+
+    const result = await listAwaitingReflectionInterviews(prisma, userId);
+    expect(result.items.map((row) => row.stepId)).toEqual([awaiting.step.id]);
+    expect(result.totalCount).toBe(1);
+    expect(result.items[0].hasReflectionDraft).toBe(false);
+  });
+
+  it("flags hasReflectionDraft for unmarked content and applies limit without shrinking totalCount", async () => {
+    const older = new Date("2026-10-01T10:00:00.000Z");
+    const newer = new Date("2026-10-05T10:00:00.000Z");
+    const first = await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      completedAt: older,
+      detail: { text: "有草稿", completedAt: null },
+    });
+    const second = await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      completedAt: newer,
+    });
+    const result = await listAwaitingReflectionInterviews(prisma, userId, {
+      limit: 1,
+    });
+    expect(result.totalCount).toBe(2);
+    expect(result.items).toHaveLength(1);
+    // completedAt desc: the newer round leads.
+    expect(result.items[0].stepId).toBe(second.step.id);
+    const all = await listAwaitingReflectionInterviews(prisma, userId);
+    expect(all.items.map((row) => row.stepId)).toEqual([
+      second.step.id,
+      first.step.id,
+    ]);
+    expect(all.items.find((row) => row.stepId === first.step.id)?.hasReflectionDraft).toBe(true);
+    expect(all.items[0].attemptId).toBe(second.attempt.id);
+    expect(all.items[0].jobOpportunityId).toBe(second.opportunity.id);
+    expect(all.items[0].companyName).toBe("Acme");
+  });
+
+  it("sorts null completedAt last and keeps completed rounds under terminal attempts", async () => {
+    const completed = new Date("2026-10-02T10:00:00.000Z");
+    const withTime = await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      completedAt: completed,
+    });
+    const noTime = await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      completedAt: null,
+    });
+    const rejected = await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      completedAt: new Date("2026-10-03T10:00:00.000Z"),
+      outcome: ATTEMPT_OUTCOME.REJECTED,
+    });
+    const result = await listAwaitingReflectionInterviews(prisma, userId);
+    expect(result.items.map((row) => row.stepId)).toEqual([
+      rejected.step.id,
+      withTime.step.id,
+      noTime.step.id,
+    ]);
+  });
+
+  it("excludes archived jobs, archived attempts, and other users", async () => {
+    await seedInterview({ status: PROCESS_STEP_STATUS.COMPLETED, archivedJob: true });
+    await seedInterview({ status: PROCESS_STEP_STATUS.COMPLETED, archivedAttempt: true });
+    await prisma.company.create({
+      data: {
+        label: "OtherCo",
+        value: `other-awaiting-${Date.now()}`,
+        createdBy: otherUserId,
+      },
+    });
+    await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      ownerId: otherUserId,
+    });
+    const mine = await listAwaitingReflectionInterviews(prisma, userId);
+    expect(mine.items).toEqual([]);
+    expect(mine.totalCount).toBe(0);
+    const theirs = await listAwaitingReflectionInterviews(prisma, otherUserId);
+    expect(theirs.totalCount).toBe(1);
+  });
+
+  it("counts overdue unclosed interviews only under minute precision, separate from awaiting", async () => {
+    const now = new Date("2026-11-04T12:00:00.000Z");
+    const past = new Date("2026-11-04T11:00:00.000Z");
+    await seedInterview({
+      status: PROCESS_STEP_STATUS.PENDING,
+      scheduledAt: past,
+      scheduledAtPrecision: "minute",
+    });
+    await seedInterview({
+      status: PROCESS_STEP_STATUS.IN_PROGRESS,
+      scheduledAt: past,
+      scheduledAtPrecision: "minute",
+    });
+    // Future / non-minute / completed rows never prompt.
+    await seedInterview({
+      status: PROCESS_STEP_STATUS.PENDING,
+      scheduledAt: new Date("2026-11-04T13:00:00.000Z"),
+      scheduledAtPrecision: "minute",
+    });
+    await seedInterview({
+      status: PROCESS_STEP_STATUS.PENDING,
+      scheduledAt: past,
+      scheduledAtPrecision: "dateOnly",
+    });
+    await seedInterview({
+      status: PROCESS_STEP_STATUS.PENDING,
+      scheduledAt: past,
+      scheduledAtPrecision: null,
+    });
+    // The COMPLETED row enters awaiting, not the overdue prompt.
+    const completedOpen = await seedInterview({
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      scheduledAt: past,
+      scheduledAtPrecision: "minute",
+      completedAt: new Date("2026-11-04T11:30:00.000Z"),
+    });
+    const result = await listAwaitingReflectionInterviews(prisma, userId, { now });
+    expect(result.overdueUnclosedCount).toBe(2);
+    expect(result.items.map((row) => row.stepId)).toEqual([completedOpen.step.id]);
   });
 });

@@ -10,7 +10,10 @@ import TasksTable from "./TasksTable";
 import { TaskForm } from "./TaskForm";
 import { ActivityType } from "@/models/activity.model";
 import { useTasksList } from "./tasks-container/useTasksList";
-import { useAutoOpenAddTaskDialog } from "./tasks-container/useAutoOpenAddTaskDialog";
+import {
+  useAutoOpenAddTaskDialog,
+  type TaskDialogPrefill,
+} from "./tasks-container/useAutoOpenAddTaskDialog";
 import { TasksToolbar } from "./tasks-container/TasksToolbar";
 import { useI18n } from "@/i18n";
 
@@ -28,6 +31,7 @@ function TasksContainer({
   const { t } = useI18n();
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [taskPrefill, setTaskPrefill] = useState<TaskDialogPrefill | null>(null);
 
   const {
     tasks,
@@ -46,9 +50,10 @@ function TasksContainer({
     onChangeTaskStatus,
   } = useTasksList({ filterKey, onTasksChanged });
 
-  useAutoOpenAddTaskDialog((open) => {
+  useAutoOpenAddTaskDialog((prefill) => {
     setEditTask(null);
-    setDialogOpen(open);
+    setTaskPrefill(prefill);
+    setDialogOpen(true);
   });
 
   const onDeleteTask = async (taskId: string) => {
@@ -71,6 +76,7 @@ function TasksContainer({
 
   const addTaskForm = () => {
     resetEditTask();
+    setTaskPrefill(null);
     setDialogOpen(true);
   };
 
@@ -130,6 +136,7 @@ function TasksContainer({
         dialogOpen={dialogOpen}
         setDialogOpen={setDialogOpen}
         timeZone={timeZone}
+        initialValues={taskPrefill}
       />
     </>
   );

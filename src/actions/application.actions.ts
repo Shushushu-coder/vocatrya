@@ -140,6 +140,7 @@ export async function saveInterviewReflection(
       applicationProcessStepId: input.applicationProcessStepId,
       reflectionText: input.reflectionText,
       items: input.items ?? [],
+      reflectionCompleted: input.reflectionCompleted,
     });
     return { success: true, data };
   } catch (error) {

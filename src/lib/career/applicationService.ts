@@ -30,6 +30,7 @@ import {
   emptyInterviewReflection,
   isEmptyInterviewReflectionSave,
   interviewReflectionSortOrder,
+  nextReflectionCompletedAt,
   normalizeReflectionText,
   normalizeSaveInterviewReflectionItems,
   toInterviewReflectionDTO,
@@ -663,8 +664,37 @@ export class ApplicationService {
         include: { reflectionItems: true },
       });
 
-      if (!existingDetail && emptySave) {
+      // An explicit mark request on a fresh step still needs a detail row to
+      // carry the timestamp, so it is not folded into the empty-save return.
+      if (!existingDetail && emptySave && input.reflectionCompleted !== true) {
         return emptyInterviewReflection(step.id);
+      }
+
+      const sourceQuestionIds = [
+        ...new Set(
+          items
+            .map((item) => item.sourceQuestionId)
+            .filter((id): id is string => id != null),
+        ),
+      ];
+      const sourceQuestionActive = new Map<string, boolean>();
+      if (sourceQuestionIds.length > 0) {
+        const questions = await tx.question.findMany({
+          where: { id: { in: sourceQuestionIds }, createdBy: this.userId },
+          select: { id: true, deletedAt: true, isActive: true },
+        });
+        if (questions.length !== sourceQuestionIds.length) {
+          throw new CareerRuntimeError(
+            "INTERVIEW_REFLECTION_SOURCE_QUESTION_INVALID",
+            "Interview reflection source question does not exist",
+          );
+        }
+        for (const question of questions) {
+          sourceQuestionActive.set(
+            question.id,
+            question.deletedAt == null && question.isActive,
+          );
+        }
       }
 
       const detail =
@@ -693,11 +723,17 @@ export class ApplicationService {
         id: string;
         questionText: string;
         answerNotes: string | null;
+        sourceQuestionId: string | null;
+        sourceKind: string | null;
         sortOrder: number;
       }> = [];
 
       for (const [index, item] of items.entries()) {
         const sortOrder = interviewReflectionSortOrder(index);
+        const sourceData = {
+          sourceQuestionId: item.sourceQuestionId,
+          sourceKind: item.sourceKind,
+        };
         if (item.id) {
           const updated = await tx.applicationInterviewReflectionItem.update({
             where: { id: item.id },
@@ -705,6 +741,7 @@ export class ApplicationService {
               questionText: item.questionText,
               answerNotes: item.answerNotes,
               sortOrder,
+              ...sourceData,
             },
           });
           savedItems.push(updated);
@@ -715,6 +752,7 @@ export class ApplicationService {
               questionText: item.questionText,
               answerNotes: item.answerNotes,
               sortOrder,
+              ...sourceData,
             },
           });
           savedItems.push(created);
@@ -735,13 +773,26 @@ export class ApplicationService {
 
       const updatedDetail = await tx.applicationInterviewDetail.update({
         where: { id: detail.id },
-        data: { reflectionText },
+        data: {
+          reflectionText,
+          reflectionCompletedAt: nextReflectionCompletedAt(
+            existingDetail?.reflectionCompletedAt,
+            input.reflectionCompleted,
+            new Date(),
+          ),
+        },
       });
 
       return toInterviewReflectionDTO(
         step.id,
         updatedDetail.reflectionText,
-        savedItems,
+        updatedDetail.reflectionCompletedAt,
+        savedItems.map((item) => ({
+          ...item,
+          sourceQuestionActive: item.sourceQuestionId
+            ? sourceQuestionActive.get(item.sourceQuestionId) === true
+            : false,
+        })),
       );
     });
   }
