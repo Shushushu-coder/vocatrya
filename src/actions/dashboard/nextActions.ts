@@ -1,5 +1,6 @@
 import prisma from "@/lib/db";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
+import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
 import { canMutateJobsSurface } from "@/lib/career/freshSurfacePolicy";
 import {
   listNextActionCandidates,
@@ -50,6 +51,12 @@ export const getNextActions = async (): Promise<NextActionsData> => {
       mode: runtime.mode,
       rolloutScope: runtime.rolloutScope,
     }),
+    // R6 gate (frozen §4.7): reflection writes need AB_ENABLED+full; the
+    // READY_DISABLED read surface keeps R6 silent.
+    reflectionWriteEnabled: isFullAbCapabilityEnabled(
+      runtime.mode,
+      runtime.rolloutScope,
+    ),
     aiConfigStatus: aiConfig.status,
     timeZone,
   });

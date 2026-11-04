@@ -28,6 +28,7 @@ import {
 import { CAREER_DATA_ORIGIN, resolveCareerRuntimeMode } from "./runtimeMode";
 import {
   bucketUpcomingApplicationEvents,
+  listAwaitingReflectionInterviews,
   listUpcomingApplicationEvents,
   UPCOMING_BUCKET_ID,
 } from "./upcomingReadModel";
@@ -432,6 +433,16 @@ export async function loadCareerInsights(
   const today = todayDateOnly(timeZone, now);
   const yearAgoStart = addDaysToDateOnly(today, -364);
 
+  // M9 (frozen §2.10/D9): the ab read surface — READY_DISABLED included —
+  // consumes the debrief domain's §7.3 totalCount verbatim. A domain-read
+  // failure keeps the metric absent (null), never a fabricated zero.
+  const awaitingReflectionInterviews =
+    family === "ab"
+      ? await listAwaitingReflectionInterviews(db, userId)
+          .then((result) => result.totalCount)
+          .catch(() => null)
+      : null;
+
   return {
     family,
     migratedOrigin,
@@ -454,6 +465,6 @@ export async function loadCareerInsights(
       total: jobsFollowUps.total + taskFollowUps.total,
       overdueCount: jobsFollowUps.overdueCount + taskFollowUps.overdueCount,
     },
-    awaitingReflectionInterviews: null,
+    awaitingReflectionInterviews,
   };
 }

@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ListTodo,
   MessagesSquare,
+  NotebookPen,
   Send,
   type LucideIcon,
 } from "lucide-react";
@@ -126,6 +127,20 @@ export default function BoardTotals({
       value: board?.offersCurrent ?? null,
       href: "/dashboard/myjobs",
     },
+    // M9 conditional metric (frozen §2.10/D9): present only while the ab
+    // read surface serves the debrief domain count — legacy/blocked and
+    // read failures leave the block absent, never a placeholder.
+    ...(blocked || insights.data.awaitingReflectionInterviews == null
+      ? []
+      : [
+          {
+            key: "awaitingReflection",
+            icon: NotebookPen,
+            label: t("dashboard.statAwaitingReflection"),
+            value: insights.data.awaitingReflectionInterviews,
+            href: "/dashboard/myjobs",
+          },
+        ]),
     {
       key: "followUps",
       icon: BellRing,

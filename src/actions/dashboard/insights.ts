@@ -38,6 +38,7 @@ export type InsightFollowUps = {
 export type CareerInsightsData = {
   family: InsightsFamily;
   migratedOrigin: boolean;
+  awaitingReflectionInterviews: number | null;
   board: InsightBoard;
   statusDistribution: JobStatusCount[];
   trend7: InsightTrendWindow;
@@ -135,6 +136,7 @@ export const getCareerInsights = async (
     data: {
       family: data.family,
       migratedOrigin: data.migratedOrigin,
+      awaitingReflectionInterviews: data.awaitingReflectionInterviews,
       board: data.board,
       statusDistribution: data.statusDistribution,
       trend7: trendWindow(data.trendWindow7, locale),

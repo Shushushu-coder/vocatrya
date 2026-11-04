@@ -351,6 +351,7 @@
     "statInterviewingPositions": "Positions in interview",
     "statInterviewingPositionsNote": "Position-level count; no interview round records",
     "statOffersCurrent": "Current offers",
+    "statAwaitingReflection": "Awaiting debrief",
     "statFollowUps": "Follow-ups due",
     "followUpsOverdue": "{count} overdue",
     "followUpsTasksOnly": "Tasks only",

@@ -306,7 +306,9 @@ describe("ab family board metrics (M1/M2/M2b/M5, archive scope, G7)", () => {
     expect(result.firstAppliedByDay).toEqual([
       { date: "2026-11-01", count: 3 }, // A, D, F
     ]);
-    expect(result.awaitingReflectionInterviews).toBeNull();
+    // M9 (frozen §2.10/D9): the ab read surface — READY_DISABLED included —
+    // reports the domain totalCount; nothing awaiting means a real 0.
+    expect(result.awaitingReflectionInterviews).toBe(0);
   });
 
   it("fresh origin is ab without the migrated footnote flag", async () => {
@@ -362,6 +364,40 @@ describe("ab interview rounds (M4a/M4b, D2)", () => {
       completedRounds: 2,
       scheduledRounds: 2,
     });
+  });
+});
+
+describe("M9 awaiting reflection (frozen §2.10/D9)", () => {
+  beforeEach(migratedAbState);
+
+  it("counts COMPLETED rounds awaiting debrief, excluding done and archived", async () => {
+    const opp = await createOpportunity({ title: "Debrief" });
+    const attempt = await createAttempt(opp.id, {
+      stage: ATTEMPT_STAGE.INTERVIEW,
+    });
+    await createStep(attempt.id, { status: PROCESS_STEP_STATUS.COMPLETED });
+    const done = await createStep(attempt.id, {
+      status: PROCESS_STEP_STATUS.COMPLETED,
+    });
+    await prisma.applicationInterviewDetail.create({
+      data: {
+        applicationProcessStepId: done.id,
+        reflectionCompletedAt: new Date("2026-11-06T00:00:00.000Z"),
+      },
+    });
+    await createStep(attempt.id, { status: PROCESS_STEP_STATUS.CANCELLED });
+    const archived = await createOpportunity({
+      title: "Archived",
+      archivedAt: new Date(),
+    });
+    const archivedAttempt = await createAttempt(archived.id, {
+      stage: ATTEMPT_STAGE.INTERVIEW,
+    });
+    await createStep(archivedAttempt.id, {
+      status: PROCESS_STEP_STATUS.COMPLETED,
+    });
+    const result = await insights(FEATURE_ON);
+    expect(result.awaitingReflectionInterviews).toBe(1);
   });
 });
 
@@ -575,6 +611,8 @@ describe("legacy family degrade (D1/D2)", () => {
     expect(result.firstAppliedByDay).toEqual([
       { date: "2026-11-04", count: 2 }, // dismissed jobs stay historical fact
     ]);
+    // M9 is an ab-only metric — the legacy family reports null, never 0.
+    expect(result.awaitingReflectionInterviews).toBeNull();
   });
 
   it("counts legacy deadline follow-ups untruncated with an overdue tally", async () => {
