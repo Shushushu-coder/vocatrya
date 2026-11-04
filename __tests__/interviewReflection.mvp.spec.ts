@@ -131,6 +131,7 @@ describe("getInterviewReflection", () => {
     expect(dto).toEqual({
       applicationProcessStepId: step.id,
       reflectionText: null,
+      reflectionCompletedAt: null,
       items: [],
     });
     expect(await prisma.applicationInterviewDetail.count()).toBe(0);
@@ -404,6 +405,7 @@ describe("saveInterviewReflection", () => {
     expect(saved).toEqual({
       applicationProcessStepId: step.id,
       reflectionText: null,
+      reflectionCompletedAt: null,
       items: [],
     });
     expect(await prisma.applicationInterviewDetail.count()).toBe(0);
@@ -432,6 +434,7 @@ describe("saveInterviewReflection", () => {
     expect(cleared).toEqual({
       applicationProcessStepId: step.id,
       reflectionText: null,
+      reflectionCompletedAt: null,
       items: [],
     });
     const remaining = await prisma.applicationInterviewDetail.findUniqueOrThrow({
@@ -479,7 +482,16 @@ describe("interview reflection isolation", () => {
     const afterTimeline = await applications.getTimeline(opportunity.id);
     const afterStep = afterTimeline.attempts[0].steps[0];
     const afterAttempt = afterTimeline.attempts[0];
-    expect(afterStep).toEqual(beforeStep);
+    const stripProjection = ({
+      interviewDetailPresent: _d,
+      reflectionItemCount: _c,
+      reflectionCompletedAt: _r,
+      ...step
+    }: typeof beforeStep) => step;
+    expect(stripProjection(afterStep)).toEqual(stripProjection(beforeStep));
+    expect(afterStep.interviewDetailPresent).toBe(true);
+    expect(afterStep.reflectionItemCount).toBe(1);
+    expect(afterStep.reflectionCompletedAt).toBeNull();
     expect(afterAttempt.currentStageCategory).toBe(beforeAttempt.currentStageCategory);
     expect(afterAttempt.outcome).toBe(beforeAttempt.outcome);
     expect(afterStep.notes).toBe("流程备注，不要进复盘");
@@ -533,5 +545,272 @@ describe("interview reflection isolation", () => {
         where: { id: saved.items[0].id },
       }),
     ).toBeNull();
+  });
+});
+
+describe("reflectionCompleted three-state mark", () => {
+  it("stamps the server clock on true, keeps it on omitted saves, clears on false", async () => {
+    const { applications, step } = await createInterviewStep();
+    const marked = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "写完了",
+      items: [{ questionText: "问题" }],
+      reflectionCompleted: true,
+    });
+    expect(marked.reflectionCompletedAt).not.toBeNull();
+    const stamp = marked.reflectionCompletedAt!;
+    expect(new Date(stamp).getTime()).not.toBeNaN();
+
+    // Omitted keeps the stored mark, even when editing content.
+    const edited = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "完成后再编辑",
+      items: [{ id: marked.items[0].id, questionText: "问题改" }],
+    });
+    expect(edited.reflectionCompletedAt).toBe(stamp);
+
+    // A second explicit true does not move the stamp.
+    const remarked = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "再标一次",
+      items: [{ id: marked.items[0].id, questionText: "问题改" }],
+      reflectionCompleted: true,
+    });
+    expect(remarked.reflectionCompletedAt).toBe(stamp);
+
+    const unmarked = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "再标一次",
+      items: [{ id: marked.items[0].id, questionText: "问题改" }],
+      reflectionCompleted: false,
+    });
+    expect(unmarked.reflectionCompletedAt).toBeNull();
+    const stored = await prisma.applicationInterviewDetail.findUniqueOrThrow({
+      where: { applicationProcessStepId: step.id },
+    });
+    expect(stored.reflectionCompletedAt).toBeNull();
+  });
+
+  it("keeps the mark when the user clears all content afterwards", async () => {
+    const { applications, step } = await createInterviewStep();
+    await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "已完成的复盘",
+      items: [{ questionText: "问题" }],
+      reflectionCompleted: true,
+    });
+    const cleared = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "",
+      items: [],
+    });
+    expect(cleared.reflectionCompletedAt).not.toBeNull();
+    expect(cleared.reflectionText).toBeNull();
+  });
+
+  it("marks a fresh detail even when the save carries no content", async () => {
+    const { applications, step } = await createInterviewStep();
+    const marked = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      items: [],
+      reflectionCompleted: true,
+    });
+    expect(marked.reflectionCompletedAt).not.toBeNull();
+    expect(await prisma.applicationInterviewDetail.count()).toBe(1);
+  });
+
+  it("never accepts a client-supplied timestamp", async () => {
+    const { applications, step } = await createInterviewStep();
+    const saved = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "内容",
+      items: [],
+      reflectionCompleted: true,
+      // A forged timestamp must not reach the column.
+      ...({ reflectionCompletedAt: "1999-01-01T00:00:00.000Z" } as object),
+    });
+    expect(saved.reflectionCompletedAt).not.toBe("1999-01-01T00:00:00.000Z");
+  });
+});
+
+describe("reflection item source linkage", () => {
+  it("persists a QUESTION_BANK source and reports it active", async () => {
+    const { applications, step } = await createInterviewStep();
+    const question = await prisma.question.create({
+      data: { question: "题库原题", createdBy: userId },
+    });
+    const saved = await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      items: [
+        {
+          questionText: "题库原题",
+          sourceQuestionId: question.id,
+          sourceKind: "QUESTION_BANK",
+        },
+      ],
+    });
+    expect(saved.items[0]).toMatchObject({
+      sourceQuestionId: question.id,
+      sourceKind: "QUESTION_BANK",
+      sourceQuestionActive: true,
+    });
+    const reloaded = await applications.getInterviewReflection(step.id);
+    expect(reloaded.items[0].sourceQuestionActive).toBe(true);
+  });
+
+  it("rejects an invalid sourceKind", async () => {
+    const { applications, step } = await createInterviewStep();
+    await expect(
+      applications.saveInterviewReflection({
+        applicationProcessStepId: step.id,
+        items: [{ questionText: "问题", sourceKind: "BOGUS" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERVIEW_REFLECTION_SOURCE_KIND_INVALID",
+    });
+  });
+
+  it("rejects an AD_HOC item that links a question", async () => {
+    const { applications, step } = await createInterviewStep();
+    const question = await prisma.question.create({
+      data: { question: "题库原题", createdBy: userId },
+    });
+    await expect(
+      applications.saveInterviewReflection({
+        applicationProcessStepId: step.id,
+        items: [
+          {
+            questionText: "问题",
+            sourceKind: "AD_HOC",
+            sourceQuestionId: question.id,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERVIEW_REFLECTION_SOURCE_KIND_INVALID",
+    });
+  });
+
+  it("rejects a missing or foreign source question", async () => {
+    const { applications, step } = await createInterviewStep();
+    await expect(
+      applications.saveInterviewReflection({
+        applicationProcessStepId: step.id,
+        items: [
+          {
+            questionText: "问题",
+            sourceKind: "QUESTION_BANK",
+            sourceQuestionId: "no-such-question",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERVIEW_REFLECTION_SOURCE_QUESTION_INVALID",
+    });
+
+    const foreign = await prisma.question.create({
+      data: { question: "别人的题", createdBy: otherUserId },
+    });
+    await expect(
+      applications.saveInterviewReflection({
+        applicationProcessStepId: step.id,
+        items: [
+          {
+            questionText: "问题",
+            sourceKind: "QUESTION_BANK",
+            sourceQuestionId: foreign.id,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERVIEW_REFLECTION_SOURCE_QUESTION_INVALID",
+    });
+  });
+
+  it("keeps the link but reports sourceQuestionActive=false on a soft-deleted question", async () => {
+    const { applications, step } = await createInterviewStep();
+    const question = await prisma.question.create({
+      data: { question: "题库原题", createdBy: userId },
+    });
+    await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      items: [
+        {
+          questionText: "题库原题快照",
+          sourceKind: "QUESTION_BANK",
+          sourceQuestionId: question.id,
+        },
+      ],
+    });
+    await prisma.question.update({
+      where: { id: question.id },
+      data: { deletedAt: new Date() },
+    });
+    const reloaded = await applications.getInterviewReflection(step.id);
+    expect(reloaded.items[0]).toMatchObject({
+      questionText: "题库原题快照",
+      sourceQuestionId: question.id,
+      sourceQuestionActive: false,
+    });
+  });
+
+  it("blocks physical delete of a referenced question (Restrict)", async () => {
+    const { applications, step } = await createInterviewStep();
+    const question = await prisma.question.create({
+      data: { question: "题库原题", createdBy: userId },
+    });
+    await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      items: [
+        {
+          questionText: "题库原题",
+          sourceKind: "QUESTION_BANK",
+          sourceQuestionId: question.id,
+        },
+      ],
+    });
+    await expect(
+      prisma.question.delete({ where: { id: question.id } }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("reflection archive and cross-user isolation", () => {
+  it("rejects writes on an archived opportunity but keeps reads", async () => {
+    const { applications, opportunity, step } = await createInterviewStep();
+    await applications.saveInterviewReflection({
+      applicationProcessStepId: step.id,
+      reflectionText: "归档前的复盘",
+      items: [{ questionText: "问题" }],
+      reflectionCompleted: true,
+    });
+    await prisma.jobOpportunity.update({
+      where: { id: opportunity.id },
+      data: { archivedAt: new Date() },
+    });
+    await expect(
+      applications.saveInterviewReflection({
+        applicationProcessStepId: step.id,
+        reflectionText: "归档后改写",
+        items: [],
+      }),
+    ).rejects.toMatchObject({ code: "OPPORTUNITY_ARCHIVED" });
+    const readable = await applications.getInterviewReflection(step.id);
+    expect(readable.reflectionText).toBe("归档前的复盘");
+    expect(readable.reflectionCompletedAt).not.toBeNull();
+  });
+
+  it("does not let user A read or write user B reflection", async () => {
+    const { step } = await createInterviewStep();
+    const other = services(otherUserId).applications;
+    await expect(other.getInterviewReflection(step.id)).rejects.toMatchObject({
+      code: "PROCESS_STEP_NOT_FOUND",
+    });
+    await expect(
+      other.saveInterviewReflection({
+        applicationProcessStepId: step.id,
+        items: [{ questionText: "注入" }],
+      }),
+    ).rejects.toMatchObject({ code: "PROCESS_STEP_NOT_FOUND" });
   });
 });

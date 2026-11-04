@@ -264,6 +264,7 @@ describe("ApplicationTimelineTab process step actions", () => {
       data: {
         applicationProcessStepId: "step-user",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });

@@ -11,8 +11,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 7;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7] as const;
+export const BACKUP_FORMAT_VERSION = 8;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -27,6 +27,7 @@ export const ManifestSchema = z.object({
     z.literal(5),
     z.literal(6),
     z.literal(7),
+    z.literal(8),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -555,6 +556,9 @@ const ApplicationInterviewDetail = z.object({
   durationMinutes: optInt,
   structuredData: str,
   reflectionText: optStr.optional(),
+  // Optional on purpose: pre-v8 backups have no such key. Absent restores to
+  // NULL — the "never marked" state — matching the in-place migration.
+  reflectionCompletedAt: optDt.optional(),
   createdAt: dt,
   updatedAt: dt,
 });
@@ -564,6 +568,10 @@ const ApplicationInterviewReflectionItem = z.object({
   applicationInterviewDetailId: id,
   questionText: str,
   answerNotes: optStr,
+  // Optional+nullable for the same pre-v8 compat reason. A non-null value is
+  // remapped through the Question id map at restore.
+  sourceQuestionId: optId.optional(),
+  sourceKind: optStr.optional(),
   sortOrder: int,
   createdAt: dt,
   updatedAt: dt,

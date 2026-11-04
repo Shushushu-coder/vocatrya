@@ -681,7 +681,12 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
   },
   ApplicationInterviewReflectionItem: {
     delegate: "applicationInterviewReflectionItem",
-    fks: { applicationInterviewDetailId: "ApplicationInterviewDetail" },
+    fks: {
+      applicationInterviewDetailId: "ApplicationInterviewDetail",
+      // Nullable back-link into the user's own question bank; remapped through
+      // the Question id map, absent ids degrade to NULL (OPTIONAL_FKS).
+      sourceQuestionId: "Question",
+    },
     scope: byInterviewDetail,
   },
   ApplicationAssessmentDetail: {

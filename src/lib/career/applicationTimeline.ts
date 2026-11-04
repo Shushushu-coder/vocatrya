@@ -36,6 +36,10 @@ export type ApplicationProcessStepDTO = {
   completedAtPrecision: "fullInstant" | "unknown" | null;
   result: string | null;
   notes: string | null;
+  /** Present when the timeline query loaded the interview detail row. */
+  interviewDetailPresent?: boolean;
+  reflectionItemCount?: number;
+  reflectionCompletedAt?: string | null;
 };
 
 export type TransferredFromDTO = {

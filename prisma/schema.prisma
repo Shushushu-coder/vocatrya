@@ -647,6 +647,7 @@ model Question {
 
   questionInstances QuestionInstance[]
   bankItems         QuestionBankItem[]
+  reflectionItems   ApplicationInterviewReflectionItem[]
 
   @@unique([presetBankKey, presetItemKey])
   @@index([createdBy])
@@ -1048,6 +1049,10 @@ model ApplicationInterviewDetail {
   structuredData           String   @default("{}")
   /// Whole-interview free-text reflection. Not a per-question note.
   reflectionText           String?
+  /// Explicit user completion. NULL means draft or never marked, including
+  /// rows that already have text. The server writes this instant; clients
+  /// do not send a timestamp. Existing rows stay NULL (no backfill).
+  reflectionCompletedAt    DateTime?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -1065,13 +1070,22 @@ model ApplicationInterviewReflectionItem {
   applicationInterviewDetailId String
   questionText                 String
   answerNotes                  String?
+  /// Snapshot stays the display truth. This optional link records which bank
+  /// question the snapshot came from. Restrict matches submitted-resume refs:
+  /// a referenced question cannot be physically deleted.
+  sourceQuestionId             String?
+  /// QUESTION_BANK | AD_HOC | PRACTICE_SESSION. NULL means typed by hand or
+  /// unknown. Independent from QuestionInstance.sourceKind.
+  sourceKind                   String?
   sortOrder                    Int
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
 
   applicationInterviewDetail ApplicationInterviewDetail @relation(fields: [applicationInterviewDetailId], references: [id], onDelete: Cascade)
+  sourceQuestion             Question?                  @relation(fields: [sourceQuestionId], references: [id], onDelete: Restrict)
 
   @@index([applicationInterviewDetailId, sortOrder])
+  @@index([sourceQuestionId])
 }
 
 model ApplicationAssessmentDetail {

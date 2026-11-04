@@ -342,4 +342,258 @@ describe("interview reflection backup contract", () => {
     );
     expect(items.map((item) => item.sortOrder)).toEqual([10, 20]);
   }, 120_000);
+
+  it("parses the v8 columns and tolerates their absence (pre-v8 rows)", () => {
+    const parsed = BackupDataSchema.parse({
+      ApplicationInterviewDetail: [
+        {
+          id: "detail-new",
+          applicationProcessStepId: "step-1",
+          interviewFormat: null,
+          roundLabel: null,
+          locationText: null,
+          interviewerNames: null,
+          durationMinutes: null,
+          structuredData: "{}",
+          reflectionText: null,
+          reflectionCompletedAt: new Date("2026-11-04T10:00:00.000Z"),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "detail-legacy",
+          applicationProcessStepId: "step-2",
+          interviewFormat: null,
+          roundLabel: null,
+          locationText: null,
+          interviewerNames: null,
+          durationMinutes: null,
+          structuredData: "{}",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      ApplicationInterviewReflectionItem: [
+        {
+          id: "item-new",
+          applicationInterviewDetailId: "detail-new",
+          questionText: "Q",
+          answerNotes: null,
+          sourceQuestionId: "q-1",
+          sourceKind: "QUESTION_BANK",
+          sortOrder: 10,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "item-legacy",
+          applicationInterviewDetailId: "detail-new",
+          questionText: "Q2",
+          answerNotes: null,
+          sortOrder: 20,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    expect(parsed.ApplicationInterviewDetail[0].reflectionCompletedAt)
+      .toBeInstanceOf(Date);
+    expect(
+      parsed.ApplicationInterviewDetail[1].reflectionCompletedAt,
+    ).toBeUndefined();
+    expect(parsed.ApplicationInterviewReflectionItem[0]).toMatchObject({
+      sourceQuestionId: "q-1",
+      sourceKind: "QUESTION_BANK",
+    });
+    expect(
+      parsed.ApplicationInterviewReflectionItem[1].sourceQuestionId,
+    ).toBeUndefined();
+    expect(
+      parsed.ApplicationInterviewReflectionItem[1].sourceKind,
+    ).toBeUndefined();
+  });
+
+  it("round-trips the completion mark and remaps sourceQuestionId to the restored Question", async () => {
+    const company = await prisma.company.create({
+      data: {
+        label: "SourceCo",
+        value: `source-reflection-${Date.now()}`,
+        createdBy: userId,
+      },
+    });
+    const question = await prisma.question.create({
+      data: { question: "题库原题", answer: null, createdBy: userId },
+    });
+    const opportunity = await prisma.jobOpportunity.create({
+      data: {
+        userId,
+        companyId: company.id,
+        title: "Engineer",
+        status: "UNKNOWN",
+      },
+    });
+    const attempt = await prisma.applicationAttempt.create({
+      data: {
+        userId,
+        jobOpportunityId: opportunity.id,
+        channelLabel: "USER",
+        outcome: "ACTIVE",
+      },
+    });
+    const step = await prisma.applicationProcessStep.create({
+      data: {
+        applicationAttemptId: attempt.id,
+        category: PROCESS_STEP_CATEGORY.INTERVIEW,
+        label: "一面",
+        sortOrder: 10,
+        source: "USER",
+      },
+    });
+    const detail = await prisma.applicationInterviewDetail.create({
+      data: {
+        applicationProcessStepId: step.id,
+        structuredData: "{}",
+        reflectionText: "复盘完成",
+        reflectionCompletedAt: new Date("2026-11-04T09:00:00.000Z"),
+      },
+    });
+    await prisma.applicationInterviewReflectionItem.create({
+      data: {
+        applicationInterviewDetailId: detail.id,
+        questionText: "题库原题快照",
+        sourceQuestionId: question.id,
+        sourceKind: "QUESTION_BANK",
+        sortOrder: 10,
+      },
+    });
+
+    const { buffer } = await buildBackupZip(
+      userId,
+      "interview-reflection-source@example.com",
+    );
+    await importBackup(
+      buffer,
+      userId,
+      "interview-reflection-source@example.com",
+      true,
+    );
+
+    const restoredQuestion = await prisma.question.findFirstOrThrow({
+      where: { createdBy: userId },
+    });
+    expect(restoredQuestion.id).not.toBe(question.id);
+
+    const restoredItem =
+      await prisma.applicationInterviewReflectionItem.findFirstOrThrow({
+        where: {
+          applicationInterviewDetail: {
+            processStep: { applicationAttempt: { userId } },
+          },
+        },
+      });
+    expect(restoredItem.sourceQuestionId).toBe(restoredQuestion.id);
+    expect(restoredItem.sourceKind).toBe("QUESTION_BANK");
+
+    const restoredDetail =
+      await prisma.applicationInterviewDetail.findFirstOrThrow({
+        where: { processStep: { applicationAttempt: { userId } } },
+      });
+    expect(restoredDetail.reflectionCompletedAt?.toISOString()).toBe(
+      "2026-11-04T09:00:00.000Z",
+    );
+  }, 120_000);
+
+  it("restores a pre-v8 backup with NULL in the new columns", async () => {
+    const JSZip = (await import("jszip")).default;
+    const company = await prisma.company.create({
+      data: {
+        label: "LegacyCo",
+        value: `legacy-reflection-${Date.now()}`,
+        createdBy: userId,
+      },
+    });
+    const opportunity = await prisma.jobOpportunity.create({
+      data: {
+        userId,
+        companyId: company.id,
+        title: "Engineer",
+        status: "UNKNOWN",
+      },
+    });
+    const attempt = await prisma.applicationAttempt.create({
+      data: {
+        userId,
+        jobOpportunityId: opportunity.id,
+        channelLabel: "USER",
+        outcome: "ACTIVE",
+      },
+    });
+    const step = await prisma.applicationProcessStep.create({
+      data: {
+        applicationAttemptId: attempt.id,
+        category: PROCESS_STEP_CATEGORY.INTERVIEW,
+        label: "一面",
+        sortOrder: 10,
+        source: "USER",
+      },
+    });
+    const detail = await prisma.applicationInterviewDetail.create({
+      data: {
+        applicationProcessStepId: step.id,
+        structuredData: "{}",
+        reflectionText: "老备份的复盘",
+      },
+    });
+    await prisma.applicationInterviewReflectionItem.create({
+      data: {
+        applicationInterviewDetailId: detail.id,
+        questionText: "老问题",
+        sortOrder: 10,
+      },
+    });
+
+    const { buffer } = await buildBackupZip(
+      userId,
+      "interview-reflection-legacy@example.com",
+    );
+    const zip = await JSZip.loadAsync(buffer);
+    const data = JSON.parse(await zip.file("data.json")!.async("string"));
+    const manifest = JSON.parse(
+      await zip.file("manifest.json")!.async("string"),
+    );
+    // Simulate the pre-v8 payload: the keys simply do not exist.
+    for (const row of data.ApplicationInterviewDetail) {
+      delete row.reflectionCompletedAt;
+    }
+    for (const row of data.ApplicationInterviewReflectionItem) {
+      delete row.sourceQuestionId;
+      delete row.sourceKind;
+    }
+    manifest.formatVersion = 7;
+    const legacyZip = new JSZip();
+    legacyZip.file("manifest.json", JSON.stringify(manifest));
+    legacyZip.file("data.json", JSON.stringify(data));
+    const legacyBuffer = await legacyZip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+    });
+
+    await importBackup(
+      legacyBuffer,
+      userId,
+      "interview-reflection-legacy@example.com",
+      true,
+    );
+    const restoredDetail =
+      await prisma.applicationInterviewDetail.findFirstOrThrow({
+        where: { processStep: { applicationAttempt: { userId } } },
+      });
+    expect(restoredDetail.reflectionCompletedAt).toBeNull();
+    const restoredItem =
+      await prisma.applicationInterviewReflectionItem.findFirstOrThrow({
+        where: { applicationInterviewDetailId: restoredDetail.id },
+      });
+    expect(restoredItem.sourceQuestionId).toBeNull();
+    expect(restoredItem.sourceKind).toBeNull();
+  }, 120_000);
 });

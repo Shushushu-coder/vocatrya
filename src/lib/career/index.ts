@@ -121,11 +121,14 @@ export { declaredStepPrecision } from "./applicationTimeline";
 export {
   assertInterviewReflectionStep,
   emptyInterviewReflection,
+  isReflectionItemSourceKind,
   INTERVIEW_REFLECTION_SORT_STEP,
+  REFLECTION_ITEM_SOURCE_KIND,
 } from "./interviewReflection";
 export type {
   InterviewReflectionDTO,
   InterviewReflectionItemDTO,
+  ReflectionItemSourceKind,
   SaveInterviewReflectionInput,
   SaveInterviewReflectionItemInput,
 } from "./interviewReflection";
@@ -133,11 +136,14 @@ export {
   UPCOMING_EVENT_KIND,
   UPCOMING_BUCKET_ID,
   listUpcomingApplicationEvents,
+  listAwaitingReflectionInterviews,
   bucketUpcomingApplicationEvents,
   compareUpcomingEvents,
   isUpcomingOverdue,
 } from "./upcomingReadModel";
 export type {
+  AwaitingReflectionInterviewItem,
+  AwaitingReflectionInterviewsResult,
   UpcomingEventKind,
   UpcomingApplicationEvent,
   UpcomingApplicationEventsEnvelope,
