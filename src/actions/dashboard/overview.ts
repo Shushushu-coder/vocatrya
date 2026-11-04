@@ -15,6 +15,7 @@ import {
   loadUpcomingJobDeadlines,
   resolveJobsReadFamily,
 } from "@/lib/career/jobsReadDispatch";
+import { resolveResumeReadFamily } from "@/lib/career/resumeReadDispatch";
 import {
   isUpcomingOverdue,
   listUpcomingApplicationEvents as queryUpcomingApplicationEvents,
@@ -83,16 +84,40 @@ export type OverviewDataState = "empty" | "nonempty" | "unknown";
 // records either.
 export const getOverviewDataState = async (): Promise<OverviewDataState> => {
   const user = await requireUser();
-  const [jobsResult, tasks, questions, sessions] = await Promise.all([
-    jobsReadOrBlocked(() => loadJobsExistence(prisma, user.id)),
-    prisma.task.count({ where: { userId: user.id } }),
-    prisma.question.count({
-      where: { createdBy: user.id, presetBankKey: null, deletedAt: null },
-    }),
-    prisma.interviewSession.count({ where: { userId: user.id } }),
-  ]);
+  const [jobsResult, resumeFamily, tasks, questions, sessions] =
+    await Promise.all([
+      jobsReadOrBlocked(() => loadJobsExistence(prisma, user.id)),
+      resolveResumeReadFamily(prisma),
+      prisma.task.count({ where: { userId: user.id } }),
+      prisma.question.count({
+        where: { createdBy: user.id, presetBankKey: null, deletedAt: null },
+      }),
+      prisma.interviewSession.count({ where: { userId: user.id } }),
+    ]);
 
-  if (tasks > 0 || questions > 0 || sessions > 0) {
+  // Resume-side records join the "has started" evidence set so a user who
+  // only built career materials or resume variants is not offered the
+  // fresh-user starting points. A blocked resume family contributes no
+  // evidence rather than fabricating it — the jobs family still owns the
+  // unknown verdict below.
+  let resumeRecords = 0;
+  if (resumeFamily.family === "ab") {
+    const [materials, variants] = await Promise.all([
+      prisma.careerMaterialItem.count({
+        where: { userId: user.id, archivedAt: null },
+      }),
+      prisma.resumeVariant.count({
+        where: { userId: user.id, archivedAt: null },
+      }),
+    ]);
+    resumeRecords = materials + variants;
+  } else if (resumeFamily.family === "legacy") {
+    resumeRecords = await prisma.resume.count({
+      where: { profile: { userId: user.id } },
+    });
+  }
+
+  if (tasks > 0 || questions > 0 || sessions > 0 || resumeRecords > 0) {
     return "nonempty";
   }
   if (jobsResult.blocked) {
