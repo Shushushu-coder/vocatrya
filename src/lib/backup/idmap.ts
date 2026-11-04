@@ -54,6 +54,9 @@ const OPTIONAL_FKS = new Set<string>([
   "ResumeVariantVersion.resolvedConnectionId",
   "AutomationRun.resolvedConnectionId",
   "QuestionInstance.sourceQuestionId",
+  // Nullable reflection back-link: a dangling source question degrades to
+  // null (snapshot text stays authoritative); present questions remap.
+  "ApplicationInterviewReflectionItem.sourceQuestionId",
   "Transcript.sourceArtifactId",
   "DialogueTurn.questionInstanceId",
   "DialogueTurn.answerAttemptId",

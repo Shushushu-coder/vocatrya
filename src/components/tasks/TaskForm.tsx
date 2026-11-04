@@ -49,6 +49,8 @@ type TaskFormProps = {
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
   timeZone?: string;
+  /** New-task seeds (e.g. reflection-to-task). Ignored while editing. */
+  initialValues?: { title?: string; description?: string } | null;
 };
 
 export function TaskForm({
@@ -59,6 +61,7 @@ export function TaskForm({
   dialogOpen,
   setDialogOpen,
   timeZone = runtimeTimeZone(),
+  initialValues,
 }: TaskFormProps) {
   const { t, formatDateTime } = useI18n();
   const [isPending, startTransition] = useTransition();
@@ -110,8 +113,8 @@ export function TaskForm({
       });
     } else {
       reset({
-        title: "",
-        description: "",
+        title: initialValues?.title ?? "",
+        description: initialValues?.description ?? "",
         status: "in-progress",
         priority: 5,
         percentComplete: 0,
@@ -119,7 +122,7 @@ export function TaskForm({
         activityTypeId: undefined,
       });
     }
-  }, [editTask, reset, timeZone]);
+  }, [editTask, reset, timeZone, initialValues]);
 
   function onSubmit(data: z.infer<typeof AddTaskFormSchema>) {
     // dueOn is the write contract: undefined keeps stored values on edit,

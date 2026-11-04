@@ -439,6 +439,66 @@ describe("TaskForm Component", () => {
     );
   });
 
+  describe("initialValues prefill (reflection-to-task)", () => {
+    it("seeds title and description for a new task only", async () => {
+      render(
+        <TaskForm
+          activityTypes={mockActivityTypes}
+          editTask={null}
+          resetEditTask={mockResetEditTask}
+          onTaskSaved={mockOnTaskSaved}
+          dialogOpen={true}
+          setDialogOpen={mockSetDialogOpen}
+          initialValues={{
+            title: "复盘跟进：二面",
+            description: "项目经历回答还是太散。",
+          }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Title/i)).toHaveValue("复盘跟进：二面");
+      });
+      const saveBtn = screen.getByTestId("save-task-btn");
+      await user.click(saveBtn);
+      await waitFor(() => {
+        expect(createTask).toHaveBeenCalledWith(
+          expect.objectContaining({ title: "复盘跟进：二面" }),
+        );
+      });
+    });
+
+    it("does not overwrite edit mode values", async () => {
+      const mockEditTask: Task = {
+        id: "task-id",
+        userId: "user-id",
+        title: "Existing Task",
+        description: "Existing description",
+        status: "in-progress",
+        priority: 5,
+        percentComplete: 0,
+        dueDate: null,
+        activityTypeId: null,
+        activityType: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      render(
+        <TaskForm
+          activityTypes={mockActivityTypes}
+          editTask={mockEditTask}
+          resetEditTask={mockResetEditTask}
+          onTaskSaved={mockOnTaskSaved}
+          dialogOpen={true}
+          setDialogOpen={mockSetDialogOpen}
+          initialValues={{ title: "IGNORED" }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Title/i)).toHaveValue("Existing Task");
+      });
+    });
+  });
+
   describe("Dialog State Management", () => {
     it("should not render when dialogOpen is false", () => {
       render(

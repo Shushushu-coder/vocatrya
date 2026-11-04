@@ -10,9 +10,15 @@ import {
   todayDateOnly,
   type BusinessTimeValue,
 } from "@/lib/datetime";
-import { ATTEMPT_OUTCOME, OPPORTUNITY_STATUS, PROCESS_STEP_STATUS } from "./identities";
+import {
+  ATTEMPT_OUTCOME,
+  OPPORTUNITY_STATUS,
+  PROCESS_STEP_CATEGORY,
+  PROCESS_STEP_STATUS,
+} from "./identities";
 import { APPLIED_ATTEMPT_WHERE } from "./applicationFact";
 import { declaredStepPrecision, toIso } from "./applicationTimeline";
+import { reflectionHasContent } from "./interviewReflection";
 
 export const UPCOMING_EVENT_KIND = {
   APPLICATION_DEADLINE: "APPLICATION_DEADLINE",
@@ -333,4 +339,144 @@ export async function listUpcomingApplicationEvents(
   ];
 
   return { events: events.sort(compareUpcomingEvents), timeZone };
+}
+
+// --- §7 Interview reflection read model -------------------------------------
+// §7.1 awaiting predicate: INTERVIEW step, status COMPLETED, and the detail
+// row either missing or reflectionCompletedAt NULL. EVIDENCED is not
+// COMPLETED, so it is excluded by the status equality alone.
+// §7.2 overdueUnclosedCount is a weak prompt counted separately: open
+// (PENDING/IN_PROGRESS) INTERVIEW steps whose declared minute-precision
+// scheduledAt already passed. They never appear in `items`.
+
+export type AwaitingReflectionInterviewItem = {
+  stepId: string;
+  attemptId: string;
+  jobOpportunityId: string;
+  jobTitle: string;
+  companyName: string | null;
+  stepTitle: string;
+  roundLabel: string | null;
+  scheduledAt: string | null;
+  scheduledAtPrecision: "minute" | "unknown" | null;
+  completedAt: string | null;
+  completedAtPrecision: "fullInstant" | "unknown" | null;
+  /** Detail exists and carries text or items while the mark stays NULL. */
+  hasReflectionDraft: boolean;
+};
+
+export type AwaitingReflectionInterviewsResult = {
+  items: AwaitingReflectionInterviewItem[];
+  /** All matching rows, ignoring `limit`. */
+  totalCount: number;
+  overdueUnclosedCount: number;
+};
+
+const AWAITING_STEP_ATTEMPT_WHERE = {
+  archivedAt: null,
+  jobOpportunity: { archivedAt: null },
+} as const;
+
+export async function listAwaitingReflectionInterviews(
+  db: PrismaClient,
+  userId: string,
+  options?: { limit?: number; now?: Date },
+): Promise<AwaitingReflectionInterviewsResult> {
+  const now = options?.now ?? new Date();
+  const limit = options?.limit;
+
+  const awaitingWhere = {
+    category: PROCESS_STEP_CATEGORY.INTERVIEW,
+    status: PROCESS_STEP_STATUS.COMPLETED,
+    OR: [
+      { interviewDetail: null },
+      { interviewDetail: { reflectionCompletedAt: null } },
+    ],
+    applicationAttempt: { userId, ...AWAITING_STEP_ATTEMPT_WHERE },
+  };
+
+  const [totalCount, overdueUnclosedCount, steps] = await Promise.all([
+    db.applicationProcessStep.count({ where: awaitingWhere }),
+    db.applicationProcessStep.count({
+      where: {
+        category: PROCESS_STEP_CATEGORY.INTERVIEW,
+        status: {
+          in: [PROCESS_STEP_STATUS.PENDING, PROCESS_STEP_STATUS.IN_PROGRESS],
+        },
+        // Only a declared minute-precision instant is a reliable wall-clock
+        // promise; unknown/unsupported precision never prompts.
+        scheduledAtPrecision: "minute",
+        scheduledAt: { lt: now },
+        applicationAttempt: { userId, ...AWAITING_STEP_ATTEMPT_WHERE },
+      },
+    }),
+    db.applicationProcessStep.findMany({
+      where: awaitingWhere,
+      orderBy: [
+        { completedAt: { sort: "desc", nulls: "last" } },
+        { id: "asc" },
+      ],
+      ...(typeof limit === "number" ? { take: limit } : {}),
+      select: {
+        id: true,
+        label: true,
+        scheduledAt: true,
+        scheduledAtPrecision: true,
+        completedAt: true,
+        completedAtPrecision: true,
+        applicationAttempt: {
+          select: {
+            id: true,
+            jobOpportunity: {
+              select: {
+                id: true,
+                title: true,
+                company: { select: { label: true } },
+              },
+            },
+          },
+        },
+        interviewDetail: {
+          select: {
+            roundLabel: true,
+            reflectionText: true,
+            _count: { select: { reflectionItems: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const items: AwaitingReflectionInterviewItem[] = steps.map((step) => {
+    const detail = step.interviewDetail;
+    return {
+      stepId: step.id,
+      attemptId: step.applicationAttempt.id,
+      jobOpportunityId: step.applicationAttempt.jobOpportunity.id,
+      jobTitle: step.applicationAttempt.jobOpportunity.title,
+      companyName: step.applicationAttempt.jobOpportunity.company.label,
+      stepTitle: step.label,
+      roundLabel: detail?.roundLabel ?? null,
+      scheduledAt: toIso(step.scheduledAt),
+      scheduledAtPrecision: declaredStepPrecision(
+        step.scheduledAtPrecision,
+        step.scheduledAt !== null,
+        ["minute"],
+      ),
+      completedAt: toIso(step.completedAt),
+      completedAtPrecision: declaredStepPrecision(
+        step.completedAtPrecision,
+        step.completedAt !== null,
+        ["fullInstant"],
+      ),
+      hasReflectionDraft:
+        detail != null &&
+        reflectionHasContent(
+          detail.reflectionText,
+          detail._count.reflectionItems,
+        ),
+    };
+  });
+
+  return { items, totalCount, overdueUnclosedCount };
 }

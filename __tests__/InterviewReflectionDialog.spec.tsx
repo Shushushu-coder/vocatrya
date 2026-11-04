@@ -8,15 +8,22 @@ import {
 } from "@/actions/application.actions";
 import { generateInterviewReflectionDraft } from "@/actions/interviewReflectionAi.actions";
 import { resolveBusinessAiConfig } from "@/actions/aiAssignment.actions";
+import { getQuestionsList } from "@/actions/question.actions";
 import type { ApplicationProcessStepDTO } from "@/lib/career/applicationTimeline";
 
+const { mockPush } = vi.hoisted(() => ({ mockPush: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: mockPush }),
 }));
 
 vi.mock("@/actions/application.actions", () => ({
   getInterviewReflection: vi.fn(),
   saveInterviewReflection: vi.fn(),
+}));
+
+vi.mock("@/actions/question.actions", () => ({
+  getQuestionsList: vi.fn(),
 }));
 
 vi.mock("@/actions/interviewReflectionAi.actions", () => ({
@@ -36,6 +43,7 @@ const getReflection = vi.mocked(getInterviewReflection);
 const saveReflection = vi.mocked(saveInterviewReflection);
 const generateDraft = vi.mocked(generateInterviewReflectionDraft);
 const resolveConfig = vi.mocked(resolveBusinessAiConfig);
+const listQuestions = vi.mocked(getQuestionsList);
 
 const step: ApplicationProcessStepDTO = {
   id: "step-interview",
@@ -60,17 +68,24 @@ function existingReflection() {
   return {
     applicationProcessStepId: "step-interview",
     reflectionText: "项目经历回答还是太散。",
+    reflectionCompletedAt: null,
     items: [
       {
         id: "item-a",
         questionText: "介绍一下你的推荐系统项目",
         answerNotes: "讲了模型，但没有明确个人贡献",
+        sourceQuestionId: null,
+        sourceKind: null,
+        sourceQuestionActive: false,
         sortOrder: 10,
       },
       {
         id: "item-b",
         questionText: "最大的技术挑战是什么",
         answerNotes: "冷启动",
+        sourceQuestionId: null,
+        sourceKind: null,
+        sourceQuestionActive: false,
         sortOrder: 20,
       },
     ],
@@ -81,7 +96,7 @@ const aiDraftOutcome = {
   status: "DRAFT" as const,
   draft: {
     reflectionText: "【面试概况】一面\n【待补充：发挥如何】",
-    items: [
+        items: [
       { questionText: "AI 生成的问题", answerNotes: null },
       { questionText: "AI 追问", answerNotes: "AI 要点" },
     ],
@@ -132,6 +147,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -153,6 +169,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -195,20 +212,27 @@ describe("InterviewReflectionDialog", () => {
     expect(saveReflection).toHaveBeenCalledWith({
       applicationProcessStepId: "step-interview",
       reflectionText: "项目经历回答还是太散。",
+      reflectionCompleted: false,
       items: [
         {
           id: "item-a",
           questionText: "介绍一下你的推荐系统项目",
           answerNotes: "讲了模型，但没有明确个人贡献",
+          sourceQuestionId: null,
+          sourceKind: null,
         },
         {
           id: "item-b",
           questionText: "最大的技术挑战是什么",
           answerNotes: "冷启动",
+          sourceQuestionId: null,
+          sourceKind: null,
         },
         {
           questionText: "你还有什么想问我们的",
           answerNotes: "",
+          sourceQuestionId: null,
+          sourceKind: "AD_HOC",
         },
       ],
     });
@@ -221,6 +245,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -250,6 +275,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -277,6 +303,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -448,16 +475,21 @@ describe("InterviewReflectionDialog", () => {
     expect(saveReflection).toHaveBeenCalledWith({
       applicationProcessStepId: "step-interview",
       reflectionText: "项目经历回答还是太散。",
+      reflectionCompleted: false,
       items: [
         {
           id: "item-a",
           questionText: "介绍一下你的推荐系统项目",
           answerNotes: "讲了模型，但没有明确个人贡献",
+          sourceQuestionId: null,
+          sourceKind: null,
         },
         {
           id: "item-b",
           questionText: "最大的技术挑战是什么",
           answerNotes: "冷启动",
+          sourceQuestionId: null,
+          sourceKind: null,
         },
       ],
     });
@@ -511,18 +543,28 @@ describe("InterviewReflectionDialog", () => {
     expect(saveReflection).toHaveBeenCalledWith({
       applicationProcessStepId: "step-interview",
       reflectionText: "编辑后的整体反思",
+      reflectionCompleted: false,
       items: [
         {
           id: "item-a",
           questionText: "介绍一下你的推荐系统项目",
           answerNotes: "讲了模型，但没有明确个人贡献",
+          sourceQuestionId: null,
+          sourceKind: null,
         },
         {
           id: "item-b",
           questionText: "最大的技术挑战是什么",
           answerNotes: "冷启动",
+          sourceQuestionId: null,
+          sourceKind: null,
         },
-        { questionText: "AI 追问", answerNotes: "AI 要点" },
+        {
+          questionText: "AI 追问",
+          answerNotes: "AI 要点",
+          sourceQuestionId: null,
+          sourceKind: "AD_HOC",
+        },
       ],
     });
   });
@@ -533,6 +575,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -572,6 +615,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -602,6 +646,7 @@ describe("InterviewReflectionDialog", () => {
       data: {
         applicationProcessStepId: "step-interview",
         reflectionText: null,
+        reflectionCompletedAt: null,
         items: [],
       },
     });
@@ -638,6 +683,213 @@ describe("InterviewReflectionDialog", () => {
     ).toHaveTextContent("保存复盘");
     expect(
       screen.getByRole("button", { name: "取消" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sends reflectionCompleted=true when the mark checkbox is ticked", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    saveReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByDisplayValue("项目经历回答还是太散。");
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-completed"),
+    );
+    await userEvent.click(screen.getByTestId("interview-reflection-save"));
+    await waitFor(() => expect(saveReflection).toHaveBeenCalledTimes(1));
+    expect(saveReflection).toHaveBeenCalledWith(
+      expect.objectContaining({ reflectionCompleted: true }),
+    );
+  });
+
+  it("shows a draft badge for unmarked content and keeps the stored mark checked", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    // Content exists but reflectionCompletedAt is null -> draft state.
+    expect(
+      await screen.findByTestId("interview-reflection-draft-badge"),
+    ).toBeInTheDocument();
+
+    getReflection.mockResolvedValue({
+      success: true,
+      data: {
+        ...existingReflection(),
+        reflectionCompletedAt: "2026-11-04T09:00:00.000Z",
+      },
+    });
+    render(
+      <InterviewReflectionDialog
+        open
+        onOpenChange={vi.fn()}
+        step={{ ...step, id: "step-2" }}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByTestId("interview-reflection-completed").length,
+      ).toBe(2),
+    );
+    const boxes = screen.getAllByTestId("interview-reflection-completed");
+    expect(boxes[boxes.length - 1]).toBeChecked();
+  });
+
+  it("hides the completion mark for non-USER steps", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog
+        open
+        onOpenChange={vi.fn()}
+        step={{ ...step, source: "SYSTEM" }}
+      />,
+    );
+    await screen.findByDisplayValue("项目经历回答还是太散。");
+    expect(
+      screen.queryByTestId("interview-reflection-completed"),
+    ).toBeDisabled();
+  });
+
+  it("shows the stale-link hint when sourceQuestionActive is false", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: {
+        applicationProcessStepId: "step-interview",
+        reflectionText: null,
+        reflectionCompletedAt: null,
+        items: [
+          {
+            id: "item-linked",
+            questionText: "题库原题快照",
+            answerNotes: null,
+            sourceQuestionId: "q-1",
+            sourceKind: "QUESTION_BANK",
+            sourceQuestionActive: false,
+            sortOrder: 10,
+          },
+        ],
+      },
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    expect(
+      await screen.findByTestId("interview-reflection-source-stale"),
+    ).toBeInTheDocument();
+  });
+
+  it("picks a bank question into a linked item that survives the save payload", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: {
+        applicationProcessStepId: "step-interview",
+        reflectionText: null,
+        reflectionCompletedAt: null,
+        items: [],
+      },
+    });
+    listQuestions.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: "q-9",
+          question: "自我介绍的最佳结构",
+          isActive: true,
+          deletedAt: null,
+        },
+      ],
+      total: 1,
+    });
+    saveReflection.mockResolvedValue({ success: true, data: {} as never });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByTestId("interview-reflection-bank-toggle");
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-bank-toggle"),
+    );
+    await userEvent.click(
+      await screen.findByTestId("interview-reflection-bank-option"),
+    );
+    await userEvent.click(screen.getByTestId("interview-reflection-save"));
+    await waitFor(() => expect(saveReflection).toHaveBeenCalledTimes(1));
+    expect(saveReflection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            questionText: "自我介绍的最佳结构",
+            sourceQuestionId: "q-9",
+            sourceKind: "QUESTION_BANK",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("deep-links convert-to-task with prefilled title and description", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog open onOpenChange={vi.fn()} step={step} />,
+    );
+    await screen.findByDisplayValue("项目经历回答还是太散。");
+    await userEvent.click(
+      screen.getByTestId("interview-reflection-to-task"),
+    );
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const url = mockPush.mock.calls[0][0] as string;
+    expect(url).toContain("/dashboard/tasks?add-task=true");
+    expect(url).toContain("prefillTitle=");
+    expect(url).toContain("prefillDescription=");
+  });
+
+  it("renders read-only without save, AI, or edit affordances", async () => {
+    getReflection.mockResolvedValue({
+      success: true,
+      data: existingReflection(),
+    });
+    render(
+      <InterviewReflectionDialog
+        open
+        onOpenChange={vi.fn()}
+        step={step}
+        readOnly
+      />,
+    );
+    await screen.findByDisplayValue("项目经历回答还是太散。");
+    expect(
+      screen.queryByTestId("interview-reflection-save"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("interview-reflection-ai"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("interview-reflection-add-question"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("interview-reflection-completed"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByTestId("interview-reflection-question")[0],
+    ).toHaveAttribute("readonly");
+    // Convert-to-task stays available — it writes to Tasks, not the job.
+    expect(
+      screen.getByTestId("interview-reflection-to-task"),
     ).toBeInTheDocument();
   });
 });

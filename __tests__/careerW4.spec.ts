@@ -245,9 +245,9 @@ describe("backup V6 schema surface", () => {
     expect(checkImportedAttachment(pdf, "AWARD_PROOF")?.kind).toBe("pdf");
     expect(checkImportedAttachment(PNG_BYTES, "UNKNOWN")).toBeNull();
   });
-  it("declares version 6 and supports 1..6", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(6);
-    for (const v of [1, 2, 3, 4, 5, 6]) {
+  it("declares version 8 and supports 1..8", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(8);
+    for (const v of [1, 2, 3, 4, 5, 6, 7, 8]) {
       expect(SUPPORTED_BACKUP_FORMAT_VERSIONS).toContain(v);
     }
   });
@@ -369,7 +369,7 @@ describe("backup round trip", () => {
     const stdManifest = JSON.parse(
       await stdZip.file("manifest.json")!.async("string"),
     );
-    expect(stdManifest.formatVersion).toBe(6);
+    expect(stdManifest.formatVersion).toBe(8);
     expect(stdManifest.containsSensitiveData).toBe(false);
     expect(stdData.CandidateReferee).toBeUndefined();
     expect(stdData.CandidateAttachment).toBeUndefined();
@@ -454,7 +454,7 @@ describe("backup round trip", () => {
       await zip.file("manifest.json")!.async("string"),
     );
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
-    expect(manifest.formatVersion).toBe(6);
+    expect(manifest.formatVersion).toBe(8);
     expect(data.CareerSkillDetail[0].tagId).toBe(tag.id);
 
     await resetDisposableDb(prisma);
