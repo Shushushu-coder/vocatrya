@@ -19,11 +19,11 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 | Feature | P2 相对优先级 | 设计状态 | 核心交付 | 实现/验收口径 |
 | --- | --- | --- | --- | --- |
-| **JOURNEY-OVERVIEW** | CORE | 合同已冻结（2026-11-01，D1–D9） | 三阶段旅程、一页主要入口、新旧用户状态 | 已源码复核 / 未编码 / 未验收 |
+| **JOURNEY-OVERVIEW** | CORE | 合同已冻结（2026-11-01，D1–D9） | 三阶段旅程、一页主要入口、新旧用户状态 | 2026-11-04 已集成未验收 |
 | **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 已源码复核 / 未编码 / 未验收 |
 | **INTERVIEW-DEBRIEF** | HIGH | 联合合同已冻结（D1–D12） | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / G-AI1 已修，P2 增量未编码 / 未验收 |
-| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 已源码复核 / 未编码 / 未验收 |
-| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 已源码复核 / 未编码 / 未验收 |
+| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 2026-11-04 已集成未验收（R6 待 §7.3 读模型） |
+| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 2026-11-04 已集成未验收（M9 待 §7.3 读模型） |
 | **MULTI-AGENT** | HIGH | 合同已冻结（D1–D10） | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 已源码复核 / 未编码 / 未验收 |
 
 对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。全部 `implementationStatus: NOT_ASSESSED`、`passes: false`：**没有进行代码审计不等于全部功能缺失**；产品确认也不等于工程通过。

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "Vocatrya",
   "phase": "P2",
-  "updatedAt": "2026-11-01",
+  "updatedAt": "2026-11-04",
   "baseline": {
     "source": "2026-10-29 已确认的 P2 产品讨论；以 P1_FEATURES.json / P1_IMPLEMENTATION.md 为上游合同参考",
     "gitRef": null,
@@ -31,7 +31,7 @@
       "relativePriority": "CORE",
       "scope": "IN_SCOPE",
       "designStatus": "CONTRACT_FROZEN",
-      "implementationStatus": "NOT_ASSESSED",
+      "implementationStatus": "IMPLEMENTED",
       "description": "P2 首页核心：在一张可滚动的概览页，以「准备 → 行动 → 复盘」讲清完整求职旅程，呈现主要功能入口、阶段进度、清晰的数据看板与 Vocatrya Agent 辅助入口；新用户与已有数据用户应有差异化呈现，但不强制线性流程。",
       "confirmedDecisions": [
         "三个阶段固定为准备（Voca Insight）→行动（Voca Pilot）→复盘（Voca Reflect），是场景导航而非强制门槛；用户可随时回到任一阶段。",
@@ -55,7 +55,7 @@
         "各阶段模块卡片/数据卡片的具体密度、排序与响应式断点。",
         "“所有主要功能”的完整可达性映射须依据当时真实导航和模块审计确定。"
       ],
-      "implementationNotes": "2026-10-31 Main 集成 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md（680b3879，merge 8fb2fd32）：对 96e896e3 做了源码复核；D1–D9 待 Owner 冻结。implementationStatus 仍为 NOT_ASSESSED（未编码）。passes:false。 2026-11-01 集成合同收敛：以 main@23178a4c 复核现状，首页/下一步仍为提案；布局可独立开发，R6 真实数据依赖复盘领域接口与共同裁定，不使用内容存在性临时替代显式完成标记。未编码或新增功能验收。 2026-11-01 Owner 裁定冻结 §9 D1–D9（全部按推荐/协调建议生效；D3 与面试合同 §13 D6 同次裁定，附随子项见合同 §10）：旅程区在前、purpose＝CAREER_DIALOGUE（存储态口径）、仅 COMPLETED 计入待复盘、3 条+N、不做 dismiss、dataState 扩展素材/版本、Agent 槽位单入口 open()、分家族口径且 R3 按未归档职位=0、R4 活跃未投递。备料 .tmp/p2-overview-actions-decision-prep/，合并表 .tmp/p2-decision-merge/owner-decision-pack.md。未编码，passes:false。",
+      "implementationNotes": "2026-10-31 Main 集成 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md（680b3879，merge 8fb2fd32）：对 96e896e3 做了源码复核；D1–D9 待 Owner 冻结。implementationStatus 仍为 NOT_ASSESSED（未编码）。passes:false。 2026-11-01 集成合同收敛：以 main@23178a4c 复核现状，首页/下一步仍为提案；布局可独立开发，R6 真实数据依赖复盘领域接口与共同裁定，不使用内容存在性临时替代显式完成标记。未编码或新增功能验收。 2026-11-01 Owner 裁定冻结 §9 D1–D9（全部按推荐/协调建议生效；D3 与面试合同 §13 D6 同次裁定，附随子项见合同 §10）：旅程区在前、purpose＝CAREER_DIALOGUE（存储态口径）、仅 COMPLETED 计入待复盘、3 条+N、不做 dismiss、dataState 扩展素材/版本、Agent 槽位单入口 open()、分家族口径且 R3 按未归档职位=0、R4 活跃未投递。备料 .tmp/p2-overview-actions-decision-prep/，合并表 .tmp/p2-decision-merge/owner-decision-pack.md。未编码，passes:false。 2026-11-04 Main 集成 feat/p2-overview-actions（5444f508，merge ae3207eb）+ 集成接线 a08875a2：首页 O1–O6 编排（JourneySection→NextActions→Reminders→Metrics→GettingStarted/RecentUpdates）、三阶段卡真实路由+能力门隐藏降级+Agent 单入口 open()（D7）、getOverviewDataState 判定域扩展（+CareerMaterialItem/ResumeVariant(ab)/Resume(legacy)，D6）、42 个 dashboard.* 词条并入 messages；O5 applied7d 改经 insights 读模型账户时区。tsc/改动 ESLint 通过，新增 65 项+受影响回归共 131 项全过。R6 待 §7.3 listAwaitingReflectionInterviews（优先级槽位预留、无替代谓词），生产 build/真实 Electron/完整 E2E 未执行，passes:false。",
       "passes": false
     },
     {
@@ -133,7 +133,7 @@
       "relativePriority": "HIGH",
       "scope": "IN_SCOPE",
       "designStatus": "CONTRACT_FROZEN",
-      "implementationStatus": "NOT_ASSESSED",
+      "implementationStatus": "IMPLEMENTED",
       "description": "根据现有真实业务数据使用确定性规则自动提供“下一步做什么”的引导；无简历、未配置 AI、尚未投递、已结束真实面试未复盘等状态触发对应模块入口。不运行 LLM，不做搜索推荐算法，不自动创建或执行 Agent 任务。",
       "confirmedDecisions": [
         "无简历→引导简历模块；未配置可用 AI→引导 AI 服务设置，但不阻止手动使用；尚未投递→引导添加/导入职位并准备投递。",
@@ -158,7 +158,7 @@
         "多条建议的排序、上限、暂时忽略/消除规则。",
         "各数据状态与时间/时区的正式判定规则及归档数据是否参与。"
       ],
-      "implementationNotes": "2026-10-31 与 JOURNEY-OVERVIEW 共用 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md。R1–R6 推荐规则与 D1–D9 待冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 合同收敛：D3 与面试 D6 统一协调建议为仅 COMPLETED，过期未完成仅提示确认状态；尚未批准。R6 消费唯一 AwaitingReflectionResult，完成标记依 D2 裁定，领域接口未就绪时静默并记录未覆盖。未编码或验收。 2026-11-01 Owner 裁定冻结 §9 D1–D9 全部按推荐/协调建议生效（合同 §10；D3 与面试 §13 D6 同次裁定）：仅 COMPLETED 计入待复盘、R6 等待 §7.3 读模型落地、规则确定性不调用 LLM。备料 .tmp/p2-overview-actions-decision-prep/。未编码，passes:false。",
+      "implementationNotes": "2026-10-31 与 JOURNEY-OVERVIEW 共用 P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md。R1–R6 推荐规则与 D1–D9 待冻结。implementationStatus 仍为 NOT_ASSESSED。passes:false。 2026-11-01 合同收敛：D3 与面试 D6 统一协调建议为仅 COMPLETED，过期未完成仅提示确认状态；尚未批准。R6 消费唯一 AwaitingReflectionResult，完成标记依 D2 裁定，领域接口未就绪时静默并记录未覆盖。未编码或验收。 2026-11-01 Owner 裁定冻结 §9 D1–D9 全部按推荐/协调建议生效（合同 §10；D3 与面试 §13 D6 同次裁定）：仅 COMPLETED 计入待复盘、R6 等待 §7.3 读模型落地、规则确定性不调用 LLM。备料 .tmp/p2-overview-actions-decision-prep/。未编码，passes:false。 2026-11-04 Main 集成 feat/p2-overview-actions（5444f508，merge ae3207eb）：nextActionsReadModel 实现 R1–R5/R7（优先级 R5>R6>R4>R3>R1>R7>R2、ruleId+实体去重、3 条+“+N”、账户时区分桶、归档排除、blocked 静默、R5 逾期 confirmStatus 弱提示），NextActions UI 无命中整块不渲染、打开首页 0 AI 调用 0 写入；R6 未实现——依赖复盘包 §7.3 读模型，按合同静默记未覆盖，无内容存在性替代谓词。验证与 JOURNEY-OVERVIEW 同批次 131 项全过。生产 build/真实 Electron/完整 E2E 未执行，passes:false。",
       "passes": false
     },
     {
@@ -168,7 +168,7 @@
       "relativePriority": "MEDIUM",
       "scope": "IN_SCOPE",
       "designStatus": "CONTRACT_FROZEN",
-      "implementationStatus": "NOT_ASSESSED",
+      "implementationStatus": "IMPLEMENTED",
       "description": "建立简洁、可解释的求职数据看板，呈现职位、真实投递、面试、Offer、待跟进等主要业务指标；可逐步加入漏斗和阶段转化，口径先定义再展示，不能恢复已退役 Activity 计时/时长统计。",
       "confirmedDecisions": [
         "数据看板位于概览中并服务于用户判断下一步，而不是堆砌大量指标。",
@@ -193,7 +193,7 @@
         "看板默认时间范围、历史/当前筛选和下钻范围。",
         "是否在 P2 首版交付漏斗，以及数据不足时的显示策略。"
       ],
-      "implementationNotes": "2026-11-01 Main 集成 P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md（1525fc92，源码核查基线 main@b3219dc2）：计数指标 M1–M8 与条件 M9、归档/账户时区/多次申请口径、运行模式降级及 D1–D9 推荐已记录。集成审查修正用户范围、Offer 派生优先级、原始投递日期分桶和未截断计数；合同未冻结，统计产品代码未修改，implementationStatus 保持 NOT_ASSESSED、passes:false。G1 等既有统计缺口仅记录，未修复。 2026-11-01 Owner 裁定冻结 §8 D1–D9 全部按推荐生效（合同 §9 冻结记录）：M2 双单位、M4a/M4b 拆分+legacy 降级、M5 当前 Offer 口径+offer-declined 标签改中性、G1 随本包修复、转化类全延期、M6 四桶合计+未截断计数新查询、归档排除+脚注、M9 就绪后接入（剩余前置为 §7.3 读模型）；附随裁定 G6 顺手修、G4 死字段不启用。备料 .tmp/p2-career-insights-decision-prep/。未编码，passes:false。",
+      "implementationNotes": "2026-11-01 Main 集成 P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md（1525fc92，源码核查基线 main@b3219dc2）：计数指标 M1–M8 与条件 M9、归档/账户时区/多次申请口径、运行模式降级及 D1–D9 推荐已记录。集成审查修正用户范围、Offer 派生优先级、原始投递日期分桶和未截断计数；合同未冻结，统计产品代码未修改，implementationStatus 保持 NOT_ASSESSED、passes:false。G1 等既有统计缺口仅记录，未修复。 2026-11-01 Owner 裁定冻结 §8 D1–D9 全部按推荐生效（合同 §9 冻结记录）：M2 双单位、M4a/M4b 拆分+legacy 降级、M5 当前 Offer 口径+offer-declined 标签改中性、G1 随本包修复、转化类全延期、M6 四桶合计+未截断计数新查询、归档排除+脚注、M9 就绪后接入（剩余前置为 §7.3 读模型）；附随裁定 G6 顺手修、G4 死字段不启用。备料 .tmp/p2-career-insights-decision-prep/。未编码，passes:false。 2026-11-04 Main 集成 feat/p2-career-insights（13eda9cf）+ 集成接线 a08875a2：新建 careerInsightsReadModel（M1–M8/M2b/M4a/M4b、原始事实查询+账户时区分桶 G1、未截断 M6 {total,overdueCount}、活跃口径+归档脚注、migratedOrigin G7、awaitingReflectionInterviews=null 预留）、insights.ts action、analytics 页面切换单一读模型、BoardTotals 八卡重写、AnalyticsPanel trend 窗口化+offer-declined 中性标签、JobsCalendar minValue 2→1（G6）；14 个 dashboard.* 词条并入 messages；O5 applied7d 经 countFirstAppliedInWindowDays 接线关闭宿主时区缺口。tsc/改动 ESLint 通过，新增 28 项+受影响回归共 131 项全过。M9 待 §7.3 读模型（不渲染不占位记未覆盖），生产 build/真实 Electron/完整 E2E 未执行，passes:false。",
       "passes": false
     },
     {
