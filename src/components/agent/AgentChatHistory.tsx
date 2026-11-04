@@ -16,12 +16,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useI18n } from "@/i18n";
 import { groupHistory, type HistoryBucket } from "@/lib/agent/historyGroups";
+import { copyFor, roleNameKey } from "@/lib/agent/roleCopy";
+import { normalizeAgentRole } from "@/lib/agent/agentRoles";
 import type { ChatConversationSummary } from "@/lib/agent/chatTypes";
 
 const BUCKETS: HistoryBucket[] = ["today", "yesterday", "earlier"];
 
 export function AgentChatHistory({ onClose }: { onClose: () => void }) {
   const { t, locale } = useI18n();
+  const copy = copyFor(t, locale);
   const {
     conversationId,
     selectConversation,
@@ -94,7 +97,13 @@ export function AgentChatHistory({ onClose }: { onClose: () => void }) {
                             });
                           }}
                         >
-                          <span className="block truncate text-sm">{title}</span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="block min-w-0 truncate text-sm">{title}</span>
+                            {/* D3 badge — NULL rows read as 通用. */}
+                            <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-[10px] leading-4 text-muted-foreground">
+                              {copy(roleNameKey(normalizeAgentRole(row.agentRole)))}
+                            </span>
+                          </span>
                           <span className="text-[11px] text-muted-foreground">
                             {when.toLocaleString(locale, {
                               month: "short",

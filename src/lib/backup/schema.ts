@@ -395,6 +395,10 @@ const ChatConversation = z.object({
   managedAiProvenance: managedAiProvenance.optional(),
   resolvedConnectionId: optId.optional(),
   resolvedModel: optStr.optional(),
+  // Optional: backups taken before multi-agent roles have no such key,
+  // and undefined restores as NULL (the general assistant, slotted under
+  // Pilot). insight/pilot/reflect round-trip unchanged.
+  agentRole: optStr.optional(),
   // Optional: backups taken before conversation archive have no such key,
   // and undefined restores as NULL (unarchived).
   archivedAt: optDt.optional(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { XIcon } from "lucide-react";
 import type { TextUIPart, UIMessage } from "ai";
@@ -15,8 +15,10 @@ import {
   PromptInput,
   PromptInputFooter,
   PromptInputHeader,
+  PromptInputProvider,
   PromptInputSubmit,
   PromptInputTextarea,
+  usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -87,7 +89,19 @@ function queuedText(
   return chip ? chipLabel(chip.data, t, formatChars) : "";
 }
 
+// The provider owns the text — fillComposer reaches it through the
+// registered API, and a nonce bump remounts this provider on the next seed
+// (role switch, conversation reset) instead of an uncontrolled key reset.
 export function AgentChatInput() {
+  const { composerNonce, composerSeed } = useAgentChat();
+  return (
+    <PromptInputProvider key={composerNonce} initialInput={composerSeed}>
+      <AgentChatComposer />
+    </PromptInputProvider>
+  );
+}
+
+function AgentChatComposer() {
   const {
     sendMessage,
     stop,
@@ -99,12 +113,27 @@ export function AgentChatInput() {
     actionError,
     preflight,
     composerNonce,
+    registerComposerApi,
   } = useAgentChat();
+  const controller = usePromptInputController();
   const { t, formatNumber } = useI18n();
   const formatChars = (n: number) => formatNumber(n);
 
-  const [text, setText] = useState("");
+  const text = controller.textInput.value;
   const [chip, setChip] = useState<AgentPastePartData | undefined>();
+
+  // The provider reads the live draft on a role switch and writes through
+  // fillComposer; the ref keeps read() current without re-registering.
+  const valueRef = useRef(text);
+  valueRef.current = text;
+  const setInput = controller.textInput.setInput;
+  useEffect(() => {
+    registerComposerApi({
+      read: () => valueRef.current,
+      set: (value: string) => setInput(value),
+    });
+    return () => registerComposerApi(null);
+  }, [registerComposerApi, setInput]);
 
   const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = event.clipboardData.getData("text/plain");
@@ -143,15 +172,12 @@ export function AgentChatInput() {
     // for the reply already streaming — is the provider's call, because it is
     // the only place that sees every sender.
     sendMessage({ parts });
-    setText("");
     setChip(undefined);
   };
 
-  // Clearing the conversation clears the composer with it. The textarea empties
-  // by remounting on the same nonce below — nothing else resets it.
+  // A role switch or conversation reset clears the paste chip with the text —
+  // the textarea itself resets by remounting on the nonce above.
   useEffect(() => {
-    if (!composerNonce) return;
-    setText("");
     setChip(undefined);
   }, [composerNonce]);
 
@@ -219,12 +245,11 @@ export function AgentChatInput() {
             </Attachments>
           </PromptInputHeader>
         ) : null}
-        {/* Uncontrolled: PromptInput reads the textarea through FormData and
-            resets it on submit. `text` mirrors it only to enable send. */}
+        {/* Controlled through PromptInputProvider: value lives in the
+            controller so fillComposer can write to it, and it still clears
+            on successful submit. */}
         <PromptInputTextarea
           className="min-h-9"
-          key={composerNonce}
-          onChange={(event) => setText(event.currentTarget.value)}
           onPaste={onPaste}
           placeholder={t("agent.inputPlaceholder")}
         />

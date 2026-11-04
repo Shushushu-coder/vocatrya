@@ -5,15 +5,17 @@ vi.mock("@/components/agent/empty-state-motion", () => ({
 }));
 
 const sendMessage = vi.fn();
-const seedExchange = vi.fn();
+const fillComposer = vi.fn();
 const requestAddContext = vi.fn();
+let activeRole: "insight" | "pilot" | "reflect" = "pilot";
 let preflight = { checked: true, ok: true };
 let context = { version: 1, items: [] as Array<Record<string, string>> };
 
 vi.mock("@/components/agent/AgentChatProvider", () => ({
   useAgentChat: () => ({
     sendMessage,
-    seedExchange,
+    fillComposer,
+    activeRole,
     preflight,
     context,
     requestAddContext,
@@ -21,9 +23,15 @@ vi.mock("@/components/agent/AgentChatProvider", () => ({
 }));
 
 import { AgentChatEmptyState } from "@/components/agent/AgentChatEmptyState";
-import { AGENT_ADD_JOB_INTRO } from "@/lib/agent/prompt";
 
 describe("AgentChatEmptyState", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    activeRole = "pilot";
+    preflight = { checked: true, ok: true };
+    context = { version: 1, items: [] };
+  });
+
   it("renders a decorative 72px idle agent presence", () => {
     const { container } = render(<AgentChatEmptyState />);
     const mark = container.querySelector("svg[data-vocatrya-mark]");
@@ -33,40 +41,52 @@ describe("AgentChatEmptyState", () => {
     expect(mark).toHaveAttribute("aria-hidden", "true");
     expect(mark).toHaveAttribute("focusable", "false");
   });
-  it("keeps all three context entries wired to the existing picker and keyboard reachable", async () => {
+
+  it("shows four role suggestions that only fill the composer", async () => {
+    render(<AgentChatEmptyState />);
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((b) => b.closest("[data-testid='agent-empty-state']"));
+    // Exactly four suggestions per role.
+    expect(screen.getAllByRole("button")).toHaveLength(7); // 4 suggestions + 3 context picks
+    await userEvent.click(screen.getByText("Add a job"));
+    expect(fillComposer).toHaveBeenCalledWith(
+      "Add this job posting to my jobs: ",
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
+    void buttons;
+  });
+
+  it.each([
+    ["insight", "Check my match for this job"],
+    ["reflect", "Talk through how that interview went"],
+  ] as const)("offers %s its own first suggestion", (role, label) => {
+    activeRole = role;
+    render(<AgentChatEmptyState />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  // D8: with no AI configured the send path is dead, but a suggestion still
+  // fills the composer — the click itself never calls the model.
+  it("keeps suggestions clickable when preflight failed", async () => {
+    preflight = { checked: true, ok: false };
+    render(<AgentChatEmptyState />);
+    await userEvent.click(screen.getByText("List my saved jobs"));
+    expect(fillComposer).toHaveBeenCalledWith("List my saved jobs");
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the context entries wired to the existing picker", async () => {
     render(<AgentChatEmptyState />);
     const user = userEvent.setup();
     for (const name of ["Choose a job", "Choose a resume", "Add context"]) {
-      await user.tab();
-      expect(screen.getByRole("button", { name })).toHaveFocus();
-      await user.keyboard("{Enter}");
+      await user.click(screen.getByRole("button", { name }));
     }
     expect(requestAddContext).toHaveBeenCalledTimes(3);
-    expect(sendMessage).not.toHaveBeenCalled();
-    expect(seedExchange).not.toHaveBeenCalled();
-  });
-  beforeEach(() => {
-    vi.clearAllMocks();
-    preflight = { checked: true, ok: true };
-    context = { version: 1, items: [] };
+    expect(fillComposer).not.toHaveBeenCalled();
   });
 
-  // The click carries no company, title or posting, so add_job is
-  // unreachable and the prompt leaves the model one legal reply. Spending a
-  // 15-30s turn on it is latency for text we already know.
-  it("answers the add-job suggestion locally instead of calling the model", async () => {
-    render(<AgentChatEmptyState />);
-    await userEvent.click(screen.getByText("Add a job posting"));
-
-    expect(sendMessage).not.toHaveBeenCalled();
-    expect(seedExchange).toHaveBeenCalledWith(
-      "Add a job posting",
-      AGENT_ADD_JOB_INTRO,
-    );
-  });
-
-  // The other three end in a tool call whose outcome depends on the page.
-  it("sends the job-context suggestion to the model", async () => {
+  it("names the context job when one is selected", () => {
     context = {
       version: 1,
       items: [
@@ -80,20 +100,5 @@ describe("AgentChatEmptyState", () => {
     };
     render(<AgentChatEmptyState />);
     expect(screen.getByText("AI Product Analyst")).toBeInTheDocument();
-    await userEvent.click(screen.getByText("Check my match"));
-
-    expect(seedExchange).not.toHaveBeenCalled();
-    expect(sendMessage).toHaveBeenCalledWith({
-      parts: [{ type: "text", text: "Check my match" }],
-    });
-  });
-
-  it("does nothing when preflight failed", async () => {
-    preflight = { checked: true, ok: false };
-    render(<AgentChatEmptyState />);
-    await userEvent.click(screen.getByText("Add a job posting"));
-
-    expect(seedExchange).not.toHaveBeenCalled();
-    expect(sendMessage).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,19 @@ import { VocatryaChatTransport, readAgentChatError } from "@/lib/agent/chatTrans
 import { hasPendingApproval, stubConsumedPastes } from "@/lib/agent/paste";
 import { pageContextFor } from "@/lib/agent/pageContext";
 import { writeActiveConversationId } from "@/lib/agent/activeConversation";
+import {
+  readActiveAgentRole,
+  readAgentRoleSlots,
+  writeActiveAgentRole,
+  writeAgentRoleSlot,
+} from "@/lib/agent/activeAgentRole";
+import {
+  GENERAL_AGENT_SLOT,
+  isAgentRole,
+  normalizeAgentRole,
+  slotRoleFor,
+  type AgentRole,
+} from "@/lib/agent/agentRoles";
 import { useRightRail } from "@/context/RightRailContext";
 import { useSidebar } from "@/context/SidebarContext";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
@@ -83,6 +96,8 @@ export type AgentChatInitialConversation = {
   resolvedModel: string | null;
   title: string | null;
   titleFallback: string | null;
+  /** Persisted role — decides which slot this row mounts into. */
+  agentRole?: AgentRole | null;
 };
 
 type QueuedMessage = { parts: UIMessage["parts"] };
@@ -163,6 +178,28 @@ function identityFromInitial(
   };
 }
 
+// Which slot a mount opens into: the loaded conversation's own role (NULL
+// rows slot under Pilot), else the role the user last had active, else the
+// default Pilot slot.
+function mountRole(initial: AgentChatInitialConversation | null): AgentRole {
+  if (initial) return slotRoleFor(initial.agentRole ?? null);
+  return readActiveAgentRole() ?? GENERAL_AGENT_SLOT;
+}
+
+// The draft state a slot restores when it has no persisted conversation.
+// Stored slots carry context and an explicit model pick alongside the
+// unsent composer text — all three are per-role (D1).
+function mountDraft(
+  role: AgentRole,
+): { context: AgentConversationContextV1; explicit: ExplicitModelSelection | null; draft: string | null } {
+  const slot = readAgentRoleSlots()[role];
+  return {
+    context: slot?.context ?? EMPTY_CONVERSATION_CONTEXT,
+    explicit: slot?.explicit ?? null,
+    draft: slot?.draft ?? null,
+  };
+}
+
 function useAgentChatValue(
   initial: AgentChatInitialConversation | null,
   seedMessages: UIMessage[],
@@ -201,10 +238,20 @@ function useAgentChatValue(
   const [conversationId, setConversationId] = useState<string | null>(
     initial?.id ?? null,
   );
+  // Multi-agent slots (D1): the mount role comes from the loaded
+  // conversation or the last-active preference; a draft slot restores its
+  // stored context/model/draft.
+  const [initialSlot] = useState(() => {
+    const role = mountRole(initial);
+    return { role, draft: initial ? null : mountDraft(role) };
+  });
+  const [activeRole, setActiveRole] = useState<AgentRole>(initialSlot.role);
   const [context, setContext] = useState<AgentConversationContextV1>(
-    initial?.context ?? EMPTY_CONVERSATION_CONTEXT,
+    initial?.context ?? initialSlot.draft?.context ?? EMPTY_CONVERSATION_CONTEXT,
   );
-  const [explicit, setExplicit] = useState<ExplicitModelSelection | null>(null);
+  const [explicit, setExplicit] = useState<ExplicitModelSelection | null>(
+    initialSlot.draft?.explicit ?? null,
+  );
   const [actionError, setActionError] = useState<{ code: string } | null>(null);
   // Display-only dismissal of the preflight banner — it never lifts the
   // send restriction, which stays bound to identity.ok.
@@ -233,10 +280,25 @@ function useAgentChatValue(
   // thing that stops a fast second click from opening a second request.
   const regenerateInFlightRef = useRef(false);
   const contextRef = useRef(context);
-  const explicitRef = useRef<ExplicitModelSelection | null>(null);
+  const explicitRef = useRef<ExplicitModelSelection | null>(
+    initialSlot.draft?.explicit ?? null,
+  );
   const lockKindRef = useRef<ChatLockKind | null>(initial?.lockKind ?? null);
   const creatingRef = useRef(false);
   const draftResolvedRef = useRef(initial !== null);
+  const activeRoleRef = useRef<AgentRole>(initialSlot.role);
+  // The composer is controlled by AgentChatInput's PromptInputProvider; it
+  // registers this API so the provider can read the draft on a role switch
+  // and write through fillComposer without owning the text.
+  const composerApiRef = useRef<{
+    read: () => string;
+    set: (text: string) => void;
+  } | null>(null);
+  // Next mount's initial text — a role switch or a fill while the composer
+  // is unmounted lands here, and a nonce bump remounts the provider on it.
+  const [composerSeed, setComposerSeed] = useState<string>(
+    initialSlot.draft?.draft ?? "",
+  );
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
   contextRef.current = context;
@@ -533,12 +595,25 @@ function useAgentChatValue(
     return () => window.removeEventListener(AI_CONFIGURATION_CHANGED_EVENT, refresh);
   }, [isOpen, runPreflight]);
 
-  const open = useCallback(() => {
-    collapseSidebar();
-    requestOpen(AGENT_CHAT_PANEL_ID);
-    setIsOpen(true);
-    void runPreflight();
-  }, [collapseSidebar, requestOpen, runPreflight]);
+  // Forward declaration for open()'s role option — switchRole is defined
+  // after selectConversation below and assigns itself into this ref.
+  const switchRoleRef = useRef<(role: AgentRole) => Promise<void>>(
+    async () => {},
+  );
+
+  const open = useCallback(
+    (options?: { role?: AgentRole }) => {
+      collapseSidebar();
+      requestOpen(AGENT_CHAT_PANEL_ID);
+      setIsOpen(true);
+      const role = options?.role;
+      if (role && isAgentRole(role) && role !== activeRoleRef.current) {
+        void switchRoleRef.current(role);
+      }
+      void runPreflight();
+    },
+    [collapseSidebar, requestOpen, runPreflight],
+  );
 
   useEffect(() => {
     if (isOpen && holder !== AGENT_CHAT_PANEL_ID) close();
@@ -546,6 +621,7 @@ function useAgentChatValue(
 
   useEffect(() => {
     writeActiveConversationId(initial?.id ?? null);
+    writeActiveAgentRole(activeRoleRef.current);
     if (initial?.id || draftResolvedRef.current) return;
     draftResolvedRef.current = true;
     const page = pageContextFor(pathnameRef.current);
@@ -568,10 +644,34 @@ function useAgentChatValue(
     chat.clearError();
     setActionError(null);
     setInterruptedTurn(false);
+    setComposerSeed("");
     setComposerNonce((n) => n + 1);
     setToolStreams({});
     setQueued(undefined);
   }, [chat]);
+
+  // ------------------------------------------------------------------
+  // Role slots (D1)
+  // ------------------------------------------------------------------
+
+  // Snapshot the live state into the active role's slot record. The
+  // composer's registered reader is the only live view of unsent text.
+  const snapshotActiveSlot = useCallback(() => {
+    writeAgentRoleSlot(activeRoleRef.current, {
+      conversationId: conversationIdRef.current,
+      draft: composerApiRef.current?.read() || null,
+      context: contextRef.current,
+      explicit: explicitRef.current,
+    });
+  }, []);
+
+  // The slot the user last touched is what a refresh reopens: the active
+  // role key names it, and the shared cookie keeps pointing at its
+  // conversation so the server loader finds the same row.
+  const persistActiveSlot = useCallback(() => {
+    writeActiveAgentRole(activeRoleRef.current);
+    snapshotActiveSlot();
+  }, [snapshotActiveSlot]);
 
   const applyCreated = useCallback(
     (data: {
@@ -593,9 +693,10 @@ function useAgentChatValue(
       setExplicit(null);
       writeActiveConversationId(data.id);
       setHistoryVersion((n) => n + 1);
+      persistActiveSlot();
       void runPreflight();
     },
-    [runPreflight],
+    [runPreflight, persistActiveSlot],
   );
 
   const createPersisted = useCallback(
@@ -605,6 +706,9 @@ function useAgentChatValue(
         context: contextRequests(contextRef.current.items),
         explicit: explicitRef.current,
         firstUserText,
+        // The role is fixed on the row here; afterwards the server reads
+        // it back and the client never carries it again.
+        agentRole: activeRoleRef.current,
       });
       if (!result.success || !result.data) {
         setActionError({ code: result.code ?? "GENERIC" });
@@ -616,9 +720,14 @@ function useAgentChatValue(
     [applyCreated],
   );
 
-  const startNewConversation = useCallback(
-    async (options?: { explicit?: ExplicitModelSelection | null }) => {
-      const wasStreaming = streamingRef.current;
+  // Enter a draft (unpersisted) state inside the active slot. Called by
+  // startNewConversation with an empty slot, and by switchRole with the
+  // target role's stored draft state.
+  const enterDraft = useCallback(
+    (slot: {
+      context: AgentConversationContextV1;
+      explicit: ExplicitModelSelection | null;
+    }) => {
       stop();
       selectionEpochRef.current += 1;
       recoveryRef.current = null;
@@ -628,19 +737,29 @@ function useAgentChatValue(
       conversationIdRef.current = null;
       lockKindRef.current = null;
       setConversationId(null);
-      const nextExplicit = options?.explicit ?? null;
-      explicitRef.current = nextExplicit;
-      setExplicit(nextExplicit);
+      explicitRef.current = slot.explicit;
+      setExplicit(slot.explicit);
       chat.setMessages([]);
       resetTransient();
-      const empty = EMPTY_CONVERSATION_CONTEXT;
-      setContext(empty);
-      contextRef.current = empty;
+      setContext(slot.context);
+      contextRef.current = slot.context;
       draftResolvedRef.current = true;
       writeActiveConversationId(null);
       setIdentity(UNKNOWN_IDENTITY);
-      if (wasStreaming) toastInfo(t("agent.conversationStartedStopped"));
       void runPreflight();
+    },
+    [chat, stop, resetTransient, runPreflight],
+  );
+
+  const startNewConversation = useCallback(
+    async (options?: { explicit?: ExplicitModelSelection | null }) => {
+      const wasStreaming = streamingRef.current;
+      enterDraft({
+        context: EMPTY_CONVERSATION_CONTEXT,
+        explicit: options?.explicit ?? null,
+      });
+      persistActiveSlot();
+      if (wasStreaming) toastInfo(t("agent.conversationStartedStopped"));
       const page = pageContextFor(pathnameRef.current);
       if (!page.jobId && !page.resumeId) return;
       const result = await resolveDraftPageContext({
@@ -653,7 +772,7 @@ function useAgentChatValue(
         contextRef.current = result.data;
       }
     },
-    [chat, stop, resetTransient, runPreflight, t],
+    [enterDraft, persistActiveSlot, t],
   );
 
   const selectConversation = useCallback(
@@ -679,6 +798,14 @@ function useAgentChatValue(
         return false;
       }
       const data = result.data;
+      // D3: picking a history row activates the slot that row's role owns —
+      // a NULL row lands in the general (Pilot) slot.
+      const rowRole = slotRoleFor(normalizeAgentRole(data.agentRole));
+      if (rowRole !== activeRoleRef.current) {
+        snapshotActiveSlot();
+        activeRoleRef.current = rowRole;
+        setActiveRole(rowRole);
+      }
       revisionRef.current = data.revision;
       durableApprovalRef.current = true;
       recoveryBlockedRef.current = false;
@@ -694,6 +821,7 @@ function useAgentChatValue(
       chat.setMessages(data.messages);
       resetTransient();
       writeActiveConversationId(data.id);
+      persistActiveSlot();
       setIdentity(
         data.lockKind === "account" || data.lockKind === "managed"
           ? {
@@ -718,8 +846,47 @@ function useAgentChatValue(
       void runPreflight();
       return true;
     },
-    [chat, stop, resetTransient, runPreflight],
+    [chat, stop, resetTransient, runPreflight, persistActiveSlot, snapshotActiveSlot],
   );
+
+  // Top-level role switch (D1). The outgoing slot is snapshotted — draft,
+  // context, model pick — and the incoming slot restores its last-active
+  // conversation or its stored draft state. A conversation id resolves
+  // through the same load path as history selection, so a deleted or
+  // archived row degrades to that role's draft rather than an error.
+  const switchRole = useCallback(
+    async (role: AgentRole) => {
+      if (role === activeRoleRef.current) return;
+      if (streamingRef.current) stop();
+      snapshotActiveSlot();
+      activeRoleRef.current = role;
+      setActiveRole(role);
+      writeActiveAgentRole(role);
+      const slot = readAgentRoleSlots()[role];
+      setComposerSeed(slot?.draft ?? "");
+      if (slot?.conversationId) {
+        const ok = await selectConversation(slot.conversationId);
+        if (ok) return;
+        // The stored id no longer resolves — fall through to the draft.
+      }
+      enterDraft({
+        context: slot?.context ?? EMPTY_CONVERSATION_CONTEXT,
+        explicit: slot?.explicit ?? null,
+      });
+      setComposerSeed(slot?.draft ?? "");
+      persistActiveSlot();
+    },
+    [stop, snapshotActiveSlot, selectConversation, enterDraft, persistActiveSlot],
+  );
+  switchRoleRef.current = switchRole;
+
+  // A refresh reopens the slot the user last touched — persist the active
+  // slot when the page unloads so the composer draft survives too.
+  useEffect(() => {
+    const persist = () => persistActiveSlot();
+    window.addEventListener("pagehide", persist);
+    return () => window.removeEventListener("pagehide", persist);
+  }, [persistActiveSlot]);
 
   // Shared post-removal flow: refresh History, then move the open draft to
   // the newest live conversation (or a fresh one) when the removed row was
@@ -800,50 +967,22 @@ function useAgentChatValue(
     [approvalPending, dispatch],
   );
 
-  const seedExchange = useCallback(
-    (userText: string, assistantText: string) => {
-      const id = conversationIdRef.current;
-      // The in-flight guard has to win before the optimistic exchange, or a
-      // second click paints messages the open create call never persists.
-      if (id) { setActionError({ code: "CONVERSATION_TURN_CONFLICT" }); return; }
-      if (creatingRef.current) return;
+  // External composer writes (D8): suggestions fill the input without
+  // touching the chat — no request, no conversation, no model call. The
+  // composer's registered setter applies it while mounted; unmounted, the
+  // seed + nonce remount lands it as the next initial text.
+  const fillComposer = useCallback((text: string) => {
+    setComposerSeed(text);
+    const api = composerApiRef.current;
+    if (api) api.set(text);
+    else setComposerNonce((n) => n + 1);
+  }, []);
 
-      // setMessages publishes the seeded transcript on the chat object. The
-      // pre-seed copy is the only transcript a rejected create can restore.
-      const previousMessages = chat.messages.slice();
-      const next: UIMessage[] = [
-        ...previousMessages,
-        {
-          id: generateId(),
-          role: "user",
-          parts: [{ type: "text", text: userText }],
-        },
-        {
-          id: generateId(),
-          role: "assistant",
-          parts: [{ type: "text", text: assistantText }],
-        },
-      ];
-      chat.setMessages(next);
-
-      creatingRef.current = true;
-      setActionError(null);
-      void (async () => {
-        let committed = false;
-        try {
-          committed = Boolean(await createPersisted(userText, next));
-        } catch {
-          // A thrown action does not go through createPersisted's typed code.
-          setActionError((current) => current ?? { code: "GENERIC" });
-        } finally {
-          if (!committed && conversationIdRef.current === null) {
-            chat.setMessages(previousMessages);
-          }
-          creatingRef.current = false;
-        }
-      })();
+  const registerComposerApi = useCallback(
+    (api: { read: () => string; set: (text: string) => void } | null) => {
+      composerApiRef.current = api;
     },
-    [chat, createPersisted],
+    [],
   );
 
   useEffect(() => {
@@ -974,7 +1113,11 @@ function useAgentChatValue(
     },
     clearActionError,
     sendMessage,
-    seedExchange,
+    fillComposer,
+    registerComposerApi,
+    composerSeed,
+    activeRole,
+    switchRole,
     stop,
     regenerate,
     addToolApprovalResponse: (...args: Parameters<typeof chat.addToolApprovalResponse>) => {

@@ -15,6 +15,8 @@ const chat = {
   clearError: vi.fn(),
   preflight: { checked: true, ok: true } as any,
   composerNonce: 0,
+  composerSeed: "",
+  registerComposerApi: vi.fn(),
 };
 vi.mock("@/components/agent/AgentChatProvider", () => ({
   useAgentChat: () => chat,
@@ -55,7 +57,7 @@ describe("AgentChatInput", () => {
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toContain(
       short,
     );
-    expect(screen.queryByText(/pasted/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pasted posting/i)).not.toBeInTheDocument();
   });
 
   it("turns an over-threshold paste into a removable chip", async () => {

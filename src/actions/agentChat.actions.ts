@@ -56,6 +56,10 @@ import type {
   EligibleChatModel,
   ExplicitModelSelection,
 } from "@/lib/agent/chatTypes";
+import {
+  normalizeAgentRole,
+  type AgentRole,
+} from "@/lib/agent/agentRoles";
 
 function fail(error: unknown, fallback: string): {
   success: false;
@@ -107,6 +111,7 @@ function snapshotOf(row: ChatConversationRow): ChatConversationSnapshot {
     lockKind: lock.kind,
     resolvedConnectionId: row.resolvedConnectionId,
     resolvedModel: row.resolvedModel,
+    agentRole: normalizeAgentRole(row.agentRole),
     archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
   };
 }
@@ -175,6 +180,7 @@ export const listChatConversations = async (): Promise<{
         id: row.id,
         title: row.title,
         titleFallback: row.titleFallback,
+        agentRole: normalizeAgentRole(row.agentRole),
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),
       })),
@@ -189,6 +195,13 @@ export const createChatConversation = async (input?: {
   context?: ContextItemRequest[];
   explicit?: ExplicitModelSelection | null;
   firstUserText?: string | null;
+  /**
+   * The role this conversation is bound to, fixed at creation. The client
+   * declares the slot it is creating in — this is the only client-carried
+   * role; afterwards the persisted row is the sole authority (route reads
+   * role from the row, never from the request).
+   */
+  agentRole?: AgentRole | null;
 }): Promise<{
   success: boolean;
   data?: ChatConversationSnapshot;
@@ -204,6 +217,7 @@ export const createChatConversation = async (input?: {
       context,
       explicit: input?.explicit ?? null,
       firstUserText: input?.firstUserText ?? null,
+      agentRole: normalizeAgentRole(input?.agentRole),
     });
     return { success: true, data: snapshotOf(row) };
   } catch (error) {
@@ -318,6 +332,7 @@ export const listArchivedChatConversations = async (input?: {
         id: row.id,
         title: row.title,
         titleFallback: row.titleFallback,
+        agentRole: normalizeAgentRole(row.agentRole),
         archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),

@@ -93,6 +93,12 @@ export type CareerDialogueContextInput = {
    * point the model at match_job or generate_cover_letter.
    */
   freshNativeFull?: boolean;
+  /**
+   * Multi-agent role from the persisted conversation row — selects the
+   * role-scoped page line so a turn never steers toward a tool the role
+   * does not register.
+   */
+  agentRole?: string | null;
 };
 
 export type CareerDialogueContextSuccess = {
@@ -556,6 +562,7 @@ export function buildCareerDialogueContext(
   let pageLine = lastIsUser
     ? buildPageContextMessage(input.pageContext, {
         freshNativeFull: input.freshNativeFull,
+        agentRole: input.agentRole,
       })
     : undefined;
   let pasteLine: string | undefined;

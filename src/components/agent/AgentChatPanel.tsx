@@ -10,13 +10,16 @@ import { AgentChatHistory } from "@/components/agent/AgentChatHistory";
 import { AgentChatIdentity } from "@/components/agent/AgentChatIdentity";
 import { AgentChatInput } from "@/components/agent/AgentChatInput";
 import { AgentChatMessages } from "@/components/agent/AgentChatMessages";
+import { AgentRoleSwitcher } from "@/components/agent/AgentRoleSwitcher";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { copyFor, AGENT_ROLE_KEYS } from "@/lib/agent/roleCopy";
 import { useI18n } from "@/i18n";
 import { VocatryaMark } from "@/components/brand/VocatryaMark";
 import { useAgentBrandState } from "@/components/brand/useAgentBrandState";
 
 export function AgentChatPanel() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const copy = copyFor(t, locale);
   const {
     isOpen,
     close,
@@ -33,8 +36,12 @@ export function AgentChatPanel() {
     startResize,
     isPanelExpanded,
     togglePanelExpand,
+    activeRole,
   } = useAgentChat();
   const [historyOpen, setHistoryOpen] = useState(false);
+  // D7 shrink order: the icon group never shrinks; the role subtitle drops
+  // with Identity under 480px, then the action labels; expand/close stays.
+  const compactHeader = width < 480;
   const hasTranscript = messages.some(message => message.role === "user" || message.role === "assistant");
   const brandState = useAgentBrandState({
     status, brandCompletion, isOpen, conversationId,
@@ -75,12 +82,21 @@ export function AgentChatPanel() {
             animated={hasTranscript}
             state={hasTranscript ? brandState : "idle"}
           />
-          <SheetTitle className="m-0 shrink-0 text-[11px] font-bold uppercase leading-none tracking-[0.15em] text-foreground">
-            {t("agent.panelTitle")}
+          <AgentRoleSwitcher />
+          <SheetTitle className="m-0 flex min-w-0 shrink items-baseline gap-1.5 overflow-hidden whitespace-nowrap leading-none">
+            <span className="overflow-hidden text-ellipsis text-[11px] font-bold uppercase tracking-[0.15em] text-foreground">
+              {copy(AGENT_ROLE_KEYS.name[activeRole])}
+            </span>
+            {compactHeader ? null : (
+              <span className="min-w-0 overflow-hidden text-ellipsis text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+                {copy(AGENT_ROLE_KEYS.subtitle[activeRole])}
+              </span>
+            )}
           </SheetTitle>
-          <AgentChatIdentity />
+          {compactHeader ? null : <AgentChatIdentity />}
           <Button
             data-testid="agent-new-conversation"
+            aria-label={t("agent.newConversation")}
             className="ml-auto h-6 shrink-0 rounded-sm px-2 text-xs"
             onClick={() => {
               setHistoryOpen(false);
@@ -90,7 +106,7 @@ export function AgentChatPanel() {
             variant="ghost"
           >
             <Plus className="h-3.5 w-3.5" />
-            {t("agent.newConversation")}
+            {compactHeader ? null : t("agent.newConversation")}
           </Button>
           <Button
             data-testid="agent-history"

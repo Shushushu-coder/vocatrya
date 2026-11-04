@@ -2,6 +2,10 @@ import type { ConversationRequest } from "../conversationRequest";
 import type { LanguageModel, ToolSet, UIMessageStreamWriter } from "ai";
 import type { PageContext } from "@/models/agent.model";
 import type { NestedGenerationGuard } from "@/lib/agent/nestedGeneration";
+import {
+  AGENT_ROLE_TOOL_ALLOWLIST,
+  normalizeAgentRole,
+} from "../agentRoles";
 import { buildAddJobTool } from "./addJob";
 import { buildListJobsTool } from "./listJobs";
 import { buildGetJobTool } from "./getJob";
@@ -36,6 +40,13 @@ export function buildAgentTools(ctx: {
    * already reads and writes canonical jobs.
    */
   canonicalJobs?: boolean;
+  /**
+   * Multi-agent role from the persisted conversation row (server-side
+   * authority). A named role intersects the registry with its allowlist —
+   * allowlists only ever shrink what the runtime already offers. NULL
+   * (pre-multi-agent rows) keeps the full general-assistant registry.
+   */
+  agentRole?: string | null;
 }): ToolSet {
   // One per request, so no two nested tools run at once but two users never
   // block each other.
@@ -86,6 +97,17 @@ export function buildAgentTools(ctx: {
       guard: nestedGuard,
     });
     delete tools.generate_cover_letter;
+  }
+
+  // Effective set = role allowlist ∩ registered runtime tools (built after
+  // the canonical rebind above so Insight's match_job is the approval-gated
+  // variant wherever the runtime gates it).
+  const role = normalizeAgentRole(ctx.agentRole);
+  if (role) {
+    const allow = new Set(AGENT_ROLE_TOOL_ALLOWLIST[role]);
+    for (const name of Object.keys(tools)) {
+      if (!allow.has(name)) delete tools[name];
+    }
   }
   return tools;
 }

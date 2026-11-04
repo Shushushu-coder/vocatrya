@@ -17,6 +17,7 @@ import {
   type AgentConversationContextV1,
 } from "./conversationContext";
 import type { ExplicitModelSelection } from "./chatTypes";
+import type { AgentRole } from "./agentRoles";
 
 /**
  * ChatConversation persistence.
@@ -40,6 +41,7 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
     resolvedConnectionId: true;
     resolvedModel: true;
     managedAiProvenance: true;
+    agentRole: true;
     archivedAt: true;
     createdAt: true;
     updatedAt: true;
@@ -56,6 +58,7 @@ const CHAT_ROW_SELECT = {
   resolvedConnectionId: true,
   resolvedModel: true,
   managedAiProvenance: true,
+  agentRole: true,
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -65,6 +68,7 @@ const SUMMARY_SELECT = {
   id: true,
   title: true,
   messages: true,
+  agentRole: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -106,6 +110,7 @@ export async function listOwnedChatConversations(
     id: string;
     title: string | null;
     titleFallback: string | null;
+    agentRole: string | null;
     createdAt: Date;
     updatedAt: Date;
   }>
@@ -120,6 +125,7 @@ export async function listOwnedChatConversations(
     id: row.id,
     title: row.title,
     titleFallback: row.title ? null : titleFallbackFromMessages(row.messages),
+    agentRole: row.agentRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }));
@@ -141,6 +147,8 @@ export async function createChatConversationRecord(input: {
   context: AgentConversationContextV1;
   explicit?: ExplicitModelSelection | null;
   firstUserText?: string | null;
+  /** Role fixed at creation — immutable for the row's lifetime. */
+  agentRole?: AgentRole | null;
   /** Injected for tests; production uses the default Hosted client. */
   managedClient?: import("@/lib/ai/managed-client").HostedManagedClient;
 }): Promise<ChatConversationRow> {
@@ -168,6 +176,7 @@ export async function createChatConversationRecord(input: {
       resolvedConnectionId: lock.resolvedConnectionId,
       resolvedModel: lock.resolvedModel,
       managedAiProvenance: lock.managedAiProvenance ?? null,
+      agentRole: input.agentRole ?? null,
     },
     select: CHAT_ROW_SELECT,
   });
@@ -277,6 +286,7 @@ export async function listArchivedChatConversations(
     id: string;
     title: string | null;
     titleFallback: string | null;
+    agentRole: string | null;
     archivedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -299,6 +309,7 @@ export async function listArchivedChatConversations(
     id: row.id,
     title: row.title,
     titleFallback: row.title ? null : titleFallbackFromMessages(row.messages),
+    agentRole: row.agentRole,
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
