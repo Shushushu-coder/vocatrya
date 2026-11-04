@@ -511,7 +511,16 @@ export class ApplicationService {
     const attempts = await this.db.applicationAttempt.findMany({
       where: { jobOpportunityId: opportunity.id, userId: this.userId },
       include: {
-        processSteps: true,
+        processSteps: {
+          include: {
+            interviewDetail: {
+              select: {
+                reflectionCompletedAt: true,
+                _count: { select: { reflectionItems: true } },
+              },
+            },
+          },
+        },
         submittedResumeVersion: {
           select: {
             id: true,
@@ -590,6 +599,9 @@ export class ApplicationService {
           ),
           result: step.result,
           notes: step.notes,
+          interviewDetailPresent: step.interviewDetail != null,
+          reflectionItemCount: step.interviewDetail?._count.reflectionItems ?? 0,
+          reflectionCompletedAt: toIso(step.interviewDetail?.reflectionCompletedAt),
         })),
       })),
     };
@@ -604,7 +616,12 @@ export class ApplicationService {
       include: {
         interviewDetail: {
           include: {
-            reflectionItems: { orderBy: { sortOrder: "asc" } },
+            reflectionItems: {
+              orderBy: { sortOrder: "asc" },
+              include: {
+                sourceQuestion: { select: { deletedAt: true, isActive: true } },
+              },
+            },
           },
         },
       },
@@ -619,7 +636,14 @@ export class ApplicationService {
     return toInterviewReflectionDTO(
       step.id,
       step.interviewDetail.reflectionText,
-      step.interviewDetail.reflectionItems,
+      step.interviewDetail.reflectionCompletedAt,
+      step.interviewDetail.reflectionItems.map((item) => ({
+        ...item,
+        sourceQuestionActive:
+          item.sourceQuestion != null &&
+          item.sourceQuestion.deletedAt == null &&
+          item.sourceQuestion.isActive,
+      })),
     );
   }
 
