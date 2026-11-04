@@ -2,9 +2,9 @@
 //
 // NEXT-ACTIONS deterministic rule matrix (frozen contract §4). Family gates
 // are exercised both through the read model's pure input seam and through
-// getNextActions for the real resolution wiring. R6 is intentionally absent
-// — it waits for the INTERVIEW-DEBRIEF §7.3 listAwaitingReflectionInterviews
-// read model and must not be simulated by a detail-presence substitute.
+// getNextActions for the real resolution wiring. R6 consumes the
+// INTERVIEW-DEBRIEF §7.3 listAwaitingReflectionInterviews read model and is
+// gated on reflectionWriteEnabled (AB_ENABLED+full only, frozen §4.7).
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
@@ -103,6 +103,7 @@ function baseInput(
     jobsFamily: "ab",
     resumeFamily: "ab",
     jobMutationsEnabled: true,
+    reflectionWriteEnabled: true,
     aiConfigStatus: "RESOLVED",
     timeZone: TZ,
     now: NOW,
@@ -691,6 +692,93 @@ describe("R5 upcoming interviews", () => {
       ofRule(
         await candidates({ jobsFamily: "legacy" }),
         NEXT_ACTION_RULE.R5,
+      ),
+    ).toEqual([]);
+  });
+});
+
+// --- R6 awaiting-reflection interviews ---------------------------------------
+
+describe("R6 awaiting reflection", () => {
+  async function seedCompletedInterview(
+    stepOptions: Parameters<typeof seedStep>[1] = {},
+    options: {
+      attempt?: Parameters<typeof seedAttempt>[1];
+      opportunity?: Parameters<typeof seedOpportunity>[0];
+    } = {},
+  ) {
+    const opp = await seedOpportunity(options.opportunity ?? {});
+    const attempt = await seedAttempt(opp.id, options.attempt ?? {});
+    const step = await seedStep(attempt.id, {
+      status: PROCESS_STEP_STATUS.COMPLETED,
+      completedAt: new Date("2026-11-05T00:00:00.000Z"),
+      ...stepOptions,
+    });
+    return { opp, attempt, step };
+  }
+
+  it("fires for a COMPLETED interview with no detail row", async () => {
+    const { opp, step } = await seedCompletedInterview({ label: "终面" });
+    const r6 = ofRule(await candidates(), NEXT_ACTION_RULE.R6);
+    expect(r6).toHaveLength(1);
+    expect(r6[0]).toMatchObject({
+      entityKey: step.id,
+      variant: "default",
+      href: `/dashboard/myjobs/${opp.id}?tab=timeline`,
+      jobTitle: "Engineer",
+      companyName: "Acme",
+      stepLabel: "终面",
+    });
+  });
+
+  it("still fires for a draft reflection — only the explicit mark counts (D5)", async () => {
+    const { step } = await seedCompletedInterview();
+    await prisma.applicationInterviewDetail.create({
+      data: {
+        applicationProcessStepId: step.id,
+        reflectionText: "draft notes",
+      },
+    });
+    expect(ofRule(await candidates(), NEXT_ACTION_RULE.R6)).toHaveLength(1);
+  });
+
+  it("stays silent once the reflection is marked complete", async () => {
+    const { step } = await seedCompletedInterview();
+    await prisma.applicationInterviewDetail.create({
+      data: {
+        applicationProcessStepId: step.id,
+        reflectionCompletedAt: new Date("2026-11-06T00:00:00.000Z"),
+      },
+    });
+    expect(ofRule(await candidates(), NEXT_ACTION_RULE.R6)).toEqual([]);
+  });
+
+  it("ignores non-COMPLETED interviews and archived parents", async () => {
+    for (const status of [
+      PROCESS_STEP_STATUS.PENDING,
+      PROCESS_STEP_STATUS.IN_PROGRESS,
+      PROCESS_STEP_STATUS.CANCELLED,
+      "EVIDENCED",
+    ]) {
+      await seedCompletedInterview({ status });
+    }
+    await seedCompletedInterview({}, { opportunity: { archivedAt: new Date() } });
+    await seedCompletedInterview({}, { attempt: { archivedAt: new Date() } });
+    expect(ofRule(await candidates(), NEXT_ACTION_RULE.R6)).toEqual([]);
+  });
+
+  it("stays silent on the read-only surface and under the legacy family", async () => {
+    await seedCompletedInterview();
+    expect(
+      ofRule(
+        await candidates({ reflectionWriteEnabled: false }),
+        NEXT_ACTION_RULE.R6,
+      ),
+    ).toEqual([]);
+    expect(
+      ofRule(
+        await candidates({ jobsFamily: "legacy" }),
+        NEXT_ACTION_RULE.R6,
       ),
     ).toEqual([]);
   });

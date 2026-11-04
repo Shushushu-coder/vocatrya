@@ -157,6 +157,7 @@ describe("BoardTotals", () => {
     data: data ?? {
       family: "ab",
       migratedOrigin: false,
+      awaitingReflectionInterviews: null,
       board: {
         total: 9,
         inProgress: 6,
@@ -186,12 +187,29 @@ describe("BoardTotals", () => {
     expect(screen.getByTestId("board-total-openTasks")).toHaveTextContent("3");
   });
 
+  it("renders the M9 awaiting-debrief card only when the metric is present", () => {
+    const insights = abInsights();
+    render(<BoardTotals insights={insights} />);
+    expect(
+      screen.queryByTestId("board-total-awaitingReflection"),
+    ).not.toBeInTheDocument();
+    const withM9 = abInsights({
+      ...insights.data!,
+      awaitingReflectionInterviews: 2,
+    });
+    render(<BoardTotals insights={withM9} />);
+    expect(
+      screen.getByTestId("board-total-awaitingReflection"),
+    ).toHaveTextContent("2");
+  });
+
   it("labels the legacy interview card as a position count", () => {
     render(
       <BoardTotals
         insights={abInsights({
           family: "legacy",
           migratedOrigin: false,
+          awaitingReflectionInterviews: null,
           board: {
             total: 9,
             inProgress: 6,

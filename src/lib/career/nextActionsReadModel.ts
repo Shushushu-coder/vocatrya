@@ -11,6 +11,7 @@ import type { ResumeReadFamily } from "./resumeReadDispatch";
 import { deriveUiStatus, pickLatestAttempt } from "./uiStatus";
 import {
   isUpcomingOverdue,
+  listAwaitingReflectionInterviews,
   listUpcomingApplicationEvents,
   UPCOMING_EVENT_KIND,
 } from "./upcomingReadModel";
@@ -24,11 +25,12 @@ import {
 // past-scheduled real interview, R6 completed interview awaiting debrief,
 // R7 broken AI assignment.
 //
-// R6 stays silent until the INTERVIEW-DEBRIEF §7.3
-// listAwaitingReflectionInterviews read model lands: the frozen contract
-// (§4.2/§4.7) forbids content-presence substitutes, and the awaiting-
-// reflection predicate belongs to that domain. The slot is marked below in
-// priority order so wiring it later changes nothing else here.
+// R6 consumes the INTERVIEW-DEBRIEF §7.3 listAwaitingReflectionInterviews
+// read model — the frozen contract (§4.2/§4.7) forbids content-presence
+// substitutes, and the awaiting-reflection predicate belongs to that
+// domain. It emits only when the reflection write surface is reachable
+// (AB_ENABLED+full): on the read-only surface the jump target cannot save
+// a reflection, so the rule stays silent there (frozen §9 D3).
 
 import {
   NEXT_ACTION_LIMIT,
@@ -65,6 +67,10 @@ export type NextActionsQueryInput = {
   resumeFamily: ResumeReadFamily;
   /** Decides the R3 no-positions href (add-job deep link vs plain list). */
   jobMutationsEnabled: boolean;
+  /** Reflection write surface reachable (AB_ENABLED+full). Gates R6 per
+   *  frozen §4.7: the read-only surface keeps the rule silent because the
+   *  timeline target could not save a reflection anyway. */
+  reflectionWriteEnabled: boolean;
   /** Stored-state resolution of the CAREER_DIALOGUE purpose (§9 D2). */
   aiConfigStatus:
     | "RESOLVED"
@@ -156,6 +162,32 @@ async function upcomingInterviewActions(
   // The read model already sorted by attentionAt/kind/stable id — the
   // contract's "R5 by event time ascending".
   return items;
+}
+
+// R6 — COMPLETED real interviews whose reflection is not marked done
+// (frozen §9 D3 predicate, owned by the debrief domain's §7.3 read model).
+// One item per step in the domain's own order; a domain-read failure keeps
+// the rule silent instead of fabricating "nothing to debrief" (§4.7).
+async function awaitingReflectionActions(
+  db: PrismaClient,
+  userId: string,
+): Promise<NextActionItem[]> {
+  try {
+    const { items } = await listAwaitingReflectionInterviews(db, userId);
+    return items.map((item) =>
+      makeItem({
+        ruleId: NEXT_ACTION_RULE.R6,
+        entityKey: item.stepId,
+        variant: "default",
+        href: `/dashboard/myjobs/${item.jobOpportunityId}?tab=timeline`,
+        jobTitle: item.jobTitle,
+        companyName: item.companyName,
+        stepLabel: item.stepTitle,
+      }),
+    );
+  } catch {
+    return [];
+  }
 }
 
 // R4 — active (unarchived, non-terminal, never applied) positions with no
@@ -365,9 +397,12 @@ export async function listNextActionCandidates(
   input: NextActionsQueryInput,
 ): Promise<NextActionItem[]> {
   const now = input.now ?? new Date();
-  const [r5, r4, r3, r1] = await Promise.all([
+  const [r5, r6, r4, r3, r1] = await Promise.all([
     input.jobsFamily === "ab"
       ? upcomingInterviewActions(db, userId, input.timeZone, now)
+      : Promise.resolve([]),
+    input.jobsFamily === "ab" && input.reflectionWriteEnabled
+      ? awaitingReflectionActions(db, userId)
       : Promise.resolve([]),
     input.jobsFamily === "ab" && input.resumeFamily === "ab"
       ? unboundPositionActions(db, userId)
@@ -378,7 +413,7 @@ export async function listNextActionCandidates(
 
   const grouped = new Map<NextActionRuleId, NextActionItem[]>([
     [NEXT_ACTION_RULE.R5, r5],
-    // [R6]: awaiting the §7.3 listAwaitingReflectionInterviews read model.
+    [NEXT_ACTION_RULE.R6, r6],
     [NEXT_ACTION_RULE.R4, r4],
     [NEXT_ACTION_RULE.R3, r3],
     [NEXT_ACTION_RULE.R1, r1],

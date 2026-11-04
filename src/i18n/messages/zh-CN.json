@@ -351,6 +351,7 @@
     "statInterviewingPositions": "面试中职位",
     "statInterviewingPositionsNote": "按职位计，无面试轮次记录",
     "statOffersCurrent": "当前 Offer 机会",
+    "statAwaitingReflection": "待复盘面试",
     "statFollowUps": "待跟进事项",
     "followUpsOverdue": "含 {count} 项已逾期",
     "followUpsTasksOnly": "仅统计待办事项",
