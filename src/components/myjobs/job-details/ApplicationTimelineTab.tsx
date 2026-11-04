@@ -43,6 +43,7 @@ import type {
 } from "@/lib/career/applicationTimeline";
 import {
   isTerminalAttemptOutcome,
+  PROCESS_STEP_CATEGORY,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_STATUS,
 } from "@/lib/career/identities";
@@ -54,9 +55,19 @@ import type { Locale } from "@/i18n";
 // t() echoes the key and the paired fallback keeps the page readable.
 function useCopy() {
   const { t, locale } = useI18n();
-  return (key: string, fallback: Record<Locale, string>) => {
-    const translated = t(key);
-    return translated === key ? fallback[locale] : translated;
+  return (
+    key: string,
+    fallback: Record<Locale, string>,
+    params?: Record<string, string | number>,
+  ) => {
+    const translated = t(key, params);
+    if (translated !== key) return translated;
+    const template = fallback[locale];
+    return params
+      ? template.replace(/\{(\w+)\}/g, (raw, name: string) =>
+          name in params ? String(params[name]) : raw,
+        )
+      : template;
   };
 }
 
@@ -430,6 +441,48 @@ export function ApplicationTimelineTab({
     );
   }
 
+  // D9 cascade warning: deleting an INTERVIEW step that owns an
+  // ApplicationInterviewDetail also drops the detail and its stored
+  // reflection items, so the confirm dialog has to say what goes with it.
+  const deleteDescription = (() => {
+    if (!stepToDelete) return "";
+    const withDetail =
+      stepToDelete.category === PROCESS_STEP_CATEGORY.INTERVIEW &&
+      stepToDelete.interviewDetailPresent;
+    if (!withDetail) return t("jobs.deleteProcessStepDescription");
+    const count = stepToDelete.reflectionItemCount ?? 0;
+    return count > 0
+      ? copy(
+          "jobs.deleteInterviewStepWithReflectionDescription",
+          {
+            "zh-CN":
+              "删除该面试轮次将同时删除其面试详情与 {count} 条复盘问答，且不可恢复。",
+            en: "Deleting this interview round also deletes its interview detail and {count} reflection item(s). This cannot be undone.",
+          },
+          { count },
+        )
+      : copy("jobs.deleteInterviewStepDescription", {
+          "zh-CN": "删除该面试轮次将同时删除其面试详情，且不可恢复。",
+          en: "Deleting this interview round also deletes its interview detail. This cannot be undone.",
+        });
+  })();
+
+  // The reflection dialog stays outside the canMutate gate (§6.3): an
+  // archived job still exposes read-only reflection viewing. Server-side
+  // writes keep being refused by requireOwnedStep → assertOpportunityWritable.
+  const reflectionDialog = (
+    <InterviewReflectionDialog
+      open={reflectionStep != null}
+      onOpenChange={(open) => {
+        if (!open) setReflectionStep(null);
+      }}
+      step={reflectionStep}
+      companyName={companyName}
+      roleTitle={roleTitle}
+      readOnly={!canMutate}
+    />
+  );
+
   // The dialogs render at a fixed position outside the attempt-count branch so
   // the process-step form survives a zero→nonzero timeline flip: a refresh
   // after PROCESS_STEP_ATTEMPT_STATE_CHANGED must keep the typed draft for an
@@ -468,15 +521,6 @@ export function ApplicationTimelineTab({
         timeZone={timeline.timeZone}
         onSubmit={onRescheduleSave}
       />
-      <InterviewReflectionDialog
-        open={reflectionStep != null}
-        onOpenChange={(open) => {
-          if (!open) setReflectionStep(null);
-        }}
-        step={reflectionStep}
-        companyName={companyName}
-        roleTitle={roleTitle}
-      />
       <DeleteAlertDialog
         pageTitle=""
         open={stepToDelete != null}
@@ -485,7 +529,7 @@ export function ApplicationTimelineTab({
         }}
         onDelete={onConfirmDelete}
         alertTitle={t("jobs.deleteProcessStepTitle")}
-        alertDescription={t("jobs.deleteProcessStepDescription")}
+        alertDescription={deleteDescription}
       />
       <DeleteAlertDialog
         pageTitle=""
@@ -517,6 +561,7 @@ export function ApplicationTimelineTab({
         />
         {/* Keep the fixed dialog position (see `dialogs` above): siblings go after it. */}
         {dialogs}
+        {reflectionDialog}
         {canMutate && (
           <div className="-mt-4 flex justify-center pb-4">
             <Button
@@ -719,6 +764,7 @@ export function ApplicationTimelineTab({
       ))}
     </div>
     {dialogs}
+    {reflectionDialog}
     </>
   );
 }

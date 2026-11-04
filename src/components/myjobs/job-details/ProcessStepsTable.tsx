@@ -102,6 +102,20 @@ export function ProcessStepsTable({
 }: ProcessStepsTableProps) {
   const { t, locale } = useI18n();
 
+  // Pending-key fallback, same convention as the label helpers below: t()
+  // echoes the key until the shared bundle lands it.
+  const copyLabel = (key: string, fallback: Record<Locale, string>) => {
+    const translated = t(key);
+    return translated === key ? fallback[locale] : translated;
+  };
+
+  // §6.3: the actions column also carries the read-only reflection entry,
+  // so it renders whenever the attempt has an INTERVIEW step — not only
+  // when the job is mutable.
+  const showActionsColumn =
+    canMutate ||
+    steps.some((s) => s.category === PROCESS_STEP_CATEGORY.INTERVIEW);
+
   const categoryLabel = (category: string) => {
     const key = `jobs.stepCategories.${category}`;
     const translated = t(key);
@@ -156,7 +170,7 @@ export function ProcessStepsTable({
           </TableHead>
           <TableHead>{t("jobs.stepStatus")}</TableHead>
           <TableHead>{t("jobs.stepResult")}</TableHead>
-          {canMutate && (
+          {showActionsColumn && (
             <TableHead className="whitespace-nowrap">
               {t("jobs.stepActions")}
             </TableHead>
@@ -170,7 +184,7 @@ export function ProcessStepsTable({
           const closed = isClosed(step);
           const canTransition = canMutate && isUserStep && !closed;
           const canOpenReflection =
-            canMutate && step.category === PROCESS_STEP_CATEGORY.INTERVIEW;
+            step.category === PROCESS_STEP_CATEGORY.INTERVIEW;
           return (
             <TableRow
               key={step.id}
@@ -208,7 +222,7 @@ export function ProcessStepsTable({
                 )}
               </TableCell>
               <TableCell>{step.result ?? "—"}</TableCell>
-              {canMutate && (
+              {showActionsColumn && (
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     {canTransition && (
@@ -243,14 +257,16 @@ export function ProcessStepsTable({
                         </Button>
                       </>
                     )}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onEdit(step)}
-                    >
-                      {t("common.edit")}
-                    </Button>
+                    {canMutate && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onEdit(step)}
+                      >
+                        {t("common.edit")}
+                      </Button>
+                    )}
                     {canOpenReflection && (
                       <Button
                         type="button"
@@ -259,7 +275,12 @@ export function ProcessStepsTable({
                         onClick={() => onReflect(step)}
                         data-testid="interview-reflection-entry"
                       >
-                        {t("jobs.interviewReflection")}
+                        {canMutate
+                          ? t("jobs.interviewReflection")
+                          : copyLabel("jobs.viewInterviewReflection", {
+                              "zh-CN": "查看复盘",
+                              en: "View reflection",
+                            })}
                       </Button>
                     )}
                     {canMutate && isUserStep && (
