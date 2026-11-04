@@ -32,14 +32,18 @@ import {
   getApplicationTimeline,
   updateApplicationProcessStep,
 } from "@/actions/application.actions";
+import { getJobConnections } from "@/actions/jobConnections.actions";
 import { SubmittedResumePanel } from "@/components/career/resume-variant/SubmittedResumePanel";
+import { JobConnectionsSummary } from "./JobConnectionsSummary";
 import type {
   ApplicationAttemptTimelineDTO,
   ApplicationProcessStepDTO,
   ApplicationTimelineDTO,
+  JobConnectionsDTO,
 } from "@/lib/career/applicationTimeline";
 import {
   isTerminalAttemptOutcome,
+  PROCESS_STEP_CATEGORY,
   PROCESS_STEP_SOURCE,
   PROCESS_STEP_STATUS,
 } from "@/lib/career/identities";
@@ -51,9 +55,19 @@ import type { Locale } from "@/i18n";
 // t() echoes the key and the paired fallback keeps the page readable.
 function useCopy() {
   const { t, locale } = useI18n();
-  return (key: string, fallback: Record<Locale, string>) => {
-    const translated = t(key);
-    return translated === key ? fallback[locale] : translated;
+  return (
+    key: string,
+    fallback: Record<Locale, string>,
+    params?: Record<string, string | number>,
+  ) => {
+    const translated = t(key, params);
+    if (translated !== key) return translated;
+    const template = fallback[locale];
+    return params
+      ? template.replace(/\{(\w+)\}/g, (raw, name: string) =>
+          name in params ? String(params[name]) : raw,
+        )
+      : template;
   };
 }
 
@@ -130,6 +144,7 @@ export function ApplicationTimelineTab({
   const copy = useCopy();
   const router = useRouter();
   const [timeline, setTimeline] = useState<ApplicationTimelineDTO | null>(null);
+  const [connections, setConnections] = useState<JobConnectionsDTO | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [attemptDialogOpen, setAttemptDialogOpen] = useState(false);
   const [transferAttempt, setTransferAttempt] =
@@ -156,12 +171,28 @@ export function ApplicationTimelineTab({
     [timeline],
   );
 
+  // The timeline and the P-B connections aggregation load in parallel: they
+  // are two independent reads of the same job (the submitted-resume summary
+  // stays on the timeline DTO, the rest of the comparison rides the
+  // connections DTO). A failed connections read degrades to absent — it must
+  // not take the timeline down with it.
   const loadTimeline = useCallback(async () => {
-    const result = await getApplicationTimeline(jobId);
-    if (result.success) {
-      setTimeline(result.data ?? null);
+    const [timelineResult, connectionsResult] = await Promise.all([
+      getApplicationTimeline(jobId),
+      getJobConnections(jobId),
+    ]);
+    if (timelineResult.success) {
+      setTimeline(timelineResult.data ?? null);
     } else {
-      toastError(result.message);
+      toastError(timelineResult.message);
+    }
+    if (connectionsResult.success) {
+      setConnections(connectionsResult.data ?? null);
+    } else {
+      setConnections(null);
+      if (timelineResult.success) {
+        toastError(connectionsResult.message);
+      }
     }
   }, [jobId]);
 
@@ -169,13 +200,26 @@ export function ApplicationTimelineTab({
   // dashboard/upcoming surface mounted alongside the tab re-reads its model.
   const reloadAfterMutation = useCallback(async () => {
     router.refresh();
-    const result = await getApplicationTimeline(jobId);
-    if (result.success) {
-      setTimeline(result.data ?? null);
-    } else {
-      toastError(result.message);
+    await loadTimeline();
+  }, [router, loadTimeline]);
+
+  const materialsByAttempt = useMemo(() => {
+    const map = new Map<string, JobConnectionsDTO["attemptMaterials"][number]>();
+    for (const row of connections?.attemptMaterials ?? []) {
+      map.set(row.attemptId, row);
     }
-  }, [router, jobId]);
+    return map;
+  }, [connections]);
+
+  const plannedVariantIds = useMemo(
+    () =>
+      new Set(
+        (connections?.plannedResumeVariants ?? []).map(
+          (variant) => variant.id,
+        ),
+      ),
+    [connections],
+  );
 
   useEffect(() => {
     void loadTimeline();
@@ -397,6 +441,48 @@ export function ApplicationTimelineTab({
     );
   }
 
+  // D9 cascade warning: deleting an INTERVIEW step that owns an
+  // ApplicationInterviewDetail also drops the detail and its stored
+  // reflection items, so the confirm dialog has to say what goes with it.
+  const deleteDescription = (() => {
+    if (!stepToDelete) return "";
+    const withDetail =
+      stepToDelete.category === PROCESS_STEP_CATEGORY.INTERVIEW &&
+      stepToDelete.interviewDetailPresent;
+    if (!withDetail) return t("jobs.deleteProcessStepDescription");
+    const count = stepToDelete.reflectionItemCount ?? 0;
+    return count > 0
+      ? copy(
+          "jobs.deleteInterviewStepWithReflectionDescription",
+          {
+            "zh-CN":
+              "删除该面试轮次将同时删除其面试详情与 {count} 条复盘问答，且不可恢复。",
+            en: "Deleting this interview round also deletes its interview detail and {count} reflection item(s). This cannot be undone.",
+          },
+          { count },
+        )
+      : copy("jobs.deleteInterviewStepDescription", {
+          "zh-CN": "删除该面试轮次将同时删除其面试详情，且不可恢复。",
+          en: "Deleting this interview round also deletes its interview detail. This cannot be undone.",
+        });
+  })();
+
+  // The reflection dialog stays outside the canMutate gate (§6.3): an
+  // archived job still exposes read-only reflection viewing. Server-side
+  // writes keep being refused by requireOwnedStep → assertOpportunityWritable.
+  const reflectionDialog = (
+    <InterviewReflectionDialog
+      open={reflectionStep != null}
+      onOpenChange={(open) => {
+        if (!open) setReflectionStep(null);
+      }}
+      step={reflectionStep}
+      companyName={companyName}
+      roleTitle={roleTitle}
+      readOnly={!canMutate}
+    />
+  );
+
   // The dialogs render at a fixed position outside the attempt-count branch so
   // the process-step form survives a zero→nonzero timeline flip: a refresh
   // after PROCESS_STEP_ATTEMPT_STATE_CHANGED must keep the typed draft for an
@@ -435,15 +521,6 @@ export function ApplicationTimelineTab({
         timeZone={timeline.timeZone}
         onSubmit={onRescheduleSave}
       />
-      <InterviewReflectionDialog
-        open={reflectionStep != null}
-        onOpenChange={(open) => {
-          if (!open) setReflectionStep(null);
-        }}
-        step={reflectionStep}
-        companyName={companyName}
-        roleTitle={roleTitle}
-      />
       <DeleteAlertDialog
         pageTitle=""
         open={stepToDelete != null}
@@ -452,7 +529,7 @@ export function ApplicationTimelineTab({
         }}
         onDelete={onConfirmDelete}
         alertTitle={t("jobs.deleteProcessStepTitle")}
-        alertDescription={t("jobs.deleteProcessStepDescription")}
+        alertDescription={deleteDescription}
       />
       <DeleteAlertDialog
         pageTitle=""
@@ -472,6 +549,9 @@ export function ApplicationTimelineTab({
   if (timeline.attempts.length === 0) {
     return (
       <>
+        {connections ? (
+          <JobConnectionsSummary connections={connections} />
+        ) : null}
         <JobTabEmptyState
           icon={CalendarClock}
           title={t("jobs.timelineEmptyTitle")}
@@ -481,6 +561,7 @@ export function ApplicationTimelineTab({
         />
         {/* Keep the fixed dialog position (see `dialogs` above): siblings go after it. */}
         {dialogs}
+        {reflectionDialog}
         {canMutate && (
           <div className="-mt-4 flex justify-center pb-4">
             <Button
@@ -527,6 +608,9 @@ export function ApplicationTimelineTab({
           </Button>
         </div>
       )}
+      {connections ? (
+        <JobConnectionsSummary connections={connections} />
+      ) : null}
       {timeline.attempts.map((attempt) => (
         <section
           key={attempt.id}
@@ -614,9 +698,39 @@ export function ApplicationTimelineTab({
               <SubmittedResumePanel
                 attemptId={attempt.id}
                 submittedResume={attempt.submittedResume}
+                submissionFacts={
+                  connections
+                    ? {
+                        artifact:
+                          materialsByAttempt.get(attempt.id)
+                            ?.submittedArtifact ?? null,
+                        submittedAgainstJdVersion:
+                          materialsByAttempt.get(attempt.id)
+                            ?.submittedAgainstJdVersion ?? null,
+                        currentJdVersion: connections.currentJdVersion,
+                        submitted: attempt.submittedAt != null,
+                      }
+                    : undefined
+                }
                 canMutate={canMutate}
                 onBound={loadTimeline}
               />
+              {attempt.submittedResume && connections ? (
+                <p
+                  className="mt-1 text-xs text-muted-foreground"
+                  data-testid="submitted-vs-planned"
+                >
+                  {plannedVariantIds.has(attempt.submittedResume.resumeVariantId)
+                    ? copy("jobs.submittedIsPlannedVariant", {
+                        "zh-CN": "属于计划绑定简历",
+                        en: "From a planned resume",
+                      })
+                    : copy("jobs.submittedNotPlannedVariant", {
+                        "zh-CN": "非计划绑定简历",
+                        en: "Not a planned resume",
+                      })}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -650,6 +764,7 @@ export function ApplicationTimelineTab({
       ))}
     </div>
     {dialogs}
+    {reflectionDialog}
     </>
   );
 }

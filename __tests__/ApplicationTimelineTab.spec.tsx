@@ -1,7 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApplicationTimelineTab } from "@/components/myjobs/job-details/ApplicationTimelineTab";
-import type { ApplicationTimelineDTO } from "@/lib/career/applicationTimeline";
+import type {
+  ApplicationTimelineDTO,
+  JobConnectionsDTO,
+} from "@/lib/career/applicationTimeline";
 import {
   cancelApplicationProcessStep,
   completeApplicationProcessStep,
@@ -11,6 +14,8 @@ import {
   getInterviewReflection,
   updateApplicationProcessStep,
 } from "@/actions/application.actions";
+import { getJobConnections } from "@/actions/jobConnections.actions";
+import { resolveBusinessAiConfig } from "@/actions/aiAssignment.actions";
 
 vi.mock("@/actions/application.actions", () => ({
   getApplicationTimeline: vi.fn(),
@@ -25,6 +30,22 @@ vi.mock("@/actions/application.actions", () => ({
   attachAttemptResumeVersion: vi.fn(),
 }));
 
+vi.mock("@/actions/jobConnections.actions", () => ({
+  getJobConnections: vi.fn(),
+}));
+
+vi.mock("@/actions/question.actions", () => ({
+  getQuestionsList: vi.fn(),
+}));
+
+vi.mock("@/actions/interviewReflectionAi.actions", () => ({
+  generateInterviewReflectionDraft: vi.fn(),
+}));
+
+vi.mock("@/actions/aiAssignment.actions", () => ({
+  resolveBusinessAiConfig: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
@@ -35,12 +56,14 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 const getTimeline = vi.mocked(getApplicationTimeline);
+const getConnections = vi.mocked(getJobConnections);
 const completeStep = vi.mocked(completeApplicationProcessStep);
 const cancelStep = vi.mocked(cancelApplicationProcessStep);
 const createStep = vi.mocked(createApplicationProcessStep);
 const updateStep = vi.mocked(updateApplicationProcessStep);
 const deleteStep = vi.mocked(deleteApplicationProcessStep);
 const getReflection = vi.mocked(getInterviewReflection);
+const resolveConfig = vi.mocked(resolveBusinessAiConfig);
 
 function step(overrides: Partial<ApplicationTimelineDTO["attempts"][number]["steps"][number]> = {}) {
   return {
@@ -88,9 +111,30 @@ function timeline(
   };
 }
 
+function connections(
+  overrides: Partial<JobConnectionsDTO> = {},
+): JobConnectionsDTO {
+  return {
+    opportunityId: "job-1",
+    currentJdVersion: null,
+    plannedResumeVariants: [],
+    practiceSessions: { total: 0, byJdVersion: [] },
+    attemptMaterials: [],
+    ...overrides,
+  };
+}
+
 describe("ApplicationTimelineTab process step actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getConnections.mockResolvedValue({
+      success: true,
+      data: connections(),
+    });
+    resolveConfig.mockResolvedValue({
+      success: true,
+      data: { status: "NOT_CONFIGURED" },
+    } as never);
   });
 
   it("shows Delete for USER steps and hides it for SYSTEM steps", async () => {
@@ -164,6 +208,75 @@ describe("ApplicationTimelineTab process step actions", () => {
     expect(await screen.findByTestId("timeline-steps-empty")).toBeInTheDocument();
     expect(screen.queryByText("Hiring manager")).not.toBeInTheDocument();
     expect(screen.queryByTestId("application-process-step")).not.toBeInTheDocument();
+  });
+
+  it("warns about the interview detail cascade when deleting a detail-backed INTERVIEW step", async () => {
+    getTimeline.mockResolvedValue({
+      success: true,
+      data: timeline([step({ interviewDetailPresent: true })]),
+    });
+    render(
+      <ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />,
+    );
+    await userEvent.click(await screen.findByTestId("delete-process-step"));
+    expect(
+      await screen.findByText(
+        "Deleting this interview round also deletes its interview detail. This cannot be undone.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("includes the reflection item count in the cascade warning", async () => {
+    getTimeline.mockResolvedValue({
+      success: true,
+      data: timeline([
+        step({ interviewDetailPresent: true, reflectionItemCount: 3 }),
+      ]),
+    });
+    render(
+      <ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />,
+    );
+    await userEvent.click(await screen.findByTestId("delete-process-step"));
+    expect(
+      await screen.findByText(
+        "Deleting this interview round also deletes its interview detail and 3 reflection item(s). This cannot be undone.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the generic delete warning for steps without interview detail", async () => {
+    getTimeline.mockResolvedValue({
+      success: true,
+      data: timeline([
+        step({ id: "step-plain", label: "Plain interview" }),
+        step({
+          id: "step-assessment",
+          category: "ASSESSMENT",
+          label: "Take-home",
+          interviewDetailPresent: true,
+        }),
+      ]),
+    });
+    render(
+      <ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />,
+    );
+    // INTERVIEW without a detail, and a detail-flagged non-INTERVIEW step,
+    // both keep the original generic description.
+    const generic =
+      "The scheduled time, deadline, notes, and result for this step will be removed.";
+    await userEvent.click(
+      within(
+        (await screen.findAllByTestId("application-process-step"))[0],
+      ).getByTestId("delete-process-step"),
+    );
+    expect(await screen.findByText(generic)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await userEvent.click(
+      within(
+        (await screen.findAllByTestId("application-process-step"))[1],
+      ).getByTestId("delete-process-step"),
+    );
+    expect(await screen.findByText(generic)).toBeInTheDocument();
   });
 
   it("still marks a USER step complete", async () => {
@@ -271,14 +384,66 @@ describe("ApplicationTimelineTab process step actions", () => {
     expect(await screen.findByTestId("interview-reflection-entry")).toBeInTheDocument();
   });
 
-  it("hides Interview reflection when the timeline is read-only", async () => {
+  it("opens a read-only reflection when the timeline is read-only", async () => {
     getTimeline.mockResolvedValue({ success: true, data: timeline([step()]) });
+    getReflection.mockResolvedValue({
+      success: true,
+      data: {
+        applicationProcessStepId: "step-user",
+        reflectionText: "It went okay.",
+        reflectionCompletedAt: "2026-10-10T09:00:00.000Z",
+        items: [],
+      },
+    });
     render(
       <ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate={false} />,
     );
-    expect(await screen.findByText("Hiring manager")).toBeInTheDocument();
-    expect(screen.queryByTestId("interview-reflection-entry")).not.toBeInTheDocument();
-    expect(getReflection).not.toHaveBeenCalled();
+    const row = await screen.findByTestId("application-process-step");
+    // Read-only mode shows only the reflection entry in the actions column —
+    // every mutation button stays hidden.
+    expect(within(row).getAllByRole("button")).toHaveLength(1);
+    const entry = within(row).getByTestId("interview-reflection-entry");
+    expect(entry).toHaveTextContent("View reflection");
+
+    await userEvent.click(entry);
+    await waitFor(() => expect(getReflection).toHaveBeenCalledWith("step-user"));
+    expect(
+      await screen.findByTestId("interview-reflection-dialog"),
+    ).toBeInTheDocument();
+    // Read-only dialog: no AI section, no add-question, no save — but the
+    // convert-to-task escape hatch stays usable.
+    await waitFor(() =>
+      expect(screen.getByTestId("interview-reflection-to-task")).toBeEnabled(),
+    );
+    expect(
+      screen.queryByTestId("interview-reflection-save"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("interview-reflection-ai"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("interview-reflection-add-question"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps non-INTERVIEW rows fully read-only when the timeline is read-only", async () => {
+    getTimeline.mockResolvedValue({
+      success: true,
+      data: timeline([
+        step({ id: "step-interview", label: "Hiring manager" }),
+        step({ id: "step-task", category: "ASSESSMENT", label: "Take-home" }),
+      ]),
+    });
+    render(
+      <ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate={false} />,
+    );
+    const rows = await screen.findAllByTestId("application-process-step");
+    // The INTERVIEW row keeps its read-only entry; the ASSESSMENT row's
+    // actions cell is rendered but empty.
+    expect(
+      within(rows[0]).getByTestId("interview-reflection-entry"),
+    ).toBeInTheDocument();
+    expect(within(rows[1]).queryAllByRole("button")).toHaveLength(0);
   });
 
   it("hides Delete for IMPORT and AUTOMATION steps", async () => {
@@ -520,5 +685,269 @@ describe("ApplicationTimelineTab process step actions", () => {
       within(row).queryByTestId("reschedule-process-step"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("cancel-process-step")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("ApplicationTimelineTab job connections view", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getConnections.mockResolvedValue({ success: true, data: connections() });
+  });
+
+  it("renders planned variants and the practice session count", async () => {
+    getTimeline.mockResolvedValue({ success: true, data: timeline([]) });
+    getConnections.mockResolvedValue({
+      success: true,
+      data: connections({
+        currentJdVersion: { id: "jd-2", versionNumber: 2 },
+        plannedResumeVariants: [
+          {
+            id: "var-1",
+            name: "Campus",
+            archivedAt: null,
+            currentVersion: { id: "ver-2", versionNumber: 2, status: "FROZEN" },
+          },
+          {
+            id: "var-2",
+            name: "Old",
+            archivedAt: "2024-01-02T00:00:00.000Z",
+            currentVersion: { id: "ver-9", versionNumber: 9, status: "ARCHIVED" },
+          },
+        ],
+        practiceSessions: {
+          total: 3,
+          byJdVersion: [
+            { jdVersionId: "jd-1", versionNumber: 1, count: 2 },
+            { jdVersionId: "jd-2", versionNumber: 2, count: 1 },
+          ],
+        },
+      }),
+    });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+
+    const summary = await screen.findByTestId("job-connections-summary");
+    const variants = within(summary).getAllByTestId("planned-resume-variant");
+    expect(variants[0]).toHaveTextContent("Campus");
+    expect(variants[0]).toHaveTextContent("v2");
+    expect(variants[0]).toHaveTextContent("Frozen");
+    expect(variants[0].querySelector("a")).toHaveAttribute(
+      "href",
+      "/dashboard/profile/resumes/var-1",
+    );
+    expect(variants[1]).toHaveTextContent("Archived");
+    expect(within(summary).getByTestId("practice-sessions-count")).toHaveTextContent(
+      "3 practice session(s)",
+    );
+    expect(within(summary).getByTestId("practice-sessions-by-jd")).toHaveTextContent(
+      "JD v1: 2",
+    );
+    expect(within(summary).getByTestId("practice-sessions-by-jd")).toHaveTextContent(
+      "JD v2: 1",
+    );
+  });
+
+  it("shows neutral empty states when nothing is planned or practiced", async () => {
+    getTimeline.mockResolvedValue({ success: true, data: timeline([]) });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+
+    const summary = await screen.findByTestId("job-connections-summary");
+    expect(within(summary).getByTestId("planned-resumes-empty")).toHaveTextContent(
+      "No resume planned for this job yet.",
+    );
+    expect(within(summary).getByTestId("practice-sessions-count")).toHaveTextContent(
+      "No practice sessions for this job yet.",
+    );
+    expect(
+      within(summary).queryByTestId("practice-sessions-by-jd"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the attempt's artifact and submitted JD version with a download entry", async () => {
+    const data = timeline([]);
+    data.attempts[0].submittedResume = {
+      id: "ver-1",
+      title: "Campus",
+      versionNumber: 1,
+      resumeVariantId: "var-1",
+      resumeVariantVersionId: "ver-1",
+    };
+    getTimeline.mockResolvedValue({ success: true, data });
+    getConnections.mockResolvedValue({
+      success: true,
+      data: connections({
+        currentJdVersion: { id: "jd-2", versionNumber: 2 },
+        attemptMaterials: [
+          {
+            attemptId: "att-1",
+            submittedArtifact: {
+              id: "art-1",
+              kind: "EXPORT",
+              format: "PDF",
+              fileName: "campus.pdf",
+              sha256: "abc123",
+              byteSize: 1024,
+            },
+            submittedAgainstJdVersion: {
+              id: "jd-1",
+              versionNumber: 1,
+              capturedAt: "2024-01-01T00:00:00.000Z",
+            },
+          },
+        ],
+      }),
+    });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+
+    const facts = await screen.findByTestId("submitted-material-facts");
+    expect(facts).toHaveTextContent("campus.pdf");
+    expect(facts).toHaveTextContent("PDF");
+    expect(within(facts).getByTestId("download-submitted-artifact")).toHaveAttribute(
+      "href",
+      "/api/profile/resume-artifacts/art-1",
+    );
+    expect(facts).toHaveTextContent("JD at submission");
+    expect(facts).toHaveTextContent("v1");
+    expect(facts).toHaveTextContent("current JD is v2");
+  });
+
+  it("renders neutral N/A for a submitted attempt with no bound materials", async () => {
+    getTimeline.mockResolvedValue({ success: true, data: timeline([]) });
+    getConnections.mockResolvedValue({
+      success: true,
+      data: connections({
+        attemptMaterials: [
+          {
+            attemptId: "att-1",
+            submittedArtifact: null,
+            submittedAgainstJdVersion: null,
+          },
+        ],
+      }),
+    });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+
+    const facts = await screen.findByTestId("submitted-material-facts");
+    expect(facts).toHaveTextContent("Submitted file");
+    expect(facts).toHaveTextContent("N/A");
+    expect(facts).toHaveTextContent("JD at submission");
+    expect(
+      within(facts).queryByTestId("download-submitted-artifact"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides material facts entirely for a draft attempt with nothing bound", async () => {
+    const data = timeline([]);
+    data.attempts[0].submittedAt = null;
+    getTimeline.mockResolvedValue({ success: true, data });
+    getConnections.mockResolvedValue({
+      success: true,
+      data: connections({
+        attemptMaterials: [
+          {
+            attemptId: "att-1",
+            submittedArtifact: null,
+            submittedAgainstJdVersion: null,
+          },
+        ],
+      }),
+    });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+
+    expect(await screen.findByText("No submitted resume linked")).toBeInTheDocument();
+    expect(screen.queryByTestId("submitted-material-facts")).not.toBeInTheDocument();
+  });
+
+  it("marks whether the submitted resume belongs to a planned variant", async () => {
+    const data = timeline([]);
+    data.attempts[0].submittedResume = {
+      id: "ver-1",
+      title: "Campus",
+      versionNumber: 1,
+      resumeVariantId: "var-1",
+      resumeVariantVersionId: "ver-1",
+    };
+    getTimeline.mockResolvedValue({ success: true, data });
+    getConnections.mockResolvedValue({
+      success: true,
+      data: connections({
+        plannedResumeVariants: [
+          {
+            id: "var-1",
+            name: "Campus",
+            archivedAt: null,
+            currentVersion: { id: "ver-2", versionNumber: 2, status: "DRAFT" },
+          },
+        ],
+      }),
+    });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+    expect(await screen.findByTestId("submitted-vs-planned")).toHaveTextContent(
+      "From a planned resume",
+    );
+  });
+
+  it("marks a submitted resume outside the planned set", async () => {
+    const data = timeline([]);
+    data.attempts[0].submittedResume = {
+      id: "ver-1",
+      title: "Other",
+      versionNumber: 3,
+      resumeVariantId: "var-9",
+      resumeVariantVersionId: "ver-1",
+    };
+    getTimeline.mockResolvedValue({ success: true, data });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+    expect(await screen.findByTestId("submitted-vs-planned")).toHaveTextContent(
+      "Not a planned resume",
+    );
+  });
+
+  it("keeps the connections view readable in read-only mode", async () => {
+    getTimeline.mockResolvedValue({ success: true, data: timeline([]) });
+    getConnections.mockResolvedValue({
+      success: true,
+      data: connections({
+        plannedResumeVariants: [
+          {
+            id: "var-1",
+            name: "Campus",
+            archivedAt: null,
+            currentVersion: { id: "ver-2", versionNumber: 2, status: "DRAFT" },
+          },
+        ],
+        attemptMaterials: [
+          {
+            attemptId: "att-1",
+            submittedArtifact: {
+              id: "art-1",
+              kind: "EXPORT",
+              format: "PDF",
+              fileName: "campus.pdf",
+              sha256: "abc123",
+              byteSize: 1024,
+            },
+            submittedAgainstJdVersion: null,
+          },
+        ],
+      }),
+    });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate={false} />);
+
+    expect(await screen.findByTestId("job-connections-summary")).toBeInTheDocument();
+    expect(await screen.findByTestId("submitted-material-facts")).toBeInTheDocument();
+  });
+
+  it("still renders the timeline when the connections read fails", async () => {
+    getTimeline.mockResolvedValue({ success: true, data: timeline([step()]) });
+    getConnections.mockResolvedValue({
+      success: false,
+      message: "unavailable",
+    });
+    render(<ApplicationTimelineTab jobId="job-1" refreshKey={0} canMutate />);
+
+    expect(await screen.findByText("Hiring manager")).toBeInTheDocument();
+    expect(screen.queryByTestId("job-connections-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("submitted-material-facts")).not.toBeInTheDocument();
   });
 });

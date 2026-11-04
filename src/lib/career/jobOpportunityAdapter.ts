@@ -18,6 +18,11 @@ import {
   firstSubmittedAtSql,
   isAppliedAttempt,
 } from "./applicationFact";
+import { assertFullAbReadable } from "./capabilities";
+import {
+  toIso,
+  type JobConnectionsDTO,
+} from "./applicationTimeline";
 import {
   deriveUiStatus,
   pickLatestAttempt,
@@ -908,4 +913,144 @@ export async function getOpportunityAsJob(
   if (!row) return null;
   const lookups = await loadJobViewLookups(db, userId, [row]);
   return mapOpportunityToJobView(userId, row, lookups);
+}
+
+// P-B JOB-CONNECTIONS aggregation view (contract §14.1): one include that
+// loads everything the job-details "planned vs actual submission" comparison
+// needs on top of ApplicationTimelineDTO. Read-only over existing columns —
+// no schema delta. The child `userId` filters are a defensive second scope
+// on top of the parent ownership match: a variant/session must never surface
+// under a job it does not own, even if a bad row ever pointed across users.
+export function jobConnectionsInclude(userId: string) {
+  return {
+    currentJdVersion: { select: { id: true, versionNumber: true } },
+    targetedResumeVariants: {
+      where: { userId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        archivedAt: true,
+        currentVersion: {
+          select: { id: true, versionNumber: true, status: true },
+        },
+      },
+    },
+    applicationAttempts: {
+      where: { userId },
+      select: {
+        id: true,
+        submittedResumeArtifact: {
+          select: {
+            id: true,
+            kind: true,
+            format: true,
+            fileName: true,
+            sha256: true,
+            byteSize: true,
+          },
+        },
+        submittedAgainstJdVersion: {
+          select: { id: true, versionNumber: true, capturedAt: true },
+        },
+      },
+    },
+    interviewSessions: {
+      where: { userId },
+      select: {
+        jobDescriptionVersionId: true,
+        jobDescriptionVersion: { select: { versionNumber: true } },
+      },
+    },
+  } satisfies Prisma.JobOpportunityInclude;
+}
+
+/**
+ * Read model behind the job-details "planned vs actual" comparison
+ * (P-B JOB-CONNECTIONS, contract §14.1). Same read surface as the
+ * application timeline (`assertFullAbReadable`); archived opportunities stay
+ * readable — the view renders them read-only. Throws
+ * `OPPORTUNITY_NOT_FOUND` for missing or cross-user ids.
+ */
+export async function getJobConnections(
+  db: PrismaClient,
+  userId: string,
+  jobOpportunityId: string,
+  env?: NodeJS.ProcessEnv,
+): Promise<JobConnectionsDTO> {
+  await assertFullAbReadable(db, env);
+  const row = await db.jobOpportunity.findFirst({
+    where: { id: jobOpportunityId, userId },
+    include: jobConnectionsInclude(userId),
+  });
+  if (!row) {
+    throw new CareerRuntimeError(
+      "OPPORTUNITY_NOT_FOUND",
+      "Opportunity not found",
+    );
+  }
+
+  // job+JD are written as one validated pair (jobJdResolver); a session row
+  // missing its JD side is skipped from the breakdown rather than invented.
+  const sessionsByJd = new Map<string, { versionNumber: number; count: number }>();
+  for (const session of row.interviewSessions) {
+    if (!session.jobDescriptionVersionId || !session.jobDescriptionVersion) {
+      continue;
+    }
+    const entry = sessionsByJd.get(session.jobDescriptionVersionId) ?? {
+      versionNumber: session.jobDescriptionVersion.versionNumber,
+      count: 0,
+    };
+    entry.count += 1;
+    sessionsByJd.set(session.jobDescriptionVersionId, entry);
+  }
+
+  return {
+    opportunityId: row.id,
+    currentJdVersion: row.currentJdVersion
+      ? {
+          id: row.currentJdVersion.id,
+          versionNumber: row.currentJdVersion.versionNumber,
+        }
+      : null,
+    plannedResumeVariants: row.targetedResumeVariants.map((variant) => ({
+      id: variant.id,
+      name: variant.name,
+      archivedAt: toIso(variant.archivedAt),
+      currentVersion: variant.currentVersion
+        ? {
+            id: variant.currentVersion.id,
+            versionNumber: variant.currentVersion.versionNumber,
+            status: variant.currentVersion.status,
+          }
+        : null,
+    })),
+    practiceSessions: {
+      total: row.interviewSessions.length,
+      byJdVersion: [...sessionsByJd.entries()]
+        .map(([jdVersionId, entry]) => ({ jdVersionId, ...entry }))
+        .sort((a, b) => a.versionNumber - b.versionNumber),
+    },
+    attemptMaterials: row.applicationAttempts.map((attempt) => ({
+      attemptId: attempt.id,
+      submittedArtifact: attempt.submittedResumeArtifact
+        ? {
+            id: attempt.submittedResumeArtifact.id,
+            kind: attempt.submittedResumeArtifact.kind,
+            format: attempt.submittedResumeArtifact.format,
+            fileName: attempt.submittedResumeArtifact.fileName,
+            sha256: attempt.submittedResumeArtifact.sha256,
+            byteSize: attempt.submittedResumeArtifact.byteSize,
+          }
+        : null,
+      submittedAgainstJdVersion: attempt.submittedAgainstJdVersion
+        ? {
+            id: attempt.submittedAgainstJdVersion.id,
+            versionNumber: attempt.submittedAgainstJdVersion.versionNumber,
+            capturedAt:
+              attempt.submittedAgainstJdVersion.capturedAt.toISOString(),
+          }
+        : null,
+    })),
+  };
 }

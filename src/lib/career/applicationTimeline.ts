@@ -71,6 +71,84 @@ export type ApplicationTimelineDTO = {
   attempts: ApplicationAttemptTimelineDTO[];
 };
 
+/**
+ * P-B JOB-CONNECTIONS: the immutable first-bound artifact actually sent with
+ * an attempt. Bytes may be missing after backup restore (re-exportable); the
+ * row itself is the submission fact.
+ */
+export type SubmittedArtifactDTO = {
+  id: string;
+  kind: string;
+  format: string;
+  fileName: string;
+  sha256: string;
+  byteSize: number | null;
+} | null;
+
+/**
+ * P-B JOB-CONNECTIONS: the JD version the attempt was submitted against.
+ * Immutable first binding; the opportunity's currentJdVersion may move on.
+ */
+export type SubmittedJdVersionDTO = {
+  id: string;
+  versionNumber: number;
+  capturedAt: string;
+} | null;
+
+/**
+ * Per-attempt actual-submission materials for the "planned vs actual"
+ * comparison. The submitted resume version row itself rides the existing
+ * `ApplicationAttemptTimelineDTO.submittedResume`; this DTO carries the two
+ * remaining immutable `submitted*` references.
+ */
+export type AttemptSubmissionMaterialsDTO = {
+  attemptId: string;
+  submittedArtifact: SubmittedArtifactDTO;
+  submittedAgainstJdVersion: SubmittedJdVersionDTO;
+};
+
+/**
+ * A ResumeVariant whose `targetJobOpportunityId` points at this job — the
+ * mutable "planned to use" binding (contract §4.2). `currentVersion` is the
+ * variant's live pointer, NOT a submission fact; it drifts with editing.
+ */
+export type PlannedResumeVariantDTO = {
+  id: string;
+  name: string;
+  archivedAt: string | null;
+  currentVersion: {
+    id: string;
+    versionNumber: number;
+    status: string;
+  } | null;
+};
+
+/**
+ * Job-level aggregation for the job-details "planned vs actual submission"
+ * view (contract §14.1 P-B). Read-only projection over existing columns.
+ *
+ * `practiceSessions` counts InterviewSession rows linked to this job by the
+ * validated (jobOpportunityId, jobDescriptionVersionId) pair — practice/mock
+ * sessions only, never real interview rounds (contract §8/D11); real rounds
+ * are the INTERVIEW process steps in `ApplicationTimelineDTO.attempts[].steps`.
+ * All linked sessions count regardless of status; the session archive path
+ * exists in schema only and has no productized writer today.
+ */
+export type JobConnectionsDTO = {
+  opportunityId: string;
+  currentJdVersion: { id: string; versionNumber: number } | null;
+  plannedResumeVariants: PlannedResumeVariantDTO[];
+  practiceSessions: {
+    total: number;
+    byJdVersion: Array<{
+      jdVersionId: string;
+      versionNumber: number;
+      count: number;
+    }>;
+  };
+  attemptMaterials: AttemptSubmissionMaterialsDTO[];
+};
+
 export type TransferTargetOpportunityDTO = {
   id: string;
   title: string;
