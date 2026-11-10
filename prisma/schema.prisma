@@ -695,6 +695,10 @@ model ChatConversation {
   managedAiProvenance String?
   resolvedConnectionId   String?
   resolvedModel          String?
+  // Multi-agent role fixed at creation: insight | pilot | reflect. NULL on
+  // pre-multi-agent rows keeps the general-assistant surface — never
+  // backfilled, displayed as "通用" and slotted under Pilot.
+  agentRole              String?
   // Reversible archive: hides the row from History and every AI read path
   // while keeping messages/context/summary intact for the Archive Center.
   archivedAt             DateTime?

@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { AgentRole } from "./agentRoles";
 import type { AgentConversationContextV1 } from "./conversationContext";
 
 export type ExplicitModelSelection = {
@@ -12,6 +13,8 @@ export type ChatConversationSummary = {
   titleFallback: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Fixed at creation; NULL on pre-multi-agent rows renders as 通用. */
+  agentRole: AgentRole | null;
 };
 
 export type ChatLockKind = "account" | "legacy" | "managed";

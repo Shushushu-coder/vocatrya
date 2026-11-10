@@ -265,6 +265,7 @@ export function renderCareerDialoguePrompt(input: {
   correction?: string;
   summary?: CareerDialogueContextInput["summary"];
   freshNativeFull?: boolean;
+  agentRole?: string | null;
 }): { prompt: string; size: CareerDialogueContextSize } {
   const lastIsUser = input.messages[input.messages.length - 1]?.role === "user";
   const pasteBlock =
@@ -294,6 +295,7 @@ export function renderCareerDialoguePrompt(input: {
     systemText: input.systemPrompt,
     fixedOverheadText,
     freshNativeFull: input.freshNativeFull,
+    agentRole: input.agentRole,
   });
   if (!budget.ok) {
     throw new AIBusinessError(
@@ -419,6 +421,12 @@ export type AccountAgentTurnInput = {
    * job opportunity instead of a legacy Job.
    */
   canonicalJobs?: boolean;
+  /**
+   * Multi-agent role from the persisted conversation row — the route reads
+   * it from the row, never the request. Filters the tool registry and the
+   * page line to the role's allowlist.
+   */
+  agentRole?: string | null;
   /** Injected for tests; production uses the default clients. */
   deps?: StreamExecutionDeps;
 };
@@ -435,18 +443,20 @@ export function assembleCareerDialogueTranscript({
   pageContext,
   pastedText,
   freshNativeFull,
+  agentRole,
 }: {
   messages: UIMessage[];
   pageContext?: PageContext;
   pastedText?: string;
   freshNativeFull?: boolean;
+  agentRole?: string | null;
 }): string[] {
   const transcriptLines = serializeChatTranscript(messages);
   const lastMessage = messages[messages.length - 1];
   const lastIsUser = lastMessage?.role === "user";
   if (lastIsUser) {
     transcriptLines.push(
-      buildPageContextMessage(pageContext, { freshNativeFull }),
+      buildPageContextMessage(pageContext, { freshNativeFull, agentRole }),
     );
   }
   if (pastedText && lastIsUser) {
@@ -494,6 +504,7 @@ export async function runAccountAgentTurn(
     freshNativeFull: input.freshNativeFull,
     canonicalJobs: input.canonicalJobs === true || input.freshNativeFull === true,
     request: input.request,
+    agentRole: input.agentRole,
   });
   const toolsBlock = describeToolsForPrompt(tools);
 
@@ -518,6 +529,7 @@ export async function runAccountAgentTurn(
       directChat: extra?.directChat,
       correction: extra?.correction,
       freshNativeFull: input.freshNativeFull,
+      agentRole: input.agentRole,
     });
     contextSize = rendered.size;
     return rendered.prompt;

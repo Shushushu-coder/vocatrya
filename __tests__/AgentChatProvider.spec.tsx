@@ -73,6 +73,7 @@ import {
   AgentChatProvider,
   useAgentChat,
 } from "@/components/agent/AgentChatProvider";
+import type { AgentRole } from "@/lib/agent/agentRoles";
 import { RightRailProvider, useRightRail } from "@/context/RightRailContext";
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import {
@@ -82,6 +83,8 @@ import {
   cancelChatConversationRequest,
   getChatConversation,
   getAgentChatPreflight,
+  resolveDraftPageContext,
+  updateChatConversationContext,
 } from "@/actions/agentChat.actions";
 import { AI_CONFIGURATION_CHANGED_EVENT } from "@/lib/ai/client-events";
 import { getUserSettings } from "@/actions/userSettings.actions";
@@ -93,7 +96,11 @@ function Probe() {
   const { expanded, toggle } = useSidebar();
   return (
     <div>
-      <button onClick={c.open}>open</button>
+      <button onClick={() => c.open()}>open</button>
+      <button onClick={() => c.open({ role: "reflect" })}>openReflect</button>
+      <button onClick={() => void c.switchRole("insight")}>switchInsight</button>
+      <button onClick={() => void c.switchRole("reflect")}>switchReflect</button>
+      <button onClick={() => c.fillComposer("filled draft")}>fillComposer</button>
       <button onClick={c.close}>close</button>
       <button onClick={() => void c.startNewConversation()}>newConversation</button>
       <button onClick={() => void c.regenerate()}>regenerate</button>
@@ -107,9 +114,8 @@ function Probe() {
       >
         sendMessage
       </button>
-      <button onClick={() => c.seedExchange("Add a job posting", "canned")}>
-        seedExchange
-      </button>
+      <span data-testid="active-role">{c.activeRole}</span>
+      <span data-testid="composer-seed">{c.composerSeed}</span>
       <button
         onClick={() =>
           c.setDraftModel({ connectionId: "conn-1", model: "model-x" })
@@ -164,7 +170,7 @@ function Probe() {
   );
 }
 
-const conversation = (messages: any[] = []) => ({
+const conversation = (messages: any[] = [], agentRole: AgentRole | null = null) => ({
   revision: 0,
   id: "conv-1",
   title: null,
@@ -176,6 +182,7 @@ const conversation = (messages: any[] = []) => ({
   lockKind: "legacy" as const,
   resolvedConnectionId: null,
   resolvedModel: null,
+  agentRole,
   archivedAt: null,
 });
 
@@ -215,6 +222,7 @@ const createdSnapshot = (id: string) => ({
     lockKind: "legacy" as const,
     resolvedConnectionId: null,
     resolvedModel: null,
+    agentRole: "pilot" as const,
     archivedAt: null,
   },
 });
@@ -263,15 +271,295 @@ describe("AgentChatProvider", () => {
     expect(chatInit().messages).toHaveLength(1);
   });
 
-  // The canned exchange never reaches the route, so it is the one pair that
-  // has to persist itself or it disappears on the next reload.
-  it("refuses an existing-conversation seed without touching the transcript", async () => {
-    chat.messages = [{ id: "m1", role: "user", parts: [] }];
+  // The mount slot comes from the loaded conversation's persisted role;
+  // NULL rows slot under Pilot.
+  it("activates the Pilot slot for a pre-multi-agent conversation", () => {
     setup();
-    await userEvent.click(screen.getByText("seedExchange"));
-    expect(chat.setMessages).not.toHaveBeenCalled();
-    expect(saveChatConversation).not.toHaveBeenCalled();
-    expect(screen.getByTestId("action-error")).toHaveTextContent("CONVERSATION_TURN_CONFLICT");
+    expect(screen.getByTestId("active-role").textContent).toBe("pilot");
+  });
+
+  it("activates the conversation's own role slot on mount", () => {
+    render(
+      <SidebarProvider initialExpanded>
+        <RightRailProvider>
+          <AgentChatProvider initialConversation={conversation([], "insight")}>
+            <Probe />
+          </AgentChatProvider>
+        </RightRailProvider>
+      </SidebarProvider>,
+    );
+    expect(screen.getByTestId("active-role").textContent).toBe("insight");
+  });
+
+  // Each role keeps its own conversation slot: switching away and back
+  // restores the conversation that slot last had active.
+  it("restores each role's own slot across a switch", async () => {
+    // conv-1 (role reflect) mounts into the reflect slot; the switch away
+    // snapshots it, and the switch back reloads the same row.
+    render(
+      <SidebarProvider initialExpanded>
+        <RightRailProvider>
+          <AgentChatProvider initialConversation={conversation([], "reflect")}>
+            <Probe />
+          </AgentChatProvider>
+        </RightRailProvider>
+      </SidebarProvider>,
+    );
+    vi.mocked(getChatConversation).mockResolvedValueOnce({
+      success: true,
+      data: conversation([], "reflect"),
+    });
+    await userEvent.click(screen.getByText("switchInsight"));
+    expect(screen.getByTestId("active-role").textContent).toBe("insight");
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+
+    await userEvent.click(screen.getByText("switchReflect"));
+    await waitFor(() =>
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-1"),
+    );
+    expect(getChatConversation).toHaveBeenCalledWith("conv-1");
+  });
+
+  it("switches to a role's empty slot as a draft without touching history", async () => {
+    setup();
+    await userEvent.click(screen.getByText("switchInsight"));
+    expect(screen.getByTestId("active-role").textContent).toBe("insight");
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+    expect(getChatConversation).not.toHaveBeenCalled();
+  });
+
+  // open({role}) is the homepage wiring point — it opens the panel and
+  // moves to that role's slot, without sending or creating anything.
+  it("open({role}) activates that role's slot without a send or a create", async () => {
+    setup();
+    await userEvent.click(screen.getByText("openReflect"));
+    expect(screen.getByTestId("active-role").textContent).toBe("reflect");
+    expect(screen.getByTestId("state").textContent).toContain("true|");
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    expect(createChatConversation).not.toHaveBeenCalled();
+  });
+
+  // Selecting a NULL conversation from history activates the general slot.
+  it("selecting a legacy conversation activates the Pilot slot", async () => {
+    render(
+      <SidebarProvider initialExpanded>
+        <RightRailProvider>
+          <AgentChatProvider initialConversation={conversation([], "insight")}>
+            <Probe />
+          </AgentChatProvider>
+        </RightRailProvider>
+      </SidebarProvider>,
+    );
+    expect(screen.getByTestId("active-role").textContent).toBe("insight");
+    vi.mocked(getChatConversation).mockResolvedValueOnce({
+      success: true,
+      data: { ...conversation(), id: "conv-2", revision: 8 },
+    });
+    await userEvent.click(screen.getByText("switchConversation"));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-role").textContent).toBe("pilot"),
+    );
+  });
+
+  // A slot that never stored a context is a fresh draft: switching to it on
+  // an object page resolves that page's AUTO item (contract §5.3/§6.2).
+  it("auto-attaches the current page object when switching to a fresh role slot", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard";
+    const { rerender } = render(draftTree());
+    currentPathname = "/dashboard/myjobs/job-9";
+    act(() => rerender(draftTree()));
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce({
+      success: true,
+      data: {
+        version: 1,
+        items: [
+          {
+            kind: "job",
+            entityId: "job-9",
+            labelSnapshot: "Job 9",
+            source: "AUTO",
+          },
+        ],
+      },
+    } as never);
+    await userEvent.click(screen.getByText("switchInsight"));
+    await waitFor(() =>
+      expect(screen.getByTestId("context-items").textContent).toContain(
+        "job:job-9",
+      ),
+    );
+    window.localStorage.clear();
+  });
+
+  it("does not activate or send a conversation created after switching roles", async () => {
+    let resolve!: (value: ReturnType<typeof createdSnapshot>) => void;
+    vi.mocked(createChatConversation).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    render(draftTree());
+    await userEvent.click(screen.getByText("switchInsight"));
+    await userEvent.click(screen.getByText("sendMessage"));
+    await userEvent.click(screen.getByText("switchReflect"));
+    await act(async () => resolve(createdSnapshot("late-insight")));
+    expect(screen.getByTestId("active-role")).toHaveTextContent("reflect");
+    expect(screen.getByTestId("conversation-id")).toBeEmptyDOMElement();
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("ignores a superseded role load and preserves its saved conversation pointer", async () => {
+    window.localStorage.setItem("agent-chat-role-slots", JSON.stringify({
+      insight: { conversationId: "conv-insight", draft: "insight draft" },
+    }));
+    let resolve!: (value: Awaited<ReturnType<typeof getChatConversation>>) => void;
+    vi.mocked(getChatConversation).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    setup();
+    await userEvent.click(screen.getByText("switchInsight"));
+    await userEvent.click(screen.getByText("switchReflect"));
+    await userEvent.click(screen.getByText("fillComposer"));
+    await act(async () => resolve({ success: true, data: { ...conversation([], "insight"), id: "conv-insight" } }));
+    expect(screen.getByTestId("active-role")).toHaveTextContent("reflect");
+    expect(screen.getByTestId("composer-seed")).toHaveTextContent("filled draft");
+    expect(screen.getByTestId("conversation-id")).toBeEmptyDOMElement();
+    expect(JSON.parse(localStorage.getItem("agent-chat-role-slots")!).insight.conversationId).toBe("conv-insight");
+  });
+
+  it("restores the active draft role after refresh without a persisted initial row", async () => {
+    const mounted = setup();
+    await userEvent.click(screen.getByText("switchReflect"));
+    expect(document.cookie).toContain("agent-chat-active-id=__draft__");
+    mounted.unmount();
+    render(draftTree());
+    expect(screen.getByTestId("active-role")).toHaveTextContent("reflect");
+    expect(screen.getByTestId("conversation-id")).toBeEmptyDOMElement();
+  });
+
+  it.each(["mount", "new"])("ignores late %s AUTO context after a role switch", async (mode) => {
+    currentPathname = mode === "mount" ? "/dashboard/myjobs/job-old" : "/dashboard/myjobs";
+    let resolve!: (value: Awaited<ReturnType<typeof resolveDraftPageContext>>) => void;
+    vi.mocked(resolveDraftPageContext).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    render(draftTree());
+    if (mode === "new") {
+      currentPathname = "/dashboard/myjobs/job-old";
+      await userEvent.click(screen.getByText("newConversation"));
+    }
+    currentPathname = "/dashboard/myjobs";
+    await userEvent.click(screen.getByText("switchReflect"));
+    await act(async () => resolve({ success: true, data: { version: 1, items: [{ kind: "job", entityId: "job-old", labelSnapshot: "Old", source: "AUTO" }] } }));
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+  });
+
+  it.each([true, false])("ignores late context update success=%s after switching roles", async (success) => {
+    let resolve!: (value: Awaited<ReturnType<typeof updateChatConversationContext>>) => void;
+    vi.mocked(updateChatConversationContext).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    setup();
+    await userEvent.click(screen.getByText("addContext"));
+    await userEvent.click(screen.getByText("switchReflect"));
+    await act(async () => resolve(success
+      ? { success: true, data: { version: 1, items: [{ kind: "job", entityId: "late-job", labelSnapshot: "Late", source: "MANUAL" }] } }
+      : { success: false, code: "GENERIC" }));
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("action-error")).toBeEmptyDOMElement();
+  });
+
+  // A restored draft already owns its objects — mounting it must not
+  // re-resolve the current page over the stored context.
+  it("keeps a restored slot context instead of re-resolving the page", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem("agent-chat-active-role", "insight");
+    window.localStorage.setItem(
+      "agent-chat-role-slots",
+      JSON.stringify({
+        insight: {
+          conversationId: null,
+          draft: null,
+          context: {
+            version: 1,
+            items: [
+              {
+                kind: "job",
+                entityId: "kept-job",
+                labelSnapshot: "Kept",
+                source: "MANUAL",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    currentPathname = "/dashboard/myjobs/job-9";
+    render(draftTree());
+    expect(screen.getByTestId("context-items").textContent).toContain(
+      "job:kept-job",
+    );
+    expect(vi.mocked(resolveDraftPageContext)).not.toHaveBeenCalled();
+    window.localStorage.clear();
+  });
+
+  // A stored id pointing at an archived row degrades to the role's draft —
+  // the archived conversation never opens as the active slot.
+  it("degrades to the role draft when the stored conversation is archived", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      "agent-chat-role-slots",
+      JSON.stringify({
+        insight: { conversationId: "conv-arch", draft: "still here" },
+      }),
+    );
+    render(draftTree());
+    vi.mocked(getChatConversation).mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...conversation([], "insight"),
+        id: "conv-arch",
+        archivedAt: "2026-11-01T00:00:00.000Z",
+      },
+    });
+    await userEvent.click(screen.getByText("switchInsight"));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-role").textContent).toBe("insight"),
+    );
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+    expect(screen.getByTestId("composer-seed").textContent).toBe("still here");
+    window.localStorage.clear();
+  });
+
+  // Unsent composer text belongs to the slot, not the switch: it comes back
+  // when the slot's conversation reloads.
+  it("restores a conversation slot's unsent composer text on switch", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      "agent-chat-role-slots",
+      JSON.stringify({
+        insight: { conversationId: "conv-9", draft: "unsent reply" },
+      }),
+    );
+    render(draftTree());
+    vi.mocked(getChatConversation).mockResolvedValueOnce({
+      success: true,
+      data: { ...conversation([], "insight"), id: "conv-9" },
+    });
+    await userEvent.click(screen.getByText("switchInsight"));
+    await waitFor(() =>
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-9"),
+    );
+    expect(screen.getByTestId("composer-seed").textContent).toBe("unsent reply");
+    window.localStorage.clear();
+  });
+
+  // A reload mounts the last active conversation — its stored unsent draft
+  // comes back with it when the slot names the same row.
+  it("restores the stored draft text for the conversation mounted on load", () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      "agent-chat-role-slots",
+      JSON.stringify({
+        pilot: { conversationId: "conv-1", draft: "typed before reload" },
+      }),
+    );
+    setup();
+    expect(screen.getByTestId("composer-seed").textContent).toBe(
+      "typed before reload",
+    );
+    window.localStorage.clear();
   });
 
   it("wires sendAutomaticallyWhen, without which an approved tool never executes", () => {
@@ -777,162 +1065,27 @@ describe("AgentChatProvider", () => {
     expect(screen.getByTestId("panel-expanded").textContent).toBe("false");
   });
 
-  it("persists one conversation when a draft suggestion is seeded", async () => {
+  // The composer fill channel only writes the input — nothing sends, and
+  // nothing persists a conversation off the back of a suggestion click.
+  it("fillComposer writes the composer seed without a request or a create", async () => {
+    render(draftTree());
+    await userEvent.click(screen.getByText("fillComposer"));
+    expect(screen.getByTestId("composer-seed").textContent).toBe("filled draft");
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    expect(createChatConversation).not.toHaveBeenCalled();
+  });
+
+  // createPersisted stamps the active slot's role on the new row — the one
+  // place the client declares a role; after that the row is the authority.
+  it("creates a draft-bound conversation stamped with the active role", async () => {
     (createChatConversation as any).mockResolvedValueOnce(createdSnapshot("conv-new"));
     render(draftTree());
-
-    await userEvent.click(screen.getByText("seedExchange"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-new");
-    });
-    expect(createChatConversation).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("message-roles").textContent).toBe("user,assistant");
-    expect(screen.getByTestId("history-version").textContent).toBe("1");
-    expect(screen.getByTestId("action-error").textContent).toBe("");
-    const persisted = (createChatConversation as any).mock.calls[0][0];
-    expect(persisted.messages).toHaveLength(2);
-    expect(persisted.messages[0].parts[0].text).toBe("Add a job posting");
-    expect(persisted.messages[1].parts[0].text).toBe("canned");
-  });
-
-  it("rolls a rejected draft seed back to the pre-seed draft", async () => {
-    (createChatConversation as any).mockRejectedValueOnce(
-      new Error('{"error":"database is locked"}'),
-    );
-    render(draftTree());
-    await userEvent.click(screen.getByText("addContext"));
-    await userEvent.click(screen.getByText("setDraftModel"));
-
-    await userEvent.click(screen.getByText("seedExchange"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
-    });
-    expect(screen.getByTestId("message-roles").textContent).toBe("");
-    expect(screen.getByTestId("conversation-id").textContent).toBe("");
-    expect(screen.getByTestId("context-items").textContent).toBe("job:job-1");
-    expect(screen.getByTestId("explicit-model").textContent).toBe("conn-1/model-x");
-    expect(screen.getByTestId("history-version").textContent).toBe("0");
-    expect(screen.queryByText("database is locked")).toBeNull();
-    expect(screen.queryByText('{"error":"database is locked"}')).toBeNull();
-    expect(deleteChatConversation).not.toHaveBeenCalled();
-    expect(saveChatConversation).not.toHaveBeenCalled();
-  });
-
-  it("keeps the typed action code when creating the seeded conversation fails", async () => {
-    (createChatConversation as any).mockResolvedValueOnce({
-      success: false,
-      code: "AI_NOT_CONFIGURED",
-      message: '{"error":"provider down"}',
-    });
-    render(draftTree());
-    await userEvent.click(screen.getByText("addContext"));
-
-    await userEvent.click(screen.getByText("seedExchange"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("action-error").textContent).toBe(
-        "AI_NOT_CONFIGURED",
-      );
-    });
-    expect(screen.getByTestId("message-roles").textContent).toBe("");
-    expect(screen.getByTestId("conversation-id").textContent).toBe("");
-    expect(screen.getByTestId("context-items").textContent).toBe("job:job-1");
-    expect(screen.getByTestId("history-version").textContent).toBe("0");
-    expect(screen.queryByText("provider down")).toBeNull();
-  });
-
-  it("creates exactly one conversation when a failed seed is retried", async () => {
-    (createChatConversation as any)
-      .mockRejectedValueOnce(new Error("first create failed"))
-      .mockResolvedValueOnce(createdSnapshot("conv-retry"));
-    render(draftTree());
-
-    await userEvent.click(screen.getByText("seedExchange"));
-    await waitFor(() => {
-      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
-    });
-    expect(screen.getByTestId("message-roles").textContent).toBe("");
-
-    await userEvent.click(screen.getByText("seedExchange"));
-    await waitFor(() => {
-      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-retry");
-    });
-    expect(createChatConversation).toHaveBeenCalledTimes(2);
-    expect(screen.getByTestId("message-roles").textContent).toBe("user,assistant");
-    expect(screen.getByTestId("history-version").textContent).toBe("1");
-    expect(screen.getByTestId("action-error").textContent).toBe("");
-    const persisted = (createChatConversation as any).mock.calls[1][0];
-    expect(persisted.messages).toHaveLength(2);
-    expect(deleteChatConversation).not.toHaveBeenCalled();
-  });
-
-  it("leaves an existing conversation untouched when a new draft seed fails", async () => {
-    (createChatConversation as any).mockRejectedValueOnce(new Error("nope"));
-    setup();
-    await userEvent.click(screen.getByText("newConversation"));
-    expect(screen.getByTestId("conversation-id").textContent).toBe("");
-
-    await userEvent.click(screen.getByText("seedExchange"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
-    });
-    expect(deleteChatConversation).not.toHaveBeenCalled();
-    expect(saveChatConversation).not.toHaveBeenCalled();
-    expect(screen.getByTestId("conversation-id").textContent).toBe("");
-    expect(screen.getByTestId("message-roles").textContent).toBe("");
-    expect(screen.getByTestId("history-version").textContent).toBe("0");
-    expect(createChatConversation).toHaveBeenCalledTimes(1);
-  });
-
-  it("sends one create for a double-clicked draft suggestion", async () => {
-    let release: (value: unknown) => void = () => {};
-    const pending = new Promise((resolve) => {
-      release = resolve;
-    });
-    (createChatConversation as any).mockImplementationOnce(() => pending);
-    render(draftTree());
-
-    await userEvent.click(screen.getByText("seedExchange"));
-    await userEvent.click(screen.getByText("seedExchange"));
-
-    expect(createChatConversation).toHaveBeenCalledTimes(1);
-    expect(chat.setMessages).toHaveBeenCalledTimes(1);
-    expect(chat.messages.map((message) => message.role).join(",")).toBe(
-      "user,assistant",
-    );
-
-    await act(async () => {
-      release({ success: false, code: "GENERIC" });
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("message-roles").textContent).toBe("");
-    });
-  });
-
-  it("queues a send that races an in-flight draft seed instead of creating twice", async () => {
-    let release: (value: unknown) => void = () => {};
-    const pending = new Promise((resolve) => {
-      release = resolve;
-    });
-    (createChatConversation as any).mockImplementationOnce(() => pending);
-    render(draftTree());
-
-    await userEvent.click(screen.getByText("seedExchange"));
+    await userEvent.click(screen.getByText("switchReflect"));
     await userEvent.click(screen.getByText("sendMessage"));
-
-    expect(createChatConversation).toHaveBeenCalledTimes(1);
-    expect(chat.sendMessage).not.toHaveBeenCalled();
-    expect(screen.getByTestId("queued").textContent).toBe("hello");
-
-    await act(async () => {
-      release({ success: false, code: "GENERIC" });
-    });
     await waitFor(() => {
-      expect(screen.getByTestId("action-error").textContent).toBe("GENERIC");
+      expect(createChatConversation).toHaveBeenCalledTimes(1);
     });
+    expect((createChatConversation as any).mock.calls[0][0].agentRole).toBe("reflect");
   });
 });
 

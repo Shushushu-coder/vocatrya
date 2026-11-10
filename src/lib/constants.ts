@@ -218,6 +218,11 @@ export const APP_CONSTANTS = {
   AGENT_CHAT_PANEL_WIDTH_KEY: "agent-chat-width",
   AGENT_CHAT_PANEL_MIN_WIDTH: 340,
   AGENT_CHAT_ACTIVE_CONVERSATION_KEY: "agent-chat-active-id",
+  AGENT_CHAT_DRAFT_CONVERSATION_ID: "__draft__",
+  // Multi-agent: last active role + each role's last-active conversation
+  // slot (independent drafts/sessions per role, D1).
+  AGENT_CHAT_ACTIVE_ROLE_KEY: "agent-chat-active-role",
+  AGENT_CHAT_ROLE_SLOTS_KEY: "agent-chat-role-slots",
   AGENT_CHAT_HISTORY_PAGE: 30,
 
   // Telemetry (OTLP export)

@@ -21,7 +21,8 @@ const chat = {
   open: vi.fn(),
   startNewConversation: vi.fn().mockResolvedValue(undefined),
   sendMessage: vi.fn(),
-  seedExchange: vi.fn(),
+  fillComposer: vi.fn(),
+  activeRole: "pilot" as "insight" | "pilot" | "reflect",
   approvalPending: false,
   busy: false,
   preflight: { checked: true, ok: true },
@@ -508,45 +509,34 @@ describe("JobDetails under fresh + full", () => {
 // ---------------------------------------------------------------------------
 
 describe("AgentChatEmptyState under fresh + full", () => {
-  it("suggests adding a job without the legacy posting copy", () => {
+  beforeEach(() => {
+    chat.activeRole = "pilot";
     chat.context = { version: 1, items: [] };
-    render(wrap(<AgentChatEmptyState />));
+  });
 
-    expect(screen.getByText("Add a job")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Add a job posting"),
-    ).not.toBeInTheDocument();
+  // The Pilot slot suggests adding a job under either runtime — but only as
+  // a composer fill; nothing sends and no conversation is created.
+  it("suggests adding a job and fills the composer without sending", async () => {
+    render(wrap(<AgentChatEmptyState />));
+    await userEvent.click(screen.getByText("Add a job"));
+    expect(chat.fillComposer).toHaveBeenCalledWith(
+      "Add this job posting to my jobs: ",
+    );
+    expect(chat.sendMessage).not.toHaveBeenCalled();
     expect(screen.getByText("Choose a job")).toBeInTheDocument();
   });
 
-  it("suggests add_job outside fresh + full", () => {
-    chat.context = { version: 1, items: [] };
-    render(wrap(<AgentChatEmptyState />, false));
-
-    expect(screen.getByText("Add a job posting")).toBeInTheDocument();
-  });
-
-  it("does not suggest matching on a job page, but keeps read prompts", () => {
-    chat.context = {
-      version: 1,
-      items: [
-        {
-          kind: "job",
-          entityId: "job-1",
-          labelSnapshot: "AI Product Analyst",
-          source: "AUTO",
-        },
-      ],
-    };
+  it("suggests the canonical match wording for Insight under fresh + full", () => {
+    chat.activeRole = "insight";
     render(wrap(<AgentChatEmptyState />));
-
-    expect(screen.queryByText("Check my match")).not.toBeInTheDocument();
-    expect(screen.getByText("Analyze this job")).toBeInTheDocument();
-    expect(screen.getByText("Prepare for the interview")).toBeInTheDocument();
+    expect(screen.getByText("Run match analysis")).toBeInTheDocument();
   });
 
-  it("suggests matching on a job page outside fresh + full", () => {
+  it("keeps the legacy match wording for Insight outside fresh + full", () => {
+    chat.activeRole = "insight";
     render(wrap(<AgentChatEmptyState />, false));
-    expect(screen.getByText("Check my match")).toBeInTheDocument();
+    expect(
+      screen.getByText("Check my match for this job"),
+    ).toBeInTheDocument();
   });
 });

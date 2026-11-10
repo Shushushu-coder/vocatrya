@@ -279,6 +279,7 @@ beforeAll(async () => {
       context: conversationContext(job.id, resume.id),
       messages: conversationMessages(job.id, resume.id, letter.id),
       archivedAt: ARCHIVED_AT,
+      agentRole: "insight",
     },
   });
   archivedConvId = archivedConv.id;
@@ -323,10 +324,12 @@ describe("archive backup round-trip", () => {
       (r: { id: string }) => r.id === archivedConvId,
     );
     expect(new Date(conv.archivedAt).getTime()).toBe(ARCHIVED_AT.getTime());
+    expect(conv.agentRole).toBe("insight");
     const active = data.ChatConversation.find(
       (r: { id: string }) => r.id === activeConvId,
     );
     expect(active.archivedAt ?? null).toBeNull();
+    expect(active.agentRole ?? null).toBeNull();
     // ConversationSummary is a disposable derived cache and is deliberately
     // not part of the portable backup.
     expect(data.ConversationSummary).toBeUndefined();
@@ -364,6 +367,12 @@ describe("archive backup round-trip", () => {
       include: { conversationSummary: true },
     });
     expect(conv.archivedAt?.getTime()).toBe(ARCHIVED_AT.getTime());
+    // Multi-agent role survives export → wipe → restore without downgrade.
+    expect(conv.agentRole).toBe("insight");
+    const activeRestored = await prisma.chatConversation.findFirstOrThrow({
+      where: { userId, title: "未归档对话" },
+    });
+    expect(activeRestored.agentRole).toBeNull();
     const resume = await prisma.resume.findFirstOrThrow({
       where: { title: "简历甲", profile: { userId } },
     });
@@ -509,6 +518,30 @@ describe("archive backup round-trip", () => {
     });
     expect(convs.length).toBeGreaterThanOrEqual(2);
     expect(convs.every((c) => c.archivedAt === null)).toBe(true);
+  }, 120_000);
+
+  // D2/V12: backups taken before multi-agent roles carry no agentRole key;
+  // they must import cleanly and restore every conversation as NULL
+  // (the general assistant, slotted under Pilot — never back-filled).
+  it("imports an old-format backup missing ChatConversation.agentRole", async () => {
+    const { buffer } = await buildBackupZip(userId, EMAIL);
+    const zip = await JSZip.loadAsync(buffer);
+    const data = JSON.parse(await zip.file("data.json")!.async("string"));
+    for (const row of data.ChatConversation ?? []) {
+      delete row.agentRole;
+    }
+    zip.file("data.json", JSON.stringify(data));
+    await importBackup(
+      await zip.generateAsync({ type: "nodebuffer" }),
+      userId,
+      EMAIL,
+      true,
+    );
+    const convs = await prisma.chatConversation.findMany({
+      where: { userId },
+    });
+    expect(convs.length).toBeGreaterThanOrEqual(2);
+    expect(convs.every((c) => c.agentRole === null)).toBe(true);
   }, 120_000);
 
   it.each(["prose", "unknown-tool"])("retains %s references across edits and repeated restores", async (source) => {

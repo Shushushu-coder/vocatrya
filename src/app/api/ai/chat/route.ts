@@ -137,6 +137,7 @@ async function accountChatResponse({
   freshNativeFull,
   canonicalJobs,
   request,
+  agentRole,
   managed,
 }: {
   req: NextRequest;
@@ -149,6 +150,12 @@ async function accountChatResponse({
   freshNativeFull: boolean;
   canonicalJobs: boolean;
   request: ConversationRequest;
+  /**
+   * Multi-agent role read from the persisted conversation row — never from
+   * the request body. It narrows the tool registry and selects the prompt
+   * variant; NULL keeps the general assistant.
+   */
+  agentRole?: string | null;
   /** Managed-locked turn — provenance + operation identity (M4). */
   managed?: import("@/lib/agent/accountTurn").ManagedTurnContext;
 }) {
@@ -205,7 +212,10 @@ async function accountChatResponse({
 
   const rawLocale = req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value;
   const locale = normalizeLocale(rawLocale);
-  const systemPrompt = buildAgentChatSystemPrompt(locale, { freshNativeFull });
+  const systemPrompt = buildAgentChatSystemPrompt(locale, {
+    freshNativeFull,
+    agentRole,
+  });
 
   // Route on the full request. Budgeting happens inside the turn, after
   // the local router has seen the current utterance.
@@ -312,6 +322,7 @@ async function accountChatResponse({
           freshNativeFull,
           canonicalJobs,
           request,
+          agentRole,
         });
         contextSize = result.contextSize;
       });
@@ -472,6 +483,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       freshNativeFull,
       canonicalJobs,
       request,
+      agentRole: conversation.agentRole,
       managed: managedTurn,
     });
   }
@@ -582,7 +594,10 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   if (lastIsUser) {
     modelMessages.push({
       role: "user",
-      content: buildPageContextMessage(pageContext, { freshNativeFull }),
+      content: buildPageContextMessage(pageContext, {
+        freshNativeFull,
+        agentRole: conversation.agentRole,
+      }),
     });
   }
   if (pastedText && lastIsUser) {
@@ -612,7 +627,10 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
 
   const rawLocale = req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value;
   const locale = normalizeLocale(rawLocale);
-  const systemPrompt = buildAgentChatSystemPrompt(locale, { freshNativeFull });
+  const systemPrompt = buildAgentChatSystemPrompt(locale, {
+    freshNativeFull,
+    agentRole: conversation.agentRole,
+  });
 
   const turnSpan = startSpan("agent.chat.turn", {
     ...genAiRequestAttrs({
@@ -659,6 +677,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
           freshNativeFull,
           canonicalJobs,
           request,
+          agentRole: conversation.agentRole,
         });
         prefixMetrics = measureTurnPrefix({
           userId,
