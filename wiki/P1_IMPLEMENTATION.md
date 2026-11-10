@@ -16,7 +16,7 @@
 - 原 `RM-MATCH` 不再单列 P1 Feature。其候选 Agent `match_job` 记录到 `AGENT-CAPABILITIES`；**现有 canonical FAST_SCREENING/MatchAnalysisService 仍是独立可复用业务能力**，代码不因台账迁移被删除或改写。
 - `AGENT-CAPABILITIES` 其余能力与扩展决策保持现状，本次只调整匹配工具的台账归属。
 
-当前 **7 项**，其中 `IMPLEMENTED` 5 项、`PARTIAL` 2 项、`MISSING` 0 项；**3 项 `passes: true`、4 项 `passes: false`**：
+当前 **7 项**，其中 `IMPLEMENTED` 6 项、`PARTIAL` 1 项、`MISSING` 0 项；**6 项 `passes: true`、1 项 `passes: false`**：
 
 | Feature | P1 范围 | 实现状态 | 当前结论 |
 | --- | --- | --- | --- |
@@ -24,9 +24,9 @@
 | **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 55/55，通过 |
 | **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | Codex 账号真实流式、错误恢复、MATCH_ANALYSIS 和 Electron 重开验收通过，`passes: true` |
 | **AI-BYOK** | IN_SCOPE | IMPLEMENTED | DeepSeek 真实 Key 服务链路 29/29、Windows Electron fresh-native/full 17/17 通过 |
-| **AI-MANAGED** | IN_SCOPE | PARTIAL | 本地 HTTP、会话兑换/断开及并发状态修复已集成；真实网关、订阅产品与桌面验收未完成 |
+| **AI-MANAGED** | IN_SCOPE | PARTIAL | 隔离 Beta 真实网关、充值Key、记账与Electron链路已验；正式产品参数/发布及剩余边界待收口 |
 | **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 四项工作台修订及 B7 已集成；Windows Electron fresh-native/full 最低验收闭环，`passes: true` |
-| **AGENT-CAPABILITIES** | OWNER_DECISION | PARTIAL | canonical `match_job` 已合入 freshNativeFull；未做真实 AI / 桌面验收，`passes: false` |
+| **AGENT-CAPABILITIES** | OWNER_DECISION | IMPLEMENTED | canonical `match_job` 已完成限定模型/运行时的真实 AI 与 Electron 验收，`passes: true`；其他扩展仍待 Owner 决定 |
 
 **授权边界**：`IN_SCOPE` 是产品交付范围，不代表已经批准源代码修改、破坏性删除、实际数据库迁移、真实凭据操作、Commit、Merge、Push、Release 或 Deploy。实际工作前须核查当时 HEAD/Dirty 与授权对象。其余 MVP 台账仍见 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md) 与 [MVP_FEATURES.json](./MVP_FEATURES.json)。
 
@@ -98,7 +98,9 @@
 
 ### AI-MANAGED：Vocatrya 托管 AI
 
-- **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路、用户会话兑换和断开入口已补齐，**面向用户的完整托管能力尚未交付**；真实网关、订阅产品配置及凭据发放流程、桌面体验仍待完成，生产可用性保持 COMING_SOON。
+- **2026-11-10 准备包集成**：受控工具见 `scripts/managed-closure-ready/README.md`。补齐本地权益/额度/幂等/UNKNOWN/会话到期验证和下一阶段桌面入口；不改变发布门，不设 passes:true。旧11/01格式错误与数据根问题已由11/10补丁及复验收口，不再重复派开发。真实服务证据转存目录见 JSON 最新 notes。
+
+- **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路、用户会话兑换和断开入口已补齐，**面向用户的完整托管能力尚未交付**；隔离 Beta 真实网关、Key 兑换及桌面主链已有证据；正式套餐/客服规则、生产开放及剩余边界验收仍待完成，生产可用性保持 COMING_SOON。
 - **2026-10-31 隔离真实网关 Beta 复验**：本机 hosted 服务（127.0.0.1:8787）+ `.private/managed-upstream.env` 真实上游凭据，beta-user-1 会话与 beta plan；`ManagedAiUsage` 实记 text×2/stream/structured 共 4 条，3 条 SUCCEEDED 含真实 token 计数，1 条 FAILED 仍 COMMITTED 计费。证据 `.tmp/managed-beta/`。会话仍由 `provision-session` 手工发放、dev env 注入，非用户产品链路。
 - **2026-11-01 Owner 决定**：订阅形态为「订阅充值」设置页——Key 填入 + 无 Key 联系客服备注，不做支付闭环；`VOCATRYA_HOSTED_ENDPOINT` loopback 为 operator beta 通道，生产构建（含 Windows Electron）由此放行 managed 链路进入充值页验收，非 loopback 值不改变发布门。桌面验收待执行，`PARTIAL`/`passes:false` 保持。
 - **2026-11-01 Windows Electron 验收通过**（`.worktrees/managed-recharge` 未提交构建，fresh-native，生产模式后端 + loopback hosted 127.0.0.1:8787）：注册登录 → 设置「订阅充值」页；错误格式 Key（非 43 字符）正确拒绝 `MANAGED_AUTH_REQUIRED` 且不落盘；beta 会话 Key 兑换后 CONNECTED——托管账号 beta-user-1、订阅 ACTIVE、套餐 beta、已用额度 4/1000（与 hosted 账本一致）；会话经 safeStorage 写入 `hosted-sessions/<sha256>.dat` 74B 密文（DB/备份无明文），`AIConnection` 行 status=CONNECTED/credentialRef=null。证据 `.tmp/worktree-closure/retained/managed-recharge/.tmp/managed-recharge/`。待办：错误格式与网关拒绝同码 `MANAGED_AUTH_REQUIRED` 的 UX 区分；dev 启动下 `hosted-sessions` 落在 `.codex-tmp/desktop-poc` 而非 `VOCATRYA_DESKTOP_DATA_ROOT`（packaged 路径正确），交桌面入口 Owner。

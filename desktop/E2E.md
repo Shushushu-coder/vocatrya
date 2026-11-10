@@ -76,6 +76,12 @@ npm run test:e2e:desktop -- --direct
 
 `--direct` 是单独标记的 Chromium 直连诊断，不修改系统代理，也不能证明绕过 TUN；诊断通过不能替代默认环境通过。`ERR_FAILED`、`Target closed` 本身不足以判定代理或单实例锁是根因，需对照本轮日志与进程退出状态。
 
+## 定向补验工具
+
+P2 职位关联、下一步建议及职业洞察的补验入口见 [P2 工具说明](../scripts/p2-closure-ready/README.md)。托管 AI 的本地 HTTP 边界和隔离桌面入口见 [Managed 工具说明](../scripts/managed-closure-ready/README.md)。两套工具的 prepare/validate 与重型执行分开，数据和合成凭据仅写入 `.tmp`；集成工具不表示已执行桌面验收，也不改变 Feature 的 `passes`。
+
+脚本路径迁移后的路径/出站保护检查可运行 `node --test scripts/acceptance-tools.test.mjs`。重型命令仍须主协调窗口指定唯一执行者及代码版本，不能两套同时运行。
+
 ## 报告边界
 
 按影响选择最小充分检查，不要求每次改动执行完整 E2E。报告明确宿主（Web/Electron）、模式（fresh-native/Legacy）、源码/构建来源，以及是否真正退出重开。只有浏览器通过时写“Web 验证通过，Windows Electron 未执行/阻塞”。本入口不覆盖安装器、系统自启、所有业务 CRUD、真实 AI 服务或 Legacy 兼容性；这些按实际改动另选定向检查。
