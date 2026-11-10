@@ -175,7 +175,6 @@ describe("fresh + full navigation", () => {
       "Analytics",
       "Jobs",
       "Tasks",
-      "Activities",
       "Questions",
       "Interview",
       "Application Profile",
@@ -201,13 +200,13 @@ describe("Header global actions", () => {
     routerPush.mockClear();
   });
 
-  it("offers the four canonical create flows and never automation", async () => {
+  it("offers the three canonical create flows and never automation", async () => {
     const user = userEvent.setup();
     render(wrap(<Header />));
     await user.click(screen.getByTestId("header-create-menu"));
 
     const menu = await screen.findByRole("menu");
-    for (const name of ["Job", "Tasks", "Activities", "Question"]) {
+    for (const name of ["Job", "Tasks", "Question"]) {
       expect(within(menu).getByText(name)).toBeInTheDocument();
     }
     expect(within(menu).queryByText("Automation")).not.toBeInTheDocument();
@@ -406,7 +405,7 @@ describe("JobDetails under fresh + full", () => {
     searchParams = new URLSearchParams("");
   });
 
-  it("hides match, cover letter and contacts tabs but keeps canonical tabs", () => {
+  it("hides cover letter and contacts tabs but keeps canonical tabs including match", () => {
     render(
       wrap(
         <JobDetails job={makeJob()} {...jobDetailsProps} />,
@@ -415,8 +414,8 @@ describe("JobDetails under fresh + full", () => {
 
     const tabList = screen.getByRole("tablist");
     expect(
-      within(tabList).queryByRole("tab", { name: /match/i }),
-    ).not.toBeInTheDocument();
+      within(tabList).getByRole("tab", { name: "Job Match" }),
+    ).toBeInTheDocument();
     expect(
       within(tabList).queryByRole("tab", { name: /cover letter/i }),
     ).not.toBeInTheDocument();
@@ -457,8 +456,24 @@ describe("JobDetails under fresh + full", () => {
     ).toBeInTheDocument();
   });
 
-  it("lands on the description tab for a retained ?tab=match link", () => {
+  it("lands on the match tab for a retained ?tab=match link", async () => {
     searchParams = new URLSearchParams("tab=match");
+    await act(async () => {
+      render(
+        wrap(
+          <JobDetails job={makeJob()} {...jobDetailsProps} />,
+        ),
+      );
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "Job Match" }),
+    ).toHaveAttribute("data-state", "active");
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("lands on the description tab for a retained ?tab=letter link", () => {
+    searchParams = new URLSearchParams("tab=letter");
     render(
       wrap(
         <JobDetails job={makeJob()} {...jobDetailsProps} />,
@@ -468,7 +483,9 @@ describe("JobDetails under fresh + full", () => {
     expect(
       screen.getByRole("tab", { name: "Description" }),
     ).toHaveAttribute("data-state", "active");
-    expect(screen.queryByRole("tab", { name: /match/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /cover letter/i }),
+    ).not.toBeInTheDocument();
     expect(chat.sendMessage).not.toHaveBeenCalled();
   });
 

@@ -545,9 +545,10 @@ describe("POST /api/ai/chat", () => {
     expect(sent).not.toContain("<page-context>");
   });
 
-  // Trusted fresh + full: add_job writes a canonical opportunity. match and
-  // cover letter still have no canonical implementation and stay hidden.
-  it("exposes canonical add_job and withholds match and cover letter on fresh-native full", async () => {
+  // Trusted fresh + full: add_job and match_job register their canonical
+  // approval-gated variants. generate_cover_letter still has no canonical
+  // implementation and stays hidden.
+  it("exposes canonical add_job and match_job and withholds cover letter on fresh-native full", async () => {
     careerRuntime.resolveCareerRuntimeMode.mockResolvedValueOnce({
       mode: "AB_ENABLED",
       rolloutScope: "full",
@@ -562,9 +563,10 @@ describe("POST /api/ai/chat", () => {
       "get_job",
       "get_resume",
       "review_resume",
+      "match_job",
     ]);
     expect(streamArgs().system).toContain("add_job");
-    expect(streamArgs().system).not.toContain("match_job");
+    expect(streamArgs().system).toContain("match_job");
     expect(streamArgs().system).not.toContain("generate_cover_letter");
     expect(JSON.stringify(streamArgs().messages)).not.toContain("match_job");
     expect(JSON.stringify(streamArgs().messages)).toContain("add_job");
