@@ -23,12 +23,19 @@ import { hasPendingApproval, stubConsumedPastes } from "@/lib/agent/paste";
 import { pageContextFor } from "@/lib/agent/pageContext";
 import { writeActiveConversationId } from "@/lib/agent/activeConversation";
 import {
+  bindAgentSlotOwner,
+  notifyAgentSlotWrite,
   readActiveAgentRole,
   readAgentRoleSlots,
   writeActiveAgentRole,
   writeAgentRoleSlot,
   type StoredRoleSlot,
 } from "@/lib/agent/activeAgentRole";
+import {
+  currentAgentSlotGeneration,
+  installAgentSlotMirror,
+  restoreDurableAgentSlots,
+} from "@/lib/agent/roleSlotPersistence";
 import {
   GENERAL_AGENT_SLOT,
   isAgentRole,
@@ -203,6 +210,7 @@ function mountDraft(
 function useAgentChatValue(
   initial: AgentChatInitialConversation | null,
   seedMessages: UIMessage[],
+  userId: string | null,
 ) {
   const { t } = useI18n();
   const router = useRouter();
@@ -245,12 +253,19 @@ function useAgentChatValue(
   // page AUTO item. A mounted conversation still picks its unsent draft
   // back up when the stored slot names the same row.
   const [initialSlot] = useState(() => {
+    // Restore the data-root snapshot before the first AUTO decision. A new
+    // loopback port has an empty localStorage; the signed-in user's slots,
+    // including an explicit empty context, have to be visible to mountRole.
+    installAgentSlotMirror();
+    bindAgentSlotOwner(userId);
+    if (userId) restoreDurableAgentSlots(userId, currentAgentSlotGeneration());
     const role = mountRole(initial);
     const stored = readAgentRoleSlots()[role];
     if (initial) {
       return {
         role,
         hasStoredContext: true,
+        preservedConversationId: null as string | null,
         draft:
           stored?.conversationId === initial.id && stored.draft
             ? {
@@ -263,7 +278,12 @@ function useAgentChatValue(
     }
     return {
       role,
-      hasStoredContext: stored?.context !== undefined,
+      // A stored conversation pointer is that role's session. An explicit
+      // empty context is a clear. Either one is already resolved, so AUTO
+      // must not replace it. Only a slot with no context and no pointer
+      // is a fresh draft.
+      hasStoredContext: stored?.context !== undefined || Boolean(stored?.conversationId),
+      preservedConversationId: stored?.conversationId ?? null,
       draft: mountDraft(stored),
     };
   });
@@ -283,6 +303,9 @@ function useAgentChatValue(
   const [historyVersion, setHistoryVersion] = useState(0);
 
   const conversationIdRef = useRef<string | null>(initial?.id ?? null);
+  // The mounted row is authoritative. When this origin has not loaded a row
+  // yet, the restored slot pointer still has to survive a snapshot.
+  const slotPointerRef = useRef<string | null>(initialSlot.preservedConversationId);
   const revisionRef = useRef(initial?.revision ?? 0);
   const activeExecutionRef = useRef<{ conversationId: string; requestId: string; existingWrites: Set<string> } | null>(null);
   const completedExecutionRef = useRef<string | null>(null);
@@ -651,6 +674,7 @@ function useAgentChatValue(
   useEffect(() => {
     writeActiveConversationId(initial?.id ?? null);
     writeActiveAgentRole(activeRoleRef.current);
+    notifyAgentSlotWrite();
     // AUTO attach happens at draft creation only — a draft restored from a
     // slot already owns its objects and is not re-resolved against the page.
     if (initial?.id || draftResolvedRef.current || initialSlot.hasStoredContext) return;
@@ -666,6 +690,12 @@ function useAgentChatValue(
       contextSettledRef.current = true;
       setContext(result.data);
       contextRef.current = result.data;
+      writeAgentRoleSlot(activeRoleRef.current, {
+        conversationId: conversationIdRef.current ?? slotPointerRef.current,
+        draft: composerApiRef.current?.read() || null,
+        context: result.data,
+        explicit: explicitRef.current,
+      });
     });
   }, [initial?.id, initialSlot.hasStoredContext]);
 
@@ -696,7 +726,7 @@ function useAgentChatValue(
     // role. Never snapshot it into the role whose row is being loaded.
     if (roleSelectionPendingRef.current) return;
     writeAgentRoleSlot(activeRoleRef.current, {
-      conversationId: conversationIdRef.current,
+      conversationId: conversationIdRef.current ?? slotPointerRef.current,
       draft: composerApiRef.current?.read() || null,
       context: contextSettledRef.current ? contextRef.current : undefined,
       explicit: explicitRef.current,
@@ -723,6 +753,7 @@ function useAgentChatValue(
       durableApprovalRef.current = true;
       conflictRef.current = false;
       conversationIdRef.current = data.id;
+      slotPointerRef.current = data.id;
       lockKindRef.current = data.lockKind;
       setConversationId(data.id);
       setContext(data.context);
@@ -782,6 +813,7 @@ function useAgentChatValue(
       revisionRef.current = 0;
       conflictRef.current = false;
       conversationIdRef.current = null;
+      slotPointerRef.current = null;
       lockKindRef.current = null;
       setConversationId(null);
       explicitRef.current = slot.explicit;
@@ -821,6 +853,12 @@ function useAgentChatValue(
         contextSettledRef.current = true;
         setContext(result.data);
         contextRef.current = result.data;
+        writeAgentRoleSlot(activeRoleRef.current, {
+          conversationId: conversationIdRef.current ?? slotPointerRef.current,
+          draft: composerApiRef.current?.read() || null,
+          context: result.data,
+          explicit: explicitRef.current,
+        });
       }
     },
     [enterDraft, persistActiveSlot, t],
@@ -867,6 +905,7 @@ function useAgentChatValue(
       activeExecutionRef.current = null;
       conflictRef.current = false;
       conversationIdRef.current = data.id;
+      slotPointerRef.current = data.id;
       lockKindRef.current = data.lockKind;
       explicitRef.current = null;
       setExplicit(null);
@@ -993,8 +1032,8 @@ function useAgentChatValue(
   );
   switchRoleRef.current = switchRole;
 
-  // A refresh reopens the slot the user last touched — persist the active
-  // slot when the page unloads so the composer draft survives too.
+  // Quit flushes the live composer. Context edits were already mirrored
+  // synchronously, so this listener is not the only copy of an explicit clear.
   useEffect(() => {
     const persist = () => persistActiveSlot();
     window.addEventListener("pagehide", persist);
@@ -1143,9 +1182,10 @@ function useAgentChatValue(
       if (conversationIdRef.current) return;
       explicitRef.current = selection;
       setExplicit(selection);
+      persistActiveSlot();
       void runPreflight();
     },
-    [runPreflight],
+    [persistActiveSlot, runPreflight],
   );
 
   const persistContext = useCallback(async (items: AgentConversationContextItem[]) => {
@@ -1158,7 +1198,12 @@ function useAgentChatValue(
     contextSettledRef.current = true;
     setContext(next);
     contextRef.current = next;
-    if (!id) return;
+    // A draft clear has no conversation row. Mirror it now — pagehide is not
+    // the write that has to survive a quit.
+    if (!id) {
+      persistActiveSlot();
+      return;
+    }
     const result = await updateChatConversationContext(id, contextRequests(items));
     if (selectionEpochRef.current !== epoch || conversationIdRef.current !== id || contextRef.current !== next) return;
     if (!result.success || !result.data) {
@@ -1169,7 +1214,8 @@ function useAgentChatValue(
     }
     setContext(result.data);
     contextRef.current = result.data;
-  }, []);
+    persistActiveSlot();
+  }, [persistActiveSlot]);
 
   const removeContextItem = useCallback(
     (kind: AgentConversationContextItem["kind"], entityId: string) => {
@@ -1281,15 +1327,19 @@ function useAgentChatValue(
 export function AgentChatProvider({
   initialConversation = null,
   initialMessages,
+  userId = null,
   children,
 }: {
   initialConversation?: AgentChatInitialConversation | null;
   initialMessages?: UIMessage[];
+  /** Signed-in account. Durable slots are stored under this id. */
+  userId?: string | null;
   children: React.ReactNode;
 }) {
   const value = useAgentChatValue(
     initialConversation?.id ? initialConversation : null,
     initialConversation?.messages ?? initialMessages ?? [],
+    userId,
   );
   return (
     <AgentChatContext.Provider value={value}>

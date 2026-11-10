@@ -84,7 +84,10 @@ export default async function RootLayout({
         initialWidth={initialWidth}
       >
         <RightRailProvider>
-          <AgentChatProvider initialConversation={conversation.data ?? null}>
+          <AgentChatProvider
+            initialConversation={conversation.data ?? null}
+            userId={user.id}
+          >
             <SaveStatusProvider>
               <div className="flex min-h-[calc(100vh-var(--desktop-titlebar-height,0px))] w-full bg-muted/40">
                 <Sidebar user={user} signOutAction={signOutAction} />

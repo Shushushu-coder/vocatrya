@@ -36,6 +36,7 @@ const { createGlobalToggleHotkey } = require("./global-shortcuts");
 const { registerShortcutsIpc } = require("./shortcuts-ipc");
 const { registerInputPreferencesIpc } = require("./input-preferences");
 const { registerResumePreviewPreferencesIpc } = require("./resume-preview-preferences");
+const { registerAgentRoleSlotsIpc, AGENT_ROLE_SLOTS_FILE_NAME } = require("./agent-role-slots");
 const { createDesktopLifecycle, shouldQuitWhenAllWindowsClosed } = require("./lifecycle");
 const { resolveColdStartEntry } = require("./cold-start");
 const { createQuitCoordinator, flushDefaultSession, runRegisteredReleaseHooks } = require("./shutdown");
@@ -510,6 +511,12 @@ if (!singleInstance) {
       registerResumePreviewPreferencesIpc({
         ipcMain,
         filePath: path.join(foundationLayout ? foundationLayout.configDir : path.join(stateRoot(), "config"), "resume-preview-preferences.json"),
+        getWindow: () => mainWindow,
+        getOrigin: () => backendPort ? `http://127.0.0.1:${backendPort}` : null,
+      });
+      registerAgentRoleSlotsIpc({
+        ipcMain,
+        filePath: path.join(foundationLayout ? foundationLayout.configDir : path.join(stateRoot(), "config"), AGENT_ROLE_SLOTS_FILE_NAME),
         getWindow: () => mainWindow,
         getOrigin: () => backendPort ? `http://127.0.0.1:${backendPort}` : null,
       });

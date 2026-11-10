@@ -87,6 +87,12 @@ import {
   updateChatConversationContext,
 } from "@/actions/agentChat.actions";
 import { AI_CONFIGURATION_CHANGED_EVENT } from "@/lib/ai/client-events";
+import {
+  currentAgentSlotGeneration,
+  resetAgentSlotPersistenceForTests,
+  restoreDurableAgentSlots,
+} from "@/lib/agent/roleSlotPersistence";
+import { bindAgentSlotOwner } from "@/lib/agent/activeAgentRole";
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 
@@ -1386,6 +1392,220 @@ describe("AgentChatProvider", () => {
   });
 });
 
+
+const USER_A = "11111111-1111-4111-8111-111111111111";
+const USER_B = "22222222-2222-4222-8222-222222222222";
+
+function slotBridge() {
+  const users = new Map<string, string>();
+  let failWrites = 0;
+  const api = {
+    read: (userId: string) => users.get(userId) ?? null,
+    write: (userId: string, raw: string) => {
+      if (failWrites > 0) {
+        failWrites -= 1;
+        return { ok: false as const, code: "unavailable" as const };
+      }
+      const next = JSON.parse(raw) as { generation: number };
+      const existing = users.get(userId);
+      if (existing && JSON.parse(existing).generation >= next.generation) {
+        return { ok: false as const, code: "stale" as const };
+      }
+      users.set(userId, raw);
+      return { ok: true as const };
+    },
+  };
+  window.vocatryaAgentSlots = api;
+  return {
+    users,
+    failNext() {
+      failWrites += 1;
+    },
+    record(userId: string) {
+      const raw = users.get(userId);
+      return raw ? JSON.parse(raw) : null;
+    },
+  };
+}
+
+const ownedTree = (userId: string) => (
+  <SidebarProvider initialExpanded>
+    <RightRailProvider>
+      <AgentChatProvider userId={userId}>
+        <Probe />
+      </AgentChatProvider>
+    </RightRailProvider>
+  </SidebarProvider>
+);
+
+const autoJob = {
+  success: true,
+  data: {
+    version: 1 as const,
+    items: [{ kind: "job" as const, entityId: "job-9", labelSnapshot: "Job 9", source: "AUTO" as const }],
+  },
+};
+
+describe("agent slots across a new loopback origin", () => {
+  let bridge: ReturnType<typeof slotBridge>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    resetAgentSlotPersistenceForTests();
+    bridge = slotBridge();
+    currentPathname = "/dashboard/myjobs/job-9";
+    vi.mocked(resolveDraftPageContext).mockClear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    resetAgentSlotPersistenceForTests();
+    delete window.vocatryaAgentSlots;
+  });
+
+  function newOrigin() {
+    localStorage.clear();
+  }
+
+  it("restores an explicit clear on a new origin and does not AUTO-mount", async () => {
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce(autoJob as never);
+    const mounted = render(ownedTree(USER_A));
+    await waitFor(() => expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-9"));
+    await userEvent.click(screen.getByText("remove:job-9"));
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    expect(bridge.record(USER_A).slots.pilot.context).toEqual({ version: 1, items: [] });
+    mounted.unmount();
+    newOrigin();
+
+    render(ownedTree(USER_A));
+    await act(async () => {});
+    expect(resolveDraftPageContext).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+  });
+
+  it("still resolves a fresh draft, and New Conversation can attach AUTO again", async () => {
+    currentPathname = "/dashboard";
+    const first = render(ownedTree(USER_A));
+    await act(async () => {});
+    expect(resolveDraftPageContext).not.toHaveBeenCalled();
+    first.unmount();
+    newOrigin();
+    currentPathname = "/dashboard/myjobs/job-9";
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce(autoJob as never);
+    const second = render(ownedTree(USER_A));
+    await waitFor(() => expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-9"));
+    await userEvent.click(screen.getByText("remove:job-9"));
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce(autoJob as never);
+    await userEvent.click(screen.getByText("newConversation"));
+    await waitFor(() => expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-9"));
+    expect(bridge.record(USER_A).slots.pilot.context.items).toEqual([
+      expect.objectContaining({ entityId: "job-9", source: "AUTO" }),
+    ]);
+    second.unmount();
+    newOrigin();
+    render(ownedTree(USER_A));
+    await act(async () => {});
+    expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-9");
+  });
+
+  it("keeps each role, a manual context, and a persisted session on the new origin", async () => {
+    bridge.users.set(USER_A, JSON.stringify({
+      generation: 3,
+      activeRole: "pilot",
+      slots: {
+        pilot: {
+          conversationId: "conv-9",
+          draft: "pilot draft",
+          context: { version: 1, items: [] },
+          explicit: null,
+        },
+        insight: {
+          conversationId: null,
+          draft: "insight draft",
+          context: {
+            version: 1,
+            items: [{ kind: "job", entityId: "job-manual", labelSnapshot: "Manual", source: "MANUAL" }],
+          },
+          explicit: null,
+        },
+      },
+    }));
+    render(ownedTree(USER_A));
+    await act(async () => {});
+    expect(resolveDraftPageContext).not.toHaveBeenCalled();
+    expect(screen.getByTestId("active-role")).toHaveTextContent("pilot");
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("composer-seed")).toHaveTextContent("pilot draft");
+    await userEvent.click(screen.getByText("switchInsight"));
+    expect(resolveDraftPageContext).not.toHaveBeenCalled();
+    expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-manual");
+    expect(screen.getByTestId("composer-seed")).toHaveTextContent("insight draft");
+    expect(JSON.parse(localStorage.getItem("agent-chat-role-slots") ?? "{}").pilot.conversationId).toBe("conv-9");
+  });
+
+  it("does not let a second user or a late restore replace the cleared slot", async () => {
+    vi.mocked(resolveDraftPageContext).mockResolvedValue(autoJob as never);
+    const first = render(ownedTree(USER_A));
+    await waitFor(() => expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-9"));
+    const beforeClear = currentAgentSlotGeneration();
+    await userEvent.click(screen.getByText("remove:job-9"));
+    const saved = bridge.users.get(USER_A);
+    bridge.users.set(USER_A, JSON.stringify({
+      generation: 99,
+      activeRole: "pilot",
+      slots: {
+        pilot: {
+          conversationId: null,
+          draft: null,
+          context: autoJob.data,
+          explicit: null,
+        },
+      },
+    }));
+    bindAgentSlotOwner(USER_A);
+    expect(restoreDurableAgentSlots(USER_A, beforeClear)).toBe("stale");
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    expect(JSON.parse(localStorage.getItem("agent-chat-role-slots") ?? "{}").pilot.context.items).toEqual([]);
+    bridge.users.set(USER_A, saved!);
+    first.unmount();
+
+    render(ownedTree(USER_B));
+    await waitFor(() => expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-9"));
+    expect(bridge.record(USER_A).slots.pilot.context.items).toEqual([]);
+    expect(bridge.record(USER_B).slots.pilot.context.items[0].entityId).toBe("job-9");
+  });
+
+  it("keeps a legacy empty slot cleared and mirrors it for the next origin", async () => {
+    localStorage.setItem("agent-chat-active-role", "pilot");
+    localStorage.setItem("agent-chat-role-slots", JSON.stringify({
+      pilot: { conversationId: null, draft: null, context: { version: 1, items: [] }, explicit: null },
+    }));
+    const first = render(ownedTree(USER_A));
+    await act(async () => {});
+    expect(resolveDraftPageContext).not.toHaveBeenCalled();
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    expect(bridge.record(USER_A).slots.pilot.context.items).toEqual([]);
+    first.unmount();
+    newOrigin();
+    render(ownedTree(USER_A));
+    await act(async () => {});
+    expect(resolveDraftPageContext).not.toHaveBeenCalled();
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+  });
+
+  it("retries the clear on quit after a failed mirror without rolling back the chips", async () => {
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce(autoJob as never);
+    render(ownedTree(USER_A));
+    await waitFor(() => expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-9"));
+    bridge.failNext();
+    await userEvent.click(screen.getByText("remove:job-9"));
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    expect(bridge.record(USER_A).slots.pilot.context.items[0].entityId).toBe("job-9");
+    expect(JSON.parse(localStorage.getItem("agent-chat-role-slots") ?? "{}").pilot.context.items).toEqual([]);
+    act(() => { window.dispatchEvent(new Event("pagehide")); });
+    expect(bridge.record(USER_A).slots.pilot.context).toEqual({ version: 1, items: [] });
+  });
+});
 
 describe("conversation client concurrency protocol", () => {
   beforeEach(() => { vi.clearAllMocks(); chat.messages = []; chat.status = "ready"; });

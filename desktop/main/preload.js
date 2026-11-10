@@ -58,6 +58,20 @@ contextBridge.exposeInMainWorld("vocatryaWindow", {
   setTheme: (theme, preference) => ipcRenderer.invoke("window:setTheme", theme, preference),
 });
 
+contextBridge.exposeInMainWorld("vocatryaAgentSlots", {
+  read: (userId) => {
+    const result = ipcRenderer.sendSync("agentRoleSlots:read", userId);
+    if (!result?.ok) throw new Error("Agent slot storage unavailable");
+    return result.value ?? null;
+  },
+  write: (userId, raw) => {
+    const result = ipcRenderer.sendSync("agentRoleSlots:write", { userId, raw });
+    if (result?.ok) return { ok: true };
+    const code = result?.code === "stale" || result?.code === "invalid" ? result.code : "unavailable";
+    return { ok: false, code };
+  },
+});
+
 contextBridge.exposeInMainWorld("vocatryaResume", {
   printToPDF: (versionId) => ipcRenderer.invoke("resume:printToPDF", versionId),
   // Resume preview pane hidden/width snapshot — a device preference stored
