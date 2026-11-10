@@ -837,10 +837,11 @@ describe("Managed AI real-HTTP loopback closed loop", () => {
     expect((await getManagedAiOverview()).data?.errorCode).toBe(
       "MANAGED_AUTH_REQUIRED",
     );
-    // Malformed paste fails closed without touching the store.
+    // Malformed paste fails closed with the local validation code — never
+    // reaching the wire, and distinguishable from an authoritative refusal.
     await expect(
       redeemManagedAiSession({ token: "not-a-real-token" }),
-    ).resolves.toMatchObject({ success: false, code: "MANAGED_AUTH_REQUIRED" });
+    ).resolves.toMatchObject({ success: false, code: "MANAGED_KEY_INVALID" });
     expect(sessionStore.read(seam.userId)).toBeNull();
 
     // A hosted-issued token (operator-provisioned for a subscribed user)

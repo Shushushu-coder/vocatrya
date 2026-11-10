@@ -254,7 +254,10 @@ export async function redeemManagedAiSession(input: {
     }
     const token = typeof input?.token === "string" ? input.token.trim() : "";
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
-      return { success: false, code: "MANAGED_AUTH_REQUIRED" };
+      // Local format check, distinct from an authoritative rejection:
+      // MANAGED_KEY_INVALID never reached the Hosted service, while
+      // MANAGED_AUTH_REQUIRED means the gateway refused a well-formed key.
+      return { success: false, code: "MANAGED_KEY_INVALID" };
     }
     // Probe the candidate credential against the Hosted authority without
     // touching the stored session — a rejected paste drops nothing.

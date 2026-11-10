@@ -102,7 +102,11 @@ function ManagedRechargeCard() {
 
       {error && (
         <p role="alert" className="text-destructive">
-          {t("settings.managedErrorCode", { code: error })}
+          {error === "MANAGED_KEY_INVALID"
+            ? t("settings.managedRechargeKeyInvalid")
+            : error === "MANAGED_AUTH_REQUIRED"
+              ? t("settings.managedRechargeKeyRejected")
+              : t("settings.managedErrorCode", { code: error })}
         </p>
       )}
 

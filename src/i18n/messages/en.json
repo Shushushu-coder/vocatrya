@@ -1737,6 +1737,8 @@
     "managedRechargeTitle": "Subscription & Recharge",
     "managedRechargeDescription": "Enter the access key issued with your Vocatrya Managed AI subscription. It is verified with the hosted service and stored only in this device's OS-protected storage.",
     "managedRechargeKeyPlaceholder": "Managed AI access key",
+    "managedRechargeKeyInvalid": "The access key format is invalid — paste the full key issued with your subscription and try again.",
+    "managedRechargeKeyRejected": "The access key was rejected by the hosted service — it may be expired, revoked, or not issued for this app. Check it and retry, or contact customer service to recharge.",
     "managedRechargeSubmit": "Activate",
     "managedRechargeNoKeyHint": "No access key? Contact customer service to recharge your subscription.",
     "managedRechargeConnectedHint": "This device is connected. Enter a new access key to switch accounts or renew the subscription.",
