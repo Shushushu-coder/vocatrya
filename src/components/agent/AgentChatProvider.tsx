@@ -309,6 +309,12 @@ function useAgentChatValue(
   const lockKindRef = useRef<ChatLockKind | null>(initial?.lockKind ?? null);
   const creatingRef = useRef(false);
   const draftResolvedRef = useRef(initial !== null);
+  // A slot's context is "settled" only once the draft actually owns it —
+  // restored from storage, resolved by the server, or explicitly edited by
+  // the user. Until then contextRef holds the EMPTY placeholder, and
+  // snapshots must not persist it: stored context is what marks a slot as
+  // already resolved, so writing EMPTY would disarm AUTO attach forever.
+  const contextSettledRef = useRef(initialSlot.hasStoredContext);
   const activeRoleRef = useRef<AgentRole>(initialSlot.role);
   // The composer is controlled by AgentChatInput's PromptInputProvider; it
   // registers this API so the provider can read the draft on a role switch
@@ -657,6 +663,7 @@ function useAgentChatValue(
       resumeId: page.resumeId ?? null,
     }).then((result) => {
       if (selectionEpochRef.current !== epoch || conversationIdRef.current || !result?.success || !result.data) return;
+      contextSettledRef.current = true;
       setContext(result.data);
       contextRef.current = result.data;
     });
@@ -681,7 +688,9 @@ function useAgentChatValue(
   // ------------------------------------------------------------------
 
   // Snapshot the live state into the active role's slot record. The
-  // composer's registered reader is the only live view of unsent text.
+  // composer's registered reader is the only live view of unsent text. An
+  // unresolved draft's EMPTY placeholder is never stored — the slot stays
+  // fresh so the next draft-creation point still resolves the page object.
   const snapshotActiveSlot = useCallback(() => {
     // During a role load the visible state still belongs to the outgoing
     // role. Never snapshot it into the role whose row is being loaded.
@@ -689,7 +698,7 @@ function useAgentChatValue(
     writeAgentRoleSlot(activeRoleRef.current, {
       conversationId: conversationIdRef.current,
       draft: composerApiRef.current?.read() || null,
-      context: contextRef.current,
+      context: contextSettledRef.current ? contextRef.current : undefined,
       explicit: explicitRef.current,
     });
   }, []);
@@ -718,6 +727,7 @@ function useAgentChatValue(
       setConversationId(data.id);
       setContext(data.context);
       contextRef.current = data.context;
+      contextSettledRef.current = true;
       explicitRef.current = null;
       setExplicit(null);
       writeActiveConversationId(data.id);
@@ -762,6 +772,7 @@ function useAgentChatValue(
     (slot: {
       context: AgentConversationContextV1;
       explicit: ExplicitModelSelection | null;
+      contextSettled: boolean;
     }) => {
       stop();
       selectionEpochRef.current += 1;
@@ -779,6 +790,7 @@ function useAgentChatValue(
       resetTransient();
       setContext(slot.context);
       contextRef.current = slot.context;
+      contextSettledRef.current = slot.contextSettled;
       draftResolvedRef.current = true;
       writeActiveConversationId(null);
       setIdentity(UNKNOWN_IDENTITY);
@@ -793,6 +805,7 @@ function useAgentChatValue(
       enterDraft({
         context: EMPTY_CONVERSATION_CONTEXT,
         explicit: options?.explicit ?? null,
+        contextSettled: false,
       });
       persistActiveSlot();
       if (wasStreaming) toastInfo(t("agent.conversationStartedStopped"));
@@ -805,6 +818,7 @@ function useAgentChatValue(
       });
       if (selectionEpochRef.current !== epoch || conversationIdRef.current) return;
       if (result?.success && result.data) {
+        contextSettledRef.current = true;
         setContext(result.data);
         contextRef.current = result.data;
       }
@@ -859,6 +873,7 @@ function useAgentChatValue(
       setConversationId(data.id);
       setContext(data.context);
       contextRef.current = data.context;
+      contextSettledRef.current = true;
       chat.setMessages(data.messages);
       resetTransient();
       // The seed lands on the same remount resetTransient triggered, so a
@@ -923,7 +938,7 @@ function useAgentChatValue(
         // Clear outgoing state while loading, without overwriting the
         // target's stored pointer. Rapid switches must not borrow a row
         // from the previous role or send against it.
-        enterDraft({ context: slot.context ?? EMPTY_CONVERSATION_CONTEXT, explicit: slot.explicit ?? null });
+        enterDraft({ context: slot.context ?? EMPTY_CONVERSATION_CONTEXT, explicit: slot.explicit ?? null, contextSettled: slot.context !== undefined });
         setComposerSeed(slot.draft ?? "");
         roleSelectionPendingRef.current = true;
         // selectConversation increments the selection epoch synchronously.
@@ -940,14 +955,17 @@ function useAgentChatValue(
       enterDraft({
         context: slot?.context ?? EMPTY_CONVERSATION_CONTEXT,
         explicit: slot?.explicit ?? null,
+        contextSettled: slot?.context !== undefined,
       });
       setComposerSeed(slot?.draft ?? "");
       // Explicit write again — the composer still reads the outgoing slot's
-      // text until the remount flushes (see selectConversation).
+      // text until the remount flushes (see selectConversation). A fresh
+      // slot keeps its missing context: writing EMPTY here would mark the
+      // draft resolved before the AUTO lookup below ever ran.
       writeAgentRoleSlot(role, {
         conversationId: null,
         draft: slot?.draft ?? null,
-        context: slot?.context ?? EMPTY_CONVERSATION_CONTEXT,
+        context: slot?.context,
         explicit: slot?.explicit ?? null,
       });
       if (!freshDraft) return;
@@ -960,6 +978,7 @@ function useAgentChatValue(
       });
       if (selectionEpochRef.current !== epoch || conversationIdRef.current) return;
       if (result?.success && result.data) {
+        contextSettledRef.current = true;
         setContext(result.data);
         contextRef.current = result.data;
         writeAgentRoleSlot(role, {
@@ -1134,6 +1153,9 @@ function useAgentChatValue(
     const epoch = selectionEpochRef.current;
     const next = { version: 1 as const, items };
     const previous = contextRef.current;
+    // The user owns the context from here on — including an explicit clear,
+    // which must persist as "resolved to empty", not revert to fresh.
+    contextSettledRef.current = true;
     setContext(next);
     contextRef.current = next;
     if (!id) return;

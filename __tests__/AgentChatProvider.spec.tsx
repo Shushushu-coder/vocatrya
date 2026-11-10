@@ -99,6 +99,7 @@ function Probe() {
       <button onClick={() => c.open()}>open</button>
       <button onClick={() => c.open({ role: "reflect" })}>openReflect</button>
       <button onClick={() => void c.switchRole("insight")}>switchInsight</button>
+      <button onClick={() => void c.switchRole("pilot")}>switchPilot</button>
       <button onClick={() => void c.switchRole("reflect")}>switchReflect</button>
       <button onClick={() => c.fillComposer("filled draft")}>fillComposer</button>
       <button onClick={c.close}>close</button>
@@ -144,6 +145,14 @@ function Probe() {
       <span data-testid="context-items">
         {c.context.items.map((item) => `${item.kind}:${item.entityId}`).join(",")}
       </span>
+      {c.context.items.map((item) => (
+        <button
+          key={`${item.kind}:${item.entityId}`}
+          onClick={() => c.removeContextItem(item.kind, item.entityId)}
+        >
+          {`remove:${item.entityId}`}
+        </button>
+      ))}
       <span data-testid="explicit-model">
         {c.explicit ? `${c.explicit.connectionId}/${c.explicit.model}` : ""}
       </span>
@@ -260,6 +269,12 @@ describe("AgentChatProvider", () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    // mockReset also drops queued once-implementations — a resolve that a
+    // previous test armed but never fired must not answer this test's call.
+    vi.mocked(resolveDraftPageContext).mockReset();
+    // Slot storage is per-test state; leftovers would silently pick the
+    // mount role and stored contexts the test never set up.
+    window.localStorage.clear();
     chat.messages = [];
     chat.status = "ready";
     chat.error = undefined;
@@ -436,12 +451,16 @@ describe("AgentChatProvider", () => {
     currentPathname = mode === "mount" ? "/dashboard/myjobs/job-old" : "/dashboard/myjobs";
     let resolve!: (value: Awaited<ReturnType<typeof resolveDraftPageContext>>) => void;
     vi.mocked(resolveDraftPageContext).mockReturnValueOnce(new Promise(done => { resolve = done; }));
-    render(draftTree());
+    const { rerender } = render(draftTree());
     if (mode === "new") {
       currentPathname = "/dashboard/myjobs/job-old";
+      // pathnameRef only follows renders — rerender after changing the
+      // mocked pathname so the new draft resolves against the new route.
+      act(() => rerender(draftTree()));
       await userEvent.click(screen.getByText("newConversation"));
     }
     currentPathname = "/dashboard/myjobs";
+    act(() => rerender(draftTree()));
     await userEvent.click(screen.getByText("switchReflect"));
     await act(async () => resolve({ success: true, data: { version: 1, items: [{ kind: "job", entityId: "job-old", labelSnapshot: "Old", source: "AUTO" }] } }));
     expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
@@ -491,6 +510,284 @@ describe("AgentChatProvider", () => {
       "job:kept-job",
     );
     expect(vi.mocked(resolveDraftPageContext)).not.toHaveBeenCalled();
+    window.localStorage.clear();
+  });
+
+  // DEFECT-001: a passive snapshot must not persist an unresolved draft's
+  // EMPTY context — a stored context is what marks a slot resolved, so the
+  // placeholder permanently disarmed AUTO attach on every later mount.
+  it("resolves the page object for an unresolved draft after a passive snapshot", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard";
+    const mounted = render(draftTree());
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    // The snapshot ran, but an unresolved draft owns no context — the slot
+    // stays fresh (pre-fix it stored {version:1,items:[]}).
+    const slots = JSON.parse(
+      localStorage.getItem("agent-chat-role-slots") ?? "{}",
+    );
+    expect(slots.pilot?.context).toBeUndefined();
+    mounted.unmount();
+
+    currentPathname = "/dashboard/myjobs/job-9";
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce({
+      success: true,
+      data: {
+        version: 1,
+        items: [
+          {
+            kind: "job",
+            entityId: "job-9",
+            labelSnapshot: "Job 9",
+            source: "AUTO",
+          },
+        ],
+      },
+    } as never);
+    render(draftTree());
+    await waitFor(() =>
+      expect(screen.getByTestId("context-items")).toHaveTextContent(
+        "job:job-9",
+      ),
+    );
+    expect(resolveDraftPageContext).toHaveBeenCalledWith({
+      jobId: "job-9",
+      resumeId: null,
+    });
+    window.localStorage.clear();
+  });
+
+  // The same poisoning ran through switchRole's outgoing snapshot and its
+  // incoming slot rewrite — an unresolved draft round-trips fresh.
+  it("keeps an unresolved draft fresh across a role switch so switching back resolves", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard";
+    const { rerender } = render(draftTree());
+    await userEvent.click(screen.getByText("switchInsight"));
+    expect(resolveDraftPageContext).not.toHaveBeenCalled();
+    currentPathname = "/dashboard/myjobs/job-9";
+    act(() => rerender(draftTree()));
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce({
+      success: true,
+      data: {
+        version: 1,
+        items: [
+          {
+            kind: "job",
+            entityId: "job-9",
+            labelSnapshot: "Job 9",
+            source: "AUTO",
+          },
+        ],
+      },
+    } as never);
+    await userEvent.click(screen.getByText("switchPilot"));
+    await waitFor(() =>
+      expect(screen.getByTestId("context-items")).toHaveTextContent(
+        "job:job-9",
+      ),
+    );
+    expect(screen.getByTestId("active-role")).toHaveTextContent("pilot");
+    window.localStorage.clear();
+  });
+
+  // "User cleared every chip" is a settled empty context, not an unresolved
+  // draft — refresh and a slot round-trip must not re-attach the page object.
+  it("does not re-resolve after the user explicitly clears a draft's context", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard/myjobs/job-9";
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce({
+      success: true,
+      data: {
+        version: 1,
+        items: [
+          {
+            kind: "job",
+            entityId: "job-9",
+            labelSnapshot: "Job 9",
+            source: "AUTO",
+          },
+        ],
+      },
+    } as never);
+    const mounted = render(draftTree());
+    await waitFor(() =>
+      expect(screen.getByTestId("context-items")).toHaveTextContent(
+        "job:job-9",
+      ),
+    );
+    await userEvent.click(screen.getByText("remove:job-9"));
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    mounted.unmount();
+
+    render(draftTree());
+    await act(async () => {});
+    expect(resolveDraftPageContext).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    await userEvent.click(screen.getByText("switchReflect"));
+    await userEvent.click(screen.getByText("switchPilot"));
+    // Reflect was fresh and resolved once; the pilot slot kept its cleared
+    // context and never re-resolved.
+    expect(resolveDraftPageContext).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("active-role")).toHaveTextContent("pilot");
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    window.localStorage.clear();
+  });
+
+  // A user-attached item is owned by the draft: it survives the passive
+  // snapshot and blocks page resolution like any settled context.
+  it("persists a manually attached draft context across snapshots without re-resolving", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard";
+    const mounted = render(draftTree());
+    await userEvent.click(screen.getByText("addContext"));
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    const slots = JSON.parse(
+      localStorage.getItem("agent-chat-role-slots") ?? "{}",
+    );
+    expect(slots.pilot?.context?.items?.[0]?.entityId).toBe("job-1");
+    mounted.unmount();
+
+    currentPathname = "/dashboard/myjobs/job-9";
+    render(draftTree());
+    await act(async () => {});
+    expect(resolveDraftPageContext).not.toHaveBeenCalled();
+    expect(screen.getByTestId("context-items")).toHaveTextContent("job:job-1");
+    window.localStorage.clear();
+  });
+
+  // Persisted conversations still snapshot their stored context — the
+  // unsettled gate only applies to drafts that never resolved.
+  it("still snapshots a persisted conversation's context", async () => {
+    window.localStorage.clear();
+    setup();
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    const slots = JSON.parse(
+      localStorage.getItem("agent-chat-role-slots") ?? "{}",
+    );
+    expect(slots.pilot?.conversationId).toBe("conv-1");
+    expect(slots.pilot?.context).toEqual({ version: 1, items: [] });
+    window.localStorage.clear();
+  });
+
+  // A resolve in flight when the slot is superseded lands on the epoch
+  // guard — it neither repaints the new state nor back-fills the slot.
+  it("ignores a late AUTO resolve after switching to another fresh role", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard";
+    const { rerender } = render(draftTree());
+    currentPathname = "/dashboard/myjobs/job-9";
+    act(() => rerender(draftTree()));
+    let resolveInsight!: (
+      value: Awaited<ReturnType<typeof resolveDraftPageContext>>,
+    ) => void;
+    vi.mocked(resolveDraftPageContext).mockReturnValueOnce(
+      new Promise((done) => {
+        resolveInsight = done;
+      }),
+    );
+    await userEvent.click(screen.getByText("switchInsight"));
+    await userEvent.click(screen.getByText("switchReflect"));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-role")).toHaveTextContent("reflect"),
+    );
+    await act(async () =>
+      resolveInsight({
+        success: true,
+        data: {
+          version: 1,
+          items: [
+            {
+              kind: "job",
+              entityId: "job-9",
+              labelSnapshot: "Late",
+              source: "AUTO",
+            },
+          ],
+        },
+      }),
+    );
+    expect(screen.getByTestId("context-items")).toBeEmptyDOMElement();
+    const slots = JSON.parse(
+      localStorage.getItem("agent-chat-role-slots") ?? "{}",
+    );
+    expect(slots.insight?.context).toBeUndefined();
+    window.localStorage.clear();
+  });
+
+  // Same guard, different successor: a conversation load wins the epoch and
+  // keeps its own context, and the superseded draft stores nothing.
+  it("ignores a late AUTO resolve after selecting a conversation", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard";
+    const { rerender } = render(draftTree());
+    currentPathname = "/dashboard/myjobs/job-9";
+    act(() => rerender(draftTree()));
+    let resolveInsight!: (
+      value: Awaited<ReturnType<typeof resolveDraftPageContext>>,
+    ) => void;
+    vi.mocked(resolveDraftPageContext).mockReturnValueOnce(
+      new Promise((done) => {
+        resolveInsight = done;
+      }),
+    );
+    await userEvent.click(screen.getByText("switchInsight"));
+    vi.mocked(getChatConversation).mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...conversation(),
+        id: "conv-2",
+        context: {
+          version: 1,
+          items: [
+            {
+              kind: "job",
+              entityId: "conv-job",
+              labelSnapshot: "Conv",
+              source: "MANUAL",
+            },
+          ],
+        },
+      },
+    });
+    await userEvent.click(screen.getByText("switchConversation"));
+    await waitFor(() =>
+      expect(screen.getByTestId("conversation-id")).toHaveTextContent(
+        "conv-2",
+      ),
+    );
+    await act(async () =>
+      resolveInsight({
+        success: true,
+        data: {
+          version: 1,
+          items: [
+            {
+              kind: "job",
+              entityId: "job-9",
+              labelSnapshot: "Late",
+              source: "AUTO",
+            },
+          ],
+        },
+      }),
+    );
+    expect(screen.getByTestId("context-items")).toHaveTextContent(
+      "job:conv-job",
+    );
+    const slots = JSON.parse(
+      localStorage.getItem("agent-chat-role-slots") ?? "{}",
+    );
+    expect(slots.insight?.context).toBeUndefined();
     window.localStorage.clear();
   });
 
