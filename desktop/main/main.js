@@ -28,7 +28,7 @@ const { createConnectionService } = require("./runtime/connection-service");
 const { registerConnectionIpcHandlers } = require("./runtime/connection-ipc");
 const { createBackendClient } = require("./runtime/backend-client");
 const { startExecutionServer } = require("./runtime/execute-server");
-const { createHostedSessionStore, startHostedSessionBroker } = require("./hosted-session");
+const { createHostedSessionStore, resolveHostedSessionDirectory, startHostedSessionBroker } = require("./hosted-session");
 const { startCredentialBroker } = require("./credential-broker");
 const { createDesktopSettingsStore, DESKTOP_SETTINGS_FILE_NAME } = require("./desktop-settings");
 const { createKeybindingsStore, KEYBINDINGS_FILE_NAME } = require("./keybindings");
@@ -514,7 +514,7 @@ if (!singleInstance) {
         getOrigin: () => backendPort ? `http://127.0.0.1:${backendPort}` : null,
       });
       hostedSessionBroker = await startHostedSessionBroker({ token: internalToken,
-        store: createHostedSessionStore({ directory: path.join(stateRoot(), "hosted-sessions"), safeStorage }),
+        store: createHostedSessionStore({ directory: resolveHostedSessionDirectory({ isPackaged: app.isPackaged, foundationLayout, stateRoot: stateRoot() }), safeStorage }),
       });
       // Registry-keyed runtime IPC: detection/version/status only. No
       // arbitrary command execution crosses this boundary.

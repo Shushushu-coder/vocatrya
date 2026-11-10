@@ -4,9 +4,48 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { describe, it, expect } from "vitest";
 const require = createRequire(import.meta.url);
-const { createHostedSessionStore, startHostedSessionBroker } = require("./hosted-session.js");
+const { createHostedSessionStore, resolveHostedSessionDirectory, startHostedSessionBroker } = require("./hosted-session.js");
+const { buildDesktopLayout } = require("./local-data.js");
 const token = "a".repeat(43);
 function storage() { return { isEncryptionAvailable: () => true, encryptString: value => Buffer.from([...value].reverse().join("")), decryptString: value => [...value.toString()].reverse().join("") }; }
+describe("hosted session directory selection", () => {
+  it("isolates sessions under each dev data root config dir", () => {
+    const rootA = path.resolve(fs.mkdtempSync(path.join(os.tmpdir(), "m2-root-a-")));
+    const rootB = path.resolve(fs.mkdtempSync(path.join(os.tmpdir(), "m2-root-b-")));
+    try {
+      const stateRoot = path.join(os.tmpdir(), "shared-poc-state");
+      const dirA = resolveHostedSessionDirectory({ isPackaged: false, foundationLayout: buildDesktopLayout(rootA), stateRoot });
+      const dirB = resolveHostedSessionDirectory({ isPackaged: false, foundationLayout: buildDesktopLayout(rootB), stateRoot });
+      expect(dirA).toBe(path.join(rootA, "config", "hosted-sessions"));
+      expect(dirB).toBe(path.join(rootB, "config", "hosted-sessions"));
+      expect(dirA).not.toBe(dirB);
+      const store = createHostedSessionStore({ directory: dirA, safeStorage: storage() });
+      store.save("local-a", token);
+      expect(store.read("local-a")).toBe(token);
+      expect(fs.readdirSync(dirA).length).toBe(1);
+      store.clear("local-a");
+      expect(store.read("local-a")).toBeNull();
+    } finally {
+      fs.rmSync(rootA, { recursive: true, force: true });
+      fs.rmSync(rootB, { recursive: true, force: true });
+    }
+  });
+  it("keeps the disposable state-root fallback when dev has no data-root override", () => {
+    const stateRoot = path.join(os.tmpdir(), "vocatrya-poc-state");
+    expect(resolveHostedSessionDirectory({ isPackaged: false, foundationLayout: null, stateRoot }))
+      .toBe(path.join(stateRoot, "hosted-sessions"));
+  });
+  it("keeps the packaged state-root location even when the foundation layout is active", () => {
+    const root = path.resolve(fs.mkdtempSync(path.join(os.tmpdir(), "m2-root-pkg-")));
+    try {
+      const stateRoot = path.join(root, "electron", "desktop-poc");
+      expect(resolveHostedSessionDirectory({ isPackaged: true, foundationLayout: buildDesktopLayout(root), stateRoot }))
+        .toBe(path.join(stateRoot, "hosted-sessions"));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 describe("OS-backed hosted session boundary", () => {
   it("stores only ciphertext, binds local users, persists across restart and supports clear", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));

@@ -7,6 +7,15 @@ const http = require("node:http");
 
 const MAX_BODY_BYTES = 8 * 1024;
 
+// Store location: a dev VOCATRYA_DESKTOP_DATA_ROOT override isolates the
+// profile through the foundation layout, so sessions live under that
+// root's config dir. Packaged and plain dev keep the existing state-root
+// location so already-stored sessions stay valid.
+function resolveHostedSessionDirectory({ isPackaged, foundationLayout, stateRoot }) {
+  if (!isPackaged && foundationLayout) return path.join(foundationLayout.configDir, "hosted-sessions");
+  return path.join(stateRoot, "hosted-sessions");
+}
+
 function createHostedSessionStore({ directory, safeStorage }) {
   const secure = () => {
     if (!safeStorage?.isEncryptionAvailable() || safeStorage.getSelectedStorageBackend?.() === "basic_text") throw new Error("Secure hosted session storage unavailable");
@@ -98,4 +107,4 @@ async function startHostedSessionBroker({ token, store }) {
   await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   return { server, url: `http://127.0.0.1:${server.address().port}` };
 }
-module.exports = { createHostedSessionStore, startHostedSessionBroker };
+module.exports = { createHostedSessionStore, resolveHostedSessionDirectory, startHostedSessionBroker };
