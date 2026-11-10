@@ -2169,7 +2169,50 @@
     "historyArchiveTitle": "归档此对话？",
     "historyArchiveDescription": "归档后将从历史中隐藏，AI 也无法再读取。可随时在 设置 → 归档数据 中恢复。",
     "roleUser": "你",
-    "roleAssistant": "助手"
+    "roleAssistant": "助手",
+    "roles": {
+      "insight": {
+        "name": "Voca Insight",
+        "subtitle": "求职分析师"
+      },
+      "pilot": {
+        "name": "Voca Pilot",
+        "subtitle": "工作台助手"
+      },
+      "reflect": {
+        "name": "Voca Reflect",
+        "subtitle": "对话教练"
+      },
+      "general": {
+        "name": "通用",
+        "subtitle": "通用助手"
+      }
+    },
+    "roleSwitcher": {
+      "label": "切换助手"
+    },
+    "suggest": {
+      "insight": {
+        "match": "运行匹配分析",
+        "matchLegacy": "看看我和这个职位的匹配度",
+        "review": "评审我的简历",
+        "job": "总结这个职位的要求",
+        "chat": "聊聊我的求职方向"
+      },
+      "pilot": {
+        "add": "添加一个职位",
+        "addFill": "帮我把这条招聘帖加入我的职位：",
+        "list": "我有哪些进行中的职位？",
+        "job": "这个职位的关键信息是什么？",
+        "chat": "帮我理一下这周要投哪些职位"
+      },
+      "reflect": {
+        "interview": "聊聊这次面试的表现",
+        "weigh": "几个机会之间怎么权衡",
+        "job": "这个职位值得继续跟吗？",
+        "chat": "理一理这周求职的进展"
+      }
+    }
   },
   "errors": {
     "generic": "操作遇到问题，请重试",

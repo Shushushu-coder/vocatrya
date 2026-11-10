@@ -4,6 +4,7 @@ import {
   getAgentChatPreflight,
   getChatConversation,
   listChatConversations,
+  loadActiveChatConversation,
   resolveDraftPageContext,
   saveChatConversation,
 } from "@/actions/agentChat.actions";
@@ -122,6 +123,19 @@ describe("agentChat actions", () => {
     createdAt: new Date("2026-10-01T00:00:00.000Z"),
     updatedAt: new Date("2026-10-01T00:00:00.000Z"),
     ...overrides,
+  });
+
+  it("preserves an intentional active draft instead of loading the newest row", async () => {
+    const result = await loadActiveChatConversation(APP_CONSTANTS.AGENT_CHAT_DRAFT_CONVERSATION_ID);
+    expect(result).toEqual({ success: true, data: null });
+    expect(prisma.chatConversation.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("retains newest-conversation fallback for clients without a preference", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow());
+    const result = await loadActiveChatConversation();
+    expect(result.data?.id).toBe("row-1");
+    expect(prisma.chatConversation.findFirst).toHaveBeenCalled();
   });
 
   it("getChatConversation scopes the read by conversationId and userId", async () => {

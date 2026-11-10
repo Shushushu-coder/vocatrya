@@ -1,7 +1,8 @@
 // JOURNEY-OVERVIEW stage cards + NEXT-ACTIONS strip rendering contract
 // (frozen §2.1–§2.4, §4.5): real routes only, capability-gated entries
-// hidden rather than disabled, the agent slot only calls open(), and the
-// suggestions block disappears entirely on a clean read.
+// hidden rather than disabled, the agent slot only calls open() — passing
+// the stage's role now that multi-agent landed — and the suggestions block
+// disappears entirely on a clean read.
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import JourneySection from "@/components/dashboard/JourneySection";
@@ -146,8 +147,10 @@ describe("JourneySection", () => {
     await user.click(buttons[2]);
     expect(mocks.open).toHaveBeenCalledTimes(2);
     // No conversation, message, or prefilled context: open() is the whole
-    // contract and takes no arguments.
-    expect(mocks.open).toHaveBeenCalledWith();
+    // contract — with multi-agent landed, the same single entry passes the
+    // stage's role (prepare→Insight, act→Pilot, review→Reflect).
+    expect(mocks.open).toHaveBeenNthCalledWith(1, { role: "insight" });
+    expect(mocks.open).toHaveBeenNthCalledWith(2, { role: "reflect" });
   });
 });
 

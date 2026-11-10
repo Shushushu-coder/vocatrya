@@ -6,6 +6,7 @@ import { isManagedResolution } from "@/lib/ai/business-execution-lock";
 import { cancelConversationRequest, ConversationRequestError } from "@/lib/agent/conversationRequest";
 import type { UIMessage } from "ai";
 import prisma from "@/lib/db";
+import { APP_CONSTANTS } from "@/lib/constants";
 import { handleError } from "@/lib/utils";
 import { requireUser } from "./shared";
 import {
@@ -150,6 +151,9 @@ export const loadActiveChatConversation = async (
 }> => {
   try {
     const user = await requireUser();
+    if (preferredId === APP_CONSTANTS.AGENT_CHAT_DRAFT_CONVERSATION_ID) {
+      return { success: true, data: null };
+    }
     if (preferredId) {
       const preferred = await getOwnedChatConversation(user.id, preferredId);
       // An archived conversation never opens as the live draft — the

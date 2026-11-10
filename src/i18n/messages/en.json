@@ -2169,7 +2169,50 @@
     "historyArchiveTitle": "Archive this conversation?",
     "historyArchiveDescription": "It disappears from History and the assistant can no longer read it. Restore it anytime in Settings → Archived Data.",
     "roleUser": "You",
-    "roleAssistant": "Assistant"
+    "roleAssistant": "Assistant",
+    "roles": {
+      "insight": {
+        "name": "Voca Insight",
+        "subtitle": "Job analyst"
+      },
+      "pilot": {
+        "name": "Voca Pilot",
+        "subtitle": "Workspace assistant"
+      },
+      "reflect": {
+        "name": "Voca Reflect",
+        "subtitle": "Conversation coach"
+      },
+      "general": {
+        "name": "General",
+        "subtitle": "General assistant"
+      }
+    },
+    "roleSwitcher": {
+      "label": "Switch assistant"
+    },
+    "suggest": {
+      "insight": {
+        "match": "Run match analysis",
+        "matchLegacy": "Check my match for this job",
+        "review": "Review my resume",
+        "job": "Summarize this job's requirements",
+        "chat": "Help me think through my job search"
+      },
+      "pilot": {
+        "add": "Add a job",
+        "addFill": "Add this job posting to my jobs: ",
+        "list": "List my saved jobs",
+        "job": "What are this job's key details?",
+        "chat": "Help me prioritize this week's applications"
+      },
+      "reflect": {
+        "interview": "Talk through how that interview went",
+        "weigh": "Help me weigh my options",
+        "job": "Is this job worth pursuing?",
+        "chat": "Help me review this week's progress"
+      }
+    }
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

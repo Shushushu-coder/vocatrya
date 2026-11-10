@@ -20,17 +20,19 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 | Feature | P2 相对优先级 | 设计状态 | 核心交付 | 实现/验收口径 |
 | --- | --- | --- | --- | --- |
 | **JOURNEY-OVERVIEW** | CORE | 合同已冻结（2026-11-01，D1–D9） | 三阶段旅程、一页主要入口、新旧用户状态 | 2026-11-04 已集成未验收 |
-| **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 已源码复核 / 未编码 / 未验收 |
-| **INTERVIEW-DEBRIEF** | HIGH | 联合合同已冻结（D1–D12） | 真实面试逐轮复盘与经验沉淀 | 已源码复核 / G-AI1 已修，P2 增量未编码 / 未验收 |
-| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 2026-11-04 已集成未验收（R6 待 §7.3 读模型） |
-| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 2026-11-04 已集成未验收（M9 待 §7.3 读模型） |
-| **MULTI-AGENT** | HIGH | 合同已冻结（D1–D10） | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 已源码复核 / 未编码 / 未验收 |
+| **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 2026-11-04 已集成未验收 |
+| **INTERVIEW-DEBRIEF** | HIGH | 联合合同已冻结（D1–D12） | 真实面试逐轮复盘与经验沉淀 | 2026-11-04 已集成未验收 |
+| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 2026-11-04 已集成未验收（R6 接线已完成） |
+| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 2026-11-04 已集成未验收（M9 接线已完成） |
+| **MULTI-AGENT** | HIGH | 合同已冻结（D1–D10） | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 2026-11-10 已集成未验收 |
 
-对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。全部 `implementationStatus: NOT_ASSESSED`、`passes: false`：**没有进行代码审计不等于全部功能缺失**；产品确认也不等于工程通过。
+对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。当前六项均已实现并集成，`implementationStatus: IMPLEMENTED`、`passes: false`；实现与集成不等于真实 Windows Electron 功能验收通过。各项变更及验证边界以 JSON 的 implementationNotes 为准。
 
 **2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。2026-11-01 已收敛两份提案并新增 [MULTI-AGENT 合同](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)（D1–D10）。面试 D6 与概览 D3 已统一协调建议为仅 COMPLETED 计入待复盘、过期未完成仅提示确认状态；仍须 Owner 同一次批准，不代表已冻结。若 D2-a 显式完成标记获批，首页 R6 等待领域接口，不用内容存在性过渡。Schema/备份和双语词典各指定唯一 Owner，跨包顺序交接；Electron 重型验证仍串行。2026-11-01 另集成 [CAREER-INSIGHTS 合同提案](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md)（核查基线 main@b3219dc2，D1–D9 待裁定），指标主表面复用 analytics、首页 O5 共享读模型，M9 等待复盘领域接口。G-AI1 既有归档隔离缺口已独立修复集成（8b09faf1），不再列为 P-A 重复开发任务；验证与并发边界见 P2_FEATURES.json 的 INTERVIEW-DEBRIEF implementationNotes，不代表 P2 功能验收。
 
 **2026-11-01 合同冻结**：四份合同提案的全部决策项经 Owner 逐项裁定、按推荐/协调建议生效——概览 D1–D9、职位/复盘 D1–D12（含题库软删、归档期复盘只读查看纳入范围、归档职位禁建练习等附随裁定）、洞察 D1–D9、多 Agent D1–D10。跨合同链「面试已结束」谓词（概览 D3＝面试 D6）同次裁定：仅 `COMPLETED` 计入待复盘，EVIDENCED 按非 COMPLETED，未归档终态 Attempt 的 COMPLETED 轮次计入；洞察 M9 剩余前置为 §7.3 `listAwaitingReflectionInterviews` 读模型落地。裁定依据为四窗口只读源码备料与合并总表（`.tmp/p2-*-decision-prep/`、`.tmp/p2-decision-merge/owner-decision-pack.md`，核实基线 main@55d5a4a9）；冻结记录见各合同文末。合同冻结仅解锁实施排期，编码仍按各包任务授权执行。
+
+**2026-11-10 三 Agent 集成收口**：纳入 `6f7b3bbd` 及复核修复，完成角色槽位、首页阶段入口、双语词条，以及首次创建/切换/上下文异步竞态和草稿刷新恢复。10 文件/189 项定向测试、完整类型检查及改动文件 ESLint 通过；当前 Main 对照复现 5 项既有断言失败，不记为全绿。六项 P2 Feature 均保持 `passes: false`，真实桌面、生产构建、完整 E2E 和真实 AI 调用未执行；待集中验收。
 
 ### A3. 明确不纳入本阶段
 

@@ -21,5 +21,6 @@ export function writeActiveConversationId(id: string | null): void {
     return;
   }
   saveToLocalStorage(KEY, "");
-  document.cookie = `${KEY}=; Path=/; Max-Age=0; SameSite=Lax`;
+  // Distinguish an intentional draft from a legacy client with no cookie.
+  document.cookie = `${KEY}=${APP_CONSTANTS.AGENT_CHAT_DRAFT_CONVERSATION_ID}; Path=/; Max-Age=${MAX_AGE}; SameSite=Lax`;
 }

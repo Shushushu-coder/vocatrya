@@ -12,11 +12,18 @@ const ROLE_ICONS: Record<AgentRole, LucideIcon> = {
   reflect: MessagesSquare,
 };
 
+// The name chip shown on keyboard focus — pure CSS so nothing eats the
+// panel's Escape handling. `content: attr(aria-label)` reuses the localized
+// accessible name; hover is covered by the native `title`.
+const FOCUS_NAME =
+  "focus-visible:after:pointer-events-none focus-visible:after:absolute focus-visible:after:left-1/2 focus-visible:after:top-full focus-visible:after:z-50 focus-visible:after:mt-1 focus-visible:after:-translate-x-1/2 focus-visible:after:whitespace-nowrap focus-visible:after:rounded-sm focus-visible:after:border focus-visible:after:bg-popover focus-visible:after:px-2 focus-visible:after:py-0.5 focus-visible:after:text-[10px] focus-visible:after:font-normal focus-visible:after:text-popover-foreground focus-visible:after:shadow-md focus-visible:after:content-[attr(aria-label)]";
+
 /**
  * Top-level role switcher, fixed order Insight → Pilot → Reflect — the icon
  * group that never shrinks (D7). Each button stays keyboard-reachable with
- * aria-current on the active role; the full name lives on the accessible
- * label and tooltip while the header text carries name + subtitle.
+ * aria-current on the active role; the full name shows on hover (`title`)
+ * AND on focus (the ::after chip) while the header text carries name +
+ * subtitle.
  */
 export function AgentRoleSwitcher() {
   const { t, locale } = useI18n();
@@ -43,7 +50,7 @@ export function AgentRoleSwitcher() {
             title={name}
             data-role={role}
             onClick={() => void switchRole(role)}
-            className={`flex h-6 w-6 items-center justify-center rounded-sm transition-colors ${
+            className={`relative flex h-6 w-6 items-center justify-center rounded-sm transition-colors ${FOCUS_NAME} ${
               active
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"

@@ -28,11 +28,21 @@ type JourneyStage = {
   entries: JourneyEntry[];
 };
 
+// The Agent slot stays a single open() entry (frozen §9 D7) — with
+// multi-agent it passes the stage's role through the same call: prepare →
+// Insight, act → Pilot, review → Reflect. Still no send, no conversation.
+const STAGE_AGENT_ROLE = {
+  prepare: "insight",
+  act: "pilot",
+  review: "reflect",
+} as const;
+
 // O1 welcome + O2 journey cards (frozen contract §2.1/§2.2). The three stages
 // map to real routes; gated entries follow the same capability policy as
 // GettingStarted/CreateMenu — hidden, never disabled. The Agent slot is a
 // single open() entry (frozen §9 D7): it only unfolds the existing panel —
-// no conversation, message, or prefilled context.
+// no conversation, message, or prefilled context. With multi-agent landed it
+// passes the stage's role through the same entry (MULTI-AGENT contract §6.2).
 export default function JourneySection({
   dataState,
   jobsAbRead,
@@ -176,7 +186,7 @@ export default function JourneySection({
               <button
                 type="button"
                 data-testid={`journey-agent-${stage.key}`}
-                onClick={() => open()}
+                onClick={() => open({ role: STAGE_AGENT_ROLE[stage.key] })}
                 className="mt-auto flex items-center gap-1.5 self-start rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <MessageSquare className="h-3.5 w-3.5 shrink-0" />

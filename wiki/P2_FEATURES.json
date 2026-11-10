@@ -203,7 +203,7 @@
       "relativePriority": "HIGH",
       "scope": "IN_SCOPE",
       "designStatus": "CONTRACT_FROZEN",
-      "implementationStatus": "NOT_ASSESSED",
+      "implementationStatus": "IMPLEMENTED",
       "description": "三个专业 Agent 对应准备/行动/复盘：Voca Insight（求职分析师）、Voca Pilot（全局助手）、Voca Reflect（复盘教练）。用户主动点击后在右侧打开 Agent 面板，顶部使用三个图标切换（hover 显示名称）；显示能力介绍与 4 条建议，建议点击只填入输入框，发送后才调用 AI。",
       "confirmedDecisions": [
         "Insight 对应准备与简历/JD/面试准备分析；Pilot 对应行动与全局检索、添加职位和经授权操作；Reflect 对应真实面试复盘与求职总结。阶段不是独占权限，用户可随时手动切换。",
@@ -231,7 +231,7 @@
         "跨 Agent 对话是否共享会话、消息历史与上下文快照的切换合同。",
         "四条提示按当前可用能力与上下文动态生成的规则、桌面/窄屏响应式细节。"
       ],
-      "implementationNotes": "2026-11-01 新增 P2_MULTI_AGENT_CONTRACT_PROPOSAL.md（基线 main@23178a4c）：核实六/七工具运行时分叉、会话锁/上下文、建议点击即发送现状；推荐每角色独立会话槽、持久角色、建议只填入、Reflect 文本教练降级。D1–D10 待批准。canonical match_job 的 P1 既有验收不外推三角色功能验收；未编码或验收。 2026-11-01 Owner 裁定冻结 §9 D1–D10 全部按推荐生效（合同 §14）：每角色独立会话槽、ChatConversation.agentRole 可空列+迁移+备份字段（唯一 Schema/备份 Owner 与复盘包顺序交接）、历史徽标、统一 CAREER_DIALOGUE、match_job 列入 Insight 建议（按白名单∩运行时注册集生成）、Pilot 不含 get_resume、收缩优先级、无 AI 时建议可填入禁发送（fillComposer）、页面 CTA 保持打开+发送（?match=1 归显式请求）、V1 不加失效徽标。备料 .tmp/p2-multi-agent-decision-prep/。未编码，passes:false。",
+      "implementationNotes": "2026-11-01 新增 P2_MULTI_AGENT_CONTRACT_PROPOSAL.md（基线 main@23178a4c）：核实六/七工具运行时分叉、会话锁/上下文、建议点击即发送现状；推荐每角色独立会话槽、持久角色、建议只填入、Reflect 文本教练降级。D1–D10 待批准。canonical match_job 的 P1 既有验收不外推三角色功能验收；未编码或验收。 2026-11-01 Owner 裁定冻结 §9 D1–D10 全部按推荐生效（合同 §14）：每角色独立会话槽、ChatConversation.agentRole 可空列+迁移+备份字段（唯一 Schema/备份 Owner 与复盘包顺序交接）、历史徽标、统一 CAREER_DIALOGUE、match_job 列入 Insight 建议（按白名单∩运行时注册集生成）、Pilot 不含 get_resume、收缩优先级、无 AI 时建议可填入禁发送（fillComposer）、页面 CTA 保持打开+发送（?match=1 归显式请求）、V1 不加失效徽标。备料 .tmp/p2-multi-agent-decision-prep/。未编码，passes:false。 2026-11-10 Main 集成收口：纳入 6f7b3bbd 三角色面板实现及槽位上下文/草稿恢复、归档槽位降级、焦点名称和首页阶段角色透传修复；补齐中英文 23 个词条。agentRole nullable additive migration、旧会话 NULL 兼容和备份字段随实现集成。集成复审另修复首次建会话/角色加载/上下文迟到响应竞态与草稿刷新恢复；10 文件/189 项定向测试、完整类型检查及改动文件 ESLint 通过，当前 Main d7108e95 原样复现 5 项既有断言失败（freshFullSurfaces 4 项、agentChatRoute 1 项）。功能验收仍未执行，passes:false；生产构建、Windows Electron、完整 E2E 和真实 AI 调用本轮未执行。",
       "passes": false
     }
   ]
