@@ -223,6 +223,10 @@ export const APP_CONSTANTS = {
   // slot (independent drafts/sessions per role, D1).
   AGENT_CHAT_ACTIVE_ROLE_KEY: "agent-chat-active-role",
   AGENT_CHAT_ROLE_SLOTS_KEY: "agent-chat-role-slots",
+  // Same-origin cache is stamped with the signed-in user. The generation
+  // lets a later port's snapshot win over a stale origin still on disk.
+  AGENT_CHAT_SLOT_OWNER_KEY: "agent-chat-slot-owner",
+  AGENT_CHAT_SLOT_GENERATION_KEY: "agent-chat-slot-generation",
   AGENT_CHAT_HISTORY_PAGE: 30,
 
   // Telemetry (OTLP export)

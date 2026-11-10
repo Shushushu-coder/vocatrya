@@ -234,6 +234,18 @@ interface Window {
     read(): string | null;
     write(raw: string): string;
   };
+  vocatryaAgentSlots?: {
+    /**
+     * Account-scoped role slots in the desktop config directory. `read`
+     * returns that user's JSON snapshot, or null when none is stored.
+     * `write` rejects a stale generation without replacing the snapshot.
+     */
+    read(userId: string): string | null;
+    write(
+      userId: string,
+      raw: string,
+    ): { ok: true } | { ok: false; code: "stale" | "invalid" | "unavailable" };
+  };
   vocatryaResume?: {
     printToPDF(versionId: string): Promise<
       { ok: true; bytes: Uint8Array } |
