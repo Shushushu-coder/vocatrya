@@ -1737,6 +1737,8 @@
     "managedRechargeTitle": "订阅充值",
     "managedRechargeDescription": "输入随 Vocatrya 托管 AI 订阅发放的访问 Key。Key 会经托管服务验证，仅保存在本机系统保护的存储中。",
     "managedRechargeKeyPlaceholder": "托管 AI 访问 Key",
+    "managedRechargeKeyInvalid": "访问 Key 格式不正确——请完整复制随订阅发放的 Key 后重试。",
+    "managedRechargeKeyRejected": "访问 Key 未通过托管服务验证，可能已失效、被撤销或不属于本应用。请核对后重试；需要充值请联系客服。",
     "managedRechargeSubmit": "激活",
     "managedRechargeNoKeyHint": "没有 Key？需要充值请联系客服。",
     "managedRechargeConnectedHint": "当前设备已连接。输入新的访问 Key 可切换账号或续费。",

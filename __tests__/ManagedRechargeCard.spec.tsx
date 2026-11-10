@@ -117,7 +117,7 @@ describe("ManagedRechargeCard", () => {
     expect(actions.get).toHaveBeenCalledTimes(2);
   });
 
-  it("surfaces the managed error code when redemption is rejected", async () => {
+  it("surfaces the rejection message when the hosted service refuses the key", async () => {
     actions.redeem.mockResolvedValue({
       success: false,
       code: "MANAGED_AUTH_REQUIRED",
@@ -133,7 +133,27 @@ describe("ManagedRechargeCard", () => {
         screen.getByRole("button", { name: "settings.managedRechargeSubmit" }),
       );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "MANAGED_AUTH_REQUIRED",
+      "settings.managedRechargeKeyRejected",
+    );
+  });
+
+  it("surfaces the format message when the key fails local validation", async () => {
+    actions.redeem.mockResolvedValue({
+      success: false,
+      code: "MANAGED_KEY_INVALID",
+    });
+    shows(EMPTY);
+    const input = await screen.findByPlaceholderText(
+      "settings.managedRechargeKeyPlaceholder",
+    );
+    await userEvent.setup().type(input, "short");
+    await userEvent
+      .setup()
+      .click(
+        screen.getByRole("button", { name: "settings.managedRechargeSubmit" }),
+      );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "settings.managedRechargeKeyInvalid",
     );
   });
 
