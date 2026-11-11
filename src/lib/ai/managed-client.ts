@@ -45,11 +45,13 @@ export class DesktopHostedSessionProvider implements HostedSessionProvider {
     if (broker) {
       broker.url.searchParams.set("localUserId", localUserId);
       try {
-        const response = await fetch(broker.url, { headers: { authorization: `Bearer ${broker.token}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
-        if (!response.ok) return null;
+        const response = await fetch(broker.url, { cache: "no-store", headers: { authorization: `Bearer ${broker.token}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+        if (response.status === 401) return null;
+        if (!response.ok) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
         const body = await response.json();
-        return typeof body?.token === "string" && /^[A-Za-z0-9_-]{43}$/.test(body.token) ? body.token : null;
-      } catch { return null; }
+        if (typeof body?.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(body.token)) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
+        return body.token;
+      } catch { throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"); }
     }
     if (process.env.NODE_ENV === "production") return null;
     const store = devSessionStore();
@@ -142,7 +144,7 @@ export class HostedManagedClient {
     const token = await this.sessions.tokenForLocalUser(userId);
     if (!token) throw new ManagedError("MANAGED_AUTH_REQUIRED");
     try {
-      const response = await this.fetchImpl(`${this.base}/v1/${path}`, { method: body === undefined ? "GET" : "POST", redirect: "error",
+      const response = await this.fetchImpl(`${this.base}/v1/${path}`, { cache: "no-store", method: body === undefined ? "GET" : "POST", redirect: "error",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body), signal });
       if (!response.ok) {

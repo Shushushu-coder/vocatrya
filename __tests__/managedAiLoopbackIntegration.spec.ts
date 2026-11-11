@@ -705,6 +705,26 @@ describe("Managed AI real-HTTP loopback closed loop", () => {
     } finally { spy.mockRestore(); }
   });
 
+  it("keeps the connection and encrypted session on a temporary broker read failure", async () => {
+    provision("hosted-broker-read-outage", "starter");
+    await getManagedAiOverview();
+    const encryptedFiles = fs.readdirSync(sessionDir);
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).startsWith(brokerUrl + "/session") && (!init?.method || init.method === "GET")) {
+        throw new Error("synthetic temporary broker outage");
+      }
+      return realFetch(input, init);
+    });
+    try {
+      const overview = await getManagedAiOverview();
+      expect(overview.data?.errorCode).toBe("MANAGED_RUNTIME_UNAVAILABLE");
+      expect((await managedConnection()).status).toBe("CONNECTED");
+      expect(fs.readdirSync(sessionDir)).toEqual(encryptedFiles);
+    } finally { spy.mockRestore(); }
+    expect((await getManagedAiOverview()).data?.connection?.status).toBe("CONNECTED");
+  });
+
   it("reports re-auth when a mid-overview read gets an authoritative 401", async () => {
     provision("hosted-midread-revoke", "starter");
     const realFetch = globalThis.fetch;
