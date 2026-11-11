@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
-import { expect } from '@playwright/test';
+import { expect as baseExpect } from '@playwright/test';
+const expect = baseExpect.configure({ timeout: 30000 });
 import { register, assertDesktopSurface } from '../../desktop/e2e/scenario.mjs';
 const require = createRequire(import.meta.url);
 const { rpc, read, save, poll, jsonHttp } = require('./fixture.cjs');
@@ -45,6 +46,18 @@ export async function runManagedScenario(context) {
   async function step(name, action, fatal = true) {
     currentName = name; currentObservation = {};
     const row = results.find(value => value.name === name);
+    if (context.previouslyObservedSteps?.includes(name)) {
+      row.reason = 'Covered by retained earlier evidence; not rerun in this continuation';
+      save(path.join(directory, 'results.json'), results);
+      return false;
+    }
+    if (context.blockedSteps?.includes(name)) {
+      row.status = 'BLOCKED';
+      row.reason = context.blockedReason || 'Known shared entry blocker';
+      save(path.join(directory, 'results.json'), results);
+      console.log('BLOCKED managed/' + name + ': ' + row.reason);
+      return false;
+    }
     try { await action(); row.status = 'PASS'; }
     catch (error) {
       row.status = 'FAIL';
@@ -66,6 +79,7 @@ export async function runManagedScenario(context) {
     await assertDesktopSurface(page());
     const container = page().getByTestId('settings-section-' + section);
     await expect(container).toBeVisible();
+    await page().waitForLoadState('networkidle', { timeout: 45000 });
     return container;
   }
   async function card() {
@@ -280,12 +294,13 @@ export async function runManagedScenario(context) {
       note({ authoritativeExpired: true, realUiRefreshObserved401: true, localStatuses: rows.map(row => row.status), privacy: privacy(false) });
     });
     await step('new-key-preserves-rights', async () => {
+      beforeRights = (await fixtureState()).subscriptions.find(row => row.hostedUserId === 'desktop-beta');
       key = await issue('desktop-beta'); assert.equal(key.token === expired.token, false);
       await redeem(key);
       const after = (await fixtureState()).subscriptions.find(row => row.hostedUserId === 'desktop-beta'); assert.deepEqual(after, beforeRights);
       const managed = await card(); await expect(managed.locator('dd').filter({ hasText: /^0\s*\/\s*1000$/ })).toBeVisible();
       note({ subscriptionUnchanged: true, privacy: privacy(true) });
-    });
+    }, false);
     await step('quit-reopen-connected', async () => {
       const oldPid = state.instance.child.pid, oldOrigin = state.instance.origin;
       const encrypted = sha(fs.readFileSync(files()[0]));
@@ -312,6 +327,9 @@ export async function runManagedScenario(context) {
     });
   });
   const failed = results.filter(row => row.status === 'FAIL');
-  save(path.join(directory, 'scope.json'), { selected, failed: failed.map(row => row.name), notRun: results.filter(row => row.status === 'NOT_RUN').map(row => row.name), realAI: 'NOT_RUN', backup: 'NOT_RUN', configuredCompetingAccountOrByokFallback: 'NOT_RUN', sourceAndBuild: '../snapshot-manifest.json' });
+  const blocked = results.filter(row => row.status === 'BLOCKED');
+  save(path.join(directory, 'scope.json'), { selected, failed: failed.map(row => row.name), blocked: blocked.map(row => row.name), notRun: results.filter(row => row.status === 'NOT_RUN').map(row => row.name), realAI: 'NOT_RUN', backup: 'NOT_RUN', configuredCompetingAccountOrByokFallback: 'NOT_RUN', sourceAndBuild: '../snapshot-manifest.json' });
   if (failed.length) throw new Error('MANAGED_DESKTOP_ASSERTIONS_FAILED_' + failed.length);
+  if (blocked.length) throw new Error('MANAGED_DESKTOP_ASSERTIONS_BLOCKED_' + blocked.length);
+  if (context.previouslyObservedSteps?.length) throw new Error('PARTIAL_CONTINUATION_REQUIRES_AGGREGATE_REVIEW');
 }

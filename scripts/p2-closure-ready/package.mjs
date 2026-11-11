@@ -188,13 +188,19 @@ export async function prepare(runInput) {
       const bcrypt = (await import('bcryptjs')).default;
       const password = await bcrypt.hash(manifest.credentials.syntheticPassword, 10);
       await prisma.$transaction(async tx => {
+        for (const [value, label] of [['draft', 'Draft'], ['interview', 'Interview']]) {
+          await tx.jobStatus.upsert({ where: { value }, create: { value, label }, update: {} });
+        }
         const primary = await tx.user.create({ data: { name: 'P2 primary synthetic', email: manifest.credentials.primaryEmail, password } });
         const foreign = await tx.user.create({ data: { name: 'P2 foreign synthetic', email: manifest.credentials.foreignEmail, password } });
         Object.assign(manifest.ids, { primaryUser: primary.id, foreignUser: foreign.id });
         await tx.userSettings.create({ data: { userId: primary.id, settings: JSON.stringify({ general: { timeZone: manifest.accountTimeZone } }) } });
         await tx.userSettings.create({ data: { userId: foreign.id, settings: JSON.stringify({ general: { timeZone: 'Pacific/Auckland' } }) } });
         const company = await tx.company.create({ data: { label: 'P2 Synthetic Company', value: 'p2-synthetic', createdBy: primary.id } });
-        const job = await tx.jobOpportunity.create({ data: { userId: primary.id, companyId: company.id, title: 'P2 dual application role', status: 'ACTIVE', createdVia: 'USER' } });
+        await tx.jobTitle.create({ data: { createdBy: primary.id, label: 'P2 dual application role', value: 'p2-dual-application' } });
+        await tx.location.create({ data: { createdBy: primary.id, label: 'P2 Shanghai', value: 'p2-shanghai' } });
+        await tx.jobSource.create({ data: { createdBy: primary.id, label: 'P2 synthetic source', value: 'p2-synthetic-source' } });
+        const job = await tx.jobOpportunity.create({ data: { userId: primary.id, companyId: company.id, title: 'P2 dual application role', locationText: 'P2 Shanghai', sourceLabel: 'P2 synthetic source', employmentType: 'FT', workplaceType: 'REMOTE', status: 'ACTIVE', createdVia: 'USER' } });
         manifest.ids.job = job.id;
         const jds = [];
         for (let number = 1; number <= 3; number++) {

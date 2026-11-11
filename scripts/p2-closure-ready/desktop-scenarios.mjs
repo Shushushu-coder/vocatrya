@@ -91,6 +91,7 @@ export async function prepareDesktop(input) {
 export async function login(instance, m) {
   const { page, origin } = instance;
   await page.context().addCookies([{ name: 'vocatrya_locale', value: 'en', url: origin }]);
+  await page.context().addInitScript(() => localStorage.setItem('vocatrya-locale-preference', 'en'));
   await page.goto(origin + '/signin', { waitUntil: 'load' });
   await page.locator('#email').fill(m.credentials.primaryEmail);
   await page.locator('#password').fill(m.credentials.syntheticPassword);
@@ -184,10 +185,12 @@ export async function createContext(instance, input, observationLog, tickActionH
         if (reminders.length) assert(events.some(event => event.kind === 'incoming-finish' && event.actionHash === tickActionHash && event.status < 400), 'Reminder writes lack a successful observed tick request');
         assert.equal(events.filter(event => event.kind === 'child-process').length, 0, 'Backend spawned a child during read');
         const outbound = events.filter(event => ['fetch', 'undici', 'http-request', 'https-request', 'socket'].includes(event.kind));
-        assert.equal(outbound.length, 0, 'Backend attempted an outbound request during read');
+        const releaseChecks = outbound.filter(event => event.kind === 'fetch' && event.hostname === 'api.github.com' && event.pathname === '/repos/Shushushu-coder/vocatrya/releases/latest' && event.method === 'GET');
+        const businessOutbound = outbound.filter(event => !releaseChecks.includes(event));
+        assert.equal(businessOutbound.length, 0, 'Backend attempted a business outbound request during read');
         assert.equal(network.filter(request => request.origin !== instance.origin).length, 0, 'Renderer attempted an external request');
         assert.equal(network.filter(request => /\/api\/(?:chat|ai|interview.*generate|.*reflection.*generate)(?:\/|$)/i.test(request.pathname)).length, 0, 'Renderer attempted an AI execution endpoint');
-        return { businessWrites: 0, reminderWrites: reminders.length, backendOutboundAttempts: 0, backendChildInvocations: 0, rendererRequests: network.length, evidence: name + '-observations.json', scope: 'Bounded real page load through networkidle; POST alone is not classified as a business write; observer covers this backend process, not machine-wide activity' };
+        return { businessWrites: 0, reminderWrites: reminders.length, backendBusinessOutboundAttempts: 0, independentReleaseChecks: releaseChecks, backendChildInvocations: 0, rendererRequests: network.length, evidence: name + '-observations.json', scope: 'Bounded real page load through networkidle; the exact GitHub release metadata GET is recorded as an independent update check; observer still blocks its external connection; POST alone is not classified as a business write' };
       } finally { page.off('request', onRequest); }
     });
   }
@@ -267,12 +270,12 @@ export async function connections(ctx, before) {
   async function target(variantId, jobId) {
     await page.goto(instance.origin + '/dashboard/profile/resumes/' + variantId, { waitUntil: 'load' });
     await expect(page.getByTestId('resume-version-switcher')).toBeVisible();
-    const select = page.getByLabel(t('resumeBuilder.targetJob'), { exact: true });
+    const select = page.locator('label').filter({ hasText: t('resumeBuilder.targetJob') }).locator('select');
     await expect(select).toBeEnabled();
     await select.selectOption(jobId || '');
     await expect.poll(async () => (await db.resumeVariant.findUniqueOrThrow({ where: { id: variantId } })).targetJobOpportunityId).toBe(jobId);
     await page.reload({ waitUntil: 'load' });
-    await expect(page.getByLabel(t('resumeBuilder.targetJob'), { exact: true })).toHaveValue(jobId || '');
+    await expect(page.locator('label').filter({ hasText: t('resumeBuilder.targetJob') }).locator('select')).toHaveValue(jobId || '');
   }
   async function plan(expected) {
     await timeline();

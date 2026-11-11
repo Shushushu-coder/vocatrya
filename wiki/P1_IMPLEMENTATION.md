@@ -98,6 +98,8 @@
 
 ### AI-MANAGED：Vocatrya 托管 AI
 
+- **2026-11-11 Main 实测未通过**：复用逐文件核对的 Main `21d81f5e` 生产装配，Windows Electron fresh-native/full、本地合成Hosted/假上游，合并续测证据为7 PASS/7 FAIL/2 NOT_RUN/2 BLOCKED。Key/连接、正常调用溯源和记账通过；额度耗尽提示通用错误、设置状态/用量及无权益/过期/续期反馈未通过；会话到期后密文文件清理观察超时。换Key/断开未覆盖，退出重开受A共享退出超时阻塞。fixture清理报告失败，复核相关进程已结束；不因重试或进程最终消失认定根因。真实模型未调用，PARTIAL/passes:false不变。具体证据和边界见JSON最新notes及 `.tmp/main-ab-20261111/results.json`。
+
 - **2026-11-10 准备包集成**：受控工具见 `scripts/managed-closure-ready/README.md`。补齐本地权益/额度/幂等/UNKNOWN/会话到期验证和下一阶段桌面入口；不改变发布门，不设 passes:true。旧11/01格式错误与数据根问题已由11/10补丁及复验收口，不再重复派开发。真实服务证据转存目录见 JSON 最新 notes。
 
 - **P1 / IN_SCOPE / PARTIAL / `passes: false`。** 本地真实 HTTP 调用与权益/额度链路、用户会话兑换和断开入口已补齐，**面向用户的完整托管能力尚未交付**；隔离 Beta 真实网关、Key 兑换及桌面主链已有证据；正式套餐/客服规则、生产开放及剩余边界验收仍待完成，生产可用性保持 COMING_SOON。
