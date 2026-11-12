@@ -10,7 +10,7 @@
 
 本次按用户要求将四项工作及其完整 Feature 记录移至 [P1_IMPLEMENTATION.md](./P1_IMPLEMENTATION.md) 和 [P1_FEATURES.json](./P1_FEATURES.json)。本文件仅维护剩余 MVP 范围；P1 的迁移不改变原实现状态、验收结论或范围批准边界。
 
-当前共 31 项：30 项 IN_SCOPE，其中 29 项验收通过、1 项待验收；另有 1 项 DEFERRED。所有 IN_SCOPE 项均为 IMPLEMENTED，当前无已批准而尚未实现的开发任务。
+当前共 32 项：31 项 IN_SCOPE，其中 30 项验收通过、1 项待验收；另有 1 项 DEFERRED（本地提醒，已按修订范围验收收口）。所有 IN_SCOPE 项均为 IMPLEMENTED，当前无已批准而尚未实现的开发任务。
 
 | Feature | 优先级 | 范围 | 实现状态 | 验收 |
 | --- | --- | --- | --- | --- |
@@ -41,7 +41,7 @@
 | SET-DATA-PRIVACY | P0 | IN_SCOPE | IMPLEMENTED | 通过 |
 | RM-RESUME | P1 | IN_SCOPE | IMPLEMENTED | 通过 |
 | RM-BIND | P1 | IN_SCOPE | IMPLEMENTED | 通过 |
-| REM-V1 | CONDITIONAL | DEFERRED | IMPLEMENTED | 未通过/待验收 |
+| REM-V1 | CONDITIONAL | DEFERRED | IMPLEMENTED | 按修订范围通过 |
 | SET-AI-RUNTIME-UPDATE | P1 | IN_SCOPE | IMPLEMENTED | 通过 |
 | AGENT-CHAT-UX | P1 | IN_SCOPE | IMPLEMENTED | 通过 |
 | SET-INPUT-PREFERENCES | P0 | IN_SCOPE | IMPLEMENTED | 通过 |
@@ -70,11 +70,12 @@
 - 尚未执行真实系统自启配置与实际启动验证。用户于 2026-10-28 明确安排在发布新版本时验证；列为发布阶段待验收事项，不安排重复开发。
 - 保留原 Feature 验收条件。发布时先核对代码与安装产物来源，再按对应授权验证；不将本次文档更新视为发布或修改系统配置的授权。
 
-### REM-V1：延期的本地提醒
+### REM-V1：本地提醒（取消点击跳转，已收口）
 
-- 范围：DEFERRED；实现状态：IMPLEMENTED；`passes: false`。
-- Windows 本地持久提醒首版代码已集成；真实通知送达与点击跳转尚待验收。
-- 完全退出后不承诺送达，不阻塞首版内部 MVP；未获任务授权不启动后续工作。
+- 范围：DEFERRED（保留原范围分类）；实现状态：IMPLEMENTED；`passes: true`。
+- 2026-11-10 已有真实 Windows 通知送达、24h 内重开补送及跨重启状态证据。
+- 2026-11-11 用户明确取消通知点击跳转；代码移除点击唤起窗口与页面跳转，仅展示通知。该路径不再列为安装包待验收任务，历史 deepLink 数据字段保留兼容。
+- 按修订范围沿用已有送达与持久化证据收口，本轮未新增 Electron 或安装包实测。完全退出后仍不承诺送达。
 
 ### 已有非阻塞观察
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { tickReminders } from "@/actions/reminder.actions";
 import type { ReminderDelivery } from "@/lib/reminders/shared";
 
@@ -13,8 +12,6 @@ const TICK_MS = 60_000;
 // catches up: anchors overdue <24h still fire, older ones are marked EXPIRED
 // server-side.
 export default function ReminderScheduler() {
-  const router = useRouter();
-
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -31,15 +28,11 @@ export default function ReminderScheduler() {
         return;
       }
       try {
-        const notification = new Notification(delivery.title, {
+        new Notification(delivery.title, {
           body: delivery.body,
           // tag collapses duplicates if two renderers raced to the same row.
           tag: `vocatrya-reminder-${delivery.id}`,
         });
-        notification.onclick = () => {
-          void window.vocatryaDesktop?.showWindow();
-          router.push(delivery.deepLink);
-        };
       } catch {
         // Notification construction can fail on odd runtimes; the server-side
         // state is already correct.
@@ -89,7 +82,7 @@ export default function ReminderScheduler() {
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [router]);
+  }, []);
 
   return null;
 }

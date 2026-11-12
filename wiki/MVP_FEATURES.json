@@ -411,13 +411,13 @@
       "priority": "CONDITIONAL",
       "scope": "DEFERRED",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-28 首版已交付（Main 集成）：新 Reminder 模型 + migration（backup ordering/schema 同步纳入），ProcessStep 写路径事务内同步建/改/取消提醒，账号级通知偏好（总开关/提前量/测试通知）走原子 patch，渲染进程 60s tick 原子认领到期提醒并经 new Notification 送达，点击经 vocatryaDesktop.showWindow + deepLink 跳转，重启逾期 24h 内补送、更旧标 EXPIRED；边界文案如实标注完全退出不承诺。reminders 24 项与共享 spec 定向通过，58 个 migration 全量 deploy 与索引不变量验证通过。Windows 真实通知送达与点击跳转验收未执行，passes 保持 false。 2026-11-10 补验收（Windows Electron fresh-native 生产构建，基线 a27e9736，隔离数据目录 .worktrees/p2-ai-acceptance）：派生模型实测——移动真实 scheduledAt 锚点经 tick reconcile 重算→原子 claim→new Notification 送达 Windows 通知中心 4 次全部成立（用户亲见、AUMID com.vocatrya.desktop 已注册、渲染端 Notification.permission=granted）；完全退出后重开立即补送过期提醒（24h 窗口内），跨重启 PENDING/FIRED 状态正确，孤儿目标被 reconcile 取消符合契约。NOT covered：通知点击→showWindow+deepLink——Action Center 激活不回传 renderer onclick（未打包 Electron AUMID 限制），横幅点击两次窗口内未获用户真实点击；待安装包复验。passes:false 保持。",
-      "description": "Windows 本地持久提醒首版代码已集成，真实通知送达与点击跳转待验收；完全退出后不承诺送达，不阻塞首版内部 MVP。",
+      "implementationNotes": "2026-10-28 首版已交付（Main 集成）：新 Reminder 模型 + migration（backup ordering/schema 同步纳入），ProcessStep 写路径事务内同步建/改/取消提醒，账号级通知偏好（总开关/提前量/测试通知）走原子 patch，渲染进程 60s tick 原子认领到期提醒并经 new Notification 送达，点击经 vocatryaDesktop.showWindow + deepLink 跳转，重启逾期 24h 内补送、更旧标 EXPIRED；边界文案如实标注完全退出不承诺。reminders 24 项与共享 spec 定向通过，58 个 migration 全量 deploy 与索引不变量验证通过。Windows 真实通知送达与点击跳转验收未执行，passes 保持 false。 2026-11-10 补验收（Windows Electron fresh-native 生产构建，基线 a27e9736，隔离数据目录 .worktrees/p2-ai-acceptance）：派生模型实测——移动真实 scheduledAt 锚点经 tick reconcile 重算→原子 claim→new Notification 送达 Windows 通知中心 4 次全部成立（用户亲见、AUMID com.vocatrya.desktop 已注册、渲染端 Notification.permission=granted）；完全退出后重开立即补送过期提醒（24h 窗口内），跨重启 PENDING/FIRED 状态正确，孤儿目标被 reconcile 取消符合契约。NOT covered：通知点击→showWindow+deepLink——Action Center 激活不回传 renderer onclick（未打包 Electron AUMID 限制），横幅点击两次窗口内未获用户真实点击；待安装包复验。passes:false 保持。 2026-11-11 Owner 明确取消通知点击跳转，不再作为开发或验收任务。ReminderScheduler 移除 onclick 中的 showWindow/router.push，仅保留通知展示；历史 deepLink 数据字段保留兼容，不触发跳转。沿用 2026-11-10 真实 Windows 通知送达、24h 内重开补送与跨重启状态证据，剩余既定送达/持久化条件已有覆盖，按本次批准范围收口 passes:true；本轮未新增 Electron/安装包实测，不把取消的点击路径记为实测通过。",
+      "description": "Windows 本地持久提醒已实现并有真实送达、重开补送证据；通知仅展示，不提供点击唤起或页面跳转，完全退出后不承诺送达。",
       "steps": [
         "若未来启用：提醒需可持久化、在 Windows 端真实调度与送达，关闭重开后规则仍有效。",
         "无真实送达链路时不向用户展示伪提醒。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "SET-AI-RUNTIME-UPDATE",
