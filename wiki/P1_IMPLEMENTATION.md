@@ -98,6 +98,10 @@
 
 ### AI-MANAGED：Vocatrya 托管 AI
 
+- **2026-11-12 任务 B 审查修复并集成**：broker 读/写/清理预算从 5 秒改为 20 秒；复核发现 Hosted 查询的 5 秒预算原本在等凭据前启动，现改为取得 token 后计时，保留调用方取消。新增慢读成功、读/写/清理截止、Hosted 截止和取消回归，定向 4 文件/75 项、归档扫描 2 项、完整类型检查与 ESLint 通过。DPAPI 冷启动尚无分段计时证据，不能认定为已证实根因。
+- **实际应用证据与复核边界**：Owner 在 `cd09eb66` 加原 B 未提交补丁的生产构建 `q5e8GhkT0CKpYa0guG7yq`（源码摘要 `81130bc09d37aa18a835e0d10b4bd17412161285a1c107ab540991851128d6dc`）上完成 Windows Electron fresh-native/full，原脚本 20/20；实际 main/preload、独立 backend、正常退出 IPC 与同目录重开有记录，三次 launch 均有退出阶段日志。证据 `.worktrees/managed-ai-closure/.tmp/managed-closure-ready/desktop-runs/1df240c1-d8a3-4913-b3fe-7d176e522853/`；失败对照 `419534b9-745d-4048-9a70-7b2b2f769331/` 保留。真实本地 Hosted/持久账本 HTTP 17/17，桌面账本 2 条 SUCCEEDED；合成上游不是正式网关或真实模型。历史退出超时未复现，根因仍未证实。
+- **安全证据纠正与剩余事项**：原 ZIP 扫描压缩字节会漏检，现逐条目解压；既有 ZIP 独立复核 2 个文件条目、4 个仍保留的会话 token 及 3 个 fixture 凭据均未泄露，managed credentialRef=null。原无回退场景虽记录 submitted=true、零新增上游/记账及无禁止调用，但响应错误码未捕获，竞争凭据为不可调用合成引用，不能宣称可用账号/BYOK 组合已完整验收；新脚本要求真实提交、期望错误码和 observer 请求完成记录。最终客户端计时补丁及加强后的桌面脚本未重跑 Electron/生产构建，不把原 20/20 当作最终版本通过。仍需当前版本定向复验、可用竞争配置无回退补验，以及正式规则、公网网关/真实模型、部署发布授权；`PARTIAL / passes:false` 保持，COMING_SOON 不变。fixture 均 STOPPED，Worktree 和证据保留。
+
 - **2026-11-12 任务 A 修复集成（功能验收未闭环）**：基于 Main `dd6f6d45` 修复会话读取失败处理并增加脱敏 broker/退出阶段日志。解密失败保留密文，解密成功但格式非法时清理；Windows 在所属根进程存活时异步终止进程树，persistent runtime 清理经服务与主退出链完整等待。复核定向 8 文件/145 项通过，含真实 Windows 父/后代终止、无关进程隔离及待完成清理等待；改动 ESLint 与语法检查通过。
 - **证据边界**：原 Owner 的真实 Electron/DPAPI 探针验证写读、超过 60 秒读取、过期清除和同数据目录退出重开，证据 `.worktrees/electron-credential-shutdown/.tmp/electron-credential-shutdown/run-1794450580165/`（`out/phase1-result.json`、`out/phase2-result.json`）。探针使用自定义 main、同进程客户端及 `app.quit()`，早于本次复核补丁；不覆盖实际应用 renderer 退出 IPC、独立 backend、生产装配路径。本轮未重跑 Electron、生产构建或完整 E2E；客户端 5 秒超时不能中断 broker 内同步文件操作。历史读取/退出失败的确切根因仍待定位，实际应用共享阻塞未宣称解除，`PARTIAL / passes:false` 保持，后续按原剩余条件复验。
 

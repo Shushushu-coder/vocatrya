@@ -36,6 +36,8 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 ### A/B 补验准备集成（2026-11-10）
 
+**2026-11-12 B 实际应用续验与集成复核**：`cd09eb66` 加原 B 补丁的生产构建 `q5e8GhkT0CKpYa0guG7yq` 已在 Windows Electron fresh-native/full 记录正常退出 IPC、所属 backend 结束和同数据目录重开；不再只有 A 的自定义 main 探针证据。历史退出超时根因仍未证实。集成复核另修 Hosted 超时计时位置，最终补丁未重跑桌面，确切来源和边界见 P1 任务 B 条目。此证据不覆盖 JOB-CONNECTIONS、NEXT-ACTIONS、CAREER-INSIGHTS 各自业务数据退出重开、备份及原缺失场景，三项 `passes:false` 保持。
+
 **2026-11-12 共享入口修复集成**：任务 A 补齐 Windows 异步进程树清理及 persistent runtime 退出等待链，定向 8 文件/145 项通过。原隔离真实 Electron/DPAPI 探针仅覆盖自定义 main 与同进程客户端，早于集成复核补丁；本轮未执行实际应用 renderer 退出 IPC、独立 backend 或生产装配复验。不能据此宣称历史共享退出阻塞已解除；JOB-CONNECTIONS、NEXT-ACTIONS、CAREER-INSIGHTS 的实际退出重开及其他缺失证据仍待补齐，三项 `passes:false` 保持。修复与证据边界详见 [P1 实施记录](./P1_IMPLEMENTATION.md) 的任务 A 条目。
 
 **2026-11-11 Main 实测结果**：Main `21d81f5e` 的显式源码快照生产构建/装配完成，Windows Electron fresh-native/full 下 A 共25个独立UI观察步骤通过，含真实R6草稿/完成/刷新、双申请历史不漂移、实际下载/下钻和归档恢复；退出IPC/进程清理多次超时，完整退出重开未闭环。修正了测试的独立版本检查归因、语言/定位器及合成职位编辑前置。三项 `passes:false` 保持；备份/完整降级错误态等未覆盖项仍在。证据 `.tmp/main-ab-20261111/results.json`，确切脚本修改与原始失败记录保留。

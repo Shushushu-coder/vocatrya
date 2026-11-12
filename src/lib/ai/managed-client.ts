@@ -30,6 +30,11 @@ function devSessionStore(): Map<string, string | null> {
   return store;
 }
 
+// Allow a bounded OS-backed credential operation separately from the
+// Hosted HTTP budget. Desktop reopens have exceeded the old 5s allowance;
+// the exact slow stage (including DPAPI) has not been measured.
+const BROKER_CALL_TIMEOUT_MS = 20000;
+
 export class DesktopHostedSessionProvider implements HostedSessionProvider {
   private broker(): { url: URL; token: string } | null {
     const base = process.env.VOCATRYA_HOSTED_SESSION_URL;
@@ -45,7 +50,7 @@ export class DesktopHostedSessionProvider implements HostedSessionProvider {
     if (broker) {
       broker.url.searchParams.set("localUserId", localUserId);
       try {
-        const response = await fetch(broker.url, { cache: "no-store", headers: { authorization: `Bearer ${broker.token}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+        const response = await fetch(broker.url, { cache: "no-store", headers: { authorization: `Bearer ${broker.token}` }, redirect: "error", signal: AbortSignal.timeout(BROKER_CALL_TIMEOUT_MS) });
         if (response.status === 401) return null;
         if (!response.ok) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
         const body = await response.json();
@@ -74,7 +79,7 @@ export class DesktopHostedSessionProvider implements HostedSessionProvider {
       return;
     }
     try {
-      const response = await fetch(broker.url, { method: "PUT", redirect: "error", signal: AbortSignal.timeout(5000),
+      const response = await fetch(broker.url, { method: "PUT", redirect: "error", signal: AbortSignal.timeout(BROKER_CALL_TIMEOUT_MS),
         headers: { authorization: `Bearer ${broker.token}`, "content-type": "application/json" }, body: JSON.stringify({ localUserId, token }) });
       if (!response.ok) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
     } catch (error) { if (error instanceof ManagedError) throw error; throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"); }
@@ -91,7 +96,7 @@ export class DesktopHostedSessionProvider implements HostedSessionProvider {
     }
     broker.url.searchParams.set("localUserId", localUserId);
     try {
-      const response = await fetch(broker.url, { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(5000),
+      const response = await fetch(broker.url, { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(BROKER_CALL_TIMEOUT_MS),
         headers: { authorization: `Bearer ${broker.token}`, "content-type": "application/json" }, body: JSON.stringify({ expectedToken }) });
       if (!response.ok) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
     } catch { throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE"); }
@@ -140,13 +145,17 @@ export class HostedManagedClient {
     if ((url.protocol !== "https:" && !loopback) || url.username || url.password || url.search || url.hash) throw new ManagedError("MANAGED_RUNTIME_UNAVAILABLE");
     this.base = url.toString().replace(/\/$/, "");
   }
-  private async request(userId: string, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
+  private async request(userId: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number): Promise<Response> {
     const token = await this.sessions.tokenForLocalUser(userId);
     if (!token) throw new ManagedError("MANAGED_AUTH_REQUIRED");
+    // Start the Hosted budget after credential acquisition. A caller's
+    // signal is kept intact, including cancellation while awaiting the broker.
+    const requestSignal = timeoutMs === undefined ? signal : AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(signal ? [signal] : [])]);
     try {
+      requestSignal?.throwIfAborted();
       const response = await this.fetchImpl(`${this.base}/v1/${path}`, { cache: "no-store", method: body === undefined ? "GET" : "POST", redirect: "error",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body), signal });
+        body: body === undefined ? undefined : JSON.stringify(body), signal: requestSignal });
       if (!response.ok) {
         let code: unknown;
         try { const errorBody = await response.json(); const replay = receiptError(errorBody, (body as ManagedInvocation | undefined)?.invocationKey); if (replay) throw replay; code = errorBody?.code; } catch (error) { if (error instanceof ManagedError) throw error; /* no raw errors */ }
@@ -157,22 +166,22 @@ export class HostedManagedClient {
         throw new ManagedError((MANAGED_ERROR_CODES as readonly unknown[]).includes(code) ? code as typeof MANAGED_ERROR_CODES[number] : "MANAGED_RUNTIME_UNAVAILABLE");
       }
       return response;
-    } catch (error) { if (error instanceof ManagedError) throw error; throw new ManagedError(signal?.reason?.name === "TimeoutError" ? "GATEWAY_TIMEOUT" : "MANAGED_RUNTIME_UNAVAILABLE"); }
+    } catch (error) { if (error instanceof ManagedError) throw error; throw new ManagedError(requestSignal?.reason?.name === "TimeoutError" ? "GATEWAY_TIMEOUT" : "MANAGED_RUNTIME_UNAVAILABLE"); }
   }
   async identity(userId: string): Promise<string> {
-    const body = await (await this.request(userId, "session", undefined, AbortSignal.timeout(5000))).json();
+    const body = await (await this.request(userId, "session", undefined, undefined, 5000)).json();
     if (typeof body?.hostedUserId !== "string" || !body.hostedUserId.trim()) throw new ManagedError("MANAGED_AUTH_REQUIRED");
     return body.hostedUserId;
   }
   async catalog(userId: string): Promise<{ revision: string; models: ManagedModelDTO[] }> {
-    const body = await (await this.request(userId, "catalog", undefined, AbortSignal.timeout(5000))).json();
+    const body = await (await this.request(userId, "catalog", undefined, undefined, 5000)).json();
     if (!body || typeof body.revision !== "string" || !Array.isArray(body.models) || body.models.some((model: ManagedModelDTO) =>
       !model || typeof model.modelKey !== "string" || typeof model.displayName !== "string" || typeof model.enabled !== "boolean" || typeof model.available !== "boolean" ||
       !model.capabilities || ["text", "streaming", "structuredOutput", "tools"].some(key => typeof model.capabilities[key as keyof typeof model.capabilities] !== "boolean"))) throw new ManagedError("GATEWAY_RESPONSE");
     return { revision: body.revision, models: body.models.map((model: ManagedModelDTO) => ({ modelKey: model.modelKey, displayName: model.displayName, enabled: model.enabled, available: model.available, capabilities: { text: model.capabilities.text, streaming: model.capabilities.streaming, structuredOutput: model.capabilities.structuredOutput, tools: false } })) };
   }
   async bind(userId: string, input: { modelKey: string; business: string; resourceKey: string }, signal?: AbortSignal): Promise<ManagedAiProvenanceV1> {
-    const body = await (await this.request(userId, "bindings", input, signal ?? AbortSignal.timeout(10000))).json();
+    const body = await (await this.request(userId, "bindings", input, signal, signal ? undefined : 10000)).json();
     const parsed = managedAiProvenanceV1Schema.safeParse(body);
     if (!parsed.success || parsed.data.requestedModelKey !== input.modelKey) throw new ManagedError("GATEWAY_RESPONSE");
     return parsed.data;
@@ -228,7 +237,7 @@ export class HostedManagedClient {
    * fields trusted beyond their declared type, nothing invented locally.
    */
   async entitlement(userId: string): Promise<ManagedEntitlement> {
-    const body = await (await this.request(userId, "me/entitlement", undefined, AbortSignal.timeout(5000))).json();
+    const body = await (await this.request(userId, "me/entitlement", undefined, undefined, 5000)).json();
     return parseEntitlementDto(body);
   }
   /**
@@ -237,7 +246,7 @@ export class HostedManagedClient {
    * the client renders exactly what arrives.
    */
   async usage(userId: string): Promise<ManagedUsageSummary> {
-    const body = await (await this.request(userId, "me/usage", undefined, AbortSignal.timeout(5000))).json();
+    const body = await (await this.request(userId, "me/usage", undefined, undefined, 5000)).json();
     const dto = parseEntitlementDto(body, { usageSummary: true });
     const { subscriptionStatus, planKey, planRevision, quotaPlanRevision, periodStart, periodEnd, quotaLimitUnits, reservedUnits, committedUnits, remainingUnits } = dto;
     return { subscriptionStatus, planKey, planRevision, quotaPlanRevision, periodStart, periodEnd, quotaLimitUnits, reservedUnits, committedUnits, remainingUnits };

@@ -15,7 +15,7 @@ const root = path.resolve(scriptDirectory, '../..');
 const task = path.join(root, '.tmp/managed-closure-ready');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const INPUTS = ['src', 'public', 'prisma/schema.prisma', 'prisma/migrations', 'desktop/main', 'desktop/assets', 'scripts/build-fresh-native-bootstrap.mjs', 'next.config.mjs', 'next-env.d.ts', 'eslint.config.mjs', 'package.json', 'package-lock.json', 'tsconfig.json', 'postcss.config.mjs'];
-const SUPPORT = ['desktop/e2e/launcher.mjs', 'desktop/e2e/harness.mjs', 'desktop/e2e/guards.mjs', 'desktop/e2e/scenario.mjs', 'desktop/scripts/assemble.mjs', 'desktop/scripts/scan-managed-secrets.mjs', 'desktop/scripts/prisma-runtime-filter.cjs', 'scripts/managed-closure-ready/fixture.cjs', 'scripts/managed-closure-ready/managed-desktop.mjs', 'scripts/managed-closure-ready/managed-desktop-scenario.mjs'];
+const SUPPORT = ['desktop/e2e/launcher.mjs', 'desktop/e2e/harness.mjs', 'desktop/e2e/guards.mjs', 'desktop/e2e/scenario.mjs', 'desktop/scripts/assemble.mjs', 'desktop/scripts/scan-managed-secrets.mjs', 'desktop/scripts/prisma-runtime-filter.cjs', 'scripts/managed-closure-ready/fixture.cjs', 'scripts/managed-closure-ready/managed-desktop.mjs', 'scripts/managed-closure-ready/managed-desktop-scenario.mjs', 'scripts/managed-closure-ready/backend-observer.cjs', 'scripts/managed-closure-ready/scan-archive.cjs'];
 const FIXTURE_ENV = ['VOCATRYA_HOSTED_ENDPOINT', 'VOCATRYA_DESKTOP_DATA_ROOT', 'VOCATRYA_AB_RUNTIME_ENABLED', 'VOCATRYA_AB_ROLLOUT_SCOPE'];
 function invariant(value, code) { if (!value) throw Object.assign(new Error(code), { code }); }
 function inside(parent, candidate) {
@@ -110,6 +110,7 @@ async function execute(plan, owner) {
     const heavyRunId = randomUUID();
     const runBase = path.join(task, 'desktop-runs');
     const runRoot = path.join(runBase, heavyRunId);
+    const observationLog = path.join(runRoot, 'backend-observation.ndjson');
     const launches = [];
     let launchNumber = 0;
     const result = await runDesktopE2E({
@@ -137,9 +138,22 @@ async function execute(plan, owner) {
         },
         assemble: options => {
           assembleDesktopBackend(options);
+          // runRoot exists only after pre-flight; creating it earlier leaves
+          // phantom retained dirs on aborted runs (RUN_DIR_LIMIT churn).
+          if (!fs.existsSync(observationLog)) fs.writeFileSync(observationLog, '');
+          // Generated test instrumentation only: the product sources hashed
+          // above are unchanged; the backend gets an outbound observer so
+          // account-login/BYOK fallback attempts are recorded (and any
+          // non-loopback destination refused) instead of inferred from UI.
+          const server = path.join(options.outputRoot, 'backend', 'server.js');
+          const original = fs.readFileSync(server);
+          const observer = fs.readFileSync(path.join(scriptDirectory, 'backend-observer.cjs'));
+          fs.writeFileSync(path.join(path.dirname(server), 'managed-observer.cjs'), observer, { flag: 'wx' });
+          const prefix = 'require("./managed-observer.cjs").install(' + JSON.stringify({ file: observationLog }) + ');\n';
+          fs.writeFileSync(server, Buffer.concat([Buffer.from(prefix), original]));
           const file = path.join(runRoot, 'snapshot-manifest.json');
           const current = fixtureApi.read(file);
-          fixtureApi.save(file, { ...current, build: 'PASS', assembly: 'PASS', buildId: fs.readFileSync(path.join(options.repoRoot, '.next', 'BUILD_ID'), 'utf8').trim(), appRoot: options.repoRoot, assembledRoot: options.outputRoot });
+          fixtureApi.save(file, { ...current, build: 'PASS', assembly: 'PASS', buildId: fs.readFileSync(path.join(options.repoRoot, '.next', 'BUILD_ID'), 'utf8').trim(), appRoot: options.repoRoot, assembledRoot: options.outputRoot, instrumentation: { server, originalServerSha256: hash(original), observedServerSha256: hash(fs.readFileSync(server)), observerSha256: hash(observer), note: 'Generated backend entry prefix only; product source unchanged; backend non-loopback outbound guarded and observed' } });
         },
         runScenario: async ({ appRoot, runRoot: current, state }) => {
           const dataRoot = plan.manifest.nativeRoot;
@@ -167,7 +181,7 @@ async function execute(plan, owner) {
             fixtureApi.save(path.join(current, 'processes.json'), launches);
             state.instance = null;
           }
-          await runManagedScenario({ root, runRoot: current, dataRoot, state, fixtureId: plan.id, fixture: plan.manifest, selected: plan.selected, start, stop });
+          await runManagedScenario({ root, runRoot: current, dataRoot, state, fixtureId: plan.id, fixture: plan.manifest, selected: plan.selected, start, stop, observationLog });
         },
         stopDesktop: instance => stopDesktop(instance, { requireGraceful: true }),
         captureFailureArtifacts: async instance => {

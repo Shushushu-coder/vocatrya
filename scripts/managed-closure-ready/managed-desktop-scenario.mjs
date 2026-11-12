@@ -9,12 +9,13 @@ const expect = baseExpect.configure({ timeout: 30000 });
 import { register, assertDesktopSurface } from '../../desktop/e2e/scenario.mjs';
 const require = createRequire(import.meta.url);
 const { rpc, read, save, poll, jsonHttp } = require('./fixture.cjs');
+const { scanArchive } = require('./scan-archive.cjs');
 const sha = value => createHash('sha256').update(value).digest('hex');
 export async function runManagedScenario(context) {
-  const { root, runRoot, dataRoot, fixtureId, fixture, state, selected, start, stop } = context;
+  const { root, runRoot, dataRoot, fixtureId, fixture, state, selected, start, stop, observationLog } = context;
   const directory = path.join(runRoot, 'managed-evidence'); fs.mkdirSync(directory);
   const messages = read(path.join(root, 'src/i18n/messages/zh-CN.json'));
-  const steps = ['signup-native', 'key-format-vs-rejection', 'connect-default', 'quota-setup', 'quota-ui-execution', 'quota-denial-feedback', 'quota-visible-usage', 'entitlement-setup', 'past-due-feedback', 'expired-period-feedback', 'no-subscription-feedback', 'lifecycle-connect', 'refresh-renewal', 'session-expiry-ui-cleanup', 'new-key-preserves-rights', 'quit-reopen-connected', 'disconnect-ui', 'quit-reopen-disconnected'];
+  const steps = ['signup-native', 'key-format-vs-rejection', 'connect-default', 'quota-setup', 'quota-ui-execution', 'quota-denial-feedback', 'quota-visible-usage', 'competing-sources-no-fallback', 'entitlement-setup', 'past-due-feedback', 'expired-period-feedback', 'no-subscription-feedback', 'lifecycle-connect', 'refresh-renewal', 'session-expiry-ui-cleanup', 'new-key-preserves-rights', 'backup-export-privacy', 'quit-reopen-connected', 'disconnect-ui', 'quit-reopen-disconnected'];
   const results = steps.map(name => ({ name, status: 'NOT_RUN' }));
   const tokens = [];
   const identity = { name: '托管边界合成用户', email: 'managed-' + randomUUID() + '@example.test', password: 'Synthetic-' + randomUUID() + '!' };
@@ -25,6 +26,17 @@ export async function runManagedScenario(context) {
   function query(sql, ...args) {
     const db = new DatabaseSync(path.join(dataRoot, 'data', 'vocatrya.db'), { readOnly: true });
     try { return db.prepare(sql).all(...args); } finally { db.close(); }
+  }
+  function execDb(sql, ...args) {
+    const db = new DatabaseSync(path.join(dataRoot, 'data', 'vocatrya.db'));
+    try { db.exec('PRAGMA busy_timeout=15000'); return db.prepare(sql).run(...args); } finally { db.close(); }
+  }
+  // Backend outbound events recorded by the assembled-server observer since
+  // byte offset. Only loopback evidence is acceptable; any exec-channel or
+  // credential-broker call here is direct proof a fallback path was attempted.
+  function outboundEvents(offset) {
+    assert.ok(observationLog && fs.existsSync(observationLog), 'backend observation log required');
+    return fs.readFileSync(observationLog).subarray(offset).toString('utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   }
   function files() {
     const folder = path.join(dataRoot, 'config', 'hosted-sessions');
@@ -172,7 +184,7 @@ export async function runManagedScenario(context) {
     assert.equal(provenance.upstreamModelId, 'fixture-model-v1'); assert.equal(provenance.requestedModelKey, 'vocatrya-fast'); assert.ok(provenance.managedBindingId);
     note({ conversationId: row.id, managedProvenance: provenance, upstreamDelta: 1, committedUnits: 1, realModel: false });
   }
-  async function deniedTurn(pattern, expectedCode) {
+  async function deniedTurn(pattern, expectedCode, requireSubmission = false) {
     const panel = await openNewChat();
     const before = await fixtureState();
     const wireCodes = [];
@@ -188,12 +200,16 @@ export async function runManagedScenario(context) {
       const send = panel.getByRole('button', { name: messages.agent.send, exact: true });
       await expect.poll(async () => await send.isEnabled() || await panel.getByRole('alert').count() > 0).toBe(true);
       const submitted = await send.isEnabled();
+      if (requireSubmission) assert.equal(submitted, true, 'backend no-fallback requires an actual submission');
       if (submitted) {
         await expect(panel.getByRole('alert')).toHaveCount(0);
+        const response = requireSubmission ? page().waitForResponse(value => new URL(value.url()).pathname === '/api/ai/chat' && value.request().method() === 'POST') : null;
         await send.click();
+        if (response) await response;
       }
       await expect(panel.getByRole('alert').first()).toBeVisible();
       await Promise.allSettled(pending);
+      if (requireSubmission) assert.ok(wireCodes.includes(expectedCode), 'backend denial code must be observed');
       const text = (await panel.getByRole('alert').allTextContents()).join('\n');
       const after = await fixtureState();
       note({ expectedCode, observedWireCodes: wireCodes, submitted, visibleFeedback: text.slice(0, 1500), upstreamDelta: after.upstreamCount - before.upstreamCount, usageDelta: after.usage.length - before.usage.length, competingFallbackSources: 'NOT_CONFIGURED' });
@@ -241,6 +257,38 @@ export async function runManagedScenario(context) {
     await step('quota-ui-execution', () => successfulTurn(user.user));
     await step('quota-denial-feedback', () => deniedTurn(/额度|quota|QUOTA_EXCEEDED/i, 'QUOTA_EXCEEDED'), false);
     await step('quota-visible-usage', async () => { const managed = await card(); await expect(managed.locator('dd').filter({ hasText: /^1\s*\/\s*1$/ })).toBeVisible(); const current = await fixtureState(); const quota = current.quotas.find(row => row.hostedUserId === user.user); assert.equal(quota.committedUnits, 1); assert.equal(quota.reservedUnits, 0); note({ visibleUsed: '1 / 1', committedUnits: 1, reservedUnits: 0 }); });
+    await step('competing-sources-no-fallback', async () => {
+      const userId = query('SELECT id FROM "User" ORDER BY createdAt ASC LIMIT 1')[0]?.id;
+      assert.ok(userId, 'local user required to seed competing connections');
+      const now = new Date().toISOString();
+      const apiKeyId = 'key-' + randomUUID(), byokId = 'conn-' + randomUUID(), accountId = 'conn-' + randomUUID();
+      // Controlled competing sources inside the same isolated account. If the
+      // managed denial silently fell back, the backend observer records the
+      // attempt: a credential-broker unseal, an exec-channel call, a spawned
+      // runtime child, or a refused non-loopback upstream connection.
+      execDb('INSERT INTO ApiKey (id,userId,provider,encryptedKey,iv,last4,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?)', apiKeyId, userId, 'deepseek', 'synthetic-ciphertext-not-real', 'os:v1', '0000', now, now);
+      execDb('INSERT INTO AIConnection (id,userId,displayName,authType,backendKind,provider,status,credentialRef,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)', byokId, userId, 'boundary-byok', 'API_KEY', 'LOCAL_BYOK', 'DEEPSEEK', 'CONNECTED', apiKeyId, now, now);
+      execDb('INSERT INTO AIConnection (id,userId,displayName,authType,backendKind,provider,status,runtimeProfileRef,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)', accountId, userId, 'boundary-account', 'ACCOUNT_LOGIN', 'CODEX_RUNTIME', 'OPENAI', 'CONNECTED', 'codex@1.0.0', now, now);
+      try {
+        assert.ok(observationLog && fs.existsSync(observationLog), 'backend observation log required for no-fallback evidence');
+        const offset = fs.statSync(observationLog).size;
+        await deniedTurn(/额度|quota|QUOTA_EXCEEDED/i, 'QUOTA_EXCEEDED', true);
+        const events = outboundEvents(offset);
+        const incoming = events.filter(event => event.kind === 'incoming-start' && event.pathname === '/api/ai/chat' && event.method === 'POST');
+        assert.ok(incoming.length > 0, 'observer must cover the submitted backend chat request');
+        assert.ok(incoming.every(request => events.some(event => event.kind === 'incoming-finish' && event.pid === request.pid && event.requestId === request.requestId)), 'observed backend requests must finish before asserting no fallback');
+        const outbound = events.filter(event => ['fetch', 'undici', 'http-request', 'https-request', 'socket'].includes(event.kind));
+        const releaseCheck = event => event.hostname === 'api.github.com' && event.pathname === '/repos/Shushushu-coder/vocatrya/releases/latest' && event.method === 'GET';
+        const forbidden = outbound.filter(event => (/^\/(internal|credential)\//i.test(String(event.pathname)) || (!/^(localhost|127\.0\.0\.1|::1|\[::1\])$/i.test(String(event.hostname)) && !releaseCheck(event))));
+        const spawned = events.filter(event => event.kind === 'child-process');
+        note({ competingSources: ['LOCAL_BYOK', 'CODEX_RUNTIME'], competingCredentials: 'SYNTHETIC_NOT_CALLABLE', observedBackendRequests: incoming.length, outboundEvents: outbound.length, toleratedReleaseChecks: outbound.filter(releaseCheck).length, forbiddenAttempts: forbidden.map(event => `${event.kind} ${event.hostname}${event.pathname}`), childProcesses: spawned.length, competingFallbackSources: 'CONFIGURED_AND_OBSERVED' });
+        assert.equal(forbidden.length, 0, 'a managed denial must never reach the exec channel, credential broker, or a non-loopback host');
+        assert.equal(spawned.length, 0, 'managed denial must not spawn a child process');
+      } finally {
+        execDb('DELETE FROM AIConnection WHERE id IN (?,?)', byokId, accountId);
+        execDb('DELETE FROM ApiKey WHERE id = ?', apiKeyId);
+      }
+    }, false);
   });
   await group('entitlement', async () => {
     let user, period;
@@ -301,14 +349,40 @@ export async function runManagedScenario(context) {
       const managed = await card(); await expect(managed.locator('dd').filter({ hasText: /^0\s*\/\s*1000$/ })).toBeVisible();
       note({ subscriptionUnchanged: true, privacy: privacy(true) });
     }, false);
+    await step('backup-export-privacy', async () => {
+      const response = await page().request.get(state.instance.origin + '/api/backup/export?includeSensitiveData=true');
+      assert.equal(response.status(), 200, 'backup export request status');
+      const buffer = await response.body();
+      fs.writeFileSync(path.join(directory, 'backup-export.zip'), buffer);
+      const credentials = read(path.join(root, '.tmp', 'managed-closure-ready', 'runs', fixtureId, 'credentials.json'));
+      const probes = { sessionTokens: tokens.filter(Boolean), sessionCiphertext: files().map(file => fs.readFileSync(file)), fixtureCredentials: Object.values(credentials).filter(value => typeof value === 'string' && value.length >= 8) };
+      const { zip, scannedEntries } = await scanArchive(buffer, probes);
+      assert.equal(zip.file(/hosted-sessions|\.dat$/i).length, 0, 'backup must not contain hosted session files');
+      const data = JSON.parse(await zip.file('data.json').async('string'));
+      assert.equal(data.ApiKey, undefined, 'API key material must never be exported');
+      const exported = (data.AIConnection || []).filter(row => row.backendKind === 'MANAGED_GATEWAY');
+      assert.ok(exported.length >= 1, 'managed connection row expected in backup');
+      const forbidden = /key|token|secret|credential|session/i;
+      const unsafe = value => !!(value && typeof value === 'object' && Object.entries(value).some(([k, v]) => forbidden.test(k) || unsafe(v)));
+      for (const row of exported) {
+        assert.equal(row.credentialRef ?? null, null, 'exported managed row must not reference credentials');
+        assert.equal(unsafe(row.providerMetadata ? JSON.parse(row.providerMetadata) : null), false, 'exported managed providerMetadata must not carry credential-shaped fields');
+      }
+      note({ includeSensitiveData: true, bytes: buffer.length, scannedEntries, exportedManagedRows: exported.length, sessionTokensProbed: probes.sessionTokens.length, ciphertextProbed: probes.sessionCiphertext.length, backup: 'EXPORTED_AND_SCANNED' });
+    }, false);
     await step('quit-reopen-connected', async () => {
       const oldPid = state.instance.child.pid, oldOrigin = state.instance.origin;
       const encrypted = sha(fs.readFileSync(files()[0]));
       await stop(); const reopened = await start(true);
       await expect(reopened.page.getByRole('complementary').getByRole('button', { name: '用户菜单', exact: true })).toContainText(identity.email);
       const managed = await card(); await expect(managed.getByText('CONNECTED', { exact: true })).toBeVisible();
+      await expect(managed.locator('dd').filter({ hasText: /^ACTIVE$/ })).toBeVisible();
+      await expect(managed.locator('dd').filter({ hasText: /^0\s*\/\s*1000$/ })).toBeVisible();
+      const assignment = query("SELECT a.model,c.backendKind FROM AIBusinessAssignment a JOIN AIConnection c ON c.id=a.connectionId WHERE a.purpose='GLOBAL_DEFAULT' ORDER BY a.updatedAt DESC LIMIT 1")[0];
+      assert.equal(assignment?.backendKind, 'MANAGED_GATEWAY', 'model assignment must survive quit/reopen');
+      assert.equal(assignment?.model, 'vocatrya-fast', 'assigned managed model must survive quit/reopen');
       assert.equal(sha(fs.readFileSync(files()[0])), encrypted);
-      note({ oldPid, newPid: reopened.child.pid, oldOrigin, newOrigin: reopened.origin, gracefulQuitAndBackendPortClosed: true, sameDataRoot: dataRoot, privacy: privacy(true) });
+      note({ oldPid, newPid: reopened.child.pid, oldOrigin, newOrigin: reopened.origin, gracefulQuitAndBackendPortClosed: true, sameDataRoot: dataRoot, entitlementStatus: 'ACTIVE', visibleUsage: '0 / 1000', assignmentModel: 'vocatrya-fast', privacy: privacy(true) });
     });
     await step('disconnect-ui', async () => {
       const managed = await card();
@@ -328,7 +402,7 @@ export async function runManagedScenario(context) {
   });
   const failed = results.filter(row => row.status === 'FAIL');
   const blocked = results.filter(row => row.status === 'BLOCKED');
-  save(path.join(directory, 'scope.json'), { selected, failed: failed.map(row => row.name), blocked: blocked.map(row => row.name), notRun: results.filter(row => row.status === 'NOT_RUN').map(row => row.name), realAI: 'NOT_RUN', backup: 'NOT_RUN', configuredCompetingAccountOrByokFallback: 'NOT_RUN', sourceAndBuild: '../snapshot-manifest.json' });
+  save(path.join(directory, 'scope.json'), { selected, failed: failed.map(row => row.name), blocked: blocked.map(row => row.name), notRun: results.filter(row => row.status === 'NOT_RUN').map(row => row.name), realAI: 'NOT_RUN', backup: results.find(row => row.name === 'backup-export-privacy')?.status ?? 'NOT_RUN', configuredCompetingAccountOrByokFallback: results.find(row => row.name === 'competing-sources-no-fallback')?.status ?? 'NOT_RUN', sourceAndBuild: '../snapshot-manifest.json' });
   if (failed.length) throw new Error('MANAGED_DESKTOP_ASSERTIONS_FAILED_' + failed.length);
   if (blocked.length) throw new Error('MANAGED_DESKTOP_ASSERTIONS_BLOCKED_' + blocked.length);
   if (context.previouslyObservedSteps?.length) throw new Error('PARTIAL_CONTINUATION_REQUIRES_AGGREGATE_REVIEW');

@@ -20,7 +20,7 @@ function recordingFetch(handler: (request: Request) => Promise<Response> | Respo
 }
 
 beforeEach(() => { delete process.env.VOCATRYA_DEV_HOSTED_ENDPOINT; delete process.env.VOCATRYA_HOSTED_ENDPOINT; });
-afterEach(() => { vi.unstubAllEnvs(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("BETA2_MANAGED_ENDPOINT_SHUCUBED contract", () => {
   it("pins the canonical hosted endpoint to the shucubed.xyz subdomain", () => {
@@ -135,6 +135,7 @@ describe("BETA2_MANAGED_ENDPOINT_SHUCUBED contract", () => {
     const provider = new DesktopHostedSessionProvider();
     await expect(provider.tokenForLocalUser("local-a")).rejects.toMatchObject({ code: "MANAGED_AUTH_REQUIRED" });
     vi.stubEnv("VOCATRYA_HOSTED_SESSION_URL", "http://127.0.0.1:9999");
-    expect(await provider.tokenForLocalUser("local-a")).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("connection refused"); }));
+    await expect(provider.tokenForLocalUser("local-a")).rejects.toMatchObject({ code: "MANAGED_RUNTIME_UNAVAILABLE" });
   });
 });

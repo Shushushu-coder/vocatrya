@@ -50,6 +50,8 @@ node scripts/managed-closure-ready/managed-desktop.mjs execute $fixtureRun --cas
 
 临时准备包已通过 Hosted 6 文件/120 项、客户端 5 文件/83 项、服务类型检查、HTTP 17 步及桌面配置检查；迁入受控路径后重新验证准备入口。没有执行生产构建、装配或 Windows Electron。
 
-桌面脚本仍待实跑；实际备份导出检查、竞争账号/BYOK 配置下的无回退组合尚未覆盖。假上游只证明本地边界，不能冒充真实模型或正式公网服务验收。
+2026-11-12 任务 B 的历史生产构建 `q5e8GhkT0CKpYa0guG7yq` 已运行 Windows Electron fresh-native/full，原脚本记录 20/20，含正常退出 IPC 和同目录重开；HTTP 边界 17/17。证据在 `.worktrees/managed-ai-closure/.tmp/managed-closure-ready/`，确切源码、产物和覆盖边界见 Wiki。
+
+合并复核修正了三处边界：Hosted 超时从取得凭据后计时；备份须扫描所有解压条目（`scan-archive.cjs`），不能仅扫描 DEFLATE 压缩字节；无回退场景须实际提交、收到期望错误码并匹配 backend 观察记录。既有 ZIP 解压复核通过；新脚本和客户端计时修复未重跑桌面，不能把原 20/20 当作当前版本证据。原竞争连接使用不可调用的合成凭据，且未捕获响应错误码，只能提供有限无回退观察；真实可用竞争配置仍待补验。假上游不代表真实模型或正式公网服务验收。
 
 Owner 已批准“Key + 无 Key 联系客服，不做支付闭环”。Key 是会话凭证，默认 24 小时、最长 7 天，换 Key 不充值；当前周期额度冻结；订阅没有 PAUSED；普通上游错误可进入 UNKNOWN 并保留 reservation。正式套餐周期/额度/模型、客服续费及发 Key 规则仍待裁定。正式发布门、公网 endpoint 和部署需单独授权，AI-MANAGED 保持 PARTIAL / passes:false。
