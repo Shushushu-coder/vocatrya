@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "project": "Vocatrya",
+  "updatedAt": "2026-11-12",
+  "baseline": {
+    "gitRef": "79e7d5ab2b50240c6ad2cb25f5e97782bcd59a45",
+    "date": "2026-11-12",
+    "notes": "记录决策时 Main 工作区已有未提交修改；本次仅新增扩展台账，不将 HEAD 视为无 Dirty 的验收版本。"
+  },
+  "definitions": {
+    "scope": "EXTENSION_BACKLOG = 已记录的扩展方向，尚未排期实施，不属于当前 MVP/P1 必交范围。",
+    "decisionStatus": "RECORDED = 用户要求记录产品方向；具体技术选择、首批支持范围与排期见实施文档，不等于代码交付授权。",
+    "implementationStatus": "MISSING = 目标业务未接通；PARTIAL = 部分接通；IMPLEMENTED = 主业务路径已接通。",
+    "passes": "仅在对应真实用户路径和必要数据验证全部完成后设为 true；技术可行、依赖存在、代码存在或模型声称成功均不构成验收。"
+  },
+  "uiDecision": {
+    "recordedAt": "2026-11-12",
+    "navigationLabel": "扩展工具",
+    "entry": "左侧常驻主导航栏新增入口，点击后在右侧主内容区打开独立工具列表页。",
+    "layout": "自动网申、Notion、面试练习三张等宽卡片；宽度不足时换行。卡片包含图标、名称、简述、必要状态和主 CTA。",
+    "cards": [
+      { "featureId": "EXT-AUTO-APPLY", "cta": "设置与使用", "behavior": "进入工具详情页配置和使用" },
+      { "featureId": "EXT-NOTION", "cta": "连接 Notion", "connectedCta": "管理连接", "behavior": "进入工具详情页授权与管理；实际 AI 操作在现有对话中完成" },
+      { "featureId": "EXT-INTERVIEW-WEB", "cta": "开始练习", "behavior": "标明浏览器中打开，直接跳转已配置网页；地址缺失时不可用" }
+    ],
+    "acceptance": [
+      "左侧常驻导航可进入扩展工具，当前项高亮；右侧展示三张工具卡片，窄窗口无横向溢出。",
+      "复杂工具进入详情页配置，卡片不嵌入复杂表单；详情页可返回工具列表。",
+      "Notion CTA 与真实连接状态一致；面试练习明确外链行为，未配置时不产生无效跳转。"
+    ],
+    "implementationStatus": "MISSING",
+    "passes": false
+  },
+  "features": [
+    {
+      "id": "EXT-AUTO-APPLY",
+      "category": "Browser Extension / Application Autofill",
+      "title": "自动网申（自动填写，手动提交）",
+      "scope": "EXTENSION_BACKLOG",
+      "decisionStatus": "RECORDED",
+      "implementationStatus": "MISSING",
+      "description": "基于 MIT 开源项目 OpenJobAutofill 维护配套 Chrome/Edge 浏览器扩展，以连接 Vocatrya 为最终体验：应用管理资料与授权，插件在招聘网页按用户操作填写。手动导出/导入作为首阶段验证及备用方式。最终提交由用户手动完成；填写记录不直接转为已投递事实。",
+      "implementationNotes": "2026-11-12 用户同意以 OpenJobAutofill 为技术基础，速申仅作为体验与站点适配参考，取代此前从零独立实现的方向。已静态查看上游源码、MIT 许可和资料样例，参考提交 005eda98841b3671ead615ebfde5922f0dfd7c36；未安装实测，不据此承诺站点成功率或 Edge 兼容性。复用时保留版权与许可；不复制授权不明的速申代码或素材。当前仅更新文档，未实现资料转换或连接。",
+      "technicalDecision": {
+        "upstream": "https://github.com/Br1an67/OpenJobAutofill",
+        "referenceCommit": "005eda98841b3671ead615ebfde5922f0dfd7c36",
+        "license": "MIT，复用时保留上游版权及许可声明",
+        "targetExperience": "安装配套插件、与 Vocatrya 配对、选择授权资料；插件按需获取资料并在招聘网页填写。Vocatrya 为资料主来源，插件副本需标识来源、版本及同步时间。",
+        "firstStageAndFallback": "Vocatrya 生成兼容的非敏感资料 JSON，用户手动导入插件；资料更新后重新导入。该模式导入完成后可独立于桌面应用使用，不代表连接式目标已交付。",
+        "runtimeBoundary": "实时获取本机资料时需要 Vocatrya 运行；缓存和离线填写策略待实施时确定，不承诺应用关闭后仍可同步。",
+        "aiBoundary": "上游 AI 是可选字段识别辅助；默认保留本地规则路径。不会自动继承 Vocatrya 模型配置或账号授权，AI 接入及网页上下文脱敏需另行实现和验证。"
+      },
+      "dependencies": ["OpenJobAutofill 上游版本与许可保留", "职业资料与敏感信息保护", "资料格式转换及来源版本标识", "桌面与浏览器插件配对通信", "简历版本与素材选择", "ApplicationAttempt 投递事实合同"],
+      "steps": [
+        "在隔离 Chrome/Edge 配置中安装扩展；只在获授权的网站及用户触发的填写操作中运行。",
+        "从 Vocatrya 导入或经配对同步用户选定的非敏感资料；资料来源、版本及更新时间可辨认，敏感字段默认排除。",
+        "手动模式实测导出、导入及更新后重新导入；连接模式实测配对、按需同步、资料变更及断开。手动导入通过不等于连接式目标验收通过。",
+        "在选定招聘系统和通用表单样本中核对基本信息、教育及实习经历映射；预览可发现缺失及歧义，默认不覆盖用户已有输入。",
+        "实测文本、下拉、单选、日期及重复经历等首批声明支持的控件；动态新增后核对数据归属，未支持的控件明确提示人工填写。",
+        "填写后读取实际控件值并报告成功、跳过和失败；可撤销范围明确，页面变化导致无法安全撤销时不误报成功。",
+        "不自动点击提交；填写完成只记草稿或填写记录，用户确认实际投递后才通过既有业务路径建立投递事实。",
+        "连接式交付须验证撤销、跨来源拒绝、应用重开及未运行时的真实提示；断开或资料过期时状态明确，不以无认证本机接口开放资料，不静默使用过期副本。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "EXT-NOTION",
+      "category": "AI / External Integration",
+      "title": "Notion 插件配置与 AI 操作",
+      "scope": "EXTENSION_BACKLOG",
+      "decisionStatus": "RECORDED",
+      "implementationStatus": "MISSING",
+      "description": "在 Vocatrya 内配置 Notion 连接，让应用内 AI 经授权搜索、读取、创建和更新 Notion 页面及数据库记录，用于求职笔记、面试复盘和投递摘要。优先评估官方远程 MCP + OAuth；需要应用自身的客户端、工具注册及权限控制。",
+      "implementationNotes": "2026-11-12 官方文档确认提供远程 MCP 和读写工具，技术上可行；当前检查的 buildAgentTools 与角色白名单未接入 Notion。当前聊天宿主的 Notion 插件不等于 Vocatrya 已具备该能力。本次没有配置凭据、连接工作区或写入真实 Notion。",
+      "dependencies": ["应用内 MCP 客户端与 OAuth 凭据生命周期", "Agent 工具注册与角色白名单", "写入批准与执行回执", "模型/运行时工具调用兼容性"],
+      "steps": [
+        "在设置的扩展/连接区域完成 Notion 授权，展示工作区、连接及可用工具状态；凭据安全保存，退出重开后可恢复或明确要求重连。",
+        "在专用测试工作区经真实 AI 调用搜索和读取页面，核对工具调用记录及实际返回内容；超出授权或应用允许范围时拒绝执行。",
+        "AI 展示目标页面或数据库及拟写入内容，用户批准后创建页面、追加内容或更新记录；核对 Notion 实际数据、返回 ID 和可打开的链接。",
+        "验证连接能力、角色白名单、运行时及工具调用模型的交集；不支持工具调用的模式明确提示，不以普通文本回答冒充执行。",
+        "测试取消批准、失效凭据、无权限、限流、网络中断及结果未知后的核对流程，避免盲目重试造成重复页面或重复内容。",
+        "断开或撤销授权后不能继续调用，凭据不进入日志、模型提示或普通备份；外部页面内容不得提升工具权限或绕过批准。",
+        "本地数据发送至 Notion 前可审阅，默认不传敏感字段；不默认全量同步，不自动开放删除、共享权限修改或任意外部 MCP 执行。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "EXT-INTERVIEW-WEB",
+      "category": "Extensions / External Link",
+      "title": "面试练习移至扩展网页入口",
+      "scope": "EXTENSION_BACKLOG",
+      "decisionStatus": "RECORDED",
+      "implementationStatus": "MISSING",
+      "description": "隐藏应用内独立面试练习板块及其导航入口，在扩展区域提供“面试练习”链接卡片，引导用户通过网页端练习；Windows Electron 使用系统默认浏览器打开。保留历史练习数据及兼容代码，不影响职位流程中的面试事件、题库及面试复盘。",
+      "implementationNotes": "2026-11-12 用户要求评估后先记录到新增文档。静态检查确认 JourneySection 有 /dashboard/interview 入口，Electron configureNavigation 已使用 shell.openExternal 处理外部 HTTP(S) 导航；隐藏入口及网页跳转预计为小范围改动。扩展区域入口需按实际 UI 补齐；目标网页 URL、是否使用独立服务及登录方式尚未确定，不假设已有可用网页版部署。本次未修改产品代码。",
+      "dependencies": ["应用内扩展区域入口与布局", "确定的面试练习网页 HTTPS 地址", "Electron 外链打开机制"],
+      "steps": [
+        "核对桌面侧栏、移动导航、首页旅程及相关快捷入口，应用内不再暴露独立面试练习板块。",
+        "扩展区域展示“面试练习”卡片，明确将在浏览器进行练习；目标地址未配置时显示不可用状态，不跳往占位或猜测的网址。",
+        "Windows Electron 点击后由系统默认浏览器打开已确认的 HTTPS 地址，不在应用窗口嵌入第三方网页；Web 宿主使用安全的新标签页打开。",
+        "旧 /dashboard/interview 及子路由在桌面宿主提供兼容引导，不再进入原内置练习界面；若同源网页仍承载练习，不因桌面隐藏策略禁用其 Web 路由。",
+        "已有练习记录和设置不删除；职位笔试/面试事件、面试题库及复盘入口保持可用，不新增数据迁移。",
+        "跳转默认不携带本地简历、岗位数据、账号凭据或敏感查询参数；网页登录、费用及可用性按实际服务说明，不承诺账号或记录自动互通。"
+      ],
+      "passes": false
+    }
+  ]
+}
