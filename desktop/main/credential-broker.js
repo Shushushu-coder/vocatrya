@@ -138,7 +138,7 @@ function readJsonObject(raw) {
   return parsed;
 }
 
-function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes } = {}) {
+function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes, logger } = {}) {
   if (typeof token !== "string" || token.length === 0) {
     throw new Error("Credential broker authentication token is required");
   }
@@ -148,25 +148,40 @@ function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes } = {})
       : MAX_BODY_BYTES;
 
   return http.createServer(async (req, res) => {
+    // Sanitized stage log: method, path and status only — never the
+    // bearer, plaintext, or ciphertext material.
+    const pathname = req.url ? req.url.split("?")[0] : "";
+    const route = [STATUS_PATH, SEAL_PATH, UNSEAL_PATH].includes(pathname) ? pathname : "unknown-route";
+    const logResult = (status, code) => {
+      const method = ["GET", "POST"].includes(req.method) ? req.method : "OTHER";
+      try { logger?.info?.(`[credential-broker] ${method} ${route} -> ${status}${code ? ` ${code}` : ""}`); } catch { /* logging must never affect the broker */ }
+    };
+    const reply = (status, payload) => {
+      sendJson(res, status, payload);
+      logResult(status, payload && payload.code);
+    };
+    const replyError = (status, code, extra) => {
+      sendError(res, status, code, extra);
+      logResult(status, code);
+    };
     try {
       // Auth before routing: an unauthenticated caller learns nothing
       // about the surface (same convention as the hosted-session broker).
       if (!bearerMatches(req.headers.authorization, token)) {
-        sendError(res, 401, CODES.UNAUTHORIZED);
+        replyError(401, CODES.UNAUTHORIZED);
         return;
       }
-      const pathname = req.url ? req.url.split("?")[0] : "";
       const state = storageState(safeStorage);
 
       if (req.method === "GET" && pathname === STATUS_PATH) {
         if (!state.available) {
-          sendError(res, 503, CODES.STORE_UNAVAILABLE, {
+          replyError(503, CODES.STORE_UNAVAILABLE, {
             available: false,
             backend: state.backend,
           });
           return;
         }
-        sendJson(res, 200, {
+        reply(200, {
           ok: true,
           available: true,
           backend: state.backend,
@@ -178,12 +193,12 @@ function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes } = {})
         req.method !== "POST" ||
         (pathname !== SEAL_PATH && pathname !== UNSEAL_PATH)
       ) {
-        sendError(res, 404, CODES.NOT_FOUND);
+        replyError(404, CODES.NOT_FOUND);
         return;
       }
 
       if (!state.available) {
-        sendError(res, 503, CODES.STORE_UNAVAILABLE, {
+        replyError(503, CODES.STORE_UNAVAILABLE, {
           available: false,
           backend: state.backend,
         });
@@ -194,12 +209,12 @@ function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes } = {})
       try {
         raw = await readBody(req, bodyCap);
       } catch {
-        sendError(res, 413, CODES.INVALID_PAYLOAD);
+        replyError(413, CODES.INVALID_PAYLOAD);
         return;
       }
       const payload = readJsonObject(raw);
       if (!payload) {
-        sendError(res, 400, CODES.INVALID_PAYLOAD);
+        replyError(400, CODES.INVALID_PAYLOAD);
         return;
       }
 
@@ -210,7 +225,7 @@ function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes } = {})
           plaintext.length === 0 ||
           Buffer.byteLength(plaintext, "utf8") > MAX_PLAINTEXT_BYTES
         ) {
-          sendError(res, 400, CODES.INVALID_PAYLOAD);
+          replyError(400, CODES.INVALID_PAYLOAD);
           return;
         }
         let ciphertext;
@@ -218,21 +233,21 @@ function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes } = {})
           const sealed = safeStorage.encryptString(plaintext);
           ciphertext = Buffer.isBuffer(sealed) ? sealed : Buffer.from(sealed);
         } catch {
-          sendError(res, 503, CODES.STORE_UNAVAILABLE);
+          replyError(503, CODES.STORE_UNAVAILABLE);
           return;
         }
         if (ciphertext.length === 0) {
-          sendError(res, 503, CODES.STORE_UNAVAILABLE);
+          replyError(503, CODES.STORE_UNAVAILABLE);
           return;
         }
-        sendJson(res, 200, { ok: true, blob: ciphertext.toString("base64") });
+        reply(200, { ok: true, blob: ciphertext.toString("base64") });
         return;
       }
 
       // UNSEAL_PATH
       const blob = payload.blob;
       if (!isCanonicalBase64(blob, MAX_BLOB_CHARS)) {
-        sendError(res, 400, CODES.INVALID_PAYLOAD);
+        replyError(400, CODES.INVALID_PAYLOAD);
         return;
       }
       let plaintext;
@@ -241,19 +256,20 @@ function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes } = {})
       } catch {
         // The blob cannot be decrypted in this OS context — foreign user,
         // foreign machine, or corruption. Permanent, not environmental.
-        sendError(res, 422, CODES.DECRYPT_FAILED);
+        replyError(422, CODES.DECRYPT_FAILED);
         return;
       }
       if (typeof plaintext !== "string" || plaintext.length === 0) {
-        sendError(res, 422, CODES.DECRYPT_FAILED);
+        replyError(422, CODES.DECRYPT_FAILED);
         return;
       }
-      sendJson(res, 200, { ok: true, plaintext });
+      reply(200, { ok: true, plaintext });
     } catch {
       // Never leak internals — a stable code is the whole contract.
       try {
         if (!res.headersSent && !res.destroyed) {
           sendError(res, 500, CODES.STORE_UNAVAILABLE);
+          logResult(500, CODES.STORE_UNAVAILABLE);
         } else if (!res.destroyed) {
           res.end();
         }

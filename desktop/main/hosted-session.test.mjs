@@ -87,14 +87,112 @@ describe("OS-backed hosted session boundary", () => {
       expect((await fetch(broker.url + "/session?localUserId=local-a", { method: "PATCH", headers })).status).toBe(404);
     } finally { await new Promise(resolve => server ? server.close(resolve) : resolve()); fs.rmSync(directory, { recursive: true, force: true }); }
   });
-  it("fails closed with unavailable OS crypto, insecure fallback or corrupt encrypted token", () => {
+  it("fails closed with unavailable OS crypto or insecure fallback", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));
     try {
       for (const safeStorage of [{ ...storage(), isEncryptionAvailable: () => false }, { ...storage(), getSelectedStorageBackend: () => "basic_text" }]) {
         expect(() => createHostedSessionStore({ directory, safeStorage }).save("a", token)).toThrow(); expect(fs.readdirSync(directory)).toEqual([]);
       }
       const store = createHostedSessionStore({ directory, safeStorage: storage() }); store.save("a", token);
-      fs.writeFileSync(path.join(directory, fs.readdirSync(directory)[0]), "corrupt"); expect(() => store.read("a")).toThrow();
+      for (const safeStorage of [{ ...storage(), isEncryptionAvailable: () => false }, { ...storage(), getSelectedStorageBackend: () => "basic_text" }]) {
+        expect(() => createHostedSessionStore({ directory, safeStorage }).read("a")).toThrow();
+      }
     } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("converges a confirmed-dead session blob to no-session and removes it", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));
+    let server;
+    try {
+      // Content that decrypts cleanly but is not a session token is provably
+      // dead — read converges to null and drops the file.
+      const store = createHostedSessionStore({ directory, safeStorage: storage() });
+      for (const corrupt of ["corrupt", Buffer.alloc(0)]) {
+        store.save("a", token);
+        fs.writeFileSync(path.join(directory, fs.readdirSync(directory)[0]), corrupt);
+        expect(store.read("a")).toBeNull();
+        expect(fs.readdirSync(directory)).toEqual([]);
+      }
+      // The conditional clear cannot compare a dead blob, but the read's
+      // self-heal already removed it — clear reports "not cleared" honestly.
+      store.save("a", token);
+      fs.writeFileSync(path.join(directory, fs.readdirSync(directory)[0]), "corrupt");
+      expect(store.clear("a", token)).toBe(false);
+      expect(fs.readdirSync(directory)).toEqual([]);
+      // Broker level: a confirmed-dead file answers the same as no session.
+      store.save("a", token);
+      fs.writeFileSync(path.join(directory, fs.readdirSync(directory)[0]), "corrupt");
+      const broker = await startHostedSessionBroker({ token: "internal-test", store }); server = broker.server;
+      const headers = { authorization: "Bearer internal-test" };
+      expect((await fetch(broker.url + "/session?localUserId=a", { headers })).status).toBe(401);
+      expect(fs.readdirSync(directory)).toEqual([]);
+    } finally { await new Promise(resolve => server ? server.close(resolve) : resolve()); fs.rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("keeps ciphertext and fails honestly when decryption itself is unavailable", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));
+    let server;
+    try {
+      // A decrypt throw cannot be distinguished from a temporarily
+      // unavailable key — the blob must be kept and the failure surfaced
+      // as a storage error, never collapsed to "no session" + deletion.
+      const failingStorage = { ...storage(), decryptString: () => { throw new Error("os decrypt failed"); } };
+      const store = createHostedSessionStore({ directory, safeStorage: failingStorage });
+      store.save("a", token);
+      const target = path.join(directory, fs.readdirSync(directory)[0]);
+      expect(() => store.read("a")).toThrow();
+      expect(fs.existsSync(target)).toBe(true);
+      // A later working store can still recover the same session — proof
+      // the ciphertext was preserved rather than dropped.
+      expect(createHostedSessionStore({ directory, safeStorage: storage() }).read("a")).toBe(token);
+      const broker = await startHostedSessionBroker({ token: "internal-test", store }); server = broker.server;
+      const headers = { authorization: "Bearer internal-test" };
+      expect((await fetch(broker.url + "/session?localUserId=a", { headers })).status).toBe(400);
+      expect(fs.existsSync(target)).toBe(true);
+      // Conditional clear must not drop ciphertext it cannot compare.
+      expect(() => store.clear("a", token)).toThrow();
+      expect(fs.existsSync(target)).toBe(true);
+      expect(fs.readFileSync(target).length).toBeGreaterThan(0);
+    } finally { await new Promise(resolve => server ? server.close(resolve) : resolve()); fs.rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("keeps transient filesystem failures distinct from an absent session", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));
+    let server;
+    try {
+      const store = createHostedSessionStore({ directory, safeStorage: storage() });
+      store.save("a", token);
+      // A directory at the session path makes readFileSync fail with a
+      // non-ENOENT error — transient storage faults must not collapse to
+      // "no session" (which would silently desync UI and disk).
+      const target = path.join(directory, fs.readdirSync(directory)[0]);
+      fs.rmSync(target); fs.mkdirSync(target);
+      expect(() => store.read("a")).toThrow();
+      expect(fs.existsSync(target)).toBe(true);
+      const broker = await startHostedSessionBroker({ token: "internal-test", store }); server = broker.server;
+      const headers = { authorization: "Bearer internal-test" };
+      expect((await fetch(broker.url + "/session?localUserId=a", { headers })).status).toBe(400);
+      expect(fs.existsSync(target)).toBe(true);
+    } finally { await new Promise(resolve => server ? server.close(resolve) : resolve()); fs.rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("logs sanitized request results without query, bearer or session material", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "m2-session-"));
+    let server;
+    try {
+      const lines = [];
+      const logger = { info: (line) => lines.push(line) };
+      const store = createHostedSessionStore({ directory, safeStorage: storage() });
+      store.save("local-a", token);
+      const broker = await startHostedSessionBroker({ token: "internal-test", store, logger }); server = broker.server;
+      const headers = { authorization: "Bearer internal-test" };
+      await fetch(broker.url + "/session?localUserId=local-a", { headers });
+      await fetch(broker.url + "/session?localUserId=local-a");
+      await fetch(broker.url + "/" + token);
+      expect(lines.some(line => line.includes("GET /session -> 200"))).toBe(true);
+      expect(lines.some(line => line.includes("GET /session -> 401"))).toBe(true);
+      expect(lines.some(line => line.includes("GET unknown-route -> 401"))).toBe(true);
+      for (const line of lines) {
+        expect(line).not.toContain("local-a");
+        expect(line).not.toContain(token);
+        expect(line).not.toContain("internal-test");
+      }
+    } finally { await new Promise(resolve => server ? server.close(resolve) : resolve()); fs.rmSync(directory, { recursive: true, force: true }); }
   });
 });

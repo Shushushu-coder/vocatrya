@@ -521,7 +521,8 @@ if (!singleInstance) {
         getOrigin: () => backendPort ? `http://127.0.0.1:${backendPort}` : null,
       });
       hostedSessionBroker = await startHostedSessionBroker({ token: internalToken,
-        store: createHostedSessionStore({ directory: resolveHostedSessionDirectory({ isPackaged: app.isPackaged, foundationLayout, stateRoot: stateRoot() }), safeStorage }),
+        store: createHostedSessionStore({ directory: resolveHostedSessionDirectory({ isPackaged: app.isPackaged, foundationLayout, stateRoot: stateRoot() }), safeStorage, logger: console }),
+        logger: console,
       });
       // Registry-keyed runtime IPC: detection/version/status only. No
       // arbitrary command execution crosses this boundary.
@@ -562,6 +563,7 @@ if (!singleInstance) {
         credentialBroker = await startCredentialBroker({
           token: internalToken,
           safeStorage,
+          logger: console,
         });
       } catch (error) {
         console.error(
@@ -603,10 +605,11 @@ if (!singleInstance) {
       // Node/Prisma processes are never touched. Process exit releases the
       // backend's SQLite connection. A hidden window does not reach here.
       try {
-        connectionOps?.dispose?.();
+        await connectionOps?.dispose?.();
       } catch {
         // Persistent Codex children are best-effort on shutdown.
       }
+      console.log("[desktop-quit] connection service released");
       try {
         execServer?.close();
         hostedSessionBroker?.server.close();
@@ -614,16 +617,24 @@ if (!singleInstance) {
       } catch {
         // Closing the loopback listener must never block shutdown.
       }
+      console.log("[desktop-quit] loopback listeners closed");
       desktopLifecycle.dispose();
       try {
         globalToggleHotkey.dispose();
       } catch {
         // unregisterAll must never block an in-progress quit.
       }
-      await Promise.all([
+      console.log("[desktop-quit] lifecycle and hotkeys disposed");
+      const [migrationResult, backendResult] = await Promise.all([
         terminateChildTree(ownedMigrationChild),
         terminateChildTree(backend),
       ]);
+      // A resolved termination is not proof of cleanup — report what was
+      // actually confirmed so best-effort failures stay visible.
+      for (const [label, result] of [["migration", migrationResult], ["backend", backendResult]]) {
+        if (result && (!result.exited || !result.ok)) console.warn(`[desktop-quit] ${label} cleanup inconclusive (exited=${result.exited} ${result.detail})`);
+      }
+      console.log("[desktop-quit] owned processes terminated");
     },
     flushSession: () => flushDefaultSession(session.defaultSession),
     requestQuit: () => app.quit(),

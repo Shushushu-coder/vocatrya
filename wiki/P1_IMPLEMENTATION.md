@@ -98,6 +98,9 @@
 
 ### AI-MANAGED：Vocatrya 托管 AI
 
+- **2026-11-12 任务 A 修复集成（功能验收未闭环）**：基于 Main `dd6f6d45` 修复会话读取失败处理并增加脱敏 broker/退出阶段日志。解密失败保留密文，解密成功但格式非法时清理；Windows 在所属根进程存活时异步终止进程树，persistent runtime 清理经服务与主退出链完整等待。复核定向 8 文件/145 项通过，含真实 Windows 父/后代终止、无关进程隔离及待完成清理等待；改动 ESLint 与语法检查通过。
+- **证据边界**：原 Owner 的真实 Electron/DPAPI 探针验证写读、超过 60 秒读取、过期清除和同数据目录退出重开，证据 `.worktrees/electron-credential-shutdown/.tmp/electron-credential-shutdown/run-1794450580165/`（`out/phase1-result.json`、`out/phase2-result.json`）。探针使用自定义 main、同进程客户端及 `app.quit()`，早于本次复核补丁；不覆盖实际应用 renderer 退出 IPC、独立 backend、生产装配路径。本轮未重跑 Electron、生产构建或完整 E2E；客户端 5 秒超时不能中断 broker 内同步文件操作。历史读取/退出失败的确切根因仍待定位，实际应用共享阻塞未宣称解除，`PARTIAL / passes:false` 保持，后续按原剩余条件复验。
+
 - **2026-11-11 Main 实测未通过**：复用逐文件核对的 Main `21d81f5e` 生产装配，Windows Electron fresh-native/full、本地合成Hosted/假上游，合并续测证据为7 PASS/7 FAIL/2 NOT_RUN/2 BLOCKED。Key/连接、正常调用溯源和记账通过；额度耗尽提示通用错误、设置状态/用量及无权益/过期/续期反馈未通过；会话到期后密文文件清理观察超时。换Key/断开未覆盖，退出重开受A共享退出超时阻塞。fixture清理报告失败，复核相关进程已结束；不因重试或进程最终消失认定根因。真实模型未调用，PARTIAL/passes:false不变。具体证据和边界见JSON最新notes及 `.tmp/main-ab-20261111/results.json`。
 
 - **2026-11-10 准备包集成**：受控工具见 `scripts/managed-closure-ready/README.md`。补齐本地权益/额度/幂等/UNKNOWN/会话到期验证和下一阶段桌面入口；不改变发布门，不设 passes:true。旧11/01格式错误与数据根问题已由11/10补丁及复验收口，不再重复派开发。真实服务证据转存目录见 JSON 最新 notes。

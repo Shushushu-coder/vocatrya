@@ -173,6 +173,7 @@ function waitForChildExit(child, timeoutMs) {
     let timer;
     const done = () => {
       clearTimeout(timer);
+      child.removeListener("exit", done);
       resolve();
     };
     child.once("exit", done);
@@ -180,24 +181,69 @@ function waitForChildExit(child, timeoutMs) {
   });
 }
 
-function terminateChildTree(child, timeoutMs = 3_000) {
+const WINDOWS_TREE_KILL_TIMEOUT_MS = 5_000;
+
+// Best-effort tree kill for grandchildren the direct child may have left.
+// This must never run as a synchronous spawn on the Electron main event
+// loop: process creation or taskkill enumeration stalling there freezes
+// every IPC channel and the quit chain itself for the whole duration.
+// The result reports what was confirmed — callers must not mistake a
+// resolved promise for a verified cleanup.
+function killWindowsProcessTree(pid, timeoutMs = WINDOWS_TREE_KILL_TIMEOUT_MS) {
+  if (process.platform !== "win32" || !pid) return Promise.resolve({ ok: true, detail: "not-applicable" });
+  return new Promise((resolve) => {
+    let killer;
+    try {
+      killer = spawn("taskkill.exe", ["/pid", String(pid), "/t", "/f"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } catch (error) {
+      resolve({ ok: false, detail: `spawn-failed:${error?.code || "unknown"}` });
+      return;
+    }
+    let settled = false;
+    let timer;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    timer = setTimeout(() => {
+      // The killer itself is disposable — an owned child must never be
+      // kept waiting on it.
+      try { killer.kill(); } catch { /* best-effort */ }
+      finish({ ok: false, detail: `timeout:${timeoutMs}` });
+    }, timeoutMs);
+    killer.once("error", (error) => finish({ ok: false, detail: `spawn-error:${error?.code || "unknown"}` }));
+    // "Not found" does not confirm that descendants were terminated.
+    killer.once("exit", (code) => finish({ ok: code === 0, detail: `exit:${code}` }));
+  });
+}
+
+async function terminateChildTree(child, timeoutMs = 3_000) {
   if (!child) return Promise.resolve();
   const pid = child.pid;
-  if (child.exitCode === null) {
+  const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+  if (hasExited()) return { exited: true, ok: true, detail: "already-exited" };
+  // On Windows child.kill() only terminates the root. Kill the owned tree
+  // while its root is still alive so descendants remain discoverable.
+  if (process.platform === "win32" && pid) {
+    const tree = await killWindowsProcessTree(pid);
+    await waitForChildExit(child, timeoutMs);
+    return { exited: hasExited(), ...tree };
+  }
+  if (!hasExited()) {
     try {
       child.kill();
     } catch {
       // The process may have exited between the state check and kill().
     }
   }
-  return waitForChildExit(child, timeoutMs).then(() => {
-    if (process.platform === "win32" && pid) {
-      spawnSync("taskkill.exe", ["/pid", String(pid), "/t", "/f"], {
-        windowsHide: true,
-        stdio: "ignore",
-      });
-    }
-  });
+  await waitForChildExit(child, timeoutMs);
+  const exited = hasExited();
+  return { exited, ok: exited, detail: exited ? "child-exited" : "child-exit-timeout" };
 }
 
 function requestHttp(url, timeoutMs) {
@@ -320,6 +366,7 @@ module.exports = {
   toPrismaFileUrl,
   isAllowedNavigation,
   isExternalHttpUrl,
+  killWindowsProcessTree,
   resolveNodeExecutable,
   spawnBackend,
   startBackendWithRetry,

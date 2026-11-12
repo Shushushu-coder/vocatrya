@@ -102,25 +102,35 @@ function createQuitCoordinator({
     if (phase === "releasing") return;
     phase = "releasing";
     if (typeof markShuttingDown === "function") markShuttingDown();
+    // Sanitized stage log (no args, paths, or user data) so a quit stall
+    // leaves evidence of exactly which stage never completed.
+    const stage = (message) => {
+      try { logger.info?.(`[desktop-quit] ${message}`); } catch { /* logging must never affect quit */ }
+    };
+    stage("releasing owned resources");
     Promise.resolve()
       .then(async () => {
         // Each stage is isolated: a hook failure must not skip backend
         // teardown, and a teardown failure must not skip the cookie flush.
         if (typeof runReleaseHooks === "function") {
           try {
-            await runReleaseHooks();
+            const results = await runReleaseHooks();
+            const failed = Array.isArray(results) ? results.filter((entry) => !entry?.ok).length : 0;
+            stage(`release hooks completed${failed ? ` (${failed} failed)` : ""}`);
           } catch (error) {
             logger.error("Desktop release hook failed", error);
           }
         }
         try {
           await releaseResources();
+          stage("resources released");
         } catch (error) {
           logger.error("Desktop resource release failed", error);
         }
         if (typeof flushSession === "function") {
           try {
             await flushSession();
+            stage("session flushed");
           } catch (error) {
             logger.error("Desktop session flush failed", error);
           }
@@ -128,6 +138,7 @@ function createQuitCoordinator({
       })
       .finally(() => {
         phase = "released";
+        stage("requesting final quit");
         requestQuit();
       });
   }

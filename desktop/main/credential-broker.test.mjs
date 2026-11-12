@@ -37,6 +37,20 @@ async function withBroker(safeStorage, fn) {
 }
 
 describe("credential broker — seal/unseal envelope", () => {
+  it("never logs caller-supplied paths or query credentials", async () => {
+    const lines = [];
+    const broker = await startCredentialBroker({ token, safeStorage: storage(), logger: { info: line => lines.push(line) } });
+    try {
+      await fetch(`${broker.url}/${SECRET}?token=${token}`);
+      await fetch(`${broker.url}/credential/status?key=${SECRET}`, { headers: auth });
+      expect(lines).toContain("[credential-broker] GET unknown-route -> 401 UNAUTHORIZED");
+      expect(lines.join("\n")).not.toContain(SECRET);
+      expect(lines.join("\n")).not.toContain(token);
+    } finally {
+      await new Promise(resolve => broker.server.close(resolve));
+    }
+  });
+
   it("round-trips a plaintext credential through base64 ciphertext", async () => {
     await withBroker(storage(), async (url) => {
       const seal = await fetch(`${url}/credential/seal`, {

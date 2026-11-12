@@ -93,6 +93,26 @@ describe("quit coordinator", () => {
     await tick();
     expect(releaseResources).not.toHaveBeenCalled();
   });
+
+  it("emits sanitized stage lines so a stalled quit leaves evidence", async () => {
+    const lines = [];
+    const logger = { error: vi.fn(), info: (line) => lines.push(line) };
+    const coordinator = createQuitCoordinator({
+      beginQuit: () => {},
+      releaseResources: async () => {},
+      flushSession: async () => {},
+      requestQuit: () => {},
+      logger,
+    });
+    coordinator.onBeforeQuit({ preventDefault: vi.fn() });
+    await tick();
+    await tick();
+    expect(lines[0]).toBe("[desktop-quit] releasing owned resources");
+    expect(lines).toContain("[desktop-quit] resources released");
+    expect(lines).toContain("[desktop-quit] session flushed");
+    expect(lines).toContain("[desktop-quit] requesting final quit");
+    expect(lines.every((line) => line.startsWith("[desktop-quit]"))).toBe(true);
+  });
 });
 
 describe("release hooks", () => {

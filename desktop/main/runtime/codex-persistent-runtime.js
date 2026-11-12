@@ -127,6 +127,7 @@ function createCodexPersistentRuntimeManager({
   const disarmTimer = clearTimer || clearTimeout;
 
   const entries = new Map();
+  const pendingTerminations = new Set();
   // Replacement processes report why the previous child for the same
   // user/connection/model was retired. The isolation key includes version
   // and fingerprint, so the reason cannot be stored on that key.
@@ -173,7 +174,17 @@ function createCodexPersistentRuntimeManager({
     entry.child = null;
     entry.session = null;
     try {
-      terminateProcess(child);
+      // Best-effort does not mean verified — surface inconclusive cleanup
+      // instead of silently assuming the tree is gone.
+      const cleanup = Promise.resolve(terminateProcess(child)).then((outcome) => {
+        if (outcome && (!outcome.exited || !outcome.ok)) {
+          console.warn(`[desktop-quit] persistent runtime cleanup inconclusive (exited=${outcome.exited} ${outcome.detail})`);
+        }
+      }).catch(() => {
+        console.warn("[desktop-quit] persistent runtime cleanup failed");
+      });
+      pendingTerminations.add(cleanup);
+      void cleanup.then(() => pendingTerminations.delete(cleanup));
     } catch {
       // Shutdown is best-effort. The OS process tree is the fallback.
     }
@@ -558,6 +569,7 @@ function createCodexPersistentRuntimeManager({
 
   function disposeAll() {
     for (const entry of [...entries.values()]) disposeEntry(entry, "shutdown");
+    return Promise.all([...pendingTerminations]);
   }
 
   function inspect() {

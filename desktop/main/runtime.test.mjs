@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { describe, expect, it } from "vitest";
 import runtime from "./runtime.js";
 import artifacts from "./artifacts.js";
@@ -270,6 +271,42 @@ describe("owned-process termination isolation", () => {
     const exited = spawnSleeper();
     exited.kill();
     await new Promise((resolve) => exited.once("exit", resolve));
-    await expect(terminateChildTree(exited, 1_000)).resolves.toBeUndefined();
+    await expect(terminateChildTree(exited, 1_000)).resolves.toMatchObject({ exited: true, ok: true, detail: "already-exited" });
+  }, 30_000);
+
+  it("reports confirmed cleanup instead of silently assuming it", async () => {
+    const owned = spawnSleeper();
+    const result = await terminateChildTree(owned, 5_000);
+    expect(result.exited).toBe(true);
+    expect(result.ok).toBe(true);
+    // A dead root cannot anchor taskkill /t — the detail records which
+    // branch produced the clean result.
+    expect(result.detail).toBe(process.platform === "win32" ? "exit:0" : "child-exited");
+    expect(alive(owned.pid)).toBe(false);
+  }, 30_000);
+
+  it.skipIf(process.platform !== "win32")("terminates descendants before losing their owned root", async () => {
+    const parentCode = `const {spawn}=require('node:child_process');
+      const child=spawn(process.execPath,['-e','setInterval(()=>{},5000)'],{windowsHide:true,stdio:'ignore'});
+      child.once('spawn',()=>process.send(child.pid)); setInterval(()=>{},5000);`;
+    const owned = spawn(process.execPath, ["-e", parentCode], {
+      windowsHide: true, stdio: ["ignore", "ignore", "ignore", "ipc"],
+    });
+    const foreign = spawnSleeper();
+    let descendant;
+    try {
+      [descendant] = await once(owned, "message");
+      expect(alive(descendant)).toBe(true);
+      const result = await terminateChildTree(owned, 5_000);
+      expect(result).toMatchObject({ exited: true, ok: true, detail: "exit:0" });
+      expect(alive(owned.pid)).toBe(false);
+      expect(alive(descendant)).toBe(false);
+      expect(alive(foreign.pid)).toBe(true);
+    } finally {
+      await terminateChildTree(owned);
+      await terminateChildTree(foreign);
+      // This test created the descendant; clean it even if a regression orphaned it.
+      if (descendant && alive(descendant)) process.kill(descendant);
+    }
   }, 30_000);
 });

@@ -226,6 +226,26 @@ describe("CodexPersistentRuntimeManager", () => {
     return { lease, result };
   }
 
+  it("waits for pending retirement cleanup even after the entry is removed", async () => {
+    let finishCleanup;
+    manager = createCodexPersistentRuntimeManager({
+      spawnImpl: fake.spawnImpl,
+      terminateImpl: () => new Promise(resolve => { finishCleanup = resolve; }),
+      stableCwd: path.join(root, "stable"),
+      buildInvocation: (input) => codexAdapter.buildStreamingInvocation(input),
+    });
+    const { lease } = await turn();
+    manager.disposeEntry(lease.entry, "status");
+    expect(manager.inspect().size).toBe(0);
+    let disposed = false;
+    const cleanup = manager.disposeAll().then(() => { disposed = true; });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+    finishCleanup({ exited: true, ok: true });
+    await cleanup;
+    expect(disposed).toBe(true);
+  });
+
   it("spawns and initializes on the first turn, then keeps the process", async () => {
     const { lease, result } = await turn({}, { prompt: "marker-A" });
     expect(lease.kind).toBe("fresh");

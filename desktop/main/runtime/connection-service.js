@@ -1701,9 +1701,9 @@ function createConnectionService({
     executeText,
     executeTextStream,
     runtimeState,
-    dispose() {
+    async dispose() {
       try {
-        codexPersistentRuntime?.disposeAll();
+        await codexPersistentRuntime?.disposeAll();
       } catch {
         // Process-tree cleanup on quit is best-effort.
       }
