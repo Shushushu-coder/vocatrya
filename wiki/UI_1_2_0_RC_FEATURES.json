@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "project": "Vocatrya",
+  "targetVersion": "1.2.0-rc",
+  "updatedAt": "2026-11-13",
+  "proposal": "UI_1_2_0_RC_PROPOSAL.md",
+  "baseline": {
+    "gitRef": "4edf773c",
+    "date": "2026-11-13",
+    "notes": "依据聊天及用户截图整理；工作区有其他任务修改。本轮未评估产品源码或执行应用验收，版本名不代表已发布。"
+  },
+  "definitions": {
+    "scope": "RC_UI = 本轮确认的 UI 调整方向，独立记录，不改写已有功能台账。",
+    "designStatus": "CORE_CONFIRMED = 核心方向已确认；recommendation 为建议，openQuestions 为待讨论。",
+    "implementationStatus": "NOT_ASSESSED = 本轮未评估产品实现，不能理解为已实现或确定缺失。",
+    "steps": "未来验收检查点；先冻结涉及的待讨论项，不是通过记录。",
+    "passes": "本轮仅整理并提交文档，全部 false；实际条件全部满足后方可设 true。"
+  },
+  "features": [
+    {
+      "id": "UI-RC-RESUME-NAV",
+      "category": "Navigation",
+      "scope": "RC_UI",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "将简历版本从设置移到左侧主导航。",
+      "confirmedDecisions": ["简历版本成为左侧主导航入口。"],
+      "recommendation": "放在我的职位前面；保留概览快捷入口。",
+      "dependencies": [],
+      "openQuestions": ["D1"],
+      "steps": ["侧边栏直接进入简历版本，设置原入口完成迁移。", "已有版本及其关联仍可访问。"],
+      "passes": false
+    },
+    {
+      "id": "UI-RC-OVERVIEW",
+      "category": "Overview",
+      "scope": "RC_UI",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "优化概览上半部分的分组、介绍与功能入口辨识度。",
+      "confirmedDecisions": ["保留准备、行动、复盘三个标题，添加浅色标签。", "介绍使用简短大白话。", "未悬浮时也能看出功能入口可点击。", "引导语表达推荐而非要求，末尾使用 😄。"],
+      "userProposedCopy": "推荐按「准备 → 行动 → 复盘」组织求职：三个阶段随时可进入，不必按顺序完成。😄",
+      "recommendation": "准备／行动／复盘候选蓝／绿／紫浅色标签；入口使用浅底色或细边框、图标及箭头，整行可点击；压缩留白。具体介绍和润色见配套方案，未定稿。",
+      "dependencies": [],
+      "openQuestions": ["D2"],
+      "steps": ["三个原标题和浅色标签可辨认，介绍通俗。", "无悬浮时可识别并实际进入各功能。", "引导不暗示强制顺序，三个阶段均可自由进入。"],
+      "passes": false
+    },
+    {
+      "id": "UI-RC-JOB-ORDER",
+      "category": "Jobs / Ordering",
+      "scope": "RC_UI",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "我的职位加入六点手柄拖动排序和置顶／取消置顶。",
+      "confirmedDecisions": ["支持通过六点手柄拖动职位顺序。", "同时加入置顶和取消置顶。"],
+      "recommendation": "列表左侧和卡片左上提供手柄，共用并保存顺序；置顶优先、区内拖动、跨区用菜单；自定义排序显示手柄。细节待确认。",
+      "dependencies": [],
+      "openQuestions": ["D3"],
+      "steps": ["按冻结规则验证列表及卡片拖动、置顶、取消置顶。", "隔离数据重新打开后验证顺序及置顶状态。", "拖动不误触详情，排序与搜索、筛选、分页组合结果一致。", "保存失败有反馈，不虚报保存成功。"],
+      "passes": false
+    },
+    {
+      "id": "UI-RC-TAG-LAYOUT",
+      "category": "Tasks / Interview Library",
+      "scope": "RC_UI",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "待办任务与面试题库将分类竖栏改为内容顶部常驻横向标签区。",
+      "confirmedDecisions": ["保留任务分类和技能标签筛选区域。", "取消主导航与内容之间的分类竖栏。", "移到内容卡片内部、标题及工具栏下方，不改为折叠表单。", "两页视觉与交互统一，保留各自业务名称。"],
+      "recommendation": "标签显示名称及数量，以浅色选中态区分；多标签候选展示两行后原处展开，长名称提供完整提示。",
+      "dependencies": [],
+      "openQuestions": ["D4"],
+      "steps": ["两页横向标签常驻，点击筛选实际结果，选中态明确。", "多标签、长名称及窄窗口下内容可访问。", "原有筛选功能可用，主要内容不被挤压或遮挡。"],
+      "passes": false
+    },
+    {
+      "id": "UI-RC-ABOUT",
+      "category": "Settings / About",
+      "scope": "RC_UI",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "版本更新时同步设置中的关于信息。",
+      "confirmedDecisions": ["关于页版本号及相关信息与实际运行版本一致，包括 RC 标识。"],
+      "recommendation": "优先复用既有版本来源，减少手工遗漏；不在本轮升版或发布。",
+      "dependencies": [],
+      "openQuestions": ["D5"],
+      "steps": ["关于页版本号与目标产物实际版本及 RC 标识一致。", "其他版本信息按冻结范围同步，无旧版残留。"],
+      "passes": false
+    },
+    {
+      "id": "UI-RC-AVATAR",
+      "category": "Navigation / User Avatar",
+      "scope": "RC_UI",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "左下角默认人形头像改为昵称首字头像。",
+      "confirmedDecisions": ["英文昵称取第一个字母并大写。", "中文昵称取第一个字，不取拼音或多个字母。"],
+      "examples": [{ "nickname": "alice", "avatar": "A" }, { "nickname": "小明", "avatar": "小" }],
+      "recommendation": "复用现有头像容器，昵称更新后同步显示。",
+      "dependencies": [],
+      "openQuestions": ["D6"],
+      "steps": ["alice 显示 A，小明显示小。", "昵称变更后显示正确；异常昵称按冻结规则兜底，不溢出。"],
+      "passes": false
+    }
+  ],
+  "openQuestions": [
+    { "id": "D1", "status": "PENDING_DISCUSSION", "topic": "简历版本在侧边栏的准确位置及概览快捷入口保留", "recommendation": "我的职位之前，概览保留快捷入口。" },
+    { "id": "D2", "status": "PENDING_DISCUSSION", "topic": "概览最终文案、引导语润色、配色、入口样式及咨询入口调整", "recommendation": "用户原文保留为基准，其他候选见方案。" },
+    { "id": "D3", "status": "PENDING_DISCUSSION", "topic": "排序默认值和选项、跨置顶区规则、取消置顶落点、搜索筛选分页下拖动、新增位置、持久化与视图共用、上移下移", "recommendation": "置顶优先、分区内拖动、自定义排序显示手柄，共用并保存顺序。" },
+    { "id": "D4", "status": "PENDING_DISCUSSION", "topic": "多标签、长名称、窄窗口、数量口径与单选多选规则", "recommendation": "候选两行后查看全部，在原处铺开；不改为折叠表单。" },
+    { "id": "D5", "status": "PENDING_DISCUSSION", "topic": "关于页除版本号外的同步范围与同步方式", "recommendation": "复用现有版本来源；更新说明和日期等尚未冻结。" },
+    { "id": "D6", "status": "PENDING_DISCUSSION", "topic": "空昵称、前导空格、数字符号开头、混合昵称、特殊字符兜底及头像背景色", "recommendation": "保留已确认的英文首字母大写和中文首字规则，不擅自用邮箱兜底。" }
+  ],
+  "validation": {
+    "status": "NOT_RUN",
+    "targetHost": "Windows Electron",
+    "targetMode": "fresh-native",
+    "notes": "本轮只校验文档结构与内容一致性，未执行产品测试、Web 或桌面验收；后续验证按影响与授权执行。"
+  }
+}
