@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { isNewerVersion } from "@/lib/version";
 import { AppVersionInfo } from "@/models/version.model";
-import packageJson from "../../../../package.json";
+import { resolveAppVersion } from "@/lib/appVersion";
 import { log } from "@/lib/telemetry";
 
 const RELEASE_URL = `https://api.github.com/repos/${APP_CONSTANTS.GITHUB_REPO}/releases/latest`;
@@ -29,12 +29,10 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // The desktop backend receives the installed app's Electron version via
-  // VOCATRYA_APP_VERSION so the displayed version always matches the
-  // installer, even when the bundled web build was produced from a stale
-  // .next output. Other deployments fall back to the bundled package.json.
-  const current =
-    (process.env.VOCATRYA_APP_VERSION ?? "").trim() || packageJson.version;
+  // resolveAppVersion lets the packaged desktop supply the installer's
+  // Electron version so the reported version always matches the installer,
+  // even when the bundled web build was produced from a stale .next output.
+  const current = resolveAppVersion();
   let release: Awaited<ReturnType<typeof fetchLatestRelease>> = null;
 
   try {

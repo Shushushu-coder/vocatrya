@@ -57,7 +57,20 @@ afterEach(() => {
   vi.unstubAllEnvs();
   delete window.vocatryaWindow;
   delete window.vocatryaRuntime;
+  document
+    .querySelectorAll('meta[name="vocatrya-app-version"]')
+    .forEach((el) => el.remove());
 });
+
+// The settings layout emits the server-resolved running version as this
+// document meta; tests inject it directly to simulate a packaged install
+// whose bundled env value is stale.
+function setVersionMeta(content: string) {
+  const meta = document.createElement("meta");
+  meta.setAttribute("name", "vocatrya-app-version");
+  meta.setAttribute("content", content);
+  document.head.appendChild(meta);
+}
 
 describe("AboutSettings — facts", () => {
   it("renders the injected version, dev build, browser environment, and MIT license", async () => {
@@ -76,6 +89,33 @@ describe("AboutSettings — facts", () => {
       ),
     );
     expect(screen.getByTestId("about-license")).toHaveTextContent("MIT");
+  });
+
+  it("prefers the server-emitted version meta over the bundled env", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_VERSION", "1.2.0-beta.2");
+    setVersionMeta("1.2.0-rc.1");
+    renderAbout();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("about-version")).toHaveTextContent(
+        "1.2.0-rc.1",
+      ),
+    );
+    expect(screen.getByTestId("about-version")).not.toHaveTextContent(
+      "beta.2",
+    );
+  });
+
+  it("keeps the bundled version when the meta is absent or blank", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_VERSION", "9.9.9-test");
+    setVersionMeta("   ");
+    renderAbout();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("about-version")).toHaveTextContent(
+        "9.9.9-test",
+      ),
+    );
   });
 
   it("labels the Electron desktop shell once the marker resolves", async () => {
@@ -130,6 +170,21 @@ describe("AboutSettings — diagnostics copy", () => {
     expect(text).toContain("locale: en");
     expect(text).toMatch(/timezone: \S+/);
     expect(text).not.toContain("runtimes:");
+  });
+
+  it("copies the meta-resolved version, not the stale bundled one", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_VERSION", "1.2.0-beta.2");
+    setVersionMeta("1.2.0-rc.1");
+    const user = userEvent.setup();
+    stubClipboard();
+    renderAbout();
+
+    await user.click(screen.getByTestId("about-copy-diagnostics"));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).toContain("version: 1.2.0-rc.1");
+    expect(text).not.toContain("beta.2");
   });
 
   it("includes whitelisted runtime entries and reports the electron shell", async () => {

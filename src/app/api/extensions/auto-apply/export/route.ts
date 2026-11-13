@@ -1,13 +1,13 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { resolveAppVersion } from "@/lib/appVersion";
 import { assertCareerDataCopyable } from "@/lib/career/access";
 import { CareerRuntimeError } from "@/lib/career/errors";
 import { loadAutoApplySource } from "@/lib/extensions/autoApply/source";
 import { buildAutoApplyExport } from "@/lib/extensions/autoApply/convert";
 import { parseSectionSelection } from "@/lib/extensions/autoApply/sections";
 import { log } from "@/lib/telemetry";
-import packageJson from "../../../../../../package.json";
 
 /**
  * GET /api/extensions/auto-apply/export?sections=basic,education,...
@@ -37,8 +37,7 @@ export const GET = async (req: NextRequest) => {
     }
 
     const source = await loadAutoApplySource(prisma, userId);
-    const appVersion =
-      (process.env.VOCATRYA_APP_VERSION ?? "").trim() || packageJson.version;
+    const appVersion = resolveAppVersion();
     const { backup } = buildAutoApplyExport(source, selection.sections, {
       appVersion,
     });

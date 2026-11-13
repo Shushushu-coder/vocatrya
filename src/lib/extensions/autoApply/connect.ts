@@ -8,8 +8,8 @@ import {
 } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import prisma from "@/lib/db";
+import { resolveAppVersion } from "@/lib/appVersion";
 import { log } from "@/lib/telemetry";
-import packageJson from "../../../../package.json";
 import { loadAutoApplySource } from "./source";
 import { buildAutoApplyExport } from "./convert";
 import {
@@ -153,9 +153,7 @@ function clampText(value: unknown, max: number): string | null {
 }
 
 export function getAutoApplyAppVersion(): string {
-  return (
-    (process.env.VOCATRYA_APP_VERSION ?? "").trim() || packageJson.version
-  );
+  return resolveAppVersion();
 }
 
 /**

@@ -1,9 +1,17 @@
 import type { ReactNode } from "react";
 import { getServerI18n } from "@/i18n/server";
+import { resolveAppVersion } from "@/lib/appVersion";
+import { APP_CONSTANTS } from "@/lib/constants";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
-  return { title: t("nav.settings") };
+  return {
+    title: t("nav.settings"),
+    // The running version reaches the client as a document meta so the About
+    // page can prefer it over the build-time NEXT_PUBLIC_APP_VERSION — in a
+    // packaged install the two can differ (stale bundled web build).
+    other: { [APP_CONSTANTS.APP_VERSION_META_NAME]: resolveAppVersion() },
+  };
 }
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
