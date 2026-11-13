@@ -161,7 +161,7 @@ describe("extensions navigation", () => {
 
 describe("JourneySection desktop gating", () => {
   it("keeps the practice entry routed but marks it desktop-hidden", () => {
-    render(<JourneySection dataState="nonempty" jobsAbRead />);
+    render(<JourneySection jobsAbRead />);
     const practice = screen.getByTestId("journey-entry-review-practice");
     expect(practice).toHaveAttribute("href", "/dashboard/interview");
     expect(practice).toHaveClass("desktop-hidden");

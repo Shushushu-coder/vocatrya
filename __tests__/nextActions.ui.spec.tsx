@@ -6,6 +6,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import JourneySection from "@/components/dashboard/JourneySection";
+import { journeyText } from "@/components/dashboard/journeyCopy";
 import NextActions from "@/components/dashboard/NextActions";
 import {
   NEXT_ACTION_RULE,
@@ -81,7 +82,7 @@ beforeEach(() => {
 
 describe("JourneySection", () => {
   it("renders the three stage cards with real-route entries", () => {
-    render(<JourneySection dataState="nonempty" jobsAbRead />);
+    render(<JourneySection jobsAbRead />);
     expect(screen.getByTestId("journey-overview")).toBeInTheDocument();
     expect(screen.getByText("Your job-search journey")).toBeInTheDocument();
     for (const stage of ["prepare", "act", "review"]) {
@@ -105,23 +106,51 @@ describe("JourneySection", () => {
     }
   });
 
-  it("switches the intro copy between empty and populated accounts", () => {
-    const { rerender } = render(
-      <JourneySection dataState="empty" jobsAbRead />,
+  it("shows the frozen RC intro copy", () => {
+    render(<JourneySection jobsAbRead />);
+    expect(
+      screen.getByText(/Try organizing your search as Prepare/),
+    ).toBeInTheDocument();
+  });
+
+  it("serves the exact frozen zh-CN copy until the dictionary merge lands", () => {
+    const t = (key: string) => key;
+    expect(journeyText("zh-CN", t, "intro")).toBe(
+      "推荐按「准备 → 行动 → 复盘」组织求职：三个阶段随时可进入，不必按顺序完成。😄",
     );
-    expect(
-      screen.getByText(/Start with Prepare, Act, Review/),
-    ).toBeInTheDocument();
-    rerender(<JourneySection dataState="nonempty" jobsAbRead />);
-    expect(
-      screen.getByText(/Work in three stages/),
-    ).toBeInTheDocument();
+    expect(journeyText("zh-CN", t, "prepareDesc")).toBe(
+      "整理经历、准备简历，提前练好面试。",
+    );
+    expect(journeyText("zh-CN", t, "actDesc")).toBe(
+      "记录投了哪些岗位，跟进面试和待办。",
+    );
+    expect(journeyText("zh-CN", t, "reviewDesc")).toBe(
+      "记下面试问答，看看下次怎么答得更好。",
+    );
+  });
+
+  it("marks every entry with a leading icon and a trailing arrow", () => {
+    render(<JourneySection jobsAbRead />);
+    for (const testid of [
+      "journey-entry-prepare-materials",
+      "journey-entry-prepare-questions",
+      "journey-entry-act-jobs",
+      "journey-entry-act-addJob",
+      "journey-entry-act-addTask",
+      "journey-entry-review-reflection",
+    ]) {
+      // Leading affordance icon + trailing chevron keep the entries
+      // recognizable without hover (UI-RC-OVERVIEW D2).
+      expect(screen.getByTestId(testid).querySelectorAll("svg")).toHaveLength(
+        2,
+      );
+    }
   });
 
   it("hides gated entries instead of disabling them", () => {
     mocks.surfaces.jobMutationsEnabled = false;
     mocks.surfaces.resumeV1Enabled = false;
-    render(<JourneySection dataState="nonempty" jobsAbRead={false} />);
+    render(<JourneySection jobsAbRead={false} />);
     expect(
       screen.queryByTestId("journey-entry-act-addJob"),
     ).not.toBeInTheDocument();
@@ -137,7 +166,7 @@ describe("JourneySection", () => {
 
   it("opens the existing agent panel from every stage slot — nothing else", async () => {
     const user = userEvent.setup();
-    render(<JourneySection dataState="nonempty" jobsAbRead />);
+    render(<JourneySection jobsAbRead />);
     const buttons = screen.getAllByRole("button", {
       name: /Ask Vocatrya/,
     });
