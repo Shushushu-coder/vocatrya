@@ -2850,8 +2850,38 @@
           "The extension never clicks submit — you always submit the form yourself.",
           "Fill activity does not create an “applied” fact in Vocatrya.",
           "Upstream AI field matching is optional; Vocatrya neither wires in nor stores any AI credentials for the extension.",
-          "Manual import is the first-stage and fallback path; it does not mean connected sync is delivered."
+          "Connected sync needs Vocatrya running with a valid grant; manual export/import remains the fallback."
         ],
+        "connect": {
+          "title": "Browser extension connection",
+          "subtitle": "Once paired, the extension pulls the sections you granted on demand while Vocatrya runs. Revoked or expired connections cannot read data again; the extension marks stale copies clearly.",
+          "pairTitle": "New pairing",
+          "pairHint": "Pick the sections this plugin may read, generate a pairing code, then paste it into the “Vocatrya connection” card on the extension options page. The code expires in 10 minutes, works once, and must not be shared.",
+          "pairButton": "Generate pairing code",
+          "pairing": "Generating…",
+          "pairReady": "Pairing code (valid {minutes} min, shown once):",
+          "copy": "Copy",
+          "copied": "Copied",
+          "pairFailed": "Failed to generate a pairing code. Please try again.",
+          "waiting": "Waiting for the extension to finish pairing… the new connection appears below automatically.",
+          "pairExpired": "Pairing code expired — generate a new one.",
+          "connectionsTitle": "Connection status",
+          "empty": "No paired extension yet.",
+          "untitledClient": "Unnamed extension",
+          "pairedAt": "Paired at {time}",
+          "lastSync": "Last sync {time}",
+          "neverSynced": "Never synced",
+          "lastProfileVersion": "Held profile version {time}",
+          "sectionsGranted": "{count} sections granted",
+          "activeBadge": "Connected",
+          "revokedBadge": "Revoked",
+          "revoke": "Revoke",
+          "revoking": "Revoking…",
+          "revokeConfirm": "Revoking invalidates the extension's access token immediately — it cannot fetch data again. Revoke?",
+          "revokeFailed": "Revoke failed. Please try again.",
+          "manualTitle": "Manual export/import (fallback)",
+          "manualHint": "Without a connection you can still export JSON and use “Import profile backup” in the extension; re-export and re-import after profile changes."
+        },
         "readUnavailableTitle": "Export unavailable",
         "readUnavailable": "Career profile data is not readable in the current runtime mode. Check the Career Profile page first.",
         "sectionTitles": {
@@ -2871,6 +2901,7 @@
         }
       },
       "available": "Manual export available",
+      "connected": "Extension connected",
       "unavailable": "Unavailable",
       "statusError": "Status unavailable"
     },

@@ -426,6 +426,41 @@ h2 {
   font-weight: 700;
 }
 
+.connect-status {
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(216, 205, 189, 0.84);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.connect-status.is-connected {
+  border-color: rgba(15, 107, 79, 0.3);
+  color: #33594a;
+}
+
+.connect-status.is-stale {
+  border-color: rgba(195, 122, 24, 0.4);
+  color: var(--amber);
+}
+
+.connect-status.is-error {
+  border-color: rgba(176, 58, 46, 0.4);
+  color: var(--red);
+}
+
+.connect-status .connect-note {
+  display: block;
+  font-size: 12px;
+}
+
+.connect-card textarea {
+  font-size: 12px;
+}
+
 .profile-tips {
   display: grid;
   gap: 12px;

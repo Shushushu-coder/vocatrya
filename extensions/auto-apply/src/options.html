@@ -16,6 +16,20 @@
         </div>
       </header>
 
+      <section class="card connect-card" id="vocatryaCard" aria-label="Vocatrya 连接">
+        <h2>Vocatrya 连接</h2>
+        <p class="hint">与 Vocatrya 应用配对后，插件在应用运行时按需同步你授权的资料板块；撤销或断开后不能继续读取。同步是整份替换插件内资料。不连接时仍可手动导入资料备份。</p>
+        <div id="connectStatus" class="connect-status" aria-live="polite">正在读取连接状态…</div>
+        <label for="pairingInput">配对码</label>
+        <textarea id="pairingInput" rows="3" spellcheck="false" autocomplete="off" placeholder="粘贴 Vocatrya 生成的 vocatrya-auto-apply://pair?… 配对码"></textarea>
+        <div class="actions">
+          <button id="pairConnect" type="button">配对并连接</button>
+          <button id="syncProfile" class="secondary" type="button" disabled>同步资料</button>
+          <button id="disconnectConnect" class="ghost" type="button" disabled>断开连接</button>
+        </div>
+        <p id="connectFeedback" class="profile-feedback" aria-live="polite"></p>
+      </section>
+
       <section class="onboarding-guide card" aria-label="首次使用步骤">
         <div>
           <p class="eyebrow">首次使用</p>

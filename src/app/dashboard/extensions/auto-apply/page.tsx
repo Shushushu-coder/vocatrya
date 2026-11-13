@@ -6,7 +6,9 @@ import { isResumeV1CapabilityEnabled } from "@/lib/career/capabilities";
 import { getCurrentUser } from "@/utils/user.utils";
 import prisma from "@/lib/db";
 import { getAutoApplyExtensionStatus } from "@/lib/extensions/autoApply/status";
+import { listConnections } from "@/lib/extensions/autoApply/connect";
 import { AutoApplyExportPanel } from "@/components/extensions/auto-apply/AutoApplyExportPanel";
+import { AutoApplyConnectPanel } from "@/components/extensions/auto-apply/AutoApplyConnectPanel";
 import { getAutoApplyCopy } from "@/components/extensions/auto-apply/autoApplyCopy";
 
 export async function generateMetadata() {
@@ -55,6 +57,7 @@ export default async function AutoApplyDetailPage() {
   if (!status.available || !status.preview) {
     return unavailable;
   }
+  const connections = await listConnections(user.id).catch(() => []);
 
   return (
     <div className="col-span-3">
@@ -66,11 +69,14 @@ export default async function AutoApplyDetailPage() {
         </div>
         {backLink}
       </div>
-      <AutoApplyExportPanel
-        preview={status.preview}
-        pluginVersion={status.plugin.version}
-        upstreamCommit={status.plugin.upstreamCommit}
-      />
+      <div className="space-y-4">
+        <AutoApplyConnectPanel initialConnections={connections} />
+        <AutoApplyExportPanel
+          preview={status.preview}
+          pluginVersion={status.plugin.version}
+          upstreamCommit={status.plugin.upstreamCommit}
+        />
+      </div>
     </div>
   );
 }

@@ -6,7 +6,9 @@ const els = {
   clearMarksBtn: document.getElementById("clearMarksBtn"),
   updateStatus: document.getElementById("updateStatus"),
   checkUpdateBtn: document.getElementById("checkUpdateBtn"),
-  openUpdateBtn: document.getElementById("openUpdateBtn")
+  openUpdateBtn: document.getElementById("openUpdateBtn"),
+  vocatryaStatus: document.getElementById("vocatryaStatus"),
+  syncVocatryaBtn: document.getElementById("syncVocatryaBtn")
 };
 
 const DEFAULT_START_LABEL = els.startAutofillBtn.textContent;
@@ -28,13 +30,16 @@ els.checkUpdateBtn.addEventListener("click", () => {
 els.openUpdateBtn.addEventListener("click", () => {
   void openUpdatePage();
 });
+els.syncVocatryaBtn?.addEventListener("click", () => {
+  void syncVocatryaProfile();
+});
 
 initialize();
 
 async function initialize() {
   try {
     setStatus("点击开始填写后，右下角会实时显示当前是本地规则还是 AI；AI 不可用也能继续用本地规则填写。");
-    await syncUpdateStatus();
+    await Promise.allSettled([syncUpdateStatus(), syncVocatryaStatus()]);
     await syncRuntimeState();
   } catch (error) {
     setStatus(`读取页面失败：${error.message}`, true);
@@ -125,6 +130,83 @@ async function clearMarks() {
   } catch (error) {
     setStatus(`清除失败：${error.message}`, true);
   }
+}
+
+async function syncVocatryaStatus() {
+  try {
+    const result = await sendRuntimeMessage({
+      type: "OJAF_VOCATRYA_STATUS",
+      payload: { live: true }
+    });
+    renderVocatryaStatus(result?.state || { connected: false });
+  } catch {
+    renderVocatryaStatus({ connected: false, checkError: true });
+  }
+}
+
+async function syncVocatryaProfile() {
+  els.syncVocatryaBtn.disabled = true;
+  els.syncVocatryaBtn.textContent = "同步中...";
+  try {
+    const result = await sendRuntimeMessage({ type: "OJAF_VOCATRYA_SYNC" });
+    renderVocatryaStatus(result?.state || { connected: false });
+    setStatus("已从 Vocatrya 同步资料。开始填写时会使用最新同步副本。");
+  } catch (error) {
+    setStatus(`同步失败：${error.message}`, true);
+  } finally {
+    await syncVocatryaStatus();
+    els.syncVocatryaBtn.textContent = "同步资料";
+  }
+}
+
+function formatVocatryaTime(iso) {
+  if (!iso) {
+    return "";
+  }
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function renderVocatryaStatus(state = {}) {
+  if (!els.vocatryaStatus) {
+    return;
+  }
+  els.vocatryaStatus.classList.toggle("error", false);
+  els.vocatryaStatus.classList.toggle("is-new", false);
+  els.syncVocatryaBtn.hidden = !state.connected;
+  els.syncVocatryaBtn.disabled = false;
+
+  if (!state.connected) {
+    els.vocatryaStatus.textContent = state.checkError
+      ? "读取连接状态失败，可在设置页查看 Vocatrya 连接。"
+      : "未连接 Vocatrya；当前使用本机维护或手动导入的资料。";
+    return;
+  }
+  if (state.syncStatus === "revoked" || state.lastCheckStatus === "revoked") {
+    els.vocatryaStatus.textContent = "授权已撤销，插件不能继续获取资料；可在设置页重新配对。";
+    els.vocatryaStatus.classList.add("error");
+    els.syncVocatryaBtn.disabled = true;
+    return;
+  }
+  if (state.lastCheckStatus === "unreachable") {
+    els.vocatryaStatus.textContent = "已连接 Vocatrya 但应用暂未响应；仍可使用上次同步副本。";
+    els.vocatryaStatus.classList.add("is-new");
+    return;
+  }
+  if (
+    state.remoteUpdatedAt &&
+    state.syncedProfileUpdatedAt &&
+    state.remoteUpdatedAt > state.syncedProfileUpdatedAt
+  ) {
+    els.vocatryaStatus.textContent = "已连接 Vocatrya，应用内资料有更新，可重新同步。";
+    els.vocatryaStatus.classList.add("is-new");
+    return;
+  }
+  if (state.lastSyncAt) {
+    els.vocatryaStatus.textContent = `已连接 Vocatrya，上次同步 ${formatVocatryaTime(state.lastSyncAt)}。`;
+    return;
+  }
+  els.vocatryaStatus.textContent = "已连接 Vocatrya，尚未同步资料。";
 }
 
 async function syncUpdateStatus() {

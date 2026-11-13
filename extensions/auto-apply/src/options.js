@@ -27,7 +27,13 @@ const fields = {
   openUpdateButton: document.getElementById("openUpdatePage"),
   updateFeedback: document.getElementById("updateFeedback"),
   toast: document.getElementById("toast"),
-  status: document.getElementById("status")
+  status: document.getElementById("status"),
+  pairingInput: document.getElementById("pairingInput"),
+  pairConnect: document.getElementById("pairConnect"),
+  syncProfile: document.getElementById("syncProfile"),
+  disconnectConnect: document.getElementById("disconnectConnect"),
+  connectStatus: document.getElementById("connectStatus"),
+  connectFeedback: document.getElementById("connectFeedback")
 };
 
 const PROFILE_SCHEMA_VERSION = 2;
@@ -500,11 +506,21 @@ fields.checkUpdateButton?.addEventListener("click", () => {
 fields.openUpdateButton?.addEventListener("click", () => {
   void openUpdatePage();
 });
+fields.pairConnect?.addEventListener("click", () => {
+  void pairWithVocatrya();
+});
+fields.syncProfile?.addEventListener("click", () => {
+  void syncFromVocatrya();
+});
+fields.disconnectConnect?.addEventListener("click", () => {
+  void disconnectFromVocatrya();
+});
 window.addEventListener("scroll", scheduleProfileSectionSync, { passive: true });
 window.addEventListener("resize", scheduleProfileSectionSync);
 
 loadSettings();
 loadUpdateStatus();
+refreshConnectStatus();
 
 window.addEventListener("beforeunload", (event) => {
   if (!profileHasUnsavedChanges && !apiHasUnsavedChanges) {
@@ -1917,6 +1933,232 @@ function formatConnectionPreview(result) {
     parts.push(`原始响应预览:\n${String(result.contentPreview).slice(0, 3000)}`);
   }
   return parts.join("\n\n") || "连接正常，但接口没有返回可预览内容。";
+}
+
+// --- Vocatrya paired connection -------------------------------------------
+// The options page collects the pairing code and asks for the loopback
+// host permission (user gesture required). The actual exchange, profile
+// pull, and token custody stay in the background service worker — the
+// token never reaches this page, content scripts, or the filled forms.
+
+let connectBusy = false;
+
+function formatConnectTime(iso) {
+  if (!iso) {
+    return "";
+  }
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function setConnectFeedback(message, state = "") {
+  if (!fields.connectFeedback) {
+    return;
+  }
+  fields.connectFeedback.textContent = message;
+  fields.connectFeedback.classList.toggle("error", state === "error");
+  fields.connectFeedback.classList.toggle("is-dirty", state === "dirty");
+  fields.connectFeedback.classList.toggle("is-saved", state === "saved");
+}
+
+async function refreshConnectStatus(options = {}) {
+  try {
+    const result = await sendRuntimeMessage({
+      type: "OJAF_VOCATRYA_STATUS",
+      payload: { live: options.live !== false }
+    });
+    renderConnectState(result?.state || { connected: false });
+  } catch (error) {
+    renderConnectState({ connected: false });
+    setConnectFeedback(`读取连接状态失败：${error.message}`, "error");
+  }
+}
+
+function renderConnectState(state) {
+  const statusEl = fields.connectStatus;
+  if (!statusEl) {
+    return;
+  }
+  statusEl.classList.remove("is-connected", "is-stale", "is-error");
+
+  if (!state?.connected) {
+    statusEl.textContent = "未连接 Vocatrya。粘贴应用内生成的配对码完成配对；也可继续手动导入资料备份或直接维护本机资料。";
+    fields.pairConnect.disabled = connectBusy;
+    fields.syncProfile.disabled = true;
+    fields.disconnectConnect.disabled = true;
+    return;
+  }
+
+  const lines = [`已连接 ${state.appOrigin || "Vocatrya"}（授权板块 ${state.allowedSections?.length || 0} 个）`];
+  let tone = "is-connected";
+
+  if (state.lastCheckStatus === "revoked" || state.syncStatus === "revoked") {
+    tone = "is-error";
+    lines.push("授权已撤销或令牌失效，插件不能继续获取资料；本地保留的副本已标记过期，请重新配对。");
+  } else if (state.lastCheckStatus === "unreachable") {
+    tone = "is-stale";
+    lines.push("暂时无法连接 Vocatrya（应用未运行或地址变化）。仍可使用上次同步副本，恢复后请重新同步。");
+  } else if (state.lastCheckStatus === "error") {
+    tone = "is-stale";
+    lines.push("连接状态检查失败，仍可使用上次同步副本。");
+  } else if (state.careerRead === false) {
+    tone = "is-stale";
+    lines.push("Vocatrya 当前无法读取职业资料，同步会被拒绝；请检查应用内资料状态。");
+  } else if (
+    state.remoteUpdatedAt &&
+    state.syncedProfileUpdatedAt &&
+    state.remoteUpdatedAt > state.syncedProfileUpdatedAt
+  ) {
+    tone = "is-stale";
+    lines.push("Vocatrya 资料有更新，点击「同步资料」获取最新版本。");
+  }
+
+  if (state.lastSyncError) {
+    tone = state.syncStatus === "revoked" ? "is-error" : "is-stale";
+    lines.push(`上次同步失败：${state.lastSyncError}`);
+  }
+  if (state.lastSyncAt) {
+    lines.push(`上次同步 ${formatConnectTime(state.lastSyncAt)} · 资料版本 ${formatConnectTime(state.syncedProfileUpdatedAt) || "未知"}`);
+  } else if (!state.lastSyncError) {
+    lines.push("已配对，尚未同步资料。");
+  }
+
+  statusEl.innerHTML = "";
+  for (const line of lines) {
+    const span = document.createElement("span");
+    span.className = "connect-note";
+    span.textContent = line;
+    statusEl.appendChild(span);
+  }
+  statusEl.classList.add(tone);
+
+  const usable = state.syncStatus !== "revoked" && state.lastCheckStatus !== "revoked";
+  fields.pairConnect.disabled = connectBusy;
+  fields.syncProfile.disabled = connectBusy || !usable;
+  fields.disconnectConnect.disabled = connectBusy;
+}
+
+function parsePairingAppOrigin(input) {
+  let url;
+  try {
+    url = new URL(String(input || "").trim());
+  } catch {
+    throw new Error("配对码格式不正确，请完整粘贴 vocatrya-auto-apply://pair?… 内容。");
+  }
+  if (url.protocol !== "vocatrya-auto-apply:" || url.hostname !== "pair") {
+    throw new Error("配对码格式不正确，应以 vocatrya-auto-apply://pair 开头。");
+  }
+  let appUrl;
+  try {
+    appUrl = new URL(url.searchParams.get("app") || "");
+  } catch {
+    throw new Error("配对码中的应用地址无效。");
+  }
+  const host = appUrl.hostname.toLowerCase();
+  const loopback =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]" ||
+    host.endsWith(".localhost");
+  if (!loopback || (appUrl.protocol !== "http:" && appUrl.protocol !== "https:")) {
+    throw new Error("配对地址必须是本机回环地址（127.0.0.1 / localhost）。");
+  }
+  return appUrl.origin;
+}
+
+async function pairWithVocatrya() {
+  if (connectBusy) {
+    return;
+  }
+  setConnectFeedback("");
+  let appOrigin;
+  try {
+    appOrigin = parsePairingAppOrigin(fields.pairingInput.value);
+  } catch (error) {
+    setConnectFeedback(error.message, "error");
+    return;
+  }
+
+  connectBusy = true;
+  renderConnectState(await cachedConnectState());
+  try {
+    const granted = await requestOptionalPermissions({ origins: [`${appOrigin}/*`] });
+    if (!granted) {
+      setConnectFeedback("未授予访问应用地址的权限，配对未完成。", "error");
+      return;
+    }
+    const result = await sendRuntimeMessage({
+      type: "OJAF_VOCATRYA_PAIR",
+      payload: { pairing: fields.pairingInput.value }
+    });
+    fields.pairingInput.value = "";
+    renderConnectState(result?.state || { connected: false });
+    setConnectFeedback("配对成功。点击「同步资料」获取你授权的资料板块。", "saved");
+  } catch (error) {
+    setConnectFeedback(`配对失败：${error.message}`, "error");
+    await refreshConnectStatus({ live: false });
+  } finally {
+    connectBusy = false;
+    await refreshConnectStatus({ live: false });
+  }
+}
+
+async function cachedConnectState() {
+  try {
+    const result = await sendRuntimeMessage({
+      type: "OJAF_VOCATRYA_STATUS",
+      payload: { live: false }
+    });
+    return result?.state || { connected: false };
+  } catch {
+    return { connected: false };
+  }
+}
+
+async function syncFromVocatrya() {
+  if (connectBusy) {
+    return;
+  }
+  connectBusy = true;
+  renderConnectState(await cachedConnectState());
+  setConnectFeedback("正在从 Vocatrya 同步资料…", "dirty");
+  try {
+    const result = await sendRuntimeMessage({ type: "OJAF_VOCATRYA_SYNC" });
+    await loadSettings();
+    renderConnectState(result?.state || (await cachedConnectState()));
+    const notes = result?.report?.unsupported?.length
+      ? `；${result.report.unsupported.length} 类资料因无对应映射未同步（详见应用内说明）`
+      : "";
+    setConnectFeedback(`已同步资料到本机${notes}。`, "saved");
+  } catch (error) {
+    await refreshConnectStatus({ live: false });
+    setConnectFeedback(error.message || "同步失败，请稍后重试。", "error");
+  } finally {
+    connectBusy = false;
+    await refreshConnectStatus({ live: false });
+  }
+}
+
+async function disconnectFromVocatrya() {
+  if (connectBusy) {
+    return;
+  }
+  const confirmed = window.confirm("断开需要 Vocatrya 确认撤销访问令牌，请保持应用运行；插件内已同步的副本仍保留在本机。确认断开？");
+  if (!confirmed) {
+    return;
+  }
+  connectBusy = true;
+  try {
+    await sendRuntimeMessage({ type: "OJAF_VOCATRYA_DISCONNECT" });
+    renderConnectState({ connected: false });
+    setConnectFeedback("已断开连接，访问令牌已撤销。如需再次使用请重新配对。", "saved");
+  } catch (error) {
+    setConnectFeedback(`断开失败：${error.message}`, "error");
+  } finally {
+    connectBusy = false;
+    await refreshConnectStatus({ live: false });
+  }
 }
 
 function sendRuntimeMessage(message) {
