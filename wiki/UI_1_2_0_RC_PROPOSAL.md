@@ -90,6 +90,6 @@ D1/D2/D3/D4/D6 可按本轮冻结规则安排实施；D5 后续实施前先解�
 
 ## 本轮验收收口（2026-11-13）
 
-2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.worktrees/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。
+2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.tmp/worktree-closure/retained/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。
 
 导航5、头像8、概览13、分类区11、职位排序11项通过，五项 passes:true；关于页 D5 未冻结、未执行，仍为 false。此前“未执行”记录为历史集成阶段状态，以本节及 JSON 最新记录为准。本轮仅复核已有桌面证据，未重复构建或启动 Electron。

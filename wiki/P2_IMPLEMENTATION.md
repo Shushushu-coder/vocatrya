@@ -40,7 +40,7 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 - **源码与修改归属**：`.worktrees/p2-business-closure`，分支 `codex/p2-business-closure`，基线 `79e7d5ab`。未提交内容仅为 `scripts/p2-closure-ready/desktop-closure.mjs`（新增）及 `desktop-run.mjs`、`desktop-scenarios.mjs`、`package.mjs`、`ui-r6.mjs` 的驱动/夹具扩展，尚未审查集成，无产品代码修改。本次仅登记状态，不恢复执行或授权新构建。
 - **已核对证据**：Windows Electron / fresh-native/full / 隔离生产快照，run `closure-20261112-10` 的检查记录合计场景 01–26 PASS；场景 27 FAIL，驱动定位器已修但未运行时复验。已覆盖职位关联主链、简历/JD 历史不漂移、真实下载、缺失材料、R6 生命周期、真实设置 UI 的 LA→Shanghai 动态日期分桶，以及账户时区与业务数据重开保持。场景 22 为真实备份导出与解压隐私扫描，不能替代备份导入恢复；场景 19/23/24/25 为退出重开核对，26 为 `AB_READY_DISABLED` 读面与写门控。
-- **证据位置**：`.worktrees/p2-business-closure/.tmp/p2-closure-ready/runs/closure-20261112-10/checks/`；对应 `heavy/ee42b4f3-112f-4bcc-bd24-e9531fae7fb5/` 保留日志、trace、备份和 `p2-*-graceful-quit.json`。run-09 保留 01–25 PASS/26 FAIL 对照；run-04/06/07 的早期失败不覆盖、不删除。run-12 构建中被终止，`heavy/2e5fb2ca-d560-4fc0-831a-f7ab4be0e066/` 仅部分产物，不能作为可复用完整构建。
+- **证据位置**：`.tmp/worktree-closure/retained/p2-business-closure/.tmp/p2-closure-ready/runs/closure-20261112-10/checks/`；对应 `heavy/ee42b4f3-112f-4bcc-bd24-e9531fae7fb5/` 保留日志、trace、备份和 `p2-*-graceful-quit.json`。run-09 保留 01–25 PASS/26 FAIL 对照；run-04/06/07 的早期失败不覆盖、不删除。run-12 构建中被终止，`heavy/2e5fb2ca-d560-4fc0-831a-f7ab4be0e066/` 仅部分产物，不能作为可复用完整构建。
 - **驱动缺陷与边界**：执行窗口报告修正 userSettings 嵌套形状、`check().result` 取值、模式枚举/blocked 状态、隐私扫描子串误报及 R5 的 INTERVIEW 夹具，并有后续通过记录。场景 27 的 myjobs blocked 定位器修正仍未复验；不把它记为产品修复或验收通过。本轮 0 个已证实产品缺陷，不代表全部失败路径已排除。
 
 | Feature | 当前结论 | 剩余条件 |
