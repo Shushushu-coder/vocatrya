@@ -37,11 +37,14 @@ export async function runR6(instance, { runRoot }) {
     if (expected) {
       await expect(page.getByTestId('next-actions')).toBeVisible();
       await expect(page.getByTestId(targetId)).toBeVisible();
-      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(1);
+      // R5 (upcoming INTERVIEW step) coexists with the R6 candidate.
+      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(2);
       await expect(page.getByTestId('next-actions-overflow')).toHaveCount(0);
     } else {
-      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(0);
-      await expect(page.getByTestId('next-actions')).toHaveCount(0);
+      // R6 completed leaves the real R5 item; the block stays honest.
+      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(1);
+      await expect(page.getByTestId(targetId)).toHaveCount(0);
+      await expect(page.getByTestId('next-actions')).toBeVisible();
       await expect(page.getByTestId('next-actions-overflow')).toHaveCount(0);
     }
     return await page.locator('[data-testid^="next-action-"]').evaluateAll(nodes => nodes.map(node => ({ id: node.getAttribute('data-testid'), text: node.textContent, href: node.getAttribute('href') })));
@@ -105,7 +108,7 @@ export async function runR6(instance, { runRoot }) {
       await page.reload({ waitUntil: 'load' });
       await expect(page.getByTestId('journey-overview')).toBeVisible();
       await expect(page.getByTestId(targetId)).toBeVisible();
-      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(1);
+      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(2);
       await expect(page.getByTestId('next-actions-overflow')).toHaveCount(0);
       await openFromCandidate();
       await expect(page.getByTestId('interview-reflection-overall')).toHaveValue(draftText);
@@ -128,8 +131,8 @@ export async function runR6(instance, { runRoot }) {
       await page.reload({ waitUntil: 'load' });
       await expect(page.getByTestId('journey-overview')).toBeVisible();
       await expect(page.getByTestId(targetId)).toHaveCount(0);
-      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(0);
-      await expect(page.getByTestId('next-actions')).toHaveCount(0);
+      await expect(page.locator('[data-testid^="next-action-"]')).toHaveCount(1);
+      await expect(page.getByTestId('next-actions')).toBeVisible();
       const persisted = await detail();
       assert.equal(persisted.reflectionText, draftText);
       assert(persisted.reflectionCompletedAt);
