@@ -20,13 +20,13 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 | Feature | P2 相对优先级 | 设计状态 | 核心交付 | 实现/验收口径 |
 | --- | --- | --- | --- | --- |
 | **JOURNEY-OVERVIEW** | CORE | 合同已冻结（2026-11-01，D1–D9） | 三阶段旅程、一页主要入口、新旧用户状态 | 2026-11-10 已验收（以 JSON 的实际覆盖范围为准） |
-| **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 2026-11-12 部分验收通过；备份导入恢复未执行，任务 C 已终止待续 |
+| **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 2026-11-13 验收收口 `passes:true`（run closure-20261112-10，37/37，基线 79e7d5ab） |
 | **INTERVIEW-DEBRIEF** | HIGH | 联合合同已冻结（D1–D12） | 真实面试逐轮复盘与经验沉淀 | 2026-11-10 已验收（以 JSON 的实际覆盖范围为准） |
-| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 2026-11-12 部分验收通过；模式/错误路径仍缺覆盖，任务 C 已终止待续 |
-| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 2026-11-12 部分验收通过；动态时区及重开通过，降级/错误恢复待验 |
+| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 2026-11-13 验收收口 `passes:true`（同上 run，含 36–37 模式覆盖） |
+| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 2026-11-13 验收收口 `passes:true`（同上 run，含 blocked/错误恢复 29–32） |
 | **MULTI-AGENT** | HIGH | 合同已冻结（D1–D10） | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 2026-11-10 已验收（以 JSON 的实际覆盖范围为准） |
 
-对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。当前六项均已实现并集成；JOURNEY-OVERVIEW、INTERVIEW-DEBRIEF、MULTI-AGENT 为 `passes:true`，其余三项为 `passes:false`；实现与集成不等于真实 Windows Electron 功能验收通过。各项变更及验证边界以 JSON 的 implementationNotes 为准。
+对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。当前六项均已实现并集成且全部 `passes:true`；验收证据基线与边界以 JSON 的 implementationNotes 为准。
 
 **2026-10-31 合同提案**：[`P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md`](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md) 覆盖 JOURNEY-OVERVIEW / NEXT-ACTIONS（D1–D9）；[`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) 覆盖 JOB-CONNECTIONS / INTERVIEW-DEBRIEF（D1–D12）。2026-11-01 已收敛两份提案并新增 [MULTI-AGENT 合同](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)（D1–D10）。面试 D6 与概览 D3 已统一协调建议为仅 COMPLETED 计入待复盘、过期未完成仅提示确认状态；仍须 Owner 同一次批准，不代表已冻结。若 D2-a 显式完成标记获批，首页 R6 等待领域接口，不用内容存在性过渡。Schema/备份和双语词典各指定唯一 Owner，跨包顺序交接；Electron 重型验证仍串行。2026-11-01 另集成 [CAREER-INSIGHTS 合同提案](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md)（核查基线 main@b3219dc2，D1–D9 待裁定），指标主表面复用 analytics、首页 O5 共享读模型，M9 等待复盘领域接口。G-AI1 既有归档隔离缺口已独立修复集成（8b09faf1），不再列为 P-A 重复开发任务；验证与并发边界见 P2_FEATURES.json 的 INTERVIEW-DEBRIEF implementationNotes，不代表 P2 功能验收。
 
@@ -34,7 +34,9 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 **2026-11-10 三 Agent 集成收口**：纳入 `6f7b3bbd` 及复核修复，完成角色槽位、首页阶段入口、双语词条，以及首次创建/切换/上下文异步竞态和草稿刷新恢复。10 文件/189 项定向测试、完整类型检查及改动文件 ESLint 通过；当前 Main 对照复现 5 项既有断言失败，不记为全绿。六项 P2 Feature 均保持 `passes: false`，真实桌面、生产构建、完整 E2E 和真实 AI 调用未执行；待集中验收。
 
-### 任务 C：部分验收通过，已终止待续（2026-11-12）
+### 任务 C：验收收口完成（2026-11-13；以下保留 2026-11-12 待续记录与最终结论）
+
+**2026-11-13 收口**：续测在同一工作树完成——驱动新增 `continue-authorized`（复用 run-10 完整构建 heavy/ee42b4f3 与既有 01–26 证据，不重建产品产物），复验场景 27（resume_v1 blocked 面，定位器修正后 PASS）并执行 28–37：scope=none 等价、blocked 降级、R6 读失败静默、页面错误路径与恢复、故障回退后新读取、第二隔离数据根真实备份导入恢复（恢复关系/附件元数据/UI，Artifact 字节按合同不在备份内，下载如实 404 `ARTIFACT_BYTES_MISSING`、提交事实不漂移）、Legacy-only 与迁移态 full 覆盖。`desktop-scenario-status.json` 全部 37 场景 PASS，FAIL→PASS 重试记录保留于 `attempts`；`desktop-continuation-result.json` `ok:true`。驱动随 76a4b4ee 集成 main；main HEAD 受影响定向 spec 111/111 通过。JOB-CONNECTIONS / NEXT-ACTIONS / CAREER-INSIGHTS 均置 `passes:true`，证据与基线边界见 JSON implementationNotes。
 
 - **源码与修改归属**：`.worktrees/p2-business-closure`，分支 `codex/p2-business-closure`，基线 `79e7d5ab`。未提交内容仅为 `scripts/p2-closure-ready/desktop-closure.mjs`（新增）及 `desktop-run.mjs`、`desktop-scenarios.mjs`、`package.mjs`、`ui-r6.mjs` 的驱动/夹具扩展，尚未审查集成，无产品代码修改。本次仅登记状态，不恢复执行或授权新构建。
 - **已核对证据**：Windows Electron / fresh-native/full / 隔离生产快照，run `closure-20261112-10` 的检查记录合计场景 01–26 PASS；场景 27 FAIL，驱动定位器已修但未运行时复验。已覆盖职位关联主链、简历/JD 历史不漂移、真实下载、缺失材料、R6 生命周期、真实设置 UI 的 LA→Shanghai 动态日期分桶，以及账户时区与业务数据重开保持。场景 22 为真实备份导出与解压隐私扫描，不能替代备份导入恢复；场景 19/23/24/25 为退出重开核对，26 为 `AB_READY_DISABLED` 读面与写门控。

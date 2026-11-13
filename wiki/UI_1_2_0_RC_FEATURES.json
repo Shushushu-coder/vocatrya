@@ -118,7 +118,7 @@
       "category": "Settings / About",
       "scope": "RC_UI",
       "designStatus": "CORE_CONFIRMED",
-      "implementationStatus": "NOT_ASSESSED",
+      "implementationStatus": "IMPLEMENTED",
       "description": "版本更新时同步设置中的关于信息。",
       "confirmedDecisions": [
         "关于页版本号及相关信息与实际运行版本一致，包括 RC 标识。"
@@ -132,6 +132,7 @@
         "关于页版本号与目标产物实际版本及 RC 标识一致。",
         "其他版本信息按冻结范围同步，无旧版残留。"
       ],
+      "implementationNotes": "2026-11-13 Main 集成 codex/ui-rc-about @ 831df5a3（merge 92d638e7）：新增 src/lib/appVersion.ts 单一解析点（VOCATRYA_APP_VERSION→package.json，预发布/RC 标识原样透传不截断）；settings layout generateMetadata 以 document meta 下发服务端解析版本，AboutSettings 挂载后优先采用该值，覆盖打包安装中 bundle env 过期场景；api/version 路由与 auto-apply export/connect 的手工版本副本收敛到同一来源。版本号未升、未发布，D5（版本号外同步范围）未实现仍待裁定。定向验证：appVersion.spec 3 项+aboutSettings.spec 12 项全过，完整 tsc 与改动文件 ESLint 通过。未执行生产构建、真实 UI 或安装产物版本核对，passes 保持 false。",
       "passes": false
     },
     {
