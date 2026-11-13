@@ -21,6 +21,7 @@ export const getJobsList = async (
   titleValue?: string,
   locationValue?: string,
   sourceValue?: string,
+  sortBy?: string,
 ): Promise<any | undefined> => {
   try {
     const user = await requireUser();
@@ -35,6 +36,7 @@ export const getJobsList = async (
       titleValue,
       locationValue,
       sourceValue,
+      sortBy,
     });
     if (result.blocked) {
       const { t } = await getServerI18n();

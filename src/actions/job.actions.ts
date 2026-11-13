@@ -12,6 +12,8 @@ export { addJob, updateJob, deleteJobById } from "./job/mutations";
 
 export { updateJobStatus, saveJobMatchResult } from "./job/status";
 
+export { reorderJob, setJobPinned } from "./job/ordering";
+
 export {
   getStatusList,
   getJobSourceList,

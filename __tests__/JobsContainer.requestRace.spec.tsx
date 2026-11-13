@@ -272,8 +272,7 @@ describe("JobsContainer request race protection", () => {
     await navigate(rerender, "/dashboard/myjobs?filter=interview");
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(2));
     expect(getJobsList).toHaveBeenLastCalledWith(
-      1, 25, "interview", undefined, undefined, undefined, undefined, undefined, undefined,
-    );
+      1, 25, "interview", undefined, undefined, undefined, undefined, undefined, undefined, "custom");
 
     // B lands first and renders the new list.
     await settle(1, ok([makeJob("b-1")], 1));
@@ -299,8 +298,7 @@ describe("JobsContainer request race protection", () => {
     await triggerSentinel();
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(2));
     expect(getJobsList).toHaveBeenLastCalledWith(
-      2, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-    );
+      2, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "custom");
     await navigate(rerender, "/dashboard/myjobs?filter=interview");
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(3));
 
@@ -329,8 +327,7 @@ describe("JobsContainer request race protection", () => {
     });
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(4));
     expect(getJobsList).toHaveBeenLastCalledWith(
-      1, 25, "interview", undefined, undefined, undefined, undefined, undefined, undefined,
-    );
+      1, 25, "interview", undefined, undefined, undefined, undefined, undefined, undefined, "custom");
     await settle(3, ok([makeJob("retried")], 1));
     await waitFor(() =>
       expect(
@@ -376,15 +373,13 @@ describe("JobsContainer request race protection", () => {
     await act(async () => rerender(jsx()));
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(2));
     expect(getJobsList).toHaveBeenLastCalledWith(
-      1, 25, undefined, "Ama", undefined, undefined, undefined, undefined, undefined,
-    );
+      1, 25, undefined, "Ama", undefined, undefined, undefined, undefined, undefined, "custom");
 
     // A URL filter change lands while the debounced search request flies.
     await navigate(rerender, "/dashboard/myjobs?search=Ama&filter=interview");
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(3));
     expect(getJobsList).toHaveBeenLastCalledWith(
-      1, 25, "interview", "Ama", undefined, undefined, undefined, undefined, undefined,
-    );
+      1, 25, "interview", "Ama", undefined, undefined, undefined, undefined, undefined, "custom");
 
     await settle(2, ok([makeJob("latest")], 1));
     await waitFor(() => expect(rowNumbers()).toHaveLength(1));
@@ -414,8 +409,7 @@ describe("JobsContainer request race protection", () => {
     });
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(3));
     expect(getJobsList).toHaveBeenLastCalledWith(
-      1, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-    );
+      1, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "custom");
 
     // The stale page-2 response lands while the refresh is still loading:
     // it must not append onto (or replace) the list being rebuilt.
@@ -453,8 +447,7 @@ describe("JobsContainer request race protection", () => {
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(3));
     // Retry re-requests page 2 under the same generation, not page 1.
     expect(getJobsList).toHaveBeenLastCalledWith(
-      2, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-    );
+      2, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "custom");
     await settle(2, ok([makeJob("page2-row")], 26));
     await waitFor(() => expect(rowNumbers()).toHaveLength(26));
     expect(
@@ -508,8 +501,7 @@ describe("JobsContainer request race protection", () => {
     // The committed query change still refetches once it actually lands.
     await waitFor(() => expect(getJobsList).toHaveBeenCalledTimes(2));
     expect(getJobsList).toHaveBeenLastCalledWith(
-      1, 25, "interview", undefined, undefined, undefined, undefined, undefined, undefined,
-    );
+      1, 25, "interview", undefined, undefined, undefined, undefined, undefined, undefined, "custom");
   }, 15_000);
 
   it("does not append rows whose id is already in the list", async () => {

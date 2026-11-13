@@ -3,8 +3,8 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { createJobRecord } from "@/lib/jobs/createJobRecord";
 import { isFullAbCapabilityEnabled } from "@/lib/career/capabilities";
-import { CAREER_RUNTIME_MODE } from "@/lib/career/identities";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
+import { assertJobMutationsAllowed } from "@/lib/career/jobMutationGate";
 import { assertLegacyCareerWriteAllowed } from "@/lib/career/writeGuard";
 import {
   archiveOpportunity,
@@ -16,7 +16,6 @@ import {
   CAREER_COVER_LETTER_UNSUPPORTED_MESSAGE,
   CAREER_TAGS_UNSUPPORTED_MESSAGE,
   CAREER_WRITE_DENIED_MESSAGE,
-  careerMutationDeniedMessage,
 } from "@/lib/career/userMessages";
 import { AddJobFormValues } from "@/models/addJobForm.schema";
 import { revalidatePath } from "next/cache";
@@ -73,17 +72,6 @@ function normalizeOptionalFk(value?: string | null): string | null | undefined {
   if (value == null) return value;
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
-}
-
-function assertJobMutationsAllowed(mode: string): void {
-  if (mode === CAREER_RUNTIME_MODE.AB_ENABLED) return;
-  if (mode === CAREER_RUNTIME_MODE.LEGACY_ONLY) return;
-  throw new CareerRuntimeError(
-    mode === CAREER_RUNTIME_MODE.BLOCKED
-      ? "CAREER_RUNTIME_BLOCKED"
-      : "JOB_MUTATIONS_DISABLED",
-    careerMutationDeniedMessage(mode),
-  );
 }
 
 type JobRefs = {

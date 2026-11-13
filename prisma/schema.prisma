@@ -456,6 +456,13 @@ model Job {
   tags          Tag[]
   contactLinks  JobContact[]
 
+  // My Jobs custom ordering + pin (UI-RC-JOB-ORDER). NULL sortOrder means
+  // "unpositioned": the row displays at the front of the normal section in
+  // createdAt-desc order until the first ordering write materializes it.
+  // pinnedAt non-null puts the row in the pinned section, ordered by sortOrder.
+  sortOrder     Int?
+  pinnedAt      DateTime?
+
   // Automation discovery fields
   automationId    String?
   automation      Automation? @relation(fields: [automationId], references: [id], onDelete: SetNull)
@@ -817,6 +824,12 @@ model JobOpportunity {
   notes      String?
   archivedAt DateTime?
   createdVia String?
+
+  // Same My Jobs ordering contract as Job.sortOrder/pinnedAt — the jobs list
+  // reads whichever family the runtime serves. The legacy migrator carries
+  // both columns so a custom order survives the legacy → canonical move.
+  sortOrder Int?
+  pinnedAt  DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

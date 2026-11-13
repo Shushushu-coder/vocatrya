@@ -5,6 +5,7 @@ import { JOB_TYPES } from "@/models/job.model";
 import { CAREER_RUNTIME_MODE } from "./identities";
 import { CareerRuntimeError } from "./errors";
 import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "./userMessages";
+import { orderRowsByCreatedAt, orderRowsForDisplay } from "@/lib/jobs/jobOrder";
 import {
   getOpportunityAsJob,
   listOpportunitiesAsJobs,
@@ -27,7 +28,12 @@ export type JobsListFilters = {
   titleValue?: string;
   locationValue?: string;
   sourceValue?: string;
+  // "custom" = the user's saved drag/pin order. Any other value keeps the
+  // existing createdAt-desc listing order.
+  sortBy?: string;
 };
+
+export const JOBS_SORT_CUSTOM = "custom";
 
 function hideUnanalyzedScore<
   T extends { matchScore: number | null; matchData: string | null },
@@ -120,6 +126,7 @@ const JOB_LIST_SELECT = {
   matchScore: true,
   matchData: true,
   discoveryStatus: true,
+  pinnedAt: true,
   _count: { select: { Notes: true } },
 };
 
@@ -322,6 +329,7 @@ export async function listJobs(
   const normalized = appliedSelected
     ? { ...options, filter: undefined, appliedOnly: true }
     : options;
+  const customOrder = normalized.sortBy === JOBS_SORT_CUSTOM;
   if (family === "ab") {
     const { data, total } = await listOpportunitiesAsJobs(db, userId, {
       skip: normalized.skip,
@@ -333,11 +341,49 @@ export async function listJobs(
       titleValue: normalized.titleValue,
       locationValue: normalized.locationValue,
       sourceValue: normalized.sourceValue,
+      orderBy: customOrder ? "custom" : normalized.sortBy === "createdAtDesc" ? "pinnedCreatedAtDesc" : undefined,
     });
     return { blocked: false as const, data, total };
   }
 
   const whereClause = buildLegacyJobsWhere(userId, normalized);
+  if (customOrder || normalized.sortBy === "createdAtDesc") {
+    // Two-stage read: order the filtered rows by the persisted ordering
+    // contract, slice out the requested page of ids, then fetch the page's
+    // full projections. Rows without a stored position keep the existing
+    // createdAt-desc order ahead of positioned ones, so the first custom
+    // view is identical to the pre-feature list.
+    const [meta, total] = await Promise.all([
+      db.job.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          createdAt: true,
+          sortOrder: true,
+          pinnedAt: true,
+        },
+      }),
+      db.job.count({ where: whereClause }),
+    ]);
+    const pageIds = (customOrder ? orderRowsForDisplay(meta) : orderRowsByCreatedAt(meta))
+      .slice(normalized.skip ?? 0, (normalized.skip ?? 0) + (normalized.take ?? meta.length))
+      .map((row) => row.id);
+    const rows = pageIds.length
+      ? await db.job.findMany({
+          where: { id: { in: pageIds } },
+          select: JOB_LIST_SELECT,
+        })
+      : [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return {
+      blocked: false as const,
+      data: pageIds.flatMap((id) => {
+        const row = byId.get(id);
+        return row ? [hideUnanalyzedScore(row)] : [];
+      }),
+      total,
+    };
+  }
   const [data, total] = await Promise.all([
     db.job.findMany({
       where: whereClause,

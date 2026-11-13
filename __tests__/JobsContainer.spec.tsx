@@ -377,7 +377,7 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Amazon", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Amazon", undefined, undefined, undefined, undefined, undefined, "custom");
       });
     });
 
@@ -395,7 +395,7 @@ describe("JobsContainer Search Functionality", () => {
       });
 
       // Initial call should not have search parameter
-      expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined);
+      expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "custom");
     });
 
     it("should trigger search when clearing search term after searching", async () => {
@@ -424,7 +424,7 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Test", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Test", undefined, undefined, undefined, undefined, undefined, "custom");
       });
 
       // Clear the search input → the search param is removed from the URL
@@ -442,7 +442,7 @@ describe("JobsContainer Search Functionality", () => {
 
       // Should call with undefined when cleared after having searched
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "custom");
       });
     });
   });
@@ -475,11 +475,11 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined, "custom");
       });
 
       // Now change filter — the status selection lands in the URL
-      const filterTrigger = screen.getByRole("combobox");
+      const filterTrigger = screen.getByTestId("job-filter-select");
       await act(async () => {
         await user.click(filterTrigger);
       });
@@ -496,7 +496,7 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", "Developer", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", "Developer", undefined, undefined, undefined, undefined, undefined, "custom");
       });
     });
 
@@ -525,11 +525,11 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Amazon", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Amazon", undefined, undefined, undefined, undefined, undefined, "custom");
       });
 
       // Change filter
-      const filterTrigger = screen.getByRole("combobox");
+      const filterTrigger = screen.getByTestId("job-filter-select");
       await act(async () => {
         await user.click(filterTrigger);
       });
@@ -542,7 +542,7 @@ describe("JobsContainer Search Functionality", () => {
 
       // Search term should still be present
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, "interview", "Amazon", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, "interview", "Amazon", undefined, undefined, undefined, undefined, undefined, "custom");
       });
     });
 
@@ -571,7 +571,7 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       // Set a filter
-      const filterTrigger = screen.getByRole("combobox");
+      const filterTrigger = screen.getByTestId("job-filter-select");
       await act(async () => {
         await user.click(filterTrigger);
       });
@@ -583,7 +583,7 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", "Developer", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", "Developer", undefined, undefined, undefined, undefined, undefined, "custom");
       });
 
       // Now clear filter by selecting None
@@ -605,7 +605,7 @@ describe("JobsContainer Search Functionality", () => {
 
       // Filter should be cleared but search preserved
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined, "custom");
       });
     });
   });
@@ -762,7 +762,7 @@ describe("JobsContainer Search Functionality", () => {
       // Wait for the search fetch to fully resolve before scrolling — the
       // infinite-scroll guard ignores intersections while a load is running.
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined, "custom");
       });
       await waitFor(() => {
         expect(screen.getByText(/of 50\s+jobs/)).toBeInTheDocument();
@@ -776,7 +776,7 @@ describe("JobsContainer Search Functionality", () => {
           [{ isIntersecting: true }] as IntersectionObserverEntry[],
           {} as IntersectionObserver,
         );
-        expect(getJobsList).toHaveBeenCalledWith(2, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(2, 25, undefined, "Developer", undefined, undefined, undefined, undefined, undefined, "custom");
       });
     });
   });
@@ -811,7 +811,7 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "test", undefined, undefined, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, "test", undefined, undefined, undefined, undefined, undefined, "custom");
       });
     });
   });
@@ -828,7 +828,7 @@ describe("JobsContainer Search Functionality", () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, "google", true, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, "google", true, undefined, undefined, undefined, "custom");
       });
     });
 
@@ -903,10 +903,10 @@ describe("JobsContainer Search Functionality", () => {
       const { rerender } = renderComponent();
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, "google", true, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, "google", true, undefined, undefined, undefined, "custom");
       });
 
-      const filterTrigger = screen.getByRole("combobox");
+      const filterTrigger = screen.getByTestId("job-filter-select");
       await act(async () => {
         await user.click(filterTrigger);
       });
@@ -925,7 +925,7 @@ describe("JobsContainer Search Functionality", () => {
       rerender(jsx());
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", undefined, "google", true, undefined, undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, "applied", undefined, "google", true, undefined, undefined, undefined, "custom");
       });
     });
   });
@@ -942,7 +942,7 @@ describe("JobsContainer Search Functionality", () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, true, "full stack developer", undefined, undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, true, "full stack developer", undefined, undefined, "custom");
       });
     });
 
@@ -1000,7 +1000,7 @@ describe("JobsContainer Search Functionality", () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, true, undefined, "remote", undefined);
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, true, undefined, "remote", undefined, "custom");
       });
     });
 
@@ -1058,7 +1058,7 @@ describe("JobsContainer Search Functionality", () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, true, undefined, undefined, "indeed");
+        expect(getJobsList).toHaveBeenCalledWith(1, 25, undefined, undefined, undefined, true, undefined, undefined, "indeed", "custom");
       });
     });
 
@@ -1158,8 +1158,7 @@ describe("JobsContainer Search Functionality", () => {
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(
           1, 25, "interview", "Amazon",
-          undefined, undefined, undefined, undefined, undefined,
-        );
+          undefined, undefined, undefined, undefined, undefined, "custom");
       });
       // The search input mirrors the URL.
       expect(screen.getByPlaceholderText("Search jobs...")).toHaveValue(
@@ -1192,8 +1191,7 @@ describe("JobsContainer Search Functionality", () => {
       await waitFor(() => {
         expect(getJobsList).toHaveBeenCalledWith(
           1, 25, undefined, undefined, "google",
-          undefined, undefined, undefined, undefined,
-        );
+          undefined, undefined, undefined, undefined, "custom");
       });
     });
   });

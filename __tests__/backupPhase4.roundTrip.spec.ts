@@ -431,6 +431,20 @@ function migrateOpts() {
 }
 
 describe("Phase 4 v2 backup / restore round-trip", () => {
+  it("round-trips custom order and pin facts for both job families", async () => {
+    const pinnedAt = new Date("2026-11-13T00:00:00.000Z");
+    await prisma.job.updateMany({ where: { userId }, data: { sortOrder: 7, pinnedAt } });
+    await prisma.jobOpportunity.updateMany({ where: { userId }, data: { sortOrder: 3, pinnedAt } });
+    const { buffer } = await buildBackupZip(userId, "phase4@example.com");
+    await importBackup(buffer, userId, "phase4@example.com", true);
+    const legacy = await prisma.job.findMany({ where: { userId } });
+    const canonical = await prisma.jobOpportunity.findMany({ where: { userId } });
+    expect(legacy.length).toBeGreaterThan(0);
+    expect(canonical.length).toBeGreaterThan(0);
+    expect(legacy.every((row) => row.sortOrder === 7 && row.pinnedAt?.getTime() === pinnedAt.getTime())).toBe(true);
+    expect(canonical.every((row) => row.sortOrder === 3 && row.pinnedAt?.getTime() === pinnedAt.getTime())).toBe(true);
+  }, 120_000);
+
   it("preserves builder visibility and lineage as values while remapping row identities", async () => {
     const section = await prisma.resumeVariantSection.findFirstOrThrow({ where: { version: { resumeVariant: { userId } } }, include: { items: { include: { expressions: true } } } });
     const hiddenAt = new Date("2026-10-29T00:00:00.000Z");

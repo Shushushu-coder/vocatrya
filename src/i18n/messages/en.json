@@ -412,6 +412,14 @@
     "nextActionR7Detail": "A configured AI service is currently unusable. Manual use is unaffected."
   },
   "jobs": {
+    "sortBy": "Sort",
+    "sortCustom": "Custom order",
+    "sortCreatedAt": "Recently created",
+    "clearFiltersToReorder": "Clear filters to drag and reorder",
+    "dragToReorder": "Drag to reorder",
+    "pinned": "Pinned",
+    "pinJob": "Pin to top",
+    "unpinJob": "Unpin",
     "title": "Jobs",
     "pageTitle": "My Jobs",
     "allJobs": "All Jobs",

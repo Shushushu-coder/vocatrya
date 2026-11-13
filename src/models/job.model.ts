@@ -73,6 +73,8 @@ export interface JobResponse {
   contactLinks?: JobContactLink[];
   createdVia?: string | null;
   discoveryStatus?: string | null;
+  /** UI-RC-JOB-ORDER: non-null = the job sits in the pinned section. */
+  pinnedAt?: Date | null;
   descriptionCompleteness?: DescriptionCompleteness | null;
   _count?: { Notes?: number };
   /** Canonical A+B compat projection — present on JobOpportunity views only.

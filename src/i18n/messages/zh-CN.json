@@ -412,6 +412,14 @@
     "nextActionR7Detail": "已配置的 AI 服务当前不可用，不影响手动使用。"
   },
   "jobs": {
+    "sortBy": "排序",
+    "sortCustom": "自定义排序",
+    "sortCreatedAt": "最近创建",
+    "clearFiltersToReorder": "清除筛选后可拖动排序",
+    "dragToReorder": "拖动排序",
+    "pinned": "已置顶",
+    "pinJob": "置顶",
+    "unpinJob": "取消置顶",
     "title": "我的职位",
     "pageTitle": "我的职位",
     "allJobs": "全部职位",

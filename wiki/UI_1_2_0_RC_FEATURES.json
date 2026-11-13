@@ -68,7 +68,7 @@
       "category": "Jobs / Ordering",
       "scope": "RC_UI",
       "designStatus": "CONFIRMED",
-      "implementationStatus": "NOT_ASSESSED",
+      "implementationStatus": "IMPLEMENTED",
       "description": "我的职位加入六点手柄拖动排序和置顶／取消置顶。",
       "confirmedDecisions": [
         "默认自定义排序，首次沿用既有顺序；新增职位放普通区最前。",
@@ -86,7 +86,8 @@
         "拖动不误触详情，排序与搜索、筛选、分页组合结果一致。",
         "保存失败有反馈，不虚报保存成功。"
       ],
-      "passes": false
+      "passes": false,
+      "implementationNotes": "2026-11-13 用户授权检查、提交并集成 D，来源 codex/ui-rc-job-order@b06a59e6（基于 9373798f），集成基线 main@1826fdf7。Job/JobOpportunity 新增 sortOrder/pinnedAt，Migration 20261113220000_add_job_ordering；默认自定义排序、分区置顶、列表/卡片共享持久化、Legacy→canonical 字段携带与备份可选字段兼容。集成修复无限滚动跨页拖动和页首锚点、普通区乐观更新越过置顶区、重叠写入/跨查询失败回滚、日期排序的置顶优先；合入 8 项双语键并移除临时兜底。7 文件/207 项定向测试通过（包含真实备份导出/导入往返、Legacy/canonical 隔离数据、分页、并发及读请求回归），类型检查及改动文件 ESLint 通过。隔离新库 67 条迁移成功，四列就位；首次缺少 SQLite 文件时部署失败，创建隔离空文件后部署通过。未访问真实库；未执行真实 Web/Electron 拖动、Electron 退出重开、生产构建或 E2E，passes:false。"
     },
     {
       "id": "UI-RC-TAG-LAYOUT",
@@ -234,6 +235,6 @@
     "status": "TARGETED_CHECKS_ONLY",
     "targetHost": "Windows Electron",
     "targetMode": "fresh-native",
-    "notes": "2026-11-13 Main 组合定向测试 16 文件/267 项通过；完整非增量 tsc --noEmit --incremental false、改动文件 ESLint 与 git diff --check 通过。未执行 Web 或 Windows Electron 实测、生产构建或 E2E。标签布局/窄窗口、任务 URL 联动及导航头像真实 UI 待验收。"
+    "notes": "2026-11-13 Main 组合定向测试 16 文件/267 项通过；完整非增量 tsc --noEmit --incremental false、改动文件 ESLint 与 git diff --check 通过。未执行 Web 或 Windows Electron 实测、生产构建或 E2E。标签布局/窄窗口、任务 URL 联动及导航头像真实 UI 待验收。 职位排序另完成 7 文件/207 项定向检查、隔离新库迁移及两模型备份往返；真实拖动及 Electron 退出重开待验收。"
   }
 }
