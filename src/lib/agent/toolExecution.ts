@@ -43,6 +43,85 @@ function evaluateExisting(
 }
 
 /**
+ * Generic durable execution reservation for an approval-gated write tool.
+ * Same semantics as acquireMatchJobExecution, parameterized by toolName so
+ * EXT-NOTION writes share the (conversationId, toolName, turnKey) ledger —
+ * one execution of a given tool per persisted turn, replay on identical
+ * input, conflict on re-proposed input.
+ */
+export async function acquireToolExecution(
+  db: Db,
+  input: {
+    userId: string;
+    conversationId: string;
+    toolName: string;
+    turnKey: string;
+    inputHash: string;
+    operationPrefix: string;
+  },
+): Promise<AcquireToolExecutionResult> {
+  return db.$transaction(async (tx) => {
+    await tx.agentToolExecution.updateMany({
+      where: {
+        conversationId: input.conversationId,
+        toolName: input.toolName,
+        status: AGENT_TOOL_EXECUTION_STATUS.PENDING,
+        turnKey: { not: input.turnKey },
+      },
+      data: {
+        status: AGENT_TOOL_EXECUTION_STATUS.ABORTED,
+        completedAt: new Date(),
+      },
+    });
+
+    const existing = await tx.agentToolExecution.findUnique({
+      where: {
+        conversationId_toolName_turnKey: {
+          conversationId: input.conversationId,
+          toolName: input.toolName,
+          turnKey: input.turnKey,
+        },
+      },
+    });
+    if (existing) return evaluateExisting(existing, input.inputHash);
+
+    try {
+      const created = await tx.agentToolExecution.create({
+        data: {
+          userId: input.userId,
+          conversationId: input.conversationId,
+          toolName: input.toolName,
+          turnKey: input.turnKey,
+          inputHash: input.inputHash,
+          operationKey: `${input.operationPrefix}:${randomUUID()}`,
+          status: AGENT_TOOL_EXECUTION_STATUS.PENDING,
+        },
+      });
+      return { state: "fresh", execution: created } as const;
+    } catch (error) {
+      // A concurrent execute on the same turn lost the create race — the
+      // winner's row is authoritative, re-read it and take its path.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const winner = await tx.agentToolExecution.findUnique({
+          where: {
+            conversationId_toolName_turnKey: {
+              conversationId: input.conversationId,
+              toolName: input.toolName,
+              turnKey: input.turnKey,
+            },
+          },
+        });
+        if (winner) return evaluateExisting(winner, input.inputHash);
+      }
+      throw error;
+    }
+  });
+}
+
+/**
  * Create or reuse the durable match_job execution for one persisted turn.
  *
  * The dedupe identity is (conversationId, toolName, turnKey) where turnKey
@@ -63,64 +142,13 @@ export async function acquireMatchJobExecution(
     inputHash: string;
   },
 ): Promise<AcquireToolExecutionResult> {
-  return db.$transaction(async (tx) => {
-    await tx.agentToolExecution.updateMany({
-      where: {
-        conversationId: input.conversationId,
-        toolName: MATCH_JOB_TOOL_NAME,
-        status: AGENT_TOOL_EXECUTION_STATUS.PENDING,
-        turnKey: { not: input.turnKey },
-      },
-      data: {
-        status: AGENT_TOOL_EXECUTION_STATUS.ABORTED,
-        completedAt: new Date(),
-      },
-    });
-
-    const existing = await tx.agentToolExecution.findUnique({
-      where: {
-        conversationId_toolName_turnKey: {
-          conversationId: input.conversationId,
-          toolName: MATCH_JOB_TOOL_NAME,
-          turnKey: input.turnKey,
-        },
-      },
-    });
-    if (existing) return evaluateExisting(existing, input.inputHash);
-
-    try {
-      const created = await tx.agentToolExecution.create({
-        data: {
-          userId: input.userId,
-          conversationId: input.conversationId,
-          toolName: MATCH_JOB_TOOL_NAME,
-          turnKey: input.turnKey,
-          inputHash: input.inputHash,
-          operationKey: `match-analysis:${randomUUID()}`,
-          status: AGENT_TOOL_EXECUTION_STATUS.PENDING,
-        },
-      });
-      return { state: "fresh", execution: created } as const;
-    } catch (error) {
-      // A concurrent execute on the same turn lost the create race — the
-      // winner's row is authoritative, re-read it and take its path.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        const winner = await tx.agentToolExecution.findUnique({
-          where: {
-            conversationId_toolName_turnKey: {
-              conversationId: input.conversationId,
-              toolName: MATCH_JOB_TOOL_NAME,
-              turnKey: input.turnKey,
-            },
-          },
-        });
-        if (winner) return evaluateExisting(winner, input.inputHash);
-      }
-      throw error;
-    }
+  return acquireToolExecution(db, {
+    userId: input.userId,
+    conversationId: input.conversationId,
+    toolName: MATCH_JOB_TOOL_NAME,
+    turnKey: input.turnKey,
+    inputHash: input.inputHash,
+    operationPrefix: "match-analysis",
   });
 }
 

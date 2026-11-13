@@ -67,6 +67,9 @@ model User {
 
   // REM-V1 persistent schedule reminders (additive backrelation only).
   reminders             Reminder[]
+
+  // EXT-NOTION dedicated Notion extension connection (additive backrelation only).
+  notionConnection      NotionConnection?
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -1819,6 +1822,47 @@ model AgentToolExecution {
 
   @@unique([conversationId, toolName, turnKey])
   @@index([userId, status])
+}
+
+/// EXT-NOTION: one Notion MCP connection per user. OAuth client registration
+/// ids and workspace metadata are stored in plain columns; the access/refresh
+/// token bundle and the in-flight OAuth flow are sealed by the credential
+/// store (same envelope as BYOK keys: safeStorage on desktop, app cipher on
+/// web). Never returned to the renderer, never logged, excluded from backup.
+model NotionConnection {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  status              String   @default("DISCONNECTED")
+  workspaceId         String?
+  workspaceName       String?
+  workspaceIcon       String?
+  notionUserId        String?
+  botId               String?
+  grantedScope        String?
+  // Dynamically-registered OAuth client id (not secret). A client_secret,
+  // when Notion issues one, lives inside the sealed credential bundle.
+  oauthClientId       String?
+  // Remote tool names from the last successful tools/list (JSON array).
+  availableTools      String?
+  // Sealed token bundle: {accessToken, refreshToken?, expiresAt?, clientSecret?}.
+  encryptedCredential String?
+  credentialIv        String?
+  // Sealed in-flight OAuth flow: {state, codeVerifier, redirectUri, appOrigin, expiresAt}.
+  pendingCipher       String?
+  pendingIv           String?
+  // sha256 hex of the pending state, so the loopback callback can look the
+  // flow up without unsealing every row.
+  pendingStateHash    String?
+  lastVerifiedAt      DateTime?
+  lastUsedAt          DateTime?
+  connectedAt         DateTime?
+  lastError           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([pendingStateHash])
 }
 
 model DeepMatchDetail {

@@ -50,7 +50,24 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
   AgentRole,
   readonly string[]
 > = {
-  insight: ["list_jobs", "get_job", "get_resume", "review_resume", "match_job"],
-  pilot: ["list_jobs", "get_job", "add_job"],
-  reflect: ["list_jobs", "get_job"],
+  insight: [
+    "list_jobs",
+    "get_job",
+    "get_resume",
+    "review_resume",
+    "match_job",
+    "notion_search",
+    "notion_read",
+  ],
+  pilot: [
+    "list_jobs",
+    "get_job",
+    "add_job",
+    "notion_search",
+    "notion_read",
+    "notion_create_page",
+    "notion_append_content",
+    "notion_update_record",
+  ],
+  reflect: ["list_jobs", "get_job", "notion_search", "notion_read"],
 };

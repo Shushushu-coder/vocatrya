@@ -13,6 +13,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { classifyDescriptionCompleteness } from "@/lib/jobs/descriptionCompleteness";
 import { useI18n } from "@/i18n";
 import { agentToolLabelKey } from "@/lib/agent/toolLabels";
+import {
+  isNotionAgentToolName,
+  NOTION_TOOL,
+} from "@/lib/extensions/notion/constants";
+import { notionCopy, type NotionCopyKey } from "@/lib/extensions/notion/copy";
 
 type Respond = (r: { id: string; approved: boolean; reason?: string }) => void;
 
@@ -99,6 +104,60 @@ function MatchJobBody({ input }: { input: Record<string, unknown> }) {
   );
 }
 
+// EXT-NOTION: the card shows the exact destination and the verbatim content
+// that will be sent — what the user sees here is what the remote call sends,
+// since the approval-bound toolCall replays this same input.
+function NotionWriteBody({
+  toolName,
+  input,
+}: {
+  toolName: string;
+  input: Record<string, unknown>;
+}) {
+  const { locale } = useI18n();
+  const nt = notionCopy(locale);
+  const target = text(input.target);
+  const title = text(input.title);
+  const content = text(input.content);
+  const properties =
+    input.properties && typeof input.properties === "object"
+      ? JSON.stringify(input.properties, null, 2)
+      : undefined;
+  return (
+    <div className="mt-1">
+      <Row
+        label={
+          toolName === NOTION_TOOL.createPage
+            ? nt["approval.destination"]
+            : nt["approval.target"]
+        }
+        value={target ?? title}
+      />
+      {title && <Row label={nt["approval.title"]} value={title} />}
+      {content && (
+        <div className="mt-2 rounded-sm border bg-muted/20 p-2">
+          <p className="text-xs text-muted-foreground">
+            {nt["approval.content"]}
+          </p>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs">
+            {content}
+          </pre>
+        </div>
+      )}
+      {properties && (
+        <div className="mt-2 rounded-sm border bg-muted/20 p-2">
+          <p className="text-xs text-muted-foreground">
+            {nt["approval.properties"]}
+          </p>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs">
+            {properties}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AgentApprovalCard({
   part,
   pastedText,
@@ -108,7 +167,7 @@ export function AgentApprovalCard({
   pastedText?: string;
   onRespond: Respond;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState("");
   const cardRef = useRef<HTMLDivElement>(null);
@@ -132,6 +191,9 @@ export function AgentApprovalCard({
       case "match_job":
         return <MatchJobBody input={input} />;
       default:
+        if (isNotionAgentToolName(toolName)) {
+          return <NotionWriteBody toolName={toolName} input={input} />;
+        }
         return null;
     }
   })();
@@ -147,7 +209,11 @@ export function AgentApprovalCard({
       <div className="flex items-center gap-2">
         <Badge variant="secondary">{t("agent.needsApproval")}</Badge>
         <span className="text-sm font-semibold">
-          {t(agentToolLabelKey(toolName) ?? "agent.tools.generic")}
+          {agentToolLabelKey(toolName)
+            ? t(agentToolLabelKey(toolName)!)
+            : isNotionAgentToolName(toolName)
+              ? notionCopy(locale)[`tool.${toolName}` as NotionCopyKey]
+              : t("agent.tools.generic")}
         </span>
       </div>
 

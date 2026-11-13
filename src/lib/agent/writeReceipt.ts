@@ -4,7 +4,16 @@ import { isToolUIPart, type UIMessage } from "ai";
 // the admission transaction, and the answer action row mirrors it so a
 // regenerate button is only offered where the route would actually admit the
 // turn. Keep it client-safe — no "server-only" import in this module.
-const writeTools = new Set(["add_job", "match_job", "generate_cover_letter"]);
+// EXT-NOTION writes return { saved: true } receipts — the same "a write
+// already landed" semantics that block regenerate-as-if-it-never-happened.
+const writeTools = new Set([
+  "add_job",
+  "match_job",
+  "generate_cover_letter",
+  "notion_create_page",
+  "notion_append_content",
+  "notion_update_record",
+]);
 
 export function hasWriteReceipt(message: UIMessage) {
   return message.parts.some(part => isToolUIPart(part) && writeTools.has(part.type.replace(/^tool-/, "")) &&

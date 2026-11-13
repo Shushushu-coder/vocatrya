@@ -28,6 +28,22 @@ html[data-desktop="true"] .desktop-titlebar {
 html[data-desktop="true"] .header-global-actions {
   display: none;
 }
+/* Host-gated surfaces keyed off the same data-desktop attribute the
+   titlebar uses — preload sets it on <html> before first paint, so the swap
+   never flashes or waits on hydration. `.desktop-hidden` removes an element
+   only inside the Electron shell; `.desktop-only` renders it nowhere else.
+   The retired built-in interview practice uses the pair: desktop shows the
+   extensions pointer while the web build keeps the routes working. Plain
+   rules, not utilities, for the same specificity reasons as above. */
+.desktop-only {
+  display: none;
+}
+html[data-desktop="true"] .desktop-only {
+  display: block;
+}
+html[data-desktop="true"] .desktop-hidden {
+  display: none;
+}
 
 /* Bundled offline CJK fallback (Noto Sans SC v2.004-H2, OFL). Exposed under a
    private family alias and ranked after the system Chinese families so an

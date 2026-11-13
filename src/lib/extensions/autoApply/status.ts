@@ -1,0 +1,76 @@
+import type { PrismaClient } from "@prisma/client";
+import { assertCareerDataReadable } from "@/lib/career/access";
+import { loadAutoApplySource } from "./source";
+import { buildAutoApplyExport } from "./convert";
+import { AUTO_APPLY_EXPORTABLE_SECTIONS } from "./sections";
+import {
+  UPSTREAM_COMMIT,
+  UPSTREAM_EXTENSION_VERSION,
+  UPSTREAM_VENDORED_PATH,
+} from "./upstreamContract";
+import type { AutoApplyExportReport } from "./types";
+
+/**
+ * Real status surface for the shared extension-tools list (owned by task A).
+ * `available: false` means the career read path is gated off — the card must
+ * show that, never a fabricated "connected" state.
+ */
+export interface AutoApplyExtensionStatus {
+  available: boolean;
+  /** Present when available=false, e.g. "career_read_disabled". */
+  reason?: string;
+  /** Fields+items currently exportable across all sections. */
+  exportableItemCount: number;
+  /** Latest update timestamp across the source data (ISO), or null. */
+  lastSourceUpdatedAt: string | null;
+  detailPath: "/dashboard/extensions/auto-apply";
+  plugin: {
+    name: "OpenJobAutofill";
+    version: string;
+    upstreamCommit: string;
+    vendoredPath: string;
+  };
+  /** Counts/notes for the page preview; not needed by the card itself. */
+  preview?: AutoApplyExportReport;
+}
+
+export const AUTO_APPLY_DETAIL_PATH = "/dashboard/extensions/auto-apply" as const;
+
+export async function getAutoApplyExtensionStatus(
+  db: PrismaClient,
+  userId: string,
+  options: { includePreview?: boolean } = {},
+): Promise<AutoApplyExtensionStatus> {
+  const base = {
+    detailPath: AUTO_APPLY_DETAIL_PATH,
+    plugin: {
+      name: "OpenJobAutofill" as const,
+      version: UPSTREAM_EXTENSION_VERSION,
+      upstreamCommit: UPSTREAM_COMMIT,
+      vendoredPath: UPSTREAM_VENDORED_PATH,
+    },
+  };
+  try {
+    await assertCareerDataReadable(db);
+  } catch {
+    return {
+      ...base,
+      available: false,
+      reason: "career_read_disabled",
+      exportableItemCount: 0,
+      lastSourceUpdatedAt: null,
+    };
+  }
+  const source = await loadAutoApplySource(db, userId);
+  const { backup, report } = buildAutoApplyExport(source, AUTO_APPLY_EXPORTABLE_SECTIONS);
+  return {
+    ...base,
+    available: true,
+    exportableItemCount: report.sections.reduce(
+      (total, section) => total + section.itemCount,
+      0,
+    ),
+    lastSourceUpdatedAt: backup.profileV2.updatedAt || null,
+    ...(options.includePreview ? { preview: report } : {}),
+  };
+}

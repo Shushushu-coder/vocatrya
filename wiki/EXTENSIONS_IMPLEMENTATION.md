@@ -1,17 +1,49 @@
 # Vocatrya 扩展功能决策与实施方向
 
-> 更新日期：2026-11-12。对应机器可读台账：[EXTENSIONS_FEATURES.json](./EXTENSIONS_FEATURES.json)。
-> 本次仅记录三项扩展决策，不实施功能、不配置真实账号、不启动应用或 E2E。三项均为 `EXTENSION_BACKLOG / RECORDED / MISSING / passes: false`，未排期。
+> 更新日期：2026-11-13。对应机器可读台账：[EXTENSIONS_FEATURES.json](./EXTENSIONS_FEATURES.json)。
+> A/B/C 已提交原始交付，本轮汇总集成到 Main，并补齐共享接线与审查修复。工具入口及面试入口迁移代码为 `IMPLEMENTED`，自动网申和 Notion 整体为 `PARTIAL`；所有 `passes` 保持 `false`。本轮执行了定向测试、隔离迁移、生产构建、Windows Electron fresh-native 定向验证和隔离 Chromium 插件导入验证，未操作真实账号或业务数据。
 
 ## 1. 范围与既有台账关系
 
-扩展独立于当前 [MVP](./MVP_IMPLEMENTATION.md) 和 [P1](./P1_IMPLEMENTATION.md) 必交范围。记录扩展不改写既有 Agent 工具的验收结果，也不代表通用插件框架已经存在。后续启动实施时再确定具体任务、首批站点、连接方式及 Owner，不由本次记录自动开始编码。
+扩展独立于当前 [MVP](./MVP_IMPLEMENTATION.md) 和 [P1](./P1_IMPLEMENTATION.md) 必交范围，不改写既有 Agent 工具的验收结果，也不代表通用插件框架已经存在。2026-11-13 已按用户指令开展 A/B/C 并行开发；以下记录本轮交付与剩余事项，不自动启动下一阶段开发或验收。
 
 | Feature | 决策 | 当前结果 |
 | --- | --- | --- |
-| EXT-AUTO-APPLY | 将自动网申作为配套浏览器扩展，自动填写、用户手动提交 | 技术路径可行，未实现、未实测 |
-| EXT-NOTION | 增加 Notion 连接配置，让 Vocatrya AI 操作获授权内容 | 官方提供接口，应用接入未实现 |
-| EXT-INTERVIEW-WEB | 隐藏内置面试练习板块，在扩展区域通过链接前往网页练习 | 改动预计较小，目标网址待定，尚未实施 |
+| EXT-AUTO-APPLY | 将自动网申作为配套浏览器扩展，自动填写、用户手动提交 | B：手动导入阶段已集成，桌面导出与插件实装导入通过；填写未覆盖、配对同步未实现 |
+| EXT-NOTION | 增加 Notion 连接配置，让 Vocatrya AI 操作获授权内容 | C：接入代码及审查修复已集成；未连接详情页通过，真实 OAuth 与读写待专用测试工作区验收 |
+| EXT-INTERVIEW-WEB | 隐藏内置面试练习板块，在扩展区域通过链接前往网页练习 | A：入口迁移已集成，桌面旧链接引导与未配置禁用通过；目标网址及真实外链跳转待验收 |
+
+### 本轮交付与收尾（2026-11-13）
+
+三个原始交付以 `957da53b` 为基线，本轮已提交保存来源：
+
+| Owner | 来源分支 / 原始交付提交 | 集成交付 |
+| --- | --- | --- |
+| A | `codex/ext-tools-entry` / `5326a9cb` | 工具导航、列表、练习入口迁移；本轮补真实状态及双语共享文案 |
+| B | `codex/ext-auto-apply` / `c684864d` | 固定上游插件、白名单转换、导出 API、详情页及状态接口 |
+| C | `codex/ext-notion` / `a2ae51bc` | Migration、连接、受控 AI 工具及回执；本轮补执行/撤销竞态与回执核对修复 |
+
+汇总集成基于 Main `4edf773c`。Main 原有两份 Agent 模型文件修改已保留并协调纳入；修正原 Schema 注释中的控制字符。集成后来源分支与原始提交继续保留，相关 Worktree 按本次用户授权在确认干净及无进程占用后删除；不清理其他任务。
+
+实际验证：
+
+- 22 个定向套件 **292 项通过**，桌面 runtime **17 项通过**；后续 OAuth/prompt 小范围调整重跑 **23 项通过**。类型、改动文件 ESLint、生产构建通过。
+- 隔离新库应用 **66 个 Migration** 通过；新增 Migration 的升级、旧用户与职业资料保留、重新打开和外键检查通过。
+- **Windows Electron / fresh-native / full**：真实注册与登录、导航高亮、三卡片、真实可导出/未连接状态、窄窗口、详情路由、导出 API、资料更新后重新导出、旧练习子路由兼容引导、真实 quit IPC 与后端停止、重新打开后资料导出保持通过。
+- **隔离 Chromium 浏览器插件**：实际安装、导入桌面导出的合成资料、更新重导后再导入、刷新保持通过。未将该证据表述为 Chrome/Edge 或真实填表通过。
+- 源码摘要 `716800815e9ce273762c86b872037c202edd104d199606736df6b6f788b6c4a7`，Build ID `109j4oxooFmvHO2r4OWc7`，证据保留在 `F:\vocatrya-ext-acceptance-20261113\1848e4ef-e0b4-43af-8f9c-3d6ee8e675a3`。本轮驱动留存在 Main 的 `.tmp/ext-integration/`，未纳入 Git。
+
+失败与续测边界：首次构建因跨盘依赖链接解析失败，依赖移至 F 盘同卷后构建通过。首次桌面场景因驱动将 Notion 普通标题误判为 heading 而中止；截图确认页面正常后，仅修正驱动，核对相同源码摘要/Build ID、隔离库 fresh-native 标记、合成资料和未连接状态，复用完整产物续测通过，未重新构建或丢弃既有通过证据。插件填表驱动先遇到未授予页面权限，当前 Chromium 又不支持 `Extensions.triggerAction`，目标真实按钮触发未覆盖；不据此认定产品填写成功或失败。
+
+本轮修复：未知/中断的 Notion 写入禁止重发，模型 `verifiedNoDuplicate` 不能绕过；派发前原子核对请求归属与已批准的完整提案，网络期间不持有数据库事务；本地回执持久化失败不再改写为远端失败；异步任务/无有效页面回执不误报成功；OAuth 回调和令牌刷新断开竞态采用条件写入，防止凭据重存；系统浏览器授权后的桌面状态可刷新，并保留可点击授权链接。
+
+仍待完成：
+
+- **B**：真实按钮触发的通用表单/选定招聘系统、声明支持控件及 Chrome/Edge 实测；桌面配对、按需同步属于后续阶段。手动模式不能代替连接式目标。
+- **C**：无专用 Notion 测试工作区，真实 OAuth、远端工具 inputSchema/异步行为、AI 读写、连接重开及撤销均未验收。未知写入需在 Notion 人工核对，尚无自动恢复/重置流程；取消不能撤销已派发的远端写入。
+- **A / 验收 Owner**：面试网页 HTTPS 地址未定，系统浏览器真实目标跳转、Web 实际页面及非空历史练习保留仍待验收；本轮不宣称历史练习完整验收通过。
+
+本轮未执行完整桌面 E2E、安装器或发布验证，未 Push。验收条件未降低，三项功能及统一 UI 的 `passes` 均保持 `false`。
 
 ### 统一 UI 决策（2026-11-12）
 
@@ -27,7 +59,7 @@
 
 复杂配置和操作放在工具详情页，卡片不承载复杂表单；详情页提供返回工具列表。面试练习不增加无实质内容的详情页或中间确认页。第一版仅三个工具，不增加分类、搜索或工具市场。
 
-导航具体排序和路由命名在实施时按现有结构确定；当前建议置于核心求职功能之后、底部设置之前。验收核对导航可达与高亮、三卡片及窄窗口布局、CTA 与真实状态一致、详情返回及外链行为。此处仅冻结设计方向，UI 尚未实现，也不改变三项功能的未验收状态。
+导航与路由已由 A 在分支实现：Profile 后新增 `/dashboard/extensions`，详情页使用其子路由。验收仍需核对导航可达与高亮、三卡片及窄窗口布局、CTA 与真实状态一致、详情返回及外链行为；Main 已包含本轮集成代码，三项功能的完整验收仍未完成。
 
 ## 2. EXT-AUTO-APPLY：自动网申
 
@@ -80,7 +112,7 @@
 
 **可以实现。** Notion 官方提供远程 MCP、OAuth 授权和内容读写工具，Vocatrya 可作为客户端接入。能力上限取决于实际发现的工具、账号权限、套餐及工作区策略，不等于可执行 Notion 界面的所有操作。
 
-当前应用工具由 `src/lib/agent/tools/index.ts` 注册，并受 `src/lib/agent/agentRoles.ts` 白名单限制；本次检查未发现其中已注册 Notion。现有向外提供的 Vocatrya MCP 服务与向外连接 Notion 的 MCP 客户端是不同方向；已有 SDK 依赖不代表接入完成。在当前聊天宿主安装 Notion 插件，也不会自动赋予 Vocatrya AI 相同能力。
+2026-11-12 基线的应用工具由 `src/lib/agent/tools/index.ts` 注册，并受 `src/lib/agent/agentRoles.ts` 白名单限制，当时尚未注册 Notion；本轮已集成 Notion 专用工具、角色过滤、批准和回执，真实远端合同仍待核对。现有向外提供的 Vocatrya MCP 服务与向外连接 Notion 的 MCP 客户端是不同方向；已有 SDK 依赖不代表接入完成。在当前聊天宿主安装 Notion 插件，也不会自动赋予 Vocatrya AI 相同能力。
 
 ### 接入方案
 
@@ -111,7 +143,7 @@
 
 隐藏应用内独立面试练习板块，在应用的扩展区域提供“面试练习”链接卡片，引导用户前往网页练习。这里的“扩展”是应用内功能入口区域，不是自动网申浏览器插件。
 
-**该调整预计容易实施，主要是入口和展示调整。** 当前 `JourneySection.tsx` 包含 `/dashboard/interview` 入口，侧栏基于 `SIDEBAR_LINKS` 和宿主策略生成，实施时应连同移动导航及其他快捷入口核对。Electron 的 `desktop/main/main.js` 中已有 `configureNavigation`，通过 `shell.openExternal` 打开外链，可复用现有机制。当前未确认已有完整扩展页，若缺失需增加最小入口和卡片布局，不能把它视为已交付基础设施。
+**该调整预计容易实施，主要是入口和展示调整。** 当前 `JourneySection.tsx` 包含 `/dashboard/interview` 入口，侧栏基于 `SIDEBAR_LINKS` 和宿主策略生成，实施时应连同移动导航及其他快捷入口核对。Electron 的 `desktop/main/main.js` 中已有 `configureNavigation`，通过 `shell.openExternal` 打开外链，可复用现有机制。2026-11-12 记录时尚无完整扩展页；本轮已补齐列表及详情页，桌面未配置状态和旧路由引导已有实际验证。
 
 该判断以“已有可用网页服务，只需要跳转”为前提；新建/部署网页练习服务、登录互通、历史数据迁移和云端同步不包含在这次轻量调整中。
 
@@ -136,4 +168,4 @@
 - [支持的 MCP 工具](https://developers.notion.com/guides/mcp/mcp-supported-tools)
 - [Notion API 授权](https://developers.notion.com/guides/authorization/overview)
 
-实现、Main 集成和用户验收分别记录。后续只更新本扩展台账对应条目，不沿用 MVP/P1 或第三方宣传的通过状态。本次仅维护两份扩展文档，未隐藏实际产品板块、未实现扩展、未连接 Notion、未操作真实资料，`passes` 均保持 false。
+实现、Main 集成和用户验收分别记录。后续只更新本扩展台账对应条目，不沿用 MVP/P1 或第三方宣传的通过状态。2026-11-12 的记录为决策基线；2026-11-13 Main 集成与实际验证见本文件“本轮交付与收尾”及台账 `integrationValidation`。本轮更新两份扩展文档，并同步 P2 首页合同的导航事实；未连接真实 Notion、未操作真实资料，`passes` 均保持 false。

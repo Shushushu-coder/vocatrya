@@ -280,3 +280,62 @@ export function addJobSettled(step: {
   if (!result) return true;
   return !(result.output as AgentAddJobResult | undefined)?.validationError;
 }
+
+// ─── EXT-NOTION ───────────────────────────────────────────────────────────
+
+export type AgentNotionSearchItem = {
+  id: string;
+  title: string;
+  objectType?: string;
+  url?: string;
+  lastEditedAt?: string;
+};
+
+export type AgentNotionSearchResult =
+  | {
+      found: true;
+      results: AgentNotionSearchItem[];
+      truncated?: boolean;
+    }
+  | { found: false; code?: string; rawPreview?: string };
+
+export type AgentNotionReadResult =
+  | {
+      found: true;
+      target: string;
+      title?: string;
+      url?: string;
+      content: string;
+      truncated?: boolean;
+    }
+  | { found: false; code: string };
+
+export type AgentNotionWriteVerify = {
+  tool: "notion_search" | "notion_read";
+  query?: string;
+  target?: string;
+};
+
+export type AgentNotionWriteResult =
+  | {
+      saved: true;
+      tool: string;
+      pageId?: string;
+      url?: string;
+      title?: string;
+      warnings?: string[];
+    }
+  | {
+      saved: false;
+      tool: string;
+      status:
+        | "failed"
+        | "unknown"
+        | "verification_required"
+        | "reauth_required"
+        | "denied";
+      code: string;
+      /** Model-facing fixed text or the remote's own validation message. */
+      detail?: string;
+      verify?: AgentNotionWriteVerify;
+    };
