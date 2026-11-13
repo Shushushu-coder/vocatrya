@@ -76,7 +76,7 @@
         "remaining": [
           "隔离浏览器真实按钮触发后的通用表单与选定招聘系统填写实测",
           "Chrome/Edge 兼容性验收",
-          "桌面配对、按需同步与连接生命周期实现及验收"
+          "桌面配对、按需同步与连接生命周期真实 Chrome/Edge、Electron 验收（代码已集成）"
         ],
         "sourceCommit": "c684864d591c6b5ac74ab9d1de12a799ddcf0e8f"
       },
@@ -86,7 +86,7 @@
       "decisionStatus": "RECORDED",
       "implementationStatus": "PARTIAL",
       "description": "基于 MIT 开源项目 OpenJobAutofill 维护配套 Chrome/Edge 浏览器扩展，以连接 Vocatrya 为最终体验：应用管理资料与授权，插件在招聘网页按用户操作填写。手动导出/导入作为首阶段验证及备用方式。最终提交由用户手动完成；填写记录不直接转为已投递事实。",
-      "implementationNotes": "2026-11-13 已集成手动导入阶段：固定上游插件与 MIT 许可、非敏感白名单转换、导出 API、详情页及真实状态。Windows Electron fresh-native 导出/更新重导/退出重开保持通过，隔离 Chromium 实装导入/重导后再导入/刷新保持通过。通用表单与招聘系统填写、Chrome/Edge 兼容、桌面配对同步尚未验收或实现；整体 passes 保持 false。",
+      "implementationNotes": "2026-11-13 已集成手动导入阶段：固定上游插件与 MIT 许可、非敏感白名单转换、导出 API、详情页及真实状态。Windows Electron fresh-native 导出/更新重导/退出重开保持通过，隔离 Chromium 实装导入/重导后再导入/刷新保持通过。通用表单与招聘系统填写、Chrome/Edge 兼容、桌面配对同步尚未验收或实现；整体 passes 保持 false。\n2026-11-13 新增连接链路 b72a6cd9 已集成 Main：授权板块、一次性配对、Bearer 白名单读取/状态/刷新与双方撤销，保留手动导入；修复撤销误报、插件异步旧状态覆盖、同步按钮禁用和并发连接上限。43项定向测试、14项插件模拟运行时测试、完整类型与定向lint通过；真实SQLite 68条迁移含旧用户保留、并发上限与事务回滚、撤销及重开通过。Prisma Client 已在 Main 重新生成，未执行真实库迁移。真实 Chrome/Edge 加载配对、招聘网页填写及新增路径 Electron 验收未执行；整体保持 PARTIAL/passes:false。",
       "technicalDecision": {
         "upstream": "https://github.com/Br1an67/OpenJobAutofill",
         "referenceCommit": "005eda98841b3671ead615ebfde5922f0dfd7c36",

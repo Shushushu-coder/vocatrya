@@ -2,7 +2,7 @@
 
 - 记录日期：2026-11-13。
 - 基线：`main @ 4edf773c`。为最初需求记录基线；本轮 A/B/C 开发共同基线为 main @ 9373798f。
-- 状态：**D1/D2/D3/D4/D6 已按用户本轮决定冻结；D5 仍待讨论；导航/头像、概览、分类区、职位排序已集成 Main，未完成真实 UI 验收**。
+- 状态：**D1/D2/D3/D4/D6 已按用户本轮决定冻结；D5 仍待讨论；导航/头像、概览、分类区、职位排序已集成 Main，并完成 Windows Electron fresh-native/full 定向验收**。
 - 配套清单：[UI_1_2_0_RC_FEATURES.json](UI_1_2_0_RC_FEATURES.json)。沿用现有方案与 Feature 清单的记录方式，独立维护，不改写 MVP/P1/P2/EXTENSIONS 的状态。
 - 标注：**【已确定】**为用户确认的方向；**【建议】**为候选方案；**【待讨论】**为尚未冻结的细节。验收步骤是未来检查点，不是通过证据。
 - 依据：本次聊天及用户提供的页面截图，未据此宣称当前源码已具备或缺少某项能力。版本名表示本轮整理目标，不代表已经发布。
@@ -87,3 +87,9 @@ D 来源 `b06a59e6`，集成基线 `main@1826fdf7`。排序使用两模型的可
 集成补齐概览及分类区双语词典，移除任务内重复文案兜底；补标签计数过期响应保护，以及键盘聚焦到折叠区域时自动展开。Main 组合定向测试 16 文件/267 项、完整非增量类型检查及改动文件 ESLint 通过；未启动真实桌面或重型验证。
 
 D1/D2/D3/D4/D6 可按本轮冻结规则安排实施；D5 后续实施前先解决对应待讨论项，按实际影响读取代码与合同；涉及排序持久化时使用隔离数据。用户可见条件最终需核对真实 UI，桌面验收以授权的 Windows Electron、fresh-native 路径为准；普通开发不自动触发完整 E2E、生产构建或发布。本次未执行 Web 或 Windows Electron 验证。
+
+## 本轮验收收口（2026-11-13）
+
+2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.worktrees/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。
+
+导航5、头像8、概览13、分类区11、职位排序11项通过，五项 passes:true；关于页 D5 未冻结、未执行，仍为 false。此前“未执行”记录为历史集成阶段状态，以本节及 JSON 最新记录为准。本轮仅复核已有桌面证据，未重复构建或启动 Electron。

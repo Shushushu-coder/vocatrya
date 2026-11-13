@@ -34,8 +34,8 @@
         "侧边栏直接进入简历版本，设置原入口完成迁移。",
         "已有版本及其关联仍可访问。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。"
+      "passes": true,
+      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。\n2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.worktrees/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。 本项 5 项通过，验收收口。"
     },
     {
       "id": "UI-RC-OVERVIEW",
@@ -60,8 +60,8 @@
         "无悬浮时可识别并实际进入各功能。",
         "引导不暗示强制顺序，三个阶段均可自由进入。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。"
+      "passes": true,
+      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。\n2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.worktrees/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。 本项 13 项通过，验收收口。"
     },
     {
       "id": "UI-RC-JOB-ORDER",
@@ -86,8 +86,8 @@
         "拖动不误触详情，排序与搜索、筛选、分页组合结果一致。",
         "保存失败有反馈，不虚报保存成功。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-11-13 用户授权检查、提交并集成 D，来源 codex/ui-rc-job-order@b06a59e6（基于 9373798f），集成基线 main@1826fdf7。Job/JobOpportunity 新增 sortOrder/pinnedAt，Migration 20261113220000_add_job_ordering；默认自定义排序、分区置顶、列表/卡片共享持久化、Legacy→canonical 字段携带与备份可选字段兼容。集成修复无限滚动跨页拖动和页首锚点、普通区乐观更新越过置顶区、重叠写入/跨查询失败回滚、日期排序的置顶优先；合入 8 项双语键并移除临时兜底。7 文件/207 项定向测试通过（包含真实备份导出/导入往返、Legacy/canonical 隔离数据、分页、并发及读请求回归），类型检查及改动文件 ESLint 通过。隔离新库 67 条迁移成功，四列就位；首次缺少 SQLite 文件时部署失败，创建隔离空文件后部署通过。未访问真实库；未执行真实 Web/Electron 拖动、Electron 退出重开、生产构建或 E2E，passes:false。"
+      "passes": true,
+      "implementationNotes": "2026-11-13 用户授权检查、提交并集成 D，来源 codex/ui-rc-job-order@b06a59e6（基于 9373798f），集成基线 main@1826fdf7。Job/JobOpportunity 新增 sortOrder/pinnedAt，Migration 20261113220000_add_job_ordering；默认自定义排序、分区置顶、列表/卡片共享持久化、Legacy→canonical 字段携带与备份可选字段兼容。集成修复无限滚动跨页拖动和页首锚点、普通区乐观更新越过置顶区、重叠写入/跨查询失败回滚、日期排序的置顶优先；合入 8 项双语键并移除临时兜底。7 文件/207 项定向测试通过（包含真实备份导出/导入往返、Legacy/canonical 隔离数据、分页、并发及读请求回归），类型检查及改动文件 ESLint 通过。隔离新库 67 条迁移成功，四列就位；首次缺少 SQLite 文件时部署失败，创建隔离空文件后部署通过。未访问真实库；未执行真实 Web/Electron 拖动、Electron 退出重开、生产构建或 E2E，passes:false。\n2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.worktrees/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。 本项 11 项通过，验收收口。"
     },
     {
       "id": "UI-RC-TAG-LAYOUT",
@@ -110,8 +110,8 @@
         "多标签、长名称及窄窗口下内容可访问。",
         "原有筛选功能可用，主要内容不被挤压或遮挡。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。"
+      "passes": true,
+      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。\n2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.worktrees/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。 本项 11 项通过，验收收口。"
     },
     {
       "id": "UI-RC-ABOUT",
@@ -162,8 +162,8 @@
         "alice 显示 A，小明显示小。",
         "昵称变更后显示正确；异常昵称按冻结规则兜底，不溢出。"
       ],
-      "passes": false,
-      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。"
+      "passes": true,
+      "implementationNotes": "2026-11-13 Main 集成 A/B/C：导航与头像来源 61637850，概览来源 60e4a628，分类区来源 d8838076（均基于 9373798f）。集成补齐共享双语文案并移除任务内重复兜底；修复标签计数过期响应覆盖及键盘聚焦被折叠标签不可见的问题。尚未执行真实 UI、Windows Electron、生产构建或 E2E；passes 保持 false。\n2026-11-13 集成 Owner 核对原始 results.json、运行驱动、截图及 quit IPC/重开记录：main@1b93c398 的 Windows Electron fresh-native/full 定向 RC 验收 48 PASS/0 FAIL。构建输入 1,207 文件与验收 Worktree 逐字节一致，source digest b166d22ea3e7867876fa17ca307a6de45e194b519cf60ee3f3cfda459943a4a9，Build ID tBjw4k4trdXojJvRD8pYk。结果及24张截图：.worktrees/ui-rc-acceptance/.tmp/ui-rc-acceptance/evidence/；驱动位于同任务目录 driver.mjs；运行数据/日志/trace：F:/vocatrya-e2e-runs/ui-rc-acceptance/7f021f6e-39de-4eb9-a212-8af849125604/；构建：同父目录 596118ac-1100-4aac-81b5-5dbd1be1cbe1/app。窄窗为真实 Electron 内 setViewportSize 视口仿真，不声称 OS 窗口缩放。该证据不覆盖后续自动网申新增连接代码。 本项 8 项通过，验收收口。"
     }
   ],
   "openQuestions": [
