@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { FileTextIcon, XIcon } from "lucide-react";
 import { getToolName, isStaticToolUIPart, type UIMessage } from "ai";
 import {
@@ -94,6 +94,7 @@ export function AgentChatMessages() {
     dismissInterrupted,
     approvalPending,
     conversationId,
+    contextUsage,
   } = useAgentChat();
   const [dismissed, setDismissed] = useState(false);
 
@@ -120,6 +121,15 @@ export function AgentChatMessages() {
   return (
     <Conversation className="flex-1">
       <ConversationContent className="gap-4">
+        {/* D2 inline hint: sits where the omitted history would be, so the
+            user sees that earlier turns were left out of the last send. */}
+        {contextUsage?.droppedTurnCount ? (
+          <p className="text-xs text-muted-foreground">
+            {t("agent.contextUsageDroppedInline", {
+              count: contextUsage.droppedTurnCount,
+            })}
+          </p>
+        ) : null}
         {messages.map((message) => {
           // Copy answers only ever covers the message's own visible prose —
           // hidden reasoning, raw tool args and card output stay out of it.
@@ -192,21 +202,40 @@ export function AgentChatMessages() {
                       />
                     );
                   }
-                  case "approval-requested":
-                  case "approval-responded":
-                    return (
-                      <AgentApprovalCard
-                        key={i}
-                        part={part}
-                        pastedText={pastedText}
-                        onRespond={addToolApprovalResponse}
-                      />
-                    );
                   // Default, not a case list: AgentResultCard already returns
                   // null for anything it does not recognize, and rendering
                   // nothing beats rendering an unknown future state raw.
-                  default:
-                    return <AgentResultCard key={i} part={part} />;
+                  default: {
+                    // AWU-APPROVAL: an approval-gated tool's output states
+                    // stay on the approval card so the card shows the whole
+                    // lifecycle (executed / denied / failed). The result
+                    // card still renders the outcome or retry beside it;
+                    // a denied write has no outcome, so it is the one state
+                    // that renders the status line alone.
+                    const approvalLifecycle =
+                      part.state === "approval-requested" ||
+                      part.state === "approval-responded" ||
+                      (Boolean(part.approval) &&
+                        (part.state === "output-available" ||
+                          part.state === "output-denied" ||
+                          part.state === "output-error"));
+                    if (!approvalLifecycle) {
+                      return <AgentResultCard key={i} part={part} />;
+                    }
+                    return (
+                      <Fragment key={i}>
+                        <AgentApprovalCard
+                          part={part}
+                          pastedText={pastedText}
+                          onRespond={addToolApprovalResponse}
+                        />
+                        {part.state === "output-available" ||
+                        part.state === "output-error" ? (
+                          <AgentResultCard part={part} />
+                        ) : null}
+                      </Fragment>
+                    );
+                  }
                 }
               })}
               {copyText && (

@@ -173,6 +173,23 @@ function Probe() {
       </span>
       <button onClick={c.togglePanelExpand}>togglePanelExpand</button>
       <button onClick={toggle}>toggleSidebar</button>
+      <button
+        onClick={() =>
+          c.setPasteChip({ id: "p1", text: "body", chars: 4, truncated: false })
+        }
+      >
+        setPaste
+      </button>
+      <button
+        onClick={() =>
+          void c.startNewConversation({
+            explicit: { connectionId: "c9", model: "m9" },
+            carry: true,
+          })
+        }
+      >
+        carryModel
+      </button>
       <span data-testid="sidebar">{String(expanded)}</span>
       <span data-testid="state">{`${c.isOpen}|${c.approvalPending}|${c.interruptedTurn}|${holder}|${c.preflight.ok}`}</span>
       <span data-testid="preflight-dismissed">{String(c.preflight.dismissed)}</span>
@@ -181,6 +198,10 @@ function Probe() {
       <span data-testid="panel-expanded">{String(c.isPanelExpanded)}</span>
       <span data-testid="review-stream">{c.toolStreams["rv1"] ?? ""}</span>
       <span data-testid="job-writes">{c.jobWrites}</span>
+      <span data-testid="paste-chip">{c.pasteChip?.text ?? ""}</span>
+      <span data-testid="context-usage">
+        {c.contextUsage ? `${c.contextUsage.estimatedInputTokens}:${c.contextUsage.droppedTurnCount}` : ""}
+      </span>
     </div>
   );
 }
@@ -1389,6 +1410,168 @@ describe("AgentChatProvider", () => {
       expect(createChatConversation).toHaveBeenCalledTimes(1);
     });
     expect((createChatConversation as any).mock.calls[0][0].agentRole).toBe("reflect");
+  });
+
+  // AWU-MODEL (D1): a model pick on a persisted conversation is a carry —
+  // the draft text, MANUAL context and paste chip move to the new draft
+  // because none of them belonged to the old model. AUTO context is not
+  // carried: it re-resolves against the page like any new draft.
+  const manualContextConversation = () => ({
+    ...conversation(),
+    context: {
+      version: 1 as const,
+      items: [
+        { kind: "job" as const, entityId: "job-1", labelSnapshot: "Acme", source: "MANUAL" as const },
+      ],
+    },
+  });
+  const manualContextTree = () => (
+    <SidebarProvider initialExpanded>
+      <RightRailProvider>
+        <AgentChatProvider initialConversation={manualContextConversation()}>
+          <Probe />
+        </AgentChatProvider>
+      </RightRailProvider>
+    </SidebarProvider>
+  );
+
+  it("carries draft text, MANUAL context and the paste chip across a model switch", async () => {
+    window.localStorage.clear();
+    render(manualContextTree());
+    await userEvent.click(screen.getByText("fillComposer"));
+    await userEvent.click(screen.getByText("setPaste"));
+    await userEvent.click(screen.getByText("carryModel"));
+
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+    expect(screen.getByTestId("composer-seed").textContent).toBe("filled draft");
+    expect(screen.getByTestId("paste-chip").textContent).toBe("body");
+    expect(screen.getByTestId("context-items").textContent).toBe("job:job-1");
+    expect(screen.getByTestId("explicit-model").textContent).toBe("c9/m9");
+    const slots = JSON.parse(
+      localStorage.getItem("agent-chat-role-slots") ?? "{}",
+    );
+    expect(slots.pilot?.draft).toBe("filled draft");
+    expect(slots.pilot?.paste?.text).toBe("body");
+    expect(slots.pilot?.context?.items?.[0]?.entityId).toBe("job-1");
+    expect(slots.pilot?.explicit).toEqual({ connectionId: "c9", model: "m9" });
+    window.localStorage.clear();
+  });
+
+  // A carried MANUAL context merges with the AUTO resolution on the same
+  // page instead of being replaced by it.
+  it("merges carried MANUAL context with the page's AUTO resolution", async () => {
+    window.localStorage.clear();
+    currentPathname = "/dashboard/myjobs/job-9";
+    render(manualContextTree());
+    vi.mocked(resolveDraftPageContext).mockResolvedValueOnce({
+      success: true,
+      data: {
+        version: 1,
+        items: [
+          { kind: "job", entityId: "job-9", labelSnapshot: "Job 9", source: "AUTO" },
+        ],
+      },
+    } as never);
+    await userEvent.click(screen.getByText("carryModel"));
+    await waitFor(() =>
+      expect(screen.getByTestId("context-items").textContent).toContain("job:job-9"),
+    );
+    expect(screen.getByTestId("context-items").textContent).toContain("job:job-1");
+    expect(resolveDraftPageContext).toHaveBeenCalledWith({ jobId: "job-9", resumeId: null });
+    window.localStorage.clear();
+  });
+
+  // A plain New Conversation still starts empty — carry is opt-in.
+  it("starts an empty draft when carry is not requested", async () => {
+    window.localStorage.clear();
+    setup();
+    await userEvent.click(screen.getByText("fillComposer"));
+    await userEvent.click(screen.getByText("setPaste"));
+    await userEvent.click(screen.getByText("newConversation"));
+    expect(screen.getByTestId("composer-seed").textContent).toBe("");
+    expect(screen.getByTestId("paste-chip").textContent).toBe("");
+    window.localStorage.clear();
+  });
+
+  // The chip serializes with the slot's draft so a role switch round-trips
+  // it — the card belongs to the slot, not the composer's lifetime.
+  it("round-trips the paste chip across a role switch", async () => {
+    window.localStorage.clear();
+    render(draftTree());
+    await userEvent.click(screen.getByText("setPaste"));
+    await userEvent.click(screen.getByText("switchInsight"));
+    expect(screen.getByTestId("paste-chip").textContent).toBe("");
+    const slots = JSON.parse(
+      localStorage.getItem("agent-chat-role-slots") ?? "{}",
+    );
+    expect(slots.pilot?.paste?.text).toBe("body");
+    await userEvent.click(screen.getByText("switchPilot"));
+    expect(screen.getByTestId("paste-chip").textContent).toBe("body");
+    window.localStorage.clear();
+  });
+
+  // A stored chip mounts with the slot's conversation — the unsent card
+  // survives a reload exactly like the unsent draft text.
+  it("restores a stored paste chip on mount", () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      "agent-chat-role-slots",
+      JSON.stringify({
+        pilot: {
+          conversationId: "conv-1",
+          draft: "typed",
+          paste: { id: "p9", text: "stored body", chars: 11, truncated: false },
+        },
+      }),
+    );
+    setup();
+    expect(screen.getByTestId("paste-chip").textContent).toBe("stored body");
+    expect(screen.getByTestId("composer-seed").textContent).toBe("typed");
+    window.localStorage.clear();
+  });
+
+  // AWU-CONTEXT: the toolbar estimate comes straight off the wire — a
+  // data-context-usage part for the active request. Legacy turns never
+  // emit it, so the absence of a number is itself the honest answer.
+  it("stores the streamed context usage for the toolbar", async () => {
+    setup();
+    const execution = beginExecution();
+    await act(async () => {
+      chatInit().onData({
+        type: "data-context-usage",
+        data: {
+          conversationId: "conv-1",
+          requestId: execution.requestId,
+          profile: "fresh",
+          estimatedInputTokens: 3200,
+          recentTurnCount: 2,
+          droppedTurnCount: 1,
+          tokens: { system: 1, currentUser: 1, history: 1, explicitContext: 1, toolResult: 1, summary: 0, dynamic: 2 },
+          budgets: { assembledInputTokens: 16000, dynamicTokens: 6000, explicitContextTokens: 2000, historyTokens: 3000, historicalToolTokens: 2000, currentUserTokens: 6000, summaryTokens: 1000 },
+        },
+      });
+    });
+    expect(screen.getByTestId("context-usage").textContent).toBe("3200:1");
+    // A stale request's usage must not overwrite the live one.
+    await act(async () => {
+      chatInit().onData({
+        type: "data-context-usage",
+        data: {
+          conversationId: "conv-1",
+          requestId: "stale-request",
+          profile: "fresh",
+          estimatedInputTokens: 9999,
+          recentTurnCount: 0,
+          droppedTurnCount: 0,
+          tokens: { system: 0, currentUser: 0, history: 0, explicitContext: 0, toolResult: 0, summary: 0, dynamic: 0 },
+          budgets: { assembledInputTokens: 16000, dynamicTokens: 6000, explicitContextTokens: 2000, historyTokens: 3000, historicalToolTokens: 2000, currentUserTokens: 6000, summaryTokens: 1000 },
+        },
+      });
+    });
+    expect(screen.getByTestId("context-usage").textContent).toBe("3200:1");
+    // And it clears with the conversation state on a new draft.
+    await userEvent.click(screen.getByText("newConversation"));
+    expect(screen.getByTestId("context-usage").textContent).toBe("");
   });
 });
 

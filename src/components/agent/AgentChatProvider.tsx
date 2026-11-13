@@ -69,8 +69,14 @@ import {
   isNestedTool,
   type AgentAddJobResult,
   type AgentNestedStreamData,
+  type AgentPastePartData,
 } from "@/models/agent.model";
 import {
+  AGENT_CONTEXT_USAGE_PART_TYPE,
+  type AgentContextUsage,
+} from "@/lib/agent/contextUsage";
+import {
+  dedupeContextItems,
   EMPTY_CONVERSATION_CONTEXT,
   type AgentConversationContextItem,
   type AgentConversationContextV1,
@@ -199,11 +205,17 @@ function mountRole(initial: AgentChatInitialConversation | null): AgentRole {
 // unsent composer text — all three are per-role (D1).
 function mountDraft(
   slot: StoredRoleSlot | undefined,
-): { context: AgentConversationContextV1; explicit: ExplicitModelSelection | null; draft: string | null } {
+): {
+  context: AgentConversationContextV1;
+  explicit: ExplicitModelSelection | null;
+  draft: string | null;
+  paste: AgentPastePartData | null;
+} {
   return {
     context: slot?.context ?? EMPTY_CONVERSATION_CONTEXT,
     explicit: slot?.explicit ?? null,
     draft: slot?.draft ?? null,
+    paste: slot?.paste ?? null,
   };
 }
 
@@ -267,11 +279,12 @@ function useAgentChatValue(
         hasStoredContext: true,
         preservedConversationId: null as string | null,
         draft:
-          stored?.conversationId === initial.id && stored.draft
+          stored?.conversationId === initial.id && (stored.draft || stored.paste)
             ? {
                 context: EMPTY_CONVERSATION_CONTEXT,
                 explicit: null,
                 draft: stored.draft,
+                paste: stored.paste ?? null,
               }
             : null,
       };
@@ -348,9 +361,32 @@ function useAgentChatValue(
   } | null>(null);
   // Next mount's initial text — a role switch or a fill while the composer
   // is unmounted lands here, and a nonce bump remounts the provider on it.
+  // The ref mirrors every seed write so a snapshot taken after the
+  // composer's unmount still sees the text it last held (e.g. a model
+  // switch remounts the composer before its slot write ever ran).
   const [composerSeed, setComposerSeed] = useState<string>(
     initialSlot.draft?.draft ?? "",
   );
+  const composerSeedRef = useRef(composerSeed);
+  const updateComposerSeed = useCallback((text: string) => {
+    composerSeedRef.current = text;
+    setComposerSeed(text);
+  }, []);
+  // The unsent paste chip lives here (not in the composer) so a model
+  // switch's composer remount does not lose it, and so the slot record can
+  // serialize it alongside the draft it was prepared for.
+  const [pasteChip, setPasteChipState] = useState<AgentPastePartData | undefined>(
+    () => initialSlot.draft?.paste ?? undefined,
+  );
+  const pasteChipRef = useRef<AgentPastePartData | undefined>(pasteChip);
+  const setPasteChip = useCallback((data: AgentPastePartData | undefined) => {
+    pasteChipRef.current = data;
+    setPasteChipState(data);
+  }, []);
+  // The last turn's assembled context size, streamed by the route for the
+  // toolbar estimate. Absent on Legacy, which cannot report a real size —
+  // the UI shows nothing rather than a fabricated number.
+  const [contextUsage, setContextUsage] = useState<AgentContextUsage | null>(null);
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
   contextRef.current = context;
@@ -437,6 +473,12 @@ function useAgentChatValue(
           completedExecutionRef.current = data.requestId;
           durableApprovalRef.current = true;
         }
+        return;
+      }
+      if (part.type === AGENT_CONTEXT_USAGE_PART_TYPE) {
+        const data = part.data as AgentContextUsage;
+        if (data.conversationId !== conversationIdRef.current || data.requestId !== activeExecutionRef.current?.requestId) return;
+        setContextUsage(data);
         return;
       }
       if (!activeExecutionRef.current || activeExecutionRef.current.conversationId !== conversationIdRef.current) return;
@@ -692,9 +734,10 @@ function useAgentChatValue(
       contextRef.current = result.data;
       writeAgentRoleSlot(activeRoleRef.current, {
         conversationId: conversationIdRef.current ?? slotPointerRef.current,
-        draft: composerApiRef.current?.read() || null,
+        draft: draftTextForSlot(),
         context: result.data,
         explicit: explicitRef.current,
+        paste: pasteChipRef.current ?? null,
       });
     });
   }, [initial?.id, initialSlot.hasStoredContext]);
@@ -707,15 +750,26 @@ function useAgentChatValue(
     chat.clearError();
     setActionError(null);
     setInterruptedTurn(false);
-    setComposerSeed("");
+    composerApiRef.current = null;
+    updateComposerSeed("");
     setComposerNonce((n) => n + 1);
+    setPasteChip(undefined);
+    setContextUsage(null);
     setToolStreams({});
     setQueued(undefined);
-  }, [chat]);
+  }, [chat, updateComposerSeed, setPasteChip]);
 
   // ------------------------------------------------------------------
   // Role slots (D1)
   // ------------------------------------------------------------------
+
+  // Unsent draft text for a slot write: a mounted composer is authoritative
+  // (an empty read means the user cleared it — never fall back to an older
+  // seed); unmounted, the seed ref still holds the last text it owned.
+  const draftTextForSlot = () =>
+    (composerApiRef.current
+      ? composerApiRef.current.read()
+      : composerSeedRef.current) || null;
 
   // Snapshot the live state into the active role's slot record. The
   // composer's registered reader is the only live view of unsent text. An
@@ -727,9 +781,10 @@ function useAgentChatValue(
     if (roleSelectionPendingRef.current) return;
     writeAgentRoleSlot(activeRoleRef.current, {
       conversationId: conversationIdRef.current ?? slotPointerRef.current,
-      draft: composerApiRef.current?.read() || null,
+      draft: draftTextForSlot(),
       context: contextSettledRef.current ? contextRef.current : undefined,
       explicit: explicitRef.current,
+      paste: pasteChipRef.current ?? null,
     });
   }, []);
 
@@ -798,12 +853,16 @@ function useAgentChatValue(
 
   // Enter a draft (unpersisted) state inside the active slot. Called by
   // startNewConversation with an empty slot, and by switchRole with the
-  // target role's stored draft state.
+  // target role's stored draft state. draft/paste seed the composer state
+  // resetTransient just cleared, so a carried or restored draft survives
+  // the remount.
   const enterDraft = useCallback(
     (slot: {
       context: AgentConversationContextV1;
       explicit: ExplicitModelSelection | null;
       contextSettled: boolean;
+      draft?: string | null;
+      paste?: AgentPastePartData | null;
     }) => {
       stop();
       selectionEpochRef.current += 1;
@@ -820,6 +879,8 @@ function useAgentChatValue(
       setExplicit(slot.explicit);
       chat.setMessages([]);
       resetTransient();
+      updateComposerSeed(slot.draft ?? "");
+      setPasteChip(slot.paste ?? undefined);
       setContext(slot.context);
       contextRef.current = slot.context;
       contextSettledRef.current = slot.contextSettled;
@@ -828,16 +889,33 @@ function useAgentChatValue(
       setIdentity(UNKNOWN_IDENTITY);
       void runPreflight();
     },
-    [chat, stop, resetTransient, runPreflight],
+    [chat, stop, resetTransient, runPreflight, updateComposerSeed, setPasteChip],
   );
 
   const startNewConversation = useCallback(
-    async (options?: { explicit?: ExplicitModelSelection | null }) => {
+    async (options?: {
+      explicit?: ExplicitModelSelection | null;
+      /** D1 model switch: carry draft text, MANUAL context and the paste
+       *  chip into the new draft instead of starting empty. AUTO page
+       *  context still re-resolves below. */
+      carry?: boolean;
+    }) => {
       const wasStreaming = streamingRef.current;
+      const carried = options?.carry
+        ? {
+            draft: composerApiRef.current?.read() || composerSeedRef.current,
+            paste: pasteChipRef.current ?? null,
+            manual: contextSettledRef.current
+              ? contextRef.current.items.filter((item) => item.source === "MANUAL")
+              : [],
+          }
+        : { draft: "", paste: null, manual: [] as AgentConversationContextItem[] };
       enterDraft({
-        context: EMPTY_CONVERSATION_CONTEXT,
+        context: { version: 1, items: carried.manual },
         explicit: options?.explicit ?? null,
-        contextSettled: false,
+        contextSettled: Boolean(options?.carry) && contextSettledRef.current,
+        draft: carried.draft,
+        paste: carried.paste,
       });
       persistActiveSlot();
       if (wasStreaming) toastInfo(t("agent.conversationStartedStopped"));
@@ -850,14 +928,24 @@ function useAgentChatValue(
       });
       if (selectionEpochRef.current !== epoch || conversationIdRef.current) return;
       if (result?.success && result.data) {
+        const merged = options?.carry
+          ? {
+              version: 1 as const,
+              items: dedupeContextItems([
+                ...result.data.items,
+                ...carried.manual,
+              ]),
+            }
+          : result.data;
         contextSettledRef.current = true;
-        setContext(result.data);
-        contextRef.current = result.data;
+        setContext(merged);
+        contextRef.current = merged;
         writeAgentRoleSlot(activeRoleRef.current, {
           conversationId: conversationIdRef.current ?? slotPointerRef.current,
-          draft: composerApiRef.current?.read() || null,
-          context: result.data,
+          draft: draftTextForSlot(),
+          context: merged,
           explicit: explicitRef.current,
+          paste: pasteChipRef.current ?? null,
         });
       }
     },
@@ -865,7 +953,10 @@ function useAgentChatValue(
   );
 
   const selectConversation = useCallback(
-    async (id: string, options?: { composerText?: string | null }) => {
+    async (
+      id: string,
+      options?: { composerText?: string | null; paste?: AgentPastePartData | null },
+    ) => {
       if (streamingRef.current) stop();
       recoveryRef.current = null;
       recoveryBlockedRef.current = true;
@@ -917,7 +1008,8 @@ function useAgentChatValue(
       resetTransient();
       // The seed lands on the same remount resetTransient triggered, so a
       // slot's unsent text reappears instead of clearing with the reset.
-      if (options?.composerText) setComposerSeed(options.composerText);
+      updateComposerSeed(options?.composerText ?? "");
+      setPasteChip(options?.paste ?? undefined);
       writeActiveConversationId(data.id);
       // Write the slot record explicitly: the composer still shows the
       // outgoing slot's text until the remount flushes, so reading it here
@@ -928,6 +1020,7 @@ function useAgentChatValue(
         draft: options?.composerText ?? null,
         context: data.context,
         explicit: null,
+        paste: options?.paste ?? null,
       });
       setIdentity(
         data.lockKind === "account" || data.lockKind === "managed"
@@ -953,7 +1046,7 @@ function useAgentChatValue(
       void runPreflight();
       return true;
     },
-    [chat, stop, resetTransient, runPreflight, snapshotActiveSlot],
+    [chat, stop, resetTransient, runPreflight, snapshotActiveSlot, updateComposerSeed, setPasteChip],
   );
 
   // Top-level role switch (D1). The outgoing slot is snapshotted — draft,
@@ -977,14 +1070,14 @@ function useAgentChatValue(
         // Clear outgoing state while loading, without overwriting the
         // target's stored pointer. Rapid switches must not borrow a row
         // from the previous role or send against it.
-        enterDraft({ context: slot.context ?? EMPTY_CONVERSATION_CONTEXT, explicit: slot.explicit ?? null, contextSettled: slot.context !== undefined });
-        setComposerSeed(slot.draft ?? "");
+        enterDraft({ context: slot.context ?? EMPTY_CONVERSATION_CONTEXT, explicit: slot.explicit ?? null, contextSettled: slot.context !== undefined, draft: slot.draft ?? null, paste: slot.paste ?? null });
         roleSelectionPendingRef.current = true;
         // selectConversation increments the selection epoch synchronously.
         // A false result may mean superseded, rather than a missing row.
         const epoch = selectionEpochRef.current + 1;
         const ok = await selectConversation(slot.conversationId, {
           composerText: slot.draft ?? null,
+          paste: slot.paste ?? null,
         });
         if (selectionEpochRef.current !== epoch || activeRoleRef.current !== role) return;
         if (ok) return;
@@ -995,8 +1088,9 @@ function useAgentChatValue(
         context: slot?.context ?? EMPTY_CONVERSATION_CONTEXT,
         explicit: slot?.explicit ?? null,
         contextSettled: slot?.context !== undefined,
+        draft: slot?.draft ?? null,
+        paste: slot?.paste ?? null,
       });
-      setComposerSeed(slot?.draft ?? "");
       // Explicit write again — the composer still reads the outgoing slot's
       // text until the remount flushes (see selectConversation). A fresh
       // slot keeps its missing context: writing EMPTY here would mark the
@@ -1006,6 +1100,7 @@ function useAgentChatValue(
         draft: slot?.draft ?? null,
         context: slot?.context,
         explicit: slot?.explicit ?? null,
+        paste: slot?.paste ?? null,
       });
       if (!freshDraft) return;
       const epoch = selectionEpochRef.current;
@@ -1025,6 +1120,7 @@ function useAgentChatValue(
           draft: slot?.draft ?? null,
           context: result.data,
           explicit: slot?.explicit ?? null,
+          paste: slot?.paste ?? null,
         });
       }
     },
@@ -1124,11 +1220,11 @@ function useAgentChatValue(
   // composer's registered setter applies it while mounted; unmounted, the
   // seed + nonce remount lands it as the next initial text.
   const fillComposer = useCallback((text: string) => {
-    setComposerSeed(text);
+    updateComposerSeed(text);
     const api = composerApiRef.current;
     if (api) api.set(text);
     else setComposerNonce((n) => n + 1);
-  }, []);
+  }, [updateComposerSeed]);
 
   const registerComposerApi = useCallback(
     (api: { read: () => string; set: (text: string) => void } | null) => {
@@ -1280,6 +1376,9 @@ function useAgentChatValue(
     fillComposer,
     registerComposerApi,
     composerSeed,
+    pasteChip,
+    setPasteChip,
+    contextUsage,
     activeRole,
     switchRole,
     stop,

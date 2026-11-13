@@ -177,12 +177,51 @@ export function AgentApprovalCard({
     if (part.state === "approval-requested") cardRef.current?.focus();
   }, [part.state]);
 
-  if (part.state !== "approval-requested" && part.state !== "approval-responded")
-    return null;
+  // AWU-APPROVAL (D5): the card owns the whole approval lifecycle —
+  // requested, responded, executed, denied and failed — so an approval-gated
+  // tool reads as one card that settles, not a request that vanishes. Output
+  // states only count when the part actually carries an approval record; a
+  // plain tool output is the result card's job.
+  const owns =
+    part.state === "approval-requested" ||
+    part.state === "approval-responded" ||
+    (Boolean(part.approval) &&
+      (part.state === "output-available" ||
+        part.state === "output-denied" ||
+        part.state === "output-error"));
+  if (!owns) return null;
 
   const approvalId = part.approval?.id;
+  const approved = part.approval?.approved;
   const toolName = getToolName(part);
   const input = (part.input ?? {}) as Record<string, unknown>;
+  const settled =
+    part.state === "output-available" ||
+    part.state === "output-denied" ||
+    part.state === "output-error";
+
+  const statusLabel = (() => {
+    switch (part.state) {
+      case "approval-requested":
+        return t("agent.needsApproval");
+      case "approval-responded":
+        return approved === false
+          ? t("agent.approvalDenied")
+          : t("agent.approvalRunning");
+      case "output-available":
+        return t("agent.approvalExecuted");
+      case "output-denied":
+        return t("agent.approvalDenied");
+      case "output-error":
+        return t("agent.approvalFailed");
+      default:
+        return "";
+    }
+  })();
+  const statusDestructive =
+    part.state === "output-denied" ||
+    part.state === "output-error" ||
+    (part.state === "approval-responded" && approved === false);
 
   const body = (() => {
     switch (toolName) {
@@ -198,6 +237,17 @@ export function AgentApprovalCard({
     }
   })();
 
+  const declineReason =
+    (part.state === "output-denied" ||
+      (part.state === "approval-responded" && approved === false)) &&
+    part.approval?.reason
+      ? part.approval.reason
+      : undefined;
+  const errorText =
+    part.state === "output-error" && typeof (part as { errorText?: unknown }).errorText === "string"
+      ? ((part as { errorText?: string }).errorText as string)
+      : undefined;
+
   return (
     <Confirmation
       ref={cardRef}
@@ -207,7 +257,9 @@ export function AgentApprovalCard({
       className="rounded-sm p-3 outline-hidden"
     >
       <div className="flex items-center gap-2">
-        <Badge variant="secondary">{t("agent.needsApproval")}</Badge>
+        <Badge variant={statusDestructive ? "destructive" : "secondary"}>
+          {statusLabel}
+        </Badge>
         <span className="text-sm font-semibold">
           {agentToolLabelKey(toolName)
             ? t(agentToolLabelKey(toolName)!)
@@ -217,9 +269,30 @@ export function AgentApprovalCard({
         </span>
       </div>
 
-      {body}
+      {settled ? (
+        // Settled states collapse to a status line; the parameters stay one
+        // tap away instead of duplicating the full request body under the
+        // result card.
+        <details className="text-xs">
+          <summary className="cursor-pointer select-none text-muted-foreground">
+            {t("agent.approvalShowParams")}
+          </summary>
+          <div className="mt-1">{body}</div>
+        </details>
+      ) : (
+        body
+      )}
 
-      {part.state === "approval-responded" && (
+      {declineReason ? (
+        <p className="text-xs text-muted-foreground">
+          {t("agent.approvalDeniedReason", { reason: declineReason })}
+        </p>
+      ) : null}
+      {errorText ? (
+        <p className="text-xs text-destructive">{errorText}</p>
+      ) : null}
+
+      {part.state === "approval-responded" && approved !== false && (
         <p className="text-xs text-muted-foreground">{t("agent.waiting")}</p>
       )}
 

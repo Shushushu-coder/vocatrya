@@ -147,4 +147,95 @@ describe("AgentApprovalCard", () => {
     );
     expect(container).toBeEmptyDOMElement();
   });
+
+  // AWU-APPROVAL: the card follows the approval through execution — the
+  // request settles into a status line with the parameters one tap away.
+  it("shows an approved respond as running, not as a fresh request", () => {
+    render(
+      <AgentApprovalCard
+        part={part({
+          state: "approval-responded",
+          approval: { id: "ap1", approved: true },
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/approved/i)).toBeInTheDocument();
+    expect(screen.queryByText("Needs approval")).not.toBeInTheDocument();
+    expect(screen.queryByText("Show details")).not.toBeInTheDocument();
+  });
+
+  it("shows a denied respond as declined with its reason", () => {
+    render(
+      <AgentApprovalCard
+        part={part({
+          state: "approval-responded",
+          approval: { id: "ap1", approved: false, reason: "wrong company" },
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Declined")).toBeInTheDocument();
+    expect(screen.getByText(/wrong company/)).toBeInTheDocument();
+    expect(screen.queryByText(/waiting/i)).not.toBeInTheDocument();
+  });
+
+  it("collapses the parameters on an executed call", () => {
+    const { container } = render(
+      <AgentApprovalCard
+        part={part({
+          state: "output-available",
+          approval: { id: "ap1", approved: true },
+          output: { created: true, jobId: "j1" },
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Executed")).toBeInTheDocument();
+    const details = container.querySelector("details");
+    expect(details).toBeInTheDocument();
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByText("Show details")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a denied output as declined", () => {
+    render(
+      <AgentApprovalCard
+        part={part({
+          state: "output-denied",
+          approval: { id: "ap1", approved: false, reason: "duplicate" },
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Declined")).toBeInTheDocument();
+    expect(screen.getByText(/duplicate/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a failed call with its error text", () => {
+    render(
+      <AgentApprovalCard
+        part={part({
+          state: "output-error",
+          approval: { id: "ap1", approved: true },
+          errorText: "provider unreachable",
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText(/provider unreachable/)).toBeInTheDocument();
+  });
+
+  it("does not claim a plain output that never carried an approval", () => {
+    const { container } = render(
+      <AgentApprovalCard
+        part={part({ state: "output-available", approval: undefined, output: {} })}
+        onRespond={vi.fn()}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
 });

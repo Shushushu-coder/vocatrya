@@ -1,27 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { XIcon } from "lucide-react";
 import type { TextUIPart, UIMessage } from "ai";
 import {
-  Attachment,
-  AttachmentInfo,
-  AttachmentPreview,
-  Attachments,
-  type AttachmentData,
-} from "@/components/ai-elements/attachments";
-import {
   PromptInput,
   PromptInputFooter,
-  PromptInputHeader,
   PromptInputProvider,
   PromptInputSubmit,
   PromptInputTextarea,
+  PromptInputTools,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { AgentAddContextMenu } from "@/components/agent/AgentChatContextBar";
+import { AgentChatIdentity } from "@/components/agent/AgentChatIdentity";
+import { AgentContextUsage } from "@/components/agent/AgentContextUsage";
+import { chipLabel } from "@/components/agent/pasteChip";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { readAgentChatError } from "@/lib/agent/chatTransport";
 import {
@@ -33,40 +30,11 @@ import {
   AGENT_PASTE_PART_TYPE,
   isAgentPastePart,
   type AgentPastePart,
-  type AgentPastePartData,
 } from "@/models/agent.model";
 
 import { useI18n, type TranslateFn } from "@/i18n";
 
 type ComposerPart = TextUIPart | AgentPastePart;
-
-function chipLabel(
-  chip: AgentPastePartData,
-  t: TranslateFn,
-  formatChars: (n: number) => string,
-): string {
-  const chars = formatChars(chip.chars);
-  return chip.truncated
-    ? t("agent.pastedPostingTruncated", { chars })
-    : t("agent.pastedPosting", { chars });
-}
-
-// Synthesized at render time only. The wire format stays the custom data part:
-// a real FileUIPart is a standard type, so convertToModelMessages would carry
-// the whole posting to the model and defeat head truncation.
-function chipAttachment(
-  chip: AgentPastePartData,
-  t: TranslateFn,
-  formatChars: (n: number) => string,
-): AttachmentData {
-  return {
-    type: "file",
-    id: chip.id,
-    mediaType: "text/plain",
-    filename: chipLabel(chip, t, formatChars),
-    url: "",
-  };
-}
 
 // crypto.randomUUID is secure-context-only, so it is absent over plain http on
 // a LAN host and calling it drops the paste. The id only has to be unique
@@ -112,15 +80,19 @@ function AgentChatComposer() {
     error,
     actionError,
     preflight,
-    composerNonce,
     registerComposerApi,
+    pasteChip,
+    setPasteChip,
+    panelWidth,
   } = useAgentChat();
   const controller = usePromptInputController();
   const { t, formatNumber } = useI18n();
   const formatChars = (n: number) => formatNumber(n);
 
   const text = controller.textInput.value;
-  const [chip, setChip] = useState<AgentPastePartData | undefined>();
+  // The paste chip is provider state — a model switch remounts this composer
+  // (D1) and the card survives the remount on the provider, not here.
+  const chip = pasteChip;
 
   // The provider reads the live draft on a role switch and writes through
   // fillComposer; the ref keeps read() current without re-registering.
@@ -145,7 +117,7 @@ function AgentChatComposer() {
     const body = truncated
       ? pasted.slice(0, APP_CONSTANTS.AGENT_CHAT_PASTE_MAX_CHARS)
       : pasted;
-    setChip({
+    setPasteChip({
       id: chipId(),
       text: body,
       chars: body.length,
@@ -172,14 +144,8 @@ function AgentChatComposer() {
     // for the reply already streaming — is the provider's call, because it is
     // the only place that sees every sender.
     sendMessage({ parts });
-    setChip(undefined);
+    setPasteChip(undefined);
   };
-
-  // A role switch or conversation reset clears the paste chip with the text —
-  // the textarea itself resets by remounting on the nonce above.
-  useEffect(() => {
-    setChip(undefined);
-  }, [composerNonce]);
 
   const onStop = useCallback(() => {
     void stop();
@@ -187,6 +153,8 @@ function AgentChatComposer() {
 
   const isGenerating = status === "submitted" || status === "streaming";
   const canSend = preflight.ok && (text.trim().length > 0 || !!chip);
+  // Same breakpoint the panel header uses for its compact variant.
+  const compact = panelWidth < 480;
 
   return (
     <div className="flex flex-col gap-2">
@@ -224,27 +192,6 @@ function AgentChatComposer() {
           a DOM-child selector that wrapper defeats. Nested, the group stays a
           row and the textarea collapses to a ~24px sliver beside the footer. */}
       <PromptInput onSubmit={(message) => submit(message.text)}>
-        {chip ? (
-          <PromptInputHeader>
-            <Attachments variant="inline">
-              <Attachment data={chipAttachment(chip, t, formatChars)}>
-                <AttachmentPreview />
-                <AttachmentInfo />
-                {/* Not AttachmentRemove: it repeats its label in an sr-only
-                    span, so the chip's wording would appear twice. */}
-                <Button
-                  aria-label={t("agent.removePasted")}
-                  className="size-5 shrink-0 rounded p-0 [&_svg]:size-2.5"
-                  onClick={() => setChip(undefined)}
-                  type="button"
-                  variant="ghost"
-                >
-                  <XIcon />
-                </Button>
-              </Attachment>
-            </Attachments>
-          </PromptInputHeader>
-        ) : null}
         {/* Controlled through PromptInputProvider: value lives in the
             controller so fillComposer can write to it, and it still clears
             on successful submit. */}
@@ -253,10 +200,18 @@ function AgentChatComposer() {
           onPaste={onPaste}
           placeholder={t("agent.inputPlaceholder")}
         />
+        {/* Unified composer toolbar (AWU-COMPOSER/MODEL/CONTEXT): add-content
+            menu, model picker and the context estimate all live here; the
+            header keeps only the conversation-level controls. */}
         <PromptInputFooter>
-          <span className="text-xs text-muted-foreground">
-            {approvalPending && !queued ? t("agent.waitingOnApproval") : ""}
-          </span>
+          <PromptInputTools>
+            <AgentAddContextMenu compact={compact} />
+            <AgentChatIdentity compact={compact} />
+            <AgentContextUsage />
+            <span className="text-xs text-muted-foreground">
+              {approvalPending && !queued ? t("agent.waitingOnApproval") : ""}
+            </span>
+          </PromptInputTools>
           <PromptInputSubmit
             aria-label={
               isGenerating ? t("agent.stopResponse") : t("agent.send")
