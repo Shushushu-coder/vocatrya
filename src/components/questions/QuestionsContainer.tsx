@@ -15,6 +15,7 @@ import {
   deleteQuestion,
   getQuestionById,
   getQuestionsList,
+  getTagsWithQuestionCounts,
 } from "@/actions/question.actions";
 import { toastActionResult, toastError } from "@/lib/toast";
 import { Question } from "@/models/question.model";
@@ -24,23 +25,41 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import Loading from "../Loading";
 import { QuestionList } from "./QuestionList";
 import { QuestionForm } from "./QuestionForm";
+import { TagFilterStrip } from "../TagFilterStrip";
 import { useI18n } from "@/i18n";
+
+export type TagQuestionCount = {
+  id: string;
+  label: string;
+  value: string;
+  questionCount: number;
+};
 
 type QuestionsContainerProps = {
   availableTags: Tag[];
   filterKey?: string;
+  onFilterChange?: (filter: string | undefined) => void;
+  initialTagCounts?: TagQuestionCount[];
+  initialTotal?: number;
   onQuestionsChanged?: () => void;
 };
 
 function QuestionsContainer({
   availableTags,
   filterKey,
+  onFilterChange,
+  initialTagCounts,
+  initialTotal,
   onQuestionsChanged,
 }: QuestionsContainerProps) {
   const { t } = useI18n();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [page, setPage] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
+  const [tagCounts, setTagCounts] = useState<TagQuestionCount[]>(
+    initialTagCounts ?? [],
+  );
+  const [tagTotal, setTagTotal] = useState(initialTotal ?? 0);
   const [editQuestion, setEditQuestion] = useState<Question | null>(null);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -74,10 +93,22 @@ function QuestionsContainer({
     [t],
   );
 
+  // Per-tag chip counts apply every other active filter (search) but never
+  // the current tag restriction itself, so the strip stays usable while a
+  // tag is selected.
+  const refreshTagCounts = useCallback(async (search?: string) => {
+    const result = await getTagsWithQuestionCounts({ search });
+    if (result?.success) {
+      setTagCounts(result.data);
+      setTagTotal(result.totalQuestions);
+    }
+  }, []);
+
   const reloadQuestions = useCallback(async () => {
     await loadQuestions(1, filterKey, searchTerm || undefined);
+    await refreshTagCounts(searchTerm || undefined);
     onQuestionsChanged?.();
-  }, [loadQuestions, filterKey, searchTerm, onQuestionsChanged]);
+  }, [loadQuestions, filterKey, searchTerm, refreshTagCounts, onQuestionsChanged]);
 
   const onDeleteQuestion = async (questionId: string) => {
     const result = await deleteQuestion(questionId);
@@ -104,8 +135,9 @@ function QuestionsContainer({
 
   useEffect(() => {
     loadQuestions(1, filterKey, searchTerm || undefined);
+    refreshTagCounts(searchTerm || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadQuestions, filterKey]);
+  }, [loadQuestions, filterKey, refreshTagCounts]);
 
   // Debounced search
   useEffect(() => {
@@ -116,6 +148,7 @@ function QuestionsContainer({
 
     const timer = setTimeout(() => {
       loadQuestions(1, filterKey, searchTerm || undefined);
+      refreshTagCounts(searchTerm || undefined);
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,6 +188,18 @@ function QuestionsContainer({
           </div>
         </ResponsiveCardHeader>
         <CardContent>
+          <TagFilterStrip
+            className="mb-3"
+            title={t("questions.skillTags")}
+            items={tagCounts.map((tag) => ({
+              id: tag.id,
+              label: tag.label,
+              count: tag.questionCount,
+            }))}
+            totalCount={tagTotal}
+            selectedId={filterKey}
+            onSelect={(id) => onFilterChange?.(id)}
+          />
           {loading && <Loading />}
           {!loading && (
             <>

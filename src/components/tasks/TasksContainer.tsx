@@ -9,23 +9,33 @@ import Loading from "../Loading";
 import TasksTable from "./TasksTable";
 import { TaskForm } from "./TaskForm";
 import { ActivityType } from "@/models/activity.model";
-import { useTasksList } from "./tasks-container/useTasksList";
+import {
+  useTasksList,
+  type ActivityTypeTaskCount,
+} from "./tasks-container/useTasksList";
 import {
   useAutoOpenAddTaskDialog,
   type TaskDialogPrefill,
 } from "./tasks-container/useAutoOpenAddTaskDialog";
 import { TasksToolbar } from "./tasks-container/TasksToolbar";
+import { TagFilterStrip } from "../TagFilterStrip";
 import { useI18n } from "@/i18n";
 
 type TasksContainerProps = {
   activityTypes: ActivityType[];
   filterKey?: string;
+  onFilterChange?: (filter: string | undefined) => void;
+  initialTypeCounts?: ActivityTypeTaskCount[];
+  initialTotalTasks?: number;
   onTasksChanged?: () => void;
 };
 
 function TasksContainer({
   activityTypes,
   filterKey,
+  onFilterChange,
+  initialTypeCounts,
+  initialTotalTasks,
   onTasksChanged,
 }: TasksContainerProps) {
   const { t } = useI18n();
@@ -36,6 +46,8 @@ function TasksContainer({
   const {
     tasks,
     totalTasks,
+    typeCounts,
+    typeTotal,
     timeZone,
     initialLoading,
     loadingMore,
@@ -48,7 +60,12 @@ function TasksContainer({
     sentinelRef,
     reloadTasks,
     onChangeTaskStatus,
-  } = useTasksList({ filterKey, onTasksChanged });
+  } = useTasksList({
+    filterKey,
+    initialTypeCounts,
+    initialTotalTasks,
+    onTasksChanged,
+  });
 
   useAutoOpenAddTaskDialog((prefill) => {
     setEditTask(null);
@@ -100,6 +117,18 @@ function TasksContainer({
           onAddTask={addTaskForm}
         />
         <CardContent>
+          <TagFilterStrip
+            className="mb-3"
+            title={t("tasks.activityTypes")}
+            items={typeCounts.map((type) => ({
+              id: type.id,
+              label: type.label,
+              count: type.taskCount,
+            }))}
+            totalCount={typeTotal}
+            selectedId={filterKey}
+            onSelect={(id) => onFilterChange?.(id)}
+          />
           {initialLoading && <Loading />}
           {!initialLoading && tasks.length > 0 && (
             <>

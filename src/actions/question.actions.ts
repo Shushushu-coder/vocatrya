@@ -150,33 +150,44 @@ export const deleteQuestion = async (
   }
 };
 
-export const getTagsWithQuestionCounts = async (): Promise<
-  any | undefined
-> => {
+export const getTagsWithQuestionCounts = async (options?: {
+  search?: string;
+}): Promise<any | undefined> => {
   try {
     const user = await requireUser();
+
+    // `search` mirrors getQuestionsList so each tag count is "questions that
+    // would match if this tag were selected": every other filter applies,
+    // the tag restriction itself does not. Multi-tag questions therefore
+    // contribute to each of their tags, while totalQuestions stays a
+    // distinct-row count.
+    const questionFilter: any = {};
+    if (options?.search) {
+      questionFilter.OR = [
+        { question: { contains: options.search } },
+        { answer: { contains: options.search } },
+      ];
+    }
 
     const tags = await prisma.tag.findMany({
       where: { createdBy: user.id },
       include: {
         _count: {
-          select: { questions: true },
+          select: { questions: { where: questionFilter } },
         },
       },
       orderBy: { label: "asc" },
     });
 
-    const data = tags
-      .filter((tag) => tag._count.questions > 0)
-      .map((tag) => ({
-        id: tag.id,
-        label: tag.label,
-        value: tag.value,
-        questionCount: tag._count.questions,
-      }));
+    const data = tags.map((tag) => ({
+      id: tag.id,
+      label: tag.label,
+      value: tag.value,
+      questionCount: tag._count.questions,
+    }));
 
     const totalQuestions = await prisma.question.count({
-      where: { createdBy: user.id },
+      where: { createdBy: user.id, ...questionFilter },
     });
 
     return { success: true, data, totalQuestions };
