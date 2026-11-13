@@ -33,6 +33,10 @@ export function getSidebarNavLabel(
   if (route.startsWith("/dashboard/questions")) return t("nav.questions");
   if (route.startsWith("/dashboard/interview")) return t("nav.interview");
   if (route.startsWith("/dashboard/extensions")) return t("nav.extensions");
+  // Resume variants owns its top-level nav entry; check before the parent
+  // /dashboard/profile prefix so it never falls through to nav.profile.
+  if (route.startsWith("/dashboard/profile/resumes"))
+    return t("resumeVariants.title");
   if (route.startsWith("/dashboard/profile")) return t("nav.profile");
   if (route.startsWith("/dashboard/admin")) return t("nav.library");
   if (route.startsWith("/dashboard/developer")) return t("nav.developer");
@@ -41,7 +45,7 @@ export function getSidebarNavLabel(
 
 function Header() {
   const { t } = useI18n();
-  const { freshNativeFull } = useCareerSurfaces();
+  const { freshNativeFull, resumeV1Enabled } = useCareerSurfaces();
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
@@ -69,6 +73,9 @@ function Header() {
                 return null;
               }
               if (freshNativeFull && isFreshFullHiddenNavRoute(item.route)) {
+                return null;
+              }
+              if (item.requiresResumeV1 && !resumeV1Enabled) {
                 return null;
               }
               const label = getSidebarNavLabel(item.route, item.label, t);

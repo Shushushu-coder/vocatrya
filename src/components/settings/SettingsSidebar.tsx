@@ -6,7 +6,6 @@ import {
   Bot,
   CreditCard,
   Database,
-  Files,
   Library,
   Info,
   Keyboard,
@@ -32,7 +31,6 @@ export type SettingsSection =
   | "audio"
   | "input"
   | "dictionary"
-  | "resume-variants"
   | "data-privacy"
   | "archive-data"
   | "about";
@@ -90,7 +88,6 @@ export const SETTINGS_SECTION_GROUPS: readonly SettingsSectionGroup[] = [
     fallbackLabel: "Career Management",
     sections: [
       { id: "dictionary", labelKey: "settings.sections.bulkEdit", fallbackLabel: "Bulk Edit", icon: Library },
-      { id: "resume-variants", labelKey: "resumeVariants.title", fallbackLabel: "Resume Variants", icon: Files },
     ],
   },
   {

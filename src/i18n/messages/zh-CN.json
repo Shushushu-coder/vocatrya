@@ -380,6 +380,12 @@
     "journeyEntryReflection": "职位面试复盘",
     "journeyEntryInterview": "面试练习",
     "journeyAskAgent": "咨询 Vocatrya",
+    "journeyRc": {
+      "intro": "推荐按「准备 → 行动 → 复盘」组织求职：三个阶段随时可进入，不必按顺序完成。😄",
+      "prepareDesc": "整理经历、准备简历，提前练好面试。",
+      "actDesc": "记录投了哪些岗位，跟进面试和待办。",
+      "reviewDesc": "记下面试问答，看看下次怎么答得更好。"
+    },
     "nextActionsTitle": "下一步建议",
     "nextActionsOverflow": "+{count} 条其他建议",
     "nextActionR1Title": "建立简历素材",

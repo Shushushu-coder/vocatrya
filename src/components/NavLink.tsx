@@ -18,13 +18,22 @@ interface NavLinkProps {
   pathname: string;
   expanded: boolean;
   className?: string;
+  // A nested route owned by a sibling nav entry (resume variants lives under
+  // /dashboard/profile) would otherwise double-highlight the parent link.
+  activeExcludePrefix?: string;
 }
 
-function NavLink({ label, Icon, route, pathname, expanded, className }: NavLinkProps) {
+function NavLink({ label, Icon, route, pathname, expanded, className, activeExcludePrefix }: NavLinkProps) {
   // "/dashboard" is a prefix of every other route, so it only matches exactly.
   const isActive =
     pathname === route ||
-    (route !== "/dashboard" && pathname.startsWith(`${route}/`));
+    (route !== "/dashboard" &&
+      pathname.startsWith(`${route}/`) &&
+      !(
+        activeExcludePrefix &&
+        (pathname === activeExcludePrefix ||
+          pathname.startsWith(`${activeExcludePrefix}/`))
+      ));
 
   const link = (
     <Link
