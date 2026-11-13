@@ -1,6 +1,6 @@
 # Vocatrya P2 产品设计与增量实施基线 V1
 
-> **更新日期**：2026-11-10
+> **更新日期**：2026-11-12
 > **定位**：P2 — Career Journey & Workspace Integration（求职旅程与跨模块工作台整合）。  
 > **依据**：2026-10-28 至 2026-10-29 已确认的 P2 产品讨论，以及同目录的 [P1_FEATURES.json](./P1_FEATURES.json) 和 [P1_IMPLEMENTATION.md](./P1_IMPLEMENTATION.md) 所记录的上游 P1 范围。  
 > **证据边界**：产品设计基线原文未重新读取仓库。2026-11-01 对照 main@23178a4c 更新两份提案并新增第三份：[首页/下一步](./P2_OVERVIEW_ACTIONS_CONTRACT_PROPOSAL.md)、[职位/复盘](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md)、[三 Agent 面板](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md)。**2026-11-01 四份合同提案（含 [CAREER-INSIGHTS](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md)）已经 Owner 逐项裁定冻结**，裁定记录见各合同文末冻结节；实施按各包任务授权执行，不代表已编码。P1 文档中的实现状态不能自动外推为 P2 实际代码状态。
@@ -20,10 +20,10 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 | Feature | P2 相对优先级 | 设计状态 | 核心交付 | 实现/验收口径 |
 | --- | --- | --- | --- | --- |
 | **JOURNEY-OVERVIEW** | CORE | 合同已冻结（2026-11-01，D1–D9） | 三阶段旅程、一页主要入口、新旧用户状态 | 2026-11-10 已验收（以 JSON 的实际覆盖范围为准） |
-| **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 2026-11-04 已集成未验收 |
+| **JOB-CONNECTIONS** | HIGH | 联合合同已冻结（D1–D12） | 职位与申请、简历版本、题目、轮次和复盘联动 | 2026-11-12 部分验收通过；备份导入恢复未执行，任务 C 已终止待续 |
 | **INTERVIEW-DEBRIEF** | HIGH | 联合合同已冻结（D1–D12） | 真实面试逐轮复盘与经验沉淀 | 2026-11-10 已验收（以 JSON 的实际覆盖范围为准） |
-| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 2026-11-04 已集成未验收（R6 接线已完成） |
-| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 2026-11-04 已集成未验收（M9 接线已完成） |
+| **NEXT-ACTIONS** | HIGH | 合同已冻结（D1–D9） | 从真实业务数据计算下一步引导 | 2026-11-12 部分验收通过；模式/错误路径仍缺覆盖，任务 C 已终止待续 |
+| **CAREER-INSIGHTS** | MEDIUM | 专项合同已冻结（D1–D9） | 简明求职看板与可信统计 | 2026-11-12 部分验收通过；动态时区及重开通过，降级/错误恢复待验 |
 | **MULTI-AGENT** | HIGH | 合同已冻结（D1–D10） | Insight/Pilot/Reflect 三入口及右侧 Agent 面板 | 2026-11-10 已验收（以 JSON 的实际覆盖范围为准） |
 
 对应的 [P2_FEATURES.json](./P2_FEATURES.json) 采用与 P1 相近的 `schemaVersion / project / baseline / definitions / features` 台账结构，另记录 `designStatus`、`confirmedDecisions`、`dependencies`、`openQuestions`。当前六项均已实现并集成；JOURNEY-OVERVIEW、INTERVIEW-DEBRIEF、MULTI-AGENT 为 `passes:true`，其余三项为 `passes:false`；实现与集成不等于真实 Windows Electron 功能验收通过。各项变更及验证边界以 JSON 的 implementationNotes 为准。
@@ -34,7 +34,22 @@ P1 重点是核心业务能力的建立与验收；P2 重点是把职位、简�
 
 **2026-11-10 三 Agent 集成收口**：纳入 `6f7b3bbd` 及复核修复，完成角色槽位、首页阶段入口、双语词条，以及首次创建/切换/上下文异步竞态和草稿刷新恢复。10 文件/189 项定向测试、完整类型检查及改动文件 ESLint 通过；当前 Main 对照复现 5 项既有断言失败，不记为全绿。六项 P2 Feature 均保持 `passes: false`，真实桌面、生产构建、完整 E2E 和真实 AI 调用未执行；待集中验收。
 
-### A/B 补验准备集成（2026-11-10）
+### 任务 C：部分验收通过，已终止待续（2026-11-12）
+
+- **源码与修改归属**：`.worktrees/p2-business-closure`，分支 `codex/p2-business-closure`，基线 `79e7d5ab`。未提交内容仅为 `scripts/p2-closure-ready/desktop-closure.mjs`（新增）及 `desktop-run.mjs`、`desktop-scenarios.mjs`、`package.mjs`、`ui-r6.mjs` 的驱动/夹具扩展，尚未审查集成，无产品代码修改。本次仅登记状态，不恢复执行或授权新构建。
+- **已核对证据**：Windows Electron / fresh-native/full / 隔离生产快照，run `closure-20261112-10` 的检查记录合计场景 01–26 PASS；场景 27 FAIL，驱动定位器已修但未运行时复验。已覆盖职位关联主链、简历/JD 历史不漂移、真实下载、缺失材料、R6 生命周期、真实设置 UI 的 LA→Shanghai 动态日期分桶，以及账户时区与业务数据重开保持。场景 22 为真实备份导出与解压隐私扫描，不能替代备份导入恢复；场景 19/23/24/25 为退出重开核对，26 为 `AB_READY_DISABLED` 读面与写门控。
+- **证据位置**：`.worktrees/p2-business-closure/.tmp/p2-closure-ready/runs/closure-20261112-10/checks/`；对应 `heavy/ee42b4f3-112f-4bcc-bd24-e9531fae7fb5/` 保留日志、trace、备份和 `p2-*-graceful-quit.json`。run-09 保留 01–25 PASS/26 FAIL 对照；run-04/06/07 的早期失败不覆盖、不删除。run-12 构建中被终止，`heavy/2e5fb2ca-d560-4fc0-831a-f7ab4be0e066/` 仅部分产物，不能作为可复用完整构建。
+- **驱动缺陷与边界**：执行窗口报告修正 userSettings 嵌套形状、`check().result` 取值、模式枚举/blocked 状态、隐私扫描子串误报及 R5 的 INTERVIEW 夹具，并有后续通过记录。场景 27 的 myjobs blocked 定位器修正仍未复验；不把它记为产品修复或验收通过。本轮 0 个已证实产品缺陷，不代表全部失败路径已排除。
+
+| Feature | 当前结论 | 剩余条件 |
+| --- | --- | --- |
+| JOB-CONNECTIONS | 部分验收通过，`passes:false` | 场景 33–35 的另一隔离数据根真实备份导入恢复、恢复后关系/附件及 UI 核对未执行 |
+| NEXT-ACTIONS | 部分验收通过，`passes:false` | 场景 27 resume_v1 修正待复验；28–32 的 scope=none/BLOCKED、规则读失败静默、页面错误路径与恢复未执行；Legacy/迁移态缺可过 preflight 的夹具，仍未覆盖 |
+| CAREER-INSIGHTS | 部分验收通过，`passes:false` | 动态时区 UI 与重开已通过；29–32 的 blocked“—”与真实 0、M9 null 与 0、错误及恢复重读未执行；适用模式覆盖仍待核对 |
+
+- **停止与接续**：执行窗口报告本任务进程已清理，其他项目进程未动，未提交/合并/推送/发布。保留 Worktree、未提交驱动和证据，三项实现状态不变、`passes:false`。恢复前先核对实际 Diff、数据前置、场景顺序和产物归属，确认驱动是否支持安全续测及旧产物能否复用；不能直接假定“新 run 即可只跑 27–35”，也不自动重建或清理残留。Legacy/迁移态缺口不能因后续场景通过而自动消除。
+
+### A/B 补验准备集成（2026-11-10；以下为历史记录）
 
 **2026-11-12 B 实际应用续验与集成复核**：`cd09eb66` 加原 B 补丁的生产构建 `q5e8GhkT0CKpYa0guG7yq` 已在 Windows Electron fresh-native/full 记录正常退出 IPC、所属 backend 结束和同数据目录重开；不再只有 A 的自定义 main 探针证据。历史退出超时根因仍未证实。集成复核另修 Hosted 超时计时位置，最终补丁未重跑桌面，确切来源和边界见 P1 任务 B 条目。此证据不覆盖 JOB-CONNECTIONS、NEXT-ACTIONS、CAREER-INSIGHTS 各自业务数据退出重开、备份及原缺失场景，三项 `passes:false` 保持。
 
