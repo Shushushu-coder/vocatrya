@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { useI18n } from "@/i18n";
+import { APP_CONSTANTS } from "@/lib/constants";
 import { toastError } from "@/lib/toast";
 import { isDesktopShell } from "../desktop/desktopShell";
 import { Button } from "../ui/button";
@@ -11,10 +12,12 @@ type RuntimeListEntry = Awaited<
   ReturnType<VocatryaRuntimeBridge["list"]>
 >[number];
 
-// The version reaches the client through next.config.mjs's env block, which
-// reads package.json when the config loads — no Electron IPC is needed and
-// the rendered value can never disagree with the shipped manifest.
-function appVersion(): string {
+// Build-time fallback: next.config.mjs's env block reads package.json when
+// the config loads, so this value always agrees with the bundled manifest.
+// The authoritative running version arrives post-mount through the document
+// meta emitted by the settings layout — in a packaged install it carries the
+// installer's Electron version, which a stale bundled build cannot know.
+function bundledVersion(): string {
   return process.env.NEXT_PUBLIC_APP_VERSION?.trim() || "unknown";
 }
 
@@ -61,11 +64,18 @@ function AboutSettings() {
   // client paint agree before the Electron-only fact appears.
   const [desktop, setDesktop] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
+  // Initialized from the bundled env so SSR and the first client paint agree;
+  // the post-mount read below upgrades it to the resolved running version.
+  const [version, setVersion] = useState(bundledVersion);
   useEffect(() => {
     setDesktop(isDesktopShell());
+    const resolved = document
+      .querySelector(`meta[name="${APP_CONSTANTS.APP_VERSION_META_NAME}"]`)
+      ?.getAttribute("content")
+      ?.trim();
+    if (resolved) setVersion(resolved);
   }, []);
 
-  const version = appVersion();
   const installed = isInstalledBuild();
 
   const copyDiagnostics = async () => {

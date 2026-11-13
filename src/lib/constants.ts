@@ -51,6 +51,9 @@ export const APP_CONSTANTS = {
   // cached. A day is plenty — releases are rare and the check is unauthenticated.
   GITHUB_REPO: "Shushushu-coder/vocatrya",
   UPDATE_CHECK_REVALIDATE_SECONDS: 86_400,
+  // Document meta tag carrying the server-resolved running version
+  // (resolveAppVersion) to client surfaces such as the About settings page.
+  APP_VERSION_META_NAME: "vocatrya-app-version",
   // Sidebar geometry in px. `collapseBelow` is the drag threshold: releasing
   // (or dragging) under it snaps the sidebar to the icon rail.
   SIDEBAR_WIDTH_PX: {
