@@ -1,7 +1,8 @@
-// Settings host shell: five nav groups with fourteen entries, `general` as
+// Settings host shell: five nav groups with thirteen entries, `general` as
 // the default page, owner components mounted per section, honest unavailable
 // states for pages whose components have not landed, and the legacy MCP /
-// Interview compat surfaces kept reachable in their new homes.
+// Interview compat surfaces kept reachable in their new homes. Resume
+// variants moved out of settings into the primary navigation (UI-RC-RESUME-NAV).
 import * as React from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,10 +12,6 @@ import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 
 vi.mock("@/components/admin/AdminTabsContainer", () => ({
   default: () => <div data-testid="dictionary-settings" />,
-}));
-
-vi.mock("@/components/career/resume-variant/ResumeVariantList", () => ({
-  ResumeVariantList: () => <div data-testid="resume-variants-settings" />,
 }));
 
 vi.mock("@/components/settings/GeneralSettings", () => ({
@@ -75,7 +72,6 @@ const EXPECTED_SECTION_ORDER = [
   "Audio",
   "Input Preferences",
   "Bulk Edit",
-  "Resume Variants",
   "Data & Privacy",
   "Archived Data",
   "About",
@@ -90,7 +86,7 @@ describe("Settings page — V1 navigation shell", () => {
     window.history.replaceState(null, "", "/dashboard/settings");
   });
 
-  it("renders fourteen sections in five groups", () => {
+  it("renders thirteen sections in five groups", () => {
     render(<Settings />);
     const names = navButtons().map((button) => button.textContent);
     expect(names).toEqual(EXPECTED_SECTION_ORDER);
@@ -130,23 +126,11 @@ describe("Settings page — V1 navigation shell", () => {
     expect(new URLSearchParams(window.location.search).get("section")).toBe("dictionary");
   });
 
-  it("mounts the resume variants list under Career Management when the capability is on", async () => {
-    const user = userEvent.setup();
+  it("no longer lists resume variants — the entry moved to primary navigation", () => {
     render(<Settings />);
-    await user.click(screen.getByRole("button", { name: "Resume Variants" }));
-    expect(screen.getByTestId("resume-variants-settings")).toBeInTheDocument();
-  });
-
-  it("shows an honest unavailable state for resume variants when the capability is off", async () => {
-    const user = userEvent.setup();
-    render(
-      <CareerSurfacesProvider freshNativeFull={false} resumeV1Enabled={false}>
-        <Settings />
-      </CareerSurfacesProvider>,
-    );
-    await user.click(screen.getByRole("button", { name: "Resume Variants" }));
-    expect(screen.getByTestId("settings-section-unavailable")).toBeInTheDocument();
-    expect(screen.queryByTestId("resume-variants-settings")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Resume Variants" }),
+    ).not.toBeInTheDocument();
   });
 
   it("splits AI connections and business assignments onto different pages", async () => {

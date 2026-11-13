@@ -380,6 +380,12 @@
     "journeyEntryReflection": "Interview debriefs",
     "journeyEntryInterview": "Interview practice",
     "journeyAskAgent": "Ask Vocatrya",
+    "journeyRc": {
+      "intro": "Try organizing your search as Prepare → Act → Review — enter any stage at any time, in any order. 😄",
+      "prepareDesc": "Organize your experience, prepare resumes, and practice interviews ahead of time.",
+      "actDesc": "Log the roles you apply to, then keep up with interviews and to-dos.",
+      "reviewDesc": "Note the interview Q&As and see how to answer better next time."
+    },
     "nextActionsTitle": "Next steps",
     "nextActionsOverflow": "+{count} more suggestions",
     "nextActionR1Title": "Start your career materials",

@@ -8,6 +8,7 @@ import {
   BookOpen,
   MessagesSquare,
   ChartColumn,
+  Files,
   Puzzle,
 } from "lucide-react";
 
@@ -369,6 +370,15 @@ export const SIDEBAR_LINKS = [
     label: "Analytics",
   },
   {
+    icon: Files,
+    route: "/dashboard/profile/resumes",
+    label: "Resume Variants",
+    // Same capability policy as the overview quick entry it mirrors: the
+    // resumes surface only exists under the resume_v1 rollout scope, so the
+    // entry is hidden (not disabled) when the capability is off.
+    requiresResumeV1: true,
+  },
+  {
     icon: BriefcaseBusiness,
     route: "/dashboard/myjobs",
     label: "Jobs",
@@ -400,6 +410,9 @@ export const SIDEBAR_LINKS = [
     icon: UserRound,
     route: "/dashboard/profile",
     label: "Profile",
+    // Resume variants moved to a top-level entry that owns its own route
+    // prefix; the parent profile link must not double-highlight there.
+    activeExcludePrefix: "/dashboard/profile/resumes",
   },
   {
     icon: Puzzle,

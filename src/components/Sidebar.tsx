@@ -59,7 +59,7 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
   const path = usePathname();
   const { expanded, width, isResizing, toggle, startResize, resizeByKey } =
     useSidebar();
-  const { freshNativeFull } = useCareerSurfaces();
+  const { freshNativeFull, resumeV1Enabled } = useCareerSurfaces();
   const version = useAppVersion();
 
   return (
@@ -113,6 +113,9 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
             if (freshNativeFull && isFreshFullHiddenNavRoute(item.route)) {
               return null;
             }
+            if (item.requiresResumeV1 && !resumeV1Enabled) {
+              return null;
+            }
             const label = getSidebarNavLabel(item.route, item.label, t);
             return (
               <NavLink
@@ -123,6 +126,7 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
                 pathname={path}
                 expanded={expanded}
                 className={item.desktopHidden ? "desktop-hidden" : undefined}
+                activeExcludePrefix={item.activeExcludePrefix}
               />
             );
           })}
