@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "project": "Vocatrya",
+  "updatedAt": "2026-11-13",
+  "proposal": "AGENT_WORKSPACE_UPGRADE_PROPOSAL.md",
+  "baseline": {
+    "gitRef": "957da53b",
+    "date": "2026-11-13",
+    "notes": "Main 工作区有其他未提交修改：src/models/agent.model.ts、src/models/agent.schema.ts。仅定向静态查看，未构建、未执行真实转写或 Windows Electron 验收。"
+  },
+  "definitions": {
+    "scope": "PROPOSED_V1 = 本轮讨论的首版方向，不自动改变既有 MVP/P1/P2 台账，也不代表产品编码授权。",
+    "designStatus": "CORE_CONFIRMED = 核心方向已确认，具体设计见 openQuestions；不能将 recommendation 当作用户裁定。",
+    "implementationStatus": "NOT_ASSESSED = 尚未系统评估目标能力；PARTIAL = 有相关基础但升级目标未完成；MISSING = 本轮定向查看未见目标主路径。",
+    "steps": "待实施的验收检查点，非已通过记录；涉及未决项时须先冻结对应合同。",
+    "passes": "仅实际用户路径和必要数据、权限验证全部通过后才设 true；本轮仅整理文档，全部为 false。"
+  },
+  "confirmedDecisions": [
+    { "id": "C1", "decision": "升级 Agent 窗口，覆盖模型选择、上下文、内容添加、审批与听写。" },
+    { "id": "C2", "decision": "本地文件纳入首版方向，具体格式与传递方式待讨论。" },
+    { "id": "C3", "decision": "听写仅使用 API，不使用本地转写模型；交互参考 Codex。" },
+    { "id": "C4", "decision": "听写纳入整体方案一节，不另建独立听写文档。" }
+  ],
+  "features": [
+    {
+      "id": "AWU-COMPOSER",
+      "category": "Agent / Composer UX",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "PARTIAL",
+      "description": "统一输入区和工具入口，使已有与新增能力容易发现并具备清晰状态。",
+      "existingEvidence": ["src/components/agent/AgentChatPanel.tsx", "src/components/agent/AgentChatInput.tsx"],
+      "recommendation": "输入框上方展示内容卡片，底部提供添加、模型、上下文、麦克风及发送或停止，保留角色与历史能力。",
+      "dependencies": [],
+      "openQuestions": ["D8"],
+      "steps": ["窄面板下各入口可操作且无横向溢出。", "键盘、焦点及按钮可访问名称覆盖主要流程。", "发送、停止、加载与失败状态反馈清楚。"],
+      "passes": false
+    },
+    {
+      "id": "AWU-MODEL",
+      "category": "Agent / Model Selection",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "PARTIAL",
+      "description": "优化模型选择的可见性与会话衔接。",
+      "existingEvidence": ["src/components/agent/AgentChatIdentity.tsx", "src/lib/agent/chatConversationLock.ts"],
+      "recommendation": "显示当前模型，沿用已有会话换模型时新建会话的契约，并明确草稿保留行为。",
+      "dependencies": ["AWU-COMPOSER"],
+      "openQuestions": ["D1", "D8"],
+      "steps": ["新会话所选模型与后端实际执行身份一致。", "已有会话切换流程清楚，重试及重新生成不静默改写旧绑定。", "按冻结规则验证草稿和附件去向；连接失效不静默回退。"],
+      "passes": false
+    },
+    {
+      "id": "AWU-CONTEXT",
+      "category": "Agent / Context Budget",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "PARTIAL",
+      "description": "呈现上下文用量与携带内容，明确预算和裁剪行为。",
+      "existingEvidence": ["src/lib/agent/contextBudget.ts", "src/components/agent/AgentChatContextBar.tsx"],
+      "recommendation": "默认自动管理，估算值明确标注；模型容量、应用预算和当前用量分别表达。是否开放档位待讨论。",
+      "dependencies": ["AWU-COMPOSER"],
+      "openQuestions": ["D2"],
+      "steps": ["显示值及裁剪提示与后端组装结果相符，不将 16k 应用预算冒充模型容量。", "添加或移除上下文后展示及实际请求同步变化。", "超预算行为与审批和当前回合保留规则兼容；若持久化设置，验证重新打开。"],
+      "passes": false
+    },
+    {
+      "id": "AWU-FILES",
+      "category": "Agent / Local Files",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "PARTIAL",
+      "description": "统一职位、简历、文本与本地文件添加流程；通用 Agent 文件链路尚未确认接通。",
+      "existingEvidence": ["src/components/agent/AgentChatContextBar.tsx", "src/components/agent/AgentChatInput.tsx", "src/lib/ai/import/extract-text.ts", "src/lib/ai/runtime/capabilities.ts"],
+      "recommendation": "优先评估文本型 PDF、DOCX、TXT 本地提取文字；文件卡片提供预览、状态和移除。原生多模态与 OCR 另行适配。",
+      "dependencies": ["AWU-COMPOSER", "AWU-CONTEXT"],
+      "openQuestions": ["D1", "D3", "D4"],
+      "steps": ["冻结首批格式与限制后，验证选择、解析、预览、移除及实际模型请求中的内容。", "超限、损坏、加密、无文本、格式不支持及取消不伪报成功。", "只读取用户所选文件，后端校验限制，文件内容不授予工具权限。", "按冻结生命周期验证会话恢复、文件删除和缓存清理；发送内容及外发对象可理解。"],
+      "passes": false
+    },
+    {
+      "id": "AWU-APPROVAL",
+      "category": "Agent / Approval UX",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "PARTIAL",
+      "description": "改善操作预览与批准、拒绝、执行状态反馈。",
+      "existingEvidence": ["src/components/agent/AgentApprovalCard.tsx", "src/lib/agent/tools/canonicalMatchJob.ts"],
+      "recommendation": "先保留现有工具审批规则，明确对象、动作与影响；会话允许或全部允许尚未批准。",
+      "dependencies": [],
+      "openQuestions": ["D5"],
+      "steps": ["审批卡展示与后端待执行参数一致。", "拒绝后不执行相应写入，批准或重试不重复执行。", "按冻结规则验证审批中输入、关闭及刷新恢复，前端状态不能绕过后端授权。"],
+      "passes": false
+    },
+    {
+      "id": "AWU-DICTATION",
+      "category": "Agent / API Dictation",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CORE_CONFIRMED",
+      "implementationStatus": "MISSING",
+      "description": "通过 API 将录音转为可编辑草稿，交互参考 Codex，不采用本地转写模型。",
+      "existingEvidence": ["src/components/settings/AudioSettings.tsx"],
+      "recommendation": "点击录音，显示时长并支持取消；停止后转写，文字插入正确草稿，由用户编辑后发送。转写配置独立于聊天模型。",
+      "dependencies": ["AWU-COMPOSER"],
+      "technicalDecision": {
+        "execution": "API_ONLY",
+        "localModel": false,
+        "provider": null,
+        "model": null,
+        "credentialMode": null,
+        "notes": "提供商、模型和凭据方式待讨论；Codex 内部服务不可视为已接入。"
+      },
+      "openQuestions": ["D6", "D7"],
+      "steps": ["在隔离 Windows Electron fresh-native 环境完成授权录音到真实 API 再到草稿的路径。", "普通话、中英混说、公司名和职位名样本核对质量及耗时，不能只用 Mock 证明转写可用。", "已有草稿不被覆盖，不自动发送；失败、权限拒绝、取消和迟到响应按冻结规则处理。", "切换会话、继续输入及关闭面板时结果不串写，麦克风和临时音频按约定释放。", "设置及凭据安全可用，明确音频去向；不下载或启动本地转写模型。"],
+      "passes": false
+    }
+  ],
+  "openQuestions": [
+    { "id": "D1", "status": "PENDING_DISCUSSION", "topic": "模型切换与草稿、附件保留规则", "recommendation": "沿用换模型新建会话。" },
+    { "id": "D2", "status": "PENDING_DISCUSSION", "topic": "上下文只读展示或档位配置、数值及持久化", "recommendation": "默认自动，估算展示。" },
+    { "id": "D3", "status": "PENDING_DISCUSSION", "topic": "首批文件格式、容量、数量、OCR、多模态与超预算处理", "recommendation": "优先文字提取路径。" },
+    { "id": "D4", "status": "PENDING_DISCUSSION", "topic": "原文件保存、会话恢复、删除、缓存及外发说明", "recommendation": "仅处理用户所选文件，明确发送内容。" },
+    { "id": "D5", "status": "PENDING_DISCUSSION", "topic": "是否扩展审批模式及其失效、恢复与后端授权语义", "recommendation": "先保留既有策略，改善展示。" },
+    { "id": "D6", "status": "PENDING_DISCUSSION", "topic": "转写 API 提供商、模型、网络、凭据、费用和额度", "recommendation": "独立于聊天模型配置，尚未选定服务。" },
+    { "id": "D7", "status": "PENDING_DISCUSSION", "topic": "录音时长、实时字幕、插入位置、跨会话归属、取消重试与音频保留清理", "recommendation": "先录后转，编辑后发送。" },
+    { "id": "D8", "status": "PENDING_DISCUSSION", "topic": "最终布局、快捷键、高保真设计需求与交付排期", "recommendation": "整体设计，按用户成果分阶段。" }
+  ],
+  "validation": {
+    "status": "NOT_RUN",
+    "targetHost": "Windows Electron",
+    "targetMode": "fresh-native",
+    "notes": "本轮仅新增方案文档；产品代码未实施，未执行真实 API 或桌面验收。重型验证按 AGENTS.md 单独授权与串行规则执行。"
+  }
+}
