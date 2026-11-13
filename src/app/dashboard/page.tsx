@@ -32,10 +32,7 @@ export default async function Dashboard() {
     ]);
   return (
     <div className="col-span-3 mx-auto grid w-full max-w-[1400px] min-w-0 auto-rows-max gap-4">
-      <JourneySection
-        dataState={dataState}
-        jobsAbRead={nextActionsData.jobsReadFamily === "ab"}
-      />
+      <JourneySection jobsAbRead={nextActionsData.jobsReadFamily === "ab"} />
       <NextActions data={nextActionsData} />
       <OverviewReminders
         reminders={remindersData.reminders}
