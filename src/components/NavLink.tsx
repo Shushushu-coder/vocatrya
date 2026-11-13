@@ -17,9 +17,10 @@ interface NavLinkProps {
   route: string;
   pathname: string;
   expanded: boolean;
+  className?: string;
 }
 
-function NavLink({ label, Icon, route, pathname, expanded }: NavLinkProps) {
+function NavLink({ label, Icon, route, pathname, expanded, className }: NavLinkProps) {
   // "/dashboard" is a prefix of every other route, so it only matches exactly.
   const isActive =
     pathname === route ||
@@ -32,7 +33,8 @@ function NavLink({ label, Icon, route, pathname, expanded }: NavLinkProps) {
       className={cn(
         "navlink h-10 w-full hover:text-foreground",
         isActive ? "text-foreground" : "text-muted-foreground",
-        isActive && expanded && "rounded-md bg-accent"
+        isActive && expanded && "rounded-md bg-accent",
+        className
       )}
     >
       {isActive && (

@@ -137,6 +137,11 @@ describe("agent chat system prompt", () => {
       "match_job",
       "match_job_canonical",
       "generate_cover_letter",
+      "notion_search",
+      "notion_read",
+      "notion_create_page",
+      "notion_append_content",
+      "notion_update_record",
     ]);
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("list_jobs");
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("get_job");

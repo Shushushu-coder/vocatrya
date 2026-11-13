@@ -55,7 +55,7 @@ export async function checkNavigation(page, origin) {
     "/dashboard/myjobs",
     "/dashboard/tasks",
     "/dashboard/questions",
-    "/dashboard/interview",
+    "/dashboard/extensions",
     "/dashboard/profile",
     "/dashboard/admin",
     "/dashboard/settings",

@@ -18,6 +18,7 @@ import { CreateMenu } from "./GlobalActions";
 import { useI18n } from "@/i18n";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { isFreshFullHiddenNavRoute } from "@/lib/career/freshSurfacePolicy";
+import { cn } from "@/lib/utils";
 
 export function getSidebarNavLabel(
   route: string,
@@ -31,6 +32,7 @@ export function getSidebarNavLabel(
   if (route.startsWith("/dashboard/tasks")) return t("nav.tasks");
   if (route.startsWith("/dashboard/questions")) return t("nav.questions");
   if (route.startsWith("/dashboard/interview")) return t("nav.interview");
+  if (route.startsWith("/dashboard/extensions")) return t("nav.extensions");
   if (route.startsWith("/dashboard/profile")) return t("nav.profile");
   if (route.startsWith("/dashboard/admin")) return t("nav.library");
   if (route.startsWith("/dashboard/developer")) return t("nav.developer");
@@ -74,7 +76,10 @@ function Header() {
                 <SheetClose asChild key={item.label}>
                   <Link
                     href={item.route}
-                    className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
+                    className={cn(
+                      "flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground",
+                      item.desktopHidden && "desktop-hidden",
+                    )}
                   >
                     <item.icon className="h-5 w-5" />
                     {label}

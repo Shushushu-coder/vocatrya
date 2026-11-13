@@ -8,6 +8,7 @@ import {
   BookOpen,
   MessagesSquare,
   ChartColumn,
+  Puzzle,
 } from "lucide-react";
 
 export const APP_CONSTANTS = {
@@ -391,11 +392,19 @@ export const SIDEBAR_LINKS = [
     icon: MessagesSquare,
     route: "/dashboard/interview",
     label: "Interview",
+    // Retired inside the desktop shell (moved to the extensions web entry);
+    // the CSS gate keeps it in the web build's navigation.
+    desktopHidden: true,
   },
   {
     icon: UserRound,
     route: "/dashboard/profile",
     label: "Profile",
+  },
+  {
+    icon: Puzzle,
+    route: "/dashboard/extensions",
+    label: "Extensions",
   },
   {
     icon: Wrench,

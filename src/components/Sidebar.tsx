@@ -122,6 +122,7 @@ function Sidebar({ user, signOutAction }: SidebarProps) {
                 route={item.route}
                 pathname={path}
                 expanded={expanded}
+                className={item.desktopHidden ? "desktop-hidden" : undefined}
               />
             );
           })}

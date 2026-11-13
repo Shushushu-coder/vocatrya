@@ -14,6 +14,7 @@ import { buildReviewResumeTool } from "./reviewResume";
 import { buildMatchJobTool } from "./matchJob";
 import { buildCanonicalMatchJobTool } from "./canonicalMatchJob";
 import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
+import { buildNotionAgentTools } from "./notion";
 
 // The three nested tools deliberately break the "a tool touches neither the
 // route nor provider resolution" rule in CLAUDE.md: they run their own
@@ -47,6 +48,12 @@ export function buildAgentTools(ctx: {
    * (pre-multi-agent rows) keeps the full general-assistant registry.
    */
   agentRole?: string | null;
+  /**
+   * EXT-NOTION: the agent-tool names the connected Notion session can serve
+   * (remote tools/list ∩ app allowlist, resolved by the route before build).
+   * Absent or empty registers nothing — the extension is strictly opt-in.
+   */
+  notionTools?: readonly string[];
 }): ToolSet {
   // One per request, so no two nested tools run at once but two users never
   // block each other.
@@ -97,6 +104,19 @@ export function buildAgentTools(ctx: {
       guard: nestedGuard,
     });
     delete tools.generate_cover_letter;
+  }
+  // EXT-NOTION: register only what the pre-resolved effective set allows —
+  // execution-time gates in the tools re-check the live connection row, so a
+  // disconnect between registration and execution cannot run a remote call.
+  if (ctx.notionTools && ctx.notionTools.length > 0) {
+    const notionToolset = buildNotionAgentTools({
+      userId: ctx.userId,
+      request: ctx.request,
+    });
+    for (const name of ctx.notionTools) {
+      const notionTool = notionToolset[name];
+      if (notionTool) tools[name] = notionTool;
+    }
   }
 
   // Effective set = role allowlist ∩ registered runtime tools (built after

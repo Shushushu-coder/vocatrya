@@ -7,6 +7,11 @@ import { GetResumeResult } from "./GetResumeResult";
 import { ReviewResumeResult } from "./ReviewResumeResult";
 import { MatchJobResult } from "./MatchJobResult";
 import { CoverLetterResult } from "./CoverLetterResult";
+import {
+  NotionReadResultCard,
+  NotionSearchResultCard,
+  NotionWriteResultCard,
+} from "./NotionResult";
 import type {
   AgentAddJobResult,
   AgentCanonicalMatchJobResult,
@@ -15,6 +20,9 @@ import type {
   AgentGetResumeResult,
   AgentListJobsResult,
   AgentMatchJobResult,
+  AgentNotionReadResult,
+  AgentNotionSearchResult,
+  AgentNotionWriteResult,
   AgentReviewResumeResult,
 } from "@/models/agent.model";
 import { useI18n } from "@/i18n";
@@ -81,6 +89,14 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       />
     ) : toolName === "generate_cover_letter" ? (
       <CoverLetterResult output={part.output as AgentCoverLetterResult} />
+    ) : toolName === "notion_search" ? (
+      <NotionSearchResultCard output={part.output as AgentNotionSearchResult} />
+    ) : toolName === "notion_read" ? (
+      <NotionReadResultCard output={part.output as AgentNotionReadResult} />
+    ) : toolName === "notion_create_page" ||
+      toolName === "notion_append_content" ||
+      toolName === "notion_update_record" ? (
+      <NotionWriteResultCard output={part.output as AgentNotionWriteResult} />
     ) : null;
 
   return <div className="rounded-sm border p-3">{body}</div>;

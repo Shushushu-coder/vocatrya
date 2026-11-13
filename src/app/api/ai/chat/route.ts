@@ -2,6 +2,7 @@ import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 import { hasArchivedJobReference } from "@/lib/agent/archiveVisibility";
 import { generateId } from "ai";
 import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError, type ConversationRequest } from "@/lib/agent/conversationRequest";
+import { resolveNotionAgentToolNames } from "@/lib/extensions/notion/service";
 import { conversationCommitStream } from "@/lib/agent/conversationStream";
 import "server-only";
 
@@ -138,6 +139,7 @@ async function accountChatResponse({
   canonicalJobs,
   request,
   agentRole,
+  notionTools,
   managed,
 }: {
   req: NextRequest;
@@ -156,6 +158,11 @@ async function accountChatResponse({
    * variant; NULL keeps the general assistant.
    */
   agentRole?: string | null;
+  /**
+   * EXT-NOTION: agent-tool names the connected session serves, resolved in
+   * the route's admission step. Empty/omitted registers nothing.
+   */
+  notionTools?: readonly string[];
   /** Managed-locked turn — provenance + operation identity (M4). */
   managed?: import("@/lib/agent/accountTurn").ManagedTurnContext;
 }) {
@@ -215,6 +222,7 @@ async function accountChatResponse({
   const systemPrompt = buildAgentChatSystemPrompt(locale, {
     freshNativeFull,
     agentRole,
+    notionTools,
   });
 
   // Route on the full request. Budgeting happens inside the turn, after
@@ -323,6 +331,7 @@ async function accountChatResponse({
           canonicalJobs,
           request,
           agentRole,
+          notionTools,
         });
         contextSize = result.contextSize;
       });
@@ -471,6 +480,13 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     careerRuntime.rolloutScope,
   );
 
+  // EXT-NOTION: one indexed row read per turn. Connection state is
+  // re-asserted inside each tool at execution time, so a mid-turn
+  // disconnect still cannot run a remote call.
+  const notionTools = await resolveNotionAgentToolNames(userId).catch(
+    () => [],
+  );
+
   if (lock.kind === "account" || lock.kind === "managed") {
     return accountChatResponse({
       req,
@@ -484,6 +500,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       canonicalJobs,
       request,
       agentRole: conversation.agentRole,
+      notionTools,
       managed: managedTurn,
     });
   }
@@ -630,6 +647,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   const systemPrompt = buildAgentChatSystemPrompt(locale, {
     freshNativeFull,
     agentRole: conversation.agentRole,
+    notionTools,
   });
 
   const turnSpan = startSpan("agent.chat.turn", {
@@ -678,6 +696,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
           canonicalJobs,
           request,
           agentRole: conversation.agentRole,
+          notionTools,
         });
         prefixMetrics = measureTurnPrefix({
           userId,

@@ -63,6 +63,23 @@ describe("desktop runtime helpers", () => {
     expect(Object.prototype.hasOwnProperty.call(absent, "VOCATRYA_HOSTED_ENDPOINT")).toBe(false);
   });
 
+  it("passes the interview practice URL through as a non-secret config knob", () => {
+    const env = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: { VOCATRYA_INTERVIEW_PRACTICE_URL: "https://practice.example.com/app" },
+      secret: "temporary",
+    });
+    expect(env.VOCATRYA_INTERVIEW_PRACTICE_URL).toBe("https://practice.example.com/app");
+    const absent = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: {},
+      secret: "temporary",
+    });
+    expect(Object.prototype.hasOwnProperty.call(absent, "VOCATRYA_INTERVIEW_PRACTICE_URL")).toBe(false);
+  });
+
   it("passes explicit AB flags through and omits absent ones", () => {
     const absent = buildBackendEnvironment({
       port: 45678,

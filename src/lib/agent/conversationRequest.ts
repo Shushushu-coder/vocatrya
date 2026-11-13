@@ -36,7 +36,14 @@ export type ConversationRequest = {
 };
 
 const fail = (code: ConversationErrorCode): never => { throw new ConversationRequestError(code); };
-const APPROVAL_BOUND_TOOL_RECEIPTS = new Set(["add_job", "match_job"]);
+const APPROVAL_BOUND_TOOL_RECEIPTS = new Set([
+  "add_job",
+  "match_job",
+  // EXT-NOTION writes execute only inside their own admitted approval.
+  "notion_create_page",
+  "notion_append_content",
+  "notion_update_record",
+]);
 export function pendingApprovals(messages: UIMessage[]) {
   return messages.flatMap(message => message.parts.filter(isToolUIPart)
     .filter(part => part.state === "approval-requested").map(part => ({ message, part })));

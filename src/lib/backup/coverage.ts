@@ -37,6 +37,11 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   // reservations whose persisted turn semantics no longer hold. Rows still
   // present on the same install keep dedupe/replay working.
   "AgentToolExecution",
+  // EXT-NOTION connection state carries a sealed OAuth credential bundle and
+  // an in-flight OAuth flow bound to this install's safeStorage — neither
+  // can travel. A restored install starts DISCONNECTED and the user
+  // re-authorizes the workspace in place.
+  "NotionConnection",
 ] as const;
 
 export const BACKED_UP_PRISMA_MODELS: readonly BackupModel[] = INSERT_ORDER;

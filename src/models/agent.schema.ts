@@ -126,3 +126,56 @@ export const AgentGetJobSchema = z.object({
 });
 
 export type AgentGetJobInput = z.infer<typeof AgentGetJobSchema>;
+
+// ─── EXT-NOTION ───────────────────────────────────────────────────────────
+// Unknown/interrupted writes require manual reconciliation in Notion. The legacy
+// verifiedNoDuplicate field is accepted but never enables retry.
+
+export const AgentNotionSearchSchema = z.object({
+  query: z.string().min(1).max(500).describe("Search keywords — a page title, a topic, or short specific terms. Notion searches pages and databases the connected workspace has shared with this integration."),
+});
+
+export type AgentNotionSearchInput = z.infer<typeof AgentNotionSearchSchema>;
+
+export const AgentNotionReadSchema = z.object({
+  target: z.string().min(1).max(2000).describe("A Notion page or database URL, or an id returned by an earlier notion_search result in this conversation. Never invent an id."),
+});
+
+export type AgentNotionReadInput = z.infer<typeof AgentNotionReadSchema>;
+
+const notionWriteCommon = {
+  verifiedNoDuplicate: z.boolean().optional().describe("Legacy compatibility flag; ignored for retry authorization. Unknown/interrupted writes remain blocked and require manual reconciliation in Notion."),
+};
+
+export const AgentNotionCreatePageSchema = z.object({
+  target: z.string().max(2000).optional().describe("Optional parent — a Notion page or database URL/id the user named or an earlier tool returned. Omit to create a private page in the connected workspace."),
+  targetType: z.enum(["page", "database"]).optional().describe("What target is. Required when target is a database: pages cannot be created under a database through page_id."),
+  title: z.string().min(1).max(300).describe("The page title shown to the user on the approval card."),
+  content: z.string().min(1).max(8000).describe("Markdown body for the new page. The approval card shows it verbatim — the user reviews exactly this text before it is sent."),
+  properties: z.record(z.string(), z.unknown()).optional().describe("Optional database properties when target is a database, using the property names and value shapes notion_read showed for that database."),
+  ...notionWriteCommon,
+});
+
+export type AgentNotionCreatePageInput = z.infer<
+  typeof AgentNotionCreatePageSchema
+>;
+
+export const AgentNotionAppendContentSchema = z.object({
+  target: z.string().min(1).max(2000).describe("The Notion page URL or id to append to — from an earlier notion_search/notion_read result or one the user named."),
+  content: z.string().min(1).max(8000).describe("Markdown to append at the end of the page. The approval card shows it verbatim."),
+  ...notionWriteCommon,
+});
+
+export type AgentNotionAppendContentInput = z.infer<
+  typeof AgentNotionAppendContentSchema
+>;
+
+export const AgentNotionUpdateRecordSchema = z.object({
+  target: z.string().min(1).max(2000).describe("The Notion database row (page) URL or id to update — from an earlier notion_search/notion_read result or one the user named."),
+  properties: z.record(z.string(), z.unknown()).describe("Property updates only, using the property names and value shapes notion_read showed for the database. Read the record first; never guess a property name or format."),
+  ...notionWriteCommon,
+});
+
+export type AgentNotionUpdateRecordInput = z.infer<
+  typeof AgentNotionUpdateRecordSchema
+>;

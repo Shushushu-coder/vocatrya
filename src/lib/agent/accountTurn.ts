@@ -427,6 +427,11 @@ export type AccountAgentTurnInput = {
    * page line to the role's allowlist.
    */
   agentRole?: string | null;
+  /**
+   * EXT-NOTION: agent-tool names the connected session serves (resolved by
+   * the route). Registered into the toolset before the role allowlist runs.
+   */
+  notionTools?: readonly string[];
   /** Injected for tests; production uses the default clients. */
   deps?: StreamExecutionDeps;
 };
@@ -505,6 +510,7 @@ export async function runAccountAgentTurn(
     canonicalJobs: input.canonicalJobs === true || input.freshNativeFull === true,
     request: input.request,
     agentRole: input.agentRole,
+    notionTools: input.notionTools,
   });
   const toolsBlock = describeToolsForPrompt(tools);
 

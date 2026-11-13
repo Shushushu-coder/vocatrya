@@ -12,12 +12,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { useI18n } from "@/i18n";
+import { cn } from "@/lib/utils";
 import type { OverviewDataState } from "@/actions/dashboard.actions";
 
 type JourneyEntry = {
   key: string;
   labelKey: string;
   href: string;
+  // Retired inside the desktop shell via the data-desktop CSS gate; the
+  // web build keeps showing the entry.
+  desktopHidden?: boolean;
 };
 
 type JourneyStage = {
@@ -141,6 +145,7 @@ export default function JourneySection({
           key: "practice",
           labelKey: "dashboard.journeyEntryInterview",
           href: "/dashboard/interview",
+          desktopHidden: true,
         },
       ],
     },
@@ -177,7 +182,10 @@ export default function JourneySection({
                     key={entry.key}
                     href={entry.href}
                     data-testid={`journey-entry-${stage.key}-${entry.key}`}
-                    className="flex min-w-0 items-center rounded-md px-2 py-1.5 text-sm hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                    className={cn(
+                      "flex min-w-0 items-center rounded-md px-2 py-1.5 text-sm hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                      entry.desktopHidden && "desktop-hidden",
+                    )}
                   >
                     <span className="truncate">{t(entry.labelKey)}</span>
                   </Link>
