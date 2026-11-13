@@ -1,6 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getTasksList, updateTaskStatus } from "@/actions/task.actions";
+import {
+  getActivityTypesWithTaskCounts,
+  getTasksList,
+  updateTaskStatus,
+} from "@/actions/task.actions";
 import { toastActionResult, toastError } from "@/lib/toast";
 import { Task, TaskGroupBy, TaskStatus } from "@/models/task.model";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -9,19 +13,34 @@ import { runtimeTimeZone } from "@/lib/datetime";
 
 const DEFAULT_STATUS_FILTER: TaskStatus[] = ["in-progress", "needs-attention"];
 
+export type ActivityTypeTaskCount = {
+  id: string;
+  label: string;
+  value: string;
+  taskCount: number;
+};
+
 // Owns the task list itself: pagination, search, status/group filters,
 // infinite scroll, and the optimistic status-change update.
 export function useTasksList({
   filterKey,
+  initialTypeCounts,
+  initialTotalTasks,
   onTasksChanged,
 }: {
   filterKey?: string;
+  initialTypeCounts?: ActivityTypeTaskCount[];
+  initialTotalTasks?: number;
   onTasksChanged?: () => void;
 }) {
   const { t } = useI18n();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
+  const [typeCounts, setTypeCounts] = useState<ActivityTypeTaskCount[]>(
+    initialTypeCounts ?? [],
+  );
+  const [typeTotal, setTypeTotal] = useState(initialTotalTasks ?? 0);
   const [timeZone, setTimeZone] = useState<string>(() => runtimeTimeZone());
   const [initialLoading, setInitialLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -30,6 +49,9 @@ export function useTasksList({
     DEFAULT_STATUS_FILTER,
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const countsRequest = useRef(0);
+  const currentCountFilter = useRef("");
+  currentCountFilter.current = JSON.stringify([statusFilter, searchTerm || undefined]);
   const hasSearched = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -68,6 +90,26 @@ export function useTasksList({
     [tasksPerPage],
   );
 
+  // Per-category chip counts apply every other active filter (status, search)
+  // but never the current category restriction itself, so the strip stays
+  // usable while a category is selected.
+  const refreshTypeCounts = useCallback(
+    async (statuses?: TaskStatus[], search?: string) => {
+      const filter = JSON.stringify([statuses, search]);
+      if (filter !== currentCountFilter.current) return;
+      const request = ++countsRequest.current;
+      const result = await getActivityTypesWithTaskCounts({
+        statuses,
+        search,
+      });
+      if (result?.success && request === countsRequest.current && filter === currentCountFilter.current) {
+        setTypeCounts(result.data);
+        setTypeTotal(result.totalTasks);
+      }
+    },
+    [],
+  );
+
   const reloadTasks = useCallback(async () => {
     await loadTasks(
       1,
@@ -76,8 +118,17 @@ export function useTasksList({
       searchTerm || undefined,
       groupBy,
     );
+    await refreshTypeCounts(statusFilter, searchTerm || undefined);
     onTasksChanged?.();
-  }, [loadTasks, filterKey, statusFilter, searchTerm, groupBy, onTasksChanged]);
+  }, [
+    loadTasks,
+    filterKey,
+    statusFilter,
+    searchTerm,
+    groupBy,
+    refreshTypeCounts,
+    onTasksChanged,
+  ]);
 
   const onChangeTaskStatus = async (taskId: string, status: TaskStatus) => {
     const originalTasks = [...tasks];
@@ -87,6 +138,7 @@ export function useTasksList({
 
     const result = await updateTaskStatus(taskId, status);
     if (result.success) {
+      await refreshTypeCounts(statusFilter, searchTerm || undefined);
       onTasksChanged?.();
     } else {
       setTasks(originalTasks);
@@ -95,14 +147,16 @@ export function useTasksList({
   };
 
   useEffect(() => {
-    (async () =>
+    (async () => {
       await loadTasks(
         1,
         filterKey,
         statusFilter,
         searchTerm || undefined,
         groupBy,
-      ))();
+      );
+      await refreshTypeCounts(statusFilter, searchTerm || undefined);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadTasks, filterKey, statusFilter, groupBy]);
 
@@ -115,6 +169,7 @@ export function useTasksList({
 
     const timer = setTimeout(() => {
       loadTasks(1, filterKey, statusFilter, searchTerm || undefined, groupBy);
+      refreshTypeCounts(statusFilter, searchTerm || undefined);
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,6 +230,8 @@ export function useTasksList({
   return {
     tasks,
     totalTasks,
+    typeCounts,
+    typeTotal,
     timeZone,
     initialLoading,
     loadingMore,

@@ -6,6 +6,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import JourneySection from "@/components/dashboard/JourneySection";
+import { translate } from "@/i18n/translate";
 import { journeyText } from "@/components/dashboard/journeyCopy";
 import NextActions from "@/components/dashboard/NextActions";
 import {
@@ -113,18 +114,18 @@ describe("JourneySection", () => {
     ).toBeInTheDocument();
   });
 
-  it("serves the exact frozen zh-CN copy until the dictionary merge lands", () => {
-    const t = (key: string) => key;
-    expect(journeyText("zh-CN", t, "intro")).toBe(
+  it("serves the exact frozen zh-CN copy from the integrated dictionary", () => {
+    const t = (key: string) => translate("zh-CN", key);
+    expect(journeyText(t, "intro")).toBe(
       "推荐按「准备 → 行动 → 复盘」组织求职：三个阶段随时可进入，不必按顺序完成。😄",
     );
-    expect(journeyText("zh-CN", t, "prepareDesc")).toBe(
+    expect(journeyText(t, "prepareDesc")).toBe(
       "整理经历、准备简历，提前练好面试。",
     );
-    expect(journeyText("zh-CN", t, "actDesc")).toBe(
+    expect(journeyText(t, "actDesc")).toBe(
       "记录投了哪些岗位，跟进面试和待办。",
     );
-    expect(journeyText("zh-CN", t, "reviewDesc")).toBe(
+    expect(journeyText(t, "reviewDesc")).toBe(
       "记下面试问答，看看下次怎么答得更好。",
     );
   });

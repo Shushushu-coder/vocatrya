@@ -78,6 +78,8 @@
     }
   },
   "common": {
+    "expandAll": "Expand all",
+    "collapse": "Collapse",
     "save": "Save",
     "saving": "Saving...",
     "saved": "Saved",

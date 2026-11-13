@@ -599,7 +599,7 @@ describe("Question Actions", () => {
       });
     });
 
-    it("should filter out tags with zero questions", async () => {
+    it("should return tags with zero questions so the strip can decide", async () => {
       (getCurrentUser as any).mockResolvedValue(mockUser);
       const mockTags = [
         {
@@ -620,8 +620,64 @@ describe("Question Actions", () => {
 
       const result = await getTagsWithQuestionCounts();
 
-      expect(result?.data).toHaveLength(1);
-      expect(result?.data[0].label).toBe("React");
+      expect(result?.data).toHaveLength(2);
+      expect(result?.data[1].questionCount).toBe(0);
+    });
+
+    it("should apply the search filter to counts and total", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.tag.findMany as any).mockResolvedValue([]);
+      (prisma.question.count as any).mockResolvedValue(0);
+
+      await getTagsWithQuestionCounts({ search: "react" });
+
+      const searchOr = [
+        { question: { contains: "react" } },
+        { answer: { contains: "react" } },
+      ];
+      expect(prisma.tag.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+        include: {
+          _count: {
+            select: { questions: { where: { OR: searchOr } } },
+          },
+        },
+        orderBy: { label: "asc" },
+      });
+      expect(prisma.question.count).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id, OR: searchOr },
+      });
+    });
+
+    it("should count the total as distinct questions, not summed tag counts", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const mockTags = [
+        {
+          id: "tag-1",
+          label: "React",
+          value: "react",
+          _count: { questions: 5 },
+        },
+        {
+          id: "tag-2",
+          label: "TypeScript",
+          value: "typescript",
+          _count: { questions: 3 },
+        },
+      ];
+      (prisma.tag.findMany as any).mockResolvedValue(mockTags);
+      // 6 unique questions: a multi-tag question is counted under each tag
+      // (5 + 3 = 8 tag hits) but the total stays the distinct row count.
+      (prisma.question.count as any).mockResolvedValue(6);
+
+      const result = await getTagsWithQuestionCounts();
+
+      expect(result?.data[0].questionCount).toBe(5);
+      expect(result?.data[1].questionCount).toBe(3);
+      expect(result?.totalQuestions).toBe(6);
+      expect(prisma.question.count).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+      });
     });
 
     it("should return error for unauthenticated user", async () => {

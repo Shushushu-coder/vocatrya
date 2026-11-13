@@ -6,6 +6,7 @@ import {
   getTaskById,
   deleteTaskById,
   updateTaskStatus,
+  getActivityTypesWithTaskCounts,
 } from "@/actions/task.actions";
 import { Task } from "@/models/task.model";
 import { useRouter } from "next/navigation";
@@ -46,6 +47,7 @@ vi.mock("@/actions/task.actions", () => ({
   deleteTaskById: vi.fn(),
   updateTaskStatus: vi.fn(),
   updateTask: vi.fn(),
+  getActivityTypesWithTaskCounts: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -170,6 +172,11 @@ describe("TasksContainer Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (useRouter as any).mockReturnValue(mockRouter);
+    (getActivityTypesWithTaskCounts as any).mockResolvedValue({
+      success: true,
+      data: [],
+      totalTasks: 0,
+    });
   });
 
   describe("Initial Load", () => {

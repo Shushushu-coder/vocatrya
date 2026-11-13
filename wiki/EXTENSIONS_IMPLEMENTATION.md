@@ -1,5 +1,12 @@
 # Vocatrya 扩展功能决策与实施方向
 
+## 本轮调度更新（2026-11-13）
+
+用户明确：网页面试练习（EXT-INTERVIEW-WEB）暂时不处理，暂不安排目标地址接入及补验；原实现状态与 passes:false 保留。
+
+自动网申下一阶段目标：复用用户已在 Vocatrya 填写的资料，插件无需重复录入。只读核查 source.ts、convert.ts、导出面板与插件导入代码确认：已有职业资料白名单读取、上游格式转换及文件导入链路；直接配对和按需拉取尚未接通。后续连接任务复用该转换层，核对字段覆盖/未映射项，提供明确授权、刷新和撤销；手动导入保留备用，不把已有导入证据当作直接连接或实际填表通过。
+
+
 > 更新日期：2026-11-13。对应机器可读台账：[EXTENSIONS_FEATURES.json](./EXTENSIONS_FEATURES.json)。
 > A/B/C 已提交原始交付，本轮汇总集成到 Main，并补齐共享接线与审查修复。工具入口及面试入口迁移代码为 `IMPLEMENTED`，自动网申和 Notion 整体为 `PARTIAL`；所有 `passes` 保持 `false`。本轮执行了定向测试、隔离迁移、生产构建、Windows Electron fresh-native 定向验证和隔离 Chromium 插件导入验证，未操作真实账号或业务数据。
 

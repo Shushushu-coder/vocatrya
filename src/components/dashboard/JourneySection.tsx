@@ -116,7 +116,7 @@ export default function JourneySection({
 }: {
   jobsAbRead: boolean;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const { open } = useAgentChat();
   const { jobMutationsEnabled, resumeV1Enabled } = useCareerSurfaces();
 
@@ -230,7 +230,7 @@ export default function JourneySection({
           {t("dashboard.journeyTitle")}
         </h2>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          {journeyText(locale, t, "intro")}
+          {journeyText(t, "intro")}
         </p>
       </div>
       <div className="grid min-w-0 grid-cols-1 items-start gap-4 @md/main:grid-cols-2 @3xl/main:grid-cols-3">
@@ -252,7 +252,7 @@ export default function JourneySection({
                   </h3>
                 </div>
                 <p className={cn("text-xs", tone.desc)}>
-                  {journeyText(locale, t, stage.descSlot)}
+                  {journeyText(t, stage.descSlot)}
                 </p>
                 <div className="grid gap-1">
                   {stage.entries.map((entry) => (

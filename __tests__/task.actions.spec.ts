@@ -801,6 +801,89 @@ describe("taskActions", () => {
       });
     });
 
+    it("should apply an explicit status filter to counts and total", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findMany as any).mockResolvedValue([]);
+      (prisma.task.count as any).mockResolvedValue(0);
+
+      await getActivityTypesWithTaskCounts({
+        statuses: ["in-progress"],
+      });
+
+      const statusWhere = { status: { in: ["in-progress"] } };
+      expect(prisma.activityType.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+        include: {
+          _count: {
+            select: {
+              Tasks: { where: statusWhere },
+            },
+          },
+        },
+      });
+      expect(prisma.task.count).toHaveBeenCalledWith({
+        where: { userId: mockUser.id, ...statusWhere },
+      });
+    });
+
+    it("should apply no status restriction when statuses is an empty array", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findMany as any).mockResolvedValue([]);
+      (prisma.task.count as any).mockResolvedValue(0);
+
+      await getActivityTypesWithTaskCounts({ statuses: [] });
+
+      expect(prisma.activityType.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+        include: {
+          _count: {
+            select: {
+              Tasks: { where: {} },
+            },
+          },
+        },
+      });
+      expect(prisma.task.count).toHaveBeenCalledWith({
+        where: { userId: mockUser.id },
+      });
+    });
+
+    it("should apply the search filter to counts and total", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.activityType.findMany as any).mockResolvedValue([]);
+      (prisma.task.count as any).mockResolvedValue(0);
+
+      await getActivityTypesWithTaskCounts({ search: "report" });
+
+      const searchOr = [
+        { title: { contains: "report" } },
+        { description: { contains: "report" } },
+        { activityType: { label: { contains: "report" } } },
+      ];
+      expect(prisma.activityType.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+        include: {
+          _count: {
+            select: {
+              Tasks: {
+                where: {
+                  status: { notIn: ["complete", "cancelled"] },
+                  OR: searchOr,
+                },
+              },
+            },
+          },
+        },
+      });
+      expect(prisma.task.count).toHaveBeenCalledWith({
+        where: {
+          userId: mockUser.id,
+          status: { notIn: ["complete", "cancelled"] },
+          OR: searchOr,
+        },
+      });
+    });
+
     it("should return error when user is not authenticated", async () => {
       (getCurrentUser as any).mockResolvedValue(null);
 

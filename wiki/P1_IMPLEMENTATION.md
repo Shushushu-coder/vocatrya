@@ -1,5 +1,10 @@
 # Vocatrya P1 增量实施计划
 
+## 本轮调度更新（2026-11-13）
+
+用户明确：托管 AI（AI-MANAGED）暂时不处理，不安排本阶段开发或验收。原实现状态 PARTIAL 与 passes:false 保留，不代表取消范围或已完成。
+
+
 > 更新日期：2026-10-31。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）、`match_job` 合同提案（`90a1a6af`，merge `264b463d`）与 canonical `match_job` 实现（`67a3adf6`，merge `393155fc`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。BYOK 已在 Main `673e3460` 的相同集成代码上完成 DeepSeek 真实服务与 Windows Electron fresh-native/full 验收，零产品代码修改。功能验收与代码集成分别记录。
 > 状态口径：`IMPLEMENTED` 表示相应业务主路径已有实现，`PARTIAL` 表示部分实现，`MISSING` 表示目标产品能力尚未完整实现。上述状态不代表用户验收完成；`passes: true` 仅在对应真实业务与必要数据/桌面 Gate 通过后设置。
 

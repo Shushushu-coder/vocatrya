@@ -1,7 +1,10 @@
 import TasksPageClient from "@/app/dashboard/tasks/TasksPageClient";
 import { screen, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { getTasksList } from "@/actions/task.actions";
+import {
+  getActivityTypesWithTaskCounts,
+  getTasksList,
+} from "@/actions/task.actions";
 import { useRouter, useSearchParams } from "next/navigation";
 
 vi.mock("next-auth", () => {
@@ -36,6 +39,7 @@ vi.mock("next-auth/providers/credentials", () => ({
 
 vi.mock("@/actions/task.actions", () => ({
   getTasksList: vi.fn(),
+  getActivityTypesWithTaskCounts: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -128,11 +132,16 @@ describe("TasksPageClient Component", () => {
       data: [],
       total: 0,
     });
+    (getActivityTypesWithTaskCounts as any).mockResolvedValue({
+      success: true,
+      data: mockActivityTypesWithCounts,
+      totalTasks: 8,
+    });
     (useSearchParams as any).mockReturnValue(new URLSearchParams());
   });
 
   describe("Rendering", () => {
-    it("should render TasksSidebar and TasksContainer components", () => {
+    it("should render the tag strip and TasksContainer components", () => {
       render(
         <TasksPageClient
           activityTypes={mockActivityTypes}
@@ -141,7 +150,7 @@ describe("TasksPageClient Component", () => {
         />,
       );
 
-      // Check if sidebar is rendered
+      // Check if the in-card tag strip is rendered
       expect(screen.getByText("Categories")).toBeInTheDocument();
       expect(screen.getByText("Development")).toBeInTheDocument();
       expect(screen.getByText("Testing")).toBeInTheDocument();
@@ -150,7 +159,7 @@ describe("TasksPageClient Component", () => {
       expect(screen.getByText("Tasks")).toBeInTheDocument();
     });
 
-    it("should display total task count in sidebar", () => {
+    it("should display total task count in the tag strip", () => {
       render(
         <TasksPageClient
           activityTypes={mockActivityTypes}
@@ -187,10 +196,10 @@ describe("TasksPageClient Component", () => {
       );
 
       const allButton = screen.getByRole("button", { name: /All/i });
-      expect(allButton).toHaveClass("bg-accent");
+      expect(allButton).toHaveAttribute("aria-pressed", "true");
     });
 
-    it("should update filter when activity type is clicked in sidebar", async () => {
+    it("should update filter when activity type is clicked in the tag strip", async () => {
       (getTasksList as any).mockResolvedValue({
         success: true,
         data: [],
@@ -211,7 +220,7 @@ describe("TasksPageClient Component", () => {
       await user.click(developmentButton);
 
       await waitFor(() => {
-        expect(developmentButton).toHaveClass("bg-accent");
+        expect(developmentButton).toHaveAttribute("aria-pressed", "true");
       });
     });
 
@@ -237,7 +246,7 @@ describe("TasksPageClient Component", () => {
       await user.click(developmentButton);
 
       await waitFor(() => {
-        expect(developmentButton).toHaveClass("bg-accent");
+        expect(developmentButton).toHaveAttribute("aria-pressed", "true");
       });
 
       // Then click on All
@@ -245,7 +254,7 @@ describe("TasksPageClient Component", () => {
       await user.click(allButton);
 
       await waitFor(() => {
-        expect(allButton).toHaveClass("bg-accent");
+        expect(allButton).toHaveAttribute("aria-pressed", "true");
       });
     });
 
@@ -270,14 +279,14 @@ describe("TasksPageClient Component", () => {
       await user.click(developmentButton);
 
       await waitFor(() => {
-        expect(developmentButton).toHaveClass("bg-accent");
+        expect(developmentButton).toHaveAttribute("aria-pressed", "true");
       });
 
       const testingButton = screen.getByRole("button", { name: /Testing/i });
       await user.click(testingButton);
 
       await waitFor(() => {
-        expect(testingButton).toHaveClass("bg-accent");
+        expect(testingButton).toHaveAttribute("aria-pressed", "true");
       });
     });
   });
@@ -324,11 +333,11 @@ describe("TasksPageClient Component", () => {
       );
 
       // Check if main container has correct classes
-      const mainContainer = container.querySelector(".col-span-3.flex.h-full");
+      const mainContainer = container.querySelector(".col-span-3.h-full");
       expect(mainContainer).toBeInTheDocument();
     });
 
-    it("should render sidebar with correct styling", () => {
+    it("should not render the category sidebar", () => {
       const { container } = render(
         <TasksPageClient
           activityTypes={mockActivityTypes}
@@ -338,10 +347,10 @@ describe("TasksPageClient Component", () => {
       );
 
       const sidebar = container.querySelector(".w-48.border-r.py-4");
-      expect(sidebar).toBeInTheDocument();
+      expect(sidebar).not.toBeInTheDocument();
     });
 
-    it("should render container with flex-1 class", () => {
+    it("should render the tag strip inside the content card", () => {
       const { container } = render(
         <TasksPageClient
           activityTypes={mockActivityTypes}
@@ -350,8 +359,9 @@ describe("TasksPageClient Component", () => {
         />,
       );
 
-      const tasksContainer = container.querySelector(".flex-1");
-      expect(tasksContainer).toBeInTheDocument();
+      const chips = container.querySelectorAll("[data-chip]");
+      // "All" chip plus the two category chips.
+      expect(chips.length).toBe(3);
     });
   });
 
@@ -535,6 +545,11 @@ describe("TasksPageClient Component", () => {
         data: [],
         total: 0,
       });
+      (getActivityTypesWithTaskCounts as any).mockResolvedValue({
+        success: true,
+        data: manyActivityTypes,
+        totalTasks: 18,
+      });
 
       render(
         <TasksPageClient
@@ -550,14 +565,14 @@ describe("TasksPageClient Component", () => {
       await user.click(developmentButton);
 
       await waitFor(() => {
-        expect(developmentButton).toHaveClass("bg-accent");
+        expect(developmentButton).toHaveAttribute("aria-pressed", "true");
       });
 
       const testingButton = screen.getByRole("button", { name: /Testing/i });
       await user.click(testingButton);
 
       await waitFor(() => {
-        expect(testingButton).toHaveClass("bg-accent");
+        expect(testingButton).toHaveAttribute("aria-pressed", "true");
       });
 
       const codeReviewButton = screen.getByRole("button", {
@@ -566,7 +581,7 @@ describe("TasksPageClient Component", () => {
       await user.click(codeReviewButton);
 
       await waitFor(() => {
-        expect(codeReviewButton).toHaveClass("bg-accent");
+        expect(codeReviewButton).toHaveAttribute("aria-pressed", "true");
       });
     });
   });
@@ -588,7 +603,7 @@ describe("TasksPageClient Component", () => {
       const developmentButton = screen.getByRole("button", {
         name: /Development/i,
       });
-      expect(developmentButton).toHaveClass("bg-accent");
+      expect(developmentButton).toHaveAttribute("aria-pressed", "true");
     });
 
     it("should write the selected activity type to the URL", async () => {

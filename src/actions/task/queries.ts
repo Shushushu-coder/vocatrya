@@ -168,13 +168,32 @@ export const getTaskById = async (taskId: string): Promise<any | undefined> => {
   }
 };
 
-export const getActivityTypesWithTaskCounts = async (): Promise<
-  any | undefined
-> => {
+export const getActivityTypesWithTaskCounts = async (options?: {
+  statuses?: TaskStatus[];
+  search?: string;
+}): Promise<any | undefined> => {
   try {
     const user = await requireUser();
 
+    // `statuses` omitted keeps the historical "open work" definition, which
+    // equals the toolbar's default status set; an explicit array reflects the
+    // current status filter, with [] meaning no status restriction.
     const excludedStatuses = ["complete", "cancelled"];
+
+    const taskFilter: any = {};
+    if (options?.statuses === undefined) {
+      taskFilter.status = { notIn: excludedStatuses };
+    } else if (options.statuses.length > 0) {
+      taskFilter.status = { in: options.statuses };
+    }
+
+    if (options?.search) {
+      taskFilter.OR = [
+        { title: { contains: options.search } },
+        { description: { contains: options.search } },
+        { activityType: { label: { contains: options.search } } },
+      ];
+    }
 
     const activityTypes = await prisma.activityType.findMany({
       where: {
@@ -184,9 +203,7 @@ export const getActivityTypesWithTaskCounts = async (): Promise<
         _count: {
           select: {
             Tasks: {
-              where: {
-                status: { notIn: excludedStatuses },
-              },
+              where: taskFilter,
             },
           },
         },
@@ -205,7 +222,7 @@ export const getActivityTypesWithTaskCounts = async (): Promise<
     const totalTasks = await prisma.task.count({
       where: {
         userId: user.id,
-        status: { notIn: excludedStatuses },
+        ...taskFilter,
       },
     });
 

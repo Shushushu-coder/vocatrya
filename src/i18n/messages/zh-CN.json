@@ -78,6 +78,8 @@
     }
   },
   "common": {
+    "expandAll": "展开全部",
+    "collapse": "收起",
     "save": "保存",
     "saving": "保存中...",
     "saved": "已保存",
