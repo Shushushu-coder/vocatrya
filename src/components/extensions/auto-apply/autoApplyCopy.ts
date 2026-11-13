@@ -27,6 +27,36 @@ export interface AutoApplyCopy {
   readUnavailableTitle: string;
   readUnavailable: string;
   sectionTitles: Record<AutoApplySectionKey, string>;
+  connect: {
+    title: string;
+    subtitle: string;
+    pairTitle: string;
+    pairHint: string;
+    pairButton: string;
+    pairing: string;
+    pairReady: string;
+    copy: string;
+    copied: string;
+    pairFailed: string;
+    waiting: string;
+    pairExpired: string;
+    connectionsTitle: string;
+    empty: string;
+    untitledClient: string;
+    pairedAt: string;
+    lastSync: string;
+    neverSynced: string;
+    lastProfileVersion: string;
+    sectionsGranted: string;
+    activeBadge: string;
+    revokedBadge: string;
+    revoke: string;
+    revoking: string;
+    revokeConfirm: string;
+    revokeFailed: string;
+    manualTitle: string;
+    manualHint: string;
+  };
 }
 
 export const AUTO_APPLY_COPY = { en: en.extensions.autoApply.detail, "zh-CN": zhCN.extensions.autoApply.detail };

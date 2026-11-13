@@ -70,6 +70,10 @@ model User {
 
   // EXT-NOTION dedicated Notion extension connection (additive backrelation only).
   notionConnection      NotionConnection?
+
+  // EXT-AUTO-APPLY browser-extension pairing/connection rows (additive only).
+  autoApplyExtensionPairings    AutoApplyExtensionPairing[]
+  autoApplyExtensionConnections AutoApplyExtensionConnection[]
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -1876,6 +1880,49 @@ model NotionConnection {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([pendingStateHash])
+}
+
+/// One-shot browser-extension pairing grant for EXT-AUTO-APPLY. The user
+/// creates a short-lived pairing code in the app; the plugin exchanges it
+/// once for a long-lived connection token. Only the sha256 of the secret is
+/// stored — the plaintext code never persists.
+model AutoApplyExtensionPairing {
+  id              String    @id @default(uuid())
+  userId          String
+  secretHash      String    @unique
+  // JSON array of AutoApplySectionKey granted at pair time.
+  allowedSections String
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// EXT-AUTO-APPLY paired plugin instance. `tokenHash` is the sha256 of the
+/// bearer token the plugin presents — plaintext tokens are never stored.
+/// revokedAt set means the token is dead even if still presented.
+model AutoApplyExtensionConnection {
+  id              String    @id @default(uuid())
+  userId          String
+  clientName      String?
+  tokenHash       String    @unique
+  // JSON array of AutoApplySectionKey the plugin may pull.
+  allowedSections String
+  pairedAt        DateTime  @default(now())
+  lastSeenAt      DateTime?
+  lastSyncAt      DateTime?
+  // profileV2.updatedAt of the last payload this connection pulled.
+  lastProfileUpdatedAt String?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model DeepMatchDetail {

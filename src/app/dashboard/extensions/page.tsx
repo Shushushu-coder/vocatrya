@@ -34,7 +34,13 @@ export default async function ExtensionsPage() {
     getNotionExtensionState(user.id),
   ]) : [];
   const autoApplyStatus = autoApply?.status === "fulfilled"
-    ? t(autoApply.value.available ? "extensions.autoApply.available" : "extensions.autoApply.unavailable")
+    ? t(
+        !autoApply.value.available
+          ? "extensions.autoApply.unavailable"
+          : autoApply.value.connections.active > 0
+            ? "extensions.autoApply.connected"
+            : "extensions.autoApply.available",
+      )
     : t("extensions.autoApply.statusError");
   const notionState = notion?.status === "fulfilled" ? notion.value : null;
   const notionStatus = notionState

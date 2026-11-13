@@ -25,7 +25,8 @@ const DEFAULT_PROFILE_V2 = {
 const STORAGE_KEYS = {
   profileV2: "profileV2",
   apiConfig: "apiConfig",
-  updateState: "updateState"
+  updateState: "updateState",
+  vocatryaConnection: "vocatryaConnection"
 };
 
 const PROFILE_PANEL_STATE_KEY = "OJAF_PROFILE_PANEL_STATE";
@@ -103,9 +104,9 @@ async function handleMessage(message) {
       await chrome.runtime.openOptionsPage();
       return {};
     case "OJAF_SAVE_SETTINGS":
-      return saveSettings(message.payload || {});
+      return queueConnectionMutation(() => saveSettings(message.payload || {}));
     case "OJAF_CLEAR_SETTINGS":
-      return clearSettings();
+      return queueConnectionMutation(() => clearSettings());
     case "OJAF_MAP_FIELDS":
       return mapFields(message.payload || {});
     case "OJAF_ANALYZE_PAGE_STRUCTURE":
@@ -124,6 +125,14 @@ async function handleMessage(message) {
       return checkForUpdate({ reason: message.payload?.reason || "manual" });
     case "OJAF_OPEN_UPDATE_PAGE":
       return openUpdatePage(message.payload || {});
+    case "OJAF_VOCATRYA_PAIR":
+      return queueConnectionMutation(() => vocatryaPair(message.payload || {}));
+    case "OJAF_VOCATRYA_STATUS":
+      return queueConnectionMutation(() => vocatryaStatus(message.payload || {}));
+    case "OJAF_VOCATRYA_SYNC":
+      return queueConnectionMutation(() => vocatryaSync(message.payload || {}));
+    case "OJAF_VOCATRYA_DISCONNECT":
+      return queueConnectionMutation(() => vocatryaDisconnect());
     default:
       throw new Error(`Unknown message type: ${message.type}`);
   }
@@ -156,6 +165,8 @@ async function saveSettings(payload) {
 }
 
 async function clearSettings() {
+  // Keep credentials and settings available for retry until revocation succeeds.
+  await vocatryaDisconnect();
   await chrome.storage.local.clear();
   return { cleared: true };
 }
@@ -1277,4 +1288,311 @@ function getByPath(source, path) {
     current = current[part];
   }
   return current;
+}
+
+// --- Vocatrya paired connection -------------------------------------------
+//
+// The pairing code is minted inside Vocatrya (user-initiated) and exchanged
+// once for a bearer token. The token lives only in chrome.storage.local and
+// is sent only to the loopback app origin inside Authorization — it never
+// reaches content scripts, page contexts, logs, or export files.
+
+const VOCATRYA_CLIENT_HEADER = "x-vocatrya-client";
+const VOCATRYA_CLIENT_VALUE = "auto-apply-extension";
+const VOCATRYA_API_BASE = "/api/extensions/auto-apply/connect";
+const VOCATRYA_REQUEST_TIMEOUT_MS = 8000;
+
+// All connection reads/mutations and profile writes execute in message order.
+// A failed operation must not poison the queue for a later retry.
+let connectionMutationQueue = Promise.resolve();
+function queueConnectionMutation(operation) {
+  const result = connectionMutationQueue.then(operation);
+  connectionMutationQueue = result.catch(() => undefined);
+  return result;
+}
+
+async function getVocatryaConnection() {
+  const stored = await chrome.storage.local.get(STORAGE_KEYS.vocatryaConnection);
+  const conn = stored[STORAGE_KEYS.vocatryaConnection];
+  return conn && typeof conn === "object" && conn.accessToken ? conn : null;
+}
+
+async function saveVocatryaConnection(conn) {
+  await chrome.storage.local.set({ [STORAGE_KEYS.vocatryaConnection]: conn });
+}
+
+// What extension pages may render. The accessToken is deliberately absent.
+function publicVocatryaState(conn) {
+  if (!conn) {
+    return { connected: false };
+  }
+  return {
+    connected: true,
+    appOrigin: conn.appOrigin || "",
+    connectionId: conn.connectionId || "",
+    clientName: conn.clientName || "",
+    allowedSections: Array.isArray(conn.allowedSections) ? conn.allowedSections : [],
+    pairedAt: conn.pairedAt || null,
+    lastSyncAt: conn.lastSyncAt || null,
+    syncedProfileUpdatedAt: conn.syncedProfileUpdatedAt || null,
+    remoteUpdatedAt: conn.remoteUpdatedAt || null,
+    lastSyncError: conn.lastSyncError || null,
+    syncStatus: conn.syncStatus || "paired",
+    lastCheckAt: conn.lastCheckAt || null,
+    lastCheckStatus: conn.lastCheckStatus || null,
+    careerRead: conn.careerRead !== false
+  };
+}
+
+function parsePairingPayload(raw) {
+  const text = String(raw || "").trim();
+  if (!text) {
+    throw new Error("请粘贴 Vocatrya 生成的配对码。");
+  }
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new Error("配对码格式不正确，请完整粘贴 vocatrya-auto-apply://pair?… 内容。");
+  }
+  if (url.protocol !== "vocatrya-auto-apply:" || url.hostname !== "pair") {
+    throw new Error("配对码格式不正确，应以 vocatrya-auto-apply://pair 开头。");
+  }
+  const version = url.searchParams.get("v");
+  const app = url.searchParams.get("app");
+  const code = url.searchParams.get("code");
+  if (version !== "1" || !app || !code) {
+    throw new Error("配对码缺少必要参数，请重新生成并完整粘贴。");
+  }
+  let appUrl;
+  try {
+    appUrl = new URL(app);
+  } catch {
+    throw new Error("配对码中的应用地址无效。");
+  }
+  const host = appUrl.hostname.toLowerCase();
+  const loopback =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]" ||
+    host.endsWith(".localhost");
+  if (!loopback || (appUrl.protocol !== "http:" && appUrl.protocol !== "https:")) {
+    throw new Error("配对地址必须是本机回环地址（127.0.0.1 / localhost）。");
+  }
+  return { appOrigin: appUrl.origin, code };
+}
+
+function hasOptionalPermissions(permissions) {
+  return new Promise((resolve) => {
+    chrome.permissions.contains(permissions, (granted) => {
+      resolve(Boolean(granted));
+    });
+  });
+}
+
+function taggedError(kind, message, extra = {}) {
+  const error = new Error(message);
+  error.kind = kind;
+  Object.assign(error, extra);
+  return error;
+}
+
+async function vocatryaFetch(conn, path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${conn.appOrigin}${path}`, {
+      method: options.method || "GET",
+      headers: {
+        "content-type": "application/json",
+        [VOCATRYA_CLIENT_HEADER]: VOCATRYA_CLIENT_VALUE,
+        authorization: `Bearer ${conn.accessToken}`
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: "omit",
+      cache: "no-store",
+      signal: AbortSignal.timeout ? AbortSignal.timeout(VOCATRYA_REQUEST_TIMEOUT_MS) : undefined
+    });
+  } catch (error) {
+    throw taggedError("unreachable", "无法连接 Vocatrya", { cause: error });
+  }
+  const data = safeJsonParse(await response.text());
+  if (!response.ok || data?.ok === false) {
+    const code = data?.code || "";
+    const kind =
+      code === "CONNECTION_REVOKED" || code === "CONNECTION_INVALID"
+        ? "revoked"
+        : response.status === 401
+          ? "unauthorized"
+          : response.status === 403
+            ? "forbidden"
+            : "http";
+    throw taggedError(kind, data?.error || `HTTP ${response.status}`, {
+      status: response.status,
+      code
+    });
+  }
+  return data;
+}
+
+function vocatryaSyncErrorMessage(error) {
+  const kind = error?.kind;
+  if (kind === "revoked" || kind === "unauthorized") {
+    return "连接已撤销或失效，请在 Vocatrya 重新配对；当前保留的是上次同步副本。";
+  }
+  if (kind === "forbidden") {
+    return "Vocatrya 当前无法读取职业资料，请检查应用内资料状态后重试。";
+  }
+  if (kind === "unreachable") {
+    return "无法连接 Vocatrya（应用未运行或地址已变化）。仍可使用上次同步副本，重新连接前资料不会更新。";
+  }
+  return `同步失败：${error?.message || "请稍后重试"}`;
+}
+
+async function vocatryaPair(payload) {
+  const { appOrigin, code } = parsePairingPayload(payload.pairing || payload.code || "");
+  const permission = { origins: [`${appOrigin}/*`] };
+  if (!(await hasOptionalPermissions(permission))) {
+    throw new Error("尚未授予访问应用地址的权限，请重新点击配对并允许授权。");
+  }
+
+  // Do not lose custody of an old live token when replacing a connection.
+  // If retirement fails, leave the old connection intact and the code unused.
+  await vocatryaDisconnect();
+
+  const clientName = `OpenJobAutofill ${chrome.runtime.getManifest().version}`;
+  let response;
+  try {
+    response = await fetch(`${appOrigin}${VOCATRYA_API_BASE}/exchange`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        [VOCATRYA_CLIENT_HEADER]: VOCATRYA_CLIENT_VALUE
+      },
+      body: JSON.stringify({ code, clientName }),
+      credentials: "omit",
+      cache: "no-store",
+      signal: AbortSignal.timeout ? AbortSignal.timeout(VOCATRYA_REQUEST_TIMEOUT_MS) : undefined
+    });
+  } catch {
+    throw new Error("无法连接 Vocatrya，请确认应用正在运行且配对码未过期。");
+  }
+  const data = safeJsonParse(await response.text());
+  if (!response.ok || !data?.ok) {
+    const code = data?.code;
+    if (code === "PAIRING_CONSUMED") {
+      throw new Error("配对码已被使用，请在 Vocatrya 重新生成。");
+    }
+    if (code === "PAIRING_EXPIRED") {
+      throw new Error("配对码已过期，请在 Vocatrya 重新生成。");
+    }
+    if (code === "CONNECTION_LIMIT") {
+      throw new Error("Vocatrya 中已配对插件达到上限，请先撤销其他连接。");
+    }
+    throw new Error(data?.error || "配对失败，请在 Vocatrya 重新生成配对码。");
+  }
+
+  const conn = {
+    appOrigin,
+    connectionId: data.connectionId,
+    accessToken: data.accessToken,
+    clientName,
+    allowedSections: Array.isArray(data.allowedSections) ? data.allowedSections : [],
+    pairedAt: new Date().toISOString(),
+    lastSyncAt: null,
+    syncedProfileUpdatedAt: null,
+    remoteUpdatedAt: null,
+    lastSyncError: null,
+    syncStatus: "paired",
+    lastCheckAt: null,
+    lastCheckStatus: null,
+    careerRead: true
+  };
+  await saveVocatryaConnection(conn);
+
+  return {
+    state: publicVocatryaState(conn),
+    app: { name: data.appName || "Vocatrya", version: data.appVersion || "" }
+  };
+}
+
+async function vocatryaStatus(payload = {}) {
+  const conn = await getVocatryaConnection();
+  if (!conn) {
+    return { state: { connected: false } };
+  }
+  if (payload.live === false) {
+    return { state: publicVocatryaState(conn) };
+  }
+  try {
+    const data = await vocatryaFetch(conn, `${VOCATRYA_API_BASE}/status`);
+    conn.lastCheckAt = new Date().toISOString();
+    conn.lastCheckStatus = "ok";
+    conn.remoteUpdatedAt = data?.sourceUpdatedAt || null;
+    conn.careerRead = data?.careerRead !== false;
+  } catch (error) {
+    conn.lastCheckAt = new Date().toISOString();
+    conn.lastCheckStatus =
+      error?.kind === "revoked" || error?.kind === "unauthorized"
+        ? "revoked"
+        : error?.kind === "unreachable"
+          ? "unreachable"
+          : "error";
+    if (conn.lastCheckStatus === "revoked") {
+      conn.syncStatus = "revoked";
+    }
+  }
+  await saveVocatryaConnection(conn);
+  return { state: publicVocatryaState(conn) };
+}
+
+async function vocatryaSync() {
+  const conn = await getVocatryaConnection();
+  if (!conn) {
+    throw new Error("尚未配对 Vocatrya，请先在选项页完成配对。");
+  }
+  try {
+    const data = await vocatryaFetch(conn, `${VOCATRYA_API_BASE}/profile`);
+    const profileV2 = normalizeProfileV2(data?.profileV2 || {});
+    conn.lastSyncAt = new Date().toISOString();
+    conn.lastSyncError = null;
+    conn.syncStatus = "synced";
+    conn.syncedProfileUpdatedAt = profileV2.updatedAt || null;
+    conn.remoteUpdatedAt = data?.meta?.sourceUpdatedAt || conn.syncedProfileUpdatedAt;
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.profileV2]: profileV2,
+      [STORAGE_KEYS.vocatryaConnection]: conn
+    });
+    return {
+      state: publicVocatryaState(conn),
+      report: data?.meta?.report || null
+    };
+  } catch (error) {
+    conn.lastSyncError = vocatryaSyncErrorMessage(error);
+    conn.syncStatus =
+      error?.kind === "revoked" || error?.kind === "unauthorized" ? "revoked" : "error";
+    await saveVocatryaConnection(conn);
+    throw taggedError("sync", conn.lastSyncError, {
+      state: publicVocatryaState(conn)
+    });
+  }
+}
+
+async function vocatryaDisconnect() {
+  const conn = await getVocatryaConnection();
+  if (conn) {
+    try {
+      const data = await vocatryaFetch(conn, `${VOCATRYA_API_BASE}/disconnect`, { method: "POST" });
+      if (data?.ok !== true || data?.revoked !== true) {
+        throw new Error("服务端未确认撤销");
+      }
+    } catch (error) {
+      // Explicit invalid/revoked responses also confirm this credential is unusable.
+      if (error?.kind !== "revoked") {
+        throw new Error(`尚未确认令牌撤销，已保留连接凭据，请恢复连接后重试：${error.message}`);
+      }
+    }
+  }
+  await chrome.storage.local.remove(STORAGE_KEYS.vocatryaConnection);
+  return { disconnected: true };
 }

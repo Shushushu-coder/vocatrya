@@ -2850,8 +2850,38 @@
           "插件不会自动点击提交，最终提交由你在招聘网页手动完成。",
           "填写记录不会在 Vocatrya 中生成「已投递」事实。",
           "插件的 AI 字段识别是可选项；Vocatrya 不接入、也不向插件写入任何模型凭据。",
-          "手动导入是首阶段与备用方式，不代表应用与插件的连接式同步已交付。"
+          "连接式同步需要 Vocatrya 运行且授权有效；手动导出/导入保留为备用方式。"
         ],
+        "connect": {
+          "title": "浏览器插件连接",
+          "subtitle": "配对后插件可在 Vocatrya 运行时按需同步你授权的资料板块；撤销或失效的连接不能继续读取，插件会明确标记过期副本。",
+          "pairTitle": "新增配对",
+          "pairHint": "选择允许该插件读取的板块并生成配对码，在插件选项页「Vocatrya 连接」卡片中粘贴完成配对。配对码 10 分钟内有效且只能使用一次，请勿分享给他人。",
+          "pairButton": "生成配对码",
+          "pairing": "生成中…",
+          "pairReady": "配对码（{minutes} 分钟内有效，仅本次显示）：",
+          "copy": "复制",
+          "copied": "已复制",
+          "pairFailed": "生成配对码失败，请稍后重试。",
+          "waiting": "等待插件完成配对…成功后下方会自动出现连接记录。",
+          "pairExpired": "配对码已过期，请重新生成。",
+          "connectionsTitle": "连接状态",
+          "empty": "还没有已配对的插件。",
+          "untitledClient": "未命名插件",
+          "pairedAt": "配对于 {time}",
+          "lastSync": "上次同步 {time}",
+          "neverSynced": "尚未同步资料",
+          "lastProfileVersion": "插件持有资料版本 {time}",
+          "sectionsGranted": "授权板块 {count} 个",
+          "activeBadge": "已连接",
+          "revokedBadge": "已撤销",
+          "revoke": "撤销",
+          "revoking": "撤销中…",
+          "revokeConfirm": "撤销后该插件的访问令牌立即失效，不能继续获取资料。确认撤销？",
+          "revokeFailed": "撤销失败，请重试。",
+          "manualTitle": "手动导出/导入（备用方式）",
+          "manualHint": "不连接插件时，仍可使用导出 JSON → 插件「导入资料备份」的方式；资料更新后需重新导出并导入。"
+        },
         "readUnavailableTitle": "当前无法导出",
         "readUnavailable": "职业资料在当前运行模式下不可读取。请先在「职业资料」页确认资料可用后再试。",
         "sectionTitles": {
@@ -2871,6 +2901,7 @@
         }
       },
       "available": "可手动导出",
+      "connected": "已连接插件",
       "unavailable": "暂不可用",
       "statusError": "状态读取失败"
     },

@@ -149,3 +149,38 @@ export interface AutoApplyExportResult {
   backup: AutoApplyBackup;
   report: AutoApplyExportReport;
 }
+
+// --- paired plugin connection (safe to import in client components) ------
+
+/** Detail-page view of a paired plugin; secrets never leave the service. */
+export interface AutoApplyConnectionSummary {
+  id: string;
+  clientName: string | null;
+  allowedSections: AutoApplySectionKey[];
+  pairedAt: string;
+  lastSeenAt: string | null;
+  lastSyncAt: string | null;
+  lastProfileUpdatedAt: string | null;
+  revoked: boolean;
+  revokedAt: string | null;
+}
+
+/** Response body of the extension-facing profile pull. */
+export interface AutoApplyPairedProfilePayload {
+  connectionId: string;
+  issuedAt: string;
+  profileV2: UpstreamProfileV2;
+  meta: {
+    app: "Vocatrya";
+    appVersion: string;
+    channel: "paired-sync";
+    sourceUpdatedAt: string;
+    allowedSections: AutoApplySectionKey[];
+    sections: AutoApplySectionKey[];
+    report: {
+      ambiguous: string[];
+      unsupported: string[];
+      sensitiveExcluded: string[];
+    };
+  };
+}
