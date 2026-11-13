@@ -243,6 +243,10 @@ const Job = z.object({
   discoveredAt: optDt,
   createdVia: optStr,
   descriptionCompleteness: optStr,
+  // UI-RC-JOB-ORDER: optional so backups written before the ordering columns
+  // still import; undefined restores as NULL (unpositioned, unpinned).
+  sortOrder: optInt.optional(),
+  pinnedAt: optDt.optional(),
 });
 
 const Note = z.object({
@@ -460,6 +464,9 @@ const JobOpportunity = z.object({
   notes: optStr,
   archivedAt: optDt,
   createdVia: optStr,
+  // UI-RC-JOB-ORDER: same optional-evolution contract as Job.sortOrder.
+  sortOrder: optInt.optional(),
+  pinnedAt: optDt.optional(),
   createdAt: dt,
   updatedAt: dt,
 });

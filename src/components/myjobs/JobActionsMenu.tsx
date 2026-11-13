@@ -1,5 +1,5 @@
 "use client";
-import { ListCollapse, MoreVertical, Pencil, StickyNote, Tags, Trash } from "lucide-react";
+import { ListCollapse, MoreVertical, Pencil, Pin, PinOff, StickyNote, Tags, Trash } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import { JobResponse, JobStatus } from "@/models/job.model";
 import { JobStatusMenuItems } from "./JobStatusMenuItems";
 import { useI18n } from "@/i18n";
+import { useJobOrderT } from "./jobs-container/useJobOrderT";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type JobActionsMenuProps = {
@@ -27,6 +28,7 @@ type JobActionsMenuProps = {
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   onAddNote: (jobId: string) => void;
   onDeleteJob: (jobId: string) => void;
+  onTogglePin?: (jobId: string, pinned: boolean) => void;
 };
 
 export function JobActionsMenu({
@@ -36,9 +38,11 @@ export function JobActionsMenu({
   onChangeJobStatus,
   onAddNote,
   onDeleteJob,
+  onTogglePin,
 }: JobActionsMenuProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const tOrder = useJobOrderT();
   const { jobMutationsEnabled } = useCareerSurfaces();
 
   return (
@@ -80,6 +84,26 @@ export function JobActionsMenu({
             <StickyNote className="mr-2 h-4 w-4" />
             {t("jobs.addANote")}
           </DropdownMenuItem>
+          {onTogglePin && (
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => onTogglePin(job.id, job.pinnedAt == null)}
+              disabled={!jobMutationsEnabled}
+              data-testid="job-pin-menu-item"
+            >
+              {job.pinnedAt != null ? (
+                <>
+                  <PinOff className="mr-2 h-4 w-4" />
+                  {tOrder("jobs.unpinJob")}
+                </>
+              ) : (
+                <>
+                  <Pin className="mr-2 h-4 w-4" />
+                  {tOrder("jobs.pinJob")}
+                </>
+              )}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={!jobMutationsEnabled}>

@@ -29,6 +29,7 @@ import {
   planUiStatusWrite,
 } from "./uiStatus";
 import { jobDeadlinePrecision } from "@/lib/jobs/deadlineTime";
+import { orderRowsForDisplay } from "@/lib/jobs/jobOrder";
 import { syncOpportunityStepReminders } from "@/lib/reminders/reminderService";
 
 export { deriveUiStatus, pickLatestAttempt, planUiStatusWrite } from "./uiStatus";
@@ -439,6 +440,7 @@ type OpportunityWithRelations = {
   status: string;
   notes: string | null;
   archivedAt: Date | null;
+  pinnedAt: Date | null;
   createdAt: Date;
   company: {
     id: string;
@@ -625,6 +627,7 @@ export function mapOpportunityToJobView(
     contactLinks: [],
     createdVia: "USER",
     discoveryStatus: null,
+    pinnedAt: opportunity.pinnedAt ?? null,
     _count: { Notes: opportunity._count?.opportunityNotes ?? 0 },
     abCompat: {
       // Legacy UI status is a projection of attempt state, not authoritative truth.
@@ -687,7 +690,7 @@ type OpportunityListOptions = {
   search?: string;
   appliedOnly?: boolean;
   filter?: string;
-  orderBy?: "createdAtDesc" | "firstSubmittedAtDesc";
+  orderBy?: "createdAtDesc" | "firstSubmittedAtDesc" | "custom";
   companyId?: string;
   companyValue?: string;
   titleValue?: string;
@@ -863,25 +866,43 @@ export async function listOpportunitiesAsJobs(
   // "firstSubmittedAtDesc" ranks by MIN(submittedAt) of live attempts — the
   // same first-application date legacy reads order applied jobs by. Stage-only
   // applied rows (no real submittedAt) sort NULL-last and keep a null date.
-  const orderSql =
-    options.orderBy === "firstSubmittedAtDesc"
-      ? Prisma.sql`ORDER BY ${firstSubmittedAtSql()} DESC, o.createdAt DESC`
-      : Prisma.sql`ORDER BY o.createdAt DESC`;
-  const idSql =
-    take === undefined
-      ? Prisma.sql`
-          SELECT o.id
-          ${fromSql}
-          ${orderSql}
-        `
-      : Prisma.sql`
-          SELECT o.id
-          ${fromSql}
-          ${orderSql}
-          LIMIT ${take} OFFSET ${skip}
-        `;
-  const idRows = await db.$queryRaw<Array<{ id: string }>>(idSql);
-  const ids = idRows.map((row) => row.id);
+  let ids: string[];
+  if (options.orderBy === "custom") {
+    // The persisted ordering contract cannot be expressed as a single ORDER
+    // BY without duplicating jobOrder.ts — fetch the ordering columns and let
+    // the shared pure function decide, then slice the requested page.
+    const metaRows = await db.$queryRaw<
+      Array<{
+        id: string;
+        createdAt: Date;
+        sortOrder: number | null;
+        pinnedAt: Date | null;
+      }>
+    >(Prisma.sql`SELECT o.id, o.createdAt, o.sortOrder, o.pinnedAt ${fromSql}`);
+    ids = orderRowsForDisplay(metaRows)
+      .slice(skip, take === undefined ? metaRows.length : skip + take)
+      .map((row) => row.id);
+  } else {
+    const orderSql =
+      options.orderBy === "firstSubmittedAtDesc"
+        ? Prisma.sql`ORDER BY ${firstSubmittedAtSql()} DESC, o.createdAt DESC`
+        : Prisma.sql`ORDER BY o.createdAt DESC`;
+    const idSql =
+      take === undefined
+        ? Prisma.sql`
+            SELECT o.id
+            ${fromSql}
+            ${orderSql}
+          `
+        : Prisma.sql`
+            SELECT o.id
+            ${fromSql}
+            ${orderSql}
+            LIMIT ${take} OFFSET ${skip}
+          `;
+    const idRows = await db.$queryRaw<Array<{ id: string }>>(idSql);
+    ids = idRows.map((row) => row.id);
+  }
   if (ids.length === 0) {
     return { data: [], total };
   }

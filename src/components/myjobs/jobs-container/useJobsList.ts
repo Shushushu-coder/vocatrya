@@ -1,9 +1,14 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { getJobsList } from "@/actions/job.actions";
+import {
+  getJobsList,
+  reorderJob,
+  setJobPinned,
+} from "@/actions/job.actions";
 import { GENERIC_ERROR_MESSAGE, toastError } from "@/lib/toast";
 import { JobResponse, JobsViewMode } from "@/models/job.model";
+import { applyPinLocally, insertJobAfter } from "@/lib/jobs/jobOrder";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
   getFromLocalStorage,
@@ -57,6 +62,12 @@ export function useJobsList({
   const searchParam = searchParams.get("search") ?? "";
   const [searchTerm, setSearchTerm] = useState(searchParam);
 
+  // UI-RC-JOB-ORDER: the list defaults to the saved custom order; any other
+  // sort is an explicit URL choice so refresh/back restore it, and switching
+  // back to custom re-reads the persisted ordering.
+  const sortParam = searchParams.get("sort");
+  const sortBy = sortParam === "createdAtDesc" ? "createdAtDesc" : "custom";
+
   // Monotonic generation identifying the current list query. It bumps in a
   // layout effect when the committed URL-derived inputs change — a response already in
   // flight for the previous conditions is stale before the refetch even
@@ -69,6 +80,7 @@ export function useJobsList({
   const queryKey = JSON.stringify([
     filterKey,
     searchParam,
+    sortBy,
     companyFilter,
     appliedFilter,
     titleFilter,
@@ -128,6 +140,16 @@ export function useJobsList({
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
+  // "custom" is the default so it stays out of the URL; any other sort is
+  // written explicitly and takes the list through the normal reload path.
+  const onSortChange = (nextSort: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextSort === "custom") params.delete("sort");
+    else params.set("sort", nextSort);
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
   // Read after mount: localStorage is unavailable during SSR, so seeding the
   // initial state from it would cause a hydration mismatch.
   useEffect(() => {
@@ -165,6 +187,7 @@ export function useJobsList({
         titleFilter || undefined,
         locationFilter || undefined,
         sourceFilter || undefined,
+        sortBy,
       ).catch((error: unknown) => ({
         success: false,
         data: undefined,
@@ -210,6 +233,7 @@ export function useJobsList({
       titleFilter,
       locationFilter,
       sourceFilter,
+      sortBy,
     ],
   );
 
@@ -220,6 +244,55 @@ export function useJobsList({
   const retryLoad = useCallback(async () => {
     await loadJobs(failedPageRef.current);
   }, [loadJobs]);
+
+  // Optimistic ordering writes: the shared pure helpers mutate the loaded
+  // array exactly as the server contract does, the server write follows, and
+  // any failure restores the pre-write array + reports the real error — the
+  // UI never claims an order the server did not save. Each operation keeps
+  // its own pre-write snapshot so an interleaved failure cannot restore an
+  // optimistic state belonging to a different write.
+  const moveSnapshotRef = useRef<JobResponse[] | null>(null);
+  const pinSnapshotRef = useRef<JobResponse[] | null>(null);
+
+  const moveJob = useCallback(
+    async (jobId: string, afterJobId: string | null) => {
+      setJobs((prev) => {
+        moveSnapshotRef.current = prev;
+        return insertJobAfter(prev, jobId, afterJobId);
+      });
+      const result = await reorderJob(jobId, afterJobId).catch(
+        (error: unknown) => ({
+          success: false,
+          message: error instanceof Error ? error.message : undefined,
+        }),
+      );
+      if (!result?.success) {
+        setJobs((prev) => moveSnapshotRef.current ?? prev);
+        toastError(result?.message);
+      }
+    },
+    [],
+  );
+
+  const toggleJobPinned = useCallback(
+    async (jobId: string, pinned: boolean) => {
+      setJobs((prev) => {
+        pinSnapshotRef.current = prev;
+        return applyPinLocally(prev, jobId, pinned);
+      });
+      const result = await setJobPinned(jobId, pinned).catch(
+        (error: unknown) => ({
+          success: false,
+          message: error instanceof Error ? error.message : undefined,
+        }),
+      );
+      if (!result?.success) {
+        setJobs((prev) => pinSnapshotRef.current ?? prev);
+        toastError(result?.message);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     (async () => await loadJobs(1))();
@@ -273,6 +346,10 @@ export function useJobsList({
     page,
     totalJobs,
     filterKey,
+    sortBy,
+    onSortChange,
+    moveJob,
+    toggleJobPinned,
     searchTerm,
     setSearchTerm: setSearch,
     initialLoading,

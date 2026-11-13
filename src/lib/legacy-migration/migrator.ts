@@ -660,6 +660,10 @@ async function migrateJobRoot(
         sourceAutomationId: job.automationId,
         discoveredAt: job.discoveredAt,
         archivedAt: null,
+        // UI-RC-JOB-ORDER: carry the legacy ordering/pin facts so a user's
+        // saved list order survives the Legacy→A+B switch.
+        sortOrder: job.sortOrder,
+        pinnedAt: job.pinnedAt,
         createdVia: job.createdVia ?? PHASE3_CREATED_VIA,
         createdAt: job.createdAt,
       },

@@ -30,6 +30,7 @@ import { JobsToolbar } from "./jobs-container/JobsToolbar";
 import { getLocalizedJobSource, useI18n } from "@/i18n";
 import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
+import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 
 type MyJobsProps = {
   statuses: JobStatus[];
@@ -56,6 +57,7 @@ function JobsContainer({
 }: MyJobsProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const { jobMutationsEnabled } = useCareerSurfaces();
   const deleteIsArchive = isAbJobReadMode(careerRuntimeMode, abRolloutScope);
   const [editJob, setEditJob] = useState(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -86,6 +88,10 @@ function JobsContainer({
     onChangeViewMode,
     totalJobs,
     filterKey,
+    sortBy,
+    onSortChange,
+    moveJob,
+    toggleJobPinned,
     searchTerm,
     setSearchTerm,
     initialLoading,
@@ -156,6 +162,13 @@ function JobsContainer({
     filterKey !== "none"
   );
 
+  // UI-RC-JOB-ORDER: only the saved custom order is draggable. An active
+  // search/filter pauses dragging (pinning stays available) and any other
+  // sort hides the handles entirely.
+  const customSortActive = sortBy === "custom";
+  const dragDisabled =
+    !jobMutationsEnabled || (customSortActive && hasActiveFilters);
+
   return (
     <>
       <Card className="min-w-0" x-chunk="dashboard-06-chunk-0">
@@ -188,6 +201,9 @@ function JobsContainer({
           onSearchTermChange={setSearchTerm}
           filterKey={filterKey}
           onFilterChange={onFilterChange}
+          sortBy={sortBy}
+          onSortChange={onSortChange}
+          dragPausedByFilters={customSortActive && hasActiveFilters}
           onDownload={() => downloadJobsList(t)}
           statuses={statuses}
           companies={companies}
@@ -263,6 +279,10 @@ function JobsContainer({
                 onAddNote={onAddNote}
                 deleteIsArchive={deleteIsArchive}
                 timeZone={timeZone}
+                showDragHandles={customSortActive}
+                dragDisabled={dragDisabled}
+                onMoveJob={moveJob}
+                onTogglePin={toggleJobPinned}
               />
             ) : (
               <MyJobsTable
@@ -274,6 +294,10 @@ function JobsContainer({
                 onAddNote={onAddNote}
                 deleteIsArchive={deleteIsArchive}
                 timeZone={timeZone}
+                showDragHandles={customSortActive}
+                dragDisabled={dragDisabled}
+                onMoveJob={moveJob}
+                onTogglePin={toggleJobPinned}
               />
             ))}
           {loadError === null && jobs.length < totalJobs && (

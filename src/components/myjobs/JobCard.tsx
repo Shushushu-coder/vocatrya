@@ -1,5 +1,5 @@
 "use client";
-import { Calendar, MapPin, PlusCircle, StickyNote } from "lucide-react";
+import { Calendar, MapPin, Pin, PlusCircle, StickyNote } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 import { Badge } from "../ui/badge";
@@ -18,10 +18,12 @@ type JobCardProps = {
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   onAddNote: (jobId: string) => void;
   onDeleteJob: (jobId: string) => void;
+  onTogglePin?: (jobId: string, pinned: boolean) => void;
   timeZone?: string;
 };
 
 import { getLocalizedJobSource, useI18n } from "@/i18n";
+import { useJobOrderT } from "./jobs-container/useJobOrderT";
 
 export function JobCard({
   job,
@@ -30,9 +32,11 @@ export function JobCard({
   onChangeJobStatus,
   onAddNote,
   onDeleteJob,
+  onTogglePin,
   timeZone,
 }: JobCardProps) {
   const { t, formatDate } = useI18n();
+  const tOrder = useJobOrderT();
   const { freshNativeFull } = useCareerSurfaces();
   const notesCount = job._count?.Notes ?? 0;
 
@@ -46,6 +50,13 @@ export function JobCard({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
+            {job.pinnedAt != null && (
+              <Pin
+                className="h-3.5 w-3.5 shrink-0 fill-current text-primary"
+                aria-label={tOrder("jobs.pinned")}
+                data-testid="job-pinned-icon"
+              />
+            )}
             <Link
               href={`/dashboard/myjobs/${job?.id}`}
               className="truncate font-semibold"
@@ -103,6 +114,7 @@ export function JobCard({
           onChangeJobStatus={onChangeJobStatus}
           onAddNote={onAddNote}
           onDeleteJob={onDeleteJob}
+          onTogglePin={onTogglePin}
         />
       </div>
     </div>

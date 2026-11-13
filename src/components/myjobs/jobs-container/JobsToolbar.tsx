@@ -1,5 +1,5 @@
 "use client";
-import { File, ListFilter, RefreshCw, X } from "lucide-react";
+import { ArrowUpDown, File, ListFilter, RefreshCw, X } from "lucide-react";
 import { CardHeader, CardTitle } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { SearchInput } from "../../SearchInput";
@@ -27,6 +27,7 @@ import {
   Tag,
 } from "@/models/job.model";
 import { useI18n } from "@/i18n";
+import { useJobOrderT } from "./useJobOrderT";
 import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 
@@ -76,6 +77,9 @@ export function JobsToolbar({
   onSearchTermChange,
   filterKey,
   onFilterChange,
+  sortBy,
+  onSortChange,
+  dragPausedByFilters,
   onDownload,
   statuses,
   companies,
@@ -111,6 +115,9 @@ export function JobsToolbar({
   onSearchTermChange: (value: string) => void;
   filterKey: string;
   onFilterChange: (filterBy: string) => void;
+  sortBy: string;
+  onSortChange: (sortBy: string) => void;
+  dragPausedByFilters?: boolean;
   onDownload: () => void;
   statuses: JobStatus[];
   companies: Company[];
@@ -127,6 +134,7 @@ export function JobsToolbar({
   timeZone?: string;
 }) {
   const { t } = useI18n();
+  const tOrder = useJobOrderT();
   const hideDiscoveryFilters = isAbJobReadMode(
     careerRuntimeMode,
     abRolloutScope,
@@ -179,6 +187,33 @@ export function JobsToolbar({
           onChange={onSearchTermChange}
           placeholder={t("jobs.searchPlaceholder")}
         />
+        <Select value={sortBy} onValueChange={onSortChange}>
+          <SelectTrigger
+            className="h-8 w-[min(100%,10rem)] max-w-full overflow-hidden [&_span]:truncate"
+            data-testid="job-sort-select"
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            <SelectValue placeholder={tOrder("jobs.sortBy")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>{tOrder("jobs.sortBy")}</SelectLabel>
+              <SelectSeparator />
+              <SelectItem value="custom">{tOrder("jobs.sortCustom")}</SelectItem>
+              <SelectItem value="createdAtDesc">
+                {tOrder("jobs.sortCreatedAt")}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {dragPausedByFilters && (
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid="job-drag-paused-hint"
+          >
+            {tOrder("jobs.clearFiltersToReorder")}
+          </span>
+        )}
         <Select value={filterKey} onValueChange={onFilterChange}>
           <SelectTrigger
             className="h-8 w-[min(100%,14rem)] max-w-full overflow-hidden [&_span]:truncate"
