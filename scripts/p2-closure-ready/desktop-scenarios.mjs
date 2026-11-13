@@ -43,7 +43,7 @@ export async function prepareDesktop(input) {
         await tx.resumeVariant.update({ where: { id: m.ids.alternateVariant }, data: { targetJobOpportunityId: sentinel.id } });
         const scheduledAt = new Date(Date.now() + 2 * 86400000);
         scheduledAt.setUTCSeconds(0, 0);
-        const upcoming = await tx.applicationProcessStep.create({ data: { applicationAttemptId: m.ids.attempts[0], category: 'SCREENING', label: extra.labels.upcoming, status: 'PENDING', source: 'USER', sortOrder: 20, scheduledAt, scheduledAtPrecision: 'minute', scheduledAtZone: m.accountTimeZone } });
+        const upcoming = await tx.applicationProcessStep.create({ data: { applicationAttemptId: m.ids.attempts[0], category: 'INTERVIEW', label: extra.labels.upcoming, status: 'PENDING', source: 'USER', sortOrder: 20, scheduledAt, scheduledAtPrecision: 'minute', scheduledAtZone: m.accountTimeZone } });
         extra.ids.upcomingStep = upcoming.id;
         extra.upcomingScheduledAt = scheduledAt.toISOString();
         const foreignAttempt = await tx.applicationAttempt.findFirstOrThrow({ where: { jobOpportunityId: m.ids.foreignJob } });
@@ -54,7 +54,7 @@ export async function prepareDesktop(input) {
         extra.ids.missingArtifact = missing.id;
         const settings = await tx.userSettings.findUniqueOrThrow({ where: { userId: m.ids.primaryUser } });
         const document = JSON.parse(settings.settings);
-        document.general = { ...document.general, locale: 'en' };
+        document.settings = { ...document.settings, general: { ...document.settings?.general, locale: 'en' } };
         await tx.userSettings.update({ where: { userId: m.ids.primaryUser }, data: { settings: JSON.stringify(document) } });
       });
       return extra;
@@ -78,7 +78,7 @@ export async function prepareDesktop(input) {
       assert.equal(await db.jobOpportunity.count({ where: { userId: m.ids.primaryUser, archivedAt: null } }), 2);
       assert.equal(await db.applicationAttempt.count({ where: { userId: m.ids.primaryUser, archivedAt: null, jobOpportunity: { archivedAt: null } } }), 2);
       const target = await db.applicationProcessStep.findUniqueOrThrow({ where: { id: extra.ids.upcomingStep } });
-      assert.equal(target.category, 'SCREENING');
+      assert.equal(target.category, 'INTERVIEW');
       assert.equal(target.status, 'PENDING');
       assert(target.scheduledAt > new Date());
       return { activePositions: 2, activeAttempts: 2, upcoming: target };
@@ -149,7 +149,7 @@ export async function createContext(instance, input, observationLog, tickActionH
   async function analytics(archived = false) {
     await page.goto(instance.origin + '/dashboard/analytics', { waitUntil: 'load' });
     await expect(page.getByTestId('analytics-panel')).toBeVisible();
-    const values = { total: archived ? 1 : 2, applied: archived ? 0 : 1, interviews: archived ? 0 : 2, interviewScheduled: 0, awaitingReflection: archived ? 0 : 1 };
+    const values = { total: archived ? 1 : 2, applied: archived ? 0 : 1, interviews: archived ? 0 : 2, interviewScheduled: archived ? 0 : 1, awaitingReflection: archived ? 0 : 1 };
     const result = {};
     for (const [key, value] of Object.entries(values)) {
       const card = page.getByTestId('board-total-' + key);
@@ -229,7 +229,7 @@ export async function initialAndArchive(ctx) {
     await expect(event).toContainText(x.labels.upcoming);
     await expect(event.getByRole('link')).toHaveAttribute('href', '/dashboard/myjobs/' + m.ids.job);
     await expect(event).not.toContainText('P2 foreign');
-    return { observed: await event.innerText(), expectedProcessStep: x.ids.upcomingStep, note: 'Completed interviews are not Upcoming events; one SCREENING event is expected' };
+    return { observed: await event.innerText(), expectedProcessStep: x.ids.upcomingStep, note: 'Completed interviews are not Upcoming events; one INTERVIEW event is expected' };
   });
   await check('06-ui-archive-removes-r6-and-board-facts', async () => {
     await timeline();
@@ -411,7 +411,9 @@ export async function checkReopened(ctx, expected) {
     assert(detail.reflectionText.startsWith('P2 UI draft '));
     await page.goto(instance.origin + '/dashboard', { waitUntil: 'load' });
     await expect(page.getByTestId('journey-overview')).toBeVisible();
-    await expect(page.getByTestId('next-actions')).toHaveCount(0);
+    await expect(page.getByTestId('next-actions')).toBeVisible();
+    await expect(page.getByTestId('next-action-R5:' + ctx.x.ids.upcomingStep)).toBeVisible();
+    await expect(page.getByTestId('next-action-R6:' + m.ids.r6Step)).toHaveCount(0);
     await page.goto(instance.origin + '/dashboard/profile/resumes/' + m.ids.variant + '?version=' + m.versions[2].id, { waitUntil: 'load' });
     await expect(page.getByLabel(t('resumeVariants.fieldFullName'), { exact: true })).toHaveValue(expected.editedName);
     return { references: await ctx.referencesUi(), completion: detail.reflectionCompletedAt, body: detail.reflectionText, currentDraftName: expected.editedName, pid: instance.child.pid, origin: instance.origin };

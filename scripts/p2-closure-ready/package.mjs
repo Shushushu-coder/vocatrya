@@ -194,8 +194,8 @@ export async function prepare(runInput) {
         const primary = await tx.user.create({ data: { name: 'P2 primary synthetic', email: manifest.credentials.primaryEmail, password } });
         const foreign = await tx.user.create({ data: { name: 'P2 foreign synthetic', email: manifest.credentials.foreignEmail, password } });
         Object.assign(manifest.ids, { primaryUser: primary.id, foreignUser: foreign.id });
-        await tx.userSettings.create({ data: { userId: primary.id, settings: JSON.stringify({ general: { timeZone: manifest.accountTimeZone } }) } });
-        await tx.userSettings.create({ data: { userId: foreign.id, settings: JSON.stringify({ general: { timeZone: 'Pacific/Auckland' } }) } });
+        await tx.userSettings.create({ data: { userId: primary.id, settings: JSON.stringify({ settings: { general: { timeZone: manifest.accountTimeZone } } }) } });
+        await tx.userSettings.create({ data: { userId: foreign.id, settings: JSON.stringify({ settings: { general: { timeZone: 'Pacific/Auckland' } } }) } });
         const company = await tx.company.create({ data: { label: 'P2 Synthetic Company', value: 'p2-synthetic', createdBy: primary.id } });
         await tx.jobTitle.create({ data: { createdBy: primary.id, label: 'P2 dual application role', value: 'p2-dual-application' } });
         await tx.location.create({ data: { createdBy: primary.id, label: 'P2 Shanghai', value: 'p2-shanghai' } });
@@ -344,7 +344,7 @@ export async function validate(runInput) {
     });
     await step(directory, '04-account-day-boundary', async () => {
       const row = await db.userSettings.findUniqueOrThrow({ where: { userId: m.ids.primaryUser } });
-      assert.equal(JSON.parse(row.settings).general.timeZone, m.accountTimeZone);
+      assert.equal(JSON.parse(row.settings).settings?.general?.timeZone, m.accountTimeZone);
       assert.notEqual(m.accountTimeZone, m.observedPreparationHostTimeZone);
       assert.equal(day(m.boundary.before, m.accountTimeZone), m.boundary.accountBeforeDay);
       assert.equal(day(m.boundary.after, m.accountTimeZone), m.boundary.accountAfterDay);
