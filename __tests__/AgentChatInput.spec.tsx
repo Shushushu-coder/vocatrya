@@ -24,6 +24,13 @@ const chat = {
   setPasteChip: vi.fn((v: any) => {
     chat.pasteChip = v;
   }),
+  // Same provider-state treatment for unsent file cards (AWU-FILES).
+  fileChips: [] as any[],
+  addFiles: vi.fn(),
+  removeFileChip: vi.fn(),
+  clearFileChips: vi.fn(() => {
+    chat.fileChips = [];
+  }),
   context: { version: 1, items: [] as any[] },
   addContextItem: vi.fn(),
   removeContextItem: vi.fn(),
@@ -97,6 +104,7 @@ describe("AgentChatInput", () => {
     chat.preflight = { checked: true, ok: true };
     chat.composerNonce = 0;
     chat.pasteChip = undefined;
+    chat.fileChips = [];
     chat.context = { version: 1, items: [] };
     chat.conversationId = null;
     chat.identity = {

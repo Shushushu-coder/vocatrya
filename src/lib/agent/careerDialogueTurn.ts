@@ -179,6 +179,7 @@ export async function runCareerDialogueTurn(
     messages,
     pageContext: input.pageContext,
     pastedText: input.pastedText,
+    fileTexts: input.fileTexts,
     summary: input.summary,
     directChat: true,
     freshNativeFull: input.freshNativeFull,

@@ -11,6 +11,7 @@ const newUserMessage = z.object({
   parts: z.array(z.union([
     z.object({ type: z.literal("text"), text: z.string() }).strict(),
     z.object({ type: z.literal("data-paste"), data: z.object({ text: z.string(), chars: z.number().optional(), consumed: z.boolean().optional() }).passthrough() }).passthrough(),
+    z.object({ type: z.literal("data-file"), data: z.object({ name: z.string(), text: z.string() }).passthrough() }).passthrough(),
   ])),
 }).strict();
 export const AgentChatRequestSchema = z.discriminatedUnion("operation", [

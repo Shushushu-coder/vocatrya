@@ -72,6 +72,11 @@ import {
   type AgentPastePartData,
 } from "@/models/agent.model";
 import {
+  sanitizeAgentFileName,
+  sniffAgentFileKind,
+  type AgentFileChip,
+} from "@/lib/agent/agentFiles";
+import {
   AGENT_CONTEXT_USAGE_PART_TYPE,
   type AgentContextUsage,
 } from "@/lib/agent/contextUsage";
@@ -383,6 +388,132 @@ function useAgentChatValue(
     pasteChipRef.current = data;
     setPasteChipState(data);
   }, []);
+  // Unsent file cards (AWU-FILES): same provider-side home as the paste
+  // chip so a composer remount keeps them. Deliberately NOT serialized into
+  // role slots — the extracted text can be ~50k chars per file, and the
+  // slot record already caps what it stores.
+  const [fileChips, setFileChipsState] = useState<AgentFileChip[]>([]);
+  const fileChipsRef = useRef<AgentFileChip[]>(fileChips);
+  const setFileChips = useCallback(
+    (next: AgentFileChip[] | ((prev: AgentFileChip[]) => AgentFileChip[])) => {
+      setFileChipsState((prev) => {
+        const value = typeof next === "function" ? next(prev) : next;
+        fileChipsRef.current = value;
+        return value;
+      });
+    },
+    [],
+  );
+
+  // Every picked file becomes a chip — including rejected ones, which sit
+  // as removable error cards rather than being silently dropped. Only
+  // non-error chips count toward the per-message cap. Chip construction
+  // happens outside the state updater so StrictMode's double-invocation
+  // cannot fork two extraction fetches for one file.
+  const addFiles = useCallback(
+    (incoming: File[] | FileList) => {
+      let active = fileChipsRef.current.filter(
+        (c) => c.status !== "error",
+      ).length;
+      const chips: AgentFileChip[] = [];
+      const pending: { chip: AgentFileChip; file: File }[] = [];
+      for (const file of incoming) {
+        const base: AgentFileChip = {
+          id: `file-${Date.now().toString(36)}-${Math.random()
+            .toString(36)
+            .slice(2, 10)}`,
+          name: sanitizeAgentFileName(file.name),
+          mediaType: file.type,
+          size: file.size,
+          status: "extracting",
+        };
+        if (active >= APP_CONSTANTS.AGENT_FILE_MAX_PER_MESSAGE) {
+          chips.push({ ...base, status: "error", errorCode: "TOO_MANY" });
+        } else if (file.size > APP_CONSTANTS.AGENT_FILE_MAX_BYTES) {
+          chips.push({ ...base, status: "error", errorCode: "FILE_TOO_LARGE" });
+        } else if (!sniffAgentFileKind(file)) {
+          chips.push({
+            ...base,
+            status: "error",
+            errorCode: "UNSUPPORTED_FORMAT",
+          });
+        } else {
+          active += 1;
+          chips.push(base);
+          pending.push({ chip: base, file });
+        }
+      }
+      setFileChips((prev) => [...prev, ...chips]);
+      // Extract each accepted file once through the server route. Updates
+      // land by id, so a chip removed mid-flight just never flips.
+      for (const { chip, file } of pending) {
+        void (async () => {
+          try {
+            const buf = new Uint8Array(await file.arrayBuffer());
+            let binary = "";
+            for (let i = 0; i < buf.length; i += 0x8000) {
+              binary += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+            }
+            const res = await fetch("/api/ai/agent-file-extract", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: chip.name,
+                mediaType: chip.mediaType,
+                contentBase64: btoa(binary),
+              }),
+            });
+            const body = (await res.json().catch(() => null)) as
+              | {
+                  name?: string;
+                  chars?: number;
+                  truncated?: boolean;
+                  text?: string;
+                  code?: string;
+                }
+              | null;
+            setFileChips((prev) =>
+              prev.map((c) => {
+                if (c.id !== chip.id) return c;
+                if (!res.ok || typeof body?.text !== "string") {
+                  return {
+                    ...c,
+                    status: "error",
+                    errorCode: body?.code ?? "EXTRACTION_FAILED",
+                  };
+                }
+                return {
+                  ...c,
+                  name: body.name ?? c.name,
+                  status: "ready",
+                  chars: body.chars ?? body.text.length,
+                  truncated: body.truncated ?? false,
+                  text: body.text,
+                };
+              }),
+            );
+          } catch {
+            setFileChips((prev) =>
+              prev.map((c) =>
+                c.id === chip.id
+                  ? { ...c, status: "error", errorCode: "EXTRACTION_FAILED" }
+                  : c,
+              ),
+            );
+          }
+        })();
+      }
+    },
+    [setFileChips],
+  );
+  const removeFileChip = useCallback(
+    (id: string) => setFileChips((prev) => prev.filter((c) => c.id !== id)),
+    [setFileChips],
+  );
+  const clearFileChips = useCallback(
+    () => setFileChips([]),
+    [setFileChips],
+  );
   // The last turn's assembled context size, streamed by the route for the
   // toolbar estimate. Absent on Legacy, which cannot report a real size —
   // the UI shows nothing rather than a fabricated number.
@@ -754,10 +885,11 @@ function useAgentChatValue(
     updateComposerSeed("");
     setComposerNonce((n) => n + 1);
     setPasteChip(undefined);
+    setFileChips([]);
     setContextUsage(null);
     setToolStreams({});
     setQueued(undefined);
-  }, [chat, updateComposerSeed, setPasteChip]);
+  }, [chat, updateComposerSeed, setPasteChip, setFileChips]);
 
   // ------------------------------------------------------------------
   // Role slots (D1)
@@ -863,6 +995,7 @@ function useAgentChatValue(
       contextSettled: boolean;
       draft?: string | null;
       paste?: AgentPastePartData | null;
+      files?: AgentFileChip[];
     }) => {
       stop();
       selectionEpochRef.current += 1;
@@ -881,6 +1014,7 @@ function useAgentChatValue(
       resetTransient();
       updateComposerSeed(slot.draft ?? "");
       setPasteChip(slot.paste ?? undefined);
+      setFileChips(slot.files ?? []);
       setContext(slot.context);
       contextRef.current = slot.context;
       contextSettledRef.current = slot.contextSettled;
@@ -889,15 +1023,15 @@ function useAgentChatValue(
       setIdentity(UNKNOWN_IDENTITY);
       void runPreflight();
     },
-    [chat, stop, resetTransient, runPreflight, updateComposerSeed, setPasteChip],
+    [chat, stop, resetTransient, runPreflight, updateComposerSeed, setPasteChip, setFileChips],
   );
 
   const startNewConversation = useCallback(
     async (options?: {
       explicit?: ExplicitModelSelection | null;
-      /** D1 model switch: carry draft text, MANUAL context and the paste
-       *  chip into the new draft instead of starting empty. AUTO page
-       *  context still re-resolves below. */
+      /** D1 model switch: carry draft text, MANUAL context, the paste chip
+       *  and unsent file cards into the new draft instead of starting empty.
+       *  AUTO page context still re-resolves below. */
       carry?: boolean;
     }) => {
       const wasStreaming = streamingRef.current;
@@ -905,17 +1039,19 @@ function useAgentChatValue(
         ? {
             draft: composerApiRef.current?.read() || composerSeedRef.current,
             paste: pasteChipRef.current ?? null,
+            files: fileChipsRef.current,
             manual: contextSettledRef.current
               ? contextRef.current.items.filter((item) => item.source === "MANUAL")
               : [],
           }
-        : { draft: "", paste: null, manual: [] as AgentConversationContextItem[] };
+        : { draft: "", paste: null, files: [] as AgentFileChip[], manual: [] as AgentConversationContextItem[] };
       enterDraft({
         context: { version: 1, items: carried.manual },
         explicit: options?.explicit ?? null,
         contextSettled: Boolean(options?.carry) && contextSettledRef.current,
         draft: carried.draft,
         paste: carried.paste,
+        files: carried.files,
       });
       persistActiveSlot();
       if (wasStreaming) toastInfo(t("agent.conversationStartedStopped"));
@@ -1378,6 +1514,10 @@ function useAgentChatValue(
     composerSeed,
     pasteChip,
     setPasteChip,
+    fileChips,
+    addFiles,
+    removeFileChip,
+    clearFileChips,
     contextUsage,
     activeRole,
     switchRole,

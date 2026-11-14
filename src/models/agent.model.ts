@@ -38,6 +38,40 @@ export function isAgentPastePart(part: unknown): part is AgentPastePart {
   );
 }
 
+// A picked-and-extracted local file (AWU-FILES). Same custom-data-part rule
+// as the paste chip: a FileUIPart would be carried whole into the model
+// context, so the wire part is custom and the route injects the extracted
+// text itself on the turn it arrived. `text` is the server-extracted text —
+// the persisted part doubles as the preview (what the card shows is what the
+// model was sent).
+export const AGENT_FILE_PART_TYPE = "data-file";
+
+export type AgentFilePartData = {
+  id: string;
+  name: string;
+  mediaType: string;
+  size: number;
+  chars: number;
+  truncated: boolean;
+  text: string;
+};
+
+export type AgentFilePart = {
+  type: typeof AGENT_FILE_PART_TYPE;
+  id?: string;
+  data: AgentFilePartData;
+};
+
+export function isAgentFilePart(part: unknown): part is AgentFilePart {
+  const candidate = part as AgentFilePart | undefined;
+  return (
+    !!candidate &&
+    candidate.type === AGENT_FILE_PART_TYPE &&
+    typeof candidate.data?.name === "string" &&
+    typeof candidate.data?.text === "string"
+  );
+}
+
 export type AgentResolvedEntity = {
   id: string;
   label: string;

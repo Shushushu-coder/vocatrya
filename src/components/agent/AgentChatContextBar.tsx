@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Paperclip, Plus, X } from "lucide-react";
 import { listAgentContextOptions } from "@/actions/agentChat.actions";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
+import { AgentFileChipCard } from "@/components/agent/fileChip";
 import { AgentPasteChip } from "@/components/agent/pasteChip";
 import {
   Attachments,
 } from "@/components/ai-elements/attachments";
-import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import {
+  PromptInputButton,
+  usePromptInputController,
+} from "@/components/ai-elements/prompt-input";
 import {
   Popover,
   PopoverContent,
@@ -29,9 +33,17 @@ type ContextOption = {
 // affordance lives in the toolbar's AgentAddContextMenu.
 export function AgentChatContextBar() {
   const { t } = useI18n();
-  const { context, removeContextItem, pasteChip, setPasteChip } = useAgentChat();
+  const {
+    context,
+    removeContextItem,
+    pasteChip,
+    setPasteChip,
+    fileChips,
+    removeFileChip,
+  } = useAgentChat();
 
-  if (context.items.length === 0 && !pasteChip) return null;
+  if (context.items.length === 0 && !pasteChip && fileChips.length === 0)
+    return null;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-2">
@@ -60,18 +72,28 @@ export function AgentChatContextBar() {
           <AgentPasteChip chip={pasteChip} onRemove={() => setPasteChip(undefined)} />
         </Attachments>
       ) : null}
+      {fileChips.map((chip) => (
+        <AgentFileChipCard
+          key={chip.id}
+          chip={chip}
+          onRemove={() => removeFileChip(chip.id)}
+        />
+      ))}
     </div>
   );
 }
 
-// The toolbar "add" entry (AWU-COMPOSER). Currently lists job/resume context
-// options — local files and dictation join this menu in their own slices.
+// The toolbar "add" entry (AWU-COMPOSER). Lists job/resume context options
+// plus the file picker (AWU-FILES); dictation joins this menu in slice C.
 export function AgentAddContextMenu({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const {
     addContextItem,
     contextPickerNonce,
   } = useAgentChat();
+  // The hidden file input lives inside PromptInput; its provider registers
+  // the opener so this menu can trigger the same dialog (AWU-FILES).
+  const attachments = usePromptInputController().attachments;
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState<ContextOption[]>([]);
   const [resumes, setResumes] = useState<ContextOption[]>([]);
@@ -124,6 +146,23 @@ export function AgentAddContextMenu({ compact = false }: { compact?: boolean }) 
       </PopoverTrigger>
       <PopoverContent side="top" align="start" className="w-72 p-2">
         <div className="max-h-64 space-y-2 overflow-y-auto">
+          <div>
+            <p className="px-2 py-1 text-[11px] font-medium text-muted-foreground">
+              {t("agent.fileSection")}
+            </p>
+            <button
+              type="button"
+              data-testid="agent-add-file"
+              className="flex w-full items-center gap-1.5 truncate rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted"
+              onClick={() => {
+                setOpen(false);
+                attachments.openFileDialog();
+              }}
+            >
+              <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
+              {t("agent.addFile")}
+            </button>
+          </div>
           <OptionGroup
             title={t("agent.contextJobs")}
             empty={t("agent.contextEmpty")}

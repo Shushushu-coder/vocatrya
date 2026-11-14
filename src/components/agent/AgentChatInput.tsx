@@ -27,14 +27,21 @@ import {
 } from "@/lib/agent/chatErrorUx";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
+  AGENT_FILE_PART_TYPE,
   AGENT_PASTE_PART_TYPE,
+  isAgentFilePart,
   isAgentPastePart,
+  type AgentFilePart,
   type AgentPastePart,
 } from "@/models/agent.model";
+import {
+  AGENT_FILE_ACCEPT,
+  fileChipToPartData,
+} from "@/lib/agent/agentFiles";
 
 import { useI18n, type TranslateFn } from "@/i18n";
 
-type ComposerPart = TextUIPart | AgentPastePart;
+type ComposerPart = TextUIPart | AgentPastePart | AgentFilePart;
 
 // crypto.randomUUID is secure-context-only, so it is absent over plain http on
 // a LAN host and calling it drops the paste. The id only has to be unique
@@ -53,8 +60,10 @@ function queuedText(
 ): string {
   const text = parts.find((part) => part.type === "text");
   const chip = parts.find(isAgentPastePart);
+  const file = parts.find(isAgentFilePart);
   if (text?.type === "text" && text.text) return text.text;
-  return chip ? chipLabel(chip.data, t, formatChars) : "";
+  if (chip) return chipLabel(chip.data, t, formatChars);
+  return file ? file.data.name : "";
 }
 
 // The provider owns the text — fillComposer reaches it through the
@@ -83,6 +92,9 @@ function AgentChatComposer() {
     registerComposerApi,
     pasteChip,
     setPasteChip,
+    fileChips,
+    addFiles,
+    clearFileChips,
     panelWidth,
   } = useAgentChat();
   const controller = usePromptInputController();
@@ -108,6 +120,23 @@ function AgentChatComposer() {
   }, [registerComposerApi, setInput]);
 
   const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // File items take the attachment path (AWU-FILES). The text/plain a
+    // file copy also carries is just the path/name metadata, not something
+    // the user meant to type, so it is consumed here rather than inserted.
+    const items = event.clipboardData?.items;
+    if (items) {
+      const files: File[] = [];
+      for (const item of items) {
+        if (item.kind !== "file") continue;
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+      if (files.length > 0) {
+        event.preventDefault();
+        addFiles(files);
+        return;
+      }
+    }
     const pasted = event.clipboardData.getData("text/plain");
     if (pasted.length < APP_CONSTANTS.AGENT_CHAT_PASTE_THRESHOLD) return;
     event.preventDefault();
@@ -127,6 +156,17 @@ function AgentChatComposer() {
 
   const submit = (submitted: string) => {
     const trimmed = submitted.trim();
+    const fileParts = fileChips
+      .map(fileChipToPartData)
+      .filter((data): data is NonNullable<typeof data> => data !== null)
+      .map(
+        (data) =>
+          ({
+            type: AGENT_FILE_PART_TYPE,
+            id: data.id,
+            data,
+          }) satisfies AgentFilePart,
+      );
     const parts: ComposerPart[] = [
       ...(trimmed ? [{ type: "text" as const, text: trimmed }] : []),
       ...(chip
@@ -138,6 +178,7 @@ function AgentChatComposer() {
             } satisfies AgentPastePart,
           ]
         : []),
+      ...fileParts,
     ];
     if (parts.length === 0) return;
     // Unconditional. Whether this goes out now or waits — for an approval, or
@@ -145,6 +186,7 @@ function AgentChatComposer() {
     // the only place that sees every sender.
     sendMessage({ parts });
     setPasteChip(undefined);
+    clearFileChips();
   };
 
   const onStop = useCallback(() => {
@@ -152,7 +194,16 @@ function AgentChatComposer() {
   }, [stop]);
 
   const isGenerating = status === "submitted" || status === "streaming";
-  const canSend = preflight.ok && (text.trim().length > 0 || !!chip);
+  // A file still extracting has nothing to send yet — send stays disabled
+  // until every chip settles ready or is removed, so an expected attachment
+  // can never be silently left out of the message.
+  const filesPending = fileChips.some((c) => c.status === "extracting");
+  const canSend =
+    preflight.ok &&
+    !filesPending &&
+    (text.trim().length > 0 ||
+      !!chip ||
+      fileChips.some((c) => c.status === "ready"));
   // Same breakpoint the panel header uses for its compact variant.
   const compact = panelWidth < 480;
 
@@ -191,7 +242,12 @@ function AgentChatComposer() {
           InputGroup only stacks vertically via has-[>[data-align=block-end]],
           a DOM-child selector that wrapper defeats. Nested, the group stays a
           row and the textarea collapses to a ~24px sliver beside the footer. */}
-      <PromptInput onSubmit={(message) => submit(message.text)}>
+      <PromptInput
+        accept={AGENT_FILE_ACCEPT}
+        multiple
+        onFiles={addFiles}
+        onSubmit={(message) => submit(message.text)}
+      >
         {/* Controlled through PromptInputProvider: value lives in the
             controller so fillComposer can write to it, and it still clears
             on successful submit. */}

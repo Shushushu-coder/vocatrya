@@ -505,6 +505,9 @@ export type PromptInputProps = Omit<
     code: "max_files" | "max_file_size" | "accept";
     message: string;
   }) => void;
+  // When set, picked/dropped files go to this handler instead of the
+  // attachment store — the caller owns validation and the upload pipeline.
+  onFiles?: (files: File[] | FileList) => void;
   onSubmit: (
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>
@@ -520,6 +523,7 @@ export const PromptInput = ({
   maxFiles,
   maxFileSize,
   onError,
+  onFiles,
   onSubmit,
   children,
   ...props
@@ -702,7 +706,7 @@ export const PromptInput = ({
     []
   );
 
-  const add = usingProvider ? addWithProviderValidation : addLocal;
+  const add = onFiles ?? (usingProvider ? addWithProviderValidation : addLocal);
   const remove = usingProvider ? controller.attachments.remove : removeLocal;
   const openFileDialog = usingProvider
     ? controller.attachments.openFileDialog

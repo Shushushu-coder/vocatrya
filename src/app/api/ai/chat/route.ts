@@ -28,6 +28,7 @@ import { AgentChatRequestSchema } from "@/models/agent.schema";
 import {
   buildAgentChatSystemPrompt,
   AGENT_PASTE_ONLY_USER_MESSAGE,
+  buildFileContextMessage,
   buildPageContextMessage,
   buildPasteContextMessage,
 } from "@/lib/agent/prompt";
@@ -36,6 +37,10 @@ import {
   resolvePastedText,
   stubConsumedPastes,
 } from "@/lib/agent/paste";
+import {
+  agentFilePlaceholder,
+  resolveFileTexts,
+} from "@/lib/agent/agentFiles";
 import {
   CAREER_DIALOGUE_CONTEXT_BUDGETS,
   careerDialogueContextLogFields,
@@ -47,6 +52,7 @@ import {
   AGENT_CONTEXT_USAGE_PART_TYPE,
   type AgentContextUsage,
 } from "@/lib/agent/contextUsage";
+import { isAgentFilePart } from "@/models/agent.model";
 import { truncateForModel } from "@/lib/agent/paste.server";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { measureTurnPrefix, type TurnPrefixMetrics } from "@/lib/agent/turnMetrics";
@@ -138,6 +144,7 @@ async function accountChatResponse({
   conversationId,
   messages,
   pastedText,
+  fileTexts,
   pageContext,
   lock,
   freshNativeFull,
@@ -152,6 +159,7 @@ async function accountChatResponse({
   conversationId: string;
   messages: UIMessage[];
   pastedText: string | undefined;
+  fileTexts: { name: string; text: string }[];
   pageContext: Parameters<typeof buildPageContextMessage>[0];
   lock: { connectionId: string; model: string | null };
   freshNativeFull: boolean;
@@ -326,6 +334,7 @@ async function accountChatResponse({
           systemPrompt,
           messages,
           pastedText,
+          fileTexts,
           pageContext,
           summary,
           writer,
@@ -468,6 +477,9 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   admitted(request);
   const messages = request.messages;
   const pastedText = resolvePastedText(messages);
+  // Extracted text of the files attached to THIS send — injected on this
+  // turn only (AWU-FILES). Later turns see the part's placeholder line.
+  const fileTexts = resolveFileTexts(messages);
   const conversation = await getOwnedChatConversation(userId, conversationId);
   if (!conversation) throw new ConversationRequestError("CONVERSATION_NOT_FOUND");
   if (conversation.archivedAt || await hasArchivedJobReference(
@@ -527,6 +539,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       conversationId,
       messages,
       pastedText,
+      fileTexts,
       pageContext,
       lock: lock as { connectionId: string; model: string | null },
       freshNativeFull,
@@ -625,12 +638,25 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   // reasoning-free reply from two turns ago 400'd the whole request. No
   // provider is special-cased here: the transcript is simply true again.
   // The paste context message below is what actually carries the posting.
+  // The fallback names what the empty shell actually carried — a data-file
+  // part's name, else the paste body — so the stand-in text is never a claim
+  // the user's message did not make. Converted user messages correspond to
+  // the persisted user messages in order.
+  const originalUsers = messages.filter((m) => m.role === "user");
+  let originalUserIndex = 0;
   modelMessages = modelMessages.flatMap((message) => {
     if (!(Array.isArray(message.content) && message.content.length === 0)) {
+      if (message.role === "user") originalUserIndex += 1;
       return [message];
     }
     if (message.role !== "user") return [];
-    return [{ role: "user" as const, content: AGENT_PASTE_ONLY_USER_MESSAGE }];
+    const original = originalUsers[originalUserIndex];
+    originalUserIndex += 1;
+    const filePart = original?.parts.find(isAgentFilePart);
+    const content = filePart
+      ? agentFilePlaceholder(filePart.data.name)
+      : AGENT_PASTE_ONLY_USER_MESSAGE;
+    return [{ role: "user" as const, content }];
   });
 
   // Injected only on the turn that introduced the paste. On the approval POST
@@ -653,6 +679,17 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   if (pastedText && lastIsUser) {
     const { block } = truncateForModel(pastedText);
     modelMessages.push({ role: "user", content: buildPasteContextMessage(block) });
+  }
+  // Same arriving-turn-only rule as the paste: one line per attached file,
+  // after it, so the file content is the last thing before the session tail.
+  if (fileTexts.length && lastIsUser) {
+    for (const file of fileTexts) {
+      const { block } = truncateForModel(file.text);
+      modelMessages.push({
+        role: "user",
+        content: buildFileContextMessage(file.name, block),
+      });
+    }
   }
 
   // req.signal is what makes stop()/Clear/close actually stop generating: the
