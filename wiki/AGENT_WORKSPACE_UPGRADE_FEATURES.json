@@ -40,8 +40,8 @@
       "dependencies": [],
       "openQuestions": ["D8"],
       "steps": ["窄面板下各入口可操作且无横向溢出。", "键盘、焦点及按钮可访问名称覆盖主要流程。", "发送、停止、加载与失败状态反馈清楚。"],
-      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：统一输入区落地，卡片行承载上下文 chip 与未发送粘贴卡，底部工具栏聚合添加菜单、模型选择与用量估算；粘贴卡移入 provider 态并随角色槽位序列化；窄面板（<480px）与 aria-label 沿用既有写法。切片 A 按 D1–D8 备料包推荐裁定执行；执行窗口五轴评审修复一处工具栏弹层随 composer 重挂载误开的回归。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
-      "passes": false
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：统一输入区落地，卡片行承载上下文 chip 与未发送粘贴卡，底部工具栏聚合添加菜单、模型选择与用量估算；粘贴卡移入 provider 态并随角色槽位序列化；窄面板（<480px）与 aria-label 沿用既有写法。切片 A 按 D1–D8 备料包推荐裁定执行；执行窗口五轴评审修复一处工具栏弹层随 composer 重挂载误开的回归。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，执行窗口 devin:legend-music）：窄面板 402px 可操作无横向溢出、键盘焦点链与可访问名称、发送/停止/加载/失败状态反馈均实测通过；11/11 场景全过，无已确认缺陷。证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/（截图、results.json、stub-requests.json、db.json、trace.zip）及 b8b430ce-6d1e-4de5-83b8-5d8d3ff0fa73/。",
+      "passes": true
     },
     {
       "id": "AWU-MODEL",
@@ -59,8 +59,8 @@
       "dependencies": ["AWU-COMPOSER"],
       "openQuestions": ["D1", "D8"],
       "steps": ["新会话所选模型与后端实际执行身份一致。", "已有会话切换流程清楚，重试及重新生成不静默改写旧绑定。", "按冻结规则验证草稿、上下文和附件去向；连接失效不静默回退。"],
-      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：模型选择器迁入底部工具栏；既有会话换模型开新会话并显式携带草稿文本、MANUAL 上下文与粘贴卡（D1），锁态弹层补充携带文案、不加二次确认；AUTO 页面上下文保留重解析并经 dedupeContextItems 合并；修复了既往槽位快照时序导致草稿残留复活的不一致。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
-      "passes": false
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：模型选择器迁入底部工具栏；既有会话换模型开新会话并显式携带草稿文本、MANUAL 上下文与粘贴卡（D1），锁态弹层补充携带文案、不加二次确认；AUTO 页面上下文保留重解析并经 dedupeContextItems 合并；修复了既往槽位快照时序导致草稿残留复活的不一致。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，devin:legend-music）：换模型开新会话并携带草稿/上下文/粘贴卡、锁态弹层文案、AUTO 重解析去重、stub 真实调用 awu-stub-v1、旧会话绑定不变实测通过，passes:true；证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/。",
+      "passes": true
     },
     {
       "id": "AWU-CONTEXT",
@@ -78,15 +78,15 @@
       "dependencies": ["AWU-COMPOSER"],
       "openQuestions": ["D2"],
       "steps": ["显示值及裁剪提示与后端组装结果相符，不将 16k 应用预算冒充模型容量。", "添加或移除上下文后展示及实际请求同步变化。", "超预算行为与审批和当前回合保留规则兼容；若持久化设置，验证重新打开。"],
-      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：route 以 transient data-context-usage 回传组装估算（account/managed 路径，conversationId+requestId 双校验），工具栏显示估算/应用预算、分项展开与裁剪提示；Legacy 会话不显示不伪报（D2 首版只读自动管理）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
-      "passes": false
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：route 以 transient data-context-usage 回传组装估算（account/managed 路径，conversationId+requestId 双校验），工具栏显示估算/应用预算、分项展开与裁剪提示；Legacy 会话不显示不伪报（D2 首版只读自动管理）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，devin:legend-music）：工具栏估算 ≈637/16k 与后端 estimatedInputTokens: 637 一致、分项展开与裁剪提示、Legacy 不显示不伪报实测通过，passes:true；证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/。",
+      "passes": true
     },
     {
       "id": "AWU-FILES",
       "category": "Agent / Local Files",
       "scope": "PROPOSED_V1",
       "designStatus": "CORE_CONFIRMED",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "统一职位、简历、文本与本地文件添加流程；通用 Agent 文件链路尚未接通（权限枚举仅为类型契约，准入拒收非 text/data-paste part）。",
       "existingEvidence": [
         "src/components/agent/AgentChatContextBar.tsx",
@@ -100,6 +100,7 @@
       "dependencies": ["AWU-COMPOSER", "AWU-CONTEXT"],
       "openQuestions": ["D1", "D3", "D4"],
       "steps": ["冻结首批格式与限制后，验证选择、解析、预览、移除及实际模型请求中的内容。", "超限、损坏、加密、无文本、格式不支持及取消不伪报成功。", "只读取用户所选文件，后端校验限制，文件内容不授予工具权限。", "按冻结生命周期验证会话恢复、文件删除和缓存清理；发送内容及外发对象可理解。"],
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-b @990c91a6（merge b6249cb6）：选择/拖入/粘贴 txt/md/pdf/docx → POST /api/ai/agent-file-extract（auth+限流、≤10MB、magic 嗅探、≤50k 字）→ data-file part 仅携服务端提取文本，准入复核数量/形状/上限，提取文本仅注入到达轮并以 (attached file: name) 占位后续轮；AgentChatInput/ContextBar/Provider/fileChip 改造，i18n 各 +13 key。定向 vitest 45 项+相邻受影响 252 项、完整 tsc 通过；Windows Electron 与会话生命周期实测未执行，passes:false 保持。",
       "passes": false
     },
     {
@@ -120,15 +121,15 @@
       "dependencies": [],
       "openQuestions": ["D5"],
       "steps": ["审批卡展示与后端待执行参数一致。", "拒绝后不执行相应写入，批准或重试不重复执行。", "按冻结规则验证审批中输入、关闭及刷新恢复，前端状态不能绕过后端授权。"],
-      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：审批卡接管五态生命周期（请求/已响应/已执行/已拒绝/失败），输出态须携带 approval 记录方归属审批卡，拒绝态仅状态行不重复结果卡；逐工具 needsApproval 策略不变（D5）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
-      "passes": false
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：审批卡接管五态生命周期（请求/已响应/已执行/已拒绝/失败），输出态须携带 approval 记录方归属审批卡，拒绝态仅状态行不重复结果卡；逐工具 needsApproval 策略不变（D5）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，devin:legend-music）：审批卡五态链路实测——批准→已执行不重复、拒绝仅状态行不执行且职位数不变、失败态渲染、第二张卡批准正确执行，passes:true；证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/。",
+      "passes": true
     },
     {
       "id": "AWU-DICTATION",
       "category": "Agent / API Dictation",
       "scope": "PROPOSED_V1",
       "designStatus": "CORE_CONFIRMED",
-      "implementationStatus": "MISSING",
+      "implementationStatus": "IMPLEMENTED",
       "description": "通过 API 将录音转为可编辑草稿，交互参考 Codex，不采用本地转写模型。",
       "existingEvidence": [
         "src/components/settings/AudioSettings.tsx",
@@ -151,6 +152,7 @@
       },
       "openQuestions": ["D6", "D7"],
       "steps": ["在隔离 Windows Electron fresh-native 环境完成授权录音到真实 API 再到草稿的路径。", "普通话、中英混说、公司名和职位名样本核对质量及耗时，不能只用 Mock 证明转写可用。", "已有草稿不被覆盖，不自动发送；失败、权限拒绝、取消和迟到响应按冻结规则处理。", "切换会话、继续输入及关闭面板时结果不串写，麦克风和临时音频按约定释放。", "设置及凭据安全可用，明确音频去向；不下载或启动本地转写模型。"],
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-c @3da20b1c（merge 92d6dbd6）+ 挂载收口 2820a675：D6 独立 dictation 设置（shared 复用 provider BYOK / dedicated 独立凭据行），OpenAI /v1/audio/transcriptions 与 Gemini generateContent 适配、统一 wire 错误码、60s 预算与取消共享信号；D7 录完再转、插入草稿不自动发送、音频仅内存、失败保留一次重试、归属切换迟到响应丢弃；AudioSettings 麦克风生命周期提取至 src/lib/audio/microphone.ts；AgentDictationButton 按交接清单挂入统一工具栏（insertDictationText 入草稿，ownership=activeRole:conversationId）；i18n 追加 dictation 顶层命名空间 46 key。定向 vitest 106 项+挂载相邻 53 项、完整 tsc、改动 ESLint 通过；真实 API、Windows Electron fresh-native 实测未执行，passes:false 保持。",
       "passes": false
     }
   ],
