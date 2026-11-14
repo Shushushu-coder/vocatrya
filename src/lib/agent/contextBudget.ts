@@ -1,7 +1,16 @@
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import { APP_CONSTANTS } from "@/lib/constants";
-import { isAgentPastePart, type PageContext } from "@/models/agent.model";
-import { buildPageContextMessage, buildPasteContextMessage } from "./prompt";
+import {
+  isAgentFilePart,
+  isAgentPastePart,
+  type PageContext,
+} from "@/models/agent.model";
+import { agentFilePlaceholder } from "./agentFiles";
+import {
+  buildFileContextMessage,
+  buildPageContextMessage,
+  buildPasteContextMessage,
+} from "./prompt";
 
 /**
  * Provider-neutral Career Dialogue context budget.
@@ -77,6 +86,12 @@ export type CareerDialogueContextInput = {
   pageContext?: PageContext;
   /** Already head-truncated paste block. The budgeter does not fetch data. */
   pasteBlock?: string;
+  /**
+   * Extracted file text for the current send (AWU-FILES), already wrapped
+   * by truncateForModel. Injected like the paste: on the arriving turn only,
+   * protected from auto-drop, charged to explicitContextTokens.
+   */
+  fileBlocks?: { name: string; block: string }[];
   /**
    * Fresh transcript-compression cache, already validated by the caller.
    * Omitted when missing, stale, legacy, or over the summary budget.
@@ -276,6 +291,10 @@ function userText(message: UIMessage | null | undefined): string {
     .map((part) => {
       if (part.type === "text") return part.text;
       if (isAgentPastePart(part)) return "(pasted job posting)";
+      // The extracted text does not replay every turn — the file line is
+      // injected on the arriving turn only, and this placeholder keeps the
+      // file-only send a complete turn in history.
+      if (isAgentFilePart(part)) return agentFilePlaceholder(part.data.name);
       return "";
     })
     .filter(Boolean)
@@ -569,8 +588,15 @@ export function buildCareerDialogueContext(
   if (lastIsUser && input.pasteBlock && !userLineText.includes(input.pasteBlock)) {
     pasteLine = buildPasteContextMessage(input.pasteBlock);
   }
+  const fileLines = lastIsUser
+    ? (input.fileBlocks ?? []).map((file) =>
+        buildFileContextMessage(file.name, file.block),
+      )
+    : [];
   if (
-    estimateContextTokens(pageLine ?? "") + estimateContextTokens(pasteLine ?? "") >
+    estimateContextTokens(pageLine ?? "") +
+      estimateContextTokens(pasteLine ?? "") +
+      tokensOf(fileLines) >
       budgets.explicitContextTokens &&
     pageLine
   ) {
@@ -598,6 +624,7 @@ export function buildCareerDialogueContext(
     ...currentLines().filter((line) => !history.some((rendered) => rendered.turn === current)),
     ...(pageLine ? [pageLine] : []),
     ...(pasteLine ? [pasteLine] : []),
+    ...fileLines,
     ...session,
   ];
 
@@ -614,6 +641,7 @@ export function buildCareerDialogueContext(
     }
     if (pageLine) lines.push(pageLine);
     if (pasteLine) lines.push(pasteLine);
+    lines.push(...fileLines);
     lines.push(...session);
     return lines;
   };
@@ -689,7 +717,7 @@ export function buildCareerDialogueContext(
   }
 
   const historyText = historyDialogue();
-  const explicitKept = [pageLine, pasteLine].filter((line): line is string => Boolean(line));
+  const explicitKept = [pageLine, pasteLine, ...fileLines].filter((line): line is string => Boolean(line));
   const toolText = [...keptHistoricalTools(), ...session];
   const systemText = input.systemText ?? "";
   const dynamicText = transcriptLines.join("\n");

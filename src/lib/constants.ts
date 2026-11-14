@@ -212,6 +212,12 @@ export const APP_CONSTANTS = {
   // sits within this many trailing user messages. Bounds how long an
   // abandoned paste can shadow a later typed add.
   AGENT_CHAT_PASTE_ACTIVE_USER_MESSAGES: 2,
+  // Agent file attachments (AWU-FILES). The byte ceiling applies to the
+  // user's picked file before extraction; the char ceiling applies to the
+  // extracted text carried in the data-file part (and into the prompt).
+  AGENT_FILE_MAX_BYTES: 10 * 1024 * 1024,
+  AGENT_FILE_MAX_PER_MESSAGE: 3,
+  AGENT_FILE_MAX_EXTRACTED_CHARS: 50_000,
   // Ceiling on the resume text a get_resume result carries. A preprocessed
   // resume runs 3-6k chars; this is headroom, not a normal-case trim. It
   // rides in the model window on every later turn, so it is bounded.

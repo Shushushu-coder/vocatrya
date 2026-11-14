@@ -32,6 +32,7 @@ import {
 } from "@/models/agent.model";
 import {
   AGENT_TOOL_DESCRIPTIONS,
+  buildFileContextMessage,
   buildPageContextMessage,
   buildPasteContextMessage,
 } from "./prompt";
@@ -259,6 +260,8 @@ export function renderCareerDialoguePrompt(input: {
   messages: UIMessage[];
   pageContext?: PageContext;
   pastedText?: string;
+  /** Extracted file texts attached to the current send (AWU-FILES). */
+  fileTexts?: { name: string; text: string }[];
   sessionFacts?: SessionToolFact[];
   toolsBlock?: string;
   directChat?: boolean;
@@ -271,6 +274,13 @@ export function renderCareerDialoguePrompt(input: {
   const pasteBlock =
     input.pastedText && lastIsUser
       ? truncateForModel(input.pastedText).block
+      : undefined;
+  const fileBlocks =
+    lastIsUser && input.fileTexts?.length
+      ? input.fileTexts.map((file) => ({
+          name: file.name,
+          block: truncateForModel(file.text).block,
+        }))
       : undefined;
   const fixedOverheadText =
     input.profile === "AGENT_DECISION"
@@ -290,6 +300,7 @@ export function renderCareerDialoguePrompt(input: {
     messages: input.messages,
     pageContext: input.pageContext,
     pasteBlock,
+    fileBlocks,
     sessionFacts: input.sessionFacts,
     summary: input.summary,
     systemText: input.systemPrompt,
@@ -406,6 +417,8 @@ export type AccountAgentTurnInput = {
   /** Windowed client messages (same windowing the legacy path applies). */
   messages: UIMessage[];
   pastedText?: string;
+  /** Extracted file texts attached to the current send (AWU-FILES). */
+  fileTexts?: { name: string; text: string }[];
   pageContext?: PageContext;
   /** Fresh summary text. Missing, stale, and legacy conversations omit it. */
   summary?: CareerDialogueContextInput["summary"];
@@ -447,12 +460,14 @@ export function assembleCareerDialogueTranscript({
   messages,
   pageContext,
   pastedText,
+  fileTexts,
   freshNativeFull,
   agentRole,
 }: {
   messages: UIMessage[];
   pageContext?: PageContext;
   pastedText?: string;
+  fileTexts?: { name: string; text: string }[];
   freshNativeFull?: boolean;
   agentRole?: string | null;
 }): string[] {
@@ -467,6 +482,12 @@ export function assembleCareerDialogueTranscript({
   if (pastedText && lastIsUser) {
     const { block } = truncateForModel(pastedText);
     transcriptLines.push(buildPasteContextMessage(block));
+  }
+  if (fileTexts?.length && lastIsUser) {
+    for (const file of fileTexts) {
+      const { block } = truncateForModel(file.text);
+      transcriptLines.push(buildFileContextMessage(file.name, block));
+    }
   }
   return transcriptLines;
 }
@@ -529,6 +550,7 @@ export async function runAccountAgentTurn(
       messages,
       pageContext,
       pastedText,
+      fileTexts: input.fileTexts,
       sessionFacts,
       summary: input.summary,
       toolsBlock,

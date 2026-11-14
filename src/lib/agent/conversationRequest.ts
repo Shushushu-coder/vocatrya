@@ -2,7 +2,29 @@ import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isToolUIPart, type UIMessage } from "ai";
 import prisma from "@/lib/db";
+import { APP_CONSTANTS } from "@/lib/constants";
 import { hasWriteReceipt, regenerateTailHasWriteReceipt } from "./writeReceipt";
+
+// Server-side shape check for data-file parts (AWU-FILES): the composer
+// builds them from endpoint-extracted text, but admission re-verifies count
+// and bounds regardless — a client can put anything in newMessage.parts.
+function validFileParts(parts: UIMessage["parts"]): boolean {
+  const files = parts.filter(p => p.type === "data-file");
+  if (files.length > APP_CONSTANTS.AGENT_FILE_MAX_PER_MESSAGE) return false;
+  const slack = 1024;
+  return files.every(p => {
+    const d = (p as { data?: Record<string, unknown> }).data;
+    return !!d &&
+      typeof d.id === "string" && d.id.length > 0 &&
+      typeof d.name === "string" && d.name.length > 0 && d.name.length <= 255 &&
+      typeof d.mediaType === "string" &&
+      typeof d.size === "number" && d.size >= 0 &&
+      typeof d.chars === "number" &&
+      typeof d.truncated === "boolean" &&
+      typeof d.text === "string" && d.text.length > 0 &&
+      d.text.length <= APP_CONSTANTS.AGENT_FILE_MAX_EXTRACTED_CHARS + slack;
+  });
+}
 
 export type ConversationErrorCode = "CONVERSATION_NOT_FOUND" | "CONVERSATION_STALE_WRITE" | "CONVERSATION_TURN_CONFLICT" | "CONVERSATION_PERSISTENCE_FAILED" | "CONVERSATION_ARCHIVED" | "CONVERSATION_ARCHIVED_CONTENT";
 export class ConversationRequestError extends Error {
@@ -79,7 +101,8 @@ export async function admitConversationRequest(input: ConversationOperation & {
         if (pending.length) return { error: "CONVERSATION_TURN_CONFLICT" as const };
         const message = input.newMessage;
         if (!message || message.role !== "user" || !message.id || !Array.isArray(message.parts) || messages.some(m => m.id === message.id) ||
-          message.parts.some(p => p.type !== "text" && p.type !== "data-paste")) return { error: "CONVERSATION_TURN_CONFLICT" as const };
+          message.parts.some(p => p.type !== "text" && p.type !== "data-paste" && p.type !== "data-file") ||
+          !validFileParts(message.parts)) return { error: "CONVERSATION_TURN_CONFLICT" as const };
         messages.push(message);
       } else if (input.operation === "regenerate") {
         const index = messages.findIndex(m => m.id === input.targetMessageId);

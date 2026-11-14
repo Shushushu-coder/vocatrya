@@ -26,10 +26,12 @@ import { parseResumeReview } from "@/lib/ai/resumeReview/parse";
 import { stripThinking } from "@/lib/ai/stripThinking";
 import { cn } from "@/lib/utils";
 import {
+  isAgentFilePart,
   isAgentPastePart,
   isNestedTool,
   type AgentPastePartData,
 } from "@/models/agent.model";
+import { AgentFilePartCard } from "@/components/agent/fileChip";
 
 import { useI18n } from "@/i18n";
 
@@ -164,6 +166,10 @@ export function AgentChatMessages() {
                 }
                 if (isAgentPastePart(part))
                   return <PasteChip key={i} data={part.data} />;
+                // Persisted file attachments (AWU-FILES): name + extracted
+                // size, read-only — the part is the record of what was sent.
+                if (isAgentFilePart(part))
+                  return <AgentFilePartCard key={i} data={part.data} />;
                 // Static, not dynamic: every tool this surface exposes is
                 // declared in buildAgentTools, so a dynamic part is not ours.
                 if (!isStaticToolUIPart(part)) return null;

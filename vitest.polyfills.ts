@@ -1,5 +1,5 @@
 import { TextEncoder, TextDecoder } from "util";
-import { ReadableStream, TransformStream } from "stream/web";
+import { ReadableStream, TransformStream } from "node:stream/web";
 
 if (typeof global.TextEncoder === "undefined") {
   global.TextEncoder = TextEncoder;
