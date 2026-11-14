@@ -37,11 +37,16 @@ import {
   stubConsumedPastes,
 } from "@/lib/agent/paste";
 import {
+  CAREER_DIALOGUE_CONTEXT_BUDGETS,
   careerDialogueContextLogFields,
   currentUserExceedsContextBudget,
   selectCareerDialogueMessages,
   type CareerDialogueContextSize,
 } from "@/lib/agent/contextBudget";
+import {
+  AGENT_CONTEXT_USAGE_PART_TYPE,
+  type AgentContextUsage,
+} from "@/lib/agent/contextUsage";
 import { truncateForModel } from "@/lib/agent/paste.server";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { measureTurnPrefix, type TurnPrefixMetrics } from "@/lib/agent/turnMetrics";
@@ -334,6 +339,34 @@ async function accountChatResponse({
           notionTools,
         });
         contextSize = result.contextSize;
+        // The budgeter's estimate for the turn that just ran, streamed back
+        // so the composer toolbar can show real assembly usage. Transient —
+        // it is transport, not transcript.
+        if (contextSize) {
+          const usage: AgentContextUsage = {
+            conversationId,
+            requestId: request.requestId,
+            profile: contextSize.contextProfile,
+            estimatedInputTokens: contextSize.estimatedInputTokens,
+            recentTurnCount: contextSize.recentTurnCount,
+            droppedTurnCount: contextSize.droppedTurnCount,
+            tokens: {
+              system: contextSize.systemTokens,
+              currentUser: contextSize.currentUserTokens,
+              history: contextSize.historyTokens,
+              explicitContext: contextSize.explicitContextTokens,
+              toolResult: contextSize.toolResultTokens,
+              summary: contextSize.summaryTokens,
+              dynamic: contextSize.dynamicTokens,
+            },
+            budgets: { ...CAREER_DIALOGUE_CONTEXT_BUDGETS },
+          };
+          writer.write({
+            type: AGENT_CONTEXT_USAGE_PART_TYPE,
+            transient: true,
+            data: usage,
+          });
+        }
       });
     },
     onFinish: async ({ messages: finalMessages, responseMessage, isAborted }) => {

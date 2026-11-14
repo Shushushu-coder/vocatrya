@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lock } from "lucide-react";
 import { listEligibleChatModels } from "@/actions/agentChat.actions";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
@@ -14,7 +14,10 @@ import {
 import { useI18n } from "@/i18n";
 import type { EligibleChatModel, ExplicitModelSelection } from "@/lib/agent/chatTypes";
 
-export function AgentChatIdentity() {
+// Lives in the composer toolbar (AWU-MODEL). The popover opens upward, and a
+// pick on an existing conversation starts a new draft carrying the composer's
+// draft text, MANUAL context and paste chip (D1) — never a silent resend.
+export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const {
     conversationId,
@@ -27,8 +30,12 @@ export function AgentChatIdentity() {
   const [picking, setPicking] = useState(false);
   const [models, setModels] = useState<EligibleChatModel[]>([]);
 
+  // Same mount-vs-bump rule as AgentAddContextMenu: the nonce outlives the
+  // toolbar remount that carries it, so the value at mount is already seen.
+  const seenPickerNonceRef = useRef(modelPickerNonce);
   useEffect(() => {
-    if (!modelPickerNonce) return;
+    if (modelPickerNonce === seenPickerNonceRef.current) return;
+    seenPickerNonceRef.current = modelPickerNonce;
     setPicking(true);
     setOpen(true);
   }, [modelPickerNonce]);
@@ -66,7 +73,7 @@ export function AgentChatIdentity() {
     setOpen(false);
     setPicking(false);
     if (conversationId) {
-      void startNewConversation({ explicit: selection });
+      void startNewConversation({ explicit: selection, carry: true });
       return;
     }
     setDraftModel(selection);
@@ -88,16 +95,17 @@ export function AgentChatIdentity() {
           aria-label={label || t("agent.selectModel")}
         >
           {locked ? <Lock className="h-3 w-3 shrink-0" aria-hidden /> : null}
-          <span className="truncate font-mono">{label}</span>
+          <span className={`truncate font-mono ${compact ? "max-w-24" : "max-w-40"}`}>{label}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 space-y-2 p-3">
+      <PopoverContent side="top" align="start" className="w-72 space-y-2 p-3">
         {locked && !picking ? (
           <>
             <p className="text-sm">
               {t("agent.lockTitle", { model: identity.model ?? "" })}
             </p>
             <p className="text-xs text-muted-foreground">{t("agent.lockBody")}</p>
+            <p className="text-xs text-muted-foreground">{t("agent.lockCarry")}</p>
             <Button
               size="sm"
               variant="outline"

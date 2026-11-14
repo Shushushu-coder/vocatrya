@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { AgentChatContextBar } from "@/components/agent/AgentChatContextBar";
 import { AgentChatEmptyState } from "@/components/agent/AgentChatEmptyState";
 import { AgentChatHistory } from "@/components/agent/AgentChatHistory";
-import { AgentChatIdentity } from "@/components/agent/AgentChatIdentity";
 import { AgentChatInput } from "@/components/agent/AgentChatInput";
 import { AgentChatMessages } from "@/components/agent/AgentChatMessages";
 import { AgentRoleSwitcher } from "@/components/agent/AgentRoleSwitcher";
@@ -93,7 +92,6 @@ export function AgentChatPanel() {
               </span>
             )}
           </SheetTitle>
-          {compactHeader ? null : <AgentChatIdentity />}
           <Button
             data-testid="agent-new-conversation"
             aria-label={t("agent.newConversation")}

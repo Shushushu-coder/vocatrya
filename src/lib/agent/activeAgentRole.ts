@@ -4,6 +4,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { isAgentRole, type AgentRole } from "./agentRoles";
 import type { AgentConversationContextV1 } from "./conversationContext";
 import type { ExplicitModelSelection } from "./chatTypes";
+import type { AgentPastePartData } from "@/models/agent.model";
 
 /**
  * Per-role slot persistence (D1). Each role keeps its own last-active
@@ -19,6 +20,8 @@ export type StoredRoleSlot = {
   draft: string | null;
   context?: AgentConversationContextV1;
   explicit?: ExplicitModelSelection | null;
+  /** Unsent paste chip, serialized with the draft it was prepared for. */
+  paste?: AgentPastePartData | null;
 };
 
 type SlotMap = Partial<Record<AgentRole, StoredRoleSlot>>;
@@ -114,6 +117,19 @@ function isValidContext(value: unknown): value is AgentConversationContextV1 {
   );
 }
 
+function isValidPaste(value: unknown): value is AgentPastePartData {
+  if (typeof value !== "object" || value === null) return false;
+  const paste = value as AgentPastePartData;
+  return (
+    typeof paste.id === "string" &&
+    paste.id.length > 0 &&
+    typeof paste.text === "string" &&
+    paste.text.length > 0 &&
+    typeof paste.chars === "number" &&
+    typeof paste.truncated === "boolean"
+  );
+}
+
 function sanitizeSlot(raw: unknown): StoredRoleSlot | null {
   if (typeof raw !== "object" || raw === null) return null;
   const slot = raw as Record<string, unknown>;
@@ -128,8 +144,9 @@ function sanitizeSlot(raw: unknown): StoredRoleSlot | null {
     typeof slot.explicit === "object" && slot.explicit !== null
       ? (slot.explicit as ExplicitModelSelection)
       : null;
-  if (!conversationId && !draft && !context && !explicit) return null;
-  return { conversationId, draft, context, explicit };
+  const paste = isValidPaste(slot.paste) ? slot.paste : null;
+  if (!conversationId && !draft && !context && !explicit && !paste) return null;
+  return { conversationId, draft, context, explicit, paste };
 }
 
 export function readAgentRoleSlots(): SlotMap {

@@ -11,6 +11,9 @@ const chat = {
   interruptedTurn: false,
   dismissInterrupted: vi.fn(),
   toolStreams: {} as Record<string, string>,
+  contextUsage: null as any,
+  approvalPending: false,
+  conversationId: "conv-1" as string | null,
 };
 vi.mock("@/components/agent/AgentChatProvider", () => ({
   useAgentChat: () => chat,
@@ -43,6 +46,7 @@ describe("AgentChatMessages", () => {
     chat.status = "ready";
     chat.interruptedTurn = false;
     chat.toolStreams = {};
+    chat.contextUsage = null;
   });
 
   it("renders the running card while the tool input is still arriving", () => {
@@ -71,6 +75,60 @@ describe("AgentChatMessages", () => {
     render(<AgentChatMessages />);
     expect(screen.getAllByText(/added/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("Needs approval")).not.toBeInTheDocument();
+  });
+
+  // AWU-APPROVAL: an approval-gated tool's settled states stay on the
+  // approval card — executed/denied/failed — beside the outcome card.
+  it("settles an approved call into Executed beside the result card", () => {
+    chat.messages = [
+      assistant([
+        toolPart("output-available", {
+          approval: { id: "ap1", approved: true },
+          output: { created: true, jobId: "j1", resolutions: [] },
+        }),
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    expect(screen.getByText("Executed")).toBeInTheDocument();
+    expect(screen.getAllByText(/added/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows a denied call as Declined without a result card", () => {
+    chat.messages = [
+      assistant([
+        toolPart("output-denied", {
+          approval: { id: "ap1", approved: false, reason: "wrong company" },
+        }),
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    expect(screen.getByText("Declined")).toBeInTheDocument();
+    expect(screen.getByText(/wrong company/)).toBeInTheDocument();
+  });
+
+  it("shows a failed call as Failed beside the retry card", () => {
+    chat.messages = [
+      assistant([
+        toolPart("output-error", {
+          approval: { id: "ap1", approved: true },
+          errorText: "provider unreachable",
+        }),
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText(/not added/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("notes the dropped history above the transcript", () => {
+    chat.contextUsage = { droppedTurnCount: 3 };
+    chat.messages = [
+      user([{ type: "text", text: "add a job" }]),
+      assistant([{ type: "text", text: "Done." }]),
+    ];
+    render(<AgentChatMessages />);
+    expect(screen.getByText(/left out of the last send/i)).toBeInTheDocument();
   });
 
   it("feeds the approval card the pasted text from the same thread", () => {
@@ -103,7 +161,9 @@ describe("AgentChatMessages", () => {
     expect(chat.regenerate).not.toHaveBeenCalled();
     expect(chat.resumeStream).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole("button", { name: /regenerate/i }));
+    // Exact name: the answer row under the truncated reply also carries a
+    // "Regenerate answer" action — the banner's button is just "Regenerate".
+    await userEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     expect(chat.regenerate).toHaveBeenCalled();
     expect(chat.resumeStream).not.toHaveBeenCalled();
   });
@@ -137,8 +197,10 @@ describe("AgentChatMessages", () => {
       assistant([{ type: "text", text: "Done." }]),
     ];
     render(<AgentChatMessages />);
+    // No interrupted banner; the answer row's "Regenerate answer" is a
+    // different control and stays.
     expect(
-      screen.queryByRole("button", { name: /regenerate/i }),
+      screen.queryByRole("button", { name: "Regenerate" }),
     ).not.toBeInTheDocument();
   });
 
