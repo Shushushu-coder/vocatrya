@@ -32,6 +32,7 @@ const fields = {
   pairConnect: document.getElementById("pairConnect"),
   syncProfile: document.getElementById("syncProfile"),
   disconnectConnect: document.getElementById("disconnectConnect"),
+  forgetConnect: document.getElementById("forgetConnect"),
   connectStatus: document.getElementById("connectStatus"),
   connectFeedback: document.getElementById("connectFeedback")
 };
@@ -514,6 +515,9 @@ fields.syncProfile?.addEventListener("click", () => {
 });
 fields.disconnectConnect?.addEventListener("click", () => {
   void disconnectFromVocatrya();
+});
+fields.forgetConnect?.addEventListener("click", () => {
+  void forgetVocatryaCredentials();
 });
 window.addEventListener("scroll", scheduleProfileSectionSync, { passive: true });
 window.addEventListener("resize", scheduleProfileSectionSync);
@@ -1986,6 +1990,7 @@ function renderConnectState(state) {
     fields.pairConnect.disabled = connectBusy;
     fields.syncProfile.disabled = true;
     fields.disconnectConnect.disabled = true;
+    fields.forgetConnect.disabled = true;
     return;
   }
 
@@ -2036,6 +2041,7 @@ function renderConnectState(state) {
   fields.pairConnect.disabled = connectBusy;
   fields.syncProfile.disabled = connectBusy || !usable;
   fields.disconnectConnect.disabled = connectBusy;
+  fields.forgetConnect.disabled = connectBusy;
 }
 
 function parsePairingAppOrigin(input) {
@@ -2154,7 +2160,41 @@ async function disconnectFromVocatrya() {
     renderConnectState({ connected: false });
     setConnectFeedback("已断开连接，访问令牌已撤销。如需再次使用请重新配对。", "saved");
   } catch (error) {
-    setConnectFeedback(`断开失败：${error.message}`, "error");
+    setConnectFeedback(
+      `断开失败：${error.message} 如确认 Vocatrya 已不可用，可改用「仅清除本机凭据」。`,
+      "error"
+    );
+  } finally {
+    connectBusy = false;
+    await refreshConnectStatus({ live: false });
+  }
+}
+
+async function forgetVocatryaCredentials() {
+  if (connectBusy) {
+    return;
+  }
+  const confirmed = window.confirm(
+    "仅在无法联系 Vocatrya 时使用：本操作清除本机保存的连接凭据，插件将视为未配对；Vocatrya 应用内的授权可能仍然存在，请之后在应用内撤销该连接。已同步的资料副本仍保留在本机。确定清除？"
+  );
+  if (!confirmed) {
+    return;
+  }
+  connectBusy = true;
+  try {
+    const result = await sendRuntimeMessage({
+      type: "OJAF_VOCATRYA_DISCONNECT",
+      payload: { force: true }
+    });
+    renderConnectState({ connected: false });
+    setConnectFeedback(
+      result?.remoteRevoked
+        ? "已断开连接，访问令牌已撤销。如需再次使用请重新配对。"
+        : "已清除本机连接凭据。未能联系 Vocatrya 确认撤销，应用内的授权可能仍然存在，请之后在应用内撤销该连接。",
+      "saved"
+    );
+  } catch (error) {
+    setConnectFeedback(`清除失败：${error.message}`, "error");
   } finally {
     connectBusy = false;
     await refreshConnectStatus({ live: false });
