@@ -13,6 +13,24 @@ import userEvent from "@testing-library/user-event";
 import AudioSettings from "@/components/settings/AudioSettings";
 import { APP_CONSTANTS } from "@/lib/constants";
 
+// The dictation config block calls its own server actions; they are not
+// under test here, so the surface is stubbed at the actions boundary.
+vi.mock("@/actions/dictation.actions", () => ({
+  getDictationSettings: vi.fn(async () => ({
+    success: true,
+    data: {
+      config: null,
+      credentials: {
+        openai: { shared: null, dedicated: null },
+        gemini: { shared: null, dedicated: null },
+      },
+    },
+  })),
+  updateDictationSettings: vi.fn(async () => ({ success: true })),
+  saveDictationKey: vi.fn(async () => ({ success: true })),
+  deleteDictationKey: vi.fn(async () => ({ success: true })),
+}));
+
 const DEVICE_KEY = APP_CONSTANTS.AUDIO_INPUT_DEVICE_STORAGE_KEY;
 
 interface FakeTrack {
@@ -181,11 +199,12 @@ describe("AudioSettings — permission gate", () => {
   it("does not touch any media API before the user enables the microphone", () => {
     const mocks = installMediaDevices();
     render(<AudioSettings />);
-    const page = screen.getByTestId("audio-settings");
     expect(screen.getByTestId("audio-mic-enable")).toHaveTextContent(
       "Enable microphone",
     );
-    expect(within(page).getAllByText("Not provided")).toHaveLength(1);
+    // AWU-DICTATION: the old "no speech-to-text" placeholder row is now the
+    // dictation config block — it never requests mic permission by itself.
+    expect(screen.getByTestId("dictation-settings")).toBeInTheDocument();
     expect(mocks.getUserMedia).not.toHaveBeenCalled();
     expect(mocks.enumerateDevices).not.toHaveBeenCalled();
     expect(mocks.addEventListener).not.toHaveBeenCalled();

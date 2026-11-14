@@ -1,5 +1,6 @@
 import { AiProvider } from "./ai.model";
 import type { Locale } from "@/i18n/config";
+import type { DictationSettings } from "@/lib/dictation/config";
 
 /**
  * Phase 2 interview adapter contract.
@@ -52,6 +53,9 @@ export interface UserSettingsData {
     general?: GeneralSettings;
     notifications?: NotificationSettings;
   };
+  // AWU-DICTATION: independent transcription config — provider, model and
+  // which ApiKey row the route resolves. Absent means "not configured".
+  dictation?: DictationSettings;
 }
 
 export interface UserSettings {
