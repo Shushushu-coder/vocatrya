@@ -11,3 +11,19 @@ import packageJson from "../../package.json";
 export function resolveAppVersion(): string {
   return (process.env.VOCATRYA_APP_VERSION ?? "").trim() || packageJson.version;
 }
+
+export interface BuildFacts {
+  commit: string;
+  builtAt: string;
+}
+
+// Build facts of the installer this backend was packaged into. The packaged
+// desktop main injects them from resources/build-info.json; every other
+// deployment (web, dev, unpackaged bundle) leaves the envs unset and gets
+// null — no surface should ever fabricate commit/date facts.
+export function resolveBuildFacts(): BuildFacts | null {
+  const commit = (process.env.VOCATRYA_BUILD_COMMIT ?? "").trim();
+  const builtAt = (process.env.VOCATRYA_BUILT_AT ?? "").trim();
+  if (!commit || !builtAt) return null;
+  return { commit, builtAt };
+}

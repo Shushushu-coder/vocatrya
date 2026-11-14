@@ -1942,6 +1942,8 @@
       "environmentLabel": "Runtime environment",
       "environmentDesktop": "Electron desktop",
       "environmentBrowser": "Browser",
+      "commitLabel": "Build commit",
+      "builtAtLabel": "Built at",
       "licenseLabel": "Open-source license",
       "diagnosticsTitle": "Diagnostics",
       "diagnosticsDescription": "Copies version and environment facts to attach when reporting issues. Contains no credentials, keys, personal data, or local file paths.",
@@ -2866,7 +2868,7 @@
           "Open the extension options page, click “Import profile backup”, pick the exported JSON, review it and save.",
           "On a job site page, trigger the extension to fill the form. After profile changes, export and import again — importing replaces the whole copy."
         ],
-        "pluginInfo": "Companion extension: OpenJobAutofill v{version} (upstream {commit}, MIT)",
+        "pluginInfo": "Companion extension: OpenJobAutofill v{version} (upstream baseline v{upstreamVersion} @ {commit}, MIT)",
         "selectTitle": "Choose what to export",
         "selectHint": "Only checked sections are exported; sensitive data is never offered or read.",
         "itemsCount": "{count} items",

@@ -58,18 +58,24 @@ afterEach(() => {
   delete window.vocatryaWindow;
   delete window.vocatryaRuntime;
   document
-    .querySelectorAll('meta[name="vocatrya-app-version"]')
+    .querySelectorAll(
+      'meta[name="vocatrya-app-version"], meta[name="vocatrya-build-commit"], meta[name="vocatrya-built-at"]',
+    )
     .forEach((el) => el.remove());
 });
+
+function setMeta(name: string, content: string) {
+  const meta = document.createElement("meta");
+  meta.setAttribute("name", name);
+  meta.setAttribute("content", content);
+  document.head.appendChild(meta);
+}
 
 // The settings layout emits the server-resolved running version as this
 // document meta; tests inject it directly to simulate a packaged install
 // whose bundled env value is stale.
 function setVersionMeta(content: string) {
-  const meta = document.createElement("meta");
-  meta.setAttribute("name", "vocatrya-app-version");
-  meta.setAttribute("content", content);
-  document.head.appendChild(meta);
+  setMeta("vocatrya-app-version", content);
 }
 
 describe("AboutSettings — facts", () => {
@@ -138,6 +144,31 @@ describe("AboutSettings — facts", () => {
     );
   });
 
+  it("renders build commit and built-at rows only when packaged metas exist", async () => {
+    setMeta("vocatrya-build-commit", "831df5a3f00d1234abcd");
+    setMeta("vocatrya-built-at", "2026-11-13T08:00:00.000Z");
+    renderAbout();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("about-commit")).toHaveTextContent(
+        "831df5a3f00d",
+      ),
+    );
+    expect(screen.getByTestId("about-built-at")).toHaveTextContent("2026");
+  });
+
+  it("hides the build fact rows when the metas are absent (web/dev)", async () => {
+    renderAbout();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("about-environment")).toHaveTextContent(
+        "Browser",
+      ),
+    );
+    expect(screen.queryByTestId("about-commit")).toBeNull();
+    expect(screen.queryByTestId("about-built-at")).toBeNull();
+  });
+
   it("renders zh-CN labels", async () => {
     renderAbout("zh-CN");
 
@@ -185,6 +216,37 @@ describe("AboutSettings — diagnostics copy", () => {
     const text = writeText.mock.calls[0][0] as string;
     expect(text).toContain("version: 1.2.0-rc.1");
     expect(text).not.toContain("beta.2");
+  });
+
+  it("includes packaged build facts when the metas exist", async () => {
+    setMeta("vocatrya-build-commit", "831df5a3f00d1234abcd");
+    setMeta("vocatrya-built-at", "2026-11-13T08:00:00.000Z");
+    const user = userEvent.setup();
+    stubClipboard();
+    renderAbout();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("about-commit")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("about-copy-diagnostics"));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).toContain("commit: 831df5a3f00d1234abcd");
+    expect(text).toContain("builtAt: 2026-11-13T08:00:00.000Z");
+  });
+
+  it("omits build fact lines when no packaged metas exist", async () => {
+    const user = userEvent.setup();
+    stubClipboard();
+    renderAbout();
+
+    await user.click(screen.getByTestId("about-copy-diagnostics"));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).not.toContain("commit:");
+    expect(text).not.toContain("builtAt:");
   });
 
   it("includes whitelisted runtime entries and reports the electron shell", async () => {

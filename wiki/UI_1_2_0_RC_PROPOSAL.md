@@ -2,7 +2,7 @@
 
 - 记录日期：2026-11-13。
 - 基线：`main @ 4edf773c`。为最初需求记录基线；本轮 A/B/C 开发共同基线为 main @ 9373798f。
-- 状态：**D1/D2/D3/D4/D6 已按用户本轮决定冻结；D5 仍待讨论；导航/头像、概览、分类区、职位排序已集成 Main，并完成 Windows Electron fresh-native/full 定向验收**。
+- 状态：**D1–D6 已全部冻结（D5 于 2026-11-14 冻结并实施）；导航/头像、概览、分类区、职位排序已集成 Main，并完成 Windows Electron fresh-native/full 定向验收**。
 - 配套清单：[UI_1_2_0_RC_FEATURES.json](UI_1_2_0_RC_FEATURES.json)。沿用现有方案与 Feature 清单的记录方式，独立维护，不改写 MVP/P1/P2/EXTENSIONS 的状态。
 - 标注：**【已确定】**为用户确认的方向；**【建议】**为候选方案；**【待讨论】**为尚未冻结的细节。验收步骤是未来检查点，不是通过证据。
 - 依据：本次聊天及用户提供的页面截图，未据此宣称当前源码已具备或缺少某项能力。版本名表示本轮整理目标，不代表已经发布。
@@ -60,7 +60,12 @@
 
 【建议】优先复用项目现有版本来源，减少手工同步遗漏。
 
-【待讨论 D5】除版本号外哪些信息随版本变化（如更新说明、日期等），以及具体同步方式。此项不授权本轮升版、构建或发布。
+【已确定，D5 于 2026-11-14 冻结并实施】
+
+- 除版本号外，**构建事实**（构建提交、构建时间）随版本自动同步：来源为打包期 `resources/build-info.json`，经 `VOCATRYA_BUILD_COMMIT`/`VOCATRYA_BUILT_AT` env 注入 backend 并经 document meta 下发；仅打包安装显示，Web/dev 无此行。
+- **发布说明本轮不同步**：About 不新增 release notes 字段；后续如需，采用仓库内 `release-notes/<version>.md` + release-gate 存在性校验，不采用 CHANGELOG.md 或运行时拉取 GitHub 作权威源。
+- 同步范围排除：第三方 AI 运行时版本、备份/迁移/协议格式版本、扩展自身版本线（manifest 与上游基线分开标注）。
+- 同轮残留修复：备份 manifest `appVersion` 收敛到 `resolveAppVersion()`；`streaming.js`/`grok.js` 的 ACP `clientInfo.version` 改用真实应用版本；`isNewerVersion` 改为预发布感知比较；扩展详情页实际 vendored 版本与上游基线分开显示；`prepareDatabase` 的 `appVersion` 加 `isPackaged` 门槛。此项不授权本轮升版、构建或发布。
 
 验收检查点：关于页显示与实际目标产物一致的版本号和 RC 标识，其他版本信息按冻结范围同步，不残留旧版内容。
 

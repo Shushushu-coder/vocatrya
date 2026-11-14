@@ -67,6 +67,10 @@ function AboutSettings() {
   // Initialized from the bundled env so SSR and the first client paint agree;
   // the post-mount read below upgrades it to the resolved running version.
   const [version, setVersion] = useState(bundledVersion);
+  // Packaged-install build facts, delivered the same way as the version meta.
+  // Absent on web/dev — the rows simply do not render there.
+  const [buildCommit, setBuildCommit] = useState<string | null>(null);
+  const [builtAt, setBuiltAt] = useState<string | null>(null);
   useEffect(() => {
     setDesktop(isDesktopShell());
     const resolved = document
@@ -74,19 +78,38 @@ function AboutSettings() {
       ?.getAttribute("content")
       ?.trim();
     if (resolved) setVersion(resolved);
+    const meta = (name: string) =>
+      document
+        .querySelector(`meta[name="${name}"]`)
+        ?.getAttribute("content")
+        ?.trim() || null;
+    setBuildCommit(meta(APP_CONSTANTS.APP_BUILD_COMMIT_META_NAME));
+    setBuiltAt(meta(APP_CONSTANTS.APP_BUILT_AT_META_NAME));
   }, []);
 
   const installed = isInstalledBuild();
+  const builtAtDate = builtAt ? new Date(builtAt) : null;
+  const builtAtLabel =
+    builtAtDate && !Number.isNaN(builtAtDate.getTime())
+      ? new Intl.DateTimeFormat(locale, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(builtAtDate)
+      : builtAt;
 
   const copyDiagnostics = async () => {
     const lines = [
       "vocatrya diagnostics",
       `version: ${version}`,
       `build: ${installed ? "installed" : "development"}`,
+    ];
+    if (buildCommit) lines.push(`commit: ${buildCommit}`);
+    if (builtAt) lines.push(`builtAt: ${builtAt}`);
+    lines.push(
       `environment: ${isDesktopShell() ? "electron" : "browser"}`,
       `locale: ${locale}`,
       `timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown"}`,
-    ];
+    );
     if (window.vocatryaRuntime) {
       try {
         const list = await window.vocatryaRuntime.list();
@@ -141,6 +164,20 @@ function AboutSettings() {
           }
           testId="about-environment"
         />
+        {buildCommit ? (
+          <FactRow
+            name={t("settings.about.commitLabel")}
+            value={buildCommit.slice(0, 12)}
+            testId="about-commit"
+          />
+        ) : null}
+        {builtAt ? (
+          <FactRow
+            name={t("settings.about.builtAtLabel")}
+            value={builtAtLabel}
+            testId="about-built-at"
+          />
+        ) : null}
         <FactRow
           name={t("settings.about.licenseLabel")}
           value="MIT"

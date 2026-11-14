@@ -7,12 +7,18 @@
  * copy is updated to a different upstream commit.
  */
 
+import vendoredManifest from "../../../../extensions/auto-apply/manifest.json";
+
 export const UPSTREAM_REPO_URL =
   "https://github.com/Br1an67/OpenJobAutofill";
 export const UPSTREAM_COMMIT =
   "005eda98841b3671ead615ebfde5922f0dfd7c36";
 export const UPSTREAM_EXTENSION_VERSION = "1.0.2";
 export const UPSTREAM_VENDORED_PATH = "extensions/auto-apply";
+// The vendored copy's own manifest version — upstream baseline plus
+// Vocatrya's connection-layer increments. Read straight from the vendored
+// manifest so it can never drift from the file users actually load.
+export const VENDORED_EXTENSION_VERSION: string = vendoredManifest.version;
 
 /** Backup envelope accepted by upstream `parseImportedProfileBackup`. */
 export const PROFILE_BACKUP_FORMAT = "OpenJobAutofillProfileBackup";

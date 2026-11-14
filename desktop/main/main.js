@@ -251,7 +251,10 @@ if (!singleInstance) {
             tmpDir: foundationLayout.tmpDir,
             backupsDir: foundationLayout.backupsDir,
             logDirectory: foundationConfig.logDirectory,
-            appVersion: app.getVersion(),
+            // Mirrors the backend spawn gate below: dev/foundation probes
+            // must not label migration logs or pre-migration backups with
+            // Electron's own version.
+            appVersion: app.isPackaged ? app.getVersion() : undefined,
             nodeExecutable,
             baseEnv: process.env,
             onMigrationChild: (child) => {
@@ -263,6 +266,7 @@ if (!singleInstance) {
             attempts: DEFAULT_PORT_ATTEMPTS,
             allocatePort: allocateLoopbackPort,
             spawnChild: async (port) => {
+              const buildInfo = app.isPackaged ? readBuildInfo() : null;
               const env = buildBackendEnvironment({
                 port,
                 dataDir: foundationLayout.dataDir,
@@ -278,6 +282,8 @@ if (!singleInstance) {
                 // version when packaged; dev/foundation probes must not leak
                 // Electron's own version into the backend.
                 appVersion: app.isPackaged ? app.getVersion() : undefined,
+                buildCommit: buildInfo?.buildCommit,
+                builtAt: buildInfo?.builtAt,
               });
               if (hostedSessionBroker) env.VOCATRYA_HOSTED_SESSION_URL = hostedSessionBroker.url;
               backendExpectedExit = true;

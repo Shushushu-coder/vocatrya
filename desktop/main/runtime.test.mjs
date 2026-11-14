@@ -125,6 +125,31 @@ describe("desktop runtime helpers", () => {
     expect(Object.prototype.hasOwnProperty.call(full, "VOCATRYA_AB_RUNTIME_ENABLED")).toBe(false);
   });
 
+  it("injects packaged build facts and keeps them absent otherwise", () => {
+    const packaged = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: {},
+      secret: "temporary",
+      appVersion: "1.2.0-rc",
+      buildCommit: " 831df5a3 ",
+      builtAt: "2026-11-13T08:00:00.000Z",
+    });
+    expect(packaged.VOCATRYA_BUILD_COMMIT).toBe("831df5a3");
+    expect(packaged.VOCATRYA_BUILT_AT).toBe("2026-11-13T08:00:00.000Z");
+
+    // Blank/absent values must not leak inherited or fabricated facts.
+    const plain = buildBackendEnvironment({
+      port: 45678,
+      dataDir: "C:\\poc-data",
+      baseEnv: { VOCATRYA_BUILD_COMMIT: "inherited", VOCATRYA_BUILT_AT: "inherited" },
+      secret: "temporary",
+      buildCommit: "  ",
+    });
+    expect(Object.prototype.hasOwnProperty.call(plain, "VOCATRYA_BUILD_COMMIT")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(plain, "VOCATRYA_BUILT_AT")).toBe(false);
+  });
+
   it("builds a bundled-node command", () => {
     expect(buildBackendCommand({ nodeExecutable: "runtime\\node.exe", serverPath: "backend\\server.js" })).toEqual({
       executable: "runtime\\node.exe",

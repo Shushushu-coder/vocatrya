@@ -1942,6 +1942,8 @@
       "environmentLabel": "运行环境",
       "environmentDesktop": "Electron 桌面",
       "environmentBrowser": "浏览器",
+      "commitLabel": "构建提交",
+      "builtAtLabel": "构建时间",
       "licenseLabel": "开源许可",
       "diagnosticsTitle": "诊断信息",
       "diagnosticsDescription": "复制版本与环境事实，供反馈问题时附加；不包含凭据、密钥、个人数据或本机文件路径。",
@@ -2866,7 +2868,7 @@
           "打开插件的选项页，点击「导入资料备份」选择刚导出的 JSON，确认内容后「保存资料」。",
           "前往招聘网站页面，点击插件按提示填写；资料更新后请重新导出并导入（导入为整份替换）。"
         ],
-        "pluginInfo": "配套插件：OpenJobAutofill v{version}（上游提交 {commit}，MIT）",
+        "pluginInfo": "配套插件：OpenJobAutofill v{version}（上游基线 v{upstreamVersion} @ {commit}，MIT）",
         "selectTitle": "选择导出内容",
         "selectHint": "仅导出勾选板块；敏感资料不在可选范围，也不会被读取。",
         "itemsCount": "{count} 条",

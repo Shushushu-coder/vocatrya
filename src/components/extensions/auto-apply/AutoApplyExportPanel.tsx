@@ -21,12 +21,14 @@ import type { AutoApplyExportReport } from "@/lib/extensions/autoApply/types";
 type AutoApplyExportPanelProps = {
   preview: AutoApplyExportReport;
   pluginVersion: string;
+  upstreamVersion: string;
   upstreamCommit: string;
 };
 
 export function AutoApplyExportPanel({
   preview,
   pluginVersion,
+  upstreamVersion,
   upstreamCommit,
 }: AutoApplyExportPanelProps) {
   const { locale } = useI18n();
@@ -106,6 +108,7 @@ export function AutoApplyExportPanel({
           <CardDescription>
             {fill(copy.pluginInfo, {
               version: pluginVersion,
+              upstreamVersion,
               commit: upstreamCommit.slice(0, 12),
             })}
           </CardDescription>

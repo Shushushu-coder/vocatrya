@@ -35,6 +35,10 @@ const { serializeInlineSchema } = require("./structured-schema");
 const { createAnthropicStreamParser } = require("./streaming");
 const { writePromptFile } = require("./prompt-input");
 
+// The version Vocatrya reports about itself to ACP peers (clientInfo) — see
+// streaming.js for why the bundled package.json is the only source here.
+const CLIENT_INFO_VERSION = require("../../../package.json").version;
+
 const GROK_BACKEND_KIND = "GROK_RUNTIME";
 const GROK_ACCOUNT_PROVIDER = "XAI";
 
@@ -463,7 +467,7 @@ function runGrokAcpAuthProbe({
           fs: { readTextFile: false, writeTextFile: false },
           terminal: false,
         },
-        clientInfo: { name: "vocatrya-auth-probe", version: "1.0.0" },
+        clientInfo: { name: "vocatrya-auth-probe", version: CLIENT_INFO_VERSION },
       },
     });
   });

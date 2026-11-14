@@ -26,6 +26,12 @@
 //   STREAM_COMPLETION_INCONSISTENT.
 const { StringDecoder } = require("node:string_decoder");
 
+// The version Vocatrya reports about itself to ACP peers (clientInfo). The
+// bundled package.json is the only application version source in this
+// process — packaged or dev it always equals what About shows, and it can
+// never drift because it is the same file electron-builder reads.
+const CLIENT_INFO_VERSION = require("../../../package.json").version;
+
 const STREAM_FAILURE_CODES = Object.freeze({
   // No consumable assistant-text delta was ever observed.
   NO_REAL_TEXT_DELTA: "NO_REAL_TEXT_DELTA",
@@ -761,7 +767,7 @@ function createCodexStreamParser({
     attachStdin(stream) {
       stdin = stream;
       sendRequest("initialize", {
-        clientInfo: { name: "vocatrya", title: null, version: "0.0.0" },
+        clientInfo: { name: "vocatrya", title: null, version: CLIENT_INFO_VERSION },
         capabilities: { experimentalApi: false, requestAttestation: false },
       });
     },

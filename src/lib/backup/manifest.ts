@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import pkg from "../../../package.json";
+import { resolveAppVersion } from "@/lib/appVersion";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { preflightZip } from "@/lib/ai/import/extract-text";
 import { modelsForBackup } from "./ordering";
@@ -41,7 +41,9 @@ export function buildManifest(
   return {
     formatVersion: BACKUP_FORMAT_VERSION,
     appName: "Vocatrya",
-    appVersion: pkg.version,
+    // Same single resolution point as About/api/version — a stale bundled
+    // package.json must not make exported backups report an older version.
+    appVersion: resolveAppVersion(),
     exportedAt: new Date().toISOString(),
     sourceEmail,
     counts: countRows(data, { includeSensitiveData }),

@@ -54,6 +54,11 @@ export const APP_CONSTANTS = {
   // Document meta tag carrying the server-resolved running version
   // (resolveAppVersion) to client surfaces such as the About settings page.
   APP_VERSION_META_NAME: "vocatrya-app-version",
+  // Document meta tags carrying the packaged installer's build facts
+  // (resolveBuildFacts); emitted only when the backend runs inside a packaged
+  // install, so dev/web surfaces never see fabricated commit/date values.
+  APP_BUILD_COMMIT_META_NAME: "vocatrya-build-commit",
+  APP_BUILT_AT_META_NAME: "vocatrya-built-at",
   // Sidebar geometry in px. `collapseBelow` is the drag threshold: releasing
   // (or dragging) under it snaps the sidebar to the icon rail.
   SIDEBAR_WIDTH_PX: {

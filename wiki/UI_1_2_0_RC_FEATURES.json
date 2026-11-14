@@ -117,22 +117,21 @@
       "id": "UI-RC-ABOUT",
       "category": "Settings / About",
       "scope": "RC_UI",
-      "designStatus": "CORE_CONFIRMED",
+      "designStatus": "CONFIRMED",
       "implementationStatus": "IMPLEMENTED",
       "description": "版本更新时同步设置中的关于信息。",
       "confirmedDecisions": [
-        "关于页版本号及相关信息与实际运行版本一致，包括 RC 标识。"
+        "关于页版本号及相关信息与实际运行版本一致，包括 RC 标识。",
+        "D5 已冻结：版本号外加构建提交、构建时间随版本自动同步（打包期 build-info.json 经 env+meta 下发，仅打包安装显示）；发布说明本轮不同步。"
       ],
       "recommendation": "优先复用既有版本来源，减少手工遗漏；不在本轮升版或发布。",
       "dependencies": [],
-      "openQuestions": [
-        "D5"
-      ],
+      "openQuestions": [],
       "steps": [
         "关于页版本号与目标产物实际版本及 RC 标识一致。",
         "其他版本信息按冻结范围同步，无旧版残留。"
       ],
-      "implementationNotes": "2026-11-13 Main 集成 codex/ui-rc-about @ 831df5a3（merge 92d638e7）：新增 src/lib/appVersion.ts 单一解析点（VOCATRYA_APP_VERSION→package.json，预发布/RC 标识原样透传不截断）；settings layout generateMetadata 以 document meta 下发服务端解析版本，AboutSettings 挂载后优先采用该值，覆盖打包安装中 bundle env 过期场景；api/version 路由与 auto-apply export/connect 的手工版本副本收敛到同一来源。版本号未升、未发布，D5（版本号外同步范围）未实现仍待裁定。定向验证：appVersion.spec 3 项+aboutSettings.spec 12 项全过，完整 tsc 与改动文件 ESLint 通过。未执行生产构建、真实 UI 或安装产物版本核对，passes 保持 false。",
+      "implementationNotes": "2026-11-13 Main 集成 codex/ui-rc-about @ 831df5a3（merge 92d638e7）：新增 src/lib/appVersion.ts 单一解析点（VOCATRYA_APP_VERSION→package.json，预发布/RC 标识原样透传不截断）；settings layout generateMetadata 以 document meta 下发服务端解析版本，AboutSettings 挂载后优先采用该值，覆盖打包安装中 bundle env 过期场景；api/version 路由与 auto-apply export/connect 的手工版本副本收敛到同一来源。版本号未升、未发布，D5（版本号外同步范围）未实现仍待裁定。定向验证：appVersion.spec 3 项+aboutSettings.spec 12 项全过，完整 tsc 与改动文件 ESLint 通过。未执行生产构建、真实 UI 或安装产物版本核对，passes 保持 false。\n2026-11-14 D5 冻结并实施（未提交）：desktop main 把打包期 build-info.json 的 buildCommit/builtAt 经 VOCATRYA_BUILD_COMMIT/VOCATRYA_BUILT_AT 注入 backend（与 appVersion 同 isPackaged 门槛），resolveBuildFacts() 解析，settings layout 增发 vocatrya-build-commit/vocatrya-built-at meta，About 在打包安装显示「构建提交/构建时间」两行并纳入诊断复制白名单，Web/dev 无 meta 自动隐藏。残留修复：backup manifest appVersion 收敛到 resolveAppVersion()；streaming/grok 的 ACP clientInfo.version 改用真实应用版本；isNewerVersion 改为预发布感知（GA>RC>beta，修复 beta→GA 无更新提示）；扩展详情页 vendored manifest 版本与上游基线分开标注；prepareDatabase 的 appVersion 加 isPackaged 门槛。发布说明按 D5 裁定本轮不同步。passes 保持 false，待验收。",
       "passes": false
     },
     {
@@ -217,9 +216,14 @@
     },
     {
       "id": "D5",
-      "status": "PENDING_DISCUSSION",
+      "status": "CONFIRMED",
       "topic": "关于页除版本号外的同步范围与同步方式",
-      "recommendation": "复用现有版本来源；更新说明和日期等尚未冻结。"
+      "decision": [
+        "版本号之外的构建事实（构建提交、构建时间）随版本自动同步：来源为打包期 resources/build-info.json，经 VOCATRYA_BUILD_COMMIT/VOCATRYA_BUILT_AT env 注入 backend 并经 document meta 下发；仅打包安装显示，Web/dev 无此行。",
+        "发布说明本轮不同步：About 不新增 release notes 字段；后续如需，采用仓库内 release-notes/<version>.md + release-gate 存在性校验，不采用 CHANGELOG.md 或运行时拉取 GitHub 作权威源。",
+        "同步范围排除：第三方 AI 运行时版本、备份/迁移/协议格式版本、扩展自身版本线（manifest 与上游基线分开标注）。",
+        "同轮残留修复：备份 manifest appVersion 收敛到 resolveAppVersion()；streaming/grok 的 ACP clientInfo.version 改用真实应用版本；isNewerVersion 改为预发布感知比较；扩展详情页实际 vendored 版本与上游基线分开显示；prepareDatabase 的 appVersion 加 isPackaged 门槛与 backend 启动一致。"
+      ]
     },
     {
       "id": "D6",

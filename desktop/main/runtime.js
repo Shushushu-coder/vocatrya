@@ -58,7 +58,7 @@ function toPrismaFileUrl(filePath) {
   return `file:${path.resolve(filePath).replaceAll("\\", "/")}`;
 }
 
-function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion, internalToken, desktopExecUrl, credentialUrl }) {
+function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret = createPocSecret(), encryptionKey, uploadsDir, databaseUrl, appVersion, buildCommit, builtAt, internalToken, desktopExecUrl, credentialUrl }) {
   assertLoopbackHost("127.0.0.1");
   const env = {
     NODE_ENV: "production",
@@ -113,6 +113,19 @@ function buildBackendEnvironment({ port, dataDir, baseEnv = process.env, secret 
     env.VOCATRYA_APP_VERSION = appVersion.trim();
   } else {
     delete env.VOCATRYA_APP_VERSION;
+  }
+  // Installer build facts from resources/build-info.json, injected by the
+  // packaged main process alongside the app version. Absent outside packaged
+  // installs so no surface reports fabricated commit/date facts.
+  if (typeof buildCommit === "string" && buildCommit.trim()) {
+    env.VOCATRYA_BUILD_COMMIT = buildCommit.trim();
+  } else {
+    delete env.VOCATRYA_BUILD_COMMIT;
+  }
+  if (typeof builtAt === "string" && builtAt.trim()) {
+    env.VOCATRYA_BUILT_AT = builtAt.trim();
+  } else {
+    delete env.VOCATRYA_BUILT_AT;
   }
   // Per-launch bearer token the Electron main process uses on the backend's
   // internal AI-connection endpoints. Generated here, never inherited, never

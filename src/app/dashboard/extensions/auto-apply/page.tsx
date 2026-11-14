@@ -74,6 +74,7 @@ export default async function AutoApplyDetailPage() {
         <AutoApplyExportPanel
           preview={status.preview}
           pluginVersion={status.plugin.version}
+          upstreamVersion={status.plugin.upstreamVersion}
           upstreamCommit={status.plugin.upstreamCommit}
         />
       </div>

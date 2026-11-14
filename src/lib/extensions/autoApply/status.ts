@@ -7,6 +7,7 @@ import {
   UPSTREAM_COMMIT,
   UPSTREAM_EXTENSION_VERSION,
   UPSTREAM_VENDORED_PATH,
+  VENDORED_EXTENSION_VERSION,
 } from "./upstreamContract";
 import type { AutoApplyExportReport } from "./types";
 
@@ -32,7 +33,10 @@ export interface AutoApplyExtensionStatus {
   detailPath: "/dashboard/extensions/auto-apply";
   plugin: {
     name: "OpenJobAutofill";
+    /** The vendored copy's own manifest version (extensions/auto-apply). */
     version: string;
+    /** The pinned upstream baseline this vendored copy derives from. */
+    upstreamVersion: string;
     upstreamCommit: string;
     vendoredPath: string;
   };
@@ -82,7 +86,8 @@ export async function getAutoApplyExtensionStatus(
     detailPath: AUTO_APPLY_DETAIL_PATH,
     plugin: {
       name: "OpenJobAutofill" as const,
-      version: UPSTREAM_EXTENSION_VERSION,
+      version: VENDORED_EXTENSION_VERSION,
+      upstreamVersion: UPSTREAM_EXTENSION_VERSION,
       upstreamCommit: UPSTREAM_COMMIT,
       vendoredPath: UPSTREAM_VENDORED_PATH,
     },

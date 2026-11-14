@@ -3,8 +3,11 @@
 // chunk-boundary handling, UTF-8 splits, cumulative snapshot diffing,
 // non-content event rejection, and terminal semantics. No process is
 // spawned — parsers consume synthetic chunk sequences.
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import streaming from "./streaming.js";
+
+const packageJson = createRequire(import.meta.url)("../../../package.json");
 
 const {
   STREAM_ABORTED_CODE,
@@ -316,7 +319,7 @@ describe("codex app-server parser — stdio JSON-RPC driver", () => {
         method: "initialize",
         id: 1,
         params: {
-          clientInfo: { name: "vocatrya", title: null, version: "0.0.0" },
+          clientInfo: { name: "vocatrya", title: null, version: packageJson.version },
           capabilities: {
             experimentalApi: false,
             requestAttestation: false,
