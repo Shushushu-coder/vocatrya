@@ -55,6 +55,7 @@ export const USER_SETTINGS_PATCH_NAMESPACES = [
   "display",
   "settings",
   "careerProfile",
+  "dictation",
 ] as const;
 
 export type SettingsDocument = Record<string, unknown>;
@@ -240,9 +241,10 @@ function prepareDisplayPatch(display: JsonObject): PreparedSettingsPatch {
 /**
  * Validate + normalize a caller-supplied patch into a JSON-safe merge
  * payload. Validation is deterministic and document-independent, so it
- * runs once before the CAS loop. `settings.*` and `careerProfile.*` are
- * registered namespaces whose per-key rules belong to their owning
- * packages; they merge generically and are only checked for JSON safety.
+ * runs once before the CAS loop. `settings.*`, `careerProfile.*` and
+ * `dictation.*` are registered namespaces whose per-key rules belong to
+ * their owning packages; they merge generically and are only checked for
+ * JSON safety.
  */
 export function prepareSettingsPatch(input: unknown): PreparedSettingsPatch {
   if (!isPlainObject(input)) {
@@ -277,7 +279,8 @@ export function prepareSettingsPatch(input: unknown): PreparedSettingsPatch {
         prepared.display = result.patch;
       }
     } else {
-      // settings / careerProfile: generic merge of a validated JSON tree.
+      // settings / careerProfile / dictation: generic merge of a validated
+      // JSON tree.
       prepared[ns] = value;
     }
   }

@@ -234,6 +234,13 @@ export const APP_CONSTANTS = {
   AGENT_CHAT_SLOT_GENERATION_KEY: "agent-chat-slot-generation",
   AGENT_CHAT_HISTORY_PAGE: 30,
 
+  // API dictation (AWU-DICTATION): record-then-upload transcription for the
+  // Agent composer. The 120s hard cap keeps this a dictation feature, not a
+  // meeting recorder; the byte cap stays well under provider limits (25MB).
+  AGENT_DICTATION_MAX_DURATION_MS: 120_000,
+  AGENT_DICTATION_MAX_AUDIO_BYTES: 12 * 1024 * 1024,
+  AGENT_DICTATION_TIMEOUT_MS: 60_000,
+
   // Telemetry (OTLP export)
   // Flush cadence. A batch is never serialized in the enqueueing caller's
   // stack — reaching the batch size only arms the timer.

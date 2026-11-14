@@ -9,15 +9,18 @@ import {
 } from "react";
 import { useI18n } from "@/i18n";
 import type { Locale, TranslationParams } from "@/i18n";
-import { APP_CONSTANTS } from "@/lib/constants";
 import {
-  getFromLocalStorage,
-  saveToLocalStorage,
-} from "@/utils/localstorage.utils";
+  MicClipRecorder,
+  acquireMicStream,
+  micErrorName,
+  readSavedMicDeviceId,
+  saveMicDeviceId,
+  stopMediaStream,
+} from "@/lib/audio/microphone";
 import { cn } from "@/lib/utils";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { controlStyles } from "../ui/control-styles";
+import { DictationSettingsControls } from "./DictationSettingsControls";
 
 // INT-01 owns the shared message bundles; until the declared keys land,
 // t() echoes the key and the paired fallback keeps the page readable.
@@ -84,50 +87,15 @@ interface InputDevice {
   label: string;
 }
 
-function errorName(err: unknown): string {
-  if (err instanceof DOMException) return err.name;
-  const named = err as { name?: unknown } | null;
-  return typeof named?.name === "string"
-    ? named.name
-    : err instanceof Error
-      ? err.message
-      : String(err);
-}
-
-function classifyMicError(err: unknown): MicState {
-  switch (errorName(err)) {
-    case "NotAllowedError":
-    case "PermissionDeniedError":
-    case "SecurityError":
-      return { kind: "denied" };
-    case "NotFoundError":
-    case "DevicesNotFoundError":
-    case "OverconstrainedError":
-      return { kind: "no-device" };
-    case "NotReadableError":
-    case "AbortError":
-      return { kind: "busy" };
-    default:
-      return { kind: "error", detail: errorName(err) };
-  }
-}
-
 function readSavedDeviceId(): string | null {
-  try {
-    const saved: unknown = getFromLocalStorage(
-      APP_CONSTANTS.AUDIO_INPUT_DEVICE_STORAGE_KEY,
-      null,
-    );
-    return typeof saved === "string" && saved.length > 0 ? saved : null;
-  } catch {
-    return null;
-  }
+  return readSavedMicDeviceId();
 }
 
-// Phase-1 audio surface: microphone pick (persisted on-device), a live input
-// level meter, and a short in-memory recording test. Speech transcription and
-// output-device switching are deliberately out of scope; the transcription
-// row keeps its honest "Not provided" badge.
+// Audio surface: microphone pick (persisted on-device), a live input level
+// meter, a short in-memory recording test, and the dictation service config
+// (AWU-DICTATION). Mic lifecycle primitives are shared with the Agent
+// dictation recorder via src/lib/audio/microphone.ts; output-device
+// switching stays out of scope.
 function AudioSettings() {
   const copy = useCopy();
 
@@ -146,8 +114,7 @@ function AudioSettings() {
   const levelSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const rafRef = useRef(0);
   const levelFillRef = useRef<HTMLDivElement | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const recordChunksRef = useRef<Blob[]>([]);
+  const clipRef = useRef<MicClipRecorder | null>(null);
   const recordTimerRef = useRef(0);
   const recordUrlRef = useRef<string | null>(null);
   const deviceListenerRef = useRef<(() => void) | null>(null);
@@ -161,26 +128,29 @@ function AudioSettings() {
     setRecordUrl(url);
   }, []);
 
-  const stopRecording = useCallback((keepOutput: boolean) => {
-    window.clearTimeout(recordTimerRef.current);
-    const recorder = recorderRef.current;
-    recorderRef.current = null;
-    setRecording(false);
-    if (!recorder) return;
-    if (!keepOutput) {
-      // Discard path: drop handlers so no blob URL is ever produced.
-      recorder.ondataavailable = null;
-      recorder.onstop = null;
-      recorder.onerror = null;
-    }
-    if (recorder.state !== "inactive") {
-      try {
-        recorder.stop();
-      } catch {
-        // Already stopped.
+  const stopRecording = useCallback(
+    (keepOutput: boolean) => {
+      window.clearTimeout(recordTimerRef.current);
+      const clip = clipRef.current;
+      clipRef.current = null;
+      setRecording(false);
+      if (!clip) return;
+      if (!keepOutput) {
+        // Discard path: cancel drops handlers so no blob URL is produced.
+        clip.cancel();
+        return;
       }
-    }
-  }, []);
+      const generation = generationRef.current;
+      void clip.stop().then((blob) => {
+        // A newer acquire or unmount superseded this clip — never mint a
+        // blob URL nobody will revoke.
+        if (generation !== generationRef.current || !blob) return;
+        if (typeof URL.createObjectURL !== "function") return;
+        replaceRecordUrl(URL.createObjectURL(blob));
+      });
+    },
+    [replaceRecordUrl],
+  );
 
   const stopStreamAndMeter = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -192,10 +162,8 @@ function AudioSettings() {
     audioContextRef.current = null;
     if (context) void context.close().catch(() => {});
     setHasLevelMeter(false);
-    if (streamRef.current) {
-      for (const track of streamRef.current.getTracks()) track.stop();
-      streamRef.current = null;
-    }
+    stopMediaStream(streamRef.current);
+    streamRef.current = null;
   }, []);
 
   const enumerateInputs = useCallback(async (): Promise<InputDevice[]> => {
@@ -256,32 +224,26 @@ function AudioSettings() {
   const acquireMic = useCallback(
     async (preferDeviceId?: string) => {
       const generation = ++generationRef.current;
-      const media = navigator.mediaDevices;
       setRecordError(null);
-      if (!media?.getUserMedia) {
-        setMicState({ kind: "unsupported" });
-        return;
-      }
       stopRecording(false);
       replaceRecordUrl(null);
       stopStreamAndMeter();
       setMicState({ kind: "requesting" });
 
-      let stream: MediaStream;
-      try {
-        stream = await media.getUserMedia({
-          audio: preferDeviceId
-            ? { deviceId: { ideal: preferDeviceId } }
-            : true,
-        });
-      } catch (err) {
+      const result = await acquireMicStream(preferDeviceId);
+      if (!result.ok) {
         if (generation === generationRef.current) {
-          setMicState(classifyMicError(err));
+          setMicState(
+            result.kind === "error"
+              ? { kind: "error", detail: result.detail ?? "getUserMedia" }
+              : { kind: result.kind },
+          );
         }
         return;
       }
+      const stream = result.stream;
       if (generation !== generationRef.current) {
-        for (const track of stream.getTracks()) track.stop();
+        stopMediaStream(stream);
         return;
       }
       streamRef.current = stream;
@@ -313,7 +275,8 @@ function AudioSettings() {
         inputs.push({ deviceId: actual || "default", label: "" });
       }
       setDevices(inputs);
-      if (!deviceListenerRef.current && media.addEventListener) {
+      const media = navigator.mediaDevices;
+      if (!deviceListenerRef.current && media?.addEventListener) {
         const onDeviceChange = () => {
           void enumerateInputs().then(setDevices);
         };
@@ -328,10 +291,7 @@ function AudioSettings() {
         pick(actual) ?? pick(preferDeviceId) ?? pick(readSavedDeviceId()) ?? inputs[0];
       selectedRef.current = chosen.deviceId;
       setSelectedId(chosen.deviceId);
-      saveToLocalStorage(
-        APP_CONSTANTS.AUDIO_INPUT_DEVICE_STORAGE_KEY,
-        chosen.deviceId,
-      );
+      saveMicDeviceId(chosen.deviceId);
     },
     [
       enumerateInputs,
@@ -351,10 +311,7 @@ function AudioSettings() {
       if (!deviceId || deviceId === selectedRef.current) return;
       selectedRef.current = deviceId;
       setSelectedId(deviceId);
-      saveToLocalStorage(
-        APP_CONSTANTS.AUDIO_INPUT_DEVICE_STORAGE_KEY,
-        deviceId,
-      );
+      saveMicDeviceId(deviceId);
       void acquireMic(deviceId);
     },
     [acquireMic],
@@ -364,44 +321,22 @@ function AudioSettings() {
     const stream = streamRef.current;
     setRecordError(null);
     if (!stream || micState.kind !== "active") return;
-    if (typeof MediaRecorder === "undefined") {
+    if (!MicClipRecorder.supported) {
       setRecordError("unsupported");
       return;
     }
-    let recorder: MediaRecorder;
+    let clip: MicClipRecorder;
     try {
-      recorder = new MediaRecorder(stream);
+      clip = new MicClipRecorder(stream, {
+        onError: (detail) => setRecordError({ detail }),
+      });
+      clip.start();
     } catch (err) {
-      setRecordError({ detail: errorName(err) });
+      setRecordError({ detail: micErrorName(err) });
       return;
     }
     replaceRecordUrl(null);
-    recordChunksRef.current = [];
-    recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        recordChunksRef.current.push(event.data);
-      }
-    };
-    recorder.onstop = () => {
-      const chunks = recordChunksRef.current;
-      recordChunksRef.current = [];
-      if (chunks.length === 0 || typeof URL.createObjectURL !== "function") {
-        return;
-      }
-      const blob = new Blob(chunks, {
-        type: recorder.mimeType || "audio/webm",
-      });
-      replaceRecordUrl(URL.createObjectURL(blob));
-    };
-    recorder.onerror = () => setRecordError({ detail: "MediaRecorder" });
-    recorderRef.current = recorder;
-    try {
-      recorder.start();
-    } catch (err) {
-      recorderRef.current = null;
-      setRecordError({ detail: errorName(err) });
-      return;
-    }
+    clipRef.current = clip;
     setRecording(true);
     recordTimerRef.current = window.setTimeout(() => {
       stopRecording(true);
@@ -424,15 +359,6 @@ function AudioSettings() {
       }
     };
   }, [replaceRecordUrl, stopRecording, stopStreamAndMeter]);
-
-  const notProvided = (
-    <Badge variant="outline">
-      {copy("settings.capabilityNotProvided", {
-        "zh-CN": "未提供",
-        en: "Not provided",
-      })}
-    </Badge>
-  );
 
   const micErrorText = (() => {
     switch (micState.kind) {
@@ -648,18 +574,6 @@ function AudioSettings() {
         />
 
         <SettingRow
-          name={copy("settings.audioTranscriptionTitle", {
-            "zh-CN": "语音转写与识别",
-            en: "Speech transcription & recognition",
-          })}
-          description={copy("settings.audioTranscriptionDescription", {
-            "zh-CN": "没有语音转文字能力。",
-            en: "No speech-to-text capability exists.",
-          })}
-          aside={notProvided}
-        />
-
-        <SettingRow
           name={copy("settings.audioRecordingTitle", {
             "zh-CN": "录音测试",
             en: "Recording test",
@@ -766,6 +680,11 @@ function AudioSettings() {
           }
         />
       </div>
+
+      {/* AWU-DICTATION: the API transcription config replaces the old
+          "no speech-to-text" row — provider, model and which credential
+          the dictation route resolves. */}
+      <DictationSettingsControls />
 
       <p className="text-sm text-muted-foreground break-words">
         {copy("settings.audioPageFootnote", {
