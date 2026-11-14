@@ -144,6 +144,35 @@
 - 核对当前套餐/工作区对所需工具的限制，确认可选目标范围、刷新机制与限流策略；不得承诺所有账号同等能力。
 - 首版目标是按需操作，双向同步、冲突合并、批量导入和复杂数据库结构变更另行评估。
 
+### 验收环境与延期决定（2026-11-14）
+
+用户决定将真实 Notion 验收延期至发布前测试合并执行；本节记录已完成的低成本预检、静态比对结论与届时执行的验收清单。`passes` 保持 `false`。
+
+**已完成环境预检（真实 Notion 服务器，无副作用）**
+
+- 本机 Node 直连 `mcp.notion.com` 可达：PRM 与授权服务器元数据返回 200；`registration_endpoint`、`token_endpoint`、`revocation_endpoint`、S256、`token_endpoint_auth_methods_supported` 含 `none`，与实现假设吻合。
+- DCR 干跑成功（HTTP 201）：应用原样 payload（`client_name=Vocatrya`、10 个 loopback redirect URI `http://127.0.0.1:43880–43889/extensions/notion/oauth/callback`、`token_endpoint_auth_method=none`）被接受，返回 `client_id=kJ421e26W95aTeOc`。该注册未授权、不接触 workspace 数据；应用首次连接时将注册自己的 client。
+- 回调端口池 43880–43889 空闲。
+- 专用测试 workspace 已建（`vocatrya`），测试父页 `https://app.notion.com/p/vocatrya-4181f78077f08090be9fd95feb2b9589`。
+
+**静态比对结论**
+
+实现与官方 build-mcp-client 参考流程及 Codex 等客户端形态一致：固定端点、PRM→AS 发现、loopback 回调、DCR public client、PKCE S256、state 约 10 分钟过期、`resource` 参数绑定、refresh 轮换原子持久化、`invalid_grant`→重授权、RFC 7009 撤销、Streamable HTTP + Bearer。差异均为可选项或细节：未用 CIMD（DCR 等价，client_id 按用户持久化）、未校验 `iss`（哈希 state + 硬编码 AS 已足）、`ownerUserId` 按旧 `owner.user.id` 形态解析可能存 null（纯展示用途）、未带 `prompt=consent`、tools/list 不翻页、未用 introspection（tools/list 活性校验等价）。v1 SDK（^1.30.0）走 2025 握手，官方声明仍兼容；交互段（consent→token→握手→真实 tools/list→写回执→refresh/revoke）是仅剩未验证面。
+
+**发布前验收 Checklist**
+
+准备项（用户）：父页下建子页「求职笔记 · 字节跳动后端岗」「面试复盘 · 美团一面」（各含独特关键词）、数据库「投递记录」（公司 title/职位 text/状态 select/日期 date，3 行）、同级「不分享-机密页」（consent 不勾）；一个可工具调用的 BYOK key；验收时段完成系统浏览器 consent，并确认 consent 目标 workspace 为 `vocatrya`。
+
+执行形态：隔离 worktree/源码快照 → 全新 `VOCATRYA_DESKTOP_DATA_ROOT` → `npm run build && npm run desktop:assemble` → `node node_modules/electron/cli.js .` fresh-native → 注册测试账号 + 配 BYOK。重型操作，届时单独授权。
+
+- **授权/凭据（step 1）**：连接 → consent 只勾测试父页+投递记录库 → CONNECTED + workspace 名/图标 + 5 项能力 → 退出重开恢复 → verify 刷新真实 tools/list；consent 取消 → `NOTION_OAUTH_DENIED`。
+- **AI 读（step 2）**：搜索已知关键词，核对工具调用记录与返回内容 vs Notion 实际；读未分享页应拒绝/找不到，不编造。
+- **AI 写（step 3）**：提案卡核对目标+内容 → 先取消（远端无写）→ 批准建页 → Notion 人工核对 + 回执 pageId/URL 可打开；append_content、update_record 同路径。
+- **能力交集（step 4）**：连接 ∩ tools/list ∩ 白名单 ∩ 运行时/模型；不支持工具调用的路径明确提示，不文本冒充。
+- **异常面（step 5）**：Notion 侧撤销 → `REAUTH_REQUIRED`；应用内断开 → `NOT_CONNECTED` 且远端授权被撤；断网写 → `OUTCOME_UNKNOWN`/`verification_required` 不自动重试、人工核对无重复；未分享目标写拒绝；限流尽力触发，不触发记未覆盖。
+- **凭据与数据边界（step 6/7）**：日志/telemetry 无 token；导出备份无 NotionConnection（恢复后 DISCONNECTED）；页面注入文本不提权不绕批准；写提案含外发内容预览可审阅。
+- **收尾**：Notion 侧撤销 Vocatrya 连接；证据（截图+日志+run 目录）落位记录；台账 steps 逐条标通过/未覆盖。
+
 ## 4. EXT-INTERVIEW-WEB：面试练习改为网页跳转
 
 ### 决策与改动评估

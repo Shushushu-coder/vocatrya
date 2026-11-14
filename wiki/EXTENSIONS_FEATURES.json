@@ -139,7 +139,7 @@
       "decisionStatus": "RECORDED",
       "implementationStatus": "PARTIAL",
       "description": "在 Vocatrya 内配置 Notion 连接，让应用内 AI 经授权搜索、读取、创建和更新 Notion 页面及数据库记录，用于求职笔记、面试复盘和投递摘要。优先评估官方远程 MCP + OAuth；需要应用自身的客户端、工具注册及权限控制。",
-      "implementationNotes": "2026-11-13 已集成连接管理、OAuth/MCP、安全存储、五个 AI 工具和批准/回执。集成审查修复了中断/未知写入重发、模型标志绕过核对、失去请求归属后派发、在途 OAuth/刷新于断开后重存凭据，以及无有效回执误报成功；未知写入须人工核对。隔离 Migration 与定向回归通过，Windows Electron 未连接详情页通过。无专用测试工作区，真实 OAuth、远端 inputSchema、读写、重开连接及撤销未验收。",
+      "implementationNotes": "2026-11-13 已集成连接管理、OAuth/MCP、安全存储、五个 AI 工具和批准/回执。集成审查修复了中断/未知写入重发、模型标志绕过核对、失去请求归属后派发、在途 OAuth/刷新于断开后重存凭据，以及无有效回执误报成功；未知写入须人工核对。隔离 Migration 与定向回归通过，Windows Electron 未连接详情页通过。无专用测试工作区，真实 OAuth、远端 inputSchema、读写、重开连接及撤销未验收。\n2026-11-14 验收环境与方案已定（详见 EXTENSIONS_IMPLEMENTATION.md EXT-NOTION 段）：本机直连 mcp.notion.com、DCR payload、回调端口池预验通过；实现与官方客户端参考流程静态比对一致；专用测试 workspace（vocatrya）已建。用户决定将真实 OAuth/AI 读写/生命周期验收延期至发布前测试合并执行。",
       "dependencies": [
         "应用内 MCP 客户端与 OAuth 凭据生命周期",
         "Agent 工具注册与角色白名单",
