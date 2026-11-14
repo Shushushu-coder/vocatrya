@@ -132,7 +132,7 @@ async function handleMessage(message) {
     case "OJAF_VOCATRYA_SYNC":
       return queueConnectionMutation(() => vocatryaSync(message.payload || {}));
     case "OJAF_VOCATRYA_DISCONNECT":
-      return queueConnectionMutation(() => vocatryaDisconnect());
+      return queueConnectionMutation(() => vocatryaDisconnect(message.payload || {}));
     default:
       throw new Error(`Unknown message type: ${message.type}`);
   }
@@ -1578,21 +1578,27 @@ async function vocatryaSync() {
   }
 }
 
-async function vocatryaDisconnect() {
+async function vocatryaDisconnect(payload = {}) {
   const conn = await getVocatryaConnection();
+  let remoteRevoked = false;
   if (conn) {
     try {
       const data = await vocatryaFetch(conn, `${VOCATRYA_API_BASE}/disconnect`, { method: "POST" });
       if (data?.ok !== true || data?.revoked !== true) {
         throw new Error("服务端未确认撤销");
       }
+      remoteRevoked = true;
     } catch (error) {
       // Explicit invalid/revoked responses also confirm this credential is unusable.
-      if (error?.kind !== "revoked") {
+      if (error?.kind === "revoked") {
+        remoteRevoked = true;
+      } else if (!payload.force) {
         throw new Error(`尚未确认令牌撤销，已保留连接凭据，请恢复连接后重试：${error.message}`);
       }
     }
+  } else {
+    remoteRevoked = true;
   }
   await chrome.storage.local.remove(STORAGE_KEYS.vocatryaConnection);
-  return { disconnected: true };
+  return { disconnected: true, remoteRevoked };
 }
