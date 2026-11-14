@@ -1162,6 +1162,13 @@
 
   function getOrCreateFieldId(element) {
     let fieldId = element.getAttribute(FIELD_ATTR);
+    if (fieldId) {
+      const holders = document.querySelectorAll(`[${FIELD_ATTR}="${CSS.escape(fieldId)}"]`);
+      if (holders.length === 1 && holders[0] === element) {
+        return fieldId;
+      }
+      fieldId = null;
+    }
     if (!fieldId) {
       fieldCounter += 1;
       fieldId = `arf_${Date.now().toString(36)}_${fieldCounter}`;
@@ -3345,6 +3352,30 @@
     const label = normalizeMatchKey(field?.inferredLabel || field?.label || "");
     if (isLikelyFamilyMemberContext(field, label)) {
       return "家庭信息";
+    }
+
+    const sectionOnlyText = String(field?.section || "");
+    if (sectionOnlyText) {
+      const repeatGroupSections = [
+        ["教育经历", /教育经历|教育背景/],
+        ["实习经历", /工作\/实习经历|工作实习经历|实习经历|实践经历/],
+        ["工作经历", /工作经历/],
+        ["培训经历", /培训经历/],
+        ["绩效考核", /绩效考核/],
+        ["家庭信息", /家庭及社会关系|家庭情况|家庭信息|社会关系/]
+      ];
+      let nearestCategory = "";
+      let nearestIndex = Infinity;
+      for (const [category, pattern] of repeatGroupSections) {
+        const match = sectionOnlyText.match(pattern);
+        if (match && match.index < nearestIndex) {
+          nearestIndex = match.index;
+          nearestCategory = category;
+        }
+      }
+      if (nearestCategory) {
+        return nearestCategory;
+      }
     }
 
     const text = compactText([field?.groupText, getFieldOptionLabelsText(field, 180), field?.section, field?.nearbyText, field?.label].join(" "));
@@ -5557,6 +5588,7 @@
       setAutofillProgress("填写匹配项", 94, `本地准备填写 ${autoFillCandidates.length} 项`);
     }
     const results = [];
+    const filledElements = new Set();
 
     for (let index = 0; index < autoFillCandidates.length; index += 1) {
       const candidate = autoFillCandidates[index];
@@ -5587,6 +5619,10 @@
         setAutofillProgress("填写匹配项", percent, `本地已处理 ${index + 1}/${autoFillCandidates.length} 项`);
       }
 
+      if (ok && element) {
+        filledElements.add(element);
+      }
+
       results.push({
         id: candidate.id,
         ok,
@@ -5594,8 +5630,8 @@
       });
     }
 
-    const filledCount = results.filter((result) => result.ok).length;
-    const failedCount = results.length - filledCount;
+    const filledCount = filledElements.size;
+    const failedCount = results.filter((result) => !result.ok).length;
     const skippedCount = await markDeferredPlanCandidates(plan, autoFillSet);
     const summary = {
       attempted: results.length,
