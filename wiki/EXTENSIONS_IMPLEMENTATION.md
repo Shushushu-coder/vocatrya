@@ -182,3 +182,11 @@
 来源 `codex/auto-apply-connect@b72a6cd9`（基于 `1b93c398`）。接通授权板块、一次性配对、按需刷新、连接状态与双方撤销；复用白名单转换和手动导入。集成审查修复撤销失败误报成功、异步请求恢复旧连接或覆盖同步结果、同步后按钮未恢复及并发兑换突破连接上限。
 
 43项服务端/认证/导出测试、14项插件模拟运行时测试、完整类型检查与定向ESLint通过。真实SQLite验证68条迁移、旧用户保留、并发上限、失败回滚及重开后令牌有效/撤销状态；Main重新生成Prisma Client，未操作真实用户数据库。新增链路尚无真实Chrome/Edge配对、招聘网站填写或Electron证据；整体PARTIAL、passes:false保持。历史“配对未实现”描述为原阶段记录，不再作为当前编码缺口。
+
+### 中文 ATS 实填首测（2026-11-14，小红书校园招聘）
+
+在真实 Chrome 隔离 profile（CDP `Extensions.loadUnpacked` 加载未打包 MV3，夹具 manifest 追加 `*://*.xiaohongshu.com/*` host_permissions 等效用户允许）中，对用户手动登录后的 `job.xiaohongshu.com/campus/position/22078/apply` 真实 antd 申请表单执行扩展填写；合成资料 `sample-profile.json` 经 options 页真实导入路径导入，AI 未配置走本地规则兜底。扩展识别适配器 `ant-design`（confidence 0.99），scan 29 字段 → 17 候选 → 自报 已填 8 / 待处理 9 / 失败 0。
+
+实测回读控件值：**8 项「已填写」中 5 项有真实值**（邮箱、教育·专业、教育·学校、竞赛/奖项·获奖时间、证书名称均正确），**3 项日期控件为误报**（出生年月是 YYYY-MM 月份选择器被写入完整日期且 antd 状态未提交、红错仍在；起止时间 RangePicker 两输入标绿实为空）。预填保护通过：手机号脱敏值 `199****3820` 未覆盖、服从调剂原状保留、未点提交/添加/保存类按钮。
+
+新发现缺陷：antd 日期类控件写入不提交却计入 filled；重复块 occurrence 绑定在该页未生效（repeatGroupId 全空）致同一教育卡跨条目混绑（专业←硕士条目、学校←本科条目）；antd Select（意向城市/性别/学历/成绩排名）与 radio 未覆盖；不支持「添加XX」建块，第 2 段教育/实习/工作经历无处落地；部分 label 误映射（姓名→英文名、导师/实验室/研究方向→学校、Github/专利日期→奖惩类别，低分待处理挡住未写错值）。「中文 ATS 实填」场景已执行但结果不达标，缺陷记入待办，PARTIAL/passes:false 保持。证据与可复跑驱动：`E:/Projects/vocatrya/.tmp/ext-aa-xhs/`（REPORT.md、填前/填后 JSON、debug snapshot、12 张截图）。
