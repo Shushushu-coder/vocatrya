@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "Vocatrya",
-  "updatedAt": "2026-11-13",
+  "updatedAt": "2026-11-14",
   "baseline": {
     "gitRef": "79e7d5ab2b50240c6ad2cb25f5e97782bcd59a45",
     "date": "2026-11-12",
@@ -86,7 +86,7 @@
       "decisionStatus": "RECORDED",
       "implementationStatus": "PARTIAL",
       "description": "基于 MIT 开源项目 OpenJobAutofill 维护配套 Chrome/Edge 浏览器扩展，以连接 Vocatrya 为最终体验：应用管理资料与授权，插件在招聘网页按用户操作填写。手动导出/导入作为首阶段验证及备用方式。最终提交由用户手动完成；填写记录不直接转为已投递事实。",
-      "implementationNotes": "2026-11-13 已集成手动导入阶段：固定上游插件与 MIT 许可、非敏感白名单转换、导出 API、详情页及真实状态。Windows Electron fresh-native 导出/更新重导/退出重开保持通过，隔离 Chromium 实装导入/重导后再导入/刷新保持通过。通用表单与招聘系统填写、Chrome/Edge 兼容、桌面配对同步尚未验收或实现；整体 passes 保持 false。\n2026-11-13 新增连接链路 b72a6cd9 已集成 Main：授权板块、一次性配对、Bearer 白名单读取/状态/刷新与双方撤销，保留手动导入；修复撤销误报、插件异步旧状态覆盖、同步按钮禁用和并发连接上限。43项定向测试、14项插件模拟运行时测试、完整类型与定向lint通过；真实SQLite 68条迁移含旧用户保留、并发上限与事务回滚、撤销及重开通过。Prisma Client 已在 Main 重新生成，未执行真实库迁移。真实 Chrome/Edge 加载配对、招聘网页填写及新增路径 Electron 验收未执行；整体保持 PARTIAL/passes:false。",
+      "implementationNotes": "2026-11-13 已集成手动导入阶段：固定上游插件与 MIT 许可、非敏感白名单转换、导出 API、详情页及真实状态。Windows Electron fresh-native 导出/更新重导/退出重开保持通过，隔离 Chromium 实装导入/重导后再导入/刷新保持通过。通用表单与招聘系统填写、Chrome/Edge 兼容、桌面配对同步尚未验收或实现；整体 passes 保持 false。\n2026-11-13 新增连接链路 b72a6cd9 已集成 Main：授权板块、一次性配对、Bearer 白名单读取/状态/刷新与双方撤销，保留手动导入；修复撤销误报、插件异步旧状态覆盖、同步按钮禁用和并发连接上限。43项定向测试、14项插件模拟运行时测试、完整类型与定向lint通过；真实SQLite 68条迁移含旧用户保留、并发上限与事务回滚、撤销及重开通过。Prisma Client 已在 Main 重新生成，未执行真实库迁移。真实 Chrome/Edge 加载配对、招聘网页填写及新增路径 Electron 验收未执行；整体保持 PARTIAL/passes:false。\n2026-11-13 真实浏览器侧验收完成（隔离 Chrome 157/Edge 157，CDP 加载未打包 MV3）：手动导入/重导/跨重启持久化、通用表单填写、不覆盖预填、无表单页提示、资料面板、清除标记、真实公开 ATS（GitLab Greenhouse）单次填写均通过；中文招聘站无可达公开表单页未执行（需有效 URL 或免验证码账号）。验收发现扩展缺陷并在 worktree ext-aa-browser 修复：1) 克隆字段携带旧 data-ojaf-field-id 导致多块解析撞车与报告虚报（getOrCreateFieldId 增加唯一性校验、applyAutofillPlan 按去重元素计 filled）；2) 重复组类别推断被上级兄弟节点文本污染，实习日期被误绑教育经历条目（inferMatchSection 优先采信最近 section 上下文）。标记【待优化】项：克隆/第二块经历与资料条目的 occurrence 精确绑定（当前可能重复填同一条目值）、英文 label 覆盖（本地规则以中文词典为主）、AI 通道未验证、无匹配条目块的显式提示、真实中文 ATS 实填验证。整体保持 PARTIAL/passes:false，桌面配对验收仍归另一窗口。\n2026-11-14 Windows Electron fresh-native 桌面配对验收（main@1bfba8c3 隔离快照生产构建，真实 Chrome 独立 profile）：16 场景 14 PASS/1 BLOCKED/1 NOT_RUN——配对码→配对→Bearer 白名单读取/状态/刷新/范围外拒绝、按需同步与来源/版本/时间标识、敏感字段默认排除、双方撤销、令牌失效真实标记、应用停止与重开端口变化真实提示、并发上限 10 条+第 11 条 409、撤销后再配对全过；S13 应用重开 origin 变化后插件无法自行断开（保留凭据待恢复，仅能手动清除）记为产品边界待裁定；S16 表单填写归浏览器窗口。证据 F:/vocatrya-e2e-runs/ext-aa-desktop/runs/311d36ae-d55f-4894-ae2c-76bed9703a47/ 与 .tmp/ext-aa-desktop/。同日 Main 集成 codex/ext-aa-browser-fixes @2bf37920（merge 0ef02852）：浏览器验收发现的 content.js 修复入库，插件模拟运行时测试 14 项通过。中文 ATS 实填、occurrence 精确绑定、英文 label 覆盖、AI 通道、无匹配块显式提示与 S13 决策仍待办，PARTIAL/passes:false 保持。",
       "technicalDecision": {
         "upstream": "https://github.com/Br1an67/OpenJobAutofill",
         "referenceCommit": "005eda98841b3671ead615ebfde5922f0dfd7c36",

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "Vocatrya",
-  "updatedAt": "2026-11-13",
+  "updatedAt": "2026-11-14",
   "proposal": "AGENT_WORKSPACE_UPGRADE_PROPOSAL.md",
   "baseline": {
     "gitRef": "1b93c398",
@@ -27,7 +27,7 @@
       "category": "Agent / Composer UX",
       "scope": "PROPOSED_V1",
       "designStatus": "CORE_CONFIRMED",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "统一输入区和工具入口，使已有与新增能力容易发现并具备清晰状态。",
       "existingEvidence": [
         "src/components/agent/AgentChatPanel.tsx",
@@ -40,6 +40,7 @@
       "dependencies": [],
       "openQuestions": ["D8"],
       "steps": ["窄面板下各入口可操作且无横向溢出。", "键盘、焦点及按钮可访问名称覆盖主要流程。", "发送、停止、加载与失败状态反馈清楚。"],
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：统一输入区落地，卡片行承载上下文 chip 与未发送粘贴卡，底部工具栏聚合添加菜单、模型选择与用量估算；粘贴卡移入 provider 态并随角色槽位序列化；窄面板（<480px）与 aria-label 沿用既有写法。切片 A 按 D1–D8 备料包推荐裁定执行；执行窗口五轴评审修复一处工具栏弹层随 composer 重挂载误开的回归。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
       "passes": false
     },
     {
@@ -47,7 +48,7 @@
       "category": "Agent / Model Selection",
       "scope": "PROPOSED_V1",
       "designStatus": "CORE_CONFIRMED",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "优化模型选择的可见性与会话衔接。",
       "existingEvidence": [
         "src/components/agent/AgentChatIdentity.tsx",
@@ -58,6 +59,7 @@
       "dependencies": ["AWU-COMPOSER"],
       "openQuestions": ["D1", "D8"],
       "steps": ["新会话所选模型与后端实际执行身份一致。", "已有会话切换流程清楚，重试及重新生成不静默改写旧绑定。", "按冻结规则验证草稿、上下文和附件去向；连接失效不静默回退。"],
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：模型选择器迁入底部工具栏；既有会话换模型开新会话并显式携带草稿文本、MANUAL 上下文与粘贴卡（D1），锁态弹层补充携带文案、不加二次确认；AUTO 页面上下文保留重解析并经 dedupeContextItems 合并；修复了既往槽位快照时序导致草稿残留复活的不一致。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
       "passes": false
     },
     {
@@ -65,7 +67,7 @@
       "category": "Agent / Context Budget",
       "scope": "PROPOSED_V1",
       "designStatus": "CORE_CONFIRMED",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "呈现上下文用量与携带内容，明确预算和裁剪行为。",
       "existingEvidence": [
         "src/lib/agent/contextBudget.ts",
@@ -76,6 +78,7 @@
       "dependencies": ["AWU-COMPOSER"],
       "openQuestions": ["D2"],
       "steps": ["显示值及裁剪提示与后端组装结果相符，不将 16k 应用预算冒充模型容量。", "添加或移除上下文后展示及实际请求同步变化。", "超预算行为与审批和当前回合保留规则兼容；若持久化设置，验证重新打开。"],
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：route 以 transient data-context-usage 回传组装估算（account/managed 路径，conversationId+requestId 双校验），工具栏显示估算/应用预算、分项展开与裁剪提示；Legacy 会话不显示不伪报（D2 首版只读自动管理）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
       "passes": false
     },
     {
@@ -104,7 +107,7 @@
       "category": "Agent / Approval UX",
       "scope": "PROPOSED_V1",
       "designStatus": "CORE_CONFIRMED",
-      "implementationStatus": "PARTIAL",
+      "implementationStatus": "IMPLEMENTED",
       "description": "改善操作预览与批准、拒绝、执行状态反馈。",
       "existingEvidence": [
         "src/components/agent/AgentApprovalCard.tsx",
@@ -117,6 +120,7 @@
       "dependencies": [],
       "openQuestions": ["D5"],
       "steps": ["审批卡展示与后端待执行参数一致。", "拒绝后不执行相应写入，批准或重试不重复执行。", "按冻结规则验证审批中输入、关闭及刷新恢复，前端状态不能绕过后端授权。"],
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：审批卡接管五态生命周期（请求/已响应/已执行/已拒绝/失败），输出态须携带 approval 记录方归属审批卡，拒绝态仅状态行不重复结果卡；逐工具 needsApproval 策略不变（D5）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。",
       "passes": false
     },
     {
