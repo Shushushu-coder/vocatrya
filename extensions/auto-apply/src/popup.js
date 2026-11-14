@@ -77,7 +77,7 @@ function applyRuntimeState(state = {}, options = {}) {
 
   if (state.autofillSummary) {
     const summary = state.autofillSummary;
-    setStatus(`上次填写：已填写 ${summary.filled || 0} 项，待处理 ${getPendingCount(summary)} 项。${formatAiCompletionNote(summary.aiUsage || state.autofillAi || {})}`);
+    setStatus(`上次填写：已填写 ${summary.filled || 0} 项，待处理 ${getPendingCount(summary)} 项。${formatUnmatchedNote(summary)}${formatAiCompletionNote(summary.aiUsage || state.autofillAi || {})}`);
   }
 }
 
@@ -100,14 +100,14 @@ async function startAutofill() {
     const data = response?.data || {};
     if (data.ok) {
       if (data.filled != null) {
-        setStatus(`已完成一键填写：已填写 ${data.filled || 0} 项，待处理 ${getPendingCount(data)} 项。${formatAiCompletionNote(data.aiUsage || {})}`);
+        setStatus(`已完成一键填写：已填写 ${data.filled || 0} 项，待处理 ${getPendingCount(data)} 项。${formatUnmatchedNote(data)}${formatAiCompletionNote(data.aiUsage || {})}`);
       } else {
         setStatus("已完成扫描处理。页面上的橙色标记需要手动处理，也可以打开资料面板查看和复制资料。");
       }
     } else if (data.reason === "cancelled") {
       setStatus("已取消填写。");
     } else if (data.reason === "no candidates") {
-      setStatus(`没有找到可自动填写的字段。橙色标记需要手动处理，也可以打开资料面板查看和复制资料。${formatAiCompletionNote(data.aiUsage || {})}`);
+      setStatus(`没有找到可自动填写的字段。${formatUnmatchedNote(data)}橙色标记需要手动处理，也可以打开资料面板查看和复制资料。${formatAiCompletionNote(data.aiUsage || {})}`);
     } else if (data.reason === "busy") {
       setStatus("当前已有扫描任务在运行，请稍候。", true);
     } else if (data.reason) {
@@ -315,6 +315,18 @@ function formatAiCompletionNote(aiUsage = {}) {
 
 function getPendingCount(summary = {}) {
   return Number(summary.pending ?? Number(summary.skipped || 0) + Number(summary.failed || 0));
+}
+
+function formatUnmatchedNote(summary = {}) {
+  const count = Number(summary.unmatched || 0);
+  if (!count) {
+    return "";
+  }
+  const labels = (Array.isArray(summary.unmatchedBlocks) ? summary.unmatchedBlocks : [])
+    .filter(Boolean)
+    .slice(0, 3)
+    .join("、");
+  return `${count} 个重复块无匹配资料条目${labels ? `（${labels}）` : ""}。`;
 }
 
 function formatElapsedTime(startedAt) {
