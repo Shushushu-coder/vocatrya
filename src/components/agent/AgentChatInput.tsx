@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { AgentAddContextMenu } from "@/components/agent/AgentChatContextBar";
 import { AgentChatIdentity } from "@/components/agent/AgentChatIdentity";
 import { AgentContextUsage } from "@/components/agent/AgentContextUsage";
+import { AgentDictationButton } from "@/components/agent/AgentDictationButton";
 import { chipLabel } from "@/components/agent/pasteChip";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { readAgentChatError } from "@/lib/agent/chatTransport";
@@ -38,6 +39,7 @@ import {
   AGENT_FILE_ACCEPT,
   fileChipToPartData,
 } from "@/lib/agent/agentFiles";
+import { insertDictationText } from "@/lib/dictation/insert";
 
 import { useI18n, type TranslateFn } from "@/i18n";
 
@@ -96,6 +98,8 @@ function AgentChatComposer() {
     addFiles,
     clearFileChips,
     panelWidth,
+    activeRole,
+    conversationId,
   } = useAgentChat();
   const controller = usePromptInputController();
   const { t, formatNumber } = useI18n();
@@ -193,6 +197,13 @@ function AgentChatComposer() {
     void stop();
   }, [stop]);
 
+  const insertDictation = useCallback(
+    (transcript: string) => {
+      setInput(insertDictationText(valueRef.current, transcript).text);
+    },
+    [setInput],
+  );
+
   const isGenerating = status === "submitted" || status === "streaming";
   // A file still extracting has nothing to send yet — send stays disabled
   // until every chip settles ready or is removed, so an expected attachment
@@ -263,6 +274,11 @@ function AgentChatComposer() {
           <PromptInputTools>
             <AgentAddContextMenu compact={compact} />
             <AgentChatIdentity compact={compact} />
+            <AgentDictationButton
+              insertText={insertDictation}
+              ownershipKey={`${activeRole}:${conversationId ?? "draft"}`}
+              compact={compact}
+            />
             <AgentContextUsage />
             <span className="text-xs text-muted-foreground">
               {approvalPending && !queued ? t("agent.waitingOnApproval") : ""}
