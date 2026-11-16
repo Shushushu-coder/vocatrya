@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { CareerRuntimeError } from "./errors";
 import { canonicalize, hashCanonical } from "./hash";
 import {
@@ -236,6 +236,18 @@ export class MatchAnalysisService {
     model?: string | null;
     promptVersion?: string | null;
     analysisSchemaVersion?: string;
+    resolvedConnectionId?: string | null;
+    managedAiProvenance?: string | null;
+    /**
+     * Optional in-transaction commit hook (e.g. the harness task that must
+     * flip SUCCEEDED and bind its result atomically with the analysis
+     * row). A throw rolls the whole commit back — no orphan analysis, no
+     * half-settled task.
+     */
+    onCommitted?: (
+      tx: Prisma.TransactionClient,
+      analysisId: string,
+    ) => Promise<void>;
   }) {
     await this.gate();
     if (!input.resumeVariantVersionId) {
@@ -279,6 +291,8 @@ export class MatchAnalysisService {
           promptVersion: input.promptVersion ?? null,
           status: MATCH_ANALYSIS_STATUS.COMPLETED,
           completedAt,
+          resolvedConnectionId: input.resolvedConnectionId ?? null,
+          managedAiProvenance: input.managedAiProvenance ?? null,
         },
       });
       await tx.deepMatchDetail.create({
@@ -298,6 +312,9 @@ export class MatchAnalysisService {
           nonFixableGaps: input.payload.nonFixableGaps ?? null,
         },
       });
+      if (input.onCommitted) {
+        await input.onCommitted(tx, analysis.id);
+      }
       return tx.matchAnalysis.findUniqueOrThrow({
         where: { id: analysis.id },
         include: { deepMatchDetail: true },

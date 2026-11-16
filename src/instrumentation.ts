@@ -5,6 +5,11 @@ export async function register() {
     }
     const { syncSchedulerState } = await import("@/lib/scheduler");
     await syncSchedulerState();
+    // Harness task runner: durable discovery, not a startup-only sweep —
+    // its interval re-claims QUEUED rows and expired leases for the whole
+    // process lifetime.
+    const { startHarnessRunner } = await import("@/lib/harness/runner");
+    startHarnessRunner();
   }
 }
 

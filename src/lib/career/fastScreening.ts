@@ -182,7 +182,7 @@ async function requireOwnedOpportunity(
   return opportunity;
 }
 
-function jobDescriptionText(version: {
+export function jobDescriptionText(version: {
   rawContent: string;
   rawContentFormat: string;
 }): string {
@@ -262,7 +262,7 @@ async function buildCareerProfileMaterial(
   };
 }
 
-async function buildResumeVersionMaterial(
+export async function buildResumeVersionMaterial(
   db: PrismaClient,
   userId: string,
   versionId: string,
@@ -313,7 +313,7 @@ async function listResumeVersionOptions(
  * reuse the same row. A real AI JD-parse pipeline can coexist later —
  * parses are per-(version, inputHash), never overwritten.
  */
-async function ensureRawTextParse(
+export async function ensureRawTextParse(
   db: PrismaClient,
   version: {
     id: string;

@@ -3134,6 +3134,71 @@
       "generic": "Fast screening failed ({code}). You can retry."
     }
   },
+  "deepMatch": {
+    "title": "Deep match",
+    "description": "A full multi-dimension analysis against one resume version. It keeps running even if you leave this page.",
+    "resumeLabel": "Resume version",
+    "resumePlaceholder": "Select a resume version",
+    "resumeEmpty": "No submittable resume version yet — prepare a draft, frozen, or submitted version in the resume editor first.",
+    "start": "Start deep match",
+    "starting": "Starting…",
+    "status": {
+      "QUEUED": "Queued",
+      "RUNNING": "Running",
+      "CANCELLING": "Cancelling",
+      "SUCCEEDED": "Completed",
+      "FAILED": "Failed",
+      "CANCELLED": "Cancelled"
+    },
+    "recovering": "recovering",
+    "step": {
+      "PIN_INPUTS": "Confirming inputs",
+      "RUN_ANALYSIS": "Analyzing",
+      "COMMIT_RESULT": "Saving result"
+    },
+    "cancel": "Cancel",
+    "cancelPending": "Cancel requested — the running step will stop shortly.",
+    "retry": "Retry",
+    "retryBillingNote": "Retrying runs the analysis again and may bill the AI provider once more.",
+    "retryableHint": "You can retry — the analysis re-runs against the same pinned inputs.",
+    "inputLostHint": "An input this analysis pinned is gone — start a new analysis with current materials instead.",
+    "viewResult": "View result",
+    "loadFailed": "Couldn't load the deep match task.",
+    "sourceJd": "JD v{version}",
+    "sourceJdMissing": "JD version deleted",
+    "sourceResume": "{name} v{version}",
+    "sourceResumeMissing": "resume version deleted",
+    "sourceUnavailable": "Pinned source unavailable",
+    "scoreLabel": "{score}/100",
+    "scoreUnknown": "No score",
+    "historyTitle": "Deep match results",
+    "historyEmpty": "No deep match results yet.",
+    "sections": {
+      "overallSummary": "Summary",
+      "hardRequirements": "Hard requirements",
+      "responsibilityAlignment": "Responsibility alignment",
+      "experienceRelevance": "Experience relevance",
+      "skillCoverage": "Skill coverage",
+      "educationExperienceFit": "Education & experience fit",
+      "strengths": "Strengths",
+      "gaps": "Gaps",
+      "resumeOptimizationOpportunities": "Resume optimization",
+      "nonFixableGaps": "Gaps a resume can't fix"
+    },
+    "errors": {
+      "TASK_NOT_FOUND": "This analysis task no longer exists.",
+      "TASK_NOT_RETRYABLE": "This analysis can't be retried — start a new one.",
+      "TASK_INPUT_VERSION_UNSUPPORTED": "This task was created by an older app version and can't continue. Start a new analysis.",
+      "DEEP_MATCH_REQUEST_CONFLICT": "This start request was already sent with different inputs — start a new analysis.",
+      "DEEP_MATCH_REQUEST_INVALID": "Choose a resume version before starting.",
+      "DEEP_MATCH_STATE_CONFLICT": "The saved task state is inconsistent ({code}). Start a new analysis.",
+      "OPPORTUNITY_NOT_FOUND": "This job no longer exists.",
+      "DEEP_JD_VERSION_MISSING": "The job description version this analysis pinned was deleted.",
+      "DEEP_RESUME_VERSION_MISSING": "The resume version this analysis pinned was deleted.",
+      "RESUME_VERSION_NOT_SUBMITTABLE": "The resume version this analysis pinned is no longer submittable.",
+      "POLL_FAILED": "Lost contact with the task state — reload to check whether it finished."
+    }
+  },
   "inputPrefs": {
     "saveFailed": "Could not save input preferences. Your previous settings are unchanged.",
     "invalidField": "Please enter a valid value.",

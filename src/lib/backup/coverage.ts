@@ -37,6 +37,13 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   // reservations whose persisted turn semantics no longer hold. Rows still
   // present on the same install keep dedupe/replay working.
   "AgentToolExecution",
+  // Harness deep-match tasks and their trace events: runtime execution
+  // ownership (leases, claim epochs, cancel state), not user state. The
+  // settled artifact is the bound MatchAnalysis (backed up). Restoring
+  // task rows would resurrect leases as if they were still live; a
+  // restored install simply re-starts a deep match from the UI.
+  "HarnessTask",
+  "HarnessTaskEvent",
   // EXT-NOTION connection state carries a sealed OAuth credential bundle and
   // an in-flight OAuth flow bound to this install's safeStorage — neither
   // can travel. A restored install starts DISCONNECTED and the user

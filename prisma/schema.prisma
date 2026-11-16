@@ -57,6 +57,9 @@ model User {
   dataMigrationRuns      DataMigrationRun[]
   agentToolExecutions    AgentToolExecution[]
 
+  // Harness durable-task ledger (additive backrelation only).
+  harnessTasks           HarnessTask[]
+
   // Phase 3A Interview transplant (additive backrelations only).
   interviewSessions   InterviewSession[]
   transcriptRevisions TranscriptRevision[] @relation("RevisionAuthor")
@@ -1771,6 +1774,10 @@ model MatchAnalysis {
   // produced by match_job. Unique on the execution side — one analysis can
   // settle at most one execution.
   agentToolExecution      AgentToolExecution?
+  // The harness task this analysis is bound to, when produced by the
+  // DEEP_MATCH consumer. Unique on the task side — one task commits at
+  // most one analysis.
+  harnessTaskResult     HarnessTask?      @relation("HarnessTaskResult")
 
   @@index([jobOpportunityId, analysisType, isStale])
   @@index([userId, analysisType, isStale])
@@ -1839,6 +1846,104 @@ model AgentToolExecution {
 
   @@unique([conversationId, toolName, turnKey])
   @@index([userId, status])
+}
+
+/// Durable long-running task row (harness). First consumer: DEEP_MATCH.
+/// Runtime recovery ledger, not user state: excluded from the product
+/// backup like AgentToolExecution — settled artifacts live in
+/// MatchAnalysis (backed up), and restoring task rows would resurrect
+/// leases whose executor no longer exists.
+///
+/// Ownership model: a task is QUEUED, RUNNING under one claimed epoch, or
+/// CANCELLING; SUCCEEDED/FAILED/CANCELLED are terminal and immutable.
+/// Every successful claim increments claimEpoch and stamps
+/// (leaseOwner, leaseUntil) via a conditional update — a superseded
+/// runner's ownership-checked writes can never commit.
+model HarnessTask {
+  id     String @id @default(uuid())
+  userId String
+  kind   String
+  status String @default("QUEUED")
+
+  // Stable create-request dedupe identity: the client mints one requestKey
+  // per user intent, a retransmitted create lands on this row, and a new
+  // explicit run mints a new task.
+  requestKey String
+  // Canonical hash of the validated create input. A same-requestKey
+  // retransmission carrying a different input is a conflict, never a
+  // second task.
+  inputHash String
+  // Frozen task input (JSON): pinned job/JD-version/resume-version ids
+  // plus the input schema version. Recovery never re-reads "latest"
+  // business objects.
+  inputJson String
+  // Pinned execution input written by the PIN_INPUTS checkpoint (JSON):
+  // resolved connection/model/parse ids, content hashes, prompt/schema
+  // versions and the exact material text the model call uses — a
+  // recovered epoch never silently re-resolves the assignment or swaps
+  // in newer material.
+  pinnedJson String?
+  currentStep String?
+  // Denormalized lookup key for the job-detail surface (mirrors
+  // inputJson.jobOpportunityId; intentionally no FK — the ledger must
+  // never block business deletes, and the runner re-verifies ownership
+  // at execution time).
+  jobOpportunityId String
+
+  // Execution ownership: incremented on every successful claim; carried
+  // by every ownership-checked write. leaseUntil is renewed while the
+  // holder runs; expiry lets a later claim reclaim the task.
+  claimEpoch      Int       @default(0)
+  leaseOwner      String?
+  leaseUntil      DateTime?
+  startedAt       DateTime?
+  lastHeartbeatAt DateTime?
+
+  attemptCount      Int       @default(0)
+  cancelRequestedAt DateTime?
+
+  failureCode      String?
+  failureDetail    String?
+  // The analysis this task committed; unique — one analysis settles at
+  // most one task.
+  resultAnalysisId String?  @unique
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resultAnalysis MatchAnalysis?     @relation("HarnessTaskResult", fields: [resultAnalysisId], references: [id], onDelete: SetNull)
+  events         HarnessTaskEvent[]
+
+  @@unique([userId, kind, requestKey])
+  @@index([status, leaseUntil])
+  @@index([userId, kind, status])
+  @@index([userId, jobOpportunityId])
+}
+
+/// Append-only harness task trace: enough to locate and correlate —
+/// claim/step/checkpoint/model-call/cancel/terminal records carrying
+/// ids, codes, durations, versions and content hashes. Never secrets or
+/// raw materials, not a replayable record of what the model saw, and not
+/// the state authority (the HarnessTask row is).
+model HarnessTaskEvent {
+  id     String @id @default(uuid())
+  taskId String
+  // Claim epoch that emitted the event — 0 for pre-claim writes.
+  epoch  Int
+  // Per-task monotonic sequence for ordering. Not a business idempotency
+  // mechanism — side-effect steps carry their own operation identity.
+  seq    Int
+  type   String
+  // Small structured payload: ids, codes, durations, hashes, versions.
+  payloadJson String?
+  createdAt   DateTime @default(now())
+
+  task HarnessTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, seq])
+  @@index([taskId, type])
 }
 
 /// EXT-NOTION: one Notion MCP connection per user. OAuth client registration

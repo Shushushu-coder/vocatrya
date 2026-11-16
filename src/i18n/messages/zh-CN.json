@@ -3134,6 +3134,71 @@
       "generic": "快速筛选失败（{code}）。可以重试。"
     }
   },
+  "deepMatch": {
+    "title": "深度匹配",
+    "description": "针对一个简历版本运行多维度深入分析。离开本页面后任务仍会继续执行。",
+    "resumeLabel": "简历版本",
+    "resumePlaceholder": "选择简历版本",
+    "resumeEmpty": "还没有可提交的简历版本——请先在简历编辑器中准备草稿、冻结或已提交版本。",
+    "start": "开始深度匹配",
+    "starting": "正在启动…",
+    "status": {
+      "QUEUED": "排队中",
+      "RUNNING": "运行中",
+      "CANCELLING": "取消中",
+      "SUCCEEDED": "已完成",
+      "FAILED": "失败",
+      "CANCELLED": "已取消"
+    },
+    "recovering": "恢复中",
+    "step": {
+      "PIN_INPUTS": "确认输入",
+      "RUN_ANALYSIS": "正在分析",
+      "COMMIT_RESULT": "保存结果"
+    },
+    "cancel": "取消",
+    "cancelPending": "已请求取消——正在等待当前步骤停止。",
+    "retry": "重试",
+    "retryBillingNote": "重试将重新执行分析，可能再次产生模型调用费用。",
+    "retryableHint": "可以重试——分析将基于同一组固定输入重新执行。",
+    "inputLostHint": "本次分析固定的某个输入已被删除——请改用当前材料发起新的分析。",
+    "viewResult": "查看结果",
+    "loadFailed": "无法加载深度匹配任务。",
+    "sourceJd": "JD v{version}",
+    "sourceJdMissing": "JD 版本已删除",
+    "sourceResume": "{name} v{version}",
+    "sourceResumeMissing": "简历版本已删除",
+    "sourceUnavailable": "固定来源不可用",
+    "scoreLabel": "{score}/100",
+    "scoreUnknown": "无评分",
+    "historyTitle": "深度匹配结果",
+    "historyEmpty": "还没有深度匹配结果。",
+    "sections": {
+      "overallSummary": "总体结论",
+      "hardRequirements": "硬性要求",
+      "responsibilityAlignment": "职责匹配度",
+      "experienceRelevance": "经验相关性",
+      "skillCoverage": "技能覆盖",
+      "educationExperienceFit": "教育与经验匹配",
+      "strengths": "优势",
+      "gaps": "差距",
+      "resumeOptimizationOpportunities": "简历优化建议",
+      "nonFixableGaps": "简历无法弥补的差距"
+    },
+    "errors": {
+      "TASK_NOT_FOUND": "该分析任务已不存在。",
+      "TASK_NOT_RETRYABLE": "该分析无法重试——请发起新的分析。",
+      "TASK_INPUT_VERSION_UNSUPPORTED": "该任务由旧版本创建，无法继续。请发起新的分析。",
+      "DEEP_MATCH_REQUEST_CONFLICT": "同一启动请求已用于不同输入——请发起新的分析。",
+      "DEEP_MATCH_REQUEST_INVALID": "请先选择简历版本再启动。",
+      "DEEP_MATCH_STATE_CONFLICT": "已保存的任务状态不一致（{code}）。请发起新的分析。",
+      "OPPORTUNITY_NOT_FOUND": "该职位已不存在。",
+      "DEEP_JD_VERSION_MISSING": "本次分析固定的 JD 版本已被删除。",
+      "DEEP_RESUME_VERSION_MISSING": "本次分析固定的简历版本已被删除。",
+      "RESUME_VERSION_NOT_SUBMITTABLE": "本次分析固定的简历版本已不可提交。",
+      "POLL_FAILED": "与任务状态失联——请刷新确认任务是否已完成。"
+    }
+  },
   "inputPrefs": {
     "saveFailed": "无法保存输入偏好，已保留原设置。",
     "invalidField": "请输入有效内容。",

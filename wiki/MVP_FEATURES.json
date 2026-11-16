@@ -488,6 +488,23 @@
         "中英文与 Light/Dark 主题下品牌 Mark 与企业 Logo 呈现一致。"
       ],
       "passes": true
+    },
+    {
+      "id": "HARNESS-DEEP-MATCH",
+      "category": "Resume / Match",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-11-16 Main 集成（codex/harness-deep-match）：新增 HarnessTask/HarnessTaskEvent 运行时恢复账本及 migration（备份分类按 AgentToolExecution 同样排除，已落库 MatchAnalysis 业务产物继续随备份）；深度匹配消费者 PIN_INPUTS→RUN_ANALYSIS→COMMIT_RESULT 固定输入执行，CAS claim/claimEpoch 栅栏、租约续期与过期失权，周期发现、取消、恢复、重试与单一绑定结果；职位匹配界面新增版本选择、任务卡片、结果与来源展示，中英文案齐备。收尾修复：首次读取失败错误与 Retry 可达；租约过期即失权（未被接管也不能续租或提交）；检查点完整结构与步骤一致性校验；运行期间 JD 更新时旧材料结果标记 stale；runner 心跳与取消联动有新增测试。集成 Owner 本轮亲自执行：git diff --check 通过，隔离 SQLite 下 harnessDeepMatchTask 17/17、deepMatchSection 8/8 通过（其中 deepMatchSection 存在一条普通 React act() 警告，未核实影响，不判为问题也不记为无影响）。复用执行 Agent 报告（未复核原始输出，代码未再变更）：tsc --noEmit、改动文件 ESLint、隔离 SQLite Migration 与相关不变量、matchAnalysis/fastScreening/saveMatchResult 36/36。真实模型调用未验证；Windows Electron 用户流程未验收，passes 保持 false。",
+      "description": "职位匹配界面可对选定简历版本发起可恢复的深度匹配任务；任务状态持久化，离开页面、刷新与应用重启后恢复真实进度，支持取消、失败重试与输入失效反馈，结果与分析一一绑定并标注来源版本与失效状态。",
+      "steps": [
+        "在职位匹配界面明确选择简历版本并启动深度匹配；同一启动请求重复提交不产生第二个任务。",
+        "任务运行期间离开页面、刷新或完整退出重开应用后，重新打开职位能恢复真实任务状态（而非重置或伪进度）。",
+        "运行中可取消且状态如实过渡；失败任务可重试；固定输入被删除或失效时给出不可重试的明确反馈。",
+        "一次任务最终只落库一条绑定结果分析，恢复或重试不重复落库。",
+        "结果展示来源版本（JD/简历），运行期间 JD 被更新时该次结果正确标记 stale 并提示。"
+      ],
+      "passes": false
     }
   ]
 }
