@@ -1530,6 +1530,10 @@
     "statusUpdated": "任务状态已更新成功"
   },
   "settings": {
+    "aiServicesConnect": "连接",
+    "aiServicesAdd": "添加",
+    "aiServicesApiKey": "使用自己的 API Key",
+    "aiServicesManagedHint": "由 Vocatrya 提供 AI 服务",
     "title": "系统设置",
     "general": "常规偏好",
     "generalDescription": "应用级偏好设置。",

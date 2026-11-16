@@ -1530,6 +1530,10 @@
     "statusUpdated": "Task status updated successfully"
   },
   "settings": {
+    "aiServicesConnect": "Connect",
+    "aiServicesAdd": "Add",
+    "aiServicesApiKey": "Use your own API key",
+    "aiServicesManagedHint": "AI services by Vocatrya",
     "title": "Settings",
     "general": "General",
     "generalDescription": "Application-level preferences.",

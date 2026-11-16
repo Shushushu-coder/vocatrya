@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AiServiceSlot } from "./AiServicesLayout";
+import SettingsDrawer from "./SettingsDrawer";
+import AiServiceListItem from "./AiServiceListItem";
+import { VocatryaMark } from "../brand/VocatryaMark";
+import { AiServiceSlot, useAiServicesLayout } from "./AiServicesLayout";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { CheckCircle, Loader2, RefreshCw, XCircle } from "lucide-react";
@@ -27,6 +30,8 @@ function formatPeriod(unix: number | null): string | null {
  */
 function ManagedAiCard() {
   const { t } = useI18n();
+  const integrated = useAiServicesLayout();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [overview, setOverview] = useState<ManagedAiOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [redeemError, setRedeemError] = useState<string | null>(null);
@@ -79,8 +84,7 @@ function ManagedAiCard() {
   const noEntitlement =
     !!entitlement && entitlement.allowedModels.length === 0;
 
-  return (
-    <AiServiceSlot placement={connection && !comingSoon ? "connected" : "available"}>
+  const card = (
     <div className="min-w-0 space-y-4 rounded-lg border bg-card p-4">
       <div className="flex items-center justify-between">
         <div>
@@ -254,8 +258,41 @@ function ManagedAiCard() {
         </div>
       )}
     </div>
-    </AiServiceSlot>
   );
+
+  if (integrated && (!connection || comingSoon)) {
+    const description = loading && !overview
+      ? t("settings.managedLoading")
+      : comingSoon
+        ? t("settings.aiServicesManagedHint")
+        : errorCode
+          ? t("settings.managedErrorCode", { code: errorCode })
+          : t("settings.managedUnavailable");
+    return (
+      <AiServiceSlot placement="available-managed">
+        <AiServiceListItem
+          icon={<VocatryaMark size={22} />}
+          name={t("settings.managedTitle")}
+          description={description}
+          onDetails={() => setDetailsOpen(true)}
+          action={comingSoon ? (
+            <span className="rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground">{t("settings.managedComingSoon")}</span>
+          ) : loading && !overview ? (
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          ) : (
+            <Button size="sm" variant="secondary" className="h-8 rounded-full px-3 text-xs" onClick={() => { window.location.hash = "subscription"; }}>
+              {t("settings.aiServicesConnect")}
+            </Button>
+          )}
+        />
+        <SettingsDrawer open={detailsOpen} onOpenChange={setDetailsOpen} title={t("settings.managedTitle")}>
+          {card}
+        </SettingsDrawer>
+      </AiServiceSlot>
+    );
+  }
+
+  return <AiServiceSlot placement={connection && !comingSoon ? "connected" : "available"}>{card}</AiServiceSlot>;
 }
 
 export default ManagedAiCard;

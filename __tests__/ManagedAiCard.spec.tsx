@@ -1,11 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ManagedAiCard from "@/components/settings/ManagedAiCard";
+import AiServicesLayout, { AiServiceSlot } from "@/components/settings/AiServicesLayout";
 import type { ManagedAiOverview } from "@/actions/managedAi.actions";
 import en from "@/i18n/messages/en.json";
 import zhCN from "@/i18n/messages/zh-CN.json";
 
 vi.mock("@/i18n", () => ({
+  hasTranslation: () => false,
   useI18n: () => ({
     t: (key: string, vars?: Record<string, unknown>) => (vars ? `${key} ${JSON.stringify(vars)}` : key),
   }),
@@ -61,6 +63,25 @@ function shows(overviewData: ManagedAiOverview) {
 }
 
 describe("ManagedAiCard", () => {
+  it("keeps the real error and refresh reachable in compact managed details", async () => {
+    overview.get.mockResolvedValue({ success: true, data: { ...EMPTY, errorCode: "MANAGED_RUNTIME_UNAVAILABLE" } });
+    render(<AiServicesLayout><ManagedAiCard /></AiServicesLayout>);
+    await screen.findByText(/MANAGED_RUNTIME_UNAVAILABLE/);
+    await userEvent.setup().click(screen.getByRole("button", { name: "settings.managedTitle" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("MANAGED_RUNTIME_UNAVAILABLE");
+    expect(screen.getByRole("button", { name: "settings.managedGoRecharge" })).toBeEnabled();
+  });
+
+  it("keeps the compact managed entry after ordinary services regardless of mount order", async () => {
+    overview.get.mockResolvedValue({ success: true, data: { ...EMPTY, availability: "COMING_SOON" } });
+    const { container } = render(<AiServicesLayout><ManagedAiCard /><AiServiceSlot placement="available"><span>Ordinary service</span></AiServiceSlot></AiServicesLayout>);
+    const managed = await screen.findByText("settings.managedComingSoon");
+    const ordinary = screen.getByText("Ordinary service");
+    expect(ordinary.compareDocumentPosition(managed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("settings.managedComingSoonHint")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="ai-services-connected"]')?.textContent).not.toContain("settings.managedTitle");
+  });
+
   it("ships the Coming Soon copy in en and zh-CN", () => {
     const copy = (messages: typeof en) =>
       messages.settings as Record<string, unknown>;

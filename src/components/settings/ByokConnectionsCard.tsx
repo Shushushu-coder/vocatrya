@@ -1,6 +1,9 @@
 "use client";
 
 import { AiServiceSlot, useAiServicesLayout } from "./AiServicesLayout";
+import AiServiceIcon from "./AiServiceIcon";
+import AiServiceListItem from "./AiServiceListItem";
+import SettingsDrawer from "./SettingsDrawer";
 import { useEffect, useState } from "react";
 import {
   Card,
@@ -297,8 +300,7 @@ function ByokConnectionsCard() {
           const isEditing = editingProvider === provider.id;
           const isBaseUrl = isBaseUrlProvider(provider.id);
 
-          return (
-            <AiServiceSlot key={provider.id} placement={existingKey ? "connected" : "available"}>
+          const card = (
             <Card className="min-w-0 gap-3 py-3">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -428,6 +430,17 @@ function ByokConnectionsCard() {
                 )}
               </CardContent>
             </Card>
+          );
+          return (
+            <AiServiceSlot key={provider.id} placement={existingKey ? "connected" : "available"}>
+              {integrated && !existingKey ? <>
+                <AiServiceListItem icon={<AiServiceIcon name={provider.name} />} name={provider.name} description={t("settings.aiServicesApiKey")} onDetails={() => { setEditingProvider(provider.id); setInputValue(""); }} action={
+                  <Button size="sm" variant="secondary" className="h-8 rounded-full px-3 text-xs" onClick={() => { setEditingProvider(provider.id); setInputValue(""); }}>{t("settings.aiServicesAdd")}</Button>
+                } />
+                <SettingsDrawer open={isEditing} onOpenChange={open => { if (!open) handleCancel(); }} hasUnsavedChanges={!!inputValue.trim()} title={provider.name} description={provider.description}>
+                  {card}
+                </SettingsDrawer>
+              </> : card}
             </AiServiceSlot>
           );
         })}

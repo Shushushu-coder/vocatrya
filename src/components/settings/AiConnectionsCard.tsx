@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { AiServiceSlot, useAiServicesLayout } from "./AiServicesLayout";
+import AiServiceIcon from "./AiServiceIcon";
+import AiServiceListItem from "./AiServiceListItem";
+import SettingsDrawer from "./SettingsDrawer";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
@@ -177,6 +181,7 @@ const ERROR_KEY: Record<string, string> = {
 function AiConnectionsCard() {
   const { t } = useI18n();
   const integrated = useAiServicesLayout();
+  const [detailBackend, setDetailBackend] = useState<string | null>(null);
   const [bridgeAvailable] = useState(
     () => typeof window !== "undefined" && Boolean(window.vocatryaAi),
   );
@@ -489,8 +494,8 @@ function AiConnectionsCard() {
         const update = updateChecks[backend.backendKind];
         const updateChecking = updateBusy[backend.backendKind] === true;
         const updateFailed = updateIpcFailed[backend.backendKind] === true;
-        return (
-          <AiServiceSlot key={backend.backendKind} placement={backendConnections.length > 0 || isConnecting ? "connected" : "available"}>
+        const compact = integrated && backendConnections.length === 0 && !isConnecting;
+        const card = (
           <section className="min-w-0 space-y-3 rounded-lg border bg-card p-3">
 
             {/* Product + runtime are both always visible — a runtime can
@@ -885,6 +890,30 @@ function AiConnectionsCard() {
               </ul>
             )}
           </section>
+        );
+        return (
+          <AiServiceSlot key={backend.backendKind} placement={backendConnections.length > 0 || isConnecting ? "connected" : "available"}>
+            {compact ? <>
+              <AiServiceListItem
+                icon={<AiServiceIcon name={backend.providerLabel} />}
+                name={backend.providerLabel}
+                description={runtimeState?.state === "READY" ? runtimeName : runtimeState ? t(RUNTIME_STATE_KEY[runtimeState.state] ?? "settings.aiConnStatusError") : t("settings.checking")}
+                onDetails={() => setDetailBackend(backend.backendKind)}
+                action={backend.accountOptions.length === 1 ? (
+                  <Button size="sm" variant="secondary" className="h-8 rounded-full px-3 text-xs" aria-label={t(backend.accountOptions[0].connectLabelKey)} disabled={busy !== null || runtimeState?.state !== "READY"} onClick={() => { setDetailBackend(null); void connect(backend, backend.accountOptions[0].accountProvider); }}>
+                    {t("settings.aiServicesConnect")}
+                  </Button>
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button size="sm" variant="secondary" className="h-8 rounded-full px-3 text-xs" disabled={busy !== null || runtimeState?.state !== "READY"}>{t("settings.aiServicesConnect")}</Button></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">{backend.accountOptions.map(option => <DropdownMenuItem key={option.accountProvider} onSelect={() => { setDetailBackend(null); void connect(backend, option.accountProvider); }}>{t(option.connectLabelKey)}</DropdownMenuItem>)}</DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              />
+              <SettingsDrawer open={detailBackend === backend.backendKind} onOpenChange={open => setDetailBackend(open ? backend.backendKind : null)} title={backend.providerLabel} description={t("settings.aiConnViaRuntime", { name: runtimeName })}>
+                {card}
+              </SettingsDrawer>
+            </> : card}
           </AiServiceSlot>
         );
       })}

@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { useI18n } from "@/i18n";
 
-type Placement = "connected" | "available" | "support";
+type Placement = "connected" | "available" | "available-managed" | "support";
 const ServiceTargets = createContext<Record<Placement, HTMLDivElement | null> | null>(null);
 
 export function useAiServicesLayout() {
@@ -24,8 +24,9 @@ export default function AiServicesLayout({ children }: { children: ReactNode }) 
   const { t } = useI18n();
   const [connected, setConnected] = useState<HTMLDivElement | null>(null);
   const [available, setAvailable] = useState<HTMLDivElement | null>(null);
+  const [managed, setManaged] = useState<HTMLDivElement | null>(null);
   const [support, setSupport] = useState<HTMLDivElement | null>(null);
-  const targets = useMemo(() => ({ connected, available, support }), [connected, available, support]);
+  const targets = useMemo(() => ({ connected, available, "available-managed": managed, support }), [connected, available, managed, support]);
   return (
     <ServiceTargets.Provider value={targets}>
       <div className="@container/services min-w-0 space-y-4">
@@ -39,8 +40,10 @@ export default function AiServicesLayout({ children }: { children: ReactNode }) 
           </section>
           <section aria-label={t("settings.aiServicesAvailable")} className="min-w-0 space-y-3">
             <h3 className="text-sm font-semibold">{t("settings.aiServicesAvailable")}</h3>
-            <div ref={setAvailable} data-testid="ai-services-available" className="min-w-0 space-y-3">
-              <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground [&:not(:only-child)]:hidden">{t("settings.aiServicesAllConnected")}</p>
+            <div data-testid="ai-services-available" className="min-w-0 space-y-2.5 [&:has(>div:not(:empty))>p]:hidden">
+              <div ref={setAvailable} className="space-y-2.5 empty:hidden" />
+              <div ref={setManaged} className="space-y-2.5 empty:hidden" />
+              <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">{t("settings.aiServicesAllConnected")}</p>
             </div>
           </section>
         </div>

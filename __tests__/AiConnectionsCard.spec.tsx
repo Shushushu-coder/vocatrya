@@ -355,3 +355,28 @@ it("shows an honest desktop-only notice in the Web rail", () => {
   render(<AiServicesLayout><AiConnectionsCard /></AiServicesLayout>);
   expect(within(screen.getByTestId("ai-services-available")).getByText(/Account sign-in is available in the desktop app/)).toBeInTheDocument();
 });
+
+it("keeps installation guidance reachable from a disabled compact service", async () => {
+  installBridges({ state: "NOT_INSTALLED" });
+  render(<AiServicesLayout><AiConnectionsCard /></AiServicesLayout>);
+  const connect = await screen.findByRole("button", { name: "Connect Claude" });
+  expect(connect).toBeDisabled();
+  expect(screen.queryByText("winget install vendor.runtime")).not.toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "Claude" }));
+  const detail = await screen.findByRole("dialog");
+  expect(within(detail).getByText("winget install vendor.runtime")).toBeInTheDocument();
+  expect(within(detail).getByRole("button", { name: "Installation guide" })).toBeEnabled();
+});
+
+it("uses the selected OpenCode product from the compact connect menu", async () => {
+  installBridges();
+  render(<AiServicesLayout><AiConnectionsCard /></AiServicesLayout>);
+  const name = await screen.findByRole("button", { name: "OpenCode" });
+  const row = name.parentElement!.parentElement!;
+  const user = userEvent.setup();
+  const connect = within(row).getByRole("button", { name: "Connect" });
+  await waitFor(() => expect(connect).toBeEnabled());
+  await user.click(connect);
+  await user.click(await screen.findByRole("menuitem", { name: "Connect OpenCode Zen" }));
+  expect(actionMocks.mintAiConnectionTicket).toHaveBeenCalledWith(expect.objectContaining({ backendKind: "OPENCODE_RUNTIME", accountProvider: "OPENCODE_ZEN" }));
+});
