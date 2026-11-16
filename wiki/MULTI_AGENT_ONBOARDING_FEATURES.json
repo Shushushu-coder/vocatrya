@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "project": "Vocatrya",
+  "updatedAt": "2026-11-16",
+  "proposal": "MULTI_AGENT_ONBOARDING_PROPOSAL.md",
+  "baseline": {
+    "gitRef": "901b9b2b",
+    "date": "2026-11-16",
+    "notes": "本轮仅定向静态查看与文档整理；未构建、未执行 Windows Electron 或真实 AI 验收。上游合同 P2_MULTI_AGENT_CONTRACT_PROPOSAL.md D1–D10 已冻结，本台账不改写其状态。"
+  },
+  "definitions": {
+    "scope": "PROPOSED_V1 = 本提案首版方向，不自动改变既有 MVP/P1/P2/EXTENSIONS 台账，也不代表产品编码授权；DEFERRED = 备档选项，本期不实施。",
+    "designStatus": "PROPOSED = 设计提案，待 Owner 逐项裁定（提案 §8 D1–D6）；CONTRACT_FROZEN = 决策项已于 2026-11-16 经 Owner 裁定冻结（提案 §13），可按冻结方案实施，不含提交/发布等额外授权；CONFIRMED_EXISTING = 需求已由现状代码满足，仅记录验收口径。",
+    "implementationStatus": "NOT_ASSESSED = 提案阶段未做系统评估；IMPLEMENTED_IN_CODE = 需求已由现状代码满足（MAO-DEFAULT）；DEFERRED = 备档不实施。",
+    "steps": "待实施的验收检查点，非已通过记录；涉及未决项时须先冻结对应决策。",
+    "passes": "仅实际用户路径和必要验证全部通过后才设 true；本轮仅文档整理，全部为 false。"
+  },
+  "confirmedDecisions": [
+    { "id": "C1", "decision": "首页三个 Agent 入口分别具名为 Voca Insight / Voca Pilot / Voca Reflect，并附一句口头化职责简介。" },
+    { "id": "C2", "decision": "静态文案只写职责域；扩展能力（如 Notion）不写入首页说明等静态介绍——能力由 prompt 按运行时注册集动态生成。" },
+    { "id": "C3", "decision": "角色拒绝用户请求时必须说明原因（分工/权限边界）并指路到能处理的角色，不得只回答不能。" },
+    { "id": "C4", "decision": "右侧 Agent 栏默认进入能力最全的 Voca Pilot（现状已实现：GENERAL_AGENT_SLOT=pilot）。" },
+    { "id": "C5", "decision": "冷启动方案参考业界 multi-agent 通行设计（GPTs 三件套、Pimcore awareness block、OctoPress handoff 确认门），不引入父子编排或自动路由。" }
+  ],
+  "features": [
+    {
+      "id": "MAO-ENTRY",
+      "category": "Agent / Discovery UX",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CONTRACT_FROZEN",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "首页三阶段卡的 Agent 入口由共用「咨询 Vocatrya」改为具名角色入口，各附一句口头化职责简介；行为保持 open({role}) 不发送不建会话。",
+      "existingEvidence": [
+        "src/components/dashboard/JourneySection.tsx:101-105",
+        "src/components/dashboard/JourneySection.tsx:284-295",
+        "src/i18n/messages/zh-CN.json:384"
+      ],
+      "recommendation": "单行「咨询 Voca X —— 口头职责」；职责句取 roster dutyLine；不提 Notion 或任何扩展/工具名。",
+      "dependencies": ["MAO-ROSTER"],
+      "openQuestions": [],
+      "steps": [
+        "三卡按钮分别显示具名角色与职责句，文案经 roster 单一来源。",
+        "点击仍 open({role})：0 次 /api/ai/chat、0 次会话创建。",
+        "文案不含扩展或工具名；zh-CN/en 双语齐备。"
+      ],
+      "implementationNotes": "2026-11-16 Owner 裁定 D1=(a) 单行文案生效（提案 §13）。未编码，passes:false。",
+      "passes": false
+    },
+    {
+      "id": "MAO-ROSTER",
+      "category": "Agent / Copy Source",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CONTRACT_FROZEN",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "三角色分工文案单一来源（name/subtitle 复用 + dutyLine），供首页入口、空状态、prompt 感知块三处消费，防止文案漂移。",
+      "existingEvidence": [
+        "src/lib/agent/roleCopy.ts",
+        "src/lib/agent/agentRoles.ts",
+        "src/lib/agent/roleSuggestions.ts"
+      ],
+      "recommendation": "AGENT_ROSTER 放 roleCopy.ts（agentRoles.ts 保持 dependency-free）；siblings 由代码按当前角色推导。",
+      "dependencies": [],
+      "openQuestions": [],
+      "steps": [
+        "三处消费断言同一 key/同一生成函数。",
+        "改 roster 一处即同步首页、空状态与 prompt。"
+      ],
+      "implementationNotes": "2026-11-16 Owner 裁定 D4=(a) roster 落 roleCopy.ts 生效（提案 §13）。未编码，passes:false。",
+      "passes": false
+    },
+    {
+      "id": "MAO-REFUSAL",
+      "category": "Agent / Prompt Routing",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CONTRACT_FROZEN",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "拒答指路：每角色 prompt 追加阵容感知块（兄弟角色+分工+切换方式）；*_LIMITATIONS 补分工归因；buildNotionPromptSection 增加只读分支。模型如实说明边界并点名该找谁，不宣称'没有工具/未连接'。",
+      "existingEvidence": [
+        "src/lib/agent/prompt.ts:61-68",
+        "src/lib/agent/prompt.ts:212-235",
+        "src/lib/agent/agentRoles.ts:49-73",
+        "src/lib/agent/tools/index.ts:125-131"
+      ],
+      "recommendation": "纯 prompt 增量（一期）：感知块按当前角色动态生成 siblings；Insight 拒写 Notion 场景须答'只读权限+归 Pilot+切换方式'；widget 切换卡列 MAO-SWITCHWIDGET 备档。",
+      "dependencies": ["MAO-ROSTER"],
+      "openQuestions": [],
+      "steps": [
+        "Insight 被要求写 Notion/加职位：答出只读/分工边界、点名 Pilot、给出顶部图标切换方式。",
+        "Pilot 被要求匹配/评审简历→指路 Insight；Reflect 被要求写入/分析→分别指路 Pilot/Insight。",
+        "只读 Notion 会话的提示词含只读指路句；含写工具会话不含。",
+        "断言感知块内容与实际注册工具集、roster 一致。"
+      ],
+      "implementationNotes": "2026-11-16 Owner 裁定 D3=(a) 一期纯 prompt 指路、D5=(a) Notion 只读动态分支生效（提案 §13）。未编码，passes:false。",
+      "passes": false
+    },
+    {
+      "id": "MAO-EMPTYSTATE",
+      "category": "Agent / Onboarding UX",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CONTRACT_FROZEN",
+      "implementationStatus": "NOT_ASSESSED",
+      "description": "空状态冷启动：现有 4 条建议之上加角色自述两行（我做什么+我不做什么/找谁），底部加阵容图例行，顺带解决切换图标可发现性。",
+      "existingEvidence": [
+        "src/components/agent/AgentChatEmptyState.tsx:30-84",
+        "src/components/agent/AgentRoleSwitcher.tsx",
+        "src/lib/agent/roleSuggestions.ts"
+      ],
+      "recommendation": "自述取 roster dutyLine 第一人称口吻；图例「Insight 帮你看 · Pilot 帮你干 · Reflect 陪你聊——顶部图标随时换」；chips 保持点击只填入（冻结 D8）。",
+      "dependencies": ["MAO-ROSTER"],
+      "openQuestions": [],
+      "steps": [
+        "每角色空状态含自述、4 条建议、图例行；建议点击仍只填入不发送。",
+        "preflight 失败态表现不随本改动退化。",
+        "双语词条齐备且口吻等义。"
+      ],
+      "implementationNotes": "2026-11-16 Owner 裁定 D2=(a) 自述两行、D6=(a) 加阵容图例行生效（提案 §13）。未编码，passes:false。",
+      "passes": false
+    },
+    {
+      "id": "MAO-DEFAULT",
+      "category": "Agent / Default Role",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CONFIRMED_EXISTING",
+      "implementationStatus": "IMPLEMENTED_IN_CODE",
+      "description": "右侧栏默认进入能力最全的 Voca Pilot：GENERAL_AGENT_SLOT=pilot，挂载顺序=载入会话角色→上次激活角色→Pilot；suggestionsForRole 空角色亦归 Pilot。",
+      "existingEvidence": [
+        "src/lib/agent/agentRoles.ts:16",
+        "src/components/agent/AgentChatProvider.tsx:203-205",
+        "src/lib/agent/roleSuggestions.ts:89"
+      ],
+      "recommendation": "无代码改动；保留'重开恢复上次激活角色'，除非 Owner 补充裁定每次强制 Pilot。验收核对全新用户冷启动落 Pilot。",
+      "dependencies": [],
+      "openQuestions": [],
+      "steps": [
+        "全新用户首次打开面板落 Pilot。",
+        "重开面板恢复上次激活角色。"
+      ],
+      "implementationNotes": "2026-11-16 源码核对确认现状已满足需求；同日 Owner 补充项裁定：首次默认 Pilot + 重开恢复上次激活角色（现状语义，不改代码）。仅验收未执行，passes:false。",
+      "passes": false
+    },
+    {
+      "id": "MAO-SWITCHWIDGET",
+      "category": "Agent / Handoff UX",
+      "scope": "DEFERRED",
+      "designStatus": "PROPOSED",
+      "implementationStatus": "DEFERRED",
+      "description": "远期备档：模型输出结构化'建议切换'信号→UI 渲染[切到 X]/[留下]卡片→点击 switchRole 并把用户原话填入目标槽位草稿。参考 Pimcore switch_agent widget 与 OctoPress handoff 门；切换永不自动发生。",
+      "existingEvidence": [],
+      "recommendation": "一期先上 MAO-REFUSAL 纯文案指路；待实测后再评估 widget 收益（需新 UI part 类型与流转接线）。",
+      "dependencies": ["MAO-REFUSAL"],
+      "openQuestions": [],
+      "steps": [],
+      "implementationNotes": "2026-11-16 D3 裁定 (a) 纯文案指路先行；widget 留档备查，未排期。",
+      "passes": false
+    }
+  ]
+}

@@ -23,6 +23,8 @@
 | [`P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md`](./P2_JOB_INTERVIEW_CONTRACT_PROPOSAL.md) | **P2 职位关联与面试复盘联合冻结合同**（2026-11-01 裁定 D1–D12，记录见 §18）：JOB-CONNECTIONS / INTERVIEW-DEBRIEF 的实体树、Schema 增量与语义。 | 实施职位关联、真实面试复盘或相关 Schema 增量前。 |
 | [`P2_MULTI_AGENT_CONTRACT_PROPOSAL.md`](./P2_MULTI_AGENT_CONTRACT_PROPOSAL.md) | **P2 三 Agent 面板冻结合同**（2026-11-01 裁定 D1–D10，记录见 §14）：角色、会话隔离、工具白名单、建议填入。 | 实施角色切换和聊天面板前。 |
 | [`P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md`](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md) | **P2 求职数据看板冻结合同**（2026-11-01 裁定 D1–D9，记录见 §9）：计数、归档/时区口径、模式降级。 | 实施统计看板或首页数据简报前。 |
+| [`MULTI_AGENT_ONBOARDING_PROPOSAL.md`](./MULTI_AGENT_ONBOARDING_PROPOSAL.md) | **多 Agent 冷启动与拒答指路提案**（2026-11-16 裁定 D1–D6+补充项，记录见 §13）：首页入口具名+口头职责、默认 Pilot（现状已满足）、阵容感知块与拒答指路、空状态角色自述；切换 widget 备档。 | 实施角色入口文案、拒答指路或空状态介绍前。 |
+| [`MULTI_AGENT_ONBOARDING_FEATURES.json`](./MULTI_AGENT_ONBOARDING_FEATURES.json) | **上述提案的功能台账**：MAO-ENTRY/ROSTER/REFUSAL/EMPTYSTATE/DEFAULT/SWITCHWIDGET 六项，含确认决策、验收检查点与 `passes`。 | 跟踪该提案实施状态或安排验收时。 |
 
 ## 使用原则
 
