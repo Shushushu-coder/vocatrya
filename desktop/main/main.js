@@ -433,8 +433,8 @@ if (!singleInstance) {
             titleBarStyle: "hidden",
             titleBarOverlay: {
               height: 36,
-              color: nativeTheme.shouldUseDarkColors ? "#020817" : "#ffffff",
-              symbolColor: nativeTheme.shouldUseDarkColors ? "#f8fafc" : "#020817",
+              color: nativeTheme.shouldUseDarkColors ? "#09090b" : "#ffffff",
+              symbolColor: nativeTheme.shouldUseDarkColors ? "#e4e4e7" : "#020817",
             },
           }
         : {}),

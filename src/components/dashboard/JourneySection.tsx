@@ -58,36 +58,36 @@ type JourneyTone = {
 // distinguishable inside the dark theme.
 const STAGE_TONE: Record<JourneyStage["key"], JourneyTone> = {
   prepare: {
-    card: "border-blue-200/70 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/50",
+    card: "border-blue-200/70 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/30",
     title: "text-blue-900 dark:text-blue-100",
     desc: "text-blue-800/75 dark:text-blue-200/75",
     icon: "text-blue-700 dark:text-blue-300",
     entry:
-      "bg-blue-100/80 text-blue-950 hover:bg-blue-100 dark:bg-blue-900/60 dark:text-blue-50 dark:hover:bg-blue-900",
+      "bg-blue-100/80 text-blue-950 hover:bg-blue-100 dark:bg-blue-900/40 dark:text-blue-50 dark:hover:bg-blue-900/70",
     entryIcon: "text-blue-600 dark:text-blue-300",
     chevron: "text-blue-400 dark:text-blue-500",
     agent:
       "text-blue-800/80 hover:bg-blue-100 hover:text-blue-900 dark:text-blue-200/75 dark:hover:bg-blue-900/70 dark:hover:text-blue-100",
   },
   act: {
-    card: "border-green-200/70 bg-green-50 dark:border-green-900 dark:bg-green-950/50",
+    card: "border-green-200/70 bg-green-50 dark:border-green-900/60 dark:bg-green-950/30",
     title: "text-green-900 dark:text-green-100",
     desc: "text-green-800/75 dark:text-green-200/75",
     icon: "text-green-700 dark:text-green-300",
     entry:
-      "bg-green-100/80 text-green-950 hover:bg-green-100 dark:bg-green-900/60 dark:text-green-50 dark:hover:bg-green-900",
+      "bg-green-100/80 text-green-950 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-50 dark:hover:bg-green-900/70",
     entryIcon: "text-green-600 dark:text-green-300",
     chevron: "text-green-500 dark:text-green-500",
     agent:
       "text-green-800/80 hover:bg-green-100 hover:text-green-900 dark:text-green-200/75 dark:hover:bg-green-900/70 dark:hover:text-green-100",
   },
   review: {
-    card: "border-purple-200/70 bg-purple-50 dark:border-purple-900 dark:bg-purple-950/50",
+    card: "border-purple-200/70 bg-purple-50 dark:border-purple-900/60 dark:bg-purple-950/30",
     title: "text-purple-900 dark:text-purple-100",
     desc: "text-purple-800/75 dark:text-purple-200/75",
     icon: "text-purple-700 dark:text-purple-300",
     entry:
-      "bg-purple-100/80 text-purple-950 hover:bg-purple-100 dark:bg-purple-900/60 dark:text-purple-50 dark:hover:bg-purple-900",
+      "bg-purple-100/80 text-purple-950 hover:bg-purple-100 dark:bg-purple-900/40 dark:text-purple-50 dark:hover:bg-purple-900/70",
     entryIcon: "text-purple-600 dark:text-purple-300",
     chevron: "text-purple-400 dark:text-purple-500",
     agent:

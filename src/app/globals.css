@@ -152,35 +152,37 @@ html[data-desktop="true"] .desktop-hidden {
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 40.6%;
-    --destructive-text: 0 90% 75%;
-    --success: 142 69% 70%;
-    --warning: 45 93% 70%;
+    /* Neutral graphite surfaces: deeper canvas with lifted cards/popover so
+       regions separate by elevation instead of bright borders. */
+    --background: 240 10% 3.9%;
+    --foreground: 240 5% 90%;
+    --card: 240 10% 7%;
+    --card-foreground: 240 5% 90%;
+    --popover: 240 10% 7%;
+    --popover-foreground: 240 5% 90%;
+    --primary: 217 75% 58%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 240 5% 90%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 64%;
+    --accent: 240 4% 15%;
+    --accent-foreground: 240 5% 90%;
+    --destructive: 0 62.8% 45%;
+    --destructive-text: 0 85% 72%;
+    --success: 142 55% 65%;
+    --warning: 45 80% 65%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 23.5%;
-    --input: 217.2 32.6% 21.5%;
-    --ring: 217.2 91.2% 59.8%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --border: 240 5% 15%;
+    --input: 240 5% 15%;
+    --ring: 217 75% 58%;
+    --chart-1: 217 70% 55%;
+    --chart-2: 160 50% 50%;
+    --chart-3: 30 70% 55%;
+    --chart-4: 280 55% 62%;
+    --chart-5: 340 65% 58%;
     /* Dark surfaces need a stronger scrim to keep modals readable. */
-    --overlay-bg: hsl(0 0% 0% / 0.5);
+    --overlay-bg: hsl(0 0% 0% / 0.6);
   }
 }
 
