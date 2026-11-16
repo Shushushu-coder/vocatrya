@@ -150,7 +150,7 @@ describe("InterviewPrepSection", () => {
     await waitFor(() => expect(continueGoal).toHaveBeenCalledTimes(1));
     expect(continueGoal).toHaveBeenCalledWith({ goalId: "goal-1" });
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("/dashboard/interview/sess-1"),
+      expect(push).toHaveBeenCalledWith("/dashboard/interview-prep/sess-1"),
     );
   });
 
@@ -167,7 +167,7 @@ describe("InterviewPrepSection", () => {
     await userEvent.setup().click(screen.getByTestId("prep-continue"));
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
-        "/dashboard/interview/new?job=job-1&jd=jd-1&prepGoal=goal-1",
+        "/dashboard/interview-prep/new?job=job-1&jd=jd-1&prepGoal=goal-1",
       ),
     );
   });
@@ -210,7 +210,7 @@ describe("InterviewPrepSection", () => {
     await userEvent.setup().click(screen.getByTestId("prep-new-round"));
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
-        "/dashboard/interview/new?job=job-1&jd=jd-2&prepGoal=goal-2",
+        "/dashboard/interview-prep/new?job=job-1&jd=jd-2&prepGoal=goal-2",
       ),
     );
     expect(newRound).toHaveBeenCalledWith(

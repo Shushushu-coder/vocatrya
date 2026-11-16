@@ -122,6 +122,28 @@ test("preflight guards run before the run directory exists and stage checks keep
   assert.deepEqual(details(calls, "unregisterInterrupt"), [undefined]);
 });
 
+test("snapshot copies and hashes extension source inputs", async () => {
+  const reads = [];
+  const harness = makeDeps({
+    execFileSync: (command, args) => {
+      if (command === "git" && args[0] === "ls-files") {
+        assert.ok(args.includes("extensions"), "extension inputs must be selected by git");
+        return Buffer.from("extensions/notion/manifest.json\0src/app/page.tsx\0");
+      }
+      return "deadbeef\n";
+    },
+  });
+  harness.deps.fs.existsSync = (file) => file.endsWith("manifest.json") || file.endsWith("page.tsx");
+  harness.deps.fs.readFileSync = (file) => { reads.push(file); return Buffer.from("input"); };
+  succeedingBuild(harness);
+  const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
+  assert.equal(result.ok, true);
+  assert.ok(reads.some(file => file.endsWith(pathSuffix("extensions/notion/manifest.json"))));
+  assert.ok(details(harness.calls, "copy").some(file => file.endsWith(pathSuffix("extensions/notion/manifest.json"))));
+});
+
+function pathSuffix(relative) { return relative.replaceAll("/", process.platform === "win32" ? "\\" : "/"); }
+
 test("the run-dir limit aborts before mkdir, spawn or assembly", async () => {
   const harness = makeDeps();
   const limitError = new Error("RUN_DIR_LIMIT synthetic"); limitError.code = "RUN_DIR_LIMIT";

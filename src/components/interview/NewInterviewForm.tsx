@@ -64,7 +64,8 @@ export default function NewInterviewForm({
         toastError(result.message);
         return;
       }
-      router.push(`/dashboard/interview/${result.data.session.id}`);
+      const base = goalBound ? "/dashboard/interview-prep" : "/dashboard/interview";
+      router.push(`${base}/${result.data.session.id}`);
     } finally {
       setSaving(false);
     }

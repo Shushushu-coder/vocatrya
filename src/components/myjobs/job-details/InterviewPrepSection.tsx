@@ -126,7 +126,7 @@ export function InterviewPrepSection({ jobId }: { jobId: string }) {
     const action = target.nextAction;
     if (action.kind === "START_PRACTICE") {
       router.push(
-        `/dashboard/interview/new?job=${target.jobOpportunityId}` +
+        `/dashboard/interview-prep/new?job=${target.jobOpportunityId}` +
           `&jd=${target.pinnedJd.versionId}&prepGoal=${target.id}`,
       );
       return true;
@@ -135,7 +135,7 @@ export function InterviewPrepSection({ jobId }: { jobId: string }) {
       (action.kind === "OPEN_SESSION" || action.kind === "VIEW_SUMMARY") &&
       action.sessionId
     ) {
-      router.push(`/dashboard/interview/${action.sessionId}`);
+      router.push(`/dashboard/interview-prep/${action.sessionId}`);
       return true;
     }
     return false;

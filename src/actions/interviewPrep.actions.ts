@@ -24,7 +24,7 @@ import type { ActionResult } from "@/models/action.model";
 import { requireUser } from "./shared";
 
 /**
- * Interview prep goal surface �?business commands only
+ * Interview prep goal surface: business commands only
  * (create/read/continue/pause/resume/end/new-round/link). The server owns
  * every transition and re-verifies progress from business records on each
  * read. Nothing here calls a model; any generation stays inside the
@@ -86,7 +86,7 @@ export async function getInterviewPrepGoalForJob(input: {
 }
 
 /**
- * "继续准备" �?re-verifies goal state before telling the client where to
+ * Continue preparation: re-verifies goal state before telling the client where to
  * go, so a stale page can never launch an outdated action.
  */
 export async function continueInterviewPrepGoal(input: {

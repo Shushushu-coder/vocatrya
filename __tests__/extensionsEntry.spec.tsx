@@ -22,7 +22,7 @@ import { getNotionExtensionState } from "@/lib/extensions/notion/service";
 import { getAutoApplyExtensionStatus } from "@/lib/extensions/autoApply/status";
 
 vi.mock("@/utils/user.utils", () => ({ getCurrentUser: async () => ({ id: "extensions-user" }) }));
-vi.mock("@/lib/extensions/autoApply/status", () => ({ getAutoApplyExtensionStatus: vi.fn(async () => ({ available: true })) }));
+vi.mock("@/lib/extensions/autoApply/status", () => ({ getAutoApplyExtensionStatus: vi.fn(async () => ({ available: true, connections: { active: 0 } })) }));
 vi.mock("@/lib/extensions/notion/service", () => ({ getNotionExtensionState: vi.fn(async () => ({ status: "DISCONNECTED" })) }));
 
 vi.mock("@/i18n/server", () => ({

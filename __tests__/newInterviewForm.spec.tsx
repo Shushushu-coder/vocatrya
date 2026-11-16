@@ -41,6 +41,15 @@ const jobs = [
 ];
 
 describe("NewInterviewForm (product flow)", () => {
+  it("keeps a goal-bound session on the local preparation route", async () => {
+    createInterviewSessionAction.mockResolvedValue({ success: true, data: { session: { id: "prep-session" } } });
+    render(<NewInterviewForm jobs={jobs} initialJobId="job-1" initialJdId="jd-1" interviewPrepGoalId="goal-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "interview.startInterviewCta" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/interview-prep/prep-session"));
+    expect(createInterviewSessionAction).toHaveBeenCalledWith({
+      jobOpportunityId: "job-1", jobDescriptionVersionId: "jd-1", interviewPrepGoalId: "goal-1",
+    });
+  });
   beforeEach(() => {
     push.mockReset();
     createInterviewSessionAction.mockReset();
