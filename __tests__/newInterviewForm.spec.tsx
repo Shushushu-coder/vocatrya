@@ -69,6 +69,7 @@ describe("NewInterviewForm (product flow)", () => {
       expect(createInterviewSessionAction).toHaveBeenCalledWith({
         jobOpportunityId: null,
         jobDescriptionVersionId: null,
+        interviewPrepGoalId: null,
       }),
     );
     await waitFor(() =>
@@ -92,6 +93,7 @@ describe("NewInterviewForm (product flow)", () => {
       expect(createInterviewSessionAction).toHaveBeenCalledWith({
         jobOpportunityId: "job-1",
         jobDescriptionVersionId: "jd-1",
+        interviewPrepGoalId: null,
       }),
     );
   });
@@ -122,6 +124,7 @@ describe("NewInterviewForm (product flow)", () => {
       expect(createInterviewSessionAction).toHaveBeenCalledWith({
         jobOpportunityId: "job-2",
         jobDescriptionVersionId: "jd-2b",
+        interviewPrepGoalId: null,
       }),
     );
   });

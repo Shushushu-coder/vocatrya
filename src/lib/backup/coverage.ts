@@ -12,7 +12,9 @@ export type BackupCoverageStatus =
 // for any other schema model fails the coverage guard test.
 // Interview models are included in product backup starting from this change:
 // legacy backups without Interview sections still restore (groups default to
-// []), and new backups carry the full 14-model Interview graph.
+// []), and new backups carry the full 14-model Interview graph plus the
+// user-owned InterviewPrepGoal (long-lived business state — the bound
+// session, not the goal, holds runtime-progress truth).
 // Dataset axis (spec v1 §20, frozen; payload shape unchanged, no format bump):
 // QuestionBank = COVERED REFERENCE_DATA (REFERENCE_DATA_SNAPSHOT, present in
 // export, used during restore, never user-wiped) — not INTENTIONALLY_EXCLUDED

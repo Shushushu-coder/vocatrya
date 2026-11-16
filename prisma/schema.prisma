@@ -64,6 +64,9 @@ model User {
   interviewSessions   InterviewSession[]
   transcriptRevisions TranscriptRevision[] @relation("RevisionAuthor")
 
+  // Interview prep goals (additive backrelation only).
+  interviewPrepGoals InterviewPrepGoal[]
+
   // Phase B account-login foundation (additive backrelations only).
   aiConnections         AIConnection[]
   aiBusinessAssignments AIBusinessAssignment[]
@@ -856,6 +859,9 @@ model JobOpportunity {
   // Phase 3A Interview transplant (additive backrelation only).
   interviewSessions InterviewSession[]
 
+  // Interview prep goals targeting this opportunity (additive backrelation).
+  interviewPrepGoals InterviewPrepGoal[]
+
   @@index([userId, status])
   @@index([userId, deadline])
   @@index([userId, archivedAt])
@@ -903,6 +909,9 @@ model JobDescriptionVersion {
 
   // Phase 3A Interview transplant (additive backrelation only).
   interviewSessions InterviewSession[]
+
+  // Prep goals pinned to this JD version (additive backrelation only).
+  pinnedPrepGoals InterviewPrepGoal[]
 
   @@unique([jobOpportunityId, versionNumber])
   @@unique([jobOpportunityId, contentHash])
@@ -2171,6 +2180,11 @@ model InterviewSession {
   resolvedModel        String?
   resolvedConnection   AIConnection? @relation(fields: [resolvedConnectionId], references: [id], onDelete: Restrict)
 
+  // Interview prep goal binding: one session serves at most one goal and a
+  // goal at most one session. Written inside session creation; restored as
+  // a nullable pointer so a missing goal degrades to unbound, never blocks.
+  interviewPrepGoalId     String?                  @unique
+  interviewPrepGoal     InterviewPrepGoal?       @relation(fields: [interviewPrepGoalId], references: [id], onDelete: SetNull)
   user                    User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
   jobOpportunity          JobOpportunity?            @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
   jobDescriptionVersion   JobDescriptionVersion?     @relation(fields: [jobDescriptionVersionId, jobOpportunityId], references: [id, jobOpportunityId], onDelete: Restrict)
@@ -2187,6 +2201,55 @@ model InterviewSession {
 
   @@index([userId, status])
   @@index([userId, createdAt])
+}
+
+/// User-owned interview preparation goal for one job opportunity.
+/// Business state (backed up), not a runtime ledger: the goal pins the JD
+/// version it prepares against, binds at most one InterviewSession through
+/// InterviewSession.interviewPrepGoalId, and carries a deterministic
+/// structured handoff snapshot (handoffJson) that any read can rebuild from
+/// the bound business records. `liveSlot` = jobOpportunityId while the goal
+/// is ACTIVE or PAUSED, enforcing at most one live goal per (user, job).
+model InterviewPrepGoal {
+  id            String @id @default(uuid())
+  userId        String
+  jobOpportunityId String
+  pinnedJobDescriptionVersionId String
+  // Content hash snapshot of the pinned JD version, so material drift can
+  // still be reported honestly if the version row is gone.
+  pinnedJdContentHash String
+
+  // status: ACTIVE | PAUSED | COMPLETED | ENDED
+  status        String @default("ACTIVE")
+  // Optimistic-concurrency counter; every lifecycle mutation bumps it and
+  // callers pass the last seen revision as a CAS guard.
+  revision      Int @default(0)
+
+  // Stable create-request dedupe identity (same semantics as HarnessTask).
+  requestKey    String
+  // = jobOpportunityId while status is ACTIVE or PAUSED; NULL on COMPLETED/ENDED.
+  liveSlot      String?
+
+  // Deterministic structured handoff snapshot (schemaVersion'd JSON):
+  // verified progress, blockers and the next allowed business action.
+  handoffJson         String?
+  handoffGoalRevision Int?
+  handoffVerifiedAt   DateTime?
+
+  pausedAt    DateTime?
+  completedAt DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  jobOpportunity  JobOpportunity       @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
+  pinnedJdVersion JobDescriptionVersion @relation(fields: [pinnedJobDescriptionVersionId], references: [id], onDelete: Restrict)
+  sessions        InterviewSession[]
+
+  @@unique([userId, requestKey])
+  @@unique([userId, liveSlot])
+  @@index([userId, jobOpportunityId])
 }
 
 model QuestionInstance {

@@ -210,6 +210,7 @@ describe("emptiness models", () => {
       "CareerMaterialItem",
       "Contact",
       "CoverLetter",
+      "InterviewPrepGoal",
       "InterviewSession",
       "Job",
       "JobOpportunity",

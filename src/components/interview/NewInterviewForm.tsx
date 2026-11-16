@@ -14,14 +14,24 @@ type Props = {
     title: string;
     jdVersions: Array<{ id: string; versionNumber: number }>;
   }>;
+  /** Prep-goal deep link: the job/JD pair is fixed by the goal. */
+  initialJobId?: string | null;
+  initialJdId?: string | null;
+  interviewPrepGoalId?: string | null;
 };
 
-export default function NewInterviewForm({ jobs }: Props) {
+export default function NewInterviewForm({
+  jobs,
+  initialJobId = null,
+  initialJdId = null,
+  interviewPrepGoalId = null,
+}: Props) {
   const { t } = useI18n();
   const router = useRouter();
-  const [jobId, setJobId] = useState("");
-  const [jdId, setJdId] = useState("");
+  const [jobId, setJobId] = useState(initialJobId ?? "");
+  const [jdId, setJdId] = useState(initialJdId ?? "");
   const [saving, setSaving] = useState(false);
+  const goalBound = Boolean(interviewPrepGoalId);
 
   const jds = useMemo(
     () => jobs.find((job) => job.id === jobId)?.jdVersions ?? [],
@@ -48,6 +58,7 @@ export default function NewInterviewForm({ jobs }: Props) {
       const result = await createInterviewSessionAction({
         jobOpportunityId: jobId || null,
         jobDescriptionVersionId: resolvedJdId || null,
+        interviewPrepGoalId,
       });
       if (!result.success || !("data" in result)) {
         toastError(result.message);
@@ -67,6 +78,7 @@ export default function NewInterviewForm({ jobs }: Props) {
           id="interview-job"
           className="w-full rounded-md border bg-background px-3 py-2 text-sm"
           value={jobId}
+          disabled={goalBound}
           onChange={(event) => {
             setJobId(event.target.value);
             setJdId("");
@@ -79,11 +91,12 @@ export default function NewInterviewForm({ jobs }: Props) {
             </option>
           ))}
         </select>
-        {jobId && jds.length > 1 ? (
+        {jobId && (jds.length > 1 || goalBound) ? (
           <select
             aria-label={t("interview.selectJd")}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
             value={jdId}
+            disabled={goalBound}
             onChange={(event) => setJdId(event.target.value)}
           >
             <option value="">{t("interview.selectJd")}</option>

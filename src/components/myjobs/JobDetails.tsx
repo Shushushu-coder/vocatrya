@@ -44,6 +44,7 @@ import { JobContactsTab } from "./job-details/JobContactsTab";
 import { ApplicationTimelineTab } from "./job-details/ApplicationTimelineTab";
 import { ApplicationResumeBindingPanel } from "./job-details/ApplicationResumeBindingPanel";
 import { MatchAnalysisPanel } from "./job-details/MatchAnalysisPanel";
+import { InterviewPrepSection } from "./job-details/InterviewPrepSection";
 import type { AbRolloutScope } from "@/lib/career/capabilities";
 import { isAbJobReadMode } from "@/lib/career/jobsReadCapabilities";
 import {
@@ -56,6 +57,7 @@ import { useI18n } from "@/i18n";
 const LEGACY_JOB_DETAIL_TABS = [
   "description",
   "match",
+  "prep",
   "letter",
   "notes",
   "contacts",
@@ -65,6 +67,7 @@ const AB_JOB_DETAIL_TABS = [
   "description",
   "timeline",
   "match",
+  "prep",
   "letter",
   "notes",
   "contacts",
@@ -77,6 +80,7 @@ const FRESH_FULL_JOB_DETAIL_TABS = [
   "description",
   "timeline",
   "match",
+  "prep",
   "notes",
 ] as const;
 
@@ -121,11 +125,22 @@ function JobDetails({
   // facts stay visible, every mutation affordance is removed, and restore
   // lives in Settings → Archived Data.
   const isArchived = job.abCompat?.uiStatus === "archived";
-  const jobDetailTabs = freshNativeFull
+  // The prep-goal surface follows the same full-AB capability contract the
+  // server enforces (assertPrepSurfaceEnabled). Under legacy/partial modes
+  // the tab is removed entirely — a direct ?tab=prep link then falls back
+  // to the default tab instead of dead-loading a denied surface.
+  const prepSurfaceEnabled = isFullAbCapabilityEnabled(
+    careerRuntimeMode ?? "",
+    abRolloutScope ?? "none",
+  );
+  const baseTabs = freshNativeFull
     ? FRESH_FULL_JOB_DETAIL_TABS
     : showTimeline
       ? AB_JOB_DETAIL_TABS
       : LEGACY_JOB_DETAIL_TABS;
+  const jobDetailTabs = prepSurfaceEnabled
+    ? baseTabs
+    : baseTabs.filter((tab) => tab !== "prep");
   const {
     open: openChat,
     startNewConversation,
@@ -302,6 +317,9 @@ function JobDetails({
             ) : (
               <TabsTrigger value="match">{t("automations.aiMatch")}</TabsTrigger>
             )}
+            {prepSurfaceEnabled && (
+              <TabsTrigger value="prep">{t("interviewPrep.tab")}</TabsTrigger>
+            )}
             {!freshNativeFull && (
               <TabsTrigger value="letter">{t("jobs.coverLetter")}</TabsTrigger>
             )}
@@ -361,6 +379,13 @@ function JobDetails({
               )}
             </Card>
           </TabsContent>
+          {prepSurfaceEnabled && (
+            <TabsContent value="prep" className="mt-4">
+              <Card className="p-6">
+                <InterviewPrepSection jobId={job.id} />
+              </Card>
+            </TabsContent>
+          )}
           {!freshNativeFull && (
             <TabsContent value="letter" className="mt-4">
               <Card className="p-6">

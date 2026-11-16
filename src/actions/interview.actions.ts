@@ -6,6 +6,10 @@ import { getServerLocale } from "@/i18n/server";
 import { mapInterviewError as mapProductError } from "@/lib/interview/productErrors";
 import { getInterviewReadiness } from "@/lib/interview/readiness";
 import type { CoachingMode } from "@/lib/interview/persistence/interviewEnums";
+import prisma from "@/lib/db";
+import { validatePrepSessionCreation } from "@/lib/interviewPrep/service";
+import { assertPrepSurfaceEnabled } from "@/lib/interviewPrep/surfaceGate";
+import { CareerRuntimeError } from "@/lib/career/errors";
 
 async function mapInterviewError(error: unknown) {
   return mapProductError(error, await getServerLocale());
@@ -55,19 +59,79 @@ export async function createInterviewSessionAction(input: {
   coachingMode?: CoachingMode;
   jobOpportunityId?: string | null;
   jobDescriptionVersionId?: string | null;
+  interviewPrepGoalId?: string | null;
 }) {
   try {
     const user = await requireUser();
+    // Goal-bound creation is validated before any planning/model work and
+    // must reuse the goal's frozen job/JD pair. A retransmit (or a session
+    // another window already bound) returns that session instead of
+    // creating a duplicate.
+    const prepGoalId = input.interviewPrepGoalId ?? null;
+    let prepGoalRevision: number | null = null;
+    if (prepGoalId) {
+      // The goal-bound path obeys the same surface capability gate as the
+      // goal actions — a restricted mode cannot reach it via this shortcut.
+      await assertPrepSurfaceEnabled(prisma);
+      const gate = await validatePrepSessionCreation(prisma, user.id, {
+        goalId: prepGoalId,
+        jobOpportunityId: input.jobOpportunityId ?? "",
+        jobDescriptionVersionId: input.jobDescriptionVersionId ?? "",
+      });
+      if (gate.alreadyBoundSessionId) {
+        const bound = await runtime().getInterviewSession(
+          user.id,
+          gate.alreadyBoundSessionId,
+        );
+        return {
+          success: true as const,
+          data: { ...bound, alreadyBound: true },
+        };
+      }
+      prepGoalRevision = gate.goalRevision;
+    }
     const created = await runtime().createInterviewSession({
       userId: user.id,
       coachingMode: input.coachingMode ?? "PRACTICE",
       jobOpportunityId: input.jobOpportunityId ?? null,
       jobDescriptionVersionId: input.jobDescriptionVersionId ?? null,
+      interviewPrepGoalId: prepGoalId,
+      expectedInterviewPrepGoalRevision: prepGoalRevision,
     });
     return { success: true as const, data: created };
   } catch (error) {
+    // The unique session→goal index also closes the double-create race:
+    // when the losing insert reports P2002, answer with the winning session.
+    if (
+      prepGoalIdFromInput(input) &&
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
+      const user = await requireUser();
+      const bound = await prisma.interviewSession.findUnique({
+        where: { interviewPrepGoalId: prepGoalIdFromInput(input)! },
+      });
+      if (bound) {
+        const loaded = await runtime().getInterviewSession(user.id, bound.id);
+        return {
+          success: true as const,
+          data: { ...loaded, alreadyBound: true },
+        };
+      }
+    }
+    if (error instanceof CareerRuntimeError) {
+      return { success: false as const, message: error.message, code: error.code };
+    }
     return mapInterviewError(error);
   }
+}
+
+function prepGoalIdFromInput(input: {
+  interviewPrepGoalId?: string | null;
+}): string | null {
+  const value = input?.interviewPrepGoalId;
+  return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
 export async function getInterviewSessionAction(sessionId: string) {

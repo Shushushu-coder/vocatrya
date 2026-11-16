@@ -44,6 +44,10 @@ const OPTIONAL_FKS = new Set<string>([
   "MatchEvidenceLink.resumeExpressionId",
   "InterviewSession.jobOpportunityId",
   "InterviewSession.jobDescriptionVersionId",
+  // SetNull binding: a session whose prep goal is absent from the backup
+  // (older file, pruned group) degrades to unbound — the practice history
+  // itself must never be lost over a missing goal pointer.
+  "InterviewSession.interviewPrepGoalId",
   // Phase B lock columns: a legacy backup has no AIConnection group, and a
   // pruned/dangling resolvedConnectionId degrades to null rather than
   // failing the import. AIBusinessAssignment.connectionId is deliberately

@@ -128,6 +128,7 @@ export type BackupModel =
   | "LegacyMigrationMap"
   | "QuestionBank"
   | "QuestionBankItem"
+  | "InterviewPrepGoal"
   | "InterviewSession"
   | "QuestionInstance"
   | "AnswerAttempt"
@@ -731,6 +732,20 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: { bankId: "QuestionBank", questionId: "Question" },
     scope: (userId) => ({ question: { createdBy: userId } }),
   },
+  // Long-lived user business state (never a runtime ledger): the goal pins
+  // the JD version it prepares against, so both FKs are required. The bound
+  // practice session points back through InterviewSession.interviewPrepGoalId
+  // (nullable — a goal without a session is the normal pre-practice state,
+  // and a session whose goal row is absent degrades to unbound).
+  InterviewPrepGoal: {
+    delegate: "interviewPrepGoal",
+    owner: "userId",
+    fks: {
+      jobOpportunityId: "JobOpportunity",
+      pinnedJobDescriptionVersionId: "JobDescriptionVersion",
+    },
+    scope: byUser,
+  },
   InterviewSession: {
     delegate: "interviewSession",
     owner: "userId",
@@ -738,6 +753,7 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
       jobOpportunityId: "JobOpportunity",
       jobDescriptionVersionId: "JobDescriptionVersion",
       resolvedConnectionId: "AIConnection",
+      interviewPrepGoalId: "InterviewPrepGoal",
     },
     scope: byUser,
   },
@@ -920,6 +936,9 @@ export const INSERT_ORDER: BackupModel[] = [
   "LegacyMigrationMap",
   "QuestionBank",
   "QuestionBankItem",
+  // Prep goals insert before sessions because InterviewSession carries the
+  // goal binding FK; wipe reverses this so sessions go first.
+  "InterviewPrepGoal",
   "InterviewSession",
   "QuestionInstance",
   "AnswerAttempt",
@@ -1058,6 +1077,7 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "MatchAnalysis",
   "ApplicationAttempt",
   "InterviewSession",
+  "InterviewPrepGoal",
   "AIConnection",
   "AIBusinessAssignment",
   "CandidateReferee",

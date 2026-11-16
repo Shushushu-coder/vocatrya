@@ -2035,9 +2035,25 @@
     "permissionsHint": "These tools are available to this conversation. Each tool enforces its approval rules and rechecks connection state when executed.",
     "permissionsUnavailable": "Could not load permissions. Reopen to retry.",
     "permissionsBoundary": "This view does not grant access or automatically approve operations. It does not grant arbitrary file or system access.",
-    "permissionApproval": {"always": "Always confirm", "conditional": "Confirm when required", "none": "No extra confirmation"},
-    "permissionTools": {"list_jobs": "List jobs", "get_job": "Read job", "get_resume": "Read resume", "review_resume": "Review resume", "match_job": "Analyze job match", "add_job": "Add job", "generate_cover_letter": "Generate cover letter", "notion_search": "Search Notion", "notion_read": "Read Notion", "notion_create_page": "Create Notion page", "notion_append_content": "Append Notion content", "notion_update_record": "Update Notion record"},
-
+    "permissionApproval": {
+      "always": "Always confirm",
+      "conditional": "Confirm when required",
+      "none": "No extra confirmation"
+    },
+    "permissionTools": {
+      "list_jobs": "List jobs",
+      "get_job": "Read job",
+      "get_resume": "Read resume",
+      "review_resume": "Review resume",
+      "match_job": "Analyze job match",
+      "add_job": "Add job",
+      "generate_cover_letter": "Generate cover letter",
+      "notion_search": "Search Notion",
+      "notion_read": "Read Notion",
+      "notion_create_page": "Create Notion page",
+      "notion_append_content": "Append Notion content",
+      "notion_update_record": "Update Notion record"
+    },
     "name": "Vocatrya",
     "triggerLabel": "Chat AI",
     "triggerTooltip": "Open Vocatrya Assistant",
@@ -3197,6 +3213,91 @@
       "DEEP_RESUME_VERSION_MISSING": "The resume version this analysis pinned was deleted.",
       "RESUME_VERSION_NOT_SUBMITTABLE": "The resume version this analysis pinned is no longer submittable.",
       "POLL_FAILED": "Lost contact with the task state — reload to check whether it finished."
+    }
+  },
+  "interviewPrep": {
+    "tab": "Prep",
+    "title": "Interview preparation",
+    "description": "One preparation goal per job: bound practice, real progress and a saved place to continue from.",
+    "create": "Create prep goal",
+    "creating": "Creating…",
+    "continue": "Continue preparing",
+    "viewSummary": "View summary",
+    "openSession": "Back to practice",
+    "pause": "Pause",
+    "resume": "Resume",
+    "end": "End goal",
+    "newRound": "Start a new round",
+    "linkExisting": "Link an existing practice",
+    "linkConfirm": "Link session",
+    "loadFailed": "Couldn't load the prep goal.",
+    "retry": "Retry",
+    "status": {
+      "ACTIVE": "Active",
+      "PAUSED": "Paused",
+      "COMPLETED": "Completed",
+      "ENDED": "Ended"
+    },
+    "source": {
+      "job": "Job: {title}",
+      "pinnedJd": "Prepared against JD v{version}",
+      "pinnedJdUnknown": "Prepared against a JD version that no longer exists",
+      "jdDrift": "Prepared against JD v{pinned}; the job now uses v{current}.",
+      "summaryProvenance": "Summary generated {date}{model}"
+    },
+    "progress": {
+      "title": "Progress",
+      "GOAL_CREATED": "Goal created",
+      "PRACTICE_STARTED": "Practice started ({answered}/{total} answered)",
+      "PRACTICE_EVIDENCE_READY": "Answers and feedback ready",
+      "SUMMARY_READY": "Interview summary saved",
+      "answeredPartial": "{answered}/{total} questions answered"
+    },
+    "pending": {
+      "title": "Still to do",
+      "START_PRACTICE": "Start a practice session",
+      "ANSWER_QUESTIONS": "Finish answering questions and collect feedback",
+      "GENERATE_SUMMARY": "Generate the interview summary",
+      "RETRY_SUMMARY": "Summary generation failed — retry from the practice page"
+    },
+    "blockers": {
+      "JOB_ARCHIVED": "This job is archived — history stays readable, but no new practice can start.",
+      "JOB_MISSING": "The job bound to this goal no longer exists.",
+      "PINNED_JD_MISSING": "The JD version this goal pinned no longer exists.",
+      "SESSION_MISSING": "The practice session this goal recorded is gone.",
+      "SESSION_ARCHIVED": "The bound practice session was archived."
+    },
+    "nextAction": {
+      "START_PRACTICE": "Suggested next: start practice",
+      "OPEN_SESSION": "Suggested next: continue the same practice",
+      "VIEW_SUMMARY": "Done — review the saved summary",
+      "RESUME_GOAL": "Paused — resume to continue",
+      "NEW_ROUND": "Suggested next: start a new round on the current JD",
+      "BLOCKED": "Blocked — resolve the issue above first",
+      "NONE": "No further action"
+    },
+    "completed": "Preparation complete — the interview summary is saved.",
+    "ended": "This goal was ended.",
+    "paused": "Paused — resume when you're ready.",
+    "linkPickerEmpty": "No compatible unlinked practice session for this job and JD version.",
+    "errors": {
+      "PREP_GOAL_NOT_FOUND": "This prep goal no longer exists.",
+      "PREP_GOAL_JOB_NOT_FOUND": "The bound job no longer exists.",
+      "PREP_GOAL_JOB_ARCHIVED": "Archived jobs cannot start a new prep round.",
+      "PREP_GOAL_JD_REQUIRED": "This job has no JD version to prepare against.",
+      "PREP_GOAL_JD_NOT_FOUND": "The pinned JD version no longer exists.",
+      "PREP_GOAL_CONFLICT": "This goal changed elsewhere — reload and try again.",
+      "PREP_GOAL_PAUSED": "Resume this prep goal first.",
+      "PREP_GOAL_NOT_ACTIVE": "This prep goal is no longer active.",
+      "PREP_GOAL_MATERIAL_MISMATCH": "The session must use the goal's pinned job and JD version.",
+      "PREP_GOAL_SESSION_NOT_FOUND": "That practice session no longer exists.",
+      "PREP_GOAL_SESSION_BOUND": "That session is already bound to a prep goal.",
+      "PREP_GOAL_SESSION_ARCHIVED": "That session is archived.",
+      "PREP_GOAL_SESSION_MATERIAL_MISMATCH": "That session was created against a different job or JD version.",
+      "PREP_GOAL_ALREADY_HAS_SESSION": "This goal already has a practice session.",
+      "PREP_GOAL_UNAVAILABLE": "Interview preparation is unavailable in this mode.",
+      "PREP_GOAL_REQUEST_INVALID": "The request is missing required fields.",
+      "PREP_GOAL_STATE_CHANGED": "The prep goal changed before the session was created. Reload and try again."
     }
   },
   "inputPrefs": {

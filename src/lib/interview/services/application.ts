@@ -153,6 +153,18 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
     feedbackReleasePolicy?: string | null;
     jobOpportunityId?: string | null;
     jobDescriptionVersionId?: string | null;
+    /**
+     * Prep-goal binding for goal-driven creation. Validated upstream by
+     * the prep service; the session row is born bound inside the same
+     * creation transaction, and the unique index dedupes retransmits.
+     */
+    interviewPrepGoalId?: string | null;
+    /**
+     * The goal revision observed by the upstream validation. Re-checked
+     * inside the creation transaction so a pause/end/new-round between
+     * validation and commit aborts the bind instead of stranding it.
+     */
+    expectedInterviewPrepGoalRevision?: number | null;
   }) {
     const jobContext = await jobContextPort.resolveJobContext({
       requestingUserId: input.userId,
@@ -239,6 +251,9 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
       knowledgeBaseVersion: knowledge.version,
       jobOpportunityId: jobContext.jobOpportunityId,
       jobDescriptionVersionId: jobContext.jobDescriptionVersionId,
+      interviewPrepGoalId: input.interviewPrepGoalId ?? null,
+      expectedInterviewPrepGoalRevision:
+        input.expectedInterviewPrepGoalRevision ?? null,
       createdVia: "USER",
       resolvedConnectionId: lock.resolvedConnectionId ?? null,
       resolvedModel: lock.resolvedModel ?? null,

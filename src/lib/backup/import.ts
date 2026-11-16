@@ -627,6 +627,39 @@ function remapConversationMessages(
   return changed ? JSON.stringify(parsed) : serialized;
 }
 
+// The prep-goal handoff snapshot embeds the ids of the entities it
+// verified (the goal itself, job, pinned/current JD versions, bound
+// session, summary generation). Every one was minted up front, so a deep
+// rewrite against the id map keeps the restored snapshot coherent — it is
+// still recomputed from live rows on the next read, but it must never
+// reference pre-restore ids.
+function remapEmbeddedIds(value: unknown, idMap: IdMap): unknown {
+  if (typeof value === "string") return idMap.get(value) ?? value;
+  if (Array.isArray(value)) {
+    return value.map((item) => remapEmbeddedIds(item, idMap));
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = remapEmbeddedIds(item, idMap);
+    }
+    return out;
+  }
+  return value;
+}
+
+function remapPrepHandoff(serialized: unknown, idMap: IdMap): unknown {
+  if (serialized === null || serialized === undefined) return serialized;
+  if (typeof serialized !== "string") return serialized;
+  try {
+    return JSON.stringify(remapEmbeddedIds(JSON.parse(serialized), idMap));
+  } catch {
+    // Malformed snapshots stay verbatim: the reader treats an unparsable
+    // snapshot as absent and rebuilds it deterministically.
+    return serialized;
+  }
+}
+
 export async function importBackup(
   bytes: Buffer,
   userId: string,
@@ -938,6 +971,12 @@ export async function importBackup(
               const restored = restoredConversations.get(row.id as string)!;
               payload.context = restored.context;
               payload.messages = restored.messages;
+            }
+            if (model === "InterviewPrepGoal") {
+              payload = {
+                ...payload,
+                handoffJson: remapPrepHandoff(row.handoffJson, idMap),
+              };
             }
             if (model === "TranscriptRevision") {
               if (payload.createdByUserId !== null && payload.createdByUserId !== undefined) {

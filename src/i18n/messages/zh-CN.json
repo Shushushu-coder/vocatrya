@@ -2035,9 +2035,25 @@
     "permissionsHint": "以下为当前会话的工具范围。审批由各工具的实际规则决定，连接状态会在执行时重新检查。",
     "permissionsUnavailable": "暂时无法获取权限信息，请重新打开查看。",
     "permissionsBoundary": "此入口仅展示现有权限，不会自动批准操作，也不授予模型任意文件或系统访问能力。",
-    "permissionApproval": {"always": "每次确认", "conditional": "按操作确认", "none": "无需额外确认"},
-    "permissionTools": {"list_jobs": "列出职位", "get_job": "读取职位", "get_resume": "读取简历", "review_resume": "诊断简历", "match_job": "职位匹配分析", "add_job": "录入职位", "generate_cover_letter": "生成求职信", "notion_search": "搜索 Notion", "notion_read": "读取 Notion", "notion_create_page": "创建 Notion 页面", "notion_append_content": "追加 Notion 内容", "notion_update_record": "更新 Notion 记录"},
-
+    "permissionApproval": {
+      "always": "每次确认",
+      "conditional": "按操作确认",
+      "none": "无需额外确认"
+    },
+    "permissionTools": {
+      "list_jobs": "列出职位",
+      "get_job": "读取职位",
+      "get_resume": "读取简历",
+      "review_resume": "诊断简历",
+      "match_job": "职位匹配分析",
+      "add_job": "录入职位",
+      "generate_cover_letter": "生成求职信",
+      "notion_search": "搜索 Notion",
+      "notion_read": "读取 Notion",
+      "notion_create_page": "创建 Notion 页面",
+      "notion_append_content": "追加 Notion 内容",
+      "notion_update_record": "更新 Notion 记录"
+    },
     "name": "Vocatrya",
     "triggerLabel": "咨询 Vocatrya",
     "triggerTooltip": "打开 Vocatrya 职业助手",
@@ -3197,6 +3213,91 @@
       "DEEP_RESUME_VERSION_MISSING": "本次分析固定的简历版本已被删除。",
       "RESUME_VERSION_NOT_SUBMITTABLE": "本次分析固定的简历版本已不可提交。",
       "POLL_FAILED": "与任务状态失联——请刷新确认任务是否已完成。"
+    }
+  },
+  "interviewPrep": {
+    "tab": "准备",
+    "title": "面试准备",
+    "description": "每个职位一个准备目标：绑定练习、真实进度，随时从上次的位置继续。",
+    "create": "创建面试准备目标",
+    "creating": "创建中…",
+    "continue": "继续准备",
+    "viewSummary": "查看总结",
+    "openSession": "返回练习",
+    "pause": "暂停",
+    "resume": "恢复",
+    "end": "结束目标",
+    "newRound": "开始新一轮",
+    "linkExisting": "关联已有练习",
+    "linkConfirm": "关联该练习",
+    "loadFailed": "加载准备目标失败。",
+    "retry": "重试",
+    "status": {
+      "ACTIVE": "进行中",
+      "PAUSED": "已暂停",
+      "COMPLETED": "已完成",
+      "ENDED": "已结束"
+    },
+    "source": {
+      "job": "职位：{title}",
+      "pinnedJd": "基于 JD v{version} 准备",
+      "pinnedJdUnknown": "基于一个已不存在的 JD 版本准备",
+      "jdDrift": "准备基于 JD v{pinned}，当前职位 JD 为 v{current}。",
+      "summaryProvenance": "总结生成于 {date}{model}"
+    },
+    "progress": {
+      "title": "进度",
+      "GOAL_CREATED": "目标已创建",
+      "PRACTICE_STARTED": "练习已开始（已答 {answered}/{total}）",
+      "PRACTICE_EVIDENCE_READY": "回答与反馈已就绪",
+      "SUMMARY_READY": "面试总结已保存",
+      "answeredPartial": "已回答 {answered}/{total} 题"
+    },
+    "pending": {
+      "title": "待完成",
+      "START_PRACTICE": "开始一次练习",
+      "ANSWER_QUESTIONS": "完成问题回答并获取反馈",
+      "GENERATE_SUMMARY": "生成面试总结",
+      "RETRY_SUMMARY": "总结生成失败——请在练习页重试"
+    },
+    "blockers": {
+      "JOB_ARCHIVED": "该职位已归档——历史记录仍可查看，但无法开始新的练习。",
+      "JOB_MISSING": "目标绑定的职位已不存在。",
+      "PINNED_JD_MISSING": "目标固定的 JD 版本已不存在。",
+      "SESSION_MISSING": "目标记录的练习会话已丢失。",
+      "SESSION_ARCHIVED": "绑定的练习会话已归档。"
+    },
+    "nextAction": {
+      "START_PRACTICE": "建议下一步：开始练习",
+      "OPEN_SESSION": "建议下一步：继续同一练习",
+      "VIEW_SUMMARY": "已完成——查看保存的总结",
+      "RESUME_GOAL": "已暂停——恢复后继续",
+      "NEW_ROUND": "建议下一步：基于当前 JD 开始新一轮",
+      "BLOCKED": "已阻塞——请先处理上方问题",
+      "NONE": "暂无更多动作"
+    },
+    "completed": "准备完成——面试总结已保存。",
+    "ended": "该目标已结束。",
+    "paused": "已暂停——恢复后继续。",
+    "linkPickerEmpty": "该职位与 JD 版本下没有可关联的未绑定练习。",
+    "errors": {
+      "PREP_GOAL_NOT_FOUND": "该准备目标已不存在。",
+      "PREP_GOAL_JOB_NOT_FOUND": "绑定的职位已不存在。",
+      "PREP_GOAL_JOB_ARCHIVED": "已归档的职位无法开始新一轮准备。",
+      "PREP_GOAL_JD_REQUIRED": "该职位没有可用于准备的 JD 版本。",
+      "PREP_GOAL_JD_NOT_FOUND": "固定的 JD 版本已不存在。",
+      "PREP_GOAL_CONFLICT": "目标已在别处更新——请刷新后重试。",
+      "PREP_GOAL_PAUSED": "请先恢复该准备目标。",
+      "PREP_GOAL_NOT_ACTIVE": "该准备目标已不在进行中。",
+      "PREP_GOAL_MATERIAL_MISMATCH": "练习必须使用目标固定的职位与 JD 版本。",
+      "PREP_GOAL_SESSION_NOT_FOUND": "该练习会话已不存在。",
+      "PREP_GOAL_SESSION_BOUND": "该练习已绑定到其他准备目标。",
+      "PREP_GOAL_SESSION_ARCHIVED": "该练习已归档。",
+      "PREP_GOAL_SESSION_MATERIAL_MISMATCH": "该练习是针对其他职位或 JD 版本创建的。",
+      "PREP_GOAL_ALREADY_HAS_SESSION": "该目标已绑定练习。",
+      "PREP_GOAL_UNAVAILABLE": "当前模式下不可用面试准备。",
+      "PREP_GOAL_REQUEST_INVALID": "请求缺少必要字段。",
+      "PREP_GOAL_STATE_CHANGED": "练习创建前目标已变化，请刷新后重试。"
     }
   },
   "inputPrefs": {

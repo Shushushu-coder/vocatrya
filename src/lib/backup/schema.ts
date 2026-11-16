@@ -11,8 +11,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 8;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+export const BACKUP_FORMAT_VERSION = 9;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -28,6 +28,7 @@ export const ManifestSchema = z.object({
     z.literal(6),
     z.literal(7),
     z.literal(8),
+    z.literal(9),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -1125,6 +1126,8 @@ const InterviewSession = z.object({
   currentQuestionInstanceId: optId,
   jobOpportunityId: optId,
   jobDescriptionVersionId: optId,
+  // Nullable goal binding — optional() keeps pre-v9 backups loadable.
+  interviewPrepGoalId: optId.optional(),
   createdVia: optStr,
   createdAt: dt,
   updatedAt: dt,
@@ -1294,6 +1297,29 @@ const DialogueTurn = z.object({
   createdAt: dt,
 });
 
+// User-owned interview prep goal (long-lived business state, backed up).
+// handoffJson is a deterministic snapshot — restored verbatim with its
+// embedded entity ids remapped; readers always recompute it from the bound
+// business records, so a stale snapshot can never resurrect old state.
+const InterviewPrepGoal = z.object({
+  id,
+  jobOpportunityId: id,
+  pinnedJobDescriptionVersionId: id,
+  pinnedJdContentHash: str,
+  status: str,
+  revision: int,
+  requestKey: str,
+  liveSlot: optStr,
+  handoffJson: optStr,
+  handoffGoalRevision: optInt,
+  handoffVerifiedAt: optDt,
+  pausedAt: optDt,
+  completedAt: optDt,
+  endedAt: optDt,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
 // REM-V1 derived schedule records. targetId is polymorphic (sourceType
 // selects the referenced table), so it is carried verbatim and remapped
 // per sourceType at restore time.
@@ -1395,6 +1421,7 @@ export const BackupDataSchema = z.object({
   LegacyMigrationMap: group(LegacyMigrationMap),
   QuestionBank: group(QuestionBank),
   QuestionBankItem: group(QuestionBankItem),
+  InterviewPrepGoal: group(InterviewPrepGoal),
   InterviewSession: group(InterviewSession),
   QuestionInstance: group(QuestionInstance),
   AnswerAttempt: group(AnswerAttempt),

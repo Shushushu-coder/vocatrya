@@ -138,6 +138,14 @@ export interface CreateSessionInput {
   knowledgeBaseVersion: string;
   jobOpportunityId?: string | null;
   jobDescriptionVersionId?: string | null;
+  /** Prep-goal binding written inside the creation transaction. */
+  interviewPrepGoalId?: string | null;
+  /**
+   * CAS guard for the goal binding: the creation transaction re-checks the
+   * goal's lifecycle, pinned job/JD pair and this revision before writing
+   * the session, so a stale pre-flight validation can never commit a bind.
+   */
+  expectedInterviewPrepGoalRevision?: number | null;
   createdVia?: string | null;
   /**
    * Caller-allocated session id (M4). The creation flow mints it before
@@ -327,6 +335,33 @@ export class VocatryaInterviewPersistence {
     try {
       return await this.db.$transaction(async (tx) => {
         const delegated = tx as unknown as PrismaClient;
+        if (input.interviewPrepGoalId) {
+          // In-transaction goal re-validation: the pre-flight check ran
+          // outside this boundary, so a pause/end/new-round landing in
+          // between must abort the bind (fail-closed on a missing
+          // expected revision) rather than strand a session on a dead
+          // or moved goal. One atomic CAS claims the binding and bumps
+          // the goal's revision so concurrent mutations lose.
+          const claimed = await delegated.interviewPrepGoal.updateMany({
+            where: {
+              id: input.interviewPrepGoalId,
+              userId: input.actorUserId,
+              status: "ACTIVE",
+              revision: input.expectedInterviewPrepGoalRevision ?? -1,
+              jobOpportunityId: jobPair.jobOpportunityId ?? "",
+              pinnedJobDescriptionVersionId:
+                jobPair.jobDescriptionVersionId ?? "",
+              liveSlot: jobPair.jobOpportunityId ?? "",
+            },
+            data: { revision: { increment: 1 } },
+          });
+          if (claimed.count !== 1) {
+            throw new DomainError(
+              "PREP_GOAL_STATE_CHANGED",
+              "The prep goal changed before the practice session was created. Reload and try again.",
+            );
+          }
+        }
         const session = await delegated.interviewSession.create({
           data: {
             id: sessionId,
@@ -337,6 +372,7 @@ export class VocatryaInterviewPersistence {
             knowledgeBaseVersion: input.knowledgeBaseVersion,
             jobOpportunityId: jobPair.jobOpportunityId,
             jobDescriptionVersionId: jobPair.jobDescriptionVersionId,
+            interviewPrepGoalId: input.interviewPrepGoalId ?? null,
             createdVia: input.createdVia ?? "USER",
             resolvedConnectionId: input.resolvedConnectionId ?? null,
             resolvedModel: input.resolvedModel ?? null,

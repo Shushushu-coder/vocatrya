@@ -399,6 +399,44 @@ describe("JobDetails – tabs", () => {
     expect(screen.getByRole("tab", { name: /timeline/i })).toBeInTheDocument();
   });
 
+  // The prep-goal surface follows the server's full-AB capability gate —
+  // restricted modes must not show an entry that would dead-load.
+  it("shows the prep tab under full AB and hides it in restricted modes", () => {
+    const { rerender } = render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="full"
+      />,
+    );
+    expect(screen.getByRole("tab", { name: /^prep$/i })).toBeInTheDocument();
+
+    rerender(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="AB_ENABLED"
+        abRolloutScope="none"
+      />,
+    );
+    expect(
+      screen.queryByRole("tab", { name: /^prep$/i }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <JobDetails
+        {...baseProps}
+        job={makeJob()}
+        careerRuntimeMode="LEGACY_ONLY"
+        abRolloutScope="none"
+      />,
+    );
+    expect(
+      screen.queryByRole("tab", { name: /^prep$/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows an honest unbound submitted resume on the timeline", async () => {
     vi.mocked(getApplicationTimeline).mockResolvedValue({
       success: true,
