@@ -38,6 +38,9 @@ vi.mock("@/components/settings/InterviewAiSettings", () => ({
 vi.mock("@/components/settings/DataSettings", () => ({
   default: () => <div data-testid="data-settings" />,
 }));
+vi.mock("@/components/settings/DataMigrationGuide", () => ({
+  default: () => <div data-testid="data-migration-guide" />,
+}));
 vi.mock("@/components/settings/DisplaySettings", () => ({
   default: () => <div data-testid="display-settings" />,
 }));

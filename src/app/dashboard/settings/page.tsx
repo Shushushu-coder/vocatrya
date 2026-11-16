@@ -12,6 +12,7 @@ import ManagedRechargeCard from "@/components/settings/ManagedRechargeCard";
 import InterviewAiSettings from "@/components/settings/InterviewAiSettings";
 import ArchiveSettings from "@/components/settings/ArchiveSettings";
 import DataSettings from "@/components/settings/DataSettings";
+import DataMigrationGuide from "@/components/settings/DataMigrationGuide";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import McpAccessSettings from "@/components/settings/McpAccessSettings";
 import NotificationsSettings from "@/components/settings/NotificationsSettings";
@@ -230,6 +231,7 @@ function Settings() {
               title={text("settings.sections.dataPrivacy", "Data & Privacy")}
             >
               <div className="space-y-6">
+                <DataMigrationGuide />
                 <DataSettings />
                 {/* MCP token management stays reachable as a compat sub-area
                     inside Data & Privacy; fresh-native surfaces still hide it. */}
