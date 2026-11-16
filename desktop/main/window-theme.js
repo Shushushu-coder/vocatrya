@@ -22,7 +22,7 @@ function registerWindowThemeIpc({ ipcMain, nativeTheme, window, origin, assetsRo
     // which uses --background/--foreground (globals.css).
     try {
       window.setTitleBarOverlay(theme === "dark"
-        ? { height: 36, color: "#020817", symbolColor: "#f8fafc" }
+        ? { height: 36, color: "#09090b", symbolColor: "#e4e4e7" }
         : { height: 36, color: "#ffffff", symbolColor: "#020817" });
     } catch {
       // Pre-overlay Electron builds: icon swap above still applies.
