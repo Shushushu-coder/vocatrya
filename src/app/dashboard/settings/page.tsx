@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import GeneralSettings from "@/components/settings/GeneralSettings";
+import AiServicesLayout from "@/components/settings/AiServicesLayout";
 import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import ByokConnectionsCard from "@/components/settings/ByokConnectionsCard";
@@ -170,15 +171,11 @@ function Settings() {
               id="ai-services"
               title={text("settings.sections.aiServices", "AI Services")}
             >
-              <div className="space-y-6">
-                {/* The three AI routes stay distinct: managed subscription,
-                    account login via provider runtimes, and user-held BYOK
-                    credentials. SET-04 replaces this stack with the tabbed
-                    services panel. */}
+              <AiServicesLayout>
                 <ManagedAiCard />
                 <AiConnectionsCard />
                 <ByokConnectionsCard />
-              </div>
+              </AiServicesLayout>
             </SectionShell>
           )}
           {activeSection === "ai-assignments" && (

@@ -1,5 +1,9 @@
 "use server";
 
+import { effectiveAgentToolNames, agentToolApproval } from "@/lib/agent/toolPermissions";
+import { resolveNotionAgentToolNames } from "@/lib/extensions/notion/service";
+import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
+import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 import { isManagedResolution } from "@/lib/ai/business-execution-lock";
 
@@ -52,6 +56,7 @@ import {
 // action export, which fails the dashboard client bundle.
 import type {
   AgentChatPreflight,
+  AgentToolPermissionSnapshot,
   ChatConversationSnapshot,
   ChatConversationSummary,
   EligibleChatModel,
@@ -730,3 +735,27 @@ export const cancelChatConversationRequest = async (conversationId: string, requ
     return { success: true as const, data: snapshotOf(row) };
   } catch (error) { return fail(error, "Failed to cancel conversation request."); }
 };
+
+/** Read-only preview; execution still rechecks connection state and approvals. */
+export async function getAgentToolPermissions(input: { conversationId?: string | null; agentRole?: string | null }): Promise<{
+  success: boolean;
+  data?: AgentToolPermissionSnapshot;
+  message?: string;
+  code?: string;
+}> {
+  try {
+    const user = await requireUser();
+    const row = input.conversationId ? await getOwnedChatConversation(user.id, input.conversationId) : null;
+    if (input.conversationId && !row) throw new ChatConversationNotFoundError();
+    const role = normalizeAgentRole(row ? row.agentRole : input.agentRole);
+    const runtime = await resolveCareerRuntimeMode(prisma);
+    const freshNativeFull = isFreshNativeFullSurface(runtime);
+    const notionTools = await resolveNotionAgentToolNames(user.id).catch(() => []);
+    return { success: true as const, data: {
+      role,
+      tools: effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools }).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull) })),
+    } };
+  } catch (error) {
+    return fail(error, "Could not load tool permissions");
+  }
+}

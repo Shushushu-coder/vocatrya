@@ -256,11 +256,11 @@ export async function handleNotionOAuthCallback(input: {
   code?: string;
   state?: string;
   error?: string;
-}, deps: Deps = {}): Promise<{ redirectUrl: string | null }> {
+}, deps: Deps = {}): Promise<{ redirectUrl: string | null; connected: boolean }> {
   const db = deps.db ?? prisma;
   const state = input.state;
   if (!state) {
-    return { redirectUrl: null };
+    return { redirectUrl: null, connected: false };
   }
   const row = await getNotionConnectionByStateHash(hashPendingState(state), db);
   const pending = row ? await loadPendingFlow(row) : null;
@@ -269,8 +269,9 @@ export async function handleNotionOAuthCallback(input: {
     appOrigin
       ? {
           redirectUrl: `${appOrigin}/dashboard/extensions/notion?${suffix}`,
+          connected: suffix === "notion=connected",
         }
-      : { redirectUrl: null };
+      : { redirectUrl: null, connected: false };
 
   const settle = async () => {
     if (!row || !pending) return done("notion=error&code=NOTION_OAUTH_STATE_MISMATCH");

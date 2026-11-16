@@ -61,3 +61,8 @@ export type EligibleChatModel = {
   displayName: string;
   provider: string;
 };
+
+export type AgentToolPermissionSnapshot = {
+  role: AgentRole | null;
+  tools: { name: string; approval: "always" | "conditional" | "none" }[];
+};

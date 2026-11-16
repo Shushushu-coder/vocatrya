@@ -4,12 +4,16 @@
 // TEXT_ONLY one-shot seam; MATCH_ANALYSIS is resolved by the fresh-native
 // fast-screening flow. This spec guards the honest-capability invariant:
 // no purpose renders a fake or non-interactive "Not provided" row.
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { toastError } from "@/lib/toast";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { clearBusinessAiAssignment, listBusinessAiAssignments, setBusinessAiAssignment } from "@/actions/aiAssignment.actions";
 
-vi.mock("@/i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("@/i18n", () => {
+  const t = (key: string) => key;
+  return { useI18n: () => ({ t }) };
+});
 vi.mock("@/actions/shared", () => ({ requireUser: () => ({ id: "u" }) }));
 vi.mock("@/lib/toast", () => ({ toastSuccess: vi.fn(), toastError: vi.fn() }));
 // The real list actions run against this mocked projection — no connections,
@@ -137,4 +141,49 @@ describe("AiAssignmentsCard — all purposes editable now that consumers exist",
     expect(screen.getByTestId(REFLECTION_ROW_TESTID)).toBeInTheDocument();
     expect(screen.getAllByRole("combobox")).toHaveLength(6);
   });
+});
+
+it("keeps other edits when one assignment is saved and restores saved values after remount", async () => {
+  const rows = ["MATCH_ANALYSIS", "CAREER_REFLECTION"].map((purpose) => ({
+    id: purpose, purpose, connectionId: "saved-connection", model: `${purpose}-model`,
+    connection: { id: "saved-connection", provider: "DEEPSEEK", backendKind: "LOCAL_BYOK", displayName: "Saved BYOK", status: "CONNECTED" },
+  }));
+  vi.mocked(listBusinessAiAssignments).mockImplementation(async () => ({ success: true, data: rows.map(row => ({ ...row })) }));
+  vi.mocked(setBusinessAiAssignment).mockImplementation(async (input) => {
+    Object.assign(rows.find(row => row.purpose === input.purpose)!, { model: input.model });
+    return { success: true, data: { ...rows.find(row => row.purpose === input.purpose)! } };
+  });
+  const view = render(<AiAssignmentsCard />);
+  await screen.findByDisplayValue("MATCH_ANALYSIS-model");
+  fireEvent.change(screen.getByDisplayValue("MATCH_ANALYSIS-model"), { target: { value: "new-match" } });
+  fireEvent.change(screen.getByDisplayValue("CAREER_REFLECTION-model"), { target: { value: "draft-reflection" } });
+  fireEvent.click(within(screen.getByTestId(MATCH_ROW_TESTID)).getByRole("button", { name: "common.save" }));
+  await screen.findByDisplayValue("new-match");
+  expect(screen.getByDisplayValue("draft-reflection")).toBeInTheDocument();
+  view.unmount();
+  render(<AiAssignmentsCard />);
+  await screen.findByDisplayValue("new-match");
+  expect(screen.getByDisplayValue("CAREER_REFLECTION-model")).toBeInTheDocument();
+  expect(within(screen.getByTestId(MATCH_ROW_TESTID)).getByRole("combobox")).toHaveTextContent("Saved BYOK");
+});
+
+it("retains a saved pair when clearing cannot be confirmed", async () => {
+  vi.mocked(listBusinessAiAssignments).mockResolvedValue({ success: true, data: [{
+    id: "saved", purpose: "MATCH_ANALYSIS", connectionId: "saved-connection", model: "keep-model",
+    connection: { id: "saved-connection", provider: "DEEPSEEK", backendKind: "LOCAL_BYOK", displayName: "Saved BYOK", status: "CONNECTED" },
+  }] });
+  vi.mocked(clearBusinessAiAssignment).mockRejectedValueOnce(new Error("transport"));
+  render(<AiAssignmentsCard />);
+  await screen.findByDisplayValue("keep-model");
+  fireEvent.click(within(screen.getByTestId(MATCH_ROW_TESTID)).getByRole("button", { name: "settings.aiAssignClear" }));
+  await waitFor(() => expect(toastError).toHaveBeenCalledWith("settings.aiAssignSaveUnconfirmed"));
+  expect(screen.getByDisplayValue("keep-model")).toBeInTheDocument();
+});
+
+it("shows a retryable load error instead of presenting saved assignments as empty", async () => {
+  vi.mocked(listBusinessAiAssignments).mockResolvedValueOnce({ success: false, message: "offline" });
+  render(<AiAssignmentsCard />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("settings.aiAssignLoadFailed");
+  expect(screen.queryByTestId(MATCH_ROW_TESTID)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "common.retry" })).toBeEnabled();
 });

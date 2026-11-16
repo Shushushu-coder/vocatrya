@@ -1,9 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import { toastError } from "@/lib/toast";
 
-vi.mock("@/i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("@/i18n", () => {
+  const t = (key: string) => key;
+  return { useI18n: () => ({ t }) };
+});
 vi.mock("@/actions/shared", () => ({ requireUser: () => ({ id: "u" }) }));
 vi.mock("@/lib/toast", () => ({ toastSuccess: vi.fn(), toastError: vi.fn() }));
 const persisted = vi.hoisted(() => [
@@ -89,9 +92,10 @@ it("explains Coming Soon, not a generic error, when a historical Managed assignm
   const user = userEvent.setup();
   render(<AiAssignmentsCard />);
   await waitFor(() => expect(screen.getByDisplayValue("stable-model")).toBeInTheDocument());
+  fireEvent.change(screen.getByDisplayValue("stable-model"), { target: { value: "edited-model" } });
   await user.click(screen.getAllByRole("button", { name: "common.save" })[0]);
   await waitFor(() => expect(toastError).toHaveBeenCalledWith("settings.aiAssignManagedComingSoon"));
-  expect(assignManaged).toHaveBeenCalledWith({ purpose: "GLOBAL_DEFAULT", modelKey: "stable-model" });
+  expect(assignManaged).toHaveBeenCalledWith({ purpose: "GLOBAL_DEFAULT", modelKey: "edited-model" });
 });
 
 it.each([
@@ -102,6 +106,37 @@ it.each([
   const user = userEvent.setup();
   render(<AiAssignmentsCard />);
   await waitFor(() => expect(screen.getByDisplayValue("stable-model")).toBeInTheDocument());
+  fireEvent.change(screen.getByDisplayValue("stable-model"), { target: { value: "edited-model" } });
   await user.click(screen.getAllByRole("button", { name: "common.save" })[0]);
   await waitFor(() => expect(toastError).toHaveBeenCalledWith(messageKey));
+});
+
+it("does not mark an unchanged Managed assignment dirty", async () => {
+  render(<AiAssignmentsCard />);
+  await screen.findByDisplayValue("stable-model");
+  expect(screen.getAllByRole("button", { name: "common.save" })[0]).toBeDisabled();
+});
+
+it("keeps the edited Managed model and explains an unconfirmed transport result", async () => {
+  assignManaged.mockRejectedValueOnce(new Error("transport"));
+  render(<AiAssignmentsCard />);
+  await screen.findByDisplayValue("stable-model");
+  fireEvent.change(screen.getByDisplayValue("stable-model"), { target: { value: "retry-model" } });
+  fireEvent.click(screen.getAllByRole("button", { name: "common.save" })[0]);
+  await waitFor(() => expect(toastError).toHaveBeenCalledWith("settings.aiAssignSaveUnconfirmed"));
+  expect(screen.getByDisplayValue("retry-model")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "common.save" })[0]).toBeEnabled();
+});
+
+it("uses the committed Managed assignment returned by save without another overview read", async () => {
+  assignManaged.mockResolvedValueOnce({ success: true, data: {
+    id: "historical", purpose: "GLOBAL_DEFAULT", connectionId: "managed", model: "committed-model",
+    connection: { id: "managed", provider: "VOCATRYA", backendKind: "MANAGED_GATEWAY", displayName: "Vocatrya Managed", status: "CONNECTED" },
+  } });
+  render(<AiAssignmentsCard />);
+  await screen.findByDisplayValue("stable-model");
+  fireEvent.change(screen.getByDisplayValue("stable-model"), { target: { value: "committed-model" } });
+  fireEvent.click(screen.getAllByRole("button", { name: "common.save" })[0]);
+  await waitFor(() => expect(screen.getAllByRole("button", { name: "common.save" })[0]).toBeDisabled());
+  expect(screen.getByDisplayValue("committed-model")).toBeInTheDocument();
 });

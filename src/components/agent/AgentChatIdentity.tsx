@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, ChevronDown } from "lucide-react";
 import { listEligibleChatModels } from "@/actions/agentChat.actions";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { Button } from "@/components/ui/button";
@@ -91,11 +91,14 @@ export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
         <button
           type="button"
           data-testid="agent-identity"
-          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+          className={`flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-full border px-2.5 text-xs text-foreground hover:bg-muted ${compact ? "max-w-full" : "max-w-sm"}`}
+          title={label}
+          aria-expanded={open}
           aria-label={label || t("agent.selectModel")}
         >
           {locked ? <Lock className="h-3 w-3 shrink-0" aria-hidden /> : null}
-          <span className={`truncate font-mono ${compact ? "max-w-24" : "max-w-40"}`}>{label}</span>
+          <span className="min-w-0 truncate">{label}</span>
+          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" className="w-72 space-y-2 p-3">

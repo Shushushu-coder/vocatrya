@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
+import { AiServiceSlot, useAiServicesLayout } from "./AiServicesLayout";
 import { Button } from "../ui/button";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
@@ -175,6 +176,7 @@ const ERROR_KEY: Record<string, string> = {
  */
 function AiConnectionsCard() {
   const { t } = useI18n();
+  const integrated = useAiServicesLayout();
   const [bridgeAvailable] = useState(
     () => typeof window !== "undefined" && Boolean(window.vocatryaAi),
   );
@@ -458,11 +460,18 @@ function AiConnectionsCard() {
     [mintTicket, errorMessage, t],
   );
 
-  if (!bridgeAvailable) return null;
+  if (!bridgeAvailable) return integrated ? (
+    <AiServiceSlot placement="available">
+      <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+        <h4 className="font-medium">{t("settings.aiConnectionsTitle")}</h4>
+        <p className="mt-1 text-muted-foreground">{t("settings.aiServicesDesktopOnly")}</p>
+      </div>
+    </AiServiceSlot>
+  ) : null;
 
   return (
-    <div className="space-y-4 rounded-lg border p-4">
-      <div>
+    <div className={integrated ? "contents" : "space-y-4 rounded-lg border p-4"}>
+      <div className={integrated ? "hidden" : undefined}>
         <h3 className="text-lg font-medium">{t("settings.aiConnectionsTitle")}</h3>
         <p className="text-sm text-muted-foreground">
           {t("settings.aiConnectionsDescription")}
@@ -481,14 +490,13 @@ function AiConnectionsCard() {
         const updateChecking = updateBusy[backend.backendKind] === true;
         const updateFailed = updateIpcFailed[backend.backendKind] === true;
         return (
-          <section
-            key={backend.backendKind}
-            className="space-y-3 rounded-md border p-3"
-          >
+          <AiServiceSlot key={backend.backendKind} placement={backendConnections.length > 0 || isConnecting ? "connected" : "available"}>
+          <section className="min-w-0 space-y-3 rounded-lg border bg-card p-3">
+
             {/* Product + runtime are both always visible — a runtime can
                 host several account products (OpenCode Go / Zen) so the
                 runtime label disambiguates what executes the session. */}
-            <div className="flex items-center justify-between">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
               <h4 className="font-medium">
                 {backend.providerLabel}{" "}
                 <span className="text-sm font-normal text-muted-foreground">
@@ -545,6 +553,8 @@ function AiConnectionsCard() {
                 ))}
               </div>
             )}
+            <details className="text-sm" open={integrated ? undefined : true}>
+              <summary className="cursor-pointer text-muted-foreground">{t("settings.aiServicesRuntimeDetails")}</summary>
             {/* Online update check — the UPDATE_AVAILABLE verdict comes
                 from a real upstream comparison (effectiveState), never
                 from the local probe alone. Checking never installs or
@@ -681,6 +691,8 @@ function AiConnectionsCard() {
               </div>
             )}
 
+            </details>
+
             <div className="flex flex-wrap items-center gap-2">
               {isConnecting ? (
                 <>
@@ -742,7 +754,7 @@ function AiConnectionsCard() {
                     className="rounded-md border p-3 space-y-2"
                   >
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="min-w-0 break-words">
                         <span className="font-medium">
                           {connection.displayName}
                         </span>
@@ -873,6 +885,7 @@ function AiConnectionsCard() {
               </ul>
             )}
           </section>
+          </AiServiceSlot>
         );
       })}
     </div>

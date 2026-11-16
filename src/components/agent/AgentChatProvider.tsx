@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -241,18 +242,30 @@ function useAgentChatValue(
     handleMouseDown: startResize,
     isDragging: isResizing,
     isExpanded: isPanelExpanded,
-    toggleExpand: togglePanelExpand,
+    toggleExpand,
   } = useResizablePanel(
     APP_CONSTANTS.AGENT_CHAT_PANEL_WIDTH_KEY,
     APP_CONSTANTS.AGENT_CHAT_PANEL_MIN_WIDTH,
   );
 
+  // Passive navigation/sidebar changes restore the docked width before paint.
   const lastPathnameRef = useRef(pathname);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const navigated = lastPathnameRef.current !== pathname;
     lastPathnameRef.current = pathname;
-    if (isPanelExpanded && (sidebarExpanded || navigated)) togglePanelExpand();
-  }, [sidebarExpanded, isPanelExpanded, pathname, togglePanelExpand]);
+    if (isPanelExpanded && (sidebarExpanded || navigated)) toggleExpand();
+  }, [sidebarExpanded, isPanelExpanded, pathname, toggleExpand]);
+
+  // Collapse the sidebar and expand against its final footprint in one commit;
+  // measuring its animated DOM width here would produce a stale target.
+  const togglePanelExpand = useCallback(() => {
+    if (isPanelExpanded) {
+      toggleExpand();
+      return;
+    }
+    if (sidebarExpanded) collapseSidebar();
+    toggleExpand(window.innerWidth - APP_CONSTANTS.SIDEBAR_COLLAPSED_OUTER_PX);
+  }, [isPanelExpanded, sidebarExpanded, collapseSidebar, toggleExpand]);
 
   const [interruptedTurn, setInterruptedTurn] = useState(false);
   // Presentation-only completion signal; errors, aborts and approval waits stay idle.

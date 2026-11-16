@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AiServiceSlot } from "./AiServicesLayout";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { CheckCircle, Loader2, RefreshCw, XCircle } from "lucide-react";
@@ -79,7 +80,8 @@ function ManagedAiCard() {
     !!entitlement && entitlement.allowedModels.length === 0;
 
   return (
-    <div className="space-y-4 rounded-lg border p-4">
+    <AiServiceSlot placement={connection && !comingSoon ? "connected" : "available"}>
+    <div className="min-w-0 space-y-4 rounded-lg border bg-card p-4">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium">{t("settings.managedTitle")}</h3>
@@ -252,6 +254,7 @@ function ManagedAiCard() {
         </div>
       )}
     </div>
+    </AiServiceSlot>
   );
 }
 

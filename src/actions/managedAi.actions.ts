@@ -5,6 +5,7 @@ import { requireUser } from "./shared";
 import { handleError } from "@/lib/utils";
 import {
   AssignmentWriteError,
+  type BusinessAssignmentSummary,
   assignManagedBusinessSource,
 } from "@/lib/ai/assignments";
 import { bootstrapManagedAiForUser } from "@/lib/ai/managed-bootstrap";
@@ -203,6 +204,7 @@ export async function assignManagedBusinessAiSource(input: {
   modelKey: string;
 }): Promise<{
   success: boolean;
+  data?: BusinessAssignmentSummary;
   code?: string;
   message?: string;
 }> {
@@ -211,12 +213,12 @@ export async function assignManagedBusinessAiSource(input: {
     if (managedAiAvailability() !== "ENABLED") {
       return { success: false, code: MANAGED_NOT_LAUNCHED, message: "Managed AI is not available in this release" };
     }
-    await assignManagedBusinessSource({
+    const data = await assignManagedBusinessSource({
       userId: user.id,
       purpose: input?.purpose ?? "",
       modelKey: input?.modelKey ?? "",
     });
-    return { success: true };
+    return { success: true, data };
   } catch (error) {
     if (error instanceof AssignmentWriteError) {
       return { success: false, code: error.code, message: error.message };

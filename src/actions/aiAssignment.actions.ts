@@ -51,18 +51,19 @@ export async function setBusinessAiAssignment(input: {
   model: string;
 }): Promise<{
   success: boolean;
+  data?: BusinessAssignmentSummary;
   code?: string;
   message?: string;
 }> {
   try {
     const user = await requireUser();
-    await setBusinessAssignment({
+    const data = await setBusinessAssignment({
       userId: user.id,
       purpose: input?.purpose ?? "",
       connectionId: input?.connectionId ?? "",
       model: input?.model ?? "",
     });
-    return { success: true };
+    return { success: true, data };
   } catch (error) {
     if (error instanceof AssignmentWriteError) {
       return { success: false, code: error.code, message: error.message };

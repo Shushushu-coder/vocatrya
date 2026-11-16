@@ -38,10 +38,13 @@ export function useResizablePanel(storageKey: string, minWidth: number = MIN_WID
     e.preventDefault();
   }, []);
 
-  const toggleExpand = useCallback(() => {
+  const toggleExpand = useCallback((expandedWidthPx?: number) => {
+    const previous = widthRef.current;
     let next: number;
     if (isExpanded) {
       next = DEFAULT_WIDTH;
+    } else if (typeof expandedWidthPx === "number") {
+      next = expandedWidthPx;
     } else {
       const sidebarWidth =
         document.getElementById(APP_CONSTANTS.SIDEBAR_DOM_ID)?.offsetWidth ?? 0;
@@ -50,7 +53,8 @@ export function useResizablePanel(storageKey: string, minWidth: number = MIN_WID
     widthRef.current = next;
     setWidth(next);
     setIsExpanded(!isExpanded);
-    saveToLocalStorage(storageKey, next);
+    // Expanded state is transient: persist only the width to reopen docked.
+    saveToLocalStorage(storageKey, isExpanded ? next : previous);
   }, [isExpanded, storageKey]);
 
   useEffect(() => {

@@ -111,6 +111,14 @@ const MANAGED_CONNECTION_ID = "__managed__";
 
 type Draft = { connectionId: string; model: string };
 
+function assignmentDraft(assignment: BusinessAssignmentSummary): Draft {
+  return {
+    connectionId: assignment.connection?.backendKind === "MANAGED_GATEWAY"
+      ? MANAGED_CONNECTION_ID : assignment.connectionId,
+    model: assignment.model,
+  };
+}
+
 type ModelEntry = {
   id: string;
   displayName: string;
@@ -146,6 +154,7 @@ function connectionLabel(connection: ConnectionSummary): string {
 function AiAssignmentsCard() {
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [assignments, setAssignments] = useState<
     Record<string, BusinessAssignmentSummary>
@@ -172,14 +181,15 @@ function AiAssignmentsCard() {
   // unreachable — the Managed option still renders with its error code.
   const [managed, setManaged] = useState<ManagedAiOverview | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (savedPurpose?: string) => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const [connResult, assignResult, interviewResult, managedResult] = await Promise.all([
         listAssignableAiConnections(),
         listBusinessAiAssignments(),
-        resolveBusinessAiConfig({ purpose: "INTERVIEW" }),
-        getManagedAiOverview(),
+        resolveBusinessAiConfig({ purpose: "INTERVIEW" }).catch(() => ({ success: false, data: undefined })),
+        getManagedAiOverview().catch(() => ({ success: false, data: undefined })),
       ]);
       if (managedResult.success && managedResult.data) {
         setManaged(managedResult.data);
@@ -218,31 +228,29 @@ function AiAssignmentsCard() {
           SETTINGS_BYOK_PROVIDERS.some((provider) => provider.toUpperCase() === connection.provider),
         ));
       }
+      if (!assignResult.success || !assignResult.data) {
+        throw new Error(assignResult.message || t("settings.aiConnErrGeneric"));
+      }
       const nextAssignments: Record<string, BusinessAssignmentSummary> = {};
       const nextDrafts: Record<string, Draft> = {};
-      if (assignResult.success && assignResult.data) {
-        for (const assignment of assignResult.data) {
-          nextAssignments[assignment.purpose] = assignment;
-          nextDrafts[assignment.purpose] = {
-            // Saved Managed rows surface as the Managed sentinel — the
-            // connection id stays server-side.
-            connectionId:
-              assignment.connection?.backendKind === "MANAGED_GATEWAY"
-                ? MANAGED_CONNECTION_ID
-                : assignment.connectionId,
-            model: assignment.model,
-          };
-        }
+      for (const assignment of assignResult.data) {
+        nextAssignments[assignment.purpose] = assignment;
+        nextDrafts[assignment.purpose] = assignmentDraft(assignment);
       }
       setAssignments(nextAssignments);
-      setDrafts(nextDrafts);
+      setDrafts((previous) => savedPurpose
+        ? { ...previous, [savedPurpose]: nextDrafts[savedPurpose] ?? { connectionId: "", model: "" } }
+        : nextDrafts);
       if (interviewResult.success && interviewResult.data) {
         setInterview(interviewResult.data);
       }
+    } catch {
+      setLoadFailed(true);
+      toastError(t("settings.aiAssignLoadFailed"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -304,17 +312,17 @@ function AiAssignmentsCard() {
         toastError(t("settings.aiConnErrBackendUnavailable"));
         return;
       }
-      const ticketResult = await mintAiConnectionTicket({
-        operation: "listModels",
-        backendKind: connection.backendKind,
-        connectionId: connection.id,
-      });
-      if (!ticketResult.success || !ticketResult.data) {
-        toastError(ticketResult.message || t("settings.aiConnErrGeneric"));
-        return;
-      }
       setCatalogBusy(connection.id);
       try {
+        const ticketResult = await mintAiConnectionTicket({
+          operation: "listModels",
+          backendKind: connection.backendKind,
+          connectionId: connection.id,
+        });
+        if (!ticketResult.success || !ticketResult.data) {
+          toastError(ticketResult.message || t("settings.aiConnErrGeneric"));
+          return;
+        }
         const result = await ai.listModels({
           connectionId: connection.id,
           ticket: ticketResult.data.ticket,
@@ -324,6 +332,8 @@ function AiAssignmentsCard() {
         } else {
           toastError(t("settings.aiConnErrModelUnavailable"));
         }
+      } catch {
+        toastError(t("settings.aiConnErrModelUnavailable"));
       } finally {
         setCatalogBusy(null);
       }
@@ -394,6 +404,21 @@ function AiAssignmentsCard() {
     return null;
   };
 
+  const refreshInterviewPreview = (purpose: string) => {
+    if (purpose !== "INTERVIEW" && purpose !== "GLOBAL_DEFAULT") return;
+    void resolveBusinessAiConfig({ purpose: "INTERVIEW" }).then((result) => {
+      if (result.success && result.data) setInterview(result.data);
+    }).catch(() => undefined);
+  };
+
+  const applySaved = (assignment: BusinessAssignmentSummary) => {
+    setAssignments((previous) => ({ ...previous, [assignment.purpose]: assignment }));
+    setDrafts((previous) => ({ ...previous, [assignment.purpose]: assignmentDraft(assignment) }));
+    refreshInterviewPreview(assignment.purpose);
+    window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
+    toastSuccess(t("settings.aiAssignSaved"));
+  };
+
   const save = async (purpose: string) => {
     const draft = drafts[purpose];
     if (!draft?.connectionId || !draft.model.trim()) {
@@ -410,14 +435,15 @@ function AiAssignmentsCard() {
           modelKey: draft.model.trim(),
         });
         if (result.success) {
-          toastSuccess(t("settings.aiAssignSaved"));
-          window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
-          await load();
+          if (result.data) applySaved(result.data);
+          else await load(purpose);
         } else {
           toastError(
             t(ERROR_KEY[result.code ?? ""] ?? "settings.aiConnErrGeneric"),
           );
         }
+      } catch {
+        toastError(t("settings.aiAssignSaveUnconfirmed"));
       } finally {
         setBusy(null);
       }
@@ -464,12 +490,13 @@ function AiAssignmentsCard() {
         model: draft.model.trim(),
       });
       if (result.success) {
-        toastSuccess(t("settings.aiAssignSaved"));
-        window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
-        await load();
+        if (result.data) applySaved(result.data);
+        else await load(purpose);
       } else {
         toastError(t(ERROR_KEY[result.code ?? ""] ?? "settings.aiConnErrGeneric"));
       }
+    } catch {
+      toastError(t("settings.aiAssignSaveUnconfirmed"));
     } finally {
       setBusy(null);
     }
@@ -480,12 +507,20 @@ function AiAssignmentsCard() {
     try {
       const result = await clearBusinessAiAssignment({ purpose });
       if (result.success) {
+        refreshInterviewPreview(purpose);
         toastSuccess(t("settings.aiAssignCleared"));
         window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
-        await load();
+        setAssignments((previous) => {
+          const next = { ...previous };
+          delete next[purpose];
+          return next;
+        });
+        setDrafts((previous) => ({ ...previous, [purpose]: { connectionId: "", model: "" } }));
       } else {
         toastError(t(ERROR_KEY[result.code ?? ""] ?? "settings.aiConnErrGeneric"));
       }
+    } catch {
+      toastError(t("settings.aiAssignSaveUnconfirmed"));
     } finally {
       setBusy(null);
     }
@@ -530,10 +565,11 @@ function AiAssignmentsCard() {
         : draft.connectionId
           ? catalogs[draft.connectionId]
           : undefined;
+    const savedConnectionId = saved ? assignmentDraft(saved).connectionId : undefined;
     const dirty =
       !!draft.connectionId &&
       !!draft.model.trim() &&
-      (saved?.connectionId !== draft.connectionId ||
+      (savedConnectionId !== draft.connectionId ||
         saved?.model !== draft.model.trim());
     const isStructuredPurpose = STRUCTURED_PURPOSES.has(purpose);
     const isTextOnlyPurpose = TEXT_ONLY_PURPOSES.has(purpose);
@@ -578,14 +614,15 @@ function AiAssignmentsCard() {
           </p>
         )}
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[240px]">
+          <div className="min-w-0 flex-1 basis-60">
             <Label className="text-xs text-muted-foreground">
               {t("settings.aiAssignConnection")}
             </Label>
             <Select
               value={draft.connectionId || undefined}
+              disabled={busy === `save:${purpose}` || busy === `clear:${purpose}`}
               onValueChange={(value) =>
-                setDraft(purpose, { connectionId: value, model: "" })
+                value !== draft.connectionId && setDraft(purpose, { connectionId: value, model: "" })
               }
             >
               <SelectTrigger className="mt-1 w-full">
@@ -594,6 +631,15 @@ function AiAssignmentsCard() {
                 />
               </SelectTrigger>
               <SelectContent>
+                {saved && draft.connectionId === savedConnectionId &&
+                  !connections.some((connection) => connection.id === draft.connectionId) &&
+                  !(draft.connectionId === MANAGED_CONNECTION_ID && managedAvailable) && (
+                    <SelectItem value={draft.connectionId} disabled>
+                      {saved.connection
+                        ? `${saved.connection.displayName} (${saved.connection.status})`
+                        : t("settings.aiAssignErrConnectionNotFound")}
+                    </SelectItem>
+                  )}
                 {managedAvailable && (
                   <SelectGroup>
                     <SelectLabel>{t("settings.aiAssignManagedGroup")}</SelectLabel>
@@ -644,7 +690,7 @@ function AiAssignmentsCard() {
             </Select>
           </div>
 
-          <div className="min-w-[200px]">
+          <div className="min-w-0 flex-1 basis-48">
             <Label className="text-xs text-muted-foreground">
               {t("settings.aiAssignModel")}
             </Label>
@@ -652,7 +698,7 @@ function AiAssignmentsCard() {
               className="mt-1"
               value={draft.model}
               placeholder={t("settings.aiAssignSelectModel")}
-              disabled={!draft.connectionId}
+              disabled={!draft.connectionId || busy === `save:${purpose}` || busy === `clear:${purpose}`}
               onChange={(event) =>
                 setDraft(purpose, { model: event.target.value })
               }
@@ -663,7 +709,7 @@ function AiAssignmentsCard() {
             <Button
               variant="outline"
               size="sm"
-              disabled={catalogBusy === draft.connectionId}
+              disabled={!selectedConnection || catalogBusy === draft.connectionId}
               onClick={() =>
                 selectedConnection && void loadCatalog(selectedConnection)
               }
@@ -734,7 +780,13 @@ function AiAssignmentsCard() {
         </p>
       </div>
 
-      {connections.length === 0 && !managedAvailable && (
+      {loadFailed && (
+        <div role="alert" className="space-y-2 rounded-md border border-destructive/30 p-3 text-sm">
+          <p>{t("settings.aiAssignLoadFailed")}</p>
+          <Button size="sm" variant="outline" onClick={() => void load()}>{t("common.retry")}</Button>
+        </div>
+      )}
+      {!loadFailed && connections.length === 0 && !managedAvailable && (
         <p className="text-sm text-muted-foreground">
           {t("settings.aiAssignNoConnections")}
         </p>
@@ -747,7 +799,11 @@ function AiAssignmentsCard() {
         </p>
       )}
 
-      {PURPOSE_ROWS.map(renderPurposeRow)}
+      {(!loadFailed || Object.keys(assignments).length > 0) && (
+        <div className="grid min-w-0 gap-3 @3xl/main:grid-cols-2">
+          {PURPOSE_ROWS.map(renderPurposeRow)}
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import {
   createChatConversation,
   deleteChatConversation,
   getAgentChatPreflight,
+  getAgentToolPermissions,
   getChatConversation,
   listChatConversations,
   loadActiveChatConversation,
@@ -80,6 +81,13 @@ vi.mock("@prisma/client", () => {
 
 vi.mock("@/utils/user.utils", () => ({ getCurrentUser: vi.fn() }));
 
+vi.mock("@/lib/career/runtimeMode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/career/runtimeMode")>();
+  return { ...actual, resolveCareerRuntimeMode: vi.fn(async () => ({ mode: "LEGACY_ONLY", origin: "legacy", rolloutScope: "none", reason: "test" })) };
+});
+vi.mock("@/lib/career/freshSurfacePolicy", () => ({ isFreshNativeFullSurface: () => true }));
+vi.mock("@/lib/extensions/notion/service", () => ({ resolveNotionAgentToolNames: vi.fn(async () => ["notion_read", "notion_create_page"]) }));
+
 const mockUser = { id: "user-1" };
 const msg = (id: string) => ({
   id,
@@ -123,6 +131,19 @@ describe("agentChat actions", () => {
     createdAt: new Date("2026-10-01T00:00:00.000Z"),
     updatedAt: new Date("2026-10-01T00:00:00.000Z"),
     ...overrides,
+  });
+
+  it("permissions use the persisted role rather than a supplied role", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow({ agentRole: "reflect" }));
+    const result = await getAgentToolPermissions({ conversationId: "row-1", agentRole: "pilot" });
+    expect(result.success).toBe(true);
+    expect(result.data?.tools.map(tool => tool.name)).toEqual(["list_jobs", "get_job", "notion_read"]);
+    expect(prisma.chatConversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "row-1", userId: "user-1" } }));
+  });
+
+  it("permissions reject conversations the caller does not own", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(null);
+    expect(await getAgentToolPermissions({ conversationId: "foreign", agentRole: "pilot" })).toMatchObject({ success: false, code: "CONVERSATION_NOT_FOUND" });
   });
 
   it("preserves an intentional active draft instead of loading the newest row", async () => {

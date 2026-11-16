@@ -1,5 +1,6 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
@@ -31,6 +32,7 @@ export function AgentContextUsage() {
           aria-label={t("agent.contextUsageLabel")}
           className="text-xs text-muted-foreground"
         >
+          <Info className="size-3.5" />
           <span>{t("agent.contextUsageValue", { used, budget })}</span>
         </PromptInputButton>
       </PopoverTrigger>

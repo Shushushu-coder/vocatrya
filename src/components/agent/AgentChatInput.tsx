@@ -16,6 +16,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AgentAddContextMenu } from "@/components/agent/AgentChatContextBar";
+import { AgentPermissionChip } from "@/components/agent/AgentPermissionChip";
 import { AgentChatIdentity } from "@/components/agent/AgentChatIdentity";
 import { AgentContextUsage } from "@/components/agent/AgentContextUsage";
 import { AgentDictationButton } from "@/components/agent/AgentDictationButton";
@@ -249,11 +250,13 @@ function AgentChatComposer() {
         </div>
       ) : null}
 
+      {approvalPending && !queued && <p role="status" className="px-1 text-xs text-amber-600">{t("agent.waitingOnApproval")}</p>}
       {/* No PromptInputBody: it wraps these in a display:contents div, and
           InputGroup only stacks vertically via has-[>[data-align=block-end]],
           a DOM-child selector that wrapper defeats. Nested, the group stays a
           row and the textarea collapses to a ~24px sliver beside the footer. */}
       <PromptInput
+        className="[&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:shadow-sm"
         accept={AGENT_FILE_ACCEPT}
         multiple
         onFiles={addFiles}
@@ -263,37 +266,37 @@ function AgentChatComposer() {
             controller so fillComposer can write to it, and it still clears
             on successful submit. */}
         <PromptInputTextarea
-          className="min-h-9"
+          className="min-h-16 px-4 pt-3 text-sm"
           onPaste={onPaste}
           placeholder={t("agent.inputPlaceholder")}
         />
         {/* Unified composer toolbar (AWU-COMPOSER/MODEL/CONTEXT): add-content
             menu, model picker and the context estimate all live here; the
             header keeps only the conversation-level controls. */}
-        <PromptInputFooter>
-          <PromptInputTools>
+        <PromptInputFooter className="flex-wrap gap-2 border-t border-border/50 px-3 pb-3 pt-2">
+          <PromptInputTools className={`min-w-0 gap-1.5 ${compact ? "basis-full" : "flex-1"}`}>
             <AgentAddContextMenu compact={compact} />
             <AgentChatIdentity compact={compact} />
+            <AgentPermissionChip compact={compact} />
+          </PromptInputTools>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <AgentContextUsage />
             <AgentDictationButton
               insertText={insertDictation}
               ownershipKey={`${activeRole}:${conversationId ?? "draft"}`}
               compact={compact}
             />
-            <AgentContextUsage />
-            <span className="text-xs text-muted-foreground">
-              {approvalPending && !queued ? t("agent.waitingOnApproval") : ""}
-            </span>
-          </PromptInputTools>
-          <PromptInputSubmit
-            aria-label={
-              isGenerating ? t("agent.stopResponse") : t("agent.send")
-            }
-            disabled={!isGenerating && !canSend}
-            className="[&_svg]:size-3.5"
-            onStop={onStop}
-            size="icon-xs"
-            status={status}
-          />
+            <PromptInputSubmit
+              aria-label={
+                isGenerating ? t("agent.stopResponse") : t("agent.send")
+              }
+              disabled={!isGenerating && !canSend}
+              className="size-8 rounded-full [&_svg]:size-4"
+              onStop={onStop}
+              size="icon-xs"
+              status={status}
+            />
+          </div>
         </PromptInputFooter>
       </PromptInput>
     </div>

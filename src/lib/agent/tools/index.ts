@@ -2,10 +2,7 @@ import type { ConversationRequest } from "../conversationRequest";
 import type { LanguageModel, ToolSet, UIMessageStreamWriter } from "ai";
 import type { PageContext } from "@/models/agent.model";
 import type { NestedGenerationGuard } from "@/lib/agent/nestedGeneration";
-import {
-  AGENT_ROLE_TOOL_ALLOWLIST,
-  normalizeAgentRole,
-} from "../agentRoles";
+import { effectiveAgentToolNames } from "../toolPermissions";
 import { buildAddJobTool } from "./addJob";
 import { buildListJobsTool } from "./listJobs";
 import { buildGetJobTool } from "./getJob";
@@ -122,12 +119,9 @@ export function buildAgentTools(ctx: {
   // Effective set = role allowlist ∩ registered runtime tools (built after
   // the canonical rebind above so Insight's match_job is the approval-gated
   // variant wherever the runtime gates it).
-  const role = normalizeAgentRole(ctx.agentRole);
-  if (role) {
-    const allow = new Set(AGENT_ROLE_TOOL_ALLOWLIST[role]);
-    for (const name of Object.keys(tools)) {
-      if (!allow.has(name)) delete tools[name];
-    }
+  const allowed = new Set(effectiveAgentToolNames(ctx));
+  for (const name of Object.keys(tools)) {
+    if (!allowed.has(name)) delete tools[name];
   }
   return tools;
 }

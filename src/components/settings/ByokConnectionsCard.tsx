@@ -1,5 +1,6 @@
 "use client";
 
+import { AiServiceSlot, useAiServicesLayout } from "./AiServicesLayout";
 import { useEffect, useState } from "react";
 import {
   Card,
@@ -76,6 +77,7 @@ interface CredentialStorageStatus {
 
 function ByokConnectionsCard() {
   const { t } = useI18n();
+  const integrated = useAiServicesLayout();
   const [keys, setKeys] = useState<ApiKeyClientResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingProvider, setEditingProvider] = useState<ApiKeyProvider | null>(
@@ -263,6 +265,7 @@ function ByokConnectionsCard() {
 
   if (isLoading) {
     return (
+      <AiServiceSlot placement="available">
       <div className="space-y-4 rounded-lg border p-4">
         <div>
           <h3 className="text-lg font-medium">{t("settings.byokTitle")}</h3>
@@ -275,26 +278,28 @@ function ByokConnectionsCard() {
           <span>{t("settings.loadingKeys")}</span>
         </div>
       </div>
+      </AiServiceSlot>
     );
   }
 
   return (
-    <div className="space-y-4 rounded-lg border p-4">
-      <div>
+    <div className={integrated ? "contents" : "space-y-4 rounded-lg border p-4"}>
+      <div className={integrated ? "hidden" : undefined}>
         <h3 className="text-lg font-medium">{t("settings.byokTitle")}</h3>
         <p className="text-sm text-muted-foreground">
           {t("settings.byokDescription")}
         </p>
       </div>
 
-      <div className="grid gap-4">
+      <div className={integrated ? "contents" : "grid min-w-0 gap-4 @3xl/main:grid-cols-2"}>
         {PROVIDERS.map((provider) => {
           const existingKey = getKeyForProvider(provider.id);
           const isEditing = editingProvider === provider.id;
           const isBaseUrl = isBaseUrlProvider(provider.id);
 
           return (
-            <Card key={provider.id}>
+            <AiServiceSlot key={provider.id} placement={existingKey ? "connected" : "available"}>
+            <Card className="min-w-0 gap-3 py-3">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -423,11 +428,13 @@ function ByokConnectionsCard() {
                 )}
               </CardContent>
             </Card>
+            </AiServiceSlot>
           );
         })}
       </div>
 
       {storageStatus && (
+        <AiServiceSlot placement="support">
         <div className="rounded-md border border-dashed p-3 space-y-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="text-sm text-muted-foreground">
@@ -480,6 +487,7 @@ function ByokConnectionsCard() {
               </p>
             )}
         </div>
+        </AiServiceSlot>
       )}
     </div>
   );

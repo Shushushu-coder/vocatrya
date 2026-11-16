@@ -11,13 +11,18 @@ type CallbackHandler = (input: {
   code?: string;
   state?: string;
   error?: string;
-}) => Promise<{ redirectUrl: string | null }>;
+}) => Promise<{ redirectUrl: string | null; connected: boolean }>;
 
 let activeServer: { server: Server; port: number } | null = null;
 let expiryTimer: ReturnType<typeof setTimeout> | null = null;
 let handlerRef: CallbackHandler | null = null;
 
-const RESPONSE_HEADERS = { "content-type": "text/plain; charset=utf-8" };
+const RESPONSE_HEADERS = {
+  "content-type": "text/plain; charset=utf-8",
+  "cache-control": "no-store",
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+};
 
 function onRequest(
   req: import("node:http").IncomingMessage,
@@ -40,13 +45,20 @@ function onRequest(
         state: url.searchParams.get("state") ?? undefined,
         error: url.searchParams.get("error") ?? undefined,
       });
-      if (outcome.redirectUrl) {
-        res.writeHead(302, { location: outcome.redirectUrl }).end();
-      } else {
-        res
-          .writeHead(400, RESPONSE_HEADERS)
-          .end("Authorization failed or expired — return to Vocatrya.");
-      }
+      // System browsers do not share the desktop's authenticated session.
+      // Finish on the loopback listener; the desktop refreshes its own state.
+      const connected = outcome.connected;
+      res.writeHead(connected ? 200 : 400, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "referrer-policy": "no-referrer",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+        "x-content-type-options": "nosniff",
+      }).end(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vocatrya · Notion</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8fafc;color:#172033;font:16px/1.7 system-ui,sans-serif}main{margin:24px;max-width:480px;padding:32px;border:1px solid #e2e8f0;border-radius:20px;background:white}small,p{color:#64748b}h1{font-size:24px}small{letter-spacing:.06em}</style>
+<main><small>VOCATRYA / NOTION</small><h1>${connected ? "Notion 授权已完成" : "Notion 授权未完成"}</h1>
+<p>${connected ? "请返回 Vocatrya 桌面应用查看连接状态。你可以关闭此页面。" : "请返回 Vocatrya 桌面应用检查连接状态并重试。"}</p>
+<p lang="en">${connected ? "Authorization completed. Return to Vocatrya to check your connection. You can close this page." : "Authorization was not completed. Return to Vocatrya to check the connection and try again."}</p></main></html>`);
     } catch {
       res.writeHead(500, RESPONSE_HEADERS).end("Connection failed");
     }
@@ -77,12 +89,14 @@ export async function ensureNotionCallbackListener(
       await new Promise<void>((resolve) => server.close(() => resolve()));
       continue;
     }
-    activeServer = { server, port };
+    const address = server.address();
+    const boundPort = address && typeof address !== "string" ? address.port : port;
+    activeServer = { server, port: boundPort };
     expiryTimer = setTimeout(() => {
       closeNotionCallbackListener();
     }, NOTION_OAUTH_PENDING_TTL_MS + 30_000);
     expiryTimer.unref?.();
-    return port;
+    return boundPort;
   }
   throw new Error("NOTION_CALLBACK_UNAVAILABLE");
 }

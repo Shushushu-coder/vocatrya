@@ -70,6 +70,10 @@ export const APP_CONSTANTS = {
     keyboardStep: 16,
   },
 
+  // Collapsed rail (56px) plus its ml-4 margin (16px). The expanded
+  // chat panel docks at this offset without covering the rail controls.
+  SIDEBAR_COLLAPSED_OUTER_PX: 72,
+
   // Ollama API timeouts
   AI_OLLAMA_LIST_TIMEOUT_MS: 5_000,
   AI_OLLAMA_GENERATE_TIMEOUT_MS: 10_000,

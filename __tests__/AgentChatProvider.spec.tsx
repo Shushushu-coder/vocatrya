@@ -121,6 +121,7 @@ function Probe() {
       >
         sendMessage
       </button>
+      <span data-testid="panel-width">{c.panelWidth}</span>
       <span data-testid="active-role">{c.activeRole}</span>
       <span data-testid="composer-seed">{c.composerSeed}</span>
       <button
@@ -1365,6 +1366,34 @@ describe("AgentChatProvider", () => {
       chatInit().onData({ type: "data-paste", id: "rv1", data: { delta: "nope" } });
     });
     expect(screen.getByTestId("review-stream")).toHaveTextContent("SCORES:");
+  });
+
+  it("expands the panel and collapses the sidebar together when the sidebar is out", async () => {
+    setup();
+    await userEvent.click(screen.getByText("open"));
+    await userEvent.click(screen.getByText("toggleSidebar"));
+    expect(screen.getByTestId("sidebar")).toHaveTextContent("true");
+    await userEvent.click(screen.getByText("togglePanelExpand"));
+    expect(screen.getByTestId("panel-expanded")).toHaveTextContent("true");
+    expect(screen.getByTestId("sidebar")).toHaveTextContent("false");
+    expect(screen.getByTestId("panel-width")).toHaveTextContent(String(window.innerWidth - 72));
+  });
+
+  it.each([450, 560])("reopens docked at %i rather than persisting the expanded width", async (dockedWidth) => {
+    localStorage.setItem("agent-chat-width", JSON.stringify(dockedWidth));
+    const view = setup();
+    await userEvent.click(screen.getByText("open"));
+    await userEvent.click(screen.getByText("togglePanelExpand"));
+    expect(JSON.parse(localStorage.getItem("agent-chat-width")!)).toBe(dockedWidth);
+    view.unmount();
+    setup();
+    expect(screen.getByTestId("panel-expanded")).toHaveTextContent("false");
+    expect(screen.getByTestId("panel-width")).toHaveTextContent(String(dockedWidth));
+    await userEvent.click(screen.getByText("open"));
+    await userEvent.click(screen.getByText("togglePanelExpand"));
+    await userEvent.click(screen.getByText("togglePanelExpand"));
+    expect(screen.getByTestId("panel-width")).toHaveTextContent("450");
+    expect(JSON.parse(localStorage.getItem("agent-chat-width")!)).toBe(450);
   });
 
   it("restores an expanded panel when the sidebar re-expands", async () => {
