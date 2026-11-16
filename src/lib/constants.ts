@@ -45,6 +45,7 @@ export const APP_CONSTANTS = {
   COVER_LETTER_EXPORT_SETTINGS_STORAGE_KEY: "cover-letter-export-settings",
   AUDIO_INPUT_DEVICE_STORAGE_KEY: "audio-input-device",
   INPUT_PREFERENCES_STORAGE_KEY: "input-preferences",
+  AI_ASSIGNMENT_ORDER_STORAGE_KEY: "ai-assignment-order",
   SIDEBAR_DOM_ID: "app-sidebar",
 
   // Update check: the upstream repo and how long a GitHub release lookup is

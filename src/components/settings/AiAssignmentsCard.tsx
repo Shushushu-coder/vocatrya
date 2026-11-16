@@ -1,7 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { GripVertical, Loader2 } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -34,6 +51,7 @@ import {
 } from "@/actions/managedAi.actions";
 import type { ConnectionSummary } from "@/lib/ai/connection-service";
 import type { BusinessAssignmentSummary } from "@/lib/ai/assignments";
+import { APP_CONSTANTS } from "@/lib/constants";
 import {
   checkStreamingExecutionReadiness,
   checkStructuredOutputReadiness,
@@ -46,16 +64,20 @@ import {
 } from "@/lib/ai/connections";
 import { PROVIDER_REGISTRY, SETTINGS_BYOK_PROVIDERS } from "@/lib/ai/provider-registry";
 
-// Purpose rows render in registry order. INTERVIEW and CAREER_REFLECTION
-// both execute through the account runtime's TEXT_ONLY one-shot seam
-// (interview sessions locked at creation, reflection drafts resolved at
-// generation); a legacy `settings.ai.interview` config still outranks
-// GLOBAL_DEFAULT for users who have not saved an INTERVIEW assignment.
-// Every registry purpose now has a real production consumer on every
-// surface — MATCH_ANALYSIS included, since the fresh-native fast-screening
-// flow resolves it — so all rows render editable.
-const PURPOSE_ROWS = [
-  "GLOBAL_DEFAULT",
+// GLOBAL_DEFAULT is the resolution fallback, not a business purpose — it
+// renders as its own full-width row above the business grid. The business
+// rows render in registry order by default; the grid order is a per-device
+// display preference the user can change by dragging (it has no effect on
+// assignment resolution). INTERVIEW and CAREER_REFLECTION both execute
+// through the account runtime's TEXT_ONLY one-shot seam (interview sessions
+// locked at creation, reflection drafts resolved at generation); a legacy
+// `settings.ai.interview` config still outranks GLOBAL_DEFAULT for users
+// who have not saved an INTERVIEW assignment. Every registry purpose now
+// has a real production consumer on every surface — MATCH_ANALYSIS
+// included, since the fresh-native fast-screening flow resolves it — so
+// all rows render editable.
+const GLOBAL_DEFAULT_PURPOSE = "GLOBAL_DEFAULT";
+const BUSINESS_PURPOSE_ROWS = [
   "RESUME",
   "MATCH_ANALYSIS",
   "CAREER_REFLECTION",
@@ -145,6 +167,52 @@ function connectionLabel(connection: ConnectionSummary): string {
   return `${connection.displayName}${identity} (${connection.status})`;
 }
 
+// Sortable wrapper for one business-purpose card. The handle is rendered
+// inside the card header — listeners live on the handle only, so the
+// connection picker, model input and buttons never initiate a drag.
+function SortablePurposeCard({
+  purpose,
+  children,
+}: {
+  purpose: string;
+  children: (dragHandle: ReactNode) => ReactNode;
+}) {
+  const { t } = useI18n();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: purpose });
+  const dragHandle = (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      aria-label={t("settings.aiAssignDragToReorder")}
+      title={t("settings.aiAssignDragToReorder")}
+      data-testid={`ai-assign-drag-${purpose}`}
+      className="inline-flex shrink-0 touch-none cursor-grab items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+    >
+      <GripVertical className="h-4 w-4" />
+    </button>
+  );
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: transition ?? undefined,
+      }}
+      className={`h-full min-w-0 ${isDragging ? "relative z-10 opacity-70" : ""}`}
+    >
+      {children(dragHandle)}
+    </div>
+  );
+}
+
 /**
  * Business AI assignment surface: each purpose binds a complete
  * connectionId + model pair. GLOBAL_DEFAULT is the fallback used when a
@@ -180,6 +248,70 @@ function AiAssignmentsCard() {
   // catalog models the Hosted authority currently offers. null = Hosted
   // unreachable — the Managed option still renders with its error code.
   const [managed, setManaged] = useState<ManagedAiOverview | null>(null);
+  // Business-grid display order — a per-device cosmetic preference kept in
+  // localStorage; GLOBAL_DEFAULT is not part of it.
+  const [rowOrder, setRowOrder] = useState<string[]>([
+    ...BUSINESS_PURPOSE_ROWS,
+  ]);
+  // A small activation distance keeps clicks on the handle from becoming
+  // accidental drags; the keyboard sensor lets a focused handle reorder
+  // with Space + arrows.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  useEffect(() => {
+    // Read the stored order after mount (the store is client-only). Unknown
+    // entries are dropped and newly added purposes appended so a stale
+    // stored order can never hide a row.
+    try {
+      const raw = window.localStorage.getItem(
+        APP_CONSTANTS.AI_ASSIGNMENT_ORDER_STORAGE_KEY,
+      );
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const known = new Set<string>(BUSINESS_PURPOSE_ROWS);
+      const stored = [
+        ...new Set(
+          parsed.filter(
+            (purpose): purpose is string =>
+              typeof purpose === "string" && known.has(purpose),
+          ),
+        ),
+      ];
+      if (stored.length === 0) return;
+      setRowOrder([
+        ...stored,
+        ...BUSINESS_PURPOSE_ROWS.filter(
+          (purpose) => !stored.includes(purpose),
+        ),
+      ]);
+    } catch {
+      // A corrupt or unavailable store falls back to the registry order.
+    }
+  }, []);
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setRowOrder((previous) => {
+      const from = previous.indexOf(String(active.id));
+      const to = previous.indexOf(String(over.id));
+      if (from < 0 || to < 0) return previous;
+      const next = arrayMove(previous, from, to);
+      try {
+        window.localStorage.setItem(
+          APP_CONSTANTS.AI_ASSIGNMENT_ORDER_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+      } catch {
+        // The reorder still applies for this session.
+      }
+      return next;
+    });
+  };
 
   const load = useCallback(async (savedPurpose?: string) => {
     setLoading(true);
@@ -553,7 +685,7 @@ function AiAssignmentsCard() {
   }));
   const managedAvailable = managed?.connection?.status === "CONNECTED";
 
-  const renderPurposeRow = (purpose: string) => {
+  const renderPurposeRow = (purpose: string, dragHandle?: ReactNode) => {
     const draft = draftFor(purpose);
     const saved = assignments[purpose];
     const selectedConnection = connections.find(
@@ -578,10 +710,13 @@ function AiAssignmentsCard() {
     return (
       <section
         key={purpose}
-        className="rounded-md border p-3 space-y-3"
+        className="h-full rounded-md border p-3 space-y-3"
         data-testid={`ai-assign-row-${purpose}`}
       >
-        <h4 className="font-medium">{t(PURPOSE_LABEL_KEY[purpose])}</h4>
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="font-medium">{t(PURPOSE_LABEL_KEY[purpose])}</h4>
+          {dragHandle}
+        </div>
         {isStructuredPurpose && (
           <p className="text-xs text-muted-foreground">
             {t("settings.aiAssignStructuredHint")}
@@ -800,8 +935,36 @@ function AiAssignmentsCard() {
       )}
 
       {(!loadFailed || Object.keys(assignments).length > 0) && (
-        <div className="grid min-w-0 gap-3 @3xl/main:grid-cols-2">
-          {PURPOSE_ROWS.map(renderPurposeRow)}
+        <div className="space-y-5">
+          {renderPurposeRow(GLOBAL_DEFAULT_PURPOSE)}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <h4 className="text-sm font-medium">
+                {t("settings.aiAssignBusinessPurposes")}
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.aiAssignOrderHint")}
+              </p>
+            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onDragEnd}
+            >
+              <SortableContext
+                items={rowOrder}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid min-w-0 gap-3 @3xl/main:grid-cols-2">
+                  {rowOrder.map((purpose) => (
+                    <SortablePurposeCard key={purpose} purpose={purpose}>
+                      {(dragHandle) => renderPurposeRow(purpose, dragHandle)}
+                    </SortablePurposeCard>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </div>
         </div>
       )}
     </div>
