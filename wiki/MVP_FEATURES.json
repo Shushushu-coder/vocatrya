@@ -495,7 +495,7 @@
       "priority": "P1",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-11-16 Main 集成（codex/harness-deep-match）：新增 HarnessTask/HarnessTaskEvent 运行时恢复账本及 migration（备份分类按 AgentToolExecution 同样排除，已落库 MatchAnalysis 业务产物继续随备份）；深度匹配消费者 PIN_INPUTS→RUN_ANALYSIS→COMMIT_RESULT 固定输入执行，CAS claim/claimEpoch 栅栏、租约续期与过期失权，周期发现、取消、恢复、重试与单一绑定结果；职位匹配界面新增版本选择、任务卡片、结果与来源展示，中英文案齐备。收尾修复：首次读取失败错误与 Retry 可达；租约过期即失权（未被接管也不能续租或提交）；检查点完整结构与步骤一致性校验；运行期间 JD 更新时旧材料结果标记 stale；runner 心跳与取消联动有新增测试。集成 Owner 本轮亲自执行：git diff --check 通过，隔离 SQLite 下 harnessDeepMatchTask 17/17、deepMatchSection 8/8 通过（其中 deepMatchSection 存在一条普通 React act() 警告，未核实影响，不判为问题也不记为无影响）。复用执行 Agent 报告（未复核原始输出，代码未再变更）：tsc --noEmit、改动文件 ESLint、隔离 SQLite Migration 与相关不变量、matchAnalysis/fastScreening/saveMatchResult 36/36。真实模型调用未验证；Windows Electron 用户流程未验收，passes 保持 false。",
+      "implementationNotes": "2026-11-16 Main 集成（codex/harness-deep-match）：新增 HarnessTask/HarnessTaskEvent 运行时恢复账本及 migration（备份分类按 AgentToolExecution 同样排除，已落库 MatchAnalysis 业务产物继续随备份）；深度匹配消费者 PIN_INPUTS→RUN_ANALYSIS→COMMIT_RESULT 固定输入执行，CAS claim/claimEpoch 栅栏、租约续期与过期失权，周期发现、取消、恢复、重试与单一绑定结果；职位匹配界面新增版本选择、任务卡片、结果与来源展示，中英文案齐备。收尾修复：首次读取失败错误与 Retry 可达；租约过期即失权（未被接管也不能续租或提交）；检查点完整结构与步骤一致性校验；运行期间 JD 更新时旧材料结果标记 stale；runner 心跳与取消联动有新增测试。集成 Owner 本轮亲自执行：git diff --check 通过，隔离 SQLite 下 harnessDeepMatchTask 17/17、deepMatchSection 8/8 通过（其中 deepMatchSection 存在一条普通 React act() 警告，未核实影响，不判为问题也不记为无影响）。复用执行 Agent 报告（未复核原始输出，代码未再变更）：tsc --noEmit、改动文件 ESLint、隔离 SQLite Migration 与相关不变量、matchAnalysis/fastScreening/saveMatchResult 36/36。真实模型调用未验证；Windows Electron 用户流程未验收，passes 保持 false。 验收追加（2026-11-16，Windows Electron fresh-native 定向验收，基线 992feb9e，隔离快照构建+隔离数据，合成托管夹具作上游）：signup/managed-connect/seed 后 deep-match 八步全部 PASS——显式简历版本启动且服务端任务真实创建、页面挂载/刷新不产生重复任务、完整退出重开后 LEASE_RECLAIMED 租约回收（claimEpoch 递增）与同 operationId 幂等重发、崩溃尝试诚实落 INVOCATION_STATUS_UNKNOWN 终态后 UI 重试成功且单一绑定结果、取消过渡真实且释放后无迟到落库、http500 可重试失败与 OPPORTUNITY_ARCHIVED 输入失效展示不同操作、运行期 JD 更新后旧输入结果标记 JD_CHANGED stale 且界面展示来源版本。证据目录 F:\\vocatrya-acceptance-runs\\167afc0d-7e50-4b73-875c-fb7178fdaeae。五条验收步骤在桌面面全部验证；上游为受控夹具而非真实外部模型，真实模型调用仍待可用授权连接，passes 保持 false。 构建证据澄清：验收快照补入 extensions/ 并规范化非法 UTF-8 注释，不是未经修改的 992feb9e 原样构建。本轮修复已提交，未重新运行生产构建或 Electron；真实模型仍 BLOCKED。",
       "description": "职位匹配界面可对选定简历版本发起可恢复的深度匹配任务；任务状态持久化，离开页面、刷新与应用重启后恢复真实进度，支持取消、失败重试与输入失效反馈，结果与分析一一绑定并标注来源版本与失效状态。",
       "steps": [
         "在职位匹配界面明确选择简历版本并启动深度匹配；同一启动请求重复提交不产生第二个任务。",
@@ -503,6 +503,41 @@
         "运行中可取消且状态如实过渡；失败任务可重试；固定输入被删除或失效时给出不可重试的明确反馈。",
         "一次任务最终只落库一条绑定结果分析，恢复或重试不重复落库。",
         "结果展示来源版本（JD/简历），运行期间 JD 被更新时该次结果正确标记 stale 并提示。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "INTERVIEW-PREP-CONTINUITY",
+      "category": "Interview / Prep",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-11-16 Windows Electron fresh-native 定向验收（基线 992feb9e，隔离构建/数据，合成托管夹具作上游）：prep 七步全部 PASS——职位页创建目标并固定当前 JD v2、来源与真实待办可见、继续动作导航到既有面试创建页且 job/jd/prepGoal 参数显式正确（桌面面同时验证 EXT-INTERVIEW-WEB moved 提示卡，练习面按产品指引在等同 Web 面驱动）、会话绑定目标并生成 3 题计划、一项作答与反馈真实落库、完整退出重开后“继续准备”重开同一 InterviewSession（upstreamDelta=0，不重复创建/重生成）、总结先于 COMPLETED 落库且可查来源、连续两轮新轮次铸出不同目标（COMPLETED/ENDED/ACTIVE）且导航 prepGoal 不复用旧意图、暂停/恢复、JD 漂移 v2→v3 提示、归档阻断文案准确。桌面残留待产品裁决：prep-continue 在 Electron 内落到已退役练习面的提示卡，是否应改路由到扩展/Web 练习入口。上游为受控夹具非真实外部模型，真实模型冒烟待可用授权连接，passes 保持 false。 本轮 6c551703 修复注释非法 UTF-8 与桌面继续入口：使用 /dashboard/interview-prep 专用本地路由、现有表单及会话组件；服务端复核目标、用户、能力与材料，保留通用入口迁移提示。原报告中的练习部分为 Web 验证，不算完整 Electron 练习闭环；修复后路由仅通过定向组件/服务端测试，Electron 待复验。",
+      "description": "职位页可创建面试准备目标并固定当前 JD 版本；目标引导进入既有面试创建面（参数显式绑定、不可静默替换），练习进度逐项持久化；退出重开后“继续准备”恢复同一 InterviewSession，不重复创建练习或重新生成既有内容；完成后总结先落库再标记目标完成，用户可查看总结与材料来源；结束/完成后可基于当前 JD 开始新一轮，连续明确轮次不复用旧创建意图。",
+      "steps": [
+        "职位页创建面试准备目标：固定正确职位/JD 版本，显示来源与真实待办。",
+        "从目标进入既有面试创建页：job/JD/prepGoal 参数显式正确且不可静默替换；练习会话绑定目标。",
+        "部分练习后完整退出重开应用：目标与进度从服务端恢复，“继续准备”重开同一 InterviewSession，无重复练习或内容重生成。",
+        "完成练习：总结真实落库后目标才显示完成，可查看总结与材料来源。",
+        "结束/完成后开始新一轮：导航携带新目标 ID 与正确 JD；连续两次新轮次不复用旧创建意图，失败重传保持幂等。",
+        "异常路径：暂停/恢复可用；JD 漂移、职位归档、关联记录缺失有准确提示。"
+      ],
+      "passes": false
+    },
+    {
+      "id": "HARNESS-PERSISTENT-APPROVAL",
+      "category": "Agent / Harness",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "集成 d1e4bf85。持久提案与运行时任务分离；审批与建任务原子提交，真实回执、过期/撤回、SetNull 保留证据、备份 v10 不自动重放。人工核对逐操作释放，regenerate admission 与历史事件升级保留已定向验证。真实 Notion/模型与 Electron 未验收，passes=false。",
+      "description": "三个 Notion 写工具可持久审批、后台执行与恢复；不确定结果通过人工核对与新提案重新授权，避免静默重发。",
+      "steps": [
+        "聊天提案显示目标、内容与期限，批准/拒绝/撤回由服务端决定，重复批准只建一个任务。",
+        "刷新、离开、重启后恢复真实提案和任务状态；queued 不冒充成功回执。",
+        "验证撤回/过期/权限失效与 dispatch 边界；不确定结果禁止自动重发，逐操作人工核对后重新提案。",
+        "备份恢复保留证据而不复活 task 或授权；会话硬删保留执行证据，regenerate 不抹去在途或已执行操作。",
+        "Windows Electron 与获授权的真实 Notion 写入定向验证完成，结果以远程事实和落库回执核验。"
       ],
       "passes": false
     }
