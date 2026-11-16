@@ -27,6 +27,19 @@ export const DICTATION_DEFAULT_MODELS: Record<DictationProvider, string> = {
   gemini: "gemini-2.5-flash",
 };
 
+// Keep legacy selections working; each model is paired with its actual API.
+export const DICTATION_MODELS: Record<DictationProvider, readonly string[]> = {
+  openai: ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"],
+  gemini: ["gemini-3.5-transcribe", "gemini-2.5-flash", "gemini-2.5-pro"],
+};
+
+export function dictationProtocol(provider: DictationProvider, model: string) {
+  if (provider === "openai") return "openai-transcriptions";
+  return /^gemini-3\.5-transcribe(?:-\d{4}-\d{2}-\d{2})?$/.test(model.replace(/^models\//, ""))
+    ? "gemini-interactions"
+    : "gemini-generate-content";
+}
+
 export const DICTATION_PROVIDER_LABELS: Record<DictationProvider, string> = {
   openai: "OpenAI",
   gemini: "Google Gemini",
@@ -97,6 +110,7 @@ export const DICTATION_ERROR_CODES = {
   NETWORK: "DICTATION_NETWORK",
   PROVIDER_ERROR: "DICTATION_PROVIDER_ERROR",
   EMPTY_RESULT: "DICTATION_EMPTY_RESULT",
+  NO_SPEECH: "DICTATION_NO_SPEECH",
 } as const;
 export type DictationErrorCode =
   (typeof DICTATION_ERROR_CODES)[keyof typeof DICTATION_ERROR_CODES];

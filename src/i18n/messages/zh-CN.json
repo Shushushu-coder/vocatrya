@@ -3207,6 +3207,12 @@
     "copyFailed": "复制失败，请重试。"
   },
   "dictation": {
+    "keyConfigured": "密钥已保存",
+    "testHint": "录制最长 15 秒的音频测试转写。音频会发送至所选服务，并使用你的密钥计费。",
+    "testStart": "测试转写",
+    "testSaveFirst": "请先保存转写设置和 API 密钥，再进行测试。",
+    "testPassed": "转写成功，识别结果：",
+    "noSpeech": "录音没有可听见的声音，请检查麦克风和输入音量。",
     "title": "听写（语音转文字）",
     "description": "将 Agent 输入区的麦克风录音通过外部转写服务转为可编辑草稿文本。与聊天模型独立配置；仅在点击麦克风后才会上传音频，费用计入你自己的 API key。",
     "provider": "转写服务",

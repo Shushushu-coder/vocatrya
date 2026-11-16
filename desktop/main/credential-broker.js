@@ -8,6 +8,9 @@
 //   GET  /credential/status           -> {ok, available, backend}
 //   POST /credential/seal   {plaintext} -> {blob}     (base64 safeStorage ciphertext)
 //   POST /credential/unseal {blob}      -> {plaintext}
+//   POST /dictation/request            -> optional fixed-destination transport
+// The dictation handler shares authentication/listener lifecycle only; it
+// owns its own audio bounds and does not change credential operations.
 //
 // Fail closed: when safeStorage reports encryption unavailable or the
 // basic_text fallback, every operation — status included — answers
@@ -138,7 +141,7 @@ function readJsonObject(raw) {
   return parsed;
 }
 
-function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes, logger } = {}) {
+function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes, logger, dictationTransport } = {}) {
   if (typeof token !== "string" || token.length === 0) {
     throw new Error("Credential broker authentication token is required");
   }
@@ -169,6 +172,10 @@ function createCredentialBrokerServer({ token, safeStorage, maxBodyBytes, logger
       // about the surface (same convention as the hosted-session broker).
       if (!bearerMatches(req.headers.authorization, token)) {
         replyError(401, CODES.UNAUTHORIZED);
+        return;
+      }
+      if (req.method === "POST" && req.url === "/dictation/request" && dictationTransport) {
+        await dictationTransport(req, res);
         return;
       }
       const state = storageState(safeStorage);

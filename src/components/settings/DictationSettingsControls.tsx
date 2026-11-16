@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -20,11 +20,13 @@ import {
 import {
   DICTATION_CREDENTIAL_MODES,
   DICTATION_DEFAULT_MODELS,
+  DICTATION_MODELS,
   DICTATION_PROVIDERS,
   DICTATION_PROVIDER_LABELS,
   type DictationCredentialMode,
   type DictationProvider,
 } from "@/lib/dictation/config";
+import { DictationTestControls } from "./DictationTestControls";
 
 /**
  * Dictation service config block inside the Audio settings page
@@ -34,9 +36,11 @@ import {
  */
 export function DictationSettingsControls() {
   const { t } = useI18n();
+  const loadFailureMessage = useRef(t("dictation.saveFailed"));
+  loadFailureMessage.current = t("dictation.saveFailed");
   const [loading, setLoading] = useState(true);
   const [provider, setProvider] = useState<DictationProvider>("openai");
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(DICTATION_DEFAULT_MODELS.openai);
   const [credentialMode, setCredentialMode] =
     useState<DictationCredentialMode>("shared");
   const [credentials, setCredentials] =
@@ -45,6 +49,9 @@ export function DictationSettingsControls() {
   const [keyInput, setKeyInput] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [deletingKey, setDeletingKey] = useState(false);
+  const [savedConfig, setSavedConfig] = useState<string | null>(null);
+  const [credentialRevision, setCredentialRevision] = useState(0);
+  const configKey = JSON.stringify({ provider, model: model.trim(), credentialMode });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,8 +64,11 @@ export function DictationSettingsControls() {
           setProvider(config.provider);
           setModel(config.model);
           setCredentialMode(config.credentialMode);
+          setSavedConfig(JSON.stringify(config));
         }
-      }
+      } else toastError(result.message || loadFailureMessage.current);
+    } catch {
+      toastError(loadFailureMessage.current);
     } finally {
       setLoading(false);
     }
@@ -74,14 +84,7 @@ export function DictationSettingsControls() {
     if (!(DICTATION_PROVIDERS as readonly string[]).includes(value)) return;
     const next = value as DictationProvider;
     setProvider(next);
-    // Repoint the model at the new provider's default unless the user
-    // typed a custom one.
-    setModel((current) =>
-      current === "" ||
-      current === DICTATION_DEFAULT_MODELS[provider]
-        ? DICTATION_DEFAULT_MODELS[next]
-        : current,
-    );
+    setModel(DICTATION_DEFAULT_MODELS[next]);
     setKeyInput("");
   };
 
@@ -94,10 +97,13 @@ export function DictationSettingsControls() {
         credentialMode,
       });
       if (result.success) {
+        setSavedConfig(configKey);
         toastSuccess(t("dictation.saved"));
       } else {
         toastError(result.message || t("dictation.saveFailed"));
       }
+    } catch {
+      toastError(t("dictation.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -109,13 +115,21 @@ export function DictationSettingsControls() {
     setSavingKey(true);
     try {
       const result = await saveDictationKey({ provider, credentialMode, key });
-      if (result.success) {
+      if (result.success && result.data) {
         toastSuccess(t("dictation.keySaved"));
         setKeyInput("");
-        await load();
+        setCredentials(current => ({
+          openai: current?.openai ?? { shared: null, dedicated: null },
+          gemini: current?.gemini ?? { shared: null, dedicated: null },
+          [provider]: { ...current?.[provider], shared: current?.[provider].shared ?? null,
+            dedicated: current?.[provider].dedicated ?? null, [credentialMode]: result.data },
+        }));
+        setCredentialRevision(current => current + 1);
       } else {
         toastError(result.message || t("dictation.saveFailed"));
       }
+    } catch {
+      toastError(t("dictation.saveFailed"));
     } finally {
       setSavingKey(false);
     }
@@ -127,10 +141,13 @@ export function DictationSettingsControls() {
       const result = await deleteDictationKey({ provider, credentialMode });
       if (result.success) {
         toastSuccess(t("dictation.keyDeleted"));
-        await load();
+        setCredentials(current => current ? { ...current, [provider]: { ...current[provider], dedicated: null } } : current);
+        setCredentialRevision(current => current + 1);
       } else {
         toastError(result.message || t("dictation.saveFailed"));
       }
+    } catch {
+      toastError(t("dictation.saveFailed"));
     } finally {
       setDeletingKey(false);
     }
@@ -166,6 +183,7 @@ export function DictationSettingsControls() {
                 value={provider}
                 onChange={(event) => onProviderChange(event.target.value)}
                 data-testid="dictation-provider"
+                disabled={saving || savingKey || deletingKey}
               >
                 {DICTATION_PROVIDERS.map((id) => (
                   <option key={id} value={id}>
@@ -183,7 +201,12 @@ export function DictationSettingsControls() {
                 onChange={(event) => setModel(event.target.value)}
                 placeholder={DICTATION_DEFAULT_MODELS[provider]}
                 data-testid="dictation-model"
+                list={`dictation-models-${provider}`}
+                disabled={saving || savingKey || deletingKey}
               />
+              <datalist id={`dictation-models-${provider}`}>
+                {DICTATION_MODELS[provider].map(id => <option key={id} value={id} />)}
+              </datalist>
             </div>
             <div>
               <Label htmlFor="dictation-credential">
@@ -206,6 +229,7 @@ export function DictationSettingsControls() {
                   }
                 }}
                 data-testid="dictation-credential-mode"
+                disabled={saving || savingKey || deletingKey}
               >
                 <option value="shared">{t("dictation.credentialShared")}</option>
                 <option value="dedicated">
@@ -217,11 +241,11 @@ export function DictationSettingsControls() {
               <div className="flex items-center gap-2">
                 {activeCredential ? (
                   <Badge
-                    className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-900"
+                    variant="secondary"
                     data-testid="dictation-key-badge"
                   >
-                    <CheckCircle className="mr-1 h-3 w-3" />
                     {`····${activeCredential.last4}`}
+                    <span className="ml-1">{t("dictation.keyConfigured")}</span>
                   </Badge>
                 ) : (
                   <Badge
@@ -255,12 +279,13 @@ export function DictationSettingsControls() {
                 }
                 autoComplete="off"
                 data-testid="dictation-key-input"
+                disabled={saving || savingKey || deletingKey}
               />
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => void onSaveKey()}
-                disabled={!keyInput.trim() || savingKey}
+                disabled={!keyInput.trim() || savingKey || saving || deletingKey}
                 data-testid="dictation-key-save"
               >
                 {savingKey ? (
@@ -275,7 +300,7 @@ export function DictationSettingsControls() {
                   variant="outline"
                   className="text-destructive hover:text-destructive"
                   onClick={() => void onDeleteKey()}
-                  disabled={deletingKey}
+                  disabled={deletingKey || saving || savingKey}
                   data-testid="dictation-key-delete"
                 >
                   {deletingKey ? (
@@ -297,7 +322,7 @@ export function DictationSettingsControls() {
             <Button
               size="sm"
               onClick={() => void onSave()}
-              disabled={saving || !model.trim()}
+              disabled={saving || savingKey || deletingKey || !model.trim()}
               data-testid="dictation-save"
             >
               {saving ? t("common.saving") : t("dictation.save")}
@@ -306,6 +331,11 @@ export function DictationSettingsControls() {
               {t("dictation.disclosure")}
             </p>
           </div>
+          <DictationTestControls
+            key={`${configKey}:${credentialRevision}:${savingKey}:${deletingKey}`}
+            ownershipKey={configKey}
+            enabled={savedConfig === configKey && !!activeCredential && !saving && !savingKey && !deletingKey}
+          />
         </>
       )}
     </div>

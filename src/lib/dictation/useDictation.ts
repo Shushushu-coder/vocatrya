@@ -196,6 +196,7 @@ export function useDictation(options: UseDictationOptions): UseDictation {
       // no-op — the in-flight upload keeps owning the generation.
       if (!clip) return;
       if (generation !== generationRef.current) return;
+      clearTimers();
       setPhase("transcribing");
       const stream = streamRef.current;
       streamRef.current = null;
@@ -209,7 +210,7 @@ export function useDictation(options: UseDictationOptions): UseDictation {
       audioRef.current = blob;
       await uploadClip(generation, blob);
     },
-    [fail, uploadClip],
+    [clearTimers, fail, uploadClip],
   );
 
   const start = useCallback(() => {

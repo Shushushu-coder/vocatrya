@@ -45,6 +45,28 @@ beforeEach(() => {
 });
 
 describe("DictationSettingsControls", () => {
+  it("keeps unsaved provider and model edits when saving a dedicated key", async () => {
+    actions.getDictationSettings.mockResolvedValue(settings({ config: {
+      provider: "openai", model: "gpt-transcribe", credentialMode: "shared",
+    } }));
+    const user = userEvent.setup();
+    render(<DictationSettingsControls />);
+    await screen.findByTestId("dictation-provider");
+    await user.selectOptions(screen.getByTestId("dictation-provider"), "gemini");
+    await user.clear(screen.getByTestId("dictation-model"));
+    await user.type(screen.getByTestId("dictation-model"), "gemini-3.5-transcribe");
+    await user.selectOptions(screen.getByTestId("dictation-credential-mode"), "dedicated");
+    await user.type(screen.getByTestId("dictation-key-input"), "synthetic-key");
+    await user.click(screen.getByTestId("dictation-key-save"));
+    await waitFor(() => expect(screen.getByTestId("dictation-key-badge")).toHaveTextContent("1234"));
+    expect(screen.getByTestId("dictation-provider")).toHaveValue("gemini");
+    expect(screen.getByTestId("dictation-model")).toHaveValue("gemini-3.5-transcribe");
+    expect(screen.getByTestId("dictation-credential-mode")).toHaveValue("dedicated");
+    expect(actions.getDictationSettings).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Test transcription" })).toBeDisabled();
+    await user.click(screen.getByTestId("dictation-save"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Test transcription" })).toBeEnabled());
+  });
   it("renders provider/model/credential fields after loading", async () => {
     render(<DictationSettingsControls />);
     await waitFor(() =>
@@ -90,7 +112,7 @@ describe("DictationSettingsControls", () => {
       "zz99",
     );
     expect(screen.getByTestId("dictation-key-badge")).not.toHaveTextContent(
-      /ENC|key/i,
+      /ENC|encryptedKey/i,
     );
   });
 

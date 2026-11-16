@@ -63,6 +63,10 @@ export function dictationErrorKey(error: DictationFailure): string {
           return "dictation.errModelUnavailable";
         case "DICTATION_NETWORK":
           return "dictation.errNetwork";
+        case "DICTATION_EMPTY_RESULT":
+          return "dictation.emptyResult";
+        case "DICTATION_NO_SPEECH":
+          return "dictation.noSpeech";
         default:
           return "dictation.errProvider";
       }

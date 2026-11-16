@@ -3207,6 +3207,12 @@
     "copyFailed": "Copy failed. Please try again."
   },
   "dictation": {
+    "keyConfigured": "Key saved",
+    "testHint": "Record up to 15 seconds to test transcription. Audio is sent to your selected service and billed to your key.",
+    "testStart": "Test transcription",
+    "testSaveFirst": "Save the settings and API key before testing.",
+    "testPassed": "Transcription succeeded. Recognized text:",
+    "noSpeech": "The recording is silent. Check the microphone and input volume.",
     "title": "Dictation (speech-to-text)",
     "description": "Turns microphone recordings in the Agent composer into editable draft text via an external transcription service. Configured independently of the chat model; audio is sent only after you press the microphone button and is billed to your own API key.",
     "provider": "Transcription provider",

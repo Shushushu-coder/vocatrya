@@ -30,6 +30,7 @@ const { createBackendClient } = require("./runtime/backend-client");
 const { startExecutionServer } = require("./runtime/execute-server");
 const { createHostedSessionStore, resolveHostedSessionDirectory, startHostedSessionBroker } = require("./hosted-session");
 const { startCredentialBroker } = require("./credential-broker");
+const { createDictationTransport } = require("./dictation-transport");
 const { createDesktopSettingsStore, DESKTOP_SETTINGS_FILE_NAME } = require("./desktop-settings");
 const { createKeybindingsStore, KEYBINDINGS_FILE_NAME } = require("./keybindings");
 const { createGlobalToggleHotkey } = require("./global-shortcuts");
@@ -570,6 +571,7 @@ if (!singleInstance) {
           token: internalToken,
           safeStorage,
           logger: console,
+          dictationTransport: createDictationTransport((url, init) => require("electron").net.fetch(url, init)),
         });
       } catch (error) {
         console.error(

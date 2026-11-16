@@ -115,6 +115,59 @@ describe("transcribeDictationAudio — OpenAI", () => {
 });
 
 describe("transcribeDictationAudio — Gemini", () => {
+  it("classifies the Interactions array error envelope without leaking its message", async () => {
+    await expect(transcribeDictationAudio(opts({
+      provider: "gemini",
+      model: "gemini-3.5-transcribe",
+      fetchImpl: vi.fn(async () => okJson([{
+        error: { message: "synthetic secret", details: [{ reason: "API_KEY_INVALID" }] },
+      }], 400)),
+    }))).rejects.toMatchObject({
+      code: DICTATION_ERROR_CODES.AUTH_FAILED,
+      message: "The transcription service rejected the configured API key",
+      upstreamStatus: 400,
+    });
+  });
+
+  it.each([[], [null], null])("falls back to HTTP status for an unusable error envelope %#", async body => {
+    await expect(transcribeDictationAudio(opts({
+      provider: "gemini", model: "gemini-3.5-transcribe",
+      fetchImpl: vi.fn(async () => okJson(body, 400)),
+    }))).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.INVALID_AUDIO, upstreamStatus: 400 });
+  });
+  it("routes a dedicated transcription model to Interactions and preserves verbatim mode", async () => {
+    const doFetch = vi.fn(async () => okJson({ status: "completed", output_text: "实际转写" }));
+    await expect(transcribeDictationAudio(opts({ provider: "gemini", model: "models/gemini-3.5-transcribe", fetchImpl: doFetch,
+      audio: { ...audio, mimeType: "audio/webm;codecs=opus" } }))).resolves.toBe("实际转写");
+    const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/interactions");
+    expect(JSON.parse(init.body as string)).toMatchObject({ model: "gemini-3.5-transcribe", store: false,
+      input: [{ type: "audio", mime_type: "audio/webm" }],
+      generation_config: { transcription_config: { mode: { type: "verbatim" } } } });
+  });
+
+  it("rejects incomplete interactions even when partial text exists", async () => {
+    await expect(transcribeDictationAudio(opts({ provider: "gemini", model: "gemini-3.5-transcribe",
+      fetchImpl: vi.fn(async () => okJson({ status: "incomplete", output_text: "partial" })) })))
+      .rejects.toMatchObject({ code: DICTATION_ERROR_CODES.PROVIDER_ERROR });
+  });
+
+  it("identifies Gemini key rejection without exposing the upstream message", async () => {
+    await expect(transcribeDictationAudio(opts({ provider: "gemini", fetchImpl: vi.fn(async () => okJson({
+      error: { message: "synthetic secret", details: [{ reason: "API_KEY_INVALID" }] },
+    }, 400)) }))).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.AUTH_FAILED,
+      message: "The transcription service rejected the configured API key" });
+  });
+
+  it.each([
+    ["DICTATION_TIMEOUT", DICTATION_ERROR_CODES.TIMEOUT],
+    ["DICTATION_CANCELLED", DICTATION_ERROR_CODES.CANCELLED],
+  ])("classifies the actual route abort reason %s", async (reason, code) => {
+    const controller = new AbortController();
+    controller.abort(new Error(reason));
+    await expect(transcribeDictationAudio(opts({ signal: controller.signal,
+      fetchImpl: vi.fn(async () => { throw controller.signal.reason; }) }))).rejects.toMatchObject({ code });
+  });
   it("sends inline audio to generateContent and joins the text parts", async () => {
     const doFetch = vi.fn(async () =>
       okJson({
