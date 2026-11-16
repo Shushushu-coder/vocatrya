@@ -60,6 +60,9 @@ model User {
   // Harness durable-task ledger (additive backrelation only).
   harnessTasks           HarnessTask[]
 
+  // Persistent operation proposals (additive backrelation only).
+  agentOperationProposals AgentOperationProposal[]
+
   // Phase 3A Interview transplant (additive backrelations only).
   interviewSessions   InterviewSession[]
   transcriptRevisions TranscriptRevision[] @relation("RevisionAuthor")
@@ -732,6 +735,9 @@ model ChatConversation {
   // persisted turns. Follows the conversation — an execution without its
   // transcript is unrecoverable anyway.
   agentToolExecutions    AgentToolExecution[]
+  // Durable operation proposals. SetNull on delete — the proposal keeps
+  // the decision/dispatch evidence after its source transcript is gone.
+  agentOperationProposals AgentOperationProposal[]
 
   @@index([userId, updatedAt])
   @@index([userId, archivedAt])
@@ -1857,6 +1863,67 @@ model AgentToolExecution {
   @@index([userId, status])
 }
 
+/// Persistent user-facing operation proposal (durable approval). Backed up:
+/// unlike the transcript approval part (display) and the HarnessTask
+/// (runtime ledger), this row is the business-level authority for "what was
+/// proposed, decided and dispatched". conversationId is SetNull on source
+/// delete so decision/dispatch evidence survives its transcript.
+/// Statuses: PROPOSED | APPROVED | REJECTED | WITHDRAWN | SUPERSEDED |
+/// EXPIRED. Execution evidence lives in dispatchedAt/outcomeStatus/
+/// outcomeJson — APPROVED is an intent, never a success claim.
+model AgentOperationProposal {
+  id              String   @id @default(uuid())
+  userId          String
+  // Nullable + SetNull per the hard-delete contract: deleting the source
+  // conversation keeps the evidence, it never re-arms the operation.
+  conversationId  String?
+  messageId       String?
+  toolCallId      String   @unique
+  approvalId      String   @unique
+  turnKey         String
+  toolName        String
+  // Server-validated immutable input + canonical dedupe hash. The decision
+  // binds exactly this input version — an input change is a new proposal.
+  inputJson       String
+  inputHash       String
+  // Target/connection snapshot pinned at proposal time (JSON):
+  // {workspaceId?} — VERIFY fails instead of silently swapping workspace.
+  materialJson    String?
+  status          String   @default("PROPOSED")
+  revision        Int      @default(0)
+  decidedAt       DateTime?
+  decisionReason  String?
+  expiresAt       DateTime
+  // Runtime task pointer — cleared on backup restore; HarnessTask is never
+  // backed up, and a stale task id must never impersonate a live execution.
+  harnessTaskId   String?  @unique
+  // Dispatch intent + stable operation identity. Written inside the
+  // pre-remote-call transaction, backed up: "may already be out" is
+  // evidence, not a success receipt.
+  dispatchKey     String?  @unique
+  dispatchedAt    DateTime?
+  // Terminal outcome mirror: SUCCEEDED | FAILED | UNCERTAIN | CANCELLED.
+  outcomeStatus   String?
+  outcomeJson     String?
+  // User-attested resolution of an UNCERTAIN outcome — evidence of the
+  // manual check, never a fabricated remote receipt.
+  manualResolution String?
+  resolvedAt      DateTime?
+  // History link for re-proposals: the new row points at the one it
+  // supersedes. Plain column (remapped by the backup idmap), no FK.
+  supersedesId    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@index([userId, toolName, inputHash])
+}
+
 /// Durable long-running task row (harness). First consumer: DEEP_MATCH.
 /// Runtime recovery ledger, not user state: excluded from the product
 /// backup like AgentToolExecution — settled artifacts live in
@@ -1896,8 +1963,8 @@ model HarnessTask {
   // Denormalized lookup key for the job-detail surface (mirrors
   // inputJson.jobOpportunityId; intentionally no FK — the ledger must
   // never block business deletes, and the runner re-verifies ownership
-  // at execution time).
-  jobOpportunityId String
+  // at execution time). Null for non-job kinds (AGENT_TOOL_WRITE).
+  jobOpportunityId String?
 
   // Execution ownership: incremented on every successful claim; carried
   // by every ownership-checked write. leaseUntil is renewed while the

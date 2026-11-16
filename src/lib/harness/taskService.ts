@@ -37,6 +37,9 @@ export type HarnessClaim = {
   taskId: string;
   epoch: number;
   owner: string;
+  /** Set by claimNextHarnessTask — the dispatcher reads it to pick the
+   *  executor; absent on direct claimHarnessTask calls. */
+  kind?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -284,12 +287,12 @@ export async function claimNextHarnessTask(
   const now = input.now ?? new Date();
   const candidates = await db.harnessTask.findMany({
     where: {
-      kind: input.kind ?? HARNESS_TASK_KIND.DEEP_MATCH,
+      ...(input.kind !== undefined ? { kind: input.kind } : {}),
       ...claimableWhere(now),
     },
     orderBy: { createdAt: "asc" },
     take: 5,
-    select: { id: true, claimEpoch: true },
+    select: { id: true, claimEpoch: true, kind: true },
   });
   for (const candidate of candidates) {
     const claim = await claimHarnessTask(db, {
@@ -298,7 +301,7 @@ export async function claimNextHarnessTask(
       leaseMs: input.leaseMs,
       now,
     });
-    if (claim) return claim;
+    if (claim) return { ...claim, kind: candidate.kind };
   }
   return null;
 }
@@ -596,6 +599,9 @@ export async function requestTaskRetry(
       where: {
         id: taskId,
         userId,
+        // Detached writes are never re-armed by a generic retry — a real
+        // retry needs a fresh proposal and a fresh approval.
+        kind: { not: HARNESS_TASK_KIND.AGENT_TOOL_WRITE },
         status: {
           in: [HARNESS_TASK_STATUS.FAILED, HARNESS_TASK_STATUS.CANCELLED],
         },
@@ -756,7 +762,10 @@ export async function toDeepMatchTaskDTO(
       task.failureCode !== null &&
       DEEP_MATCH_INPUT_FAILURE_CODES.has(task.failureCode),
     resultAnalysisId: task.resultAnalysisId,
-    jobOpportunityId: task.jobOpportunityId,
+    // DEEP_MATCH rows always carry a job opportunity — AGENT_TOOL_WRITE
+    // tasks are the ones that leave it null, and this DTO only serves
+    // deep-match tasks.
+    jobOpportunityId: task.jobOpportunityId!,
     createdAt: task.createdAt,
     startedAt: task.startedAt,
     completedAt: task.completedAt,

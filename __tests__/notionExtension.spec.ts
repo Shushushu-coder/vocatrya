@@ -19,6 +19,10 @@ import {
 } from "@/lib/extensions/notion/capabilities";
 import { NOTION_ERROR } from "@/lib/extensions/notion/errors";
 import { NOTION_TOOL } from "@/lib/extensions/notion/constants";
+import {
+  NOTION_WRITE_SPECS,
+  notionWriteInputHash,
+} from "@/lib/agent/notionWriteSpec";
 import { mapNotionRemoteError, setNotionMcpClientFactory } from "@/lib/extensions/notion/mcpClient";
 import { setNotionOAuthFetch } from "@/lib/extensions/notion/oauth";
 import {
@@ -38,6 +42,8 @@ type FakeState = {
   connection: Row | null;
   executions: Row[];
   conversation: Row | null;
+  proposals?: Row[];
+  tasks?: Row[];
 };
 
 // Evaluate the Prisma predicates used by ownership and execution CAS checks.
@@ -151,16 +157,47 @@ function makeDb(state: FakeState) {
     }),
   };
 
+  const agentOperationProposal = {
+    findUnique: vi.fn(async ({ where }: { where: Row }) =>
+      state.proposals?.find(
+        (r) =>
+          (where.id !== undefined && r.id === where.id) ||
+          (where.toolCallId !== undefined && r.toolCallId === where.toolCallId),
+      ) ?? null,
+    ),
+    findFirst: vi.fn(async ({ where }: { where: Row }) =>
+      state.proposals?.find((row) => matches(row, where)) ?? null,
+    ),
+    create: vi.fn(async ({ data }: { data: Row }) => {
+      const row = { id: `prop-${(state.proposals?.length ?? 0) + 1}`, ...data };
+      (state.proposals ??= []).push(row);
+      return structuredClone(row);
+    }),
+    updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+      const rows = (state.proposals ?? []).filter((row) => matches(row, where));
+      rows.forEach((row) => Object.assign(row, data));
+      return { count: rows.length };
+    }),
+  };
+
+  const harnessTask = {
+    findUnique: vi.fn(async ({ where }: { where: Row }) =>
+      state.tasks?.find((r) => r.id === where.id) ?? null,
+    ),
+  };
+
   let transactionDepth = 0;
   const db = {
     get inTransaction() { return transactionDepth > 0; },
     notionConnection,
     agentToolExecution,
+    agentOperationProposal,
+    harnessTask,
     chatConversation,
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
       const snapshot = structuredClone(state);
       transactionDepth++;
-      try { return await fn({ notionConnection, agentToolExecution, chatConversation }); }
+      try { return await fn({ notionConnection, agentToolExecution, agentOperationProposal, harnessTask, chatConversation }); }
       catch (error) { Object.assign(state, snapshot); throw error; }
       finally { transactionDepth--; }
     }),
@@ -479,19 +516,9 @@ describe("durable write execution", () => {
   });
 });
 
-describe("write tool approval binding and outcomes", () => {
+describe("write tool approval binding and detached queue", () => {
   function toolset(state: FakeState, request: ConversationRequest) {
     const db = makeDb(state);
-    if (state.conversation?.messages === "[]") {
-      state.conversation.messages = JSON.stringify([
-        ...request.messages,
-        { id: "proposal", role: "assistant", parts: [{
-          type: "tool-notion_create_page", toolCallId: request.approvalToolCallId,
-          state: "approval-responded", approval: { id: "approval", approved: true },
-          input: { title: "Test page", content: "Hello Notion" },
-        }] },
-      ]);
-    }
     const tools = buildNotionAgentTools({
       userId: USER,
       request,
@@ -500,19 +527,35 @@ describe("write tool approval binding and outcomes", () => {
     return { db, tools };
   }
 
-  const createInput = {
-    title: "Test page",
-    content: "Hello Notion",
-  };
+  const createInput = { title: "Test page", content: "Hello Notion" };
+
+  function seedProposal(state: FakeState, over: Partial<Row> = {}) {
+    const row: Row = {
+      id: "prop-1",
+      userId: USER,
+      conversationId: CONV,
+      toolCallId: "tc-1",
+      toolName: "notion_create_page",
+      status: "APPROVED",
+      inputJson: JSON.stringify(createInput),
+      inputHash: notionWriteInputHash(createInput),
+      harnessTaskId: "task-1",
+      outcomeJson: null,
+      expiresAt: new Date(Date.now() + 3600_000),
+      ...over,
+    };
+    (state.proposals ??= []).push(row);
+    (state.tasks ??= []).push({ id: "task-1", status: "QUEUED" });
+    return row;
+  }
 
   it("refuses execution outside an admitted approval turn", async () => {
     const state = connectedState();
     const request = approvalRequest("tc-1");
     request.operation = "send";
     const { tools } = toolset(state, request);
-    const create = tools[NOTION_TOOL.createPage];
     await expect(
-      create.execute!(createInput, { toolCallId: "tc-1" } as never),
+      tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-1" } as never),
     ).rejects.toBeInstanceOf(ConversationRequestError);
     expect(request.failure).toBeInstanceOf(ConversationRequestError);
   });
@@ -521,195 +564,107 @@ describe("write tool approval binding and outcomes", () => {
     const state = connectedState();
     const request = approvalRequest("tc-approved");
     const { tools } = toolset(state, request);
-    const create = tools[NOTION_TOOL.createPage];
     await expect(
-      create.execute!(createInput, { toolCallId: "tc-other" } as never),
+      tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-other" } as never),
     ).rejects.toBeInstanceOf(ConversationRequestError);
   });
 
-  it("writes and returns a verifiable receipt", async () => {
-    setNotionMcpClientFactory(async () => ({
-      listTools: async () => ({ tools: [] }),
-      callTool: async () => ({
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              pages: [{ id: "12345678-1234-1234-1234-123456789abc", url: "https://notion.so/12345678-1234-1234-1234-123456789abc" }],
-            }),
-          },
-        ],
-      }),
-      close: async () => undefined,
-    }));
-    const sealed = await sealBundle({
-      v: 1,
-      accessToken: "at-1",
-      clientId: "client-1",
-      expiresAt: Date.now() + 3_600_000,
-    });
-    const state = connectedState(sealed);
+  it("fails closed when the durable proposal is missing — never a fake queued", async () => {
+    const callTool = vi.fn();
+    setNotionMcpClientFactory(async () => ({ listTools: async () => ({ tools: [] }), callTool, close: async () => undefined }));
+    const state = connectedState();
     const request = approvalRequest("tc-1");
-    const { tools, db } = toolset(state, request);
-    const create = tools[NOTION_TOOL.createPage];
-    const out = (await create.execute!(createInput, {
-      toolCallId: "tc-1",
-    } as never)) as { saved: boolean; pageId?: string; url?: string };
+    const { tools } = toolset(state, request);
+    const out = (await tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-1" } as never)) as { saved: boolean; status: string; code?: string };
+    expect(out.saved).toBe(false);
+    expect(out.status).toBe("failed");
+    expect(out.code).toBe("PROPOSAL_MISSING");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("returns the persisted queued stub — never calls the remote", async () => {
+    const callTool = vi.fn();
+    setNotionMcpClientFactory(async () => ({ listTools: async () => ({ tools: [] }), callTool, close: async () => undefined }));
+    const state = connectedState();
+    seedProposal(state);
+    const request = approvalRequest("tc-1");
+    const { tools } = toolset(state, request);
+    const out = (await tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-1" } as never)) as { saved: boolean; status: string; proposalId?: string; taskId?: string; taskStatus?: string };
+    expect(out.saved).toBe(false);
+    expect(out.status).toBe("queued");
+    expect(out.proposalId).toBe("prop-1");
+    expect(out.taskId).toBe("task-1");
+    expect(out.taskStatus).toBe("QUEUED");
+    expect(out).not.toMatchObject({ saved: true });
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("reports the real RUNNING task state — still no remote call", async () => {
+    const callTool = vi.fn();
+    setNotionMcpClientFactory(async () => ({ listTools: async () => ({ tools: [] }), callTool, close: async () => undefined }));
+    const state = connectedState();
+    seedProposal(state);
+    state.tasks![0].status = "RUNNING";
+    const request = approvalRequest("tc-1");
+    const { tools } = toolset(state, request);
+    const out = (await tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-1" } as never)) as { saved: boolean; status: string; taskStatus?: string };
+    expect(out.saved).toBe(false);
+    expect(out.status).toBe("queued");
+    expect(out.taskStatus).toBe("RUNNING");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the call input no longer matches the approved hash", async () => {
+    const callTool = vi.fn();
+    setNotionMcpClientFactory(async () => ({ listTools: async () => ({ tools: [] }), callTool, close: async () => undefined }));
+    const state = connectedState();
+    seedProposal(state);
+    const request = approvalRequest("tc-1");
+    const { tools } = toolset(state, request);
+    const out = (await tools[NOTION_TOOL.createPage].execute!(
+      { ...createInput, title: "Tampered title" },
+      { toolCallId: "tc-1" } as never,
+    )) as { saved: boolean; status: string; code?: string };
+    expect(out.saved).toBe(false);
+    expect(out.status).toBe("failed");
+    expect(out.code).toBe("PROPOSAL_INPUT_CONFLICT");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("approved without a task reports unknown, not queued", async () => {
+    const state = connectedState();
+    seedProposal(state, { harnessTaskId: null });
+    const request = approvalRequest("tc-1");
+    const { tools } = toolset(state, request);
+    const out = (await tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-1" } as never)) as { status: string; code?: string };
+    expect(out.status).toBe("unknown");
+    expect(out.code).toBe("TASK_MISSING");
+  });
+
+  it("replays the stored outcome receipt — saved:true only from persistence", async () => {
+    const state = connectedState();
+    seedProposal(state, {
+      outcomeJson: JSON.stringify({ saved: true, tool: "notion_create_page", pageId: "12345678-1234-1234-1234-123456789abc" }),
+    });
+    const request = approvalRequest("tc-1");
+    const { tools } = toolset(state, request);
+    const out = (await tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-1" } as never)) as { saved: boolean; pageId?: string };
     expect(out.saved).toBe(true);
     expect(out.pageId).toBe("12345678-1234-1234-1234-123456789abc");
-    expect(out.url).toBe("https://notion.so/12345678-1234-1234-1234-123456789abc");
-    expect(
-      state.executions.find((r) => r.toolName === "notion_create_page")!
-        .status,
-    ).toBe(AGENT_TOOL_EXECUTION_STATUS.COMPLETED);
-    // The durable receipt landed in the conversation messages.
-    expect(
-      (db.chatConversation.findFirst as ReturnType<typeof vi.fn>).mock.calls
-        .length,
-    ).toBeGreaterThan(0);
   });
 
-  it("reports unknown outcome and blocks retry including a model verification flag", async () => {
-    let calls = 0;
-    setNotionMcpClientFactory(async () => ({
-      listTools: async () => ({ tools: [] }),
-      callTool: async () => {
-        calls += 1;
-        throw new TypeError("fetch failed");
-      },
-      close: async () => undefined,
-    }));
-    const sealed = await sealBundle({
-      v: 1,
-      accessToken: "at-1",
-      clientId: "client-1",
-      expiresAt: Date.now() + 3_600_000,
-    });
-    const state = connectedState(sealed);
-
-    const request1 = approvalRequest("tc-1", "msg-turn-1");
-    const { tools: t1 } = toolset(state, request1);
-    const first = (await t1[NOTION_TOOL.createPage].execute!(createInput, {
-      toolCallId: "tc-1",
-    } as never)) as { saved: boolean; status?: string; verify?: { tool: string } };
-    expect(first.saved).toBe(false);
-    expect(first.status).toBe("unknown");
-    expect(first.verify?.tool).toBe("notion_search");
-    expect(
-      state.executions.find((r) => r.toolName === "notion_create_page")!
-        .failureCode,
-    ).toBe(NOTION_ERROR.OUTCOME_UNKNOWN);
-
-    // A new turn retrying without verification is blocked.
-    const request2 = approvalRequest("tc-2", "msg-turn-2");
-    const { tools: t2 } = toolset(state, request2);
-    const second = (await t2[NOTION_TOOL.createPage].execute!(createInput, {
-      toolCallId: "tc-2",
-    } as never)) as { saved: boolean; status?: string };
-    expect(second.saved).toBe(false);
-    expect(second.status).toBe("verification_required");
-    expect(calls).toBe(1);
-
-    // A model flag never authorizes retry, even on a fresh turn.
-    const request3 = approvalRequest("tc-3", "msg-turn-3");
-    const { tools: t3 } = toolset(state, request3);
-    const third = (await t3[NOTION_TOOL.createPage].execute!(
-      { ...createInput, verifiedNoDuplicate: true },
-      { toolCallId: "tc-3" } as never,
-    )) as { saved: boolean; status?: string };
-    expect(third.saved).toBe(false);
-    expect(third.status).toBe("verification_required");
-    expect(calls).toBe(1);
-  });
-
-  async function ready() {
-    const state = connectedState(await sealBundle({ v: 1, accessToken: "at-1", clientId: "client-1", expiresAt: Date.now() + 3_600_000 }));
-    const request = approvalRequest("tc-1");
-    const ctx = toolset(state, request);
-    const callTool = vi.fn(async () => ({ content: [{ type: "text", text: '{"pages":[{"id":"12345678-1234-1234-1234-123456789abc"}]}' }] }));
+  it.each(["REJECTED", "WITHDRAWN", "EXPIRED", "SUPERSEDED"])("a %s proposal reports denied — the stored decision rules", async (status) => {
+    const callTool = vi.fn();
     setNotionMcpClientFactory(async () => ({ listTools: async () => ({ tools: [] }), callTool, close: async () => undefined }));
-    const execute = (input = createInput) => ctx.tools[NOTION_TOOL.createPage].execute!(input, { toolCallId: "tc-1" } as never);
-    return { state, request, ...ctx, callTool, execute };
-  }
-
-  it.each([
-    ["cancelled", { activeRequestId: null }],
-    ["replaced owner", { activeRequestId: "other" }],
-    ["stale revision", { revision: 9 }],
-    ["expired lease", { activeRequestExpiresAt: new Date(0) }],
-    ["archived", { archivedAt: new Date() }],
-    ["wrong user", { userId: "other" }],
-  ])("blocks dispatch for %s live ownership", async (_name, patch) => {
-    const ctx = await ready();
-    Object.assign(ctx.state.conversation!, patch);
-    await expect(ctx.execute()).rejects.toBeInstanceOf(ConversationRequestError);
-    expect(ctx.callTool).not.toHaveBeenCalled();
-    expect(ctx.state.executions[0].failureCode).toBeNull();
-  });
-
-  it.each(["denied", "changed input", "wrong tool", "missing proposal", "wrong turn"])("rejects persisted approval: %s", async (kind) => {
-    const ctx = await ready();
-    const messages = JSON.parse(ctx.state.conversation!.messages as string);
-    const part = messages[1].parts[0];
-    if (kind === "denied") part.approval.approved = false;
-    if (kind === "changed input") part.input.content = "unapproved";
-    if (kind === "wrong tool") part.type = "tool-notion_update_record";
-    if (kind === "missing proposal") messages.pop();
-    if (kind === "wrong turn") messages[0].id = "other-turn";
-    ctx.state.conversation!.messages = JSON.stringify(messages);
-    await expect(ctx.execute()).rejects.toBeInstanceOf(ConversationRequestError);
-    expect(ctx.callTool).not.toHaveBeenCalled();
-  });
-
-  it("rechecks cancellation occurring during token resolution", async () => {
-    const ctx = await ready();
-    ctx.db.notionConnection.findUnique.mockImplementationOnce(async () => {
-      ctx.state.conversation!.activeRequestId = null;
-      return ctx.state.connection;
-    });
-    await expect(ctx.execute()).rejects.toBeInstanceOf(ConversationRequestError);
-    expect(ctx.callTool).not.toHaveBeenCalled();
-  });
-
-  it("does not redispatch a concurrent pending execution", async () => {
-    const ctx = await ready();
-    let release!: () => void;
-    let entered!: () => void;
-    const started = new Promise<void>((resolve) => { entered = resolve; });
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
-    ctx.callTool.mockImplementationOnce(async () => { expect(ctx.db.inTransaction).toBe(false); entered(); await blocked; return { content: [{ type: "text", text: '{"pages":[{"id":"12345678-1234-1234-1234-123456789abc"}]}' }] }; });
-    const first = ctx.execute();
-    await started;
-    expect(await ctx.execute()).toMatchObject({ status: "verification_required" });
-    expect(ctx.callTool).toHaveBeenCalledTimes(1);
-    release();
-    expect(await first).toMatchObject({ saved: true });
-  });
-
-  it.each(["PENDING", "ABORTED"])("blocks %s interruption on a later turn even with a verification flag", async (status) => {
-    const ctx = await ready();
-    const reservation = await acquireToolExecution(ctx.db as never, {
-      userId: USER, conversationId: CONV, toolName: NOTION_TOOL.createPage,
-      turnKey: "old-turn", inputHash: hashCanonical(createInput), operationPrefix: "notion",
-    });
-    ctx.state.executions[0].status = status;
-    expect(await ctx.tools[NOTION_TOOL.createPage].execute!({ ...createInput, verifiedNoDuplicate: true }, { toolCallId: "tc-1" } as never)).toMatchObject({ status: "verification_required" });
-    expect(ctx.callTool).not.toHaveBeenCalled();
-    expect(reservation.execution.operationKey).toBeTruthy();
-  });
-
-  it("preserves remote success when the local checkpoint loses ownership", async () => {
-    const ctx = await ready();
-    ctx.callTool.mockImplementationOnce(async () => {
-      ctx.state.conversation!.activeRequestId = null;
-      return { content: [{ type: "text", text: '{"pages":[{"id":"12345678-1234-1234-1234-123456789abc"}]}' }] };
-    });
-    await expect(ctx.execute()).rejects.toMatchObject({ code: "CONVERSATION_STALE_WRITE" });
-    expect(ctx.state.executions[0]).toMatchObject({ status: "COMPLETED", failureCode: null });
-    expect(JSON.parse(ctx.state.executions[0].resultJson as string)).toMatchObject({ saved: true, pageId: "12345678-1234-1234-1234-123456789abc" });
-    expect(ctx.callTool).toHaveBeenCalledTimes(1);
-    expect(await ctx.execute()).toMatchObject({ saved: true });
-    expect(ctx.callTool).toHaveBeenCalledTimes(1);
+    const state = connectedState();
+    seedProposal(state, { status, harnessTaskId: null });
+    const request = approvalRequest("tc-1");
+    const { tools } = toolset(state, request);
+    const out = (await tools[NOTION_TOOL.createPage].execute!(createInput, { toolCallId: "tc-1" } as never)) as { saved: boolean; status: string; code?: string };
+    expect(out.saved).toBe(false);
+    expect(out.status).toBe("denied");
+    expect(out.code).toBe("PROPOSAL_" + status);
+    expect(callTool).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -718,50 +673,28 @@ describe("write tool approval binding and outcomes", () => {
     ["garbage", "request accepted"],
     ["empty response", "{}"],
     ["untrusted URL", JSON.stringify({ url: "https://example.com/page" })],
-  ])("keeps %s receipts unknown and blocks later retry", async (_name, text) => {
-    const ctx = await ready();
-    ctx.callTool.mockResolvedValueOnce({ content: [{ type: "text", text }] });
-    expect(await ctx.execute()).toMatchObject({ saved: false, status: "unknown", verify: { tool: "notion_search" } });
-    expect(ctx.state.executions[0]).toMatchObject({ status: "FAILED", failureCode: NOTION_ERROR.OUTCOME_UNKNOWN });
-    const request = approvalRequest("tc-2", "next-turn");
-    const next = toolset(ctx.state, request);
-    expect(await next.tools[NOTION_TOOL.createPage].execute!({ ...createInput, verifiedNoDuplicate: true }, { toolCallId: "tc-2" } as never)).toMatchObject({ status: "verification_required" });
-    expect(ctx.callTool).toHaveBeenCalledTimes(1);
+  ])("keeps %s receipts unknown at settle — never a saved receipt", (_name, text) => {
+    const receipt = NOTION_WRITE_SPECS[NOTION_TOOL.createPage].receipt(text, createInput);
+    expect(receipt.saved).toBe(false);
+    expect((receipt as { status?: string }).status).toBe("unknown");
   });
 
-  it("does not treat the input target as proof of a completed append", async () => {
-    const ctx = await ready();
-    const input = { target: "12345678-1234-1234-1234-123456789abc", content: "append this" };
-    const messages = JSON.parse(ctx.state.conversation!.messages as string);
-    Object.assign(messages[1].parts[0], { type: "tool-notion_append_content", input });
-    ctx.state.conversation!.messages = JSON.stringify(messages);
-    ctx.callTool.mockResolvedValueOnce({ content: [{ type: "text", text: '{"task_id":"async-task"}' }] });
-    expect(await ctx.tools[NOTION_TOOL.appendContent].execute!(input, { toolCallId: "tc-1" } as never)).toMatchObject({
-      saved: false, status: "unknown", verify: { tool: "notion_read", target: input.target },
-    });
-    expect(ctx.state.executions[0]).toMatchObject({ status: "FAILED", failureCode: NOTION_ERROR.OUTCOME_UNKNOWN });
+  it("accepts a verifiable Notion page URL receipt without an ID field", () => {
+    const receipt = NOTION_WRITE_SPECS[NOTION_TOOL.createPage].receipt(
+      JSON.stringify({ url: "https://www.notion.so/12345678123412341234123456789abc" }),
+      createInput,
+    );
+    expect(receipt.saved).toBe(true);
+    expect((receipt as { url?: string }).url).toBe("https://www.notion.so/12345678123412341234123456789abc");
   });
 
-  it("accepts a verifiable Notion page URL receipt without an ID field", async () => {
-    const ctx = await ready();
-    ctx.callTool.mockResolvedValueOnce({ content: [{ type: "text", text: JSON.stringify({ url: "https://www.notion.so/12345678123412341234123456789abc" }) }] });
-    expect(await ctx.execute()).toMatchObject({ saved: true, url: "https://www.notion.so/12345678123412341234123456789abc" });
-    expect(ctx.state.executions[0].status).toBe("COMPLETED");
+  it("verifyOf names a read-path check per tool, never the write tool", () => {
+    expect(NOTION_WRITE_SPECS[NOTION_TOOL.createPage].verifyOf({ title: "x" }).tool).toBe("notion_search");
+    expect(NOTION_WRITE_SPECS[NOTION_TOOL.appendContent].verifyOf({ target: "p" }).tool).toBe("notion_read");
+    expect(NOTION_WRITE_SPECS[NOTION_TOOL.updateRecord].verifyOf({ target: "p" }).tool).toBe("notion_read");
   });
-
-  it("leaves a remotely successful write unresolved if ledger persistence fails", async () => {
-    const ctx = await ready();
-    ctx.callTool.mockImplementationOnce(async () => {
-      ctx.db.agentToolExecution.updateMany.mockRejectedValueOnce(new Error("ledger unavailable"));
-      return { content: [{ type: "text", text: '{"pages":[{"id":"12345678-1234-1234-1234-123456789abc"}]}' }] };
-    });
-    await expect(ctx.execute()).rejects.toThrow("ledger unavailable");
-    expect(ctx.state.executions[0]).toMatchObject({ status: "PENDING", failureCode: "NOTION_DISPATCHED" });
-    expect(await ctx.execute()).toMatchObject({ status: "verification_required" });
-    expect(ctx.callTool).toHaveBeenCalledTimes(1);
-  });
-
 });
+
 
 describe("remote error mapping", () => {
   it("maps HTTP statuses to stable codes", () => {

@@ -79,6 +79,7 @@ export type BackupModel =
   | "AIConnection"
   | "AIBusinessAssignment"
   | "ChatConversation"
+  | "AgentOperationProposal"
   | "AutomationRun"
   | "UserSettings"
   | "AbMigrationState"
@@ -412,6 +413,19 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     delegate: "chatConversation",
     owner: "userId",
     fks: { resolvedConnectionId: "AIConnection" },
+    scope: byUser,
+  },
+  // Durable operation proposals are user state: the row carries the
+  // decision/dispatch evidence the transcript part only displays. The
+  // runtime links (harnessTaskId) are cleared on import — never backed-up
+  // task rows to resurrect. conversationId is SetNull (OPTIONAL_FKS);
+  // supersedesId remaps through this model's own id map.
+  AgentOperationProposal: {
+    delegate: "agentOperationProposal",
+    owner: "userId",
+    fks: {
+      conversationId: "ChatConversation",
+    },
     scope: byUser,
   },
   AutomationRun: {
@@ -887,6 +901,7 @@ export const INSERT_ORDER: BackupModel[] = [
   "AIConnection",
   "AIBusinessAssignment",
   "ChatConversation",
+  "AgentOperationProposal",
   "AutomationRun",
   "UserSettings",
   "AbMigrationState",
@@ -1047,6 +1062,13 @@ export const DEFERRED_FKS: ReadonlyArray<{
     model: "AnswerAttempt",
     field: "activeRevisionId",
     target: "TranscriptRevision",
+  },
+  // Self-history chain — insert null, patch once every row of the model
+  // exists; a dangling pointer degrades to null like any SetNull FK.
+  {
+    model: "AgentOperationProposal",
+    field: "supersedesId",
+    target: "AgentOperationProposal",
   },
 ];
 

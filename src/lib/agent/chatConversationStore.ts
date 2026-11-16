@@ -1,4 +1,5 @@
 import { ConversationRequestError } from "./conversationRequest";
+import { prepareConversationDelete } from "./operationProposal";
 import { restoredJobReferences, withRestoredJobReferences } from "./restoredJobReferences";
 import "server-only";
 
@@ -320,10 +321,18 @@ export async function deleteOwnedChatConversation(
   userId: string,
   conversationId: string,
 ): Promise<boolean> {
-  const deleted = await prisma.chatConversation.deleteMany({
-    where: { id: conversationId, userId },
+  // Proposals share the same commit boundary as the delete: undecided and
+  // approved-but-undispatched operations are withdrawn/cancelled atomically
+  // with the row; dispatched and terminal rows keep their evidence via
+  // conversationId SetNull.
+  const deleted = await prisma.$transaction(async (tx) => {
+    await prepareConversationDelete(tx, { userId, conversationId });
+    const removed = await tx.chatConversation.deleteMany({
+      where: { id: conversationId, userId },
+    });
+    return removed.count;
   });
-  return deleted.count === 1;
+  return deleted === 1;
 }
 
 export function contextOfRow(row: {

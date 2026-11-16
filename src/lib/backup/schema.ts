@@ -11,8 +11,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 9;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+export const BACKUP_FORMAT_VERSION = 10;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -29,6 +29,7 @@ export const ManifestSchema = z.object({
     z.literal(7),
     z.literal(8),
     z.literal(9),
+    z.literal(10),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -407,6 +408,36 @@ const ChatConversation = z.object({
   // Optional: backups taken before conversation archive have no such key,
   // and undefined restores as NULL (unarchived).
   archivedAt: optDt.optional(),
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+// Durable operation proposals — user state. Runtime links (harnessTaskId)
+// are cleared on import; dispatch evidence and outcomes travel.
+const AgentOperationProposal = z.object({
+  id,
+  conversationId: optId,
+  messageId: optId.optional(),
+  toolCallId: str,
+  approvalId: str,
+  turnKey: str,
+  toolName: str,
+  inputJson: str,
+  inputHash: str,
+  materialJson: optStr.optional(),
+  status: str,
+  revision: optInt.optional(),
+  decidedAt: optDt.optional(),
+  decisionReason: optStr.optional(),
+  expiresAt: dt,
+  harnessTaskId: optId.optional(),
+  dispatchKey: optStr.optional(),
+  dispatchedAt: optDt.optional(),
+  outcomeStatus: optStr.optional(),
+  outcomeJson: optStr.optional(),
+  manualResolution: optStr.optional(),
+  resolvedAt: optDt.optional(),
+  supersedesId: optId.optional(),
   createdAt: dt,
   updatedAt: dt,
 });
@@ -1372,6 +1403,7 @@ export const BackupDataSchema = z.object({
   AIConnection: group(AIConnection),
   AIBusinessAssignment: group(AIBusinessAssignment),
   ChatConversation: group(ChatConversation),
+  AgentOperationProposal: group(AgentOperationProposal),
   AutomationRun: group(AutomationRun),
   UserSettings: group(UserSettings),
   AbMigrationState: group(AbMigrationState),

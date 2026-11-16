@@ -66,6 +66,13 @@ const OPTIONAL_FKS = new Set<string>([
   "DialogueTurn.answerAttemptId",
   "DialogueTurn.commercialFeedbackItemId",
   "DialogueTurn.summaryGenerationId",
+  // SetNull FK: a proposal whose source conversation is absent from the
+  // backup (or restored without it) keeps its decision/dispatch evidence
+  // with a null source — evidence survives, it never re-arms.
+  "AgentOperationProposal.conversationId",
+  // Self-history link: a dangling chain pointer degrades to null rather
+  // than failing the import.
+  "AgentOperationProposal.supersedesId",
 ]);
 
 // Lock/provenance pointers that must SURVIVE dangling, not degrade: a

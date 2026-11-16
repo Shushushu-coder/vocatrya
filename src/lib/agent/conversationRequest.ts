@@ -1,9 +1,15 @@
 import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { isToolUIPart, type UIMessage } from "ai";
+import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { hasWriteReceipt, regenerateTailHasWriteReceipt } from "./writeReceipt";
+import {
+  createProposalsForResponseMessage,
+  decideOperationProposalInTx,
+  isDetachedWriteTool,
+  reconcileConversationProposals,
+} from "./operationProposal";
 
 // Server-side shape check for data-file parts (AWU-FILES): the composer
 // builds them from endpoint-extracted text, but admission re-verifies count
@@ -95,8 +101,13 @@ export async function admitConversationRequest(input: ConversationOperation & {
       if (row.activeRequestId) return { error: "CONVERSATION_TURN_CONFLICT" as const };
       if (row.revision !== input.expectedRevision) return { error: "CONVERSATION_STALE_WRITE" as const };
       const messages = JSON.parse(row.messages) as UIMessage[];
+      // Durable proposals are the authority: externally decided proposals
+      // mirror into the transcript, expired ones close out, and pre-H05
+      // orphan parts are marked not-continuable instead of deadlocking.
+      await reconcileConversationProposals(tx, { id: row.id, userId: row.userId }, messages);
       const pending = pendingApprovals(messages);
       let approvalToolCallId: string | undefined;
+      let approvedWriteTask = false;
       if (input.operation === "send") {
         if (pending.length) return { error: "CONVERSATION_TURN_CONFLICT" as const };
         const message = input.newMessage;
@@ -108,12 +119,46 @@ export async function admitConversationRequest(input: ConversationOperation & {
         const index = messages.findIndex(m => m.id === input.targetMessageId);
         if (pending.length || index < 0 || index !== messages.length - 1 || messages[index].role !== "assistant" || regenerateTailHasWriteReceipt(messages))
           return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        // C06: a queued stub is not a write receipt — the tail must not be
+        // regenerated while any detached-write proposal it carries is
+        // committed (approved/queued/running/dispatched/settled). The
+        // proposal row is the authority; a missing task row never disarms
+        // this guard.
+        const tailToolCallIds = messages[index].parts
+          .filter(part => isToolUIPart(part) && isDetachedWriteTool(getToolName(part)))
+          .map(part => (isToolUIPart(part) ? part.toolCallId : ""))
+          .filter(Boolean);
+        if (tailToolCallIds.length) {
+          const committed = await tx.agentOperationProposal.findFirst({
+            where: {
+              conversationId: row.id,
+              toolCallId: { in: tailToolCallIds },
+              status: "APPROVED",
+            },
+          });
+          if (committed) return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        }
         messages.splice(index);
       } else {
         const proposal = pending.find(p => p.part.approval?.id === input.approvalId);
         if (!proposal || proposal.message.role !== "assistant" || proposal.message.id !== messages.at(-1)?.id || typeof input.decision !== "boolean" || !proposal.part.toolCallId || !proposal.part.type.startsWith("tool-") || proposal.part.input === undefined)
           return { error: "CONVERSATION_TURN_CONFLICT" as const };
         approvalToolCallId = proposal.part.toolCallId;
+        // Detached writes: the proposal row takes the decision in the same
+        // transaction — an approve CAS mints the harness task here, so the
+        // resumed turn's tool execute can only read real persisted state.
+        if (isDetachedWriteTool(getToolName(proposal.part))) {
+          const decision = await decideOperationProposalInTx(tx, {
+            userId: input.userId,
+            toolCallId: proposal.part.toolCallId,
+            decision: input.decision ? "approve" : "reject",
+            reason: input.reason,
+            mirrorPart: false,
+          }).catch(() => null);
+          if (decision?.state === "approved") approvedWriteTask = true;
+          else if (decision?.state !== "rejected")
+            return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        }
         Object.assign(proposal.part, { state: "approval-responded", approval: { id: input.approvalId, approved: input.decision, ...(input.reason ? { reason: input.reason } : {}) } });
       }
       const updated = await tx.chatConversation.updateMany({
@@ -121,9 +166,14 @@ export async function admitConversationRequest(input: ConversationOperation & {
         data: { messages: JSON.stringify(messages), revision: { increment: 1 }, activeRequestId: input.requestId, activeRequestExpiresAt: new Date(now.getTime() + 300000) },
       });
       if (updated.count !== 1) return { error: "CONVERSATION_TURN_CONFLICT" as const };
-      return { request: { operation: input.operation, approvalToolCallId, userId: input.userId, conversationId: row.id, requestId: input.requestId, revision: row.revision + 1, messages, responseMessageId: "", released: false, wrote: false } };
+      return { request: { operation: input.operation, approvalToolCallId, userId: input.userId, conversationId: row.id, requestId: input.requestId, revision: row.revision + 1, messages, responseMessageId: "", released: false, wrote: false }, kickWrite: approvedWriteTask };
     });
     if ("error" in result) return fail(result.error!);
+    if (result.kickWrite) {
+      void import("@/lib/harness/runner")
+        .then((m) => m.kickHarnessRunner(db))
+        .catch(() => undefined);
+    }
     return result.request;
   } catch (error) {
     if (error instanceof ConversationRequestError) throw error;
@@ -200,6 +250,21 @@ export async function finishConversationRequest(request: ConversationRequest, in
     const row = await tx.chatConversation.findFirst({ where: ownedWhere(request) });
     if (!row) return fail("CONVERSATION_STALE_WRITE");
     const finalMessages = mergeDurableMessages(JSON.parse(row.messages) as UIMessage[], incoming);
+    // Persist a durable proposal for every detached-write approval part the
+    // finished turn produced — the proposal outlives this HTTP round. Only
+    // the response message mints rows; older proposal-less parts are
+    // orphans for reconcile, never re-armed.
+    const responseMessage = finalMessages.find(m => m.id === request.responseMessageId);
+    if (responseMessage) {
+      const turnKey = [...finalMessages].reverse().find(m => m.role === "user")?.id ?? "";
+      await createProposalsForResponseMessage(tx, {
+        userId: request.userId,
+        conversationId: request.conversationId,
+        turnKey,
+        message: responseMessage,
+      });
+    }
+    await reconcileConversationProposals(tx, { id: row.id, userId: row.userId }, finalMessages);
     const saved = await tx.chatConversation.updateMany({ where: ownedWhere(request), data: { messages: JSON.stringify(finalMessages), revision: { increment: 1 }, activeRequestId: null, activeRequestExpiresAt: null } });
     if (saved.count !== 1) return fail("CONVERSATION_STALE_WRITE");
     return finalMessages;

@@ -18,6 +18,7 @@ import {
   NOTION_TOOL,
 } from "@/lib/extensions/notion/constants";
 import { notionCopy, type NotionCopyKey } from "@/lib/extensions/notion/copy";
+import { AgentProposalStatus } from "@/components/agent/AgentProposalStatus";
 
 type Respond = (r: { id: string; approved: boolean; reason?: string }) => void;
 
@@ -294,6 +295,13 @@ export function AgentApprovalCard({
 
       {part.state === "approval-responded" && approved !== false && (
         <p className="text-xs text-muted-foreground">{t("agent.waiting")}</p>
+      )}
+
+      {/* Detached Notion writes: the transcript part is only the display;
+          the durable proposal is the authority. Hydrate its real state so
+          queued ≠ succeeded stays honest across refresh/restart. */}
+      {isNotionAgentToolName(toolName) && approvalId && (
+        <AgentProposalStatus approvalId={approvalId} />
       )}
 
       <ConfirmationRequest>

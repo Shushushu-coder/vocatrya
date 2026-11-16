@@ -8,6 +8,7 @@ import "server-only";
 
 export const HARNESS_TASK_KIND = {
   DEEP_MATCH: "DEEP_MATCH",
+  AGENT_TOOL_WRITE: "AGENT_TOOL_WRITE",
 } as const;
 
 export type HarnessTaskKind =
@@ -41,6 +42,13 @@ export const HARNESS_TASK_STEP = {
   PIN_INPUTS: "PIN_INPUTS",
   RUN_ANALYSIS: "RUN_ANALYSIS",
   COMMIT_RESULT: "COMMIT_RESULT",
+} as const;
+
+/** AGENT_TOOL_WRITE step names — VERIFY → DISPATCH → SETTLE. */
+export const AGENT_WRITE_TASK_STEP = {
+  VERIFY: "VERIFY",
+  DISPATCH: "DISPATCH",
+  SETTLE: "SETTLE",
 } as const;
 
 export type HarnessTaskStep =

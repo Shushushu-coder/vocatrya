@@ -972,6 +972,13 @@ export async function importBackup(
               payload.context = restored.context;
               payload.messages = restored.messages;
             }
+            if (model === "AgentOperationProposal") {
+              // Runtime links are never restored: HarnessTask does not
+              // travel in the backup, and a stale task id must never
+              // impersonate a live execution. dispatchKey/dispatchedAt stay
+              // — they are evidence the call may already be out.
+              payload.harnessTaskId = null;
+            }
             if (model === "InterviewPrepGoal") {
               payload = {
                 ...payload,

@@ -60,8 +60,14 @@ vi.mock("@prisma/client", () => {
     userSettings: {
       findUnique: vi.fn(),
     },
+    agentOperationProposal: {
+      findMany: vi.fn(async () => []),
+    },
     job: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     resume: { findFirst: vi.fn(), findMany: vi.fn() },
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn(mPrismaClient),
+    ),
   };
   return {
     PrismaClient: vi.fn(function () {

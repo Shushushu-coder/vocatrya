@@ -6,6 +6,7 @@ import prisma from "@/lib/db";
 import type { ExecuteAIConnectionTextDeps } from "@/lib/ai/execution";
 import { log } from "@/lib/telemetry";
 import { executeDeepMatchTask } from "./deepMatch";
+import { executeAgentWriteTask } from "./agentWrite";
 import {
   claimNextHarnessTask,
   mintHarnessRunnerId,
@@ -13,7 +14,7 @@ import {
   sweepHarnessTasks,
   type HarnessClaim,
 } from "./taskService";
-import { HARNESS_TASK_STATUS } from "./types";
+import { HARNESS_TASK_KIND, HARNESS_TASK_STATUS } from "./types";
 
 /**
  * Process-local harness runner — lives in the Next.js backend process
@@ -74,11 +75,17 @@ async function runClaimed(
   };
   activeRuns.set(claim.taskId, run);
   try {
-    await executeDeepMatchTask(db, claim, {
-      deps,
-      env,
-      signal: abort.signal,
-    });
+    // One claim/lease/heartbeat for every kind — the executor is the only
+    // kind-specific part.
+    if (claim.kind === HARNESS_TASK_KIND.AGENT_TOOL_WRITE) {
+      await executeAgentWriteTask(db, claim, { signal: abort.signal });
+    } else {
+      await executeDeepMatchTask(db, claim, {
+        deps,
+        env,
+        signal: abort.signal,
+      });
+    }
   } finally {
     clearInterval(run.heartbeat);
     if (activeRuns.get(claim.taskId) === run) {

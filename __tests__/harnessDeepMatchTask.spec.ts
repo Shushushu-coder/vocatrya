@@ -276,7 +276,7 @@ describe("createDeepMatchTask", () => {
       prisma,
       userId,
       {
-        jobOpportunityId: task.jobOpportunityId,
+        jobOpportunityId: task.jobOpportunityId!,
         resumeVariantVersionId: versionId,
         requestKey: "req-dedupe",
       },
@@ -292,7 +292,7 @@ describe("createDeepMatchTask", () => {
         prisma,
         userId,
         {
-          jobOpportunityId: task.jobOpportunityId,
+          jobOpportunityId: task.jobOpportunityId!,
           resumeVariantVersionId: version2,
           requestKey: "req-dedupe",
         },
@@ -306,7 +306,7 @@ describe("createDeepMatchTask", () => {
       prisma,
       userId,
       {
-        jobOpportunityId: task.jobOpportunityId,
+        jobOpportunityId: task.jobOpportunityId!,
         resumeVariantVersionId: versionId,
         requestKey: `req-${randomUUID()}`,
       },

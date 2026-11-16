@@ -367,9 +367,16 @@ export type AgentNotionWriteResult =
         | "unknown"
         | "verification_required"
         | "reauth_required"
-        | "denied";
+        | "denied"
+        // Detached execution: the write is queued on its harness task. A
+        // queued stub is not a write receipt — hasWriteReceipt stays false.
+        | "queued";
       code: string;
       /** Model-facing fixed text or the remote's own validation message. */
       detail?: string;
       verify?: AgentNotionWriteVerify;
+      /** Durable proposal/task identity returned by the queued stub. */
+      proposalId?: string;
+      taskId?: string;
+      taskStatus?: string;
     };
