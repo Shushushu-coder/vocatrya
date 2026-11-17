@@ -1987,10 +1987,18 @@ function renderConnectState(state) {
 
   if (!state?.connected) {
     statusEl.textContent = "未连接 Vocatrya。粘贴应用内生成的配对码完成配对；也可继续手动导入资料备份或直接维护本机资料。";
-    fields.pairConnect.disabled = connectBusy;
-    fields.syncProfile.disabled = true;
-    fields.disconnectConnect.disabled = true;
-    fields.forgetConnect.disabled = true;
+    if (fields.pairConnect) {
+      fields.pairConnect.disabled = connectBusy;
+    }
+    if (fields.syncProfile) {
+      fields.syncProfile.disabled = true;
+    }
+    if (fields.disconnectConnect) {
+      fields.disconnectConnect.disabled = true;
+    }
+    if (fields.forgetConnect) {
+      fields.forgetConnect.disabled = true;
+    }
     return;
   }
 
@@ -2038,10 +2046,18 @@ function renderConnectState(state) {
   statusEl.classList.add(tone);
 
   const usable = state.syncStatus !== "revoked" && state.lastCheckStatus !== "revoked";
-  fields.pairConnect.disabled = connectBusy;
-  fields.syncProfile.disabled = connectBusy || !usable;
-  fields.disconnectConnect.disabled = connectBusy;
-  fields.forgetConnect.disabled = connectBusy;
+  if (fields.pairConnect) {
+    fields.pairConnect.disabled = connectBusy;
+  }
+  if (fields.syncProfile) {
+    fields.syncProfile.disabled = connectBusy || !usable;
+  }
+  if (fields.disconnectConnect) {
+    fields.disconnectConnect.disabled = connectBusy;
+  }
+  if (fields.forgetConnect) {
+    fields.forgetConnect.disabled = connectBusy;
+  }
 }
 
 function parsePairingAppOrigin(input) {
@@ -2087,8 +2103,8 @@ async function pairWithVocatrya() {
   }
 
   connectBusy = true;
-  renderConnectState(await cachedConnectState());
   try {
+    renderConnectState(await cachedConnectState());
     const granted = await requestOptionalPermissions({ origins: [`${appOrigin}/*`] });
     if (!granted) {
       setConnectFeedback("未授予访问应用地址的权限，配对未完成。", "error");
@@ -2127,9 +2143,9 @@ async function syncFromVocatrya() {
     return;
   }
   connectBusy = true;
-  renderConnectState(await cachedConnectState());
-  setConnectFeedback("正在从 Vocatrya 同步资料…", "dirty");
   try {
+    renderConnectState(await cachedConnectState());
+    setConnectFeedback("正在从 Vocatrya 同步资料…", "dirty");
     const result = await sendRuntimeMessage({ type: "OJAF_VOCATRYA_SYNC" });
     await loadSettings();
     renderConnectState(result?.state || (await cachedConnectState()));
