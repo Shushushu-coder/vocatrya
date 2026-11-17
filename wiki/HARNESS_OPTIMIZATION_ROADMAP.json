@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "title": "Vocatrya Harness 优化实施台账",
-  "recordedOn": "2026-11-16",
+  "recordedOn": "2026-11-17",
   "baseline": {
     "branch": "main",
-    "commit": "992feb9ea595b6ddb35a69fd6ed7c2dd3c6d9bb2",
-    "source": "本次 Git 与源码只读核对",
+    "commit": "da519f936e38ff08b8477931d9f4719eacc8ca98",
+    "source": "2026-11-17 Git 祖先关系与相关源码只读核对；历史验收基线仍为 992feb9e，不追认当前版本已验收",
     "untrackedReference": "wiki/AGENT_LONG_TASK_HARNESS_PROPOSAL.md"
   },
   "purpose": "记录当前已实施、已集成、待验收及后续方案；不是新增编码、迁移真实数据、提交或发布授权。",
@@ -20,11 +20,272 @@
     "COMPLETED_WITH_BLOCKERS": "本轮验收执行已结束，有未完成条件；不等于功能全部通过"
   },
   "architecture": {
-    "modelAccess": "账号运行时/API 提供模型能力，Vocatrya 负责本产品工具编排、权限和业务结果；不等同于直接使用完整供应商原生 Agent。",
+    "modelAccess": "当前实现仍主要由 Vocatrya 编排；已确认目标为账号登录优先原生 Agent 执行，普通 API／Vocatrya 托管 API 由应用编排。业务权限和结果合同始终由 Vocatrya 管理，具体见“AI 服务双路径与设置 UI”。",
     "execution": "HarnessTask / HarnessTaskEvent：具体执行的恢复账本，不随备份恢复。",
     "business": "InterviewPrepGoal / InterviewSession / MatchAnalysis / AgentOperationProposal：长期业务状态与证据；按各自契约备份，提案恢复不复活任务或自动重放授权。",
     "handoff": "从已绑定业务记录确定性重算，handoffJson 是辅助快照，不取代业务事实。",
     "trace": "目前仅深度匹配路径的轻量轨迹；哈希/引用不等于完整输入重建。"
+  },
+  "aiServiceExecutionDecision": {
+    "recordedOn": "2026-11-17",
+    "status": "REQUIREMENTS_CONFIRMED",
+    "implementation": "NOT_STARTED",
+    "acceptance": "NOT_RUN",
+    "document": "wiki/HARNESS_OPTIMIZATION_ROADMAP.md#ai-service-execution",
+    "groups": [
+      {
+        "label": "Agent 账号登录",
+        "sources": [
+          "官方 Agent 账号／订阅"
+        ],
+        "execution": "优先复用官方运行时已验证的原生 Agent 能力"
+      },
+      {
+        "label": "Vocatrya 托管 AI",
+        "sources": [
+          "用户自接模型 API",
+          "Vocatrya 托管 API"
+        ],
+        "execution": "Vocatrya 统一管理 Agent 执行、工具、上下文与联网"
+      }
+    ],
+    "uiScope": [
+      "AI 服务列表",
+      "添加连接",
+      "连接详情",
+      "与既有业务用途分配兼容"
+    ],
+    "boundaries": [
+      "保留业务权限、提案批准及回执合同",
+      "后台文本调用保持受限",
+      "不自动导入本机扩展；第三方 Skill 导入敬请期待",
+      "不改变 H01–H06 状态或授权实施"
+    ],
+    "referenceCommit": "HernanJiang/CraftStation@05e25f09fff38c5cf3b2a227ec44168ad4fce598"
+  },
+  "frameworkScope": {
+    "name": "Vocatrya Agent 运行与任务续做框架",
+    "englishName": "Vocatrya Agent Harness",
+    "recordedOn": "2026-11-17",
+    "status": "DOCUMENTED_DIRECTION_NOT_IMPLEMENTED",
+    "authorization": "本次仅授权更新文档；升级细化为后续建议，不授权编码、真实账号操作、提交或发布。",
+    "agentTypes": {
+      "native": {
+        "label": "原生 Agent",
+        "uiGroup": "Agent 账号登录",
+        "executionOwner": "官方运行时",
+        "responsibilities": [
+          "原生循环、模型调用及工具",
+          "原生上下文、压缩及会话恢复"
+        ],
+        "currentBoundary": "现有账号路径主要为受限文本调用，原生 Agent 适配未完成；应用检查点不能恢复官方内部任意步骤。"
+      },
+      "managed": {
+        "label": "托管 Agent",
+        "uiGroup": "Vocatrya 托管 AI",
+        "sources": [
+          "用户自接 API",
+          "Vocatrya 托管 API"
+        ],
+        "executionOwner": "Vocatrya",
+        "responsibilities": [
+          "应用循环、工具与搜索编排",
+          "应用上下文、摘要、预算及任务恢复"
+        ],
+        "currentBoundary": "H01–H06 只在既有专项消费者内记账，不代表全部托管 Agent 自动具备全部能力。"
+      }
+    },
+    "sharedBusinessMechanisms": [
+      "用户与角色权限",
+      "业务工具中立契约及执行入口",
+      "目标、材料引用与业务进度",
+      "按操作风险确定的批准",
+      "提案、结果与执行回执",
+      "统一语义的事件适配"
+    ],
+    "contextLayers": {
+      "businessReferences": "程序核验归属、权限、归档／删除及材料版本，不靠摘要维护实体身份。",
+      "executionProgress": "任务、业务结果、批准及回执决定已完成和待办。",
+      "summary": "对话辅助压缩，保留覆盖与来源边界，不作为业务事实或授权。",
+      "native": "优先官方上下文管理，补充已核验业务状态；不重复施加托管路径 16k 裁剪或双重摘要。",
+      "managed": "现有默认 16k 且优先移除摘要；后续按有效性、用户更正及相关性优化，结构化引用独立保存。",
+      "grounding": "恢复装配前按实际引用只读核验，执行前继续校验，不全库扫描或自动绑定同名对象。"
+    },
+    "stageApplicability": {
+      "H01": "应用编排的深度匹配专项检查点；原生通过工具接入，不恢复其内部推理。",
+      "H02": "现有面试目标和业务续做；原生会话关联及通用记忆尚未实现。",
+      "H03": "现有消费者历史证据；不能替代原生路径验证。",
+      "H04": "三个 Notion 写工具的既定合同；不自动扩大适用工具。",
+      "H05": "现有 Notion 持久审批消费者；原生工具桥及事件接线待实施。",
+      "H06": "后置未实施，两路径各自核对恢复、宿主与预算，不承诺关闭应用后继续运行。"
+    },
+    "upgradeSuggestions": [
+      {
+        "topic": "统一工具契约与事件",
+        "priority": "FIRST",
+        "scope": "共享业务入口，原生 MCP／动态工具与托管本地工具分别适配。"
+      },
+      {
+        "topic": "提案依据快照",
+        "scope": "记录实际可得的版本、材料来源及简短建议依据，不收集内部推理，不将哈希当作完整重放证据。"
+      },
+      {
+        "topic": "结构化交接与恢复核验",
+        "priority": "NEXT",
+        "scope": "业务引用、进度、摘要分层，分别适配原生及托管上下文。"
+      },
+      {
+        "topic": "核心操作持久执行与审批",
+        "scope": "按消费者区分可恢复执行、人工批准和回执，不强制所有工具审批；review_resume 当前不需批准，add_job 条件批准。"
+      },
+      {
+        "topic": "细粒度子检查点",
+        "scope": "仅在应用拥有多个独立且重算代价高的步骤时采用，绑定材料及契约版本；不截取原生内部推理。"
+      },
+      {
+        "topic": "脱敏模型样本回放",
+        "scope": "绑定协议／运行时版本，区分真实录制与合成样本，不默认录制全部聊天。"
+      },
+      {
+        "topic": "事实保真评测",
+        "scope": "核验个人事实来源，允许别名与合理改写，区分建议／假设，不用机械词语闭集替代语义判断。"
+      }
+    ],
+    "evaluationEvidence": [
+      "协议与状态机回放",
+      "任务输出质量",
+      "当前账号／服务在线验证",
+      "Windows Electron 用户路径验证"
+    ],
+    "evaluationBoundary": "离线回放不能解除真实模型 BLOCKED，不能替代在线与桌面验收或据此设置 passes=true。",
+    "contractBoundary": "升级项尚待实施前细化；H04 D1–D8/C01–C08、H01–H06 状态及证据保持不变，不新增 H05.1。"
+  },
+  "interactionDecisions": {
+    "recordedOn": "2026-11-17",
+    "document": "wiki/HARNESS_OPTIMIZATION_ROADMAP.md#interaction-decisions",
+    "status": "DOCUMENTED_NOT_IMPLEMENTED",
+    "nativeFirstWave": [
+      "Codex",
+      "Devin"
+    ],
+    "nativeVerification": "分别验证；公共适配复用不等于其他运行时自动通过。",
+    "resume": {
+      "status": "CONFIRMED",
+      "trigger": "USER_MESSAGE",
+      "behavior": "重开只加载状态，用户发消息后按其意图续做，不要求另点继续；已派发外部操作先核验回执。",
+      "boundary": "不改写既有已批准任务的后台执行合同；H06 仍后置。"
+    },
+    "taskMemory": {
+      "direction": "CONFIRMED",
+      "groundTruth": [
+        "业务产物",
+        "任务目标与步骤",
+        "依赖与状态",
+        "实际回执与验收证据"
+      ],
+      "storageSuggestion": "复用 SQLite 与任务账本，大文件引用；不依赖单个不断增长的 JSON 或模型聊天记忆。",
+      "checkpoint": "关键步骤完成即持久化，从最近有效检查点恢复，不保证恢复原生内部推理。"
+    },
+    "authorization": {
+      "ask": "按工具策略请求用户批准。",
+      "rules": "预设规则审批；常规和可恢复操作自动执行，不可恢复数据变化及未预授权对外动作请求同意。",
+      "fullAccess": "按用户最新决定对齐 Codex；不套用帮我审批的逐项确认，仍受用户归属、账号权限及业务接口约束。",
+      "contractBoundary": "现有 H04/H05 Notion 批准规则继续有效，实施新模式前另行明确兼容与合同变更。"
+    },
+    "materialChanges": {
+      "direction": "CONFIRMED",
+      "behavior": "运行中关键数据变化弹窗处理；阻止受影响旧结果提交，无法推进时跳过／受阻并检查下游依赖。",
+      "dialogOptionsStatus": "PROPOSED",
+      "dialogOptions": [
+        "按最新材料继续",
+        "跳过受影响步骤",
+        "暂停任务"
+      ],
+      "boundary": "不承诺撤销已派发外部操作；新输入不沿用旧批准。"
+    },
+    "compaction": {
+      "localObservation": "用户配置未显式设置自动压缩阈值；自定义模型目录 gpt-6.1-sol 声明窗口 500000，阈值为空；npm CLI 0.169.0 不等于桌面实际版本。",
+      "nativeSuggestion": "优先官方压缩，持续保存应用业务状态。",
+      "managedSuggestion": "按模型容量及输出／交接预留设置预算。",
+      "threshold": "NOT_FIXED",
+      "boundary": "压缩不是强制销毁会话；不统一固定 60%–70%。"
+    },
+    "errors": {
+      "position": "MAIN_CONTENT_TOP_LEFT_CONFIRMED",
+      "persistentUntilDismissed": "CONFIRMED",
+      "retryEntry": "CONFIRMED",
+      "behaviorSuggestion": "同类错误合并，恢复后更新；关闭不清除任务失败记录，显示脱敏错误，未知写入先核验再重试。",
+      "fallback": "不静默切换服务。"
+    },
+    "uiScope": "PLACEMENT_AND_VISIBILITY_CONFIRMED_DETAILS_PENDING",
+    "deliveryScope": "PENDING_DISCUSSION",
+    "implementation": "NOT_STARTED",
+    "acceptance": "NOT_RUN"
+  },
+  "uiDecisions": {
+    "recordedOn": "2026-11-17",
+    "status": "CONFIRMED_NOT_IMPLEMENTED",
+    "document": "wiki/HARNESS_OPTIMIZATION_ROADMAP.md#interaction-decisions",
+    "navigation": "设置管理 AI 服务；扩展管理连接与技能；Agent 执行窗口显示任务进度。",
+    "aiServices": {
+      "layout": "TOP_TWO_TABS",
+      "tabs": [
+        "Agent 账号登录",
+        "Vocatrya 托管 AI"
+      ],
+      "managedSources": [
+        "用户自接 API",
+        "Vocatrya 托管 API"
+      ],
+      "replaces": "上下两组布局建议"
+    },
+    "taskProgress": {
+      "position": "AGENT_EXECUTION_WINDOW_TOP_RIGHT",
+      "collapsible": true,
+      "globalFloating": false,
+      "visibility": "仅 Agent 执行窗口打开时可见，窗口收起／关闭时随之隐藏。",
+      "reopen": "读取对应任务最新状态，不触发执行；用户发消息后按意图续做。",
+      "lifecycle": "隐藏任务卡不等于取消已经派发的任务或外部操作。",
+      "contentSuggestion": [
+        "任务名与当前状态",
+        "完成数（跳过不计完成）",
+        "步骤、当前项与受阻原因",
+        "结果及验收证据"
+      ],
+      "presentation": "默认使用用户可理解的内容，调试信息进入详情。"
+    },
+    "errors": {
+      "position": "MAIN_CONTENT_TOP_LEFT",
+      "persistentUntilDismissed": true,
+      "retryEntry": true,
+      "fieldErrors": "贴近字段",
+      "taskErrors": "在对应步骤保留失败状态",
+      "retryBoundary": "未知外部写入先核验，不直接重发。"
+    },
+    "notifications": {
+      "position": "WINDOW_BOTTOM_RIGHT",
+      "transient": true,
+      "scope": "普通操作反馈；审批与材料变更决定不由短暂通知代替。"
+    },
+    "extensions": {
+      "classification": "PENDING_DECISION",
+      "candidateTabs": [
+        "连接与工具",
+        "技能",
+        "配套工具"
+      ],
+      "thirdPartySkillImport": "敬请期待"
+    },
+    "remaining": [
+      "授权选择入口",
+      "材料变更弹窗按钮及关闭后行为",
+      "多任务选择",
+      "错误合并与恢复后显示细节",
+      "扩展分类形式",
+      "首轮交付组合"
+    ],
+    "implementation": "NOT_STARTED",
+    "acceptance": "NOT_RUN"
   },
   "principles": [
     "增量演化，不替换已有 Harness 或引入完整 DeepSeek/Cordis 框架",
@@ -212,13 +473,13 @@
       "id": "H04",
       "title": "持久审批的只读调研与最小实施契约",
       "status": "DESIGN_DECISIONS_APPROVED",
-      "owner": "设计已完成；本轮由 Main 集成 Owner 接续实施收尾",
+      "owner": "设计已完成；H05 实施收尾及集成已由 Main 集成 Owner 完成",
       "featureId": null,
       "dependsOn": [
         "H01",
         "H02"
       ],
-      "implementation": "NOT_STARTED",
+      "implementation": "NOT_APPLICABLE",
       "integration": "NOT_APPLICABLE",
       "execution": "COMPLETED",
       "acceptance": "NOT_APPLICABLE",
@@ -235,7 +496,7 @@
       "evidence": [
         {
           "source": "SESSION_INSTRUCTION",
-          "detail": "已给出 Agent B 完整设计指令；尚无交付回报，约定设计文件本次未找到，实际执行状态待确认。"
+          "detail": "历史：最初已给出 Agent B 设计指令；后续已交付设计并完成 H05，不能将初始未确认状态视为当前待办。"
         },
         {
           "source": "USER_COMPLETION_REPORT_AND_LOCAL_ARTIFACT_CHECK",
@@ -243,7 +504,7 @@
         },
         {
           "source": "USER_EXPLICIT_DECISION",
-          "detail": "用户明确同意采用助手最终推荐并写入 wiki；D6/D7 覆盖原稿相反推荐，补充 queued receipt、dispatch 前过期、恢复快照歧义、硬删/重新生成/归档/孤儿 part 不变量。未授权 H05 编码。"
+          "detail": "用户明确同意采用助手最终推荐并写入 wiki；D6/D7 覆盖原稿相反推荐，补充 queued receipt、dispatch 前过期、恢复快照歧义、硬删/重新生成/归档/孤儿 part 不变量。设计确认当时未授权 H05 编码；后续已另获授权并实施，见 H05。"
         },
         {
           "source": "USER_AUTHORIZATION",
@@ -276,7 +537,7 @@
         "portability": "原稿在 .tmp，不随 Git 同步；跨机器/Worktree 交接需显式提供原稿。wiki 摘要不替代完整设计。"
       },
       "designSummary": {
-        "status": "OWNER_DECISIONS_APPROVED_NOT_IMPLEMENTED",
+        "status": "OWNER_DECISIONS_APPROVED_IMPLEMENTATION_TRACKED_IN_H05",
         "consumer": "EXT-NOTION 三个共享 buildNotionWriteTool 的写工具：notion_create_page / notion_append_content / notion_update_record",
         "reportedGap": "现有审批卡片已持久化，但决定、执行、回执与叙述仍耦合 HTTP 回合；设计聚焦批准后的可恢复执行与跨表面决定。此处为设计结论摘要。",
         "proposedMechanism": [
@@ -512,7 +773,23 @@
     "allowed": [],
     "rules": [
       "本轮开发与验收执行均已结束；后续桌面重型验证仍由一个明确指定的执行者串行运行",
-      "共享物理文件单一 Owner；不自动开始下一阶段"
+      "共享物理文件单一 Owner；不自动开始下一阶段",
+      "任务 A 的桌面补验可与 B 的隔离服务侧验证并行；生产构建、装配及 Electron E2E 仍严格串行。",
+      "共享 Harness/认证/启动入口缺陷交单一 Owner；共享 wiki 由 Main 集成 Owner 汇总；建议不等于派发或新增执行授权。"
+    ],
+    "proposedTasks": [
+      {
+        "id": "A",
+        "scope": "H01/H02 集中定向补验：修复后的构建入口、本地准备路由、同一会话退出重开续做及真实模型冒烟",
+        "resource": "唯一指定桌面重型执行者；隔离源码快照与 fresh-native 数据",
+        "status": "PROPOSED_NOT_DISPATCHED"
+      },
+      {
+        "id": "B",
+        "scope": "H05 隔离后端及真实 Notion 提案/审批/执行/回执验收；Electron 部分排在 A 之后",
+        "resource": "独立 Worktree/隔离数据库；需要有效连接、明确测试目标和外写授权",
+        "status": "PROPOSED_NOT_DISPATCHED"
+      }
     ]
   },
   "openItems": [
@@ -520,7 +797,7 @@
     "H02 专用本地准备路由待 Windows Electron 定向复验；旧练习证据部分来自 Web",
     "H05 真实 Notion、模型与 Windows Electron 未验收，passes=false",
     "真实数据库未操作，migration 仅在隔离数据库验证",
-    "未 Push、未清理 Worktree；原始未跟踪方案文档未纳入提交"
+    "历史集成轮次未 Push、未清理 Worktree，原始方案当时未纳入提交；2026-11-17 按用户要求随 Wiki 文档提交，仅作参考，不授权完整实施。"
   ],
   "excluded": [
     "直接实施原 AGENT_LONG_TASK_HARNESS_PROPOSAL.md 的完整架构",
@@ -567,5 +844,22 @@
     "productCommit": "d1e4bf85",
     "fixesCommit": "6c551703",
     "authorization": "用户明确要求直接修复、提交和集成；未授权真实数据迁移、Push 或 Worktree 删除。"
+  },
+  "verificationUpdate": {
+    "date": "2026-11-17",
+    "baseline": "da519f936e38ff08b8477931d9f4719eacc8ca98",
+    "checks": [
+      "五个实现及修复提交均已包含于当前 Main",
+      "相关实现、Schema/Migration 和历史证据目录存在",
+      "三个相关 Feature 均 IMPLEMENTED 且 passes=false"
+    ],
+    "notRun": [
+      "测试重跑",
+      "生产 Build",
+      "Windows Electron",
+      "真实模型",
+      "真实 Notion"
+    ],
+    "evidenceBoundary": "历史测试与验收报告不计为本次执行证据。"
   }
 }
