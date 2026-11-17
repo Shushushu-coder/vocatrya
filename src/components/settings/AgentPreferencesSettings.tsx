@@ -7,7 +7,7 @@ import { AUTO_ARCHIVE_DAYS, PERSONAL_INSTRUCTIONS_MAX, DEFAULT_AGENT_PREFERENCES
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 
 export const permissionLabels = {
   "zh-CN": { ask: "请求审批", rules: "帮我审批", full: "完全访问" },
@@ -20,8 +20,8 @@ export function PermissionHelp({ english }: { english: boolean }) {
   const show = () => { clearTimeout(timer.current); setOpen(true); };
   const hide = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(false), 180); };
   useEffect(() => () => clearTimeout(timer.current), []);
-  return <Popover open={open} onOpenChange={setOpen}><PopoverTrigger asChild><button type="button" onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} aria-label={english ? "Permission modes" : "权限模式说明"} title={english ? "Compare permission modes" : "查看三种权限的区别"} className="rounded p-1 text-muted-foreground"><CircleHelp className="size-4" /></button></PopoverTrigger>
-    <PopoverContent onOpenAutoFocus={e => e.preventDefault()} onMouseEnter={show} onMouseLeave={hide} onFocusCapture={show} onBlurCapture={hide} className="w-[min(34rem,calc(100vw-2rem))] text-xs" align="start"><table className="w-full text-left"><caption className="mb-2 text-left font-medium">{english ? "Business tool permissions" : "业务工具的三档权限"}</caption><tbody>
+  return <Popover open={open} onOpenChange={setOpen}><PopoverAnchor asChild><button type="button" onClick={show} onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} aria-label={english ? "Permission modes" : "权限模式说明"} title={english ? "Compare permission modes" : "查看三种权限的区别"} className="rounded p-1 text-muted-foreground"><CircleHelp className="size-4" /></button></PopoverAnchor>
+    <PopoverContent onOpenAutoFocus={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} onMouseEnter={show} onMouseLeave={hide} onFocusCapture={show} onBlurCapture={hide} className="w-[min(34rem,calc(100vw-2rem))] text-xs" align="start"><table className="w-full text-left"><caption className="mb-2 text-left font-medium">{english ? "Business tool permissions" : "业务工具的三档权限"}</caption><tbody>
       <tr><th className="p-2 align-top">{labels.ask}</th><td className="p-2">{english ? "Ask before tools that require approval; reads and analysis remain available." : "需要批准的写入和操作先请示；已授权读取与分析不反复询问。"}</td></tr>
       <tr><th className="p-2 align-top">{labels.rules}</th><td className="p-2">{english ? "Automatically allow local additions and versioned outputs. External writes and irreversible changes still require approval." : "本地新增和保留版本的结果自动执行；外部写入及不可逆操作仍需批准。"}</td></tr>
       <tr><th className="p-2 align-top">{labels.full}</th><td className="p-2">{english ? "Allow supported business tools in the granted scope without per-tool prompts. Does not grant missing account or native runtime permissions." : "已授权范围内的受支持业务工具不逐项打断；不会获得缺失的账号权限或原生运行时权限。"}</td></tr>

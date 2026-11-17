@@ -99,7 +99,14 @@ export async function collectBackupData(
     const sorted = [...results[index]].sort(byId);
     raw[model] = sorted.map((row) => {
       const clean = stripOwnership(model, row);
-      if (model === "ChatConversation" && typeof clean.messages === "string") clean.messages = decodeHistory(clean.messages);
+      if (model === "ChatConversation" && typeof clean.messages === "string") {
+        try {
+          clean.messages = decodeHistory(clean.messages);
+        } catch {
+          // A single unreadable (corrupt) encoded row must not sink the whole
+          // backup — keep its raw payload so nothing is silently dropped.
+        }
+      }
 
       if (model === "Job") {
         const { statusId, Status, tags, ...rest } = clean as Row & {

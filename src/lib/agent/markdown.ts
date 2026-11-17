@@ -36,6 +36,9 @@ export type AgentMarkdownSegment =
 // would break the container rendering. They keep rendering inline with no
 // action of their own.
 export function splitAgentMarkdown(text: string): AgentMarkdownSegment[] {
+  // Persisted tool outputs are trusted shapes, but a malformed row must not
+  // take the whole surface down — render nothing rather than crash.
+  if (typeof text !== "string") return [];
   const src = stripThinking(text).replace(/\r\n?/g, "\n");
   if (!src) return [];
   const lines = src.split("\n");

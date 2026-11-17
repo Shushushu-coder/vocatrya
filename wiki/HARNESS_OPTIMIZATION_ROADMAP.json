@@ -305,11 +305,11 @@
   },
   "generalAgentPreferencesImplementation": {
     "recordedOn": "2026-11-17",
-    "baseline": "ef2850c8",
-    "implementation": "IMPLEMENTED_PENDING_ACCEPTANCE",
+    "baseline": "071f48e0",
+    "implementation": "IMPLEMENTED",
     "integration": "MAIN",
-    "acceptance": "NOT_RUN",
-    "passes": false,
+    "acceptance": "PASS_WINDOWS_ELECTRON_FRESH_NATIVE_SCOPED",
+    "passes": true,
     "document": "wiki/HARNESS_OPTIMIZATION_ROADMAP.md#general-agent-preferences",
     "scope": [
       "自定义提示词",
@@ -376,15 +376,29 @@
       "logs": ".tmp/agent-general-settings/"
     },
     "notRun": [
-      "Windows Electron 验收",
       "真实模型调用",
       "真实 Notion 写入",
-      "生产 Build",
-      "完整 E2E",
+      "安装包/发布通道验收",
       "提交",
       "Push"
     ],
-    "handoff": "验收指令已交付；用户后续授权本窗口收尾并提交确定内容。本次保存实现与现有证据，常规设置仍待验收；不 Push，不补跑重型或真实服务验证。"
+    "handoff": "2026-11-17 本窗口已在 Windows Electron fresh-native 完成 20/20 步骤验收（loopback 夹具，无真实模型/Notion/账号权限），证据保留于 desktop-runs/7cdc83c1。产品修复：PermissionHelp 锚点化+外部交互豁免、备份导出损坏行容错、markdown 非字符串守卫。提交待用户明确授权；不 Push、不部署、不操作真实数据。",
+    "electronAcceptance": {
+      "host": "WINDOWS_ELECTRON",
+      "mode": "fresh-native",
+      "head": "071f48e031609b131a65a7df4f20739b720743bc",
+      "sourceDigest": "a463a04b06f0a5c6cc9d0ca87028137fb62b75c216d5ddf22e70cbbc0b328147",
+      "stepsTotal": 20,
+      "stepsPass": 20,
+      "stepsFail": 0,
+      "stepsBlocked": 0,
+      "run": "E:/Projects/vocatrya/.tmp/agent-settings-acceptance/desktop-runs/7cdc83c1-35a7-4a8d-9b18-b5b44b703b06",
+      "fixture": "aa576658-7691-44fe-9053-264dc675c049",
+      "build": "isolated snapshot production build+assembly reused, verified head+sourceDigest",
+      "upstream": "LOOPBACK_FIXTURE_ONLY；真实模型/Notion/账号权限未使用；系统代理未变",
+      "scenario": "settings-evidence/results.json 20/20 PASS；每步独立 JSON/PNG 证据"
+    },
+    "qualifications": "通过范围限于本节 scope 四项：自定义提示词、默认权限与创建前覆盖、自动归档、本地历史无损压缩及关联备份恢复契约。完全访问仅限受支持业务工具授权范围，不授予缺失账号/原生运行时权限；Codex/Devin 原生 Agent 完整适配、全量原生权限适配、AI 服务双 Tab、任务进度卡、全局通知布局均不在本次验收范围内。"
   },
   "principles": [
     "增量演化，不替换已有 Harness 或引入完整 DeepSeek/Cordis 框架",
