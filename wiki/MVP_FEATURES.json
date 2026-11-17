@@ -354,14 +354,14 @@
       "priority": "P0",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "2026-10-28 部分验收通过，passes 仍 false：Windows Electron fresh-native FRESH_READY/AB_ENABLED/full，独立数据根；复用 Main 3b4b75ff 构建输入一致的 e1879aca 产物（nS35fBmVoQmYzIiHrq7Mr）。真实窗口关闭在偏好关闭时完整退出，开启时隐藏到真实托盘；Windows 原生托盘弹出菜单以系统键盘选择打开/退出，验证还原与进程/后端结束。最小化启动、两项偏好持久化、真实文件写失败反馈及开关回退、完整退出重开和登录态保留通过。测试仅通过主进程调试器观察窗口并捕获原生菜单对象，未替换模式门或托盘行为。证据：.tmp/compat-closure/tray2/checks.json、tray.mjs、inspector.mjs；早期调试连接脚本问题已修正并保留记录。系统自启只读取状态，未写真实系统自启、未安装或重启系统，真实自启验收仍未执行。 2026-10-28 用户明确安排“自启验收发布新版本的时候验证”。真实 Windows 系统自启验证列为新版本发布时的待验收事项，当前不执行系统配置变更，原验收条件不变，passes 保持 false。",
+      "implementationNotes": "2026-10-28 部分验收通过，passes 仍 false：Windows Electron fresh-native FRESH_READY/AB_ENABLED/full，独立数据根；复用 Main 3b4b75ff 构建输入一致的 e1879aca 产物（nS35fBmVoQmYzIiHrq7Mr）。真实窗口关闭在偏好关闭时完整退出，开启时隐藏到真实托盘；Windows 原生托盘弹出菜单以系统键盘选择打开/退出，验证还原与进程/后端结束。最小化启动、两项偏好持久化、真实文件写失败反馈及开关回退、完整退出重开和登录态保留通过。测试仅通过主进程调试器观察窗口并捕获原生菜单对象，未替换模式门或托盘行为。证据：.tmp/compat-closure/tray2/checks.json、tray.mjs、inspector.mjs；早期调试连接脚本问题已修正并保留记录。系统自启只读取状态，未写真实系统自启、未安装或重启系统，真实自启验收仍未执行。 2026-10-28 用户明确安排“自启验收发布新版本的时候验证”。真实 Windows 系统自启验证列为新版本发布时的待验收事项，当前不执行系统配置变更，原验收条件不变，passes 保持 false。 2026-11-17 用户确认真实 Windows 系统自启验证成功，发布阶段待验收事项完成；Feature 全部验收条件满足，passes 置 true。",
       "description": "Settings UI 接通现有桌面自启、最小化启动与关闭到托盘 IPC。",
       "steps": [
         "在 Windows 桌面端设置自启、最小化启动及关闭至托盘，选项反馈实际底层状态。",
         "保存失败显示错误；关闭到托盘默认关闭时正常退出，开启后可从托盘显式退出。",
         "重启应用后设置持续生效，退出不损坏数据。"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "SET-DATA-PRIVACY",

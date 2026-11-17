@@ -37,7 +37,7 @@
 | BD-LINKS | P1 | IN_SCOPE | IMPLEMENTED | 通过 |
 | SET-LOCALE | P0 | IN_SCOPE | IMPLEMENTED | 通过 |
 | SET-APPEARANCE | P0 | IN_SCOPE | IMPLEMENTED | 通过 |
-| SET-DESKTOP | P0 | IN_SCOPE | IMPLEMENTED | 未通过/待验收 |
+| SET-DESKTOP | P0 | IN_SCOPE | IMPLEMENTED | 通过 |
 | SET-DATA-PRIVACY | P0 | IN_SCOPE | IMPLEMENTED | 通过 |
 | RM-RESUME | P1 | IN_SCOPE | IMPLEMENTED | 通过 |
 | RM-BIND | P1 | IN_SCOPE | IMPLEMENTED | 通过 |
@@ -58,17 +58,16 @@
 | 日期与时区 | P-TZ、P-PROC、P-JO、P-TASK | 时区、日期精度、历史 unknown 保护、排序分页与跨模块联动已验收 |
 | 基础数据 | BD-CORE、BD-INLINE、BD-LINKS | 维护、就地创建、职业素材技能真实引用及改名/删除保护已验收 |
 | 简历复用 | RM-RESUME、RM-BIND | 素材复用、编辑、冻结、预览/PDF 导出、Attempt 绑定及历史追溯已验收 |
-| 设置与数据 | SET-LOCALE、SET-APPEARANCE、SET-DATA-PRIVACY | 语言、外观、备份预检与恢复已验收 |
+| 设置与数据 | SET-LOCALE、SET-APPEARANCE、SET-DESKTOP、SET-DATA-PRIVACY | 语言、外观、桌面自启/最小化/托盘偏好、备份预检与恢复已验收 |
 | 运行时更新检测 | SET-AI-RUNTIME-UPDATE | 自动/手动检测、真实版本与兼容状态区分已验收；不含 CLI 安装更新 |
 | 聊天操作 | AGENT-CHAT-UX | 正文复制、顶层围栏代码块复制与普通回答重新生成已实现；用户确认人工验收通过 |
 | 输入与资料页精简 | SET-INPUT-PREFERENCES | 三项保留偏好、设备持久化、移除重复快捷提示/连续填写入口及复制图标统一，用户确认人工验收通过 |
 
-### SET-DESKTOP：发布新版本时验证系统自启
+### SET-DESKTOP：系统自启验收已通过（2026-11-17）
 
-- 实现状态：IMPLEMENTED；`passes: false`。
+- 实现状态：IMPLEMENTED；`passes: true`。
 - 已有 Windows Electron 隔离证据：关闭偏好关闭时退出、开启时隐藏至真实托盘；原生托盘打开/退出、最小化启动、偏好持久化、文件写失败反馈、完整退出重开及登录态保留通过。
-- 尚未执行真实系统自启配置与实际启动验证。用户于 2026-10-28 明确安排在发布新版本时验证；列为发布阶段待验收事项，不安排重复开发。
-- 保留原 Feature 验收条件。发布时先核对代码与安装产物来源，再按对应授权验证；不将本次文档更新视为发布或修改系统配置的授权。
+- 真实系统自启配置与实际启动验证此前按用户 2026-10-28 安排延期至发布新版本时执行；2026-11-17 用户确认验证成功，全部验收条件满足，`passes` 置 true。
 
 ### REM-V1：本地提醒（取消点击跳转，已收口）
 
@@ -96,7 +95,7 @@ Task 的 5,000 条合成数据性能记录为平均 309.0ms、最大 549.2ms/页
 - 用户于 2026-10-28 确认“输入偏好与资料页精简收口我已经人工验收了”及“B也验收了，可以复制和重新生成聊天”。结合此前定向证据，SET-INPUT-PREFERENCES、AGENT-CHAT-UX 已置 `passes: true`；人工试用未提供新增构建标识，不补造来源。
 - 旧库合成升级证据包含 55→57 条迁移及 COMPLETED/AB_ENABLED/resume_v1；不是 fresh-native。标准/敏感备份、技能引用与附件字节恢复有对应隔离证据。
 - 已有临时证据保留在以下位置，如 `.tmp/final-acceptance`、`.tmp/compat-closure`、`.tmp/worktree-closure/retained/input-runtime-acceptance/.tmp/input-runtime-acceptance/`；Worktree 收尾时相关证据目录已转存至 `.tmp/worktree-closure/retained/`，内容保留。
-- 系统自启仍待发布阶段验收；文档拆分不等于整个产品发布放行。Commit、Merge、Push、Release、真实数据和系统设置变更仍各需相应授权。
+- 系统自启验收已于 2026-11-17 通过；文档拆分不等于整个产品发布放行。Commit、Merge、Push、Release、真实数据和系统设置变更仍各需相应授权。
 - 本次仅整理文档、迁移 Feature 记录，不运行新构建、桌面/E2E 或产品测试。
 
 ## E. 已交付功能的详细边界
