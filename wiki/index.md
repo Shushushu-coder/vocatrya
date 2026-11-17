@@ -27,6 +27,8 @@
 | [`P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md`](./P2_CAREER_INSIGHTS_CONTRACT_PROPOSAL.md) | **P2 求职数据看板冻结合同**（2026-11-01 裁定 D1–D9，记录见 §9）：计数、归档/时区口径、模式降级。 | 实施统计看板或首页数据简报前。 |
 | [`MULTI_AGENT_ONBOARDING_PROPOSAL.md`](./MULTI_AGENT_ONBOARDING_PROPOSAL.md) | **多 Agent 冷启动与拒答指路提案**（2026-11-16 裁定 D1–D6+补充项，记录见 §13）：首页入口具名+口头职责、默认 Pilot（现状已满足）、阵容感知块与拒答指路、空状态角色自述；切换 widget 备档。 | 实施角色入口文案、拒答指路或空状态介绍前。 |
 | [`MULTI_AGENT_ONBOARDING_FEATURES.json`](./MULTI_AGENT_ONBOARDING_FEATURES.json) | **上述提案的功能台账**：MAO-ENTRY/ROSTER/REFUSAL/EMPTYSTATE/DEFAULT/SWITCHWIDGET 六项，含确认决策、验收检查点与 `passes`。 | 跟踪该提案实施状态或安排验收时。 |
+| [`NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md`](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) | **待批准提案**：Codex／Devin原生会话边界，首切片建议仅Codex会话关联与恢复；不代表已实施。 | 原生会话适配编码及接口裁定前。 |
+| [`RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md`](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md) | **待批准提案**：简历证据深挖流程、提示内容及草稿结果；首版不保存、不加载。 | 内置技能内容及后续加载接口裁定前。 |
 
 ## 使用原则
 

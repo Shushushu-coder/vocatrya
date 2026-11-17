@@ -6,15 +6,19 @@
 
 同日用户补充方向：账号登录的 AI 服务优先复用对应官方 Agent 运行时的原生能力，参考 CraftStation；正式架构及 UI 决策见 [Harness 双路径方案](./HARNESS_OPTIMIZATION_ROADMAP.md#ai-service-execution)，本文 §7 仅保留关联规则。原生能力属于具体运行时、版本和账号权限，不把厂商聊天产品的全部功能视为可继承，也不据此开放全部权限。
 
-## 本轮调度更新（2026-11-13）
+## 当前交付与调度（2026-11-17）
 
-用户明确：网页面试练习（EXT-INTERVIEW-WEB）暂时不处理，暂不安排目标地址接入及补验；原实现状态与 passes:false 保留。
+**Notion 与自动网申本轮收口，暂停继续派发验收或修复窗口。** 这是用户当前的任务调度决定，不表示所有历史验收条件已满足，也不将 `passes:false` 改为通过。只有用户重新指定具体缺陷或验收范围时再启动；残留观察不自动成为下一轮任务。
 
-自动网申下一阶段目标：复用用户已在 Vocatrya 填写的资料，插件无需重复录入。只读核查 source.ts、convert.ts、导出面板与插件导入代码确认：已有职业资料白名单读取、上游格式转换及文件导入链路；直接配对和按需拉取已于本轮实现集成，真实插件/桌面路径仍待验收。后续连接任务复用该转换层，核对字段覆盖/未映射项，提供明确授权、刷新和撤销；手动导入保留备用，不把已有导入证据当作直接连接或实际填表通过。
+- **自动网申**：手动导入、配对及按需同步均已有实现与实际验证。真实小红书页面覆盖基本资料、教育与实习条目、日期和预填保护；真实 options 页与隔离本地 Next 服务/SQLite 的配对、同步、失败重试及撤销后迟到响应共 20 项通过。最终补丁已随 `a36fb9ab` 集成 Main（merge `071f48e0`）；主协调插件定向测试 33/33、最终新增块相关合成 Chromium 11/11 通过。最后的 DOM 归属安全补修未重新执行真实 ATS；排名选项采集结论待核实，AI 成功路径及跨站覆盖未完成，本轮未运行 Windows Electron。保持 `PARTIAL / passes:false`。
+- **Notion**：Web 隔离环境中，真实 OAuth、search/read、create/append，以及 update_record 的提案→人工批准→持久任务→远端写入→读回已有证据；update_record 的拒绝不派发、远端不存在目标准确失败也已核对，主协调定向测试 56/56 通过。update_record 产品源码零修改，核验记录随 `a36fb9ab` 集成。真实写入的宿主是 Web；既有 Electron 合成凭据机制证据不能合并宣称为 Electron+真实写入同轮通过。OAuth listener 定时器等执行窗口观察保留，不自动派修。保持 `PARTIAL / passes:false`。
+- **网页面试练习**：沿用用户暂停决定，不安排目标地址接入或补验。
 
+原始证据分别位于 `.worktrees/auto-apply-final-verify/.tmp/auto-apply-final-verify/`、`.worktrees/notion-update-record/.tmp/notion-update-record/`，更早轮次来源见 [EXTENSIONS_FEATURES.json](./EXTENSIONS_FEATURES.json) 的逐轮记录。临时证据不随 Git 自动同步，本次不清理或搬迁。
 
-> 更新日期：2026-11-13。对应机器可读台账：[EXTENSIONS_FEATURES.json](./EXTENSIONS_FEATURES.json)。
-> A/B/C 已提交原始交付，本轮汇总集成到 Main，并补齐共享接线与审查修复。工具入口及面试入口迁移代码为 `IMPLEMENTED`，自动网申和 Notion 整体为 `PARTIAL`；所有 `passes` 保持 `false`。本轮执行了定向测试、隔离迁移、生产构建、Windows Electron fresh-native 定向验证和隔离 Chromium 插件导入验证，未操作真实账号或业务数据。
+后续已产出 [Codex／Devin 原生会话适配最小合同提案](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) 与 [简历证据深挖 Skill 内容及结果合同提案](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md)。两份已完成协调核验，仍待批准、未加载或实施；首版推荐分别收敛到 Codex 会话关联/恢复及证据草稿输出，不自动授权放开原生工具权限、保存职业素材或改写会话契约。自动网申页面识别方向仍属于已登记的后续范围，不据此重新包装为当前优先任务。
+
+> 以下保留 2026-11-13 起的历史实施过程。涉及“尚未实现／待验收”的旧轮次表述按当时证据理解；当前摘要及机器可读台账优先，不覆盖其宿主与版本边界。
 
 ## 1. 范围与既有台账关系
 
@@ -22,8 +26,8 @@
 
 | Feature | 决策 | 当前结果 |
 | --- | --- | --- |
-| EXT-AUTO-APPLY | 将自动网申作为配套浏览器扩展，自动填写、用户手动提交 | B：手动导入阶段已集成，桌面导出与插件实装导入通过；填写未覆盖、配对同步未实现 |
-| EXT-NOTION | 增加 Notion 连接配置，让 Vocatrya AI 操作获授权内容 | C：接入代码及审查修复已集成；未连接详情页通过，真实 OAuth 与读写待专用测试工作区验收 |
+| EXT-AUTO-APPLY | 配套浏览器扩展，自动填写、用户手动提交 | 配对同步与真实小红书定向验证已有证据，最终安全补修已集成；PARTIAL，当前轮次收口 |
+| EXT-NOTION | Notion 连接及受控 AI 读写 | Web 真实 OAuth 与全部三个写工具路径已有证据；PARTIAL，当前轮次收口，不再派验收 |
 | EXT-INTERVIEW-WEB | 隐藏内置面试练习板块，在扩展区域通过链接前往网页练习 | A：入口迁移已集成，桌面旧链接引导与未配置禁用通过；目标网址及真实外链跳转待验收 |
 
 ### 本轮交付与收尾（2026-11-13）

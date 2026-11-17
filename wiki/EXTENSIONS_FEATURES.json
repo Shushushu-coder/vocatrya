@@ -64,6 +64,14 @@
   "features": [
     {
       "id": "EXT-AUTO-APPLY",
+      "currentDisposition": {
+        "recordedOn": "2026-11-17",
+        "status": "CURRENT_ROUND_CLOSED_NO_FURTHER_DISPATCH",
+        "decision": "用户要求本轮收口，暂不继续安排测试或缺陷修复；历史未覆盖项和观察保留，不自动重新派发。",
+        "integratedCommit": "a36fb9ab",
+        "mergeCommit": "071f48e0",
+        "acceptanceBoundary": "保留 PARTIAL 与 passes:false；收口是调度决定，不代表完整功能验收通过。"
+      },
       "worktreeDelivery": {
         "task": "B",
         "status": "INTEGRATED_WITH_FOLLOWUPS",
@@ -139,6 +147,14 @@
     },
     {
       "id": "EXT-NOTION",
+      "currentDisposition": {
+        "recordedOn": "2026-11-17",
+        "status": "CURRENT_ROUND_CLOSED_NO_FURTHER_DISPATCH",
+        "decision": "用户要求本轮收口，暂不继续安排测试或缺陷修复；历史未覆盖项和观察保留，不自动重新派发。",
+        "integratedCommit": "a36fb9ab",
+        "mergeCommit": "071f48e0",
+        "acceptanceBoundary": "保留 PARTIAL 与 passes:false；收口是调度决定，不代表完整功能验收通过。"
+      },
       "worktreeDelivery": {
         "task": "C",
         "status": "INTEGRATED_WITH_FOLLOWUPS",
