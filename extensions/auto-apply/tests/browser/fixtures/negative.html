@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>合成拒绝与副作用夹具</title>
+<style>input,button { margin:8px; padding:8px } .ant-picker-dropdown { padding:12px } .ant-picker-dropdown-hidden { display:none }</style>
+<form id="traps">
+<button type="submit">添加教育经历</button>
+<button>添加教育经历</button>
+<button type="submit"><span class="ant-btn" role="button">添加教育经历</span></button>
+<button type="submit"><span>添加教育经历</span>并发送</button>
+<button type="button">保存<span>添加教育经历</span></button>
+<a href="/unexpected">添加教育经历</a>
+<button id="safe" type="button"><span>添加教育经历</span></button>
+</form>
+<div class="ant-picker"><input id="invalid" aria-invalid="true"></div>
+<div class="ant-picker"><input id="changed"></div>
+<div class="ant-picker ant-picker-range"><input id="start"><input id="end"></div>
+<div id="panel" class="ant-picker-dropdown ant-picker-dropdown-hidden"><div class="ant-picker-month-panel">合成月份面板</div></div>
+<script>
+window.__SUBMIT_COUNT__=0; window.__TRAP_CLICKS__=0; window.__SAFE_CLICKS__=0; window.__CLOSE_COUNT__=0;
+const panel=document.querySelector('#panel');
+document.querySelector('#traps').addEventListener('submit',e=>{e.preventDefault();window.__SUBMIT_COUNT__++});
+document.querySelectorAll('#traps button').forEach(b=>b.addEventListener('click',()=>{if(b.id==='safe')window.__SAFE_CLICKS__++;else window.__TRAP_CLICKS__++}));
+document.querySelectorAll('input').forEach(input=>input.addEventListener('focus',()=>panel.classList.remove('ant-picker-dropdown-hidden')));
+document.querySelector('#changed').addEventListener('blur',e=>{e.target.value='2001-02'});
+document.body.addEventListener('mousedown',e=>{
+ if(e.target!==document.body)return;
+ panel.classList.add('ant-picker-dropdown-hidden');
+ if(document.querySelector('#start').value){
+   window.__CLOSE_COUNT__++;
+   setTimeout(()=>{document.querySelector('#start').value='';document.querySelector('#end').value=''},50);
+ }
+});
+window.__READY__=true;
+</script></html>

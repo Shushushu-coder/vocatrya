@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>合成 antd 网申表单（仿小红书结构）</title>
+<link rel="stylesheet" href="/vendor/antd/dist/reset.css">
+<style>
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background:#f5f6f7; }
+  #root { max-width: 960px; margin: 0 auto; padding: 24px 16px 120px; }
+  .page-card { background:#fff; border-radius:12px; padding:24px 32px 8px; }
+  .sec-h { font-size:16px; font-weight:600; margin:28px 0 16px; padding-left:10px; border-left:3px solid #ff2442; }
+  .entry-block { border:1px solid #eceef1; border-radius:8px; padding:16px 16px 0; margin-bottom:16px; position:relative; }
+  .entry-title { font-size:13px; color:#8a8f99; margin-bottom:12px; }
+  .hint { color:#c0c4cc; font-size:12px; margin:4px 0 12px; }
+  .footer-bar { margin-top:32px; padding:16px 0; text-align:center; }
+</style>
+</head>
+<body>
+<div id="root">loading…</div>
+<script src="/vendor/react/umd/react.production.min.js"></script>
+<script src="/vendor/react-dom/umd/react-dom.production.min.js"></script>
+<script src="/vendor/dayjs/dayjs.min.js"></script>
+<script src="/vendor/antd/dist/antd.min.js"></script>
+<script>
+const { Form, Input, DatePicker, Select, Radio, Button } = antd;
+const h = React.createElement;
+const Item = Form.Item;
+const D = window.__FIXTURE__ || {};
+
+function educationBlock(field, remove) {
+  return h('div', { className: 'entry-block edu-entry', key: field.key },
+    h('div', { className: 'entry-title' }, '教育经历 ' + (field.name + 1)),
+    h(Item, { label: '学历', name: [field.name, 'degree'], rules: [{ required: true, message: '请选择学历' }] },
+      h(Select, { placeholder: '请选择', options: ['博士研究生', '硕士研究生', '大学本科', '大学专科', '其他'].map(v => ({ value: v, label: v })) })),
+    h(Item, { label: '起止时间', name: [field.name, 'period'], rules: [{ required: true, message: '请选择起止时间' }] },
+      h(DatePicker.RangePicker, { picker: 'month', placeholder: ['入学时间', '毕业时间'], style: { width: '100%' } })),
+    h(Item, { label: '学校', name: [field.name, 'school'], rules: [{ required: true, message: '请输入学校全称' }] },
+      h(Input, { placeholder: '请输入学校全称' })),
+    h(Item, { label: '学校所在城市', name: [field.name, 'city'] }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '院系', name: [field.name, 'college'] }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '专业', name: [field.name, 'major'] }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '成绩排名', name: [field.name, 'rank'] },
+      h(Select, { placeholder: '请选择', options: ['前10%', '前25%', '前50%', '其他'].map(v => ({ value: v, label: v })) })),
+    h(Item, { label: '导师', name: [field.name, 'advisor'] }, h(Input, { placeholder: '请输入导师姓名' })),
+    h(Item, { label: '实验室', name: [field.name, 'lab'] }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '研究方向', name: [field.name, 'research'] }, h(Input, { placeholder: '请输入' }))
+  );
+}
+
+function experienceBlock(field, kindLabel) {
+  return h('div', { className: 'entry-block exp-entry', key: field.key },
+    h('div', { className: 'entry-title' }, kindLabel + ' ' + (field.name + 1)),
+    h(Item, { label: '单位名称', name: [field.name, 'company'] }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '职位名称', name: [field.name, 'position'] }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '起止时间', name: [field.name, 'period'] },
+      h(DatePicker.RangePicker, { picker: 'month', placeholder: ['开始时间', '结束时间'], style: { width: '100%' } })),
+    h(Item, { label: '工作内容', name: [field.name, 'content'] }, h(Input.TextArea, { rows: 2, placeholder: '请输入' }))
+  );
+}
+
+function App() {
+  const [form] = Form.useForm();
+  window.__SUBMIT_COUNT__ = 0;
+  window.__FORM_API__ = form;
+
+  const basic = h(React.Fragment, null,
+    h('div', { className: 'sec-h' }, '基础信息'),
+    h('div', { className: 'hint' }, '请勿使用多个手机/邮箱重复投递，一经发现将取消面试资格'),
+    h(Item, { label: '推荐码', name: 'referral' }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '姓名', name: 'name', rules: [{ required: true, message: '请输入姓名' }] }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '证件号码（用于实名认证）', name: 'idNumber' }, h(Input, { placeholder: '请输入证件号码' })),
+    h(Item, { label: '性别', name: 'gender' },
+      h(Select, { placeholder: '请选择性别', options: ['男', '女'].map(v => ({ value: v, label: v })) })),
+    h(Item, { label: '出生年月', name: 'birth', rules: [{ required: true, message: '请输入出生年月' }] },
+      h(DatePicker, { picker: 'month', placeholder: '请选择日期' })),
+    h(Item, { label: '手机号', name: 'phone' }, h(Input, { addonBefore: '中国大陆', placeholder: '请输入' })),
+    h(Item, { label: '邮箱', name: 'email' }, h(Input, { placeholder: '请输入' })),
+    h(Item, { label: '意向工作城市', name: 'city' },
+      h(Select, { showSearch: true, placeholder: '请选择', options: ['北京', '上海', '杭州', '深圳', '广州', '成都', '南京', '武汉'].map(v => ({ value: v, label: v })) })),
+    h(Item, { label: '是否服从调剂', name: 'adjust' },
+      h(Radio.Group, { options: [{ value: '是', label: '是' }, { value: '否', label: '否' }] }))
+  );
+
+  const education = h(React.Fragment, null,
+    h('div', { className: 'sec-h' }, '教育经历'),
+    h(Form.List, { name: 'education' }, (fields, op) => h(React.Fragment, null,
+      fields.map((field) => educationBlock(field, op.remove)),
+      h(Button, { type: 'dashed', block: true, onClick: () => op.add() }, '+ 添加教育经历')
+    ))
+  );
+
+  const internship = h(React.Fragment, null,
+    h('div', { className: 'sec-h' }, '实习经历'),
+    h(Form.List, { name: 'internship' }, (fields, op) => h(React.Fragment, null,
+      fields.map((field) => experienceBlock(field, '实习经历')),
+      h(Button, { type: 'dashed', block: true, onClick: () => op.add() }, '+ 添加实习经历')
+    ))
+  );
+
+  const work = h(React.Fragment, null,
+    h('div', { className: 'sec-h' }, '工作经历'),
+    h(Form.List, { name: 'work' }, (fields, op) => h(React.Fragment, null,
+      fields.map((field) => experienceBlock(field, '工作经历')),
+      h(Button, { type: 'dashed', block: true, onClick: () => op.add() }, '+ 添加工作经历')
+    ))
+  );
+
+  const awards = h(React.Fragment, null,
+    h('div', { className: 'sec-h' }, '竞赛/奖项'),
+    h(Form.List, { name: 'awards' }, (fields, op) => h(React.Fragment, null,
+      fields.map((field) => h('div', { className: 'entry-block award-entry', key: field.key },
+        h('div', { className: 'entry-title' }, '竞赛/奖项 ' + (field.name + 1)),
+        h(Item, { label: '竞赛/奖项名称', name: [field.name, 'awardName'] }, h(Input, { placeholder: '请输入' })),
+        h(Item, { label: '获奖名次', name: [field.name, 'awardRank'] },
+          h(Select, { showSearch: true, placeholder: '请选择', options: ['一等奖', '二等奖', '三等奖', '优秀奖', '金奖', '银奖', '铜奖'].map(v => ({ value: v, label: v })) })),
+        h(Item, { label: '获奖时间', name: [field.name, 'awardTime'] }, h(DatePicker, { picker: 'month', placeholder: '获奖时间' })),
+        h(Item, { label: '获奖情况描述/链接', name: [field.name, 'awardDesc'] }, h(Input.TextArea, { rows: 2, placeholder: '请输入获奖描述或链接' }))
+      )),
+      h(Button, { type: 'dashed', block: true, onClick: () => op.add() }, '+ 添加竞赛/奖项')
+    ))
+  );
+
+  const cert = h(React.Fragment, null,
+    h('div', { className: 'sec-h' }, '证书'),
+    h(Form.List, { name: 'certificates' }, (fields, op) => h(React.Fragment, null,
+      fields.map((field) => h('div', { className: 'entry-block cert-entry', key: field.key },
+        h(Item, { label: '证书名称', name: [field.name, 'certName'] }, h(Input, { placeholder: '请输入证书名称' }))
+      )),
+      h(Button, { type: 'dashed', block: true, onClick: () => op.add() }, '+ 添加证书')
+    ))
+  );
+
+  const patent = h(React.Fragment, null,
+    h('div', { className: 'sec-h' }, '专利'),
+    h(Form.List, { name: 'patents' }, (fields, op) => h(React.Fragment, null,
+      fields.map((field) => h('div', { className: 'entry-block patent-entry', key: field.key },
+        h(Item, { label: '专利名称', name: [field.name, 'patentName'] }, h(Input, { placeholder: '请输入' })),
+        h(Item, { label: '专利人', name: [field.name, 'patentee'] }, h(Input, { placeholder: '请输入' })),
+        h(Item, { label: '取得日期', name: [field.name, 'grantDate'] }, h(DatePicker, { placeholder: '获奖时间' })),
+        h(Item, { label: '专利描述/链接', name: [field.name, 'patentDesc'] }, h(Input.TextArea, { rows: 2, placeholder: '请输入专利描述或链接' }))
+      )),
+      h(Button, { type: 'dashed', block: true, onClick: () => op.add() }, '+ 添加专利')
+    ))
+  );
+
+  return h('div', { className: 'page-card' },
+    h('h2', null, '2027 校园招聘 · 申请信息（合成样本）'),
+    h(Form, {
+      form,
+      layout: 'vertical',
+      initialValues: { phone: '199****3820', adjust: '是', education: [{}], internship: [], work: [], awards: [{}], certificates: [{}], patents: [{}] }
+    },
+      basic, education, internship, work, awards, cert, patent,
+      h('div', { className: 'footer-bar' },
+        h(Button, {
+          type: 'primary',
+          onClick: () => { window.__SUBMIT_COUNT__ += 1; }
+        }, '提交志愿')
+      )
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+window.__READY__ = true;
+</script>
+</body>
+</html>
