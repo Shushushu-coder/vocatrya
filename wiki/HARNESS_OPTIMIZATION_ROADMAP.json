@@ -799,7 +799,7 @@
       "implementation": "IMPLEMENTED",
       "integration": "MERGED",
       "execution": "COMPLETED",
-      "acceptance": "PARTIAL_PASS_UPDATE_RECORD_BLOCKED",
+      "acceptance": "PARTIAL_PASS_DESKTOP_REAL_WRITE_PENDING",
       "commits": [
         "d1e4bf85"
       ],
@@ -830,7 +830,7 @@
         }
       ],
       "limitations": [
-        "notion_update_record 真实目标未覆盖（授权父页下无数据库行）；passes=false",
+        "notion_update_record 已补Web真实更新/拒绝/不存在目标失败及远端读回；主协调核对原始记录并复跑56项通过，passes=false",
         "真实远端写入证据来自 Web dev 宿主；Windows Electron 侧机制以合成凭据验证（fail-closed 边界），桌面+真实写入未在同一 run 覆盖",
         "不承诺外部副作用恰好一次；不确定结果禁止自动重发",
         "真实数据库未应用本次 Migration；Worktree 保留，未 Push"
@@ -842,7 +842,7 @@
         "prisma/migrations/20261117120000_agent_operation_proposal/"
       ],
       "next": [
-        "授权父页下补建「投递记录」库后复验 update_record（需重新 OAuth consent）",
+        "update_record 已于授权父页下专用测试库完成；真实证据见 .worktrees/notion-update-record/.tmp/notion-update-record/",
         "由验收 Owner 判断是否需补 Electron+真实 Notion 合并定向验证；不自动执行下一阶段"
       ]
     },
@@ -904,7 +904,7 @@
   "openItems": [
     "H01 真实模型冒烟等待可用授权连接",
     "H02 专用本地准备路由待 Windows Electron 定向复验；旧练习证据部分来自 Web（A 轮补验结果待汇总进台账后更新本条）",
-    "H05：create/append 真实写入已验证（Web+真实 DeepSeek/Notion），update_record 待授权父页下建库后补验；Electron 侧机制已过（合成凭据），桌面+真实写入未合并覆盖；passes=false",
+    "H05：create/append/update_record 的Web真实写入均有证据，update_record新增成功/拒绝/不存在目标失败已核验；Electron侧机制已有合成凭据证据，桌面+真实写入未合并覆盖；passes=false",
     "真实数据库未操作，migration 仅在隔离数据库验证",
     "历史集成轮次未 Push、未清理 Worktree，原始方案当时未纳入提交；2026-11-17 按用户要求随 Wiki 文档提交，仅作参考，不授权完整实施。"
   ],

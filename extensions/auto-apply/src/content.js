@@ -6388,12 +6388,62 @@
     }
   }
 
-  function buildExpandedBlockCandidates(newFields, candidates, entries, category, targetItemIndex) {
-    const eligibleFields = newFields.filter((field) =>
-      field?.canFill && !field.hasCurrentValue &&
-      field.inferredCategory === category &&
-      (!field.repeatGroupIndex || Number(field.repeatGroupIndex) === targetItemIndex)
+  function findAddedBlockRoot(beforeNodes, triggerButton, beforeControlCounts) {
+    // A replaced trigger means the outer form may have been rebuilt: new nodes alone
+    // cannot distinguish old empty records from the requested new record.
+    if (!(beforeNodes instanceof Set) || !beforeNodes.size || !triggerButton?.isConnected) {
+      return null;
+    }
+    const added = Array.from(document.querySelectorAll("*")).filter((el) => !beforeNodes.has(el));
+    const addedSet = new Set(added);
+    const roots = added.filter((el) =>
+      !addedSet.has(el.parentElement) &&
+      !el.contains(triggerButton) &&
+      !el.closest?.(`#${PANEL_ID},#${FLOAT_ID}`) &&
+      el.querySelectorAll(CONTROL_SELECTOR).length > 0
     );
+    // Use the nearest surviving trigger container. Multiple new control subtrees
+    // are ambiguous, so do not relax category/position checks for any of them.
+    for (let scope = triggerButton.parentElement; scope; scope = scope.parentElement) {
+      const nearby = roots.filter((root) => scope.contains(root));
+      if (nearby.length) {
+        if (nearby.length !== 1 || !beforeControlCounts?.has(scope)) {
+          return null;
+        }
+        const root = nearby[0];
+        const growth = scope.querySelectorAll(CONTROL_SELECTOR).length - beforeControlCounts.get(scope);
+        // A rebuilt list includes old controls too. Its subtree size exceeds the
+        // actual control growth, so it is not proof of a single newly added item.
+        return growth > 0 && root.querySelectorAll(CONTROL_SELECTOR).length === growth ? root : null;
+      }
+    }
+    return null;
+  }
+
+  function buildExpandedBlockCandidates(newFields, candidates, entries, category, targetItemIndex, blockRoot) {
+    const inAddedBlock = (field) => {
+      if (!blockRoot || !field?.fieldId) {
+        return false;
+      }
+      const el = document.querySelector(`[${FIELD_ATTR}="${CSS.escape(field.fieldId)}"]`);
+      return Boolean(el && el !== blockRoot && blockRoot.contains(el));
+    };
+    const domOnlyIds = new Set();
+    const eligibleFields = newFields.filter((field) => {
+      if (!field?.canFill || field.hasCurrentValue) {
+        return false;
+      }
+      if (field.inferredCategory === category) {
+        return !field.repeatGroupIndex || Number(field.repeatGroupIndex) === targetItemIndex;
+      }
+      // 标签推断可能把同一块内字段归到相邻类别（如"起止时间"被归到工作经历）；
+      // DOM 上确实落在刚新增的块内且类别兼容时，仍按目标条目绑定。
+      if (inAddedBlock(field) && isCategoryCompatibleForMapping(field.inferredCategory, category)) {
+        domOnlyIds.add(field.fieldId);
+        return true;
+      }
+      return false;
+    });
     const eligibleIds = new Set(eligibleFields.map((field) => field.fieldId));
     const itemEntries = (entries || []).filter(
       (entry) =>
@@ -6414,10 +6464,11 @@
         continue;
       }
       const fieldLabel = field.inferredLabel || inferFieldLabel(field);
+      const scoringField = domOnlyIds.has(field.fieldId) ? { ...field, repeatGroupIndex: 0 } : field;
       let bestEntry = null;
       let bestScore = -9999;
       for (const entry of itemEntries) {
-        const score = scoreAutofillCandidate(field, entry, fieldLabel, field.inferredCategory);
+        const score = scoreAutofillCandidate(scoringField, entry, fieldLabel, category);
         if (score > bestScore) {
           bestScore = score;
           bestEntry = entry;
@@ -6472,6 +6523,11 @@
           const beforeFieldIds = new Set(
             latestFields.map((field) => field?.fieldId).filter(Boolean)
           );
+          const beforeNodes = new Set(document.querySelectorAll("*"));
+          const beforeControlCounts = new Map();
+          for (let scope = button.parentElement; scope; scope = scope.parentElement) {
+            beforeControlCounts.set(scope, scope.querySelectorAll(CONTROL_SELECTOR).length);
+          }
           const beforeCount = document.querySelectorAll(CONTROL_SELECTOR).length;
           clickActionElement(button);
           const grown = await waitForControlGrowth(beforeCount, 1800);
@@ -6492,7 +6548,8 @@
 
           const newFields = latestFields.filter((field) => !beforeFieldIds.has(field.fieldId));
           const newCandidates = buildExpandedBlockCandidates(
-            newFields, replan?.candidates, entries, category, existing + 1
+            newFields, replan?.candidates, entries, category, existing + 1,
+            findAddedBlockRoot(beforeNodes, button, beforeControlCounts)
           );
 
           for (const candidate of newCandidates) {
@@ -7984,6 +8041,7 @@
     createAiAutofillCandidate,
     buildAutofillPlan,
     buildExpandedBlockCandidates,
+    findAddedBlockRoot,
     collectUnmatchedRepeatBlocks,
     formatUnmatchedBlocksNote,
     getOrCreateRepeatGroupId,
