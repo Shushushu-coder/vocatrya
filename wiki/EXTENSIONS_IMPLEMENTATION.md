@@ -226,6 +226,18 @@
 
 新发现缺陷：antd 日期类控件写入不提交却计入 filled；重复块 occurrence 绑定在该页未生效（repeatGroupId 全空）致同一教育卡跨条目混绑（专业←硕士条目、学校←本科条目）；antd Select（意向城市/性别/学历/成绩排名）与 radio 未覆盖；不支持「添加XX」建块，第 2 段教育/实习/工作经历无处落地；部分 label 误映射（姓名→英文名、导师/实验室/研究方向→学校、Github/专利日期→奖惩类别，低分待处理挡住未写错值）。「中文 ATS 实填」场景已执行但结果不达标，缺陷记入待办，PARTIAL/passes:false 保持。证据与可复跑驱动：`E:/Projects/vocatrya/.tmp/ext-aa-xhs/`（REPORT.md、填前/填后 JSON、debug snapshot、12 张截图）。
 
+### 中文 ATS 已知缺陷修复与集成（2026-11-17）
+
+来源 `codex/auto-apply-ats-fixes@21f5f4a1`，已集成 Main。修复月份日期被误拆为 `month=0` 的正则回溯、日期精度与提交核验、区间连续填写和成对审计、重复经历按条目绑定、语义字段防错配、antd Select/radio 写后核验，以及可靠「新增经历」按钮发现与新块填写。无法安全识别的控件或缺失资料继续留给人工。
+
+集成审查另修复三处边界：新增按钮校验真实原生祖先，排除 submit、默认提交、导航链接及危险文案；等待区间关闭审计完成后再统计，失败同步到逐项结果和待处理数；日期按最终显示值及 `aria-invalid` 判断，关闭后清空或改值不计成功。未增加自动投递或提交能力。
+
+主协调实际验证：隔离 Web fixture + Playwright headless Chromium **35/35**（真实 antd 正常路径 29 项、可控 DOM 负向路径 6 项）；正常夹具 `filled=33 / failed=0 / skipped=3 / unmatched=1`，自报与实测回读一致。原生表单 submit 计数经过校准，插件执行阶段为 0；负向区间被清空时为 `filled=0 / failed=2 / pending=2`。content 单测 **12/12**、脚本语法和 diff 检查通过；Main 集成后内容脚本单测再次通过，受影响源码与来源分支一致。
+
+连接测试 **12/14**，两项 `options sync restores buttons after success/failure` 在 Main 基线 `d63c1d83` 同样失败（`options.js renderConnectState` 的 undefined.disabled），本次未扩项修复。证据：`.worktrees/auto-apply-ats-fixes/.tmp/integration-verify/final-browser/`、同目录 `plugin-unit.log`；基线对照 `.tmp/tabs-ats-integration/main-plugin-baseline.log`。可复跑夹具、依赖锁文件与命令说明位于 `extensions/auto-apply/tests/browser/README.md`。
+
+本轮仅合成 Web 验证，**未复验小红书或其他真实 ATS，未运行 Windows Electron**；专利块无资料仍留人工，AI 通道及既有真实浏览器/桌面剩余项未消除。保持 `PARTIAL / passes:false`，不将旧版真实站点证据追认为修复版本已通过。两条来源 Worktree 保留，未 push。
+
 ## 6. Agent 的 MCP／工具与 Skills（2026-11-17 用户确认范围）
 
 ### 分层与入口
