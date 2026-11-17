@@ -315,12 +315,15 @@
     学历学位: ["学历/学位", "学历学位", "最高学历学位"],
     学号: ["学生证号"],
     学制: ["学习年限", "几年制"],
-    城市: ["所在城市", "学校城市", "地点"],
+    城市: ["所在城市", "学校城市", "学校所在城市", "地点"],
+    学校所在城市: ["学校城市", "所在城市", "城市", "学校所在地", "院校所在地"],
     学校类别: ["院校类别", "学校类型"],
     录取批次: ["高考录取批次", "招生批次"],
     专业描述: ["专业介绍"],
     专业课程: ["主修课程", "核心课程"],
-    研究方向: ["研究领域"],
+    研究方向: ["研究领域", "研究课题", "课题方向"],
+    导师: ["导师姓名", "指导教师", "指导教师姓名"],
+    实验室: ["实验室名称", "所属实验室", "所在实验室"],
     毕业论文: ["论文题目", "毕业论文题目"],
     成绩: ["学习成绩", "GPA分数", "平均成绩"],
     学历证书编号: ["学历证书号", "毕业证书编号"],
@@ -1432,6 +1435,13 @@
         return current;
       }
     }
+
+    // 单块回退：无孪生兄弟时复用最外层重复块容器，
+    // 保证同一块内的字段绑定到同一条资料记录。
+    const fallbackRoot = findRepeatItemRoot(element);
+    if (fallbackRoot && getRepeatItemSignature(fallbackRoot).size >= 2) {
+      return fallbackRoot;
+    }
     return null;
   }
 
@@ -2181,7 +2191,21 @@
 
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
       if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)) {
-        return element.checked ? "checked" : "";
+        return element.checked ? getChoiceLabelText(element) || "checked" : "";
+      }
+      if (!isVisible(element)) {
+        const host = getFrameworkHiddenControlHost(element);
+        if (host) {
+          const selected = normalizeText(
+            host.querySelector(
+              ".ant-select-selection-item,.el-select__selected-item,.arco-select-view-value,[class*='selection-item'],[class*='view-value']"
+            )?.textContent || "",
+            260
+          );
+          if (selected) {
+            return selected;
+          }
+        }
       }
       return normalizeText(element.value || "", 260);
     }
@@ -2212,6 +2236,25 @@
     return true;
   }
 
+  function getDateRangeEndIndex(element) {
+    if (!element || !(element instanceof HTMLInputElement)) {
+      return -1;
+    }
+
+    const rangeRoot = element.closest?.(
+      ".ant-picker-range,.el-date-editor--daterange,.el-date-editor--timerange,.arco-picker-range,[class*='range-picker'],[class*='RangePicker'],[class*='rangePicker']"
+    );
+    if (!rangeRoot) {
+      return -1;
+    }
+
+    const inputs = Array.from(rangeRoot.querySelectorAll("input")).filter(
+      (input) => input.type !== "hidden" && input.getAttribute("aria-hidden") !== "true"
+    );
+    const index = inputs.indexOf(element);
+    return index === 0 || index === 1 ? index : -1;
+  }
+
   function buildFieldMeta(element) {
     const adapter = getActiveSiteAdapter();
     const type = getControlType(element);
@@ -2224,15 +2267,58 @@
         getAriaLabelText(element)
     );
     const nearbyText = getNearbyText(element);
-    const label = improveFieldLabel(element, rawLabel, nearbyText);
+    let label = improveFieldLabel(element, rawLabel, nearbyText);
+    if (
+      element instanceof HTMLInputElement &&
+      ["radio", "checkbox"].includes(element.type) &&
+      isOptionOnlyLabel(label)
+    ) {
+      // 选项标签（是/否/男/女）不是字段问题本身，回退到表单项标签
+      const formItem = element.closest(".ant-form-item,.el-form-item,[class*='form-item'],[class*='formItem']");
+      const itemLabel = normalizeFieldLabelText(
+        formItem?.querySelector(".ant-form-item-label,.el-form-item__label,label,[class*='label']")?.textContent ||
+          extractFieldContainerLabel(formItem) ||
+          ""
+      );
+      if (itemLabel && !isOptionOnlyLabel(itemLabel) && !isGenericFieldLabel(itemLabel)) {
+        label = itemLabel;
+      }
+    }
+    const dateRangeEnd = getDateRangeEndIndex(element);
+    if (dateRangeEnd >= 0) {
+      const placeholder = normalizeText(element.getAttribute("placeholder"), 80);
+      const placeholderEnd = /开始|起始|入学|入职|from|start/i.test(placeholder)
+        ? 0
+        : /结束|截止|毕业|至今|离职|end|to/i.test(placeholder)
+          ? 1
+          : -1;
+      const resolvedEnd = placeholderEnd >= 0 ? placeholderEnd : dateRangeEnd;
+      const labelKey = normalizeMatchKey(label);
+      if (
+        !labelKey ||
+        isGenericFieldLabel(label) ||
+        /^(起止时间|起止日期|时间段|时间范围|时间|日期|期限|期间|起止年月|开始至结束|starttoend|startend|fromto)$/i.test(labelKey)
+      ) {
+        label = resolvedEnd === 0 ? "开始时间" : "结束时间";
+      }
+    }
     const currentValue = getControlCurrentValue(element);
     const groupText = getRepeatGroupLabelText(element);
+    let dateRangeKey = "";
+    if (dateRangeEnd >= 0) {
+      const rangeRoot = element.closest(".ant-picker-range,.el-date-editor--daterange,.el-date-editor--timerange,.arco-picker-range,[class*='range-picker'],[class*='RangePicker'],[class*='rangePicker']");
+      if (rangeRoot) {
+        dateRangeKey = getOrCreateFieldId(rangeRoot);
+      }
+    }
 
     return {
       fieldId: getOrCreateFieldId(element),
       type,
       tagName: element.tagName.toLowerCase(),
       label,
+      dateRangeEnd,
+      dateRangeKey,
       placeholder: normalizeText(element.getAttribute("placeholder")),
       name: normalizeText(element.getAttribute("name")),
       id: normalizeText(element.getAttribute("id")),
@@ -2285,7 +2371,18 @@
     return Array.from(root.querySelectorAll(CONTROL_SELECTOR))
       .filter((element, index, array) => array.indexOf(element) === index)
       .filter((element) => !element.closest(`#${PANEL_ID}`))
-      .filter(isVisible);
+      .filter((element) => isVisible(element) || Boolean(getFrameworkHiddenControlHost(element)));
+  }
+
+  function getFrameworkHiddenControlHost(element) {
+    if (!element || !(element instanceof Element)) {
+      return null;
+    }
+
+    const host = element.closest?.(
+      ".ant-select,.ant-radio-wrapper,.ant-checkbox-wrapper,.ant-switch,.el-select,.el-radio,.el-checkbox,.arco-select,.t-select"
+    );
+    return host && isVisible(host) ? host : null;
   }
 
   function hasVisibleControls(root) {
@@ -2873,6 +2970,10 @@
   function markElement(element, mark, title) {
     injectStyle();
     element.setAttribute(MARK_ATTR, mark);
+    const host = getFrameworkHiddenControlHost(element);
+    if (host && host !== element) {
+      host.setAttribute(MARK_ATTR, mark);
+    }
     if (title) {
       element.setAttribute("title", title);
     }
@@ -3980,25 +4081,19 @@
   function getContextualSemanticBucket(field, fieldLabel, fieldCategory) {
     const labelKey = normalizeMatchKey(fieldLabel || field?.label || "");
     const optionText = getFieldOptionLabelsText(field, 200);
-    const key = compactText([
-      fieldCategory,
-      field?.groupText,
-      field?.section,
-      field?.nearbyText,
-      field?.label,
-      field?.placeholder,
-      field?.name,
-      field?.id,
-      optionText
-    ].join(" "));
+    // 上下文门控只看块级结构信号（类别 + 同块字段标签），
+    // 不再把区块噪声、邻近文本和字段自身混入 key，
+    // 避免单个字段被无关上下文劫持到错误语义桶。
+    const scopeKey = compactText([fieldCategory, field?.groupText].join(" "));
+    const contextKey = compactText([fieldCategory, field?.groupText, field?.section].join(" "));
 
-    if (!key) {
+    if (!scopeKey && !contextKey) {
       return "";
     }
 
     if (
-      /家庭信息|家庭情况|家庭及社会关系|社会关系|亲属信息|亲属情况|亲属关系/.test(key) &&
-      !/是否存在亲属.*(应聘单位|本行|我行)|亲属在.*(应聘单位|本行|我行)|有关声明|电子签名/.test(key)
+      /家庭信息|家庭情况|家庭及社会关系|社会关系|亲属信息|亲属情况|亲属关系|与本人关系/.test(scopeKey) &&
+      !/是否存在亲属.*(应聘单位|本行|我行)|亲属在.*(应聘单位|本行|我行)|有关声明|电子签名/.test(scopeKey)
     ) {
       if (isRelationLikeLabel(labelKey) || hasRelationLikeOptions(optionText)) {
         return "familyRelation";
@@ -4032,25 +4127,25 @@
       }
     }
 
-    if (/绩效考核|考核年度|考核等级/.test(key)) {
+    if (/绩效考核|考核年度|考核等级/.test(scopeKey)) {
       if (isPhoneLikeLabel(labelKey)) {
         return "performanceContact";
       }
       if (isNameLikeLabel(labelKey)) {
         return "performanceReference";
       }
-      if (/排名/.test(labelKey) || /排名/.test(key)) {
+      if (/排名/.test(labelKey) || /排名/.test(scopeKey)) {
         return "performanceRank";
       }
-      if (/绩效考核等级|考核等级/.test(labelKey) || /绩效考核等级|考核等级/.test(key)) {
+      if (/绩效考核等级|考核等级/.test(labelKey) || /绩效考核等级|考核等级/.test(scopeKey)) {
         return "performanceLevel";
       }
-      if (/说明|评语|备注/.test(labelKey) || /说明|评语|备注/.test(key)) {
+      if (/说明|评语|备注/.test(labelKey) || /说明|评语|备注/.test(scopeKey)) {
         return "performanceNote";
       }
     }
 
-    if (/紧急联系人|紧急联系方式/.test(key)) {
+    if (/紧急联系人|紧急联系方式/.test(scopeKey)) {
       if (isRelationLikeLabel(labelKey) || hasRelationLikeOptions(optionText)) {
         return "emergencyRelation";
       }
@@ -4062,7 +4157,7 @@
       }
     }
 
-    if (/证明人|推荐人|介绍人/.test(key) && !/紧急联系人/.test(key)) {
+    if (/证明人|推荐人|介绍人/.test(scopeKey) && !/紧急联系人/.test(scopeKey)) {
       if (isPhoneLikeLabel(labelKey)) {
         return "referencePhone";
       }
@@ -4074,7 +4169,23 @@
       }
     }
 
-    return getContextualAddressBucket(key, labelKey);
+    // 日期标签按所在块类别分桶，避免专利/证书/奖项/论文日期互相误配。
+    if (/时间|日期|年月|期限|截止/.test(labelKey)) {
+      if (/专利/.test(scopeKey)) {
+        return "patentDate";
+      }
+      if (/证书|资格|执照/.test(scopeKey)) {
+        return "certificateDate";
+      }
+      if (/奖惩|获奖|奖励|荣誉|奖项|竞赛/.test(scopeKey)) {
+        return "awardDate";
+      }
+      if (/论文|著作|刊物|发表/.test(scopeKey)) {
+        return "paperDate";
+      }
+    }
+
+    return getContextualAddressBucket(contextKey, labelKey);
   }
 
   function getSemanticBucket(text, category = "") {
@@ -4199,6 +4310,18 @@
     }
     if (/名拼音|名字拼音/.test(key)) {
       return "firstNamePinyin";
+    }
+    if (/英文名|英文姓名|english\s*name/i.test(key)) {
+      return "englishName";
+    }
+    if (/导师|指导教师|supervisor|advisor/i.test(key)) {
+      return "advisor";
+    }
+    if (/实验室|lab(oratory)?\b/i.test(key)) {
+      return "lab";
+    }
+    if (/研究方向|研究领域|研究课题|课题方向/.test(key)) {
+      return "researchDirection";
     }
     if (/^姓名$|真实姓名/.test(key)) {
       return "fullName";
@@ -4326,7 +4449,10 @@
     if (/学号|学生证号/.test(key)) {
       return "studentId";
     }
-    if (/学校名称|毕业院校|院校名称/.test(key)) {
+    if (/学校所在城市|学校城市|学校所在地|院校所在地|学校所在地区/.test(key)) {
+      return "schoolCity";
+    }
+    if (/学校名称|毕业院校|院校名称|所在学校|就读学校|^学校$|学校$/.test(key)) {
       return "school";
     }
     if (/院系|学院名称/.test(key)) {
@@ -4569,6 +4695,12 @@
     if (/论文描述|论文摘要|论文说明/.test(key)) {
       return "paperDescription";
     }
+    if (/专利.*(取得|获得|授权|申请|登记|公开|公告)?(日期|时间)|取得日期|授权日期|申请日期/.test(key) && /专利/.test(key)) {
+      return "patentDate";
+    }
+    if (/论文.*(时间|日期)|发表时间|发表日期|出版时间/.test(key)) {
+      return "paperDate";
+    }
     if (/专利名称|专利题目/.test(key)) {
       return "patentName";
     }
@@ -4616,6 +4748,15 @@
     const contextualBucket = getContextualSemanticBucket(field, fieldLabel, fieldCategory);
     if (contextualBucket) {
       return contextualBucket;
+    }
+
+    // 标签本身能明确语义时优先采用，避免邻近噪声文本带偏。
+    const labelOnlyBucket = getSemanticBucket(
+      getFieldMatchLabel(field, fieldLabel) || field?.label || "",
+      ""
+    );
+    if (labelOnlyBucket) {
+      return labelOnlyBucket;
     }
 
     return getFirstSemanticBucket(
@@ -5130,7 +5271,21 @@
     const labelText = compactText([getFieldMatchLabel(field, field?.inferredLabel || inferFieldLabel(field)), field?.label, field?.placeholder].join(" "));
     const optionText = getFieldOptionLabelsText(field, 160);
     const contextText = compactText([field?.nearbyText, field?.section, field?.groupText, optionText].join(" "));
-    if (/开始时间|结束时间|出生日期|出生年月|取得毕业证时间|获取日期|取得时间|竞赛时间|获得时间|有效期/.test(labelText)) {
+
+    // DOM 级判定优先：控件本身即日期选择器或下拉
+    try {
+      const element = field ? getElementByFieldRuntimeId(field) : null;
+      if (element?.closest?.(".ant-picker,[class*='picker'],.el-date-editor,.arco-picker")) {
+        return "date";
+      }
+      if (element?.closest?.(".ant-select,.el-select,.arco-select,.t-select")) {
+        return "choice";
+      }
+    } catch {
+      // DOM 不可用时退回标签判定
+    }
+
+    if (/开始时间|结束时间|起止时间|起止日期|入学时间|毕业时间|出生日期|出生年月|取得毕业证时间|获取日期|取得日期|获得日期|授权日期|发表日期|登记日期|取得时间|获得时间|竞赛时间|获奖时间|有效期|时间段|日期|年月|年份/.test(labelText)) {
       return "date";
     }
     if (/是否|有无|能否|接受|服从|未参加|参加过|长期有效|填写有效期/.test(labelText)) {
@@ -5139,12 +5294,15 @@
     if (/性别/.test(labelText)) {
       return "choice";
     }
+    if (field?.type === "combobox" || field?.type === "radio" || field?.type === "checkbox") {
+      return "choice";
+    }
     if (/男|女|是|否|有|无|未婚|已婚|离婚|丧偶|本科|硕士|博士|父亲|母亲|配偶|党员|团员|群众/.test(optionText)) {
       return "choice";
     }
     if (
       !labelText &&
-      /开始时间|结束时间|出生日期|出生年月|取得毕业证时间|获取日期|取得时间|竞赛时间|获得时间|有效期/.test(contextText)
+      /开始时间|结束时间|起止时间|入学时间|毕业时间|出生日期|出生年月|取得毕业证时间|获取日期|取得日期|取得时间|竞赛时间|获得时间|有效期|日期|年月/.test(contextText)
     ) {
       return "date";
     }
@@ -5207,8 +5365,11 @@
     const writeMode = guessAutofillValueFieldType(field);
     const autoFillScoreThreshold = getAutoFillScoreThreshold(field, fieldLabel, fieldCategory);
     const alreadyMatches = valuesLookEquivalent(field.currentValue, value);
+    // 单选/复选控件标签仍是裸选项词（是/否/男/女）时无法确认题目含义，提高自动填写门槛
+    const bareBinaryChoice =
+      ["radio", "checkbox"].includes(field?.type) && isOptionOnlyLabel(fieldLabel || field?.label || "");
     const shouldAutoFill =
-      (alreadyMatches || score >= autoFillScoreThreshold) &&
+      (alreadyMatches || score >= (bareBinaryChoice ? Math.max(autoFillScoreThreshold, 70) : autoFillScoreThreshold)) &&
       value !== "" &&
       field.canFill &&
       !/上传|附件|照片|证件照|简历附件/.test(text);
@@ -5603,9 +5764,14 @@
       groups.get(field.repeatGroupId).fieldIds.push(field.fieldId);
     }
 
+    const repeatCapableCategory =
+      /教育经历|实习经历|工作经历|项目经历|家庭信息|奖惩|获奖|证书|专利|论文|培训|社会实践|绩效|语言|技能|科研|志愿|社会兼职|学生工作/;
     const blocks = [];
     for (const [groupId, group] of groups) {
       if (group.fieldIds.some((fieldId) => candidateFieldIds.has(fieldId))) {
+        continue;
+      }
+      if (group.category && !repeatCapableCategory.test(group.category)) {
         continue;
       }
       const hasMatchingItem = (entries || []).some(
@@ -5973,6 +6139,37 @@
     }
   }
 
+  function orderCandidatesByDateRangeKey(candidates) {
+    const byKey = new Map();
+    for (const candidate of candidates) {
+      const key = candidate?.field?.dateRangeKey;
+      if (key) {
+        if (!byKey.has(key)) {
+          byKey.set(key, []);
+        }
+        byKey.get(key).push(candidate);
+      }
+    }
+    if (!byKey.size) {
+      return candidates;
+    }
+    const emitted = new Set();
+    const result = [];
+    for (const candidate of candidates) {
+      const key = candidate?.field?.dateRangeKey;
+      if (!key) {
+        result.push(candidate);
+        continue;
+      }
+      if (emitted.has(key)) {
+        continue;
+      }
+      emitted.add(key);
+      result.push(...(byKey.get(key) || []));
+    }
+    return result;
+  }
+
   async function applyAutofillPlan(plan, autoFillIds, options = {}) {
     const runId = Number(options.runId || 0);
     if (autofillInProgress && !isCurrentAutofillRun(runId)) {
@@ -5992,15 +6189,19 @@
       return { ok: false, reason: "empty autofill candidates" };
     }
 
+    // 同一 RangePicker 的两端必须连续填写：中途焦点离开会重置未提交的区间
+    const orderedCandidates = orderCandidatesByDateRangeKey(autoFillCandidates);
+
     setProfilePanelStatus("正在把匹配项填写到当前网页...");
     if (isCurrentAutofillRun(runId)) {
       setAutofillProgress("填写匹配项", 94, `本地准备填写 ${autoFillCandidates.length} 项`);
     }
     const results = [];
     const filledElements = new Set();
+    const resultByElement = new Map();
 
-    for (let index = 0; index < autoFillCandidates.length; index += 1) {
-      const candidate = autoFillCandidates[index];
+    for (let index = 0; index < orderedCandidates.length; index += 1) {
+      const candidate = orderedCandidates[index];
       const field = candidate.field;
       let element = await resolveFieldElement(field);
       let ok = false;
@@ -6024,27 +6225,35 @@
       }
 
       if (isCurrentAutofillRun(runId)) {
-        const percent = 94 + Math.round(((index + 1) / autoFillCandidates.length) * 6);
-        setAutofillProgress("填写匹配项", percent, `本地已处理 ${index + 1}/${autoFillCandidates.length} 项`);
+        const percent = 94 + Math.round(((index + 1) / orderedCandidates.length) * 6);
+        setAutofillProgress("填写匹配项", percent, `本地已处理 ${index + 1}/${orderedCandidates.length} 项`);
       }
 
       if (ok && element) {
         filledElements.add(element);
       }
 
-      results.push({
-        id: candidate.id,
-        ok,
-        note
-      });
+      const result = { id: candidate.id, ok, note };
+      results.push(result);
+      if (element) resultByElement.set(element, result);
     }
 
-    const filledCount = filledElements.size;
+    // 资料条目多于页面块时，尝试点击经识别的新增块按钮补齐，再填写新块
+    const expandResult = await expandMissingRepeatBlocks(plan, runId);
+    for (const extraResult of expandResult.results) {
+      results.push(extraResult);
+    }
+
+    // 区间日期成对审计：任一端未提交时两端都不计为成功
+    await auditRangePairsAfterFill(filledElements, expandResult, resultByElement);
+
+    const filledCount = filledElements.size + expandResult.filled;
     const failedCount = results.filter((result) => !result.ok).length;
     const skippedCount = await markDeferredPlanCandidates(plan, autoFillSet);
     await markUnmatchedRepeatBlocks(plan);
     const unmatchedBlocks = Array.isArray(plan?.unmatchedBlocks) ? plan.unmatchedBlocks : [];
     const unmatchedNote = formatUnmatchedBlocksNote(unmatchedBlocks);
+    const expandNote = expandResult.notes.length ? `；${expandResult.notes.join("；")}` : "";
     const summary = {
       attempted: results.length,
       filled: filledCount,
@@ -6052,12 +6261,14 @@
       skipped: skippedCount,
       unmatched: unmatchedBlocks.length,
       unmatchedBlocks: unmatchedBlocks.map((block) => block.label),
+      expandedBlocks: expandResult.created,
+      expandNotes: expandResult.notes,
       pending: failedCount + skippedCount,
       total: plan?.candidates?.length || results.length,
-      message: `页面已标记：绿色为已填写，橙色为待处理${unmatchedNote}。`,
+      message: `页面已标记：绿色为已填写，橙色为待处理${unmatchedNote}${expandNote}。`,
       aiUsage: getAutofillAiSnapshot()
     };
-    setProfilePanelStatus(`已自动填写 ${filledCount} 项，待处理 ${summary.pending} 项${unmatchedNote}。`);
+    setProfilePanelStatus(`已自动填写 ${filledCount} 项，待处理 ${summary.pending} 项${unmatchedNote}${expandNote}。`);
     setAutofillSummary(summary);
     updateAutofillDebugResults(summary, results);
     await persistProfilePanelState(getProfilePanelStateSnapshot());
@@ -6069,10 +6280,207 @@
       skipped: skippedCount,
       unmatched: unmatchedBlocks.length,
       unmatchedBlocks: unmatchedBlocks.map((block) => block.label),
+      expandedBlocks: expandResult.created,
+      expandNotes: expandResult.notes,
       total: plan?.candidates?.length || results.length,
       aiUsage: summary.aiUsage,
       results
     };
+  }
+
+  const EXPANDABLE_REPEAT_CATEGORIES = ["教育经历", "实习经历", "工作经历", "项目经历"];
+  const ADD_BLOCK_LABEL_PATTERNS = {
+    教育经历: /(添加|新增|再加|继续添加|＋|\+)\s*一?(段|条|个|份|项|块)?\s*(教育经历|教育|学习经历|教育背景)/,
+    实习经历: /(添加|新增|再加|继续添加|＋|\+)\s*一?(段|条|个|份|项|块)?\s*(实习经历|实习)/,
+    工作经历: /(添加|新增|再加|继续添加|＋|\+)\s*一?(段|条|个|份|项|块)?\s*(工作经历|职业经历|工作经验|工作)/,
+    项目经历: /(添加|新增|再加|继续添加|＋|\+)\s*一?(段|条|个|份|项|块)?\s*(项目经历|项目经验|项目)/
+  };
+  const UNSAFE_ACTION_LABEL = /提交|投递|发送|保存|申请|确定|完成|取消|删除|移除|编辑|修改|清空|重置|退出|返回|下一步|上一步|预览|打印/;
+
+  function findAddBlockButton(category) {
+    const pattern = ADD_BLOCK_LABEL_PATTERNS[category];
+    if (!pattern) {
+      return null;
+    }
+
+    const candidates = Array.from(
+      document.querySelectorAll("button,a,[role='button'],.ant-btn,.el-button,span,div")
+    )
+      .filter((element) => !element.closest(`#${PANEL_ID}`))
+      .filter((element) => !element.disabled && element.getAttribute("aria-disabled") !== "true")
+      .filter(isVisible);
+
+    for (const element of candidates) {
+      const text = normalizeText(getElementText(element), 40);
+      if (!text || text.length > 24 || !pattern.test(text) || UNSAFE_ACTION_LABEL.test(text)) {
+        continue;
+      }
+      const clickable = element.closest("button,a") || element.closest("[role='button'],.ant-btn,.el-button");
+      if (!clickable || clickable.disabled || clickable.getAttribute("aria-disabled") === "true") {
+        continue;
+      }
+      // A native button defaults to submit, even when its child says "添加".
+      // Links can navigate; only explicit buttons and non-link button roles are safe here.
+      if (clickable instanceof HTMLButtonElement ? clickable.type !== "button" :
+        clickable.tagName === "A" || clickable.getAttribute("role") !== "button") {
+        continue;
+      }
+      const actionText = normalizeText(getElementText(clickable), 80);
+      if (!actionText || actionText.length > 24 || !pattern.test(actionText) || UNSAFE_ACTION_LABEL.test(actionText)) {
+        continue;
+      }
+      return clickable;
+    }
+
+    return null;
+  }
+
+  function getMaxRepeatGroupIndexForCategory(fields, category) {
+    let max = 0;
+    for (const field of fields || []) {
+      if ((field?.inferredCategory || "") === category) {
+        max = Math.max(max, Number(field?.repeatGroupIndex || 0));
+      }
+    }
+    return max;
+  }
+
+  async function waitForControlGrowth(beforeCount, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (document.querySelectorAll(CONTROL_SELECTOR).length > beforeCount) {
+        return true;
+      }
+      await sleep(140);
+    }
+    return false;
+  }
+
+  async function auditRangePairsAfterFill(filledElements, expandResult, resultByElement) {
+    const roots = Array.from(document.querySelectorAll(".ant-picker-range"))
+      .filter((root) => Array.from(root.querySelectorAll("input"))
+        .some((input) => filledElements.has(input) || expandResult.elements.has(input)));
+    if (!roots.length) return;
+    const previousValues = new Map(roots.flatMap((root) => Array.from(root.querySelectorAll("input"))
+      .map((input) => [input, normalizeText(input.value || "", 80)])));
+    if (document.querySelector(".ant-picker-dropdown:not(.ant-picker-dropdown-hidden)")) {
+      closeOverlaysViaOutsideClick();
+      await sleep(140);
+    }
+    for (const root of roots) {
+      const inputs = Array.from(root.querySelectorAll("input"));
+      const rejected = inputs.some((input) => !normalizeText(input.value || "", 80) ||
+        input.getAttribute("aria-invalid") === "true" || getFieldValidationError(input) ||
+        normalizeText(input.value || "", 80) !== previousValues.get(input));
+      if (!rejected) continue;
+      for (const input of inputs) {
+        if (!filledElements.has(input) && !expandResult.elements.has(input)) continue;
+        const note = "区间日期未成对提交或关闭后被控件拒绝";
+        markElement(input, "uncertain", `待处理: ${note}`);
+        filledElements.delete(input);
+        if (expandResult.elements.delete(input)) expandResult.filled -= 1;
+        const result = resultByElement.get(input) || expandResult.resultByElement.get(input);
+        if (result) { result.ok = false; result.note = note; }
+      }
+    }
+  }
+
+  async function expandMissingRepeatBlocks(plan, runId) {
+    const result = { filled: 0, created: 0, notes: [], results: [], elements: new Set(), resultByElement: new Map() };
+    try {
+      const entries = Array.isArray(plan?.entries) ? plan.entries : getCurrentProfileEntries();
+      const needed = new Map();
+      for (const entry of entries) {
+        const index = Number(entry?.itemOccurrenceIndex || 0);
+        if (index > 0 && entry?.hasValue && EXPANDABLE_REPEAT_CATEGORIES.includes(entry?.category)) {
+          needed.set(entry.category, Math.max(needed.get(entry.category) || 0, index));
+        }
+      }
+      if (!needed.size) {
+        return result;
+      }
+
+      let latestFields = Array.isArray(plan?.scan?.fields) ? plan.scan.fields : [];
+      let totalCreated = 0;
+
+      for (const [category, maxItem] of needed.entries()) {
+        let attempts = 0;
+        while (attempts < 4 && totalCreated < 6) {
+          const existing = getMaxRepeatGroupIndexForCategory(latestFields, category);
+          if (existing >= maxItem) {
+            break;
+          }
+
+          const button = findAddBlockButton(category);
+          if (!button) {
+            result.notes.push(`${category}第${existing + 1}段及以后：未找到可靠的「新增${category}」按钮，请手动添加`);
+            break;
+          }
+
+          const beforeCount = document.querySelectorAll(CONTROL_SELECTOR).length;
+          clickActionElement(button);
+          const grown = await waitForControlGrowth(beforeCount, 1800);
+          if (!grown) {
+            attempts += 1;
+            continue;
+          }
+
+          totalCreated += 1;
+          result.created += 1;
+          if (isCurrentAutofillRun(runId)) {
+            setAutofillProgress("填写匹配项", 96, `已新增${category}块，正在填写`);
+          }
+
+          const rescan = await scanForm();
+          const replan = buildAutofillPlan(rescan);
+          latestFields = Array.isArray(replan?.scan?.fields) ? replan.scan.fields : latestFields;
+
+          const newFieldIds = new Set(
+            latestFields
+              .filter((field) => field?.inferredCategory === category && Number(field?.repeatGroupIndex || 0) > existing)
+              .map((field) => field.fieldId)
+          );
+          const newCandidates = (replan?.candidates || []).filter(
+            (candidate) => newFieldIds.has(candidate.fieldId) && candidate.shouldAutoFill
+          );
+
+          for (const candidate of newCandidates) {
+            const element = await resolveFieldElement(candidate.field);
+            let ok = false;
+            let note = "";
+            if (element) {
+              if (candidate.alreadyMatches) {
+                ok = true;
+                note = "当前值已匹配本机资料";
+              } else {
+                const fillResult = await fillElementSmart(element, candidate.value, candidate.field, candidate);
+                ok = Boolean(fillResult?.ok);
+                note = fillResult?.reason || fillResult?.warning || "";
+              }
+            } else {
+              note = "未找到可自动填写控件";
+            }
+            if (element) {
+              markElement(
+                element,
+                ok ? "filled" : "uncertain",
+                `${ok ? "自动填写" : "待处理"}: ${candidate.fieldLabel || candidate.sourceLabel || candidate.id}`
+              );
+            }
+            if (ok && element) {
+              result.filled += 1;
+              result.elements.add(element);
+            }
+            const fieldResult = { id: candidate.id, ok, note };
+            result.results.push(fieldResult);
+            if (element) result.resultByElement.set(element, fieldResult);
+          }
+        }
+      }
+    } catch (error) {
+      result.notes.push(`新增经历块过程出错：${normalizeText(error?.message || error, 120)}`);
+    }
+    return result;
   }
 
   async function markDeferredPlanCandidates(plan, autoFillIds) {
@@ -6158,13 +6566,20 @@
       element = editableTarget;
     }
 
+    // antd Select：含不可见的搜索输入框，走受控选择 + 写后核验
+    const selectHost = element.closest?.(".ant-select");
+    if (selectHost) {
+      return fillAntdSelect(element, selectHost, value, field, candidate);
+    }
+
+    // 日期类控件：antd DatePicker/RangePicker，或按标签判定的日期字段
+    const pickerHost = element.closest?.(".ant-picker");
+    if (pickerHost || candidate?.writeMode === "date") {
+      return fillFrameworkDateField(element, pickerHost, value, field, candidate);
+    }
+
     const text = compactText([candidate?.fieldLabel, field?.nearbyText, field?.placeholder, field?.name, field?.id, field?.section].join(" "));
     const isChoiceField = candidate?.writeMode === "choice" || /选择|请选择|下拉|选择项|单选/.test(text);
-
-    if (candidate?.writeMode === "date") {
-      setNativeValue(element, normalizeDateValue(value));
-      return { ok: true };
-    }
 
     if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)) {
       return fillBooleanOrRadioChoice(element, value, field, candidate);
@@ -6177,24 +6592,28 @@
     if (type === "combobox") {
       const choiceResult = await tryFillCustomChoiceField(element, value, field);
       if (choiceResult.ok) {
-        return choiceResult;
+        const verified = getControlCurrentValue(element) || normalizeText(element.value || "", 120);
+        return verified ? choiceResult : { ok: false, reason: "选择未被组件接受" };
       }
-
-      const textInput = element.querySelector?.('input:not([type="hidden"]),textarea,[contenteditable="true"]');
-      if (textInput && textInput !== element) {
-        setNativeValue(textInput, value);
-        return { ok: true, warning: "combobox fallback wrote into inner input only" };
-      }
+      return { ok: false, reason: choiceResult.reason || "下拉中未匹配到选项" };
     }
 
     if (element instanceof HTMLSelectElement) {
       const matched = setSelectValue(element, value);
-      return { ok: true, warning: matched ? "" : "下拉选项需要手动确认，已尝试按原值填写" };
+      await sleep(60);
+      const selected = normalizeText(element.options?.[element.selectedIndex]?.textContent || "", 120);
+      if (matched && element.value && selected) {
+        return { ok: true };
+      }
+      return { ok: false, reason: matched ? "值未被控件接受" : `下拉中无匹配选项「${normalizeText(value, 60)}」` };
     }
 
     if (element.isContentEditable) {
       setContentEditableValue(element, value);
-      return { ok: true };
+      await sleep(60);
+      return normalizeText(element.textContent || "", 200)
+        ? { ok: true }
+        : { ok: false, reason: "值未被控件接受" };
     }
 
     if (isChoiceField) {
@@ -6206,6 +6625,361 @@
 
     element.focus();
     setNativeValue(element, value);
+    await sleep(60);
+    return normalizeText(element.value || "", 260)
+      ? { ok: true }
+      : { ok: false, reason: "值未被控件接受" };
+  }
+
+  function parseProfileDateParts(value) {
+    const text = normalizeText(value, 80);
+    if (!text) {
+      return {};
+    }
+    if (/至今|长期|现在|目前|今止|present|now/i.test(text)) {
+      return { special: "present" };
+    }
+    // 完整日期要求两段都有真实分隔符；否则「2024-09」会回溯成 {month:0, day:9}
+    const full = text.match(/(\d{4})\s*[年\-/.]\s*(\d{1,2})\s*[月\-/.]\s*(\d{1,2})/);
+    if (full) {
+      return { year: full[1], month: full[2], day: full[3] };
+    }
+    const yearMonth = text.match(/(\d{4})\s*[年\-/.]\s*(\d{1,2})/);
+    if (yearMonth) {
+      return { year: yearMonth[1], month: yearMonth[2], day: "" };
+    }
+    const yearOnly = text.match(/(\d{4})/);
+    if (yearOnly) {
+      return { year: yearOnly[1], month: "", day: "" };
+    }
+    return {};
+  }
+
+  function findLatestPickerPanel() {
+    const candidates = Array.from(
+      document.querySelectorAll(".ant-picker-dropdown:not(.ant-picker-dropdown-hidden) [class*='-panel'],.ant-picker-panel-container [class*='-panel']")
+    ).filter((panel) => !panel.closest(`#${PANEL_ID}`) && isVisible(panel));
+    return (
+      candidates.find((panel) => /-(date|month|year|week|quarter|decade|time|datetime)-panel/.test(String(panel.className || ""))) ||
+      candidates[0] ||
+      null
+    );
+  }
+
+  async function detectAntdPickerFormat() {
+    for (let i = 0; i < 12; i += 1) {
+      const panel = findLatestPickerPanel();
+      if (panel) {
+        const cls = String(panel.className || "");
+        if (/month-panel/.test(cls)) {
+          return "YYYY-MM";
+        }
+        if (/quarter-panel/.test(cls)) {
+          return "YYYY-Q";
+        }
+        if (/year-panel|decade-panel/.test(cls)) {
+          return "YYYY";
+        }
+        return "YYYY-MM-DD";
+      }
+      await sleep(90);
+    }
+    return "";
+  }
+
+  function formatDatePartsForPicker(parts, format) {
+    if (!parts?.year || parts.special === "present") {
+      return "";
+    }
+    const year = parts.year;
+    const month = parts.month ? String(Number(parts.month)).padStart(2, "0") : "";
+    const day = parts.day ? String(Number(parts.day)).padStart(2, "0") : "";
+    if (format === "YYYY") {
+      return year;
+    }
+    if (format === "YYYY-Q") {
+      return month ? `${year}-Q${Math.min(4, Math.ceil(Number(month) / 3))}` : "";
+    }
+    if (format === "YYYY-MM") {
+      return month ? `${year}-${month}` : "";
+    }
+    return month && day ? `${year}-${month}-${day}` : "";
+  }
+
+  function datesDisplayEquivalent(displayValue, expected, format) {
+    const shown = parseProfileDateParts(displayValue);
+    const target = parseProfileDateParts(expected);
+    if (!shown.year || !target.year || shown.year !== target.year) {
+      return false;
+    }
+    if (format === "YYYY") {
+      return true;
+    }
+    if (format === "YYYY-Q") {
+      return Math.ceil(Number(shown.month || 0) / 3) === Math.ceil(Number(target.month || 0) / 3);
+    }
+    if (!shown.month || Number(shown.month) !== Number(target.month)) {
+      return false;
+    }
+    if (format === "YYYY-MM") {
+      return true;
+    }
+    return !target.day || Number(shown.day) === Number(target.day);
+  }
+
+  function getFieldValidationError(element) {
+    const item = element?.closest?.(".ant-form-item,.el-form-item,[class*='form-item'],[class*='formItem']");
+    if (!item) {
+      return "";
+    }
+    const cls = String(item.className || "");
+    if (/has-error|is-error|has-feedback/.test(cls)) {
+      const message = item.querySelector(
+        ".ant-form-item-explain-error,.el-form-item__error,[class*='explain-error'],[class*='error-message'],[role='alert']"
+      );
+      return normalizeText(message ? message.textContent : "校验未通过", 120) || "校验未通过";
+    }
+    return "";
+  }
+
+  function closeActiveOverlay() {
+    const active = document.activeElement;
+    if (active && active instanceof HTMLElement) {
+      active.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true }));
+      active.blur();
+    }
+  }
+
+  async function commitDateViaPanel(formatted, format) {
+    const panel = findLatestPickerPanel();
+    if (!panel) {
+      return false;
+    }
+    const cells = Array.from(panel.querySelectorAll(".ant-picker-cell"))
+      .filter((cell) => !cell.classList.contains("ant-picker-cell-disabled"))
+      .filter(isVisible);
+    const monthText = format === "YYYY-Q" ? formatted.replace("-Q", "Q") : "";
+    const matched = cells.find((cell) => {
+      const title = normalizeText(cell.getAttribute("title") || "", 40);
+      if (title && title === formatted) {
+        return true;
+      }
+      const text = normalizeMatchKey(cell.textContent || "");
+      if (!text) {
+        return false;
+      }
+      if (format === "YYYY") {
+        return text === normalizeMatchKey(formatted);
+      }
+      if (format === "YYYY-Q") {
+        return monthText && text === normalizeMatchKey(monthText);
+      }
+      if (format === "YYYY-MM") {
+        return Number(text.replace(/月/g, "")) === Number(formatted.split("-")[1]);
+      }
+      return Number(text) === Number(formatted.split("-")[2]);
+    });
+    if (!matched) {
+      return false;
+    }
+    clickActionElement(matched.querySelector(".ant-picker-cell-inner") || matched);
+    await sleep(120);
+    return true;
+  }
+
+  async function fillFrameworkDateField(element, pickerHost, value, field, candidate) {
+    const parts = parseProfileDateParts(value);
+    if (!parts.year && !parts.special) {
+      return { ok: false, reason: `无法解析资料日期「${normalizeText(value, 60)}」` };
+    }
+
+    let format = "";
+    if (pickerHost) {
+      const isRangeInput = Boolean(element.closest?.(".ant-picker-range"));
+      const ownRangeOpen =
+        isRangeInput &&
+        Boolean(document.querySelector(".ant-picker-dropdown:not(.ant-picker-dropdown-hidden)"));
+      if (!ownRangeOpen) {
+        // 关闭其他控件残留的浮层，避免点击被消耗或识别到错误面板
+        closeOverlaysViaOutsideClick();
+        await sleep(90);
+      }
+      element.focus();
+      clickActionElement(element);
+      format = await detectAntdPickerFormat();
+      if (!format) {
+        closeActiveOverlay();
+        return { ok: false, reason: "日期面板未出现，无法识别控件格式" };
+      }
+    } else if (element instanceof HTMLInputElement && element.type === "date") {
+      format = "YYYY-MM-DD";
+    } else {
+      // 非框架文本日期输入：按资料值规范化写入并回读
+      const normalized = normalizeDateValue(value);
+      element.focus();
+      setNativeValue(element, normalized);
+      await sleep(80);
+      return normalizeText(element.value || "", 80)
+        ? { ok: true }
+        : { ok: false, reason: "日期值未被控件接受" };
+    }
+
+    const formatted = formatDatePartsForPicker(parts, format);
+    if (!formatted) {
+      closeActiveOverlay();
+      const need = format === "YYYY-MM-DD" ? "完整日期" : format === "YYYY-MM" ? "年月" : "年份";
+      return {
+        ok: false,
+        reason: `控件需要${need}格式，资料值「${normalizeText(value, 60)}」精度不足，未擅自补造`
+      };
+    }
+
+    const isRangeInput = Boolean(element.closest?.(".ant-picker-range"));
+
+    setNativeValue(element, formatted);
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+    element.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+    await sleep(240);
+
+    const inputAccepted = () =>
+      Boolean(element.value) &&
+      element.getAttribute("aria-invalid") !== "true" &&
+      datesDisplayEquivalent(element.value, formatted, format);
+    let accepted = inputAccepted();
+    if (!accepted) {
+      // 兜底：直接从面板点选目标单元格
+      if (await commitDateViaPanel(formatted, format)) {
+        await sleep(160);
+        accepted = inputAccepted();
+      }
+    }
+    if (!isRangeInput) {
+      // 单值选择器提交已结束，关闭面板安全；区间选择器在双端齐全前 blur 会整体重置
+      closeActiveOverlay();
+      await sleep(80);
+    }
+
+    const finalValue = normalizeText(element.value || "", 80);
+    if (!finalValue) {
+      if (isRangeInput) {
+        closeActiveOverlay();
+      }
+      return { ok: false, reason: "日期未被控件接受（输入未提交）" };
+    }
+    if (!inputAccepted()) {
+      if (isRangeInput) {
+        closeActiveOverlay();
+      }
+      return { ok: false, reason: element.getAttribute("aria-invalid") === "true"
+        ? "日期被控件标记无效"
+        : `控件显示值「${finalValue}」与目标「${formatted}」不一致` };
+    }
+    const error = getFieldValidationError(element);
+    if (error) {
+      return { ok: false, reason: `填写后仍有校验错误：${error}` };
+    }
+    return { ok: true };
+  }
+
+  function getVisibleAntdSelectDropdowns() {
+    return Array.from(document.querySelectorAll(".ant-select-dropdown"))
+      .filter((dropdown) => !dropdown.classList.contains("ant-select-dropdown-hidden"))
+      .filter((dropdown) => !dropdown.closest(`#${PANEL_ID}`))
+      .filter(isVisible);
+  }
+
+  function closeOverlaysViaOutsideClick() {
+    // 模拟点击空白处，让 antd 收起残留的 Select/Picker 浮层
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+    document.body.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  }
+
+  async function waitForAntdDropdown(before, timeoutMs = 1600) {
+    const deadline = Date.now() + timeoutMs;
+    const previous = before instanceof Set ? before : new Set(getVisibleAntdSelectDropdowns());
+    while (Date.now() < deadline) {
+      const dropdowns = getVisibleAntdSelectDropdowns();
+      const fresh = dropdowns.filter((dropdown) => !previous.has(dropdown));
+      const dropdown = fresh[fresh.length - 1] || dropdowns[dropdowns.length - 1];
+      if (dropdown && dropdown.querySelector(".ant-select-item-option")) {
+        return dropdown;
+      }
+      await sleep(80);
+    }
+    return null;
+  }
+
+  async function fillAntdSelect(element, selectHost, value, field, candidate) {
+    const target = normalizeChoiceValue(value, candidate?.fieldLabel || field?.label || "");
+    if (!target) {
+      return { ok: false, reason: "无资料值" };
+    }
+
+    const readSelected = () =>
+      normalizeText(
+        selectHost.querySelector(".ant-select-selection-item")?.textContent || "",
+        120
+      );
+
+    const current = readSelected();
+    if (current && choiceTextMatches(current, target)) {
+      return { ok: true };
+    }
+
+    // 关闭上一个控件残留的浮层，再打开本控件的下拉
+    closeOverlaysViaOutsideClick();
+    await sleep(80);
+    const selector = selectHost.querySelector(".ant-select-selector") || selectHost;
+    clickActionElement(selector);
+
+    const dropdown = await waitForAntdDropdown(new Set(getVisibleAntdSelectDropdowns()), 1600);
+    if (!dropdown) {
+      closeOverlaysViaOutsideClick();
+      return { ok: false, reason: "选项面板未出现" };
+    }
+
+    const findMatch = () =>
+      Array.from(dropdown.querySelectorAll(".ant-select-item-option"))
+        .filter((option) => !option.classList.contains("ant-select-item-option-disabled"))
+        .filter(isVisible)
+        .find(
+          (option) =>
+            choiceTextMatches(getElementText(option), target) ||
+            choiceTextMatches(option.getAttribute("title") || option.getAttribute("aria-label") || "", target)
+        );
+
+    let matched = findMatch();
+    if (!matched) {
+      const searchInput =
+        selectHost.querySelector("input.ant-select-selection-search-input") ||
+        (element instanceof HTMLInputElement ? element : null);
+      if (searchInput) {
+        setNativeValue(searchInput, target);
+        await sleep(280);
+        matched = findMatch();
+      }
+    }
+
+    if (!matched) {
+      closeActiveOverlay();
+      return { ok: false, reason: `下拉中无匹配选项「${target}」` };
+    }
+
+    clickActionElement(matched);
+    await sleep(220);
+
+    const selected = readSelected();
+    if (!selected) {
+      return { ok: false, reason: "选择后控件无选中值" };
+    }
+    if (!choiceTextMatches(selected, target) && !choiceTextMatches(selected, getElementText(matched))) {
+      return { ok: false, reason: `选中值「${selected}」与目标「${target}」不一致` };
+    }
+    const error = getFieldValidationError(element);
+    if (error) {
+      return { ok: false, reason: `选择后仍有校验错误：${error}` };
+    }
     return { ok: true };
   }
 
@@ -6232,7 +7006,21 @@
     return input || element;
   }
 
-  function fillRoleChoice(element, value, field, candidate) {
+  function isChoiceControlChecked(element) {
+    if (!element) {
+      return false;
+    }
+    if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)) {
+      return Boolean(element.checked);
+    }
+    if (element.getAttribute("aria-checked") === "true") {
+      return true;
+    }
+    const wrapper = element.closest?.(".ant-radio-wrapper,.ant-checkbox-wrapper,.el-radio,.el-checkbox,[class*='radio'],[class*='checkbox']");
+    return Boolean(wrapper?.querySelector?.(".ant-radio-checked,.ant-checkbox-checked,[class*='checked']"));
+  }
+
+  async function fillRoleChoice(element, value, field, candidate) {
     const role = element.getAttribute("role");
     const target = normalizeChoiceValue(value, candidate?.fieldLabel || field?.label || "");
     const root = findChoiceFieldContainer(element);
@@ -6244,26 +7032,39 @@
 
     if (matched) {
       clickActionElement(matched);
-      return { ok: true };
+      await sleep(160);
+      if (isChoiceControlChecked(matched) || isChoiceControlChecked(element)) {
+        return { ok: true };
+      }
+      return { ok: false, reason: "选项未被组件接受" };
     }
 
     if (role === "checkbox" && /^(是|yes|true|1|on)$/i.test(target)) {
       clickActionElement(element);
-      return { ok: true };
+      await sleep(160);
+      return isChoiceControlChecked(element)
+        ? { ok: true }
+        : { ok: false, reason: "勾选未被组件接受" };
     }
 
     if (role === "radio") {
       clickActionElement(element);
-      return { ok: true };
+      await sleep(160);
+      return isChoiceControlChecked(element)
+        ? { ok: true }
+        : { ok: false, reason: "选项未被组件接受" };
     }
 
     return { ok: false, reason: "no matching role choice found" };
   }
 
-  function fillBooleanOrRadioChoice(element, value, field, candidate) {
+  async function fillBooleanOrRadioChoice(element, value, field, candidate) {
     if (element instanceof HTMLInputElement && element.type === "checkbox") {
       setCheckboxOrRadio(element, value);
-      return { ok: true };
+      await sleep(120);
+      return isChoiceControlChecked(element)
+        ? { ok: true }
+        : { ok: false, reason: "勾选未被组件接受" };
     }
 
     if (!(element instanceof HTMLInputElement) || element.type !== "radio") {
@@ -6292,9 +7093,15 @@
       return { ok: false, reason: "no matching radio option" };
     }
 
+    if (isChoiceControlChecked(matched)) {
+      return { ok: true };
+    }
     matched.click();
     matched.dispatchEvent(new Event("change", { bubbles: true }));
-    return { ok: true };
+    await sleep(160);
+    return isChoiceControlChecked(matched)
+      ? { ok: true }
+      : { ok: false, reason: "单选项未被组件接受" };
   }
 
   function getChoiceLabelText(element) {
@@ -6971,7 +7778,7 @@
 
     if (field.fieldId) {
       const direct = document.querySelector(`[${FIELD_ATTR}="${CSS.escape(field.fieldId)}"]`);
-      if (direct && isVisible(direct)) {
+      if (direct && (isVisible(direct) || getFrameworkHiddenControlHost(direct))) {
         return direct;
       }
     }
@@ -7133,7 +7940,25 @@
     getRepeatItemSignature,
     signaturesLikelySameItem,
     guessAutofillValueFieldType,
-    resolveEntryValueForField
+    resolveEntryValueForField,
+    getFieldSemanticBucket,
+    getEntrySemanticBucket,
+    getContextualSemanticBucket,
+    isSemanticallyIncompatible,
+    getDateRangeEndIndex,
+    getFrameworkHiddenControlHost,
+    getControlCurrentValue,
+    parseProfileDateParts,
+    formatDatePartsForPicker,
+    datesDisplayEquivalent,
+    getFieldValidationError,
+    fillElementSmart,
+    fillAntdSelect,
+    fillFrameworkDateField,
+    applyAutofillPlan,
+    findAddBlockButton,
+    expandMissingRepeatBlocks,
+    getMaxRepeatGroupIndexForCategory
   };
 
   if (window.__OJAF_AUTOFILL_MESSAGE_HANDLER__) {

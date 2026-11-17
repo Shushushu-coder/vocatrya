@@ -1,0 +1,12 @@
+{
+  "name": "ojaf-browser-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Real-browser fixtures for the auto-apply extension content script (synthetic antd pages only).",
+  "devDependencies": {
+    "antd": "5.21.6",
+    "dayjs": "1.11.13",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
