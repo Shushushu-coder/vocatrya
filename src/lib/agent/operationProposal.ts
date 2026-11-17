@@ -1,3 +1,4 @@
+import { decodeHistory } from "./historyCodec";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -243,7 +244,7 @@ async function mirrorProposalDecision(
     select: { revision: true, activeRequestId: true, messages: true },
   });
   if (!row || row.activeRequestId !== null) return;
-  const messages = JSON.parse(row.messages) as UIMessage[];
+  const messages = JSON.parse(decodeHistory(row.messages)) as UIMessage[];
   let hit = false;
   for (const message of messages) {
     for (const part of message.parts) {

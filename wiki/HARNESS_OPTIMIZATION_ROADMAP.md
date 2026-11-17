@@ -19,9 +19,10 @@
 
 ## 当前结论
 
+- 常规设置的聊天记录与 Agent 偏好已实现并随本次提交保存到 Main，尚未执行桌面验收；详见下文“常规设置与对话偏好实施”。不代表双 Tab、任务卡或原生 Agent 改造已完成。
 - H01/H02 已集成；验收报告已回收，真实模型仍 BLOCKED，passes=false。
 - H03 执行已结束：Electron fresh-native + 合成上游；面试练习部分在 Web 完成，不能称桌面完整闭环通过。
-- H05 已实施并集成，提交 d1e4bf85；本轮收尾修复提交 6c551703。
+- H05 已实施并集成，提交 d1e4bf85；本轮收尾修复提交 6c551703。2026-11-17 验收：Electron 机制 14/14（合成凭据 fail-closed）+ Web 宿主真实 DeepSeek/真实 Notion（create/append 远端写入核验通过）；update_record 缺前置库 BLOCKED，passes=false。
 - 专用本地准备路由保留同一 InterviewSession；通用面试入口仍保留迁移提示。新路由尚待 Electron 定向复验。
 - H04 的 D1–D8/C01–C08 合同不变，H06 仍后置；原 AGENT_LONG_TASK_HARNESS_PROPOSAL.md 随 Wiki 文档提交，仅作参考，不授权完整实施。
 - 双路径目标已确认：原生 Agent 由官方运行时执行，托管 Agent 由 Vocatrya 执行，共享业务机制；原生适配尚未完成，具体升级项见“架构与约束”，不改变既有通过状态。
@@ -107,7 +108,7 @@ CraftStation 某些路径允许加载 user／project／local 配置或选择 Ful
 
 建议复用 SQLite 及既有业务表／任务账本，大文件单独保存并记录引用；小型结构化 JSON 可用于受校验快照，不禁止其合理使用。关键步骤完成后即保存结果和检查点，不依赖结束前才生成交接便签。交接只携带必要引用、状态及下一步，恢复时核验归属、存在性、材料版本、内容完整性和步骤验收条件；不能保证只查数据库即可还原官方内部推理或未落地的生成过程。
 
-### 三档授权（方向已确认，迁移合同待实施时细化）
+### 三档授权（方向已确认，应用业务工具接线已实现）
 
 | 模式 | 目标规则 |
 | --- | --- |
@@ -115,7 +116,7 @@ CraftStation 某些路径允许加载 user／project／local 配置或选择 Ful
 | 帮我审批 | 按预设规则批准，不另设 AI 审批者。常规读取、分析、新增、生成草稿、保留版本的更新及可恢复归档自动执行；永久删除、清库、不可恢复覆盖及备份恢复覆盖请求用户同意。对外动作按已有明确预授权执行，超范围时请求同意 |
 | 完全访问 | 对齐 Codex 的授权体验，不额外套用“帮我审批”的逐项确认；目标为在已授予资源范围内执行时不再逐项请求批准。不能绕过账号权限、用户归属、业务接口约束或自动解锁未交付工具 |
 
-Codex 的 Full access 通常对应 `sandbox_mode = "danger-full-access"` 与 `approval_policy = "never"`；不能对 Vocatrya 所有运行时直接复制相同参数。业务操作通过受控工具完成，不把任意 SQL／删除数据库文件开放给模型。完全访问的模式切换及授权范围须明确展示；现有 H04/H05 三个 Notion 写工具的批准合同仍有效，实施新模式前明确如何修改／兼容该合同，不在本次文档登记中静默放宽。
+Codex 的 Full access 通常对应 `sandbox_mode = "danger-full-access"` 与 `approval_policy = "never"`；不能对 Vocatrya 所有运行时直接复制相同参数。业务操作通过受控工具完成，不把任意 SQL／删除数据库文件开放给模型。本次新会话“完全访问”作为应用业务写工具的明确预授权来源：Notion 新提案在冻结输入后，经原决定入口原子批准并创建执行任务，记录 `FULL_ACCESS_PREAUTHORIZED`；旧提案不因设置变化获自动批准。H04/H05 的回执、结果未知、去重和执行核验继续有效。该增量仅适用于应用业务工具，不解除原生运行时的 `TEXT_ONLY` 限制或声称原生 Full access 已接通。
 
 ### 执行期间关键材料变化（已确认方向）
 
@@ -149,6 +150,29 @@ Codex 的 Full access 通常对应 `sandbox_mode = "danger-full-access"` 与 `ap
 ### 首轮交付范围与剩余 UI 细节（待讨论）
 
 顶部双 Tab、窗口内任务卡、左上角错误和右下角通知已确认，不再列为未定。授权模式选择入口、材料变更弹窗按钮及关闭后的行为、多任务选择、错误合并细节和首轮最终交付组合仍待细化。扩展工具的 MCP／Skills 分类形式尚未冻结，具体见扩展文档；不默认新增独立任务中心。本次 UI 决策尚未实现或验收。
+
+<a id="general-agent-preferences"></a>
+
+## 常规设置与对话偏好实施（2026-11-17，已实现／待验收）
+
+用户先授权在 Main 实施并更新 Wiki，随后要求本窗口收尾、提交确定内容。本次保存已完成实现和现有验收记录；常规设置尚待指定 Agent 定向验收，未追认为通过。实现基线为 `ef2850c8`，本次完整源码以包含本节的 Git 提交为准，不以基线代表实现版本。本次收尾未 Push、未生产构建、未启动 Electron、未调用真实模型／Notion，也未操作真实用户数据库。
+
+| 设置项 | 实际实现 | 默认与生效范围 |
+| --- | --- | --- |
+| 自定义提示词 | 常规设置中的多行输入与实时字符计数，前后端最多 2000 个 Unicode 字符，超出拒绝保存，不静默截断 | 留空关闭；每次 Agent 对话请求读取当前配置，下一条消息生效；同时覆盖应用编排的账号、托管 API 和历史普通 API 路径，不注入后台摘要／解析。显示为个人偏好，不覆盖业务权限和角色规则 |
+| 默认权限 | 常规设置三档选择，问号可悬停／聚焦／点击查看区别；输入区可在创建会话前改选 | 新会话默认“帮我审批”；创建时写入服务端会话上下文并固定，旧会话无模式字段仍“请求审批”。修改全局设置不改变既有会话和提案，备份恢复清除会话模式，恢复后回到请求审批 |
+| 自动归档不活跃聊天 | 永不／30／90／180 天；独立维护器在应用后端启动后及每 5 分钟按用户配置处理 | 默认永不。跳过活跃请求、未完成审批、未决／结果未知外写，以及当前／历史／恢复来源职位关联的未完成任务和准备目标。遵守归档内容 AI 完全不可读合同，不自动恢复或删除聊天 |
+| 压缩本地历史 | 对超过 7 天且无保护状态的历史按需 gzip，仅实际变小时编码；读取时解码，备份导出原始 JSON，归档搜索分页解码 | 默认关闭，开启后由维护器处理；关闭仅停止后续压缩。完整保留消息与工具内容，不是上下文摘要。保持活动时间，纯压缩不改变语义 revision；编码损坏不覆盖原记录 |
+
+设置保存在 `UserSettings.settings.settings.general.agent`，通过现有原子 CAS patch 保存，不新增 Schema 或 Migration。常规偏好面板显式保存并显示成功／失败；加载失败不可保存默认值覆盖已有设置。后台维护按用户、材料关联、版本、锁及记录内容核对，分页游标跨轮保留，防止前 1000 条受保护记录长期阻塞后面的记录；不运行数据库 VACUUM，不承诺文件立即缩小或具体压缩比例。
+
+**权限实际范围**：现有受支持业务工具中，“请求审批”沿用工具原批准规则；“帮我审批”自动放行 `add_job`、`match_job` 的本地结果写入，外部 Notion 写入仍请求批准；“完全访问”对该本地工具和本次新建的 Notion 提案不逐项打断，仍走真实提案、任务与回执。自动批准后的流只显示真实排队结果 `saved:false`，不显示要求用户确认的卡片，也不冒充远端成功。用户／角色／连接授权及未知结果禁止重发继续生效；未注册的删除、投递、发邮件工具不会因权限模式出现。Codex／Devin 的完整原生循环与权限适配仍未实施，本节只接入当前应用循环。
+
+**实现入口**：`AgentPreferencesSettings.tsx`、`agentPreferences.actions.ts`、`preferences.ts`／`preferences.server.ts`；对话创建／输入权限选择、chat route／工具注册／请求提交接线；`historyCodec.ts`／`historyMaintenance.ts` 及 instrumentation；聊天读取、归档可见性／搜索、摘要读取和备份导出／恢复兼容。
+
+**实际开发验证**：23 个相关定向测试文件共 393 项通过（相同套件后续修正复跑不重复累计），包括新增偏好／编码／隔离 SQLite 用例、常规设置、对话 UI／路由／循环、摘要、并发、持久审批、归档与备份。隔离 SQLite 覆盖压缩后重开、发送、搜索、导出原文；真实 export→import 覆盖压缩内容无损与恢复后 Full access 失效；模式对比验证仅持久化 full 才原子批准外部提案，且未派发远端请求；维护覆盖保护状态、历史关联及超 1000 条跨轮推进。限定源码／测试目录的类型检查、改动 TS/TSX ESLint 与 Git 差异检查均通过，日志位于 `.tmp/agent-general-settings/`（不随 Git 同步）。只读审查发现的维护遗漏已修复并复核，无剩余重要项；审查不替代验收。
+
+**待指定验收者执行**：Windows Electron / fresh-native 的实际设置、提示词与权限行为，真实账号／模型和专用 Notion 目标下的受控路径；定向核对退出重开、偏好保存、自动归档与历史可读、悬停帮助、窄窗口和错误状态。当前未运行桌面或真实模型验收，`passes` 保持 false，不更新既有 H01–H06 通过状态。定向验收指令已在本聊天交付，但尚未收到执行结果；本次只提交实现与已知证据，不新增完整 E2E 或验收报告。
 
 ## 架构与约束
 
@@ -234,7 +258,7 @@ Codex 的 Full access 通常对应 `sandbox_mode = "danger-full-access"` 与 `ap
 | H02 | 面试准备目标、确定性交接与用户主动续做 | MERGED_PENDING_ACCEPTANCE / PARTIAL_PASS_DESKTOP_ROUTE_RETEST_PENDING | 定向复验新的桌面准备路由与同一会话续做；有授权连接后补真实模型冒烟 |
 | H03 | 两项已集成功能的集中 Windows Electron 定向验收 | COMPLETED_WITH_BLOCKERS / PARTIAL_BLOCKED | 只复验修复涉及的构建入口和桌面准备导航，不重跑完整历史链路；真实模型等待可用连接 |
 | H04 | 持久审批的只读调研与最小实施契约 | DESIGN_DECISIONS_APPROVED / NOT_APPLICABLE | 已批准 D1–D8/C01–C08 作为 H05 合同；实施与集成见 H05 |
-| H05 | 持久审批首个消费者的前后端实施 | MERGED_PENDING_ACCEPTANCE / PENDING | 按授权安排真实服务与 Windows Electron 定向验收，不自动执行下一阶段 |
+| H05 | 持久审批首个消费者的前后端实施 | MERGED_PENDING_ACCEPTANCE / PARTIAL_PASS_UPDATE_RECORD_BLOCKED | 授权父页下建「投递记录」库后补验 update_record；由验收 Owner 判断是否补 Electron+真实写入合并验证 |
 | H06 | 用户显式开启的自动唤醒与有界推进 | DEFERRED / NOT_STARTED | 持久审批和相关恢复/预算契约稳定后再评估，不自动开工 |
 
 ## H01 · 可恢复深度匹配与轻量追溯
@@ -503,7 +527,7 @@ regenerate 守卫查询权威 proposal/task，而非只依赖 transcript 的 sav
 
 ## H05 · 持久审批首个消费者的前后端实施
 
-状态：MERGED_PENDING_ACCEPTANCE；实现 IMPLEMENTED，Main 集成 MERGED，真实 Notion 与 Electron 验收 PENDING。
+状态：MERGED_PENDING_ACCEPTANCE；实现 IMPLEMENTED，Main 集成 MERGED；验收 PARTIAL_PASS_UPDATE_RECORD_BLOCKED。
 
 Feature：HARNESS-PERSISTENT-APPROVAL；提交：d1e4bf85。
 
@@ -524,16 +548,20 @@ Feature：HARNESS-PERSISTENT-APPROVAL；提交：d1e4bf85。
 证据：
 
 - INTEGRATION_OWNER_EXECUTED：14 个定向 Vitest 文件 170/170（隔离 SQLite/受控 MCP/jsdom），包括升级前已有任务事件保留、备份 round-trip、regenerate admission、H01/H02 回归；launcher node:test 14/14。全部改动 TS/TSX ESLint 和排除临时目录的全部源码/测试类型检查通过。提交 d1e4bf85 / 6c551703。
+- ACCEPTANCE_OWNER_REPORT（2026-11-17）：Windows Electron fresh-native，da519f93 产品等价基线、复用经核验 A 轮产物；持久审批 14/14 步骤 PASS（提案卡、唯一任务、queued≠成功、退出重开恢复、UNCERTAIN 零重发+人工核对+重提案、撤回/过期、归档恢复后批准、孤儿 reconcile、硬删 SetNull、备份带证据不带运行时）。合成凭据在 loadTokenBundle fail-closed→REAUTH_REQUIRED，无远端字节。证据 `F:\vocatrya-acceptance-runs\b2077725-d76f-413e-8961-a8633d0bf4ed`。
+- TASK_B_OWNER_REPORT（2026-11-17）：Web/Next dev（`.worktrees/h05-notion-verify` @ ef2850c8，隔离库+独立密钥）；真实 DeepSeek deepseek-chat（用户自填 key，pilot）+ 真实 Notion OAuth（vocatrya workspace，授权父页 `4181f78077f08090be9fd95feb2b9589` 子树）。create_page 全生命周期、append_content 远程读回、拒绝/撤回、刷新与重启恢复、过期、killwatch 崩溃×4→UNCERTAIN 零重发+人工核对+supersedesId 链、会话硬删 SetNull、备份 v10 恢复 38 提案零重放、断开/撤销均 PASS；重复批准幂等零新任务。update_record BLOCKED（无前置库）；Electron 宿主 NOT_RUN。证据 worktree 内 `.tmp/h05-notion-verify/`。
 
 边界：
 
-- 未运行真实 Notion、真实模型、Windows Electron、生产 Build 或完整 E2E；passes=false
+- notion_update_record 真实目标未覆盖（授权父页下无数据库行）；passes=false
+- 真实远端写入证据来自 Web dev 宿主；Electron 侧机制以合成凭据验证，桌面+真实写入未在同一 run 覆盖
 - 不承诺外部副作用恰好一次；不确定结果禁止自动重发
 - 真实数据库未应用本次 Migration；Worktree 保留，未 Push
 
 下一步：
 
-- 按授权安排真实服务与 Windows Electron 定向验收，不自动执行下一阶段
+- 授权父页下补建「投递记录」库后复验 update_record（需重新 OAuth consent）
+- 由验收 Owner 判断是否需补 Electron+真实 Notion 合并定向验证；不自动执行下一阶段
 
 ## H06 · 用户显式开启的自动唤醒与有界推进
 
@@ -573,6 +601,14 @@ Feature：HARNESS-PERSISTENT-APPROVAL；提交：d1e4bf85。
 - 可并行任务 B：H05 持久审批验收。另一 Owner 在独立 Worktree/隔离数据库中验证真实服务侧的提案、批准、后台执行与远程回执，不确定结果不自动重发；需要有效授权连接及明确的测试 Notion 目标/外写授权。其 Electron 部分排在 A 释放资源后，由唯一指定桌面执行者执行。
 - A/B 可并行的是不同业务链路的验证；不得同时生产构建、装配或执行 Windows Electron E2E。各自只修本功能缺陷，共享 Harness/认证/启动入口问题交单一 Owner；共享 wiki 状态由 Main 集成 Owner 汇总。开始前核对 Worktree 当前 Diff 与进程归属，不复用旧分支作为最新集成版本。
 - 上述是调度建议，未派发或启动；本次文档更新不增加真实外写、重型验证、提交或清理授权。H06 继续后置，不作为当前并行开发项。
+
+## 2026-11-17 A/B 执行结果汇总
+
+本次收尾保留 A/B Owner 的分宿主报告及既有证据位置；已核对对应证据目录存在，未重演或逐项复核其全部原始证据。H05 的这些报告不覆盖常规设置新增的 Full access 预授权路径，该路径仍需单独验收。
+
+- 任务 A（h01h02-retest，桌面重型执行者）报告完成：除 H01/H02 补验外，复用经核验产物对 H05 做了 Electron 机制验收 14/14 PASS（合成凭据 fail-closed 边界，真实远端写入未覆盖）；进程已清理。H01/H02 补验结果尚未汇入台账，待该窗口报告后更新对应阶段。
+- 任务 B（h05-notion-verify，devin/swe-2-max 独立窗口）报告完成：Web dev 宿主 + 真实 DeepSeek + 真实 Notion OAuth（vocatrya workspace 授权父页子树）；用户授权的外写范围内 create_page/append_content 经远程读回核验通过，提案-批准-后台执行-恢复-备份-断开全链路 PASS；update_record 因授权父页下无数据库 BLOCKED，Electron 宿主按约定未执行。worktree 保留全部证据。
+- H05 合并结论：机制（Electron，合成凭据）与真实远端写入（Web，2/3 工具）已分别验证；严格合并路径（Electron+真实写入同一 run）与 update_record 未覆盖，passes=false 保持。
 
 ## 明确不做
 

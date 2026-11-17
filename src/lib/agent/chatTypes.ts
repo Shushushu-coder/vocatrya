@@ -63,6 +63,7 @@ export type EligibleChatModel = {
 };
 
 export type AgentToolPermissionSnapshot = {
+  permissionMode?: import("./preferences").PermissionMode;
   role: AgentRole | null;
   tools: { name: string; approval: "always" | "conditional" | "none" }[];
 };

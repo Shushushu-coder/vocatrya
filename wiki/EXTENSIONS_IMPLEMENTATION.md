@@ -324,6 +324,8 @@ Grill Me 借鉴持续追问的方法，针对求职重写，不直接复制开�
 
 ## 7. AI 执行路径的关联规则
 
+常规设置的自定义提示词、默认权限和聊天维护已接线并随本次提交保存到 Main，尚未验收，具体实现及证据统一见 [Harness：常规设置与对话偏好实施](./HARNESS_OPTIMIZATION_ROADMAP.md#general-agent-preferences)。本次“完全访问”只对新会话的应用业务工具生效，不代表原生 MCP／Skills 或 Codex／Devin 完整运行时已接通；Notion 仍保留提案、任务及真实结果回执，未知写入不自动重发。本文件其他扩展和 UI 决策的实现状态不变。
+
 账号登录与 Vocatrya 托管 AI 的两档分类、设置 UI、原生运行时适配、CraftStation 源码参考及验收检查点，统一迁至 [Harness：AI 服务双路径与设置 UI](./HARNESS_OPTIMIZATION_ROADMAP.md#ai-service-execution)。本文件只维护扩展范围及其接入要求：账号登录路径优先使用经验证的原生搜索及工具，API 路径由 Vocatrya 提供工具编排；MCP／内置 Skills 按对应运行时支持加载，展示实际可用状态，继续遵守业务授权与回执合同。浏览器页面状态／表单识别及邮件／日历连接仍按 §6 范围推进。
 
 2026-11-17 续做与授权补充统一见 [Harness：交互讨论结果](./HARNESS_OPTIMIZATION_ROADMAP.md#interaction-decisions)：首批原生适配 Codex／Devin；用户消息触发中断后的续做；“帮我审批”使用预设规则，“完全访问”对齐 Codex 体验；关键材料变更提示按共享规则设计。最新 UI 已确认顶部 AI 服务双 Tab、Agent 执行窗口内右上角任务卡、左上角持续错误及重试入口、右下角普通通知；首轮实施组合和细节仍待讨论。扩展连接成功不等于本次会话已加载；关闭错误提示不等于恢复连接，不自动重发结果未知的外部写入。既有 Notion 批准合同与网页面试暂停决定保留。

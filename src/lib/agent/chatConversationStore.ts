@@ -1,4 +1,6 @@
+import { decodeHistory } from "./historyCodec";
 import { ConversationRequestError } from "./conversationRequest";
+import { permissionModeOfContext } from "./preferences";
 import { prepareConversationDelete } from "./operationProposal";
 import { restoredJobReferences, withRestoredJobReferences } from "./restoredJobReferences";
 import "server-only";
@@ -97,10 +99,11 @@ export async function getOwnedChatConversation(
   conversationId: string,
 ): Promise<ChatConversationRow | null> {
   if (!conversationId) return null;
-  return prisma.chatConversation.findFirst({
+  const row = await prisma.chatConversation.findFirst({
     where: { id: conversationId, userId },
     select: CHAT_ROW_SELECT,
   });
+  return row ? { ...row, messages: decodeHistory(row.messages) } : null;
 }
 
 export async function listOwnedChatConversations(
@@ -125,7 +128,7 @@ export async function listOwnedChatConversations(
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
-    titleFallback: row.title ? null : titleFallbackFromMessages(row.messages),
+    titleFallback: row.title ? null : titleFallbackFromMessages(decodeHistory(row.messages)),
     agentRole: row.agentRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -135,11 +138,12 @@ export async function listOwnedChatConversations(
 export async function getNewestOwnedChatConversation(
   userId: string,
 ): Promise<ChatConversationRow | null> {
-  return prisma.chatConversation.findFirst({
+  const row = await prisma.chatConversation.findFirst({
     where: { userId, archivedAt: null },
     orderBy: { updatedAt: "desc" },
     select: CHAT_ROW_SELECT,
   });
+  return row ? { ...row, messages: decodeHistory(row.messages) } : null;
 }
 
 export async function createChatConversationRecord(input: {
@@ -208,7 +212,7 @@ export async function updateOwnedChatConversationContext(
   const updated = await prisma.chatConversation.updateMany({
     where: { id: conversationId, userId, archivedAt: null, context: previous.context },
     data: { context: withRestoredJobReferences(
-      serializeConversationContext(context), restoredJobReferences(previous.context),
+      serializeConversationContext({ ...context, permissionMode: permissionModeOfContext(previous.context) }), restoredJobReferences(previous.context),
     ) },
   });
   if (updated.count !== 1) {
@@ -294,22 +298,27 @@ export async function listArchivedChatConversations(
   }>
 > {
   const q = search?.trim();
-  const rows = await prisma.chatConversation.findMany({
-    where: {
-      userId,
-      archivedAt: { not: null },
-      ...(q
-        ? { OR: [{ title: { contains: q } }, { messages: { contains: q } }] }
-        : {}),
-    },
-    orderBy: { updatedAt: "desc" },
-    take: limit,
-    select: { ...SUMMARY_SELECT, archivedAt: true },
-  });
+  const rows: Pick<ChatConversationRow, "id" | "title" | "messages" | "agentRole" | "archivedAt" | "createdAt" | "updatedAt">[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await prisma.chatConversation.findMany({
+      where: { userId, archivedAt: { not: null } },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: q ? 100 : limit,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { ...SUMMARY_SELECT, archivedAt: true },
+    });
+    for (const row of page) {
+      if (!q || `${row.title ?? ""} ${decodeHistory(row.messages)}`.toLocaleLowerCase().includes(q.toLocaleLowerCase())) rows.push(row);
+      if (rows.length >= limit) break;
+    }
+    if (!q || page.length < 100 || rows.length >= limit) break;
+    cursor = page[page.length - 1].id;
+  } while (true);
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
-    titleFallback: row.title ? null : titleFallbackFromMessages(row.messages),
+    titleFallback: row.title ? null : titleFallbackFromMessages(decodeHistory(row.messages)),
     agentRole: row.agentRole,
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,

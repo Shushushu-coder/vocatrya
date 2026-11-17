@@ -40,6 +40,8 @@ import {
 } from "@/lib/ai/runtime/capabilities";
 import { fetchAccountRuntimeState } from "@/lib/ai/streaming-execution";
 import { getUserSettings } from "@/actions/userSettings.actions";
+import { isPermissionMode, permissionModeOfContext, type PermissionMode } from "@/lib/agent/preferences";
+import { loadAgentPreferences } from "@/lib/agent/preferences.server";
 import {
   parseConversationContext,
   titleFallbackFromUiMessages,
@@ -200,6 +202,7 @@ export const listChatConversations = async (): Promise<{
 };
 
 export const createChatConversation = async (input?: {
+  permissionMode?: PermissionMode;
   messages?: UIMessage[];
   context?: ContextItemRequest[];
   explicit?: ExplicitModelSelection | null;
@@ -220,6 +223,10 @@ export const createChatConversation = async (input?: {
   try {
     const user = await requireUser();
     const context = await resolveOwnedContext(user.id, input?.context ?? []);
+    if (input?.permissionMode !== undefined && !isPermissionMode(input.permissionMode)) {
+      return { success: false, code: "INVALID_PERMISSION_MODE", message: "Invalid permission mode" };
+    }
+    context.permissionMode = input?.permissionMode ?? (await loadAgentPreferences(user.id)).defaultPermission;
     const row = await createChatConversationRecord({
       userId: user.id,
       messages: input?.messages ?? [],
@@ -737,7 +744,7 @@ export const cancelChatConversationRequest = async (conversationId: string, requ
 };
 
 /** Read-only preview; execution still rechecks connection state and approvals. */
-export async function getAgentToolPermissions(input: { conversationId?: string | null; agentRole?: string | null }): Promise<{
+export async function getAgentToolPermissions(input: { conversationId?: string | null; agentRole?: string | null; permissionMode?: PermissionMode }): Promise<{
   success: boolean;
   data?: AgentToolPermissionSnapshot;
   message?: string;
@@ -751,9 +758,13 @@ export async function getAgentToolPermissions(input: { conversationId?: string |
     const runtime = await resolveCareerRuntimeMode(prisma);
     const freshNativeFull = isFreshNativeFullSurface(runtime);
     const notionTools = await resolveNotionAgentToolNames(user.id).catch(() => []);
+    const permissionMode = input.conversationId
+      ? permissionModeOfContext((await getOwnedChatConversation(user.id, input.conversationId))?.context)
+      : isPermissionMode(input.permissionMode) ? input.permissionMode : (await loadAgentPreferences(user.id)).defaultPermission;
     return { success: true as const, data: {
       role,
-      tools: effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools }).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull) })),
+      permissionMode,
+      tools: effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools }).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull, permissionMode) })),
     } };
   } catch (error) {
     return fail(error, "Could not load tool permissions");

@@ -32,7 +32,15 @@ export function conversationCommitStream(stream: ReadableStream<UIMessageChunk>,
               ready.push({ type: "data-conversation", transient: true, data: {
                 conversationId: request.conversationId, requestId: request.requestId, revision: request.revision,
                 durable: true, released: true, wrote: request.wrote,
-              } }, ...buffered);
+              } }, ...buffered.map(chunk => {
+                if (chunk.type !== "tool-approval-request") return chunk;
+                const settled = request.messages.flatMap(m => m.parts).find(p =>
+                  "toolCallId" in p && p.toolCallId === chunk.toolCallId && "state" in p && p.state === "output-available");
+                // Full access approval was committed with a real queued task.
+                // Do not briefly show a user approval card for that operation.
+                if (settled && "output" in settled) return { type: "tool-output-available" as const, toolCallId: chunk.toolCallId, output: settled.output };
+                return chunk;
+              }));
             }
             await release();
             ended = true;

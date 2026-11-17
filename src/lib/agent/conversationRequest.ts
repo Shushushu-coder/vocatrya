@@ -1,3 +1,5 @@
+import { decodeHistory } from "./historyCodec";
+import { permissionModeOfContext } from "./preferences";
 import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
@@ -100,7 +102,7 @@ export async function admitConversationRequest(input: ConversationOperation & {
       }
       if (row.activeRequestId) return { error: "CONVERSATION_TURN_CONFLICT" as const };
       if (row.revision !== input.expectedRevision) return { error: "CONVERSATION_STALE_WRITE" as const };
-      const messages = JSON.parse(row.messages) as UIMessage[];
+      const messages = JSON.parse(decodeHistory(row.messages)) as UIMessage[];
       // Durable proposals are the authority: externally decided proposals
       // mirror into the transcript, expired ones close out, and pre-H05
       // orphan parts are marked not-continuable instead of deadlocking.
@@ -211,7 +213,7 @@ export async function checkpointConversationTool<T>(request: ConversationRequest
     if (acquired.count !== 1) return fail("CONVERSATION_STALE_WRITE");
     const row = await tx.chatConversation.findFirst({ where: { id: request.conversationId, userId: request.userId } });
     if (!row) return fail("CONVERSATION_NOT_FOUND");
-    const messages = JSON.parse(row.messages) as UIMessage[];
+    const messages = JSON.parse(decodeHistory(row.messages)) as UIMessage[];
     const previousReceipt = messages.flatMap(m => m.parts).find(p => isToolUIPart(p) && p.toolCallId === receipt.toolCallId && p.state === "output-available");
     if (previousReceipt && isToolUIPart(previousReceipt)) {
       if (previousReceipt.type !== `tool-${receipt.toolName}` || JSON.stringify(previousReceipt.input) !== JSON.stringify(receipt.input)) return fail("CONVERSATION_TURN_CONFLICT");
@@ -249,7 +251,7 @@ export async function finishConversationRequest(request: ConversationRequest, in
   const messages = await db.$transaction(async tx => {
     const row = await tx.chatConversation.findFirst({ where: ownedWhere(request) });
     if (!row) return fail("CONVERSATION_STALE_WRITE");
-    const finalMessages = mergeDurableMessages(JSON.parse(row.messages) as UIMessage[], incoming);
+    const finalMessages = mergeDurableMessages(JSON.parse(decodeHistory(row.messages)) as UIMessage[], incoming);
     // Persist a durable proposal for every detached-write approval part the
     // finished turn produced — the proposal outlives this HTTP round. Only
     // the response message mints rows; older proposal-less parts are
@@ -263,6 +265,29 @@ export async function finishConversationRequest(request: ConversationRequest, in
         turnKey,
         message: responseMessage,
       });
+    }
+    // Full access is a persisted creation-time user choice, never a model
+    // argument or a preference changed while this request was executing.
+    if (responseMessage && permissionModeOfContext(row.context) === "full") {
+      for (const part of responseMessage.parts) {
+        if (!isToolUIPart(part) || part.state !== "approval-requested") continue;
+        const proposal = await tx.agentOperationProposal.findFirst({ where: {
+          userId: request.userId, conversationId: row.id,
+          messageId: responseMessage.id, toolCallId: part.toolCallId, status: "PROPOSED",
+        } });
+        if (proposal) {
+          const decision = await decideOperationProposalInTx(tx, {
+            userId: request.userId, proposalId: proposal.id, decision: "approve",
+            reason: "FULL_ACCESS_PREAUTHORIZED", mirrorPart: false,
+          });
+          if (decision.state === "approved") {
+            Object.assign(part, { state: "output-available", output: {
+              saved: false, tool: proposal.toolName, status: "queued", code: "QUEUED",
+              proposalId: proposal.id, taskId: decision.taskId, taskStatus: "QUEUED",
+            } });
+          }
+        }
+      }
     }
     await reconcileConversationProposals(tx, { id: row.id, userId: row.userId }, finalMessages);
     const saved = await tx.chatConversation.updateMany({ where: ownedWhere(request), data: { messages: JSON.stringify(finalMessages), revision: { increment: 1 }, activeRequestId: null, activeRequestExpiresAt: null } });

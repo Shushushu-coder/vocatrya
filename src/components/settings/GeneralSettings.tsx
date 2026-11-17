@@ -44,6 +44,7 @@ import {
 } from "@/context/SaveStatusContext";
 import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
 import DesktopPreferencesSettings from "@/components/settings/DesktopPreferencesSettings";
+import AgentPreferencesSettings from "./AgentPreferencesSettings";
 
 // Application-level preferences. Selecting a language applies instantly
 // through I18nContext (state + cookie + localStorage + refresh) and, for
@@ -443,6 +444,7 @@ function GeneralSettingsPanel() {
           bridge, not the account settings document — the component renders
           its own availability state outside the desktop shell. */}
       <DesktopPreferencesSettings />
+      <AgentPreferencesSettings />
     </div>
   );
 }

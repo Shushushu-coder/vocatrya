@@ -32,6 +32,7 @@ export interface DisplaySettings {
  * the resolved value is never persisted back.
  */
 export interface GeneralSettings {
+  agent?: import("@/lib/agent/preferences").AgentPreferences;
   locale?: Locale;
   timeZone?: string;
 }

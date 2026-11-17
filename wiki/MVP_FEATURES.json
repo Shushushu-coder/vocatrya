@@ -530,7 +530,7 @@
       "priority": "P1",
       "scope": "IN_SCOPE",
       "implementationStatus": "IMPLEMENTED",
-      "implementationNotes": "集成 d1e4bf85。持久提案与运行时任务分离；审批与建任务原子提交，真实回执、过期/撤回、SetNull 保留证据、备份 v10 不自动重放。人工核对逐操作释放，regenerate admission 与历史事件升级保留已定向验证。真实 Notion/模型与 Electron 未验收，passes=false。",
+      "implementationNotes": "集成 d1e4bf85。持久提案与运行时任务分离；审批与建任务原子提交，真实回执、过期/撤回、SetNull 保留证据、备份 v10 不自动重放。人工核对逐操作释放，regenerate admission 与历史事件升级保留已定向验证。 验收追加（2026-11-17，两个并行窗口报告）：①Windows Electron fresh-native（da519f93 产品等价、复用经核验产物）持久审批机制 14/14 PASS——提案卡、唯一任务、queued≠成功、退出重开恢复、UNCERTAIN 零重发+人工核对+重提案、撤回/过期、归档恢复后批准、孤儿 reconcile、硬删 SetNull、备份带证据不带运行时；合成凭据 fail-closed→REAUTH_REQUIRED 无远端字节，证据 F:\\vocatrya-acceptance-runs\\b2077725-d76f-413e-8961-a8633d0bf4ed。②Web dev（隔离库，真实 DeepSeek deepseek-chat + 真实 Notion OAuth，vocatrya workspace 授权父页 4181f78077f08090be9fd95feb2b9589 子树）：create_page 全生命周期与 append_content 远程读回核验通过，拒绝/撤回/过期/崩溃不重发/硬删/备份恢复/断开撤销全链路 PASS，证据 .worktrees/h05-notion-verify/.tmp/h05-notion-verify/。 未覆盖：notion_update_record（授权父页下无数据库，前置缺失）；Electron+真实写入未在同一 run 覆盖。passes 保持 false。",
       "description": "三个 Notion 写工具可持久审批、后台执行与恢复；不确定结果通过人工核对与新提案重新授权，避免静默重发。",
       "steps": [
         "聊天提案显示目标、内容与期限，批准/拒绝/撤回由服务端决定，重复批准只建一个任务。",

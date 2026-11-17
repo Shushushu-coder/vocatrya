@@ -1,3 +1,4 @@
+vi.mock("@/lib/agent/preferences.server", () => ({ loadAgentPreferences: vi.fn(async () => ({ personalInstructions: "", defaultPermission: "rules", autoArchiveDays: 0, compressHistory: false })) }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 const archiveRows = vi.hoisted(() => ({ findMany: vi.fn(async () => [] as { id: string }[]) }));
 vi.mock("@/lib/db", () => ({ default: { jobOpportunity: archiveRows } }));
@@ -106,6 +107,7 @@ import { auth } from "@/auth";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { getModel } from "@/lib/ai/providers";
 import { getUserSettings } from "@/actions/userSettings.actions";
+import { loadAgentPreferences } from "@/lib/agent/preferences.server";
 import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError } from "@/lib/agent/conversationRequest";
 import { buildAgentTools } from "@/lib/agent/tools";
 import { buildPageContextMessage } from "@/lib/agent/prompt";
@@ -199,6 +201,13 @@ describe("POST /api/ai/chat", () => {
     (getModel as any).mockRejectedValue(new Error("Ollama credential not configured"));
     const res = await POST(req({ messages: [pasteMessage("posting")] }));
     expect(res.status).toBe(503);
+  });
+
+  it("injects current personal instructions once in the user-visible conversation system prompt", async () => {
+    vi.mocked(loadAgentPreferences).mockResolvedValueOnce({ personalInstructions: "请按岗位要求逐项引用证据", defaultPermission: "rules", autoArchiveDays: 0, compressHistory: false });
+    await POST(req({ messages: [pasteMessage("posting")] }));
+    expect(streamArgs().system).toContain("请按岗位要求逐项引用证据");
+    expect(streamArgs().system.split("请按岗位要求逐项引用证据")).toHaveLength(2);
   });
 
   it("persists the incoming messages BEFORE calling the model", async () => {

@@ -139,7 +139,7 @@
       "decisionStatus": "RECORDED",
       "implementationStatus": "PARTIAL",
       "description": "在 Vocatrya 内配置 Notion 连接，让应用内 AI 经授权搜索、读取、创建和更新 Notion 页面及数据库记录，用于求职笔记、面试复盘和投递摘要。优先评估官方远程 MCP + OAuth；需要应用自身的客户端、工具注册及权限控制。",
-      "implementationNotes": "2026-11-13 已集成连接管理、OAuth/MCP、安全存储、五个 AI 工具和批准/回执。集成审查修复了中断/未知写入重发、模型标志绕过核对、失去请求归属后派发、在途 OAuth/刷新于断开后重存凭据，以及无有效回执误报成功；未知写入须人工核对。隔离 Migration 与定向回归通过，Windows Electron 未连接详情页通过。无专用测试工作区，真实 OAuth、远端 inputSchema、读写、重开连接及撤销未验收。\n2026-11-14 验收环境与方案已定（详见 EXTENSIONS_IMPLEMENTATION.md EXT-NOTION 段）：本机直连 mcp.notion.com、DCR payload、回调端口池预验通过；实现与官方客户端参考流程静态比对一致；专用测试 workspace（vocatrya）已建。用户决定将真实 OAuth/AI 读写/生命周期验收延期至发布前测试合并执行。",
+      "implementationNotes": "2026-11-13 已集成连接管理、OAuth/MCP、安全存储、五个 AI 工具和批准/回执。集成审查修复了中断/未知写入重发、模型标志绕过核对、失去请求归属后派发、在途 OAuth/刷新于断开后重存凭据，以及无有效回执误报成功；未知写入须人工核对。隔离 Migration 与定向回归通过，Windows Electron 未连接详情页通过。无专用测试工作区，真实 OAuth、远端 inputSchema、读写、重开连接及撤销未验收。\n2026-11-14 验收环境与方案已定（详见 EXTENSIONS_IMPLEMENTATION.md EXT-NOTION 段）：本机直连 mcp.notion.com、DCR payload、回调端口池预验通过；实现与官方客户端参考流程静态比对一致；专用测试 workspace（vocatrya）已建。用户决定将真实 OAuth/AI 读写/生命周期验收延期至发布前测试合并执行。\n2026-11-17 H05 服务侧验收顺带覆盖（Web dev 宿主，非 Electron）：真实 OAuth consent→CONNECTED、真实 tools/list（远端工具名与 inputSchema 存档）、notion_search/notion_read 真实读取、notion_create_page/notion_append_content 经远程读回核验通过、应用内断开→DISCONNECTED 且再调用被拒、Notion 侧撤销由用户完成；均在 vocatrya 测试 workspace 授权父页 4181f78077f08090be9fd95feb2b9589 子树内、H05 提案-审批-detached 执行链路下。证据 .worktrees/h05-notion-verify/.tmp/h05-notion-verify/。仍未覆盖：update_record（无前置库）、Electron 宿主连接与凭据生命周期（os-backed 存储）、未分享页拒绝、限流/断网、敏感字段审阅、备份排除 NotionConnection 的恢复行为等发布前清单项；implementationStatus 与 passes 不变。",
       "dependencies": [
         "应用内 MCP 客户端与 OAuth 凭据生命周期",
         "Agent 工具注册与角色白名单",

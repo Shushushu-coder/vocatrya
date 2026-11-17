@@ -10,6 +10,8 @@ export async function register() {
     // process lifetime.
     const { startHarnessRunner } = await import("@/lib/harness/runner");
     startHarnessRunner();
+    const { startChatHistoryMaintenance } = await import("@/lib/agent/historyMaintenance");
+    startChatHistoryMaintenance();
   }
 }
 

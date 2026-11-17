@@ -1,3 +1,4 @@
+import { decodeHistory } from "./historyCodec";
 import "server-only";
 import { hasArchivedJobReference } from "./archiveVisibility";
 import {
@@ -274,7 +275,7 @@ async function recordSummaryFailure(
 
 function parseMessages(raw: string): UIMessage[] {
   try {
-    const value = JSON.parse(raw) as unknown;
+    const value = JSON.parse(decodeHistory(raw)) as unknown;
     return Array.isArray(value) ? (value as UIMessage[]) : [];
   } catch {
     return [];

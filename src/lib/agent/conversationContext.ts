@@ -1,5 +1,6 @@
 import type { UIMessage } from "ai";
 import type { PageContext } from "@/models/agent.model";
+import { isPermissionMode, type PermissionMode } from "./preferences";
 
 export const AGENT_CONVERSATION_CONTEXT_VERSION = 1 as const;
 export const AGENT_CONTEXT_KINDS = ["job", "resume"] as const;
@@ -16,6 +17,8 @@ export type AgentConversationContextItem = {
 export type AgentConversationContextV1 = {
   version: 1;
   items: AgentConversationContextItem[];
+  /** Creation-time choice; never updated by a model or context picker. */
+  permissionMode?: PermissionMode;
 };
 
 export const EMPTY_CONVERSATION_CONTEXT: AgentConversationContextV1 = {
@@ -128,12 +131,14 @@ export function parseConversationContext(
     const parsed = JSON.parse(raw) as {
       version?: unknown;
       items?: unknown;
+      permissionMode?: unknown;
     };
     if (parsed.version !== 1 || !Array.isArray(parsed.items)) {
       return { version: 1, items: [] };
     }
     return {
       version: 1,
+      ...(isPermissionMode(parsed.permissionMode) ? { permissionMode: parsed.permissionMode } : {}),
       items: parsed.items.filter(isContextItem).map((item) => ({
         kind: item.kind,
         entityId: item.entityId,
@@ -152,6 +157,7 @@ export function serializeConversationContext(
   return JSON.stringify({
     version: AGENT_CONVERSATION_CONTEXT_VERSION,
     items: context.items,
+    ...(isPermissionMode(context.permissionMode) ? { permissionMode: context.permissionMode } : {}),
   });
 }
 

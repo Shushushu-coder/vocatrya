@@ -7,6 +7,17 @@ import { cancelConversationRequest } from "@/lib/agent/conversationRequest";
 vi.mock("@/lib/agent/conversationRequest", async original => ({ ...await original<typeof import("@/lib/agent/conversationRequest")>(), cancelConversationRequest: vi.fn(async () => true) }));
 
 const request = (): ConversationRequest => ({ userId: "u", conversationId: "c", requestId: "r", revision: 1, messages: [], responseMessageId: "a", released: false, wrote: false });
+it("replaces an automatically approved durable write card with the real queued result", async () => {
+  const owned = request();
+  owned.released = true;
+  owned.messages = [{ id: "a", role: "assistant", parts: [{ type: "tool-notion_create_page", toolCallId: "call", state: "output-available", input: {}, output: { saved: false, status: "queued", taskId: "persisted-task" } }] }];
+  const input = new ReadableStream<UIMessageChunk>({ start(c) { c.enqueue({ type: "tool-approval-request", approvalId: "approval", toolCallId: "call" }); c.enqueue({ type: "finish" }); c.close(); } });
+  const reader = conversationCommitStream(input, owned).getReader();
+  const chunks: UIMessageChunk[] = [];
+  for (;;) { const next = await reader.read(); if (next.done) break; chunks.push(next.value); }
+  expect(chunks.some(c => c.type === "tool-approval-request")).toBe(false);
+  expect(chunks).toContainEqual({ type: "tool-output-available", toolCallId: "call", output: { saved: false, status: "queued", taskId: "persisted-task" } });
+});
 it("holds actionable approval and finish until the persistence barrier completes", async () => {
   const owned = request();
   let source!: ReadableStreamDefaultController<UIMessageChunk>;

@@ -1,3 +1,4 @@
+import { decodeHistory } from "@/lib/agent/historyCodec";
 import fs from "fs/promises";
 import path from "path";
 import JSZip from "jszip";
@@ -98,6 +99,7 @@ export async function collectBackupData(
     const sorted = [...results[index]].sort(byId);
     raw[model] = sorted.map((row) => {
       const clean = stripOwnership(model, row);
+      if (model === "ChatConversation" && typeof clean.messages === "string") clean.messages = decodeHistory(clean.messages);
 
       if (model === "Job") {
         const { statusId, Status, tags, ...rest } = clean as Row & {

@@ -12,12 +12,14 @@ import { buildMatchJobTool } from "./matchJob";
 import { buildCanonicalMatchJobTool } from "./canonicalMatchJob";
 import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
 import { buildNotionAgentTools } from "./notion";
+import type { PermissionMode } from "../preferences";
 
 // The three nested tools deliberately break the "a tool touches neither the
 // route nor provider resolution" rule in CLAUDE.md: they run their own
 // generation, so they need the resolved model and the stream writer. Recorded
 // in docs/architecture/agent-chat.md rather than contorted around.
 export function buildAgentTools(ctx: {
+  permissionMode?: PermissionMode;
   userId: string;
   request?: ConversationRequest;
   pastedText?: string;
@@ -122,6 +124,14 @@ export function buildAgentTools(ctx: {
   const allowed = new Set(effectiveAgentToolNames(ctx));
   for (const name of Object.keys(tools)) {
     if (!allowed.has(name)) delete tools[name];
+  }
+  // Only known reversible local operations are automatically approved.
+  // Detached external writes retain their proposal gate even in Full access;
+  // the server settles their approval from the persisted choice atomically.
+  if (ctx.permissionMode === "rules" || ctx.permissionMode === "full") {
+    for (const name of ["add_job", "match_job"]) {
+      if (tools[name]) tools[name].needsApproval = false;
+    }
   }
   return tools;
 }

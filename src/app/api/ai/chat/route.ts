@@ -1,3 +1,5 @@
+import { loadAgentPreferences } from "@/lib/agent/preferences.server";
+import { personalInstructionsBlock, permissionInstructions, permissionModeOfContext } from "@/lib/agent/preferences";
 import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
 import { hasArchivedJobReference } from "@/lib/agent/archiveVisibility";
 import { generateId } from "ai";
@@ -139,6 +141,8 @@ function outcomeOf(message: UIMessage | undefined): {
  * orchestration, the runtime only produces text and decisions.
  */
 async function accountChatResponse({
+  permissionMode,
+  personalInstructions,
   req,
   userId,
   conversationId,
@@ -154,6 +158,8 @@ async function accountChatResponse({
   notionTools,
   managed,
 }: {
+  permissionMode: import("@/lib/agent/preferences").PermissionMode;
+  personalInstructions: string;
   req: NextRequest;
   userId: string;
   conversationId: string;
@@ -236,7 +242,7 @@ async function accountChatResponse({
     freshNativeFull,
     agentRole,
     notionTools,
-  });
+  }) + personalInstructionsBlock(personalInstructions) + permissionInstructions(permissionMode);
 
   // Route on the full request. Budgeting happens inside the turn, after
   // the local router has seen the current utterance.
@@ -346,6 +352,7 @@ async function accountChatResponse({
           request,
           agentRole,
           notionTools,
+          permissionMode,
         });
         contextSize = result.contextSize;
         // The budgeter's estimate for the turn that just ran, streamed back
@@ -487,6 +494,8 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   )) {
     throw new ConversationRequestError("CONVERSATION_ARCHIVED_CONTENT");
   }
+  const preferences = await loadAgentPreferences(userId);
+  const permissionMode = permissionModeOfContext(conversation.context);
   let lock: ReturnType<typeof chatLockFromRow>;
   let managedTurn: import("@/lib/agent/accountTurn").ManagedTurnContext | undefined;
   try {
@@ -534,6 +543,8 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
 
   if (lock.kind === "account" || lock.kind === "managed") {
     return accountChatResponse({
+      permissionMode,
+      personalInstructions: preferences.personalInstructions,
       req,
       userId,
       conversationId,
@@ -718,7 +729,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     freshNativeFull,
     agentRole: conversation.agentRole,
     notionTools,
-  });
+  }) + personalInstructionsBlock(preferences.personalInstructions) + permissionInstructions(permissionMode);
 
   const turnSpan = startSpan("agent.chat.turn", {
     ...genAiRequestAttrs({
@@ -767,6 +778,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
           request,
           agentRole: conversation.agentRole,
           notionTools,
+          permissionMode,
         });
         prefixMetrics = measureTurnPrefix({
           userId,

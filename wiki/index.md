@@ -14,7 +14,7 @@
 | [`P2_IMPLEMENTATION.md`](./P2_IMPLEMENTATION.md) | **P2 产品设计与增量实施基线**：已确认原则、已冻结的领域合同、依赖与 Owner 交叉项。 | 核对 P2 范围、阅读冻结合同或安排实施包时。 |
 | [`EXTENSIONS_FEATURES.json`](./EXTENSIONS_FEATURES.json) | **扩展工具功能清单**：自动网申、Notion 接入和网页面试练习三项待实施扩展，以及左侧常驻导航与三卡片 UI 决策；分别记录状态和验收条件。 | 核对扩展决策、实施边界及验收状态时。 |
 | [`EXTENSIONS_IMPLEMENTATION.md`](./EXTENSIONS_IMPLEMENTATION.md) | **扩展工具实施方向**：自动网申、Notion、面试网页入口；§6 记录 MCP／工具与求职 Skills 清单、难度、浏览器状态／表单识别、邮件／日历连接及第三方技能导入「敬请期待」；§7 链接 Harness 执行规则。 | 设计工具详情页、确定接入方式或安排扩展实施时；文档登记不自动启动开发。 |
-| [`HARNESS_OPTIMIZATION_ROADMAP.md`](./HARNESS_OPTIMIZATION_ROADMAP.md) | **Harness 实施台账与架构决策**：H01–H06 的实现、集成及验收边界；已确认的「Agent 账号登录／Vocatrya 托管 AI」两档 UI、执行分工、原生运行时及 CraftStation 源码参考。 | 核对 Agent 执行架构、AI 服务设置 UI、恢复与审批机制或安排定向验收时。 |
+| [`HARNESS_OPTIMIZATION_ROADMAP.md`](./HARNESS_OPTIMIZATION_ROADMAP.md) | **Harness 实施台账与架构决策**：H01–H06、双路径执行及 UI 决策；新增常规设置提示词、默认权限、自动归档和无损历史压缩的实际实现、定向验证与待验收范围。 | 核对 Agent 执行架构、设置实现、恢复与审批机制或安排定向验收时。 |
 | [`HARNESS_OPTIMIZATION_ROADMAP.json`](./HARNESS_OPTIMIZATION_ROADMAP.json) | **Harness 机器可读台账**：配套阶段状态、证据和 AI 服务双路径需求；已确认需求与已实现功能分别记录。 | 查询 Harness 阶段状态和已确认决策时；不替代所属 Feature 验收清单。 |
 | [`RESUME_BUILDER_CONTRACT_PROPOSAL.md`](./RESUME_BUILDER_CONTRACT_PROPOSAL.md) | **结构化简历工作台实施合同 v2**：数据、导入校对、版本 Diff、分页与导出；2026-10-29 本期规则已批准。2026-10-30 修订覆盖跨分节移动、预览宽度/隐藏、DOCX 与预览对齐，以及冻结后的状态调整和版本删除。 | 进入简历工作台编码前核对范围、已批决定和技术不变量。文首同日修订优先于文中旧句。 |
 | [`CAREER_SCHEMA_CONTRACT_PROPOSAL.md`](./CAREER_SCHEMA_CONTRACT_PROPOSAL.md) | **职业资料 Schema 冻结合同**（2026-10-27 已批准）：CP-SCHEMA、CP-RECORDS、CP-PRIVACY 的字段和模型基线、派生规则、备份兼容、D1–D18 决策；文首含已集成 Main 的 BD-LINKS 补充合同（`CareerSkillDetail.tagId` 真实 FK、Backup V6）。 | 实施或修改职业资料、关联数据、隐私和备份相关工作包前。 |

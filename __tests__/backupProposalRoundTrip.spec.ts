@@ -12,6 +12,8 @@ import { PrismaClient } from "@prisma/client";
 import { buildBackupZip } from "@/lib/backup/export";
 import { importBackup } from "@/lib/backup/import";
 import { seedAccount } from "./helpers/backupTestDb";
+import { compressHistory } from "@/lib/agent/historyCodec";
+import { permissionModeOfContext } from "@/lib/agent/preferences";
 
 const ctx = await vi.hoisted(async () => {
   const helpers = await import("./helpers/backupTestDb");
@@ -39,8 +41,9 @@ afterAll(async () => {
 
 it("proposals round-trip; task pointer is cleared, evidence is kept", async () => {
   const userId = await seedAccount(prisma, "prop@example.com");
+  const messages = JSON.stringify([{ id: "history", role: "user", parts: [{ type: "text", text: "完整保留历史😀".repeat(1000) }] }]);
   const conv = await prisma.chatConversation.create({
-    data: { userId, messages: "[]" },
+    data: { userId, messages: compressHistory(messages), context: '{"version":1,"items":[],"permissionMode":"full"}' },
   });
   const task = await prisma.harnessTask.create({
     data: {
@@ -115,4 +118,6 @@ it("proposals round-trip; task pointer is cleared, evidence is kept", async () =
   const restoredConv = await prisma.chatConversation.findFirstOrThrow();
   expect(restoredConv.activeRequestId).toBeNull();
   expect(restoredConv.revision).toBe(0);
+  expect(restoredConv.messages).toBe(messages);
+  expect(permissionModeOfContext(restoredConv.context)).toBe("ask");
 });

@@ -190,7 +190,7 @@
       "ask": "按工具策略请求用户批准。",
       "rules": "预设规则审批；常规和可恢复操作自动执行，不可恢复数据变化及未预授权对外动作请求同意。",
       "fullAccess": "按用户最新决定对齐 Codex；不套用帮我审批的逐项确认，仍受用户归属、账号权限及业务接口约束。",
-      "contractBoundary": "现有 H04/H05 Notion 批准规则继续有效，实施新模式前另行明确兼容与合同变更。"
+      "contractBoundary": "现有 H04/H05 执行与回执保护继续有效；新会话 full 对新提案提供预授权来源，具体兼容增量见 generalAgentPreferencesImplementation。"
     },
     "materialChanges": {
       "direction": "CONFIRMED",
@@ -286,6 +286,89 @@
     ],
     "implementation": "NOT_STARTED",
     "acceptance": "NOT_RUN"
+  },
+  "generalAgentPreferencesImplementation": {
+    "recordedOn": "2026-11-17",
+    "baseline": "ef2850c8",
+    "implementation": "IMPLEMENTED_PENDING_ACCEPTANCE",
+    "integration": "MAIN",
+    "acceptance": "NOT_RUN",
+    "passes": false,
+    "document": "wiki/HARNESS_OPTIMIZATION_ROADMAP.md#general-agent-preferences",
+    "scope": [
+      "自定义提示词",
+      "默认权限和创建前覆盖",
+      "自动归档",
+      "本地历史无损压缩"
+    ],
+    "storage": "UserSettings.settings.settings.general.agent；无 Schema/Migration 修改。",
+    "personalInstructions": {
+      "maxUnicodeCharacters": 2000,
+      "emptyDisables": true,
+      "effective": "下一条用户 Agent 对话消息；后台摘要／解析不注入。"
+    },
+    "permissions": {
+      "newDefault": "rules",
+      "historicalDefault": "ask",
+      "fixedAtCreation": true,
+      "restore": "清除会话模式，回到 ask；不复活自动批准。",
+      "rulesAutoApprove": [
+        "add_job",
+        "match_job"
+      ],
+      "externalFullAccess": "新会话 full 的新 Notion 提案经既有入口原子批准并创建任务，记录 FULL_ACCESS_PREAUTHORIZED。",
+      "boundary": "仅当前应用业务工具；原生 TEXT_ONLY 边界未放开，不代表原生 Agent 完整适配。"
+    },
+    "autoArchive": {
+      "defaultDays": 0,
+      "optionsDays": [
+        0,
+        30,
+        90,
+        180
+      ],
+      "intervalMinutes": 5,
+      "protects": [
+        "活跃请求",
+        "待处理审批",
+        "未决或结果未知外部写入",
+        "当前／历史／恢复来源职位的未完成任务或准备目标"
+      ],
+      "paging": "每用户游标跨轮推进，避免前 1000 条重复阻塞。"
+    },
+    "historyCompression": {
+      "defaultEnabled": false,
+      "minimumAgeDays": 7,
+      "encoding": "gzip v1，只有更小时保存",
+      "semantics": "原始消息无损；活动时间不变，纯压缩不增加语义 revision；读写、摘要、归档检查和备份兼容。",
+      "backup": "导出原始 JSON，恢复后完整可读。",
+      "disabled": "停止后续压缩，已有记录仍可读取。"
+    },
+    "validation": {
+      "staticChecks": "源码／测试类型检查、改动 TS/TSX ESLint、git diff --check 通过",
+      "targetedFiles": 23,
+      "uniqueTestsPassed": 393,
+      "host": "Vitest/jsdom 与隔离 SQLite；非 Windows Electron 验收",
+      "checks": [
+        "设置与工具权限",
+        "对话路由／循环／摘要／并发",
+        "历史编码与分页搜索",
+        "真实隔离 SQLite 重开／发送",
+        "压缩历史 export→import 无损且清除 Full access",
+        "持久提案与任务原子创建，无真实远端派发"
+      ],
+      "logs": ".tmp/agent-general-settings/"
+    },
+    "notRun": [
+      "Windows Electron 验收",
+      "真实模型调用",
+      "真实 Notion 写入",
+      "生产 Build",
+      "完整 E2E",
+      "提交",
+      "Push"
+    ],
+    "handoff": "验收指令已交付；用户后续授权本窗口收尾并提交确定内容。本次保存实现与现有证据，常规设置仍待验收；不 Push，不补跑重型或真实服务验证。"
   },
   "principles": [
     "增量演化，不替换已有 Harness 或引入完整 DeepSeek/Cordis 框架",
@@ -700,7 +783,7 @@
       "implementation": "IMPLEMENTED",
       "integration": "MERGED",
       "execution": "COMPLETED",
-      "acceptance": "PENDING",
+      "acceptance": "PARTIAL_PASS_UPDATE_RECORD_BLOCKED",
       "commits": [
         "d1e4bf85"
       ],
@@ -720,10 +803,19 @@
         {
           "source": "INTEGRATION_OWNER_EXECUTED",
           "detail": "14 个定向 Vitest 文件 170/170（隔离 SQLite/受控 MCP/jsdom），包括升级前已有任务事件保留、备份 round-trip、regenerate admission、H01/H02 回归；launcher node:test 14/14。全部改动 TS/TSX ESLint 和排除临时目录的全部源码/测试类型检查通过。提交 d1e4bf85 / 6c551703。"
+        },
+        {
+          "source": "ACCEPTANCE_OWNER_REPORT",
+          "detail": "2026-11-17 Windows Electron fresh-native（.worktrees/h01h02-retest，da519f93 产品等价基线，复用经核验的 A 轮产物 reuse-verdict=DIGEST_MATCH_REUSE_VALID）：持久审批 14/14 步骤 PASS——提案卡渲染、批准唯一任务与 dispatchedAt/dispatchKey 先落库、queued≠成功回执、完整退出重开后 durable 任务被 claim+settle、UNCERTAIN/DISPATCH_OUTCOME_UNKNOWN 零远端重发+人工 attest+supersedesId 重提案、撤回/过期不建任务、归档须恢复才能批准、孤儿 part reconcile 不阻塞、会话硬删 SetNull 保留证据、备份 v10 带证据不带运行时、恢复不复活任务/授权。合成 Notion 凭据（iv=\"\"）在 loadTokenBundle fail-closed→REAUTH_REQUIRED，无远端字节发出；真实远端写入未在该 run 覆盖。证据 F:\\vocatrya-acceptance-runs\\b2077725-d76f-413e-8961-a8633d0bf4ed。"
+        },
+        {
+          "source": "TASK_B_OWNER_REPORT",
+          "detail": "2026-11-17 Web/Next dev（.worktrees/h05-notion-verify @ ef2850c8，隔离 sqlite+独立 ENCRYPTION_KEY）：真实 DeepSeek deepseek-chat（用户自行填 key，pilot 角色）+ 真实 Notion OAuth（vocatrya workspace，授权父页 4181f78077f08090be9fd95feb2b9589 子树）。create_page 全生命周期 PASS（提案卡→批准→VERIFY→DISPATCH→SETTLE→notion_read 远程读回；重复批准幂等零新任务）；append_content 远程读回 PASS；拒绝/撤回、刷新与重启恢复、过期语义、killwatch 崩溃×4→UNCERTAIN 零重发+人工核对+supersedesId 链、会话硬删 SetNull、备份 v10 恢复 38 提案且 harnessTaskId 清零零重放、断开/撤销后 NOT_CONNECTED/REAUTH_REQUIRED 均 PASS。update_record BLOCKED（授权父页下无「投递记录」数据库）；Electron 宿主 NOT_RUN。证据 .worktrees/h05-notion-verify/.tmp/h05-notion-verify/（worktree 保留）。"
         }
       ],
       "limitations": [
-        "未运行真实 Notion、真实模型、Windows Electron、生产 Build 或完整 E2E；passes=false",
+        "notion_update_record 真实目标未覆盖（授权父页下无数据库行）；passes=false",
+        "真实远端写入证据来自 Web dev 宿主；Windows Electron 侧机制以合成凭据验证（fail-closed 边界），桌面+真实写入未在同一 run 覆盖",
         "不承诺外部副作用恰好一次；不确定结果禁止自动重发",
         "真实数据库未应用本次 Migration；Worktree 保留，未 Push"
       ],
@@ -734,7 +826,8 @@
         "prisma/migrations/20261117120000_agent_operation_proposal/"
       ],
       "next": [
-        "按授权安排真实服务与 Windows Electron 定向验收，不自动执行下一阶段"
+        "授权父页下补建「投递记录」库后复验 update_record（需重新 OAuth consent）",
+        "由验收 Owner 判断是否需补 Electron+真实 Notion 合并定向验证；不自动执行下一阶段"
       ]
     },
     {
@@ -782,20 +875,20 @@
         "id": "A",
         "scope": "H01/H02 集中定向补验：修复后的构建入口、本地准备路由、同一会话退出重开续做及真实模型冒烟",
         "resource": "唯一指定桌面重型执行者；隔离源码快照与 fresh-native 数据",
-        "status": "PROPOSED_NOT_DISPATCHED"
+        "status": "REPORTED_COMPLETED"
       },
       {
         "id": "B",
         "scope": "H05 隔离后端及真实 Notion 提案/审批/执行/回执验收；Electron 部分排在 A 之后",
         "resource": "独立 Worktree/隔离数据库；需要有效连接、明确测试目标和外写授权",
-        "status": "PROPOSED_NOT_DISPATCHED"
+        "status": "COMPLETED_WITH_BLOCKERS"
       }
     ]
   },
   "openItems": [
     "H01 真实模型冒烟等待可用授权连接",
-    "H02 专用本地准备路由待 Windows Electron 定向复验；旧练习证据部分来自 Web",
-    "H05 真实 Notion、模型与 Windows Electron 未验收，passes=false",
+    "H02 专用本地准备路由待 Windows Electron 定向复验；旧练习证据部分来自 Web（A 轮补验结果待汇总进台账后更新本条）",
+    "H05：create/append 真实写入已验证（Web+真实 DeepSeek/Notion），update_record 待授权父页下建库后补验；Electron 侧机制已过（合成凭据），桌面+真实写入未合并覆盖；passes=false",
     "真实数据库未操作，migration 仅在隔离数据库验证",
     "历史集成轮次未 Push、未清理 Worktree，原始方案当时未纳入提交；2026-11-17 按用户要求随 Wiki 文档提交，仅作参考，不授权完整实施。"
   ],

@@ -405,6 +405,7 @@ export type ManagedTurnContext = {
 };
 
 export type AccountAgentTurnInput = {
+  permissionMode?: import("./preferences").PermissionMode;
   request?: ConversationRequest;
   userId: string;
   connectionId: string;
@@ -532,6 +533,7 @@ export async function runAccountAgentTurn(
     request: input.request,
     agentRole: input.agentRole,
     notionTools: input.notionTools,
+    permissionMode: input.permissionMode,
   });
   const toolsBlock = describeToolsForPrompt(tools);
 

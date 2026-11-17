@@ -1,6 +1,7 @@
 import { AiProvider } from "@/models/ai.model";
 import { defaultUserSettings } from "@/models/userSettings.model";
 import { getInterviewConfig } from "@/lib/interview/interviewSettings";
+import { validateAgentPreferences } from "@/lib/agent/preferences";
 
 /**
  * C-01.P — atomic JSON patch primitive for `UserSettings.settings`.
@@ -281,6 +282,9 @@ export function prepareSettingsPatch(input: unknown): PreparedSettingsPatch {
     } else {
       // settings / careerProfile / dictation: generic merge of a validated
       // JSON tree.
+      if (ns === "settings" && isPlainObject(value.general) && "agent" in value.general && value.general.agent !== undefined && !validateAgentPreferences(value.general.agent)) {
+        return invalid("invalid Agent preferences");
+      }
       prepared[ns] = value;
     }
   }

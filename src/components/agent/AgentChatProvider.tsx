@@ -1,4 +1,5 @@
 "use client";
+import type { PermissionMode } from "@/lib/agent/preferences";
 
 import {
   createContext,
@@ -319,6 +320,7 @@ function useAgentChatValue(
     };
   });
   const [activeRole, setActiveRole] = useState<AgentRole>(initialSlot.role);
+  const [draftPermissionMode, setDraftPermissionMode] = useState<PermissionMode | undefined>();
   const [context, setContext] = useState<AgentConversationContextV1>(
     initial?.context ?? initialSlot.draft?.context ?? EMPTY_CONVERSATION_CONTEXT,
   );
@@ -974,6 +976,7 @@ function useAgentChatValue(
       const epoch = selectionEpochRef.current;
       const role = activeRoleRef.current;
       const result = await createChatConversation({
+        permissionMode: draftPermissionMode,
         messages,
         context: contextRequests(contextRef.current.items),
         explicit: explicitRef.current,
@@ -993,7 +996,7 @@ function useAgentChatValue(
       applyCreated(result.data);
       return result.data.id;
     },
-    [applyCreated],
+    [applyCreated, draftPermissionMode],
   );
 
   // Enter a draft (unpersisted) state inside the active slot. Called by
@@ -1010,6 +1013,7 @@ function useAgentChatValue(
       paste?: AgentPastePartData | null;
       files?: AgentFileChip[];
     }) => {
+      setDraftPermissionMode(undefined);
       stop();
       selectionEpochRef.current += 1;
       roleSelectionPendingRef.current = false;
@@ -1558,6 +1562,8 @@ function useAgentChatValue(
     context,
     explicit,
     setDraftModel,
+    draftPermissionMode,
+    setDraftPermissionMode,
     addContextItem,
     removeContextItem,
     requestAddContext,

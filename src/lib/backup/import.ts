@@ -592,7 +592,9 @@ function remapConversationContext(
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return serialized;
   const record = parsed as Record<string, unknown>;
   if (record.version !== 1 || !Array.isArray(record.items)) return serialized;
-  let changed = false;
+  // Restoring data must never revive Full access or automatic approval.
+  let changed = "permissionMode" in record;
+  delete record.permissionMode;
   for (const item of record.items) {
     if (!isRemappableContextItem(item)) continue;
     const allowed = item.kind === "job" ? jobIds : resumeIds;
