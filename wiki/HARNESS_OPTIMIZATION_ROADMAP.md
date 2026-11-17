@@ -640,3 +640,10 @@ Feature：HARNESS-PERSISTENT-APPROVAL；提交：d1e4bf85。
 - [Windows Electron 验证边界](../desktop/E2E.md)
 - [DeepSeek Harness 架构](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)
 - [Anthropic 长任务实践](https://www.anthropic.com/research/effective-harnesses-for-long-running-agents)
+
+
+### 2026-11-17 update_record 补验核验
+
+2026-11-17 update_record补验核验：Web dev隔离库、真实DeepSeek deepseek-chat、真实Notion MCP，在原授权父页子树专用投递记录库完成记录更新。主协调核对原始提案/任务事件及远端前后读回：6dc95f86→6aa88fcf为APPROVED/SUCCEEDED且saved:true，职位/状态/备注改变、公司不变；eb5888a0为REJECTED且无任务/dispatch、远端未改；不存在目标f6d42365→2e447618为FAILED/saved:false并保留远端404 object_not_found（此负向经应用提案/批准函数驱动，不是模型UI成功路径）。56/56定向测试独立复跑通过。产品源码零修改；原始证据 .worktrees/notion-update-record/.tmp/notion-update-record/。OAuth listener旧timer、错误定码粒度及审批队列409为执行窗口观察，未独立复现根因、不在本次修复。Windows Electron+真实写入合并路径未覆盖，passes:false保持。
+
+以上增量解除历史 update_record 无测试库的前置阻塞；历史轮次的记录保留，不追认 Electron 与真实写入已在同一 run 覆盖。

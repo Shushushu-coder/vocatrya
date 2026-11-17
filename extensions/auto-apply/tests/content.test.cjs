@@ -49,6 +49,7 @@ function harness(overrides={}){
  };
  const context={
   window,
+  Set,
   document,
   location:{href:'https://example.com/apply',hostname:'example.com'},
   chrome:{runtime:{onMessage:{addListener(){},removeListener(){}}}},
@@ -318,4 +319,61 @@ test('expanded range endpoints retain DOM order after fallback supplies a missin
  const end=h.createAutofillCandidate(fields[1],endEntry,100);
  const candidates=h.buildExpandedBlockCandidates(fields,[end],entries,'教育经历',2);
  assert.deepEqual(Array.from(candidates,c=>[c.fieldId,c.value]),[['0','2019-09'],['1','2023-06']]);
+});
+
+test('expanded block admits DOM-contained compat fields mis-categorized by labels',()=>{
+ const inBlockIds=new Set(['d1','d2','desc','award']);
+ const blockRoot={contains:(el)=>inBlockIds.has(el.id)};
+ const h=harness({document:{
+  getElementById:()=>null,
+  querySelector:(sel)=>{const m=String(sel).match(/"([^"]+)"/);return m&&inBlockIds.has(m[1])?{id:m[1]}:null;},
+  querySelectorAll:()=>[],
+  createElement:()=>({appendChild(){},setAttribute(){},getAttribute:()=>null,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){},style:{},classList:{add(){},remove(){},toggle(){}},hidden:true}),
+  documentElement:{appendChild(){}},
+  title:'fixture'
+ }});
+ const entries=entriesOf(h,{sections:{internship:repeatSection('实习经历',[{'开始时间':'2025-07','结束时间':'2026-03','工作内容':'实习内容A'}])}});
+ const fields=[
+  field({fieldId:'d1',label:'开始时间',inferredLabel:'开始时间',inferredCategory:'工作经历'}),
+  field({fieldId:'d2',label:'结束时间',inferredLabel:'结束时间',inferredCategory:'工作经历'}),
+  field({fieldId:'desc',label:'工作描述',inferredLabel:'工作描述',inferredCategory:'工作经历'}),
+  field({fieldId:'award',label:'获奖时间',inferredLabel:'获奖时间',inferredCategory:'奖惩情况'}),
+  field({fieldId:'other',label:'开始时间',inferredLabel:'开始时间',inferredCategory:'工作经历'})
+ ];
+ const candidates=h.buildExpandedBlockCandidates(fields,[],entries,'实习经历',1,blockRoot);
+ assert.deepEqual(Array.from(candidates,c=>[c.fieldId,c.value]).sort(),[['d1','2025-07'],['d2','2026-03'],['desc','实习内容A']]);
+});
+
+
+test('rebuilt outer form cannot relax old work fields into the new internship',()=>{
+ const h=harness();
+ const trigger={isConnected:false};
+ const root=h.findAddedBlockRoot(new Set([{}]),trigger);
+ assert.equal(root,null);
+ const entries=entriesOf(h,{sections:{internship:repeatSection('实习经历',[{'开始时间':'2020-01'},{'开始时间':'2025-07'}])}});
+ const oldWork=field({fieldId:'old-work',label:'开始时间',inferredLabel:'开始时间',inferredCategory:'工作经历',repeatGroupIndex:1});
+ const candidates=h.buildExpandedBlockCandidates([oldWork],[],entries,'实习经历',2,root);
+ assert.equal(candidates.length,0);
+});
+
+test('new block root requires a unique subtree near the surviving trigger',()=>{
+ const makeRoot=()=>({parentElement:null,contains:()=>false,closest:()=>null,querySelectorAll:()=>[{}]});
+ const a=makeRoot(),b=makeRoot();
+ const scope={parentElement:null,contains:(root)=>root===a||root===b,querySelectorAll:()=>[{}]};
+ const trigger={isConnected:true,parentElement:scope};
+ let nodes=[a];
+ const h=harness({document:{getElementById:()=>null,querySelector:()=>null,querySelectorAll:()=>nodes,createElement:()=>({}),documentElement:{appendChild(){}}}});
+ const before=new Set([{}]);
+ assert.equal(h.findAddedBlockRoot(before,trigger,new Map([[scope,0]])),a);
+ nodes=[a,b];
+ assert.equal(h.findAddedBlockRoot(before,trigger,new Map([[scope,0]])),null);
+});
+
+
+test('surviving trigger does not mistake a rebuilt list for a new item',()=>{
+ const root={parentElement:null,contains:()=>false,closest:()=>null,querySelectorAll:()=>[{},{}]};
+ const scope={parentElement:null,contains:(el)=>el===root,querySelectorAll:()=>[{},{}]};
+ const trigger={isConnected:true,parentElement:scope};
+ const h=harness({document:{getElementById:()=>null,querySelector:()=>null,querySelectorAll:()=>[root],createElement:()=>({}),documentElement:{appendChild(){}}}});
+ assert.equal(h.findAddedBlockRoot(new Set([{}]),trigger,new Map([[scope,1]])),null);
 });
