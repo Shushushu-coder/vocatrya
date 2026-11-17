@@ -29,7 +29,7 @@
   "aiServiceExecutionDecision": {
     "recordedOn": "2026-11-17",
     "status": "REQUIREMENTS_CONFIRMED",
-    "implementation": "NOT_STARTED",
+    "implementation": "PARTIAL_UI_INTEGRATED_NATIVE_NOT_STARTED",
     "acceptance": "NOT_RUN",
     "document": "wiki/HARNESS_OPTIMIZATION_ROADMAP.md#ai-service-execution",
     "groups": [
@@ -61,7 +61,23 @@
       "不自动导入本机扩展；第三方 Skill 导入敬请期待",
       "不改变 H01–H06 状态或授权实施"
     ],
-    "referenceCommit": "HernanJiang/CraftStation@05e25f09fff38c5cf3b2a227ec44168ad4fce598"
+    "referenceCommit": "HernanJiang/CraftStation@05e25f09fff38c5cf3b2a227ec44168ad4fce598",
+    "uiIntegration": {
+      "recordedOn": "2026-11-17",
+      "commit": "62ff16e1",
+      "status": "MERGED_PENDING_ACCEPTANCE",
+      "scope": "顶部账号登录/托管 AI 双 Tab；第二 Tab 区分自接 API 与托管 API，控制器保持挂载。",
+      "validation": {
+        "componentTests": "56/56 PASS",
+        "scopedTypeScript": "PASS",
+        "eslint": "PASS",
+        "diffCheck": "PASS",
+        "windowsElectron": "NOT_RUN",
+        "realDesktopOAuth": "NOT_RUN"
+      },
+      "evidence": ".worktrees/ai-services-tabs/.tmp/integration-verify/",
+      "boundary": "不代表原生 Agent 循环、搜索、工具或上下文恢复已适配。"
+    }
   },
   "frameworkScope": {
     "name": "Vocatrya Agent 运行与任务续做框架",
