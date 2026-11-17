@@ -466,7 +466,7 @@ function AiConnectionsCard() {
   );
 
   if (!bridgeAvailable) return integrated ? (
-    <AiServiceSlot placement="available">
+    <AiServiceSlot placement="account-available">
       <div className="rounded-lg border bg-muted/20 p-3 text-sm">
         <h4 className="font-medium">{t("settings.aiConnectionsTitle")}</h4>
         <p className="mt-1 text-muted-foreground">{t("settings.aiServicesDesktopOnly")}</p>
@@ -892,7 +892,7 @@ function AiConnectionsCard() {
           </section>
         );
         return (
-          <AiServiceSlot key={backend.backendKind} placement={backendConnections.length > 0 || isConnecting ? "connected" : "available"}>
+          <AiServiceSlot key={backend.backendKind} placement={backendConnections.length > 0 || isConnecting ? "account-connected" : "account-available"}>
             {compact ? <>
               <AiServiceListItem
                 icon={<AiServiceIcon name={backend.providerLabel} />}

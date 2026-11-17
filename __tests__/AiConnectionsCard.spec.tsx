@@ -346,14 +346,14 @@ describe("AiConnectionsCard", () => {
 it("keeps recorded connections in the center and new services in the rail", async () => {
   installBridges({ connections: [{ id: "saved", backendKind: "CODEX_RUNTIME", displayName: "Saved account", status: "REAUTH_REQUIRED" }] });
   render(<AiServicesLayout><AiConnectionsCard /></AiServicesLayout>);
-  await within(screen.getByTestId("ai-services-connected")).findByText("Saved account");
-  expect(within(screen.getByTestId("ai-services-available")).getByText("Claude")).toBeInTheDocument();
-  expect(within(screen.getByTestId("ai-services-available")).queryByText("Saved account")).not.toBeInTheDocument();
+  await within(screen.getByTestId("ai-services-account-connected")).findByText("Saved account");
+  expect(within(screen.getByTestId("ai-services-account-available")).getByText("Claude")).toBeInTheDocument();
+  expect(within(screen.getByTestId("ai-services-account-available")).queryByText("Saved account")).not.toBeInTheDocument();
 });
 
 it("shows an honest desktop-only notice in the Web rail", () => {
   render(<AiServicesLayout><AiConnectionsCard /></AiServicesLayout>);
-  expect(within(screen.getByTestId("ai-services-available")).getByText(/Account sign-in is available in the desktop app/)).toBeInTheDocument();
+  expect(within(screen.getByTestId("ai-services-account-available")).getByText(/Account sign-in is available in the desktop app/)).toBeInTheDocument();
 });
 
 it("keeps installation guidance reachable from a disabled compact service", async () => {

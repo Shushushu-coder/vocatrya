@@ -268,7 +268,7 @@ function ByokConnectionsCard() {
 
   if (isLoading) {
     return (
-      <AiServiceSlot placement="available">
+      <AiServiceSlot placement="byok-available">
       <div className="space-y-4 rounded-lg border p-4">
         <div>
           <h3 className="text-lg font-medium">{t("settings.byokTitle")}</h3>
@@ -432,7 +432,7 @@ function ByokConnectionsCard() {
             </Card>
           );
           return (
-            <AiServiceSlot key={provider.id} placement={existingKey ? "connected" : "available"}>
+            <AiServiceSlot key={provider.id} placement={existingKey ? "byok-connected" : "byok-available"}>
               {integrated && !existingKey ? <>
                 <AiServiceListItem icon={<AiServiceIcon name={provider.name} />} name={provider.name} description={t("settings.aiServicesApiKey")} onDetails={() => { setEditingProvider(provider.id); setInputValue(""); }} action={
                   <Button size="sm" variant="secondary" className="h-8 rounded-full px-3 text-xs" onClick={() => { setEditingProvider(provider.id); setInputValue(""); }}>{t("settings.aiServicesAdd")}</Button>

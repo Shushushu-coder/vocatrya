@@ -269,7 +269,7 @@ function ManagedAiCard() {
           ? t("settings.managedErrorCode", { code: errorCode })
           : t("settings.managedUnavailable");
     return (
-      <AiServiceSlot placement="available-managed">
+      <AiServiceSlot placement="managed-available">
         <AiServiceListItem
           icon={<VocatryaMark size={22} />}
           name={t("settings.managedTitle")}
@@ -292,7 +292,7 @@ function ManagedAiCard() {
     );
   }
 
-  return <AiServiceSlot placement={connection && !comingSoon ? "connected" : "available"}>{card}</AiServiceSlot>;
+  return <AiServiceSlot placement={connection && !comingSoon ? "managed-connected" : "managed-available"}>{card}</AiServiceSlot>;
 }
 
 export default ManagedAiCard;
