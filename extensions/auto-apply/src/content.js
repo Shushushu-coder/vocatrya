@@ -355,7 +355,7 @@
     行业: ["行业属性", "所属行业"],
     其他行业属性: ["请填写其他行业属性"],
     实习内容: ["实践内容", "工作内容", "工作内容描述", "职责描述", "工作职责", "项目描述"],
-    工作内容: ["工作内容描述", "职责描述", "工作职责", "实践内容"],
+    工作内容: ["工作内容描述", "工作描述", "职位描述", "岗位描述", "职责描述", "工作职责", "实践内容"],
     工作成果: ["实习成果", "工作业绩", "项目成果"],
     证明人: ["证明人姓名", "推荐人"],
     证明人姓名: ["证明人", "推荐人"],
@@ -2285,7 +2285,12 @@
       }
     }
     const dateRangeEnd = getDateRangeEndIndex(element);
-    if (dateRangeEnd >= 0) {
+    const rangeLabelKey = normalizeMatchKey(label);
+    const genericRangeLabel =
+      !rangeLabelKey ||
+      isGenericFieldLabel(label) ||
+      /^(起止时间|起止日期|时间段|时间范围|时间|日期|期限|期间|起止年月|开始至结束|starttoend|startend|fromto)$/i.test(rangeLabelKey);
+    if (dateRangeEnd >= 0 || genericRangeLabel) {
       const placeholder = normalizeText(element.getAttribute("placeholder"), 80);
       const placeholderEnd = /开始|起始|入学|入职|from|start/i.test(placeholder)
         ? 0
@@ -2293,12 +2298,7 @@
           ? 1
           : -1;
       const resolvedEnd = placeholderEnd >= 0 ? placeholderEnd : dateRangeEnd;
-      const labelKey = normalizeMatchKey(label);
-      if (
-        !labelKey ||
-        isGenericFieldLabel(label) ||
-        /^(起止时间|起止日期|时间段|时间范围|时间|日期|期限|期间|起止年月|开始至结束|starttoend|startend|fromto)$/i.test(labelKey)
-      ) {
+      if (genericRangeLabel && resolvedEnd >= 0) {
         label = resolvedEnd === 0 ? "开始时间" : "结束时间";
       }
     }
@@ -3764,6 +3764,10 @@
         ["实习经历", /工作\/实习经历|工作实习经历|实习经历|实践经历|\bintern(ship)?\b/i],
         ["工作经历", /工作经历|work experience|employment|work history|professional experience/i],
         ["项目经历", /项目经历|项目经验|projects?\b/i],
+        ["论文著作", /论文|著作|publication|paper/i],
+        ["专利成果", /专利|patent/i],
+        ["奖惩情况", /奖惩|获奖|奖励|荣誉|竞赛|award|honor/i],
+        ["证书技能", /证书|资格证书|certificat/i],
         ["培训经历", /培训经历|training/i],
         ["绩效考核", /绩效考核|performance|appraisal/i],
         ["家庭信息", /家庭及社会关系|家庭情况|家庭信息|社会关系|family/i]
@@ -4470,7 +4474,10 @@
     if (/部门/.test(key)) {
       return "department";
     }
-    if (/职务|岗位|职位名称/.test(key)) {
+    if (/工作内容描述|工作内容|工作描述|职位描述|岗位描述|实践内容|职责描述/.test(key)) {
+      return "description";
+    }
+    if (/职务|岗位|职位/.test(key)) {
       return "role";
     }
     if (/籍贯省/.test(key)) {
@@ -4643,9 +4650,6 @@
     }
     if (/项目链接|项目地址|作品链接/.test(key)) {
       return "projectUrl";
-    }
-    if (/工作内容描述|工作内容|实践内容|职责描述/.test(key)) {
-      return "description";
     }
     if (/奖惩解除时间|处分解除时间|解除时间/.test(key)) {
       return "awardReleaseDate";
@@ -5232,12 +5236,11 @@
     score += textMatchScore(fieldText, entry.category) * 2;
     score += textMatchScore(fieldText, entry.subsection) * 8;
 
-    if (fieldCategory === entry.category) {
-      score += 4;
-    } else {
-      score += getEntryCategoryBonus(fieldCategory, entry.category);
-    }
+    score += getEntryCategoryBonus(fieldCategory, entry.category);
 
+    if (normalizeMatchKey(entry.label) === normalizeMatchKey(matchLabel)) {
+      score += 8;
+    }
     score += getOccurrenceMatchBonus(field, entry);
 
     if (field.required) {
@@ -6385,6 +6388,55 @@
     }
   }
 
+  function buildExpandedBlockCandidates(newFields, candidates, entries, category, targetItemIndex) {
+    const eligibleFields = newFields.filter((field) =>
+      field?.canFill && !field.hasCurrentValue &&
+      field.inferredCategory === category &&
+      (!field.repeatGroupIndex || Number(field.repeatGroupIndex) === targetItemIndex)
+    );
+    const eligibleIds = new Set(eligibleFields.map((field) => field.fieldId));
+    const itemEntries = (entries || []).filter(
+      (entry) =>
+        entry?.hasValue &&
+        entry.category === category &&
+        Number(entry.itemOccurrenceIndex || 0) === targetItemIndex
+    );
+    const newCandidates = (candidates || []).filter(
+      (candidate) =>
+        eligibleIds.has(candidate.fieldId) &&
+        candidate.shouldAutoFill &&
+        candidate.sourceCategory === category &&
+        Number(candidate.sourceItemOccurrenceIndex || 0) === targetItemIndex
+    );
+    const coveredFieldIds = new Set(newCandidates.map((candidate) => candidate.fieldId));
+    for (const field of eligibleFields) {
+      if (coveredFieldIds.has(field.fieldId) || !field?.canFill) {
+        continue;
+      }
+      const fieldLabel = field.inferredLabel || inferFieldLabel(field);
+      let bestEntry = null;
+      let bestScore = -9999;
+      for (const entry of itemEntries) {
+        const score = scoreAutofillCandidate(field, entry, fieldLabel, field.inferredCategory);
+        if (score > bestScore) {
+          bestScore = score;
+          bestEntry = entry;
+        }
+      }
+      if (!bestEntry || bestScore < 18) {
+        continue;
+      }
+      const candidate = createAutofillCandidate(field, bestEntry, bestScore);
+      if (candidate?.value && candidate.shouldAutoFill) {
+        newCandidates.push(candidate);
+      }
+    }
+
+    // Keep range endpoints in DOM order; setting a start after an end can reset controlled pickers.
+    const order = new Map(eligibleFields.map((field, index) => [field.fieldId, index]));
+    return newCandidates.sort((a, b) => order.get(a.fieldId) - order.get(b.fieldId));
+  }
+
   async function expandMissingRepeatBlocks(plan, runId) {
     const result = { filled: 0, created: 0, notes: [], results: [], elements: new Set(), resultByElement: new Map() };
     try {
@@ -6417,6 +6469,9 @@
             break;
           }
 
+          const beforeFieldIds = new Set(
+            latestFields.map((field) => field?.fieldId).filter(Boolean)
+          );
           const beforeCount = document.querySelectorAll(CONTROL_SELECTOR).length;
           clickActionElement(button);
           const grown = await waitForControlGrowth(beforeCount, 1800);
@@ -6435,13 +6490,9 @@
           const replan = buildAutofillPlan(rescan);
           latestFields = Array.isArray(replan?.scan?.fields) ? replan.scan.fields : latestFields;
 
-          const newFieldIds = new Set(
-            latestFields
-              .filter((field) => field?.inferredCategory === category && Number(field?.repeatGroupIndex || 0) > existing)
-              .map((field) => field.fieldId)
-          );
-          const newCandidates = (replan?.candidates || []).filter(
-            (candidate) => newFieldIds.has(candidate.fieldId) && candidate.shouldAutoFill
+          const newFields = latestFields.filter((field) => !beforeFieldIds.has(field.fieldId));
+          const newCandidates = buildExpandedBlockCandidates(
+            newFields, replan?.candidates, entries, category, existing + 1
           );
 
           for (const candidate of newCandidates) {
@@ -7932,6 +7983,7 @@
     createAutofillCandidate,
     createAiAutofillCandidate,
     buildAutofillPlan,
+    buildExpandedBlockCandidates,
     collectUnmatchedRepeatBlocks,
     formatUnmatchedBlocksNote,
     getOrCreateRepeatGroupId,

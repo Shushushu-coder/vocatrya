@@ -160,6 +160,20 @@ test('block without matching profile item is reported, not silently skipped',()=
  assert.match(note,/教育经历第 2 块/);
 });
 
+test('same-category entry wins over cross-category compatible entry',()=>{
+ const internals=harness();
+ const profile={sections:{
+  internship:repeatSection('实习经历',[{'职位':'软件开发实习生','部门':'平台研发部','工作内容':'参与招聘管理系统开发'}]),
+  project:repeatSection('项目经历',[{'职位':'前端负责人'}])
+ }};
+ const scan={fields:fieldsFromGroups([['g1',['职位','工作描述','职位描述','岗位描述'],'实习经历']])};
+ const plan=internals.buildAutofillPlan(scan,entriesOf(internals,profile));
+ assert.equal(candidateFor(plan,'f_g1_职位').value,'软件开发实习生');
+ for(const label of ['工作描述','职位描述','岗位描述']) {
+  assert.equal(candidateFor(plan,`f_g1_${label}`)?.value,'参与招聘管理系统开发',label);
+ }
+});
+
 test('block with compatible item but no matched fields is not flagged',()=>{
  const internals=harness();
  const profile=educationProfile([{'学校':'大学A'},{'学校':'大学B'}]);
@@ -280,4 +294,28 @@ test('getOrCreateRepeatGroupId re-assigns ids carried by clones',()=>{
  assert.notEqual(idB,idA);
  assert.equal(b.attrs['data-ojaf-repeat-id'],idB);
  assert.equal(internals.getOrCreateRepeatGroupId(b),idB);
+});
+
+
+test('expanded block excludes unrelated categories, existing values and other item positions',()=>{
+ const h=harness();
+ const entries=entriesOf(h,{sections:{internship:repeatSection('实习经历',[{'工作内容':'第一段'},{'工作内容':'第二段'}])}});
+ const fields=[
+  field({fieldId:'new',label:'工作内容',inferredLabel:'工作内容',inferredCategory:'实习经历',repeatGroupIndex:2}),
+  field({fieldId:'other',label:'工作内容',inferredLabel:'工作内容',inferredCategory:'培训经历'}),
+  field({fieldId:'prefilled',label:'工作内容',inferredLabel:'工作内容',inferredCategory:'实习经历',hasCurrentValue:true,currentValue:'保留用户内容'}),
+  field({fieldId:'oldItem',label:'工作内容',inferredLabel:'工作内容',inferredCategory:'实习经历',repeatGroupIndex:1})
+ ];
+ const candidates=h.buildExpandedBlockCandidates(fields,[],entries,'实习经历',2);
+ assert.deepEqual(Array.from(candidates,c=>[c.fieldId,c.value]),[['new','第二段']]);
+});
+
+test('expanded range endpoints retain DOM order after fallback supplies a missing start',()=>{
+ const h=harness();
+ const entries=entriesOf(h,educationProfile([{'开始时间':'2024-09','结束时间':'2027-06'},{'开始时间':'2019-09','结束时间':'2023-06'}]));
+ const fields=['开始时间','结束时间'].map((label,i)=>field({fieldId:String(i),label,inferredLabel:label,inferredCategory:'教育经历',repeatGroupIndex:2}));
+ const endEntry=entries.find(e=>e.itemOccurrenceIndex===2&&e.label==='结束时间');
+ const end=h.createAutofillCandidate(fields[1],endEntry,100);
+ const candidates=h.buildExpandedBlockCandidates(fields,[end],entries,'教育经历',2);
+ assert.deepEqual(Array.from(candidates,c=>[c.fieldId,c.value]),[['0','2019-09'],['1','2023-06']]);
 });
