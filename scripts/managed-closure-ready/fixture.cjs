@@ -106,7 +106,13 @@ async function serve(id) {
       if (hostedRequests.length > 5000) hostedRequests.shift();
       const promise = service.handle(request);
       active.add(promise);
-      promise.then(response => { entry.status = response.status; active.delete(promise); }, () => { entry.status = 500; active.delete(promise); });
+      promise.then(async response => {
+        entry.status = response.status;
+        // Error responses carry the authoritative denial code in their JSON
+        // body; the renderer stream does not expose it after client aborts.
+        try { if (response.status >= 400) { const body = await response.clone().json(); if (body && typeof body.code === 'string') entry.code = body.code; } } catch {}
+        active.delete(promise);
+      }, () => { entry.status = 500; active.delete(promise); });
       return promise;
     } };
   }

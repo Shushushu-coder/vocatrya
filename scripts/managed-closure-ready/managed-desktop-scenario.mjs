@@ -103,7 +103,10 @@ export async function runManagedScenario(context) {
   }
   async function card() {
     const section = await settings('ai-services');
-    const result = section.getByRole('heading', { name: messages.settings.managedTitle, exact: true }).locator('xpath=../../..');
+    // The managed card lives on the second service tab; BYOK and account
+    // services sit on the first. Click the tab before locating it.
+    await section.getByRole('tab', { name: messages.settings.aiServicesTabManaged, exact: true }).click();
+    const result = section.getByRole('heading', { name: messages.settings.aiServicesManagedGroupTitle, exact: true }).locator('xpath=../..');
     await expect(result.getByRole('button').first()).toBeEnabled();
     return result;
   }
@@ -231,17 +234,28 @@ export async function runManagedScenario(context) {
       }
       await expect(panel.getByRole('alert').first()).toBeVisible();
       await Promise.all(pending);
-      const denial = denials.find(row => row.code === expectedCode) || denials[0] || { httpStatus: null, code: null, captureError: 'MISSING_RESPONSE' };
-      if (requireSubmission) {
-        assert.equal(denial.captureError, null, 'backend denial response must be readable');
-        assert.equal(denial.code, expectedCode, 'backend denial code must be the response code');
-      }
+      let denial = denials.find(row => row.code === expectedCode) || denials[0] || { httpStatus: null, code: null, captureError: 'MISSING_RESPONSE' };
       const text = (await panel.getByRole('alert').allTextContents()).join('\n');
       const after = await fixtureState();
+      let authoritative = null;
+      if (requireSubmission) {
+        // The denial travels inside the chat stream; the renderer aborts it
+        // once the error part lands, so the wire code is asserted against the
+        // authoritative hosted ledger (real submission, real HTTP status and
+        // response code) instead of a possibly unreadable renderer body.
+        const ledgerBase = before.hostedRequests.length;
+        await poll(async () => (await fixtureState()).hostedRequests.slice(ledgerBase)
+          .find(row => row.method === 'POST' && row.status >= 400 && row.code === expectedCode), 15000)
+          .then(row => { authoritative = row; }, () => {});
+        authoritative = authoritative || after.hostedRequests.slice(ledgerBase)
+          .find(row => row.method === 'POST' && row.status >= 400 && row.code === expectedCode) || null;
+        assert.ok(authoritative, 'backend denial must reach hosted with the expected code');
+        if (denial.code !== expectedCode) denial = { httpStatus: denial.httpStatus, code: authoritative.code, captureError: null, codeSource: 'HOSTED_LEDGER', hostedHttpStatus: authoritative.status, hostedPath: authoritative.path };
+      }
       const upstreamDelta = after.upstreamCount - before.upstreamCount;
       const usageDelta = after.usage.length - before.usage.length;
       const newSucceeded = after.usage.some(row => row.status === 'SUCCEEDED' && !before.usage.some(old => old.hostedUserId === row.hostedUserId && old.invocationKey === row.invocationKey));
-      note({ expectedCode, observedCode: denial.code, httpStatus: denial.httpStatus, captureError: denial.captureError, submitted, visibleFeedback: text.slice(0, 1500), upstreamDelta, usageDelta, competingFallbackSources: requireSubmission ? 'PENDING_OBSERVER' : 'NOT_CONFIGURED' });
+      note({ expectedCode, observedCode: denial.code, httpStatus: denial.httpStatus, captureError: denial.captureError, denialCodeSource: denial.codeSource || 'RENDERER_RESPONSE', hostedDenial: authoritative ? { path: authoritative.path, httpStatus: authoritative.status, code: authoritative.code } : null, submitted, visibleFeedback: text.slice(0, 1500), upstreamDelta, usageDelta, competingFallbackSources: requireSubmission ? 'PENDING_OBSERVER' : 'NOT_CONFIGURED' });
       assert.equal(upstreamDelta, 0);
       assert.equal(usageDelta, 0);
       assert.equal(newSucceeded, false);
