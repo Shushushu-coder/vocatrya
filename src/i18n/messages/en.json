@@ -2320,6 +2320,25 @@
     "roleSwitcher": {
       "label": "Switch assistant"
     },
+    "roster": {
+      "ask": "Ask {name} — {duty}",
+      "legend": "Insight analyzes · Pilot does · Reflect talks — switch anytime from the icons up top",
+      "insight": {
+        "duty": "what the job wants, how to fix your resume",
+        "selfLead": "I read jobs and resumes and tell you how well they fit — match checks, resume reviews.",
+        "selfHandoff": "I look but never touch; logging and writes are Pilot's job."
+      },
+      "pilot": {
+        "duty": "log jobs, track applications, always confirms first",
+        "selfLead": "I keep your job list in shape — look jobs up, log new ones, and always confirm before touching your data.",
+        "selfHandoff": "For resume analysis, ask Insight."
+      },
+      "reflect": {
+        "duty": "talk through interviews and next steps",
+        "selfLead": "I help you think it through — how the interview went, which offer to pick, what next.",
+        "selfHandoff": "I never change your data; doing is Pilot's, analysis is Insight's."
+      }
+    },
     "suggest": {
       "insight": {
         "match": "Run match analysis",

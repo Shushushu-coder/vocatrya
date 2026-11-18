@@ -167,20 +167,35 @@ describe("JourneySection", () => {
 
   it("opens the existing agent panel from every stage slot — nothing else", async () => {
     const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
     render(<JourneySection jobsAbRead />);
-    const buttons = screen.getAllByRole("button", {
-      name: /Ask Vocatrya/,
-    });
-    expect(buttons).toHaveLength(3);
-    await user.click(buttons[0]);
+    const prepare = screen.getByTestId("journey-agent-prepare");
+    const act = screen.getByTestId("journey-agent-act");
+    const review = screen.getByTestId("journey-agent-review");
+    expect(prepare).toHaveTextContent(
+      "Ask Voca Insight — what the job wants, how to fix your resume",
+    );
+    expect(act).toHaveTextContent(
+      "Ask Voca Pilot — log jobs, track applications, always confirms first",
+    );
+    expect(review).toHaveTextContent(
+      "Ask Voca Reflect — talk through interviews and next steps",
+    );
+    for (const button of [prepare, act, review]) {
+      expect(button.textContent).not.toMatch(/notion/i);
+    }
+    await user.click(prepare);
     expect(mocks.open).toHaveBeenCalledTimes(1);
-    await user.click(buttons[2]);
+    await user.click(review);
     expect(mocks.open).toHaveBeenCalledTimes(2);
     // No conversation, message, or prefilled context: open() is the whole
     // contract — with multi-agent landed, the same single entry passes the
     // stage's role (prepare→Insight, act→Pilot, review→Reflect).
     expect(mocks.open).toHaveBeenNthCalledWith(1, { role: "insight" });
     expect(mocks.open).toHaveBeenNthCalledWith(2, { role: "reflect" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
 
