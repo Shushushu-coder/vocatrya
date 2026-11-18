@@ -2320,6 +2320,25 @@
     "roleSwitcher": {
       "label": "切换助手"
     },
+    "roster": {
+      "ask": "咨询 {name} —— {duty}",
+      "legend": "Insight 帮你看 · Pilot 帮你干 · Reflect 陪你聊——顶部图标随时换",
+      "insight": {
+        "duty": "帮你看看职位要什么人、简历怎么改",
+        "selfLead": "我帮你看清楚：职位要什么人、简历怎么改、和你有多匹配。",
+        "selfHandoff": "我只看不动手——记职位、写入类的活儿找 Pilot。"
+      },
+      "pilot": {
+        "duty": "帮你记职位、盯投递，动手前先给你确认",
+        "selfLead": "我帮你打理职位：查、记、跟进，动数据前都先给你确认。",
+        "selfHandoff": "想分析简历？找 Insight。"
+      },
+      "reflect": {
+        "duty": "陪你聊聊面试、捋捋下一步",
+        "selfLead": "我陪你捋：面试聊得咋样、机会怎么选、下周干啥。",
+        "selfHandoff": "我不动你的数据——干活找 Pilot，分析找 Insight。"
+      }
+    },
     "suggest": {
       "insight": {
         "match": "运行匹配分析",

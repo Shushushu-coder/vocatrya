@@ -2,7 +2,11 @@
 
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
-import { copyFor } from "@/lib/agent/roleCopy";
+import {
+  AGENT_ROSTER_LEGEND_KEY,
+  copyFor,
+  rosterSelfLines,
+} from "@/lib/agent/roleCopy";
 import { suggestionsForRole } from "@/lib/agent/roleSuggestions";
 import { useI18n } from "@/i18n";
 import { BriefcaseBusiness, FileText, Plus } from "lucide-react";
@@ -18,6 +22,7 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
   const { fillComposer, activeRole, context, requestAddContext } =
     useAgentChat();
   const copy = copyFor(t, locale);
+  const self = rosterSelfLines(activeRole, copy);
   const items = context?.items ?? [];
   const job = items.find((item) => item.kind === "job");
   const resume = items.find((item) => item.kind === "resume");
@@ -37,6 +42,10 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
             ? resume.labelSnapshot
             : t("agent.emptyStart")}
       </p>
+      <div data-testid="agent-empty-self" className="grid max-w-md gap-1 text-sm text-muted-foreground">
+        <p>{self.lead}</p>
+        <p>{self.handoff}</p>
+      </div>
       <Suggestions className={`${styles.actions} w-full`}>
         {suggestions.map((item) => (
           <Suggestion
@@ -81,6 +90,9 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
           {t("agent.addContext")}
         </Button>
       </div>
+      <p data-testid="agent-roster-legend" className="max-w-md text-xs text-muted-foreground">
+        {copy(AGENT_ROSTER_LEGEND_KEY)}
+      </p>
     </div>
   );
 }

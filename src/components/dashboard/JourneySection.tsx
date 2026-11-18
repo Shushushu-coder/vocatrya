@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { useI18n } from "@/i18n";
+import { copyFor, rosterAskLine } from "@/lib/agent/roleCopy";
 import { cn } from "@/lib/utils";
 import { journeyText, type JourneyCopySlot } from "./journeyCopy";
 
@@ -116,7 +117,8 @@ export default function JourneySection({
 }: {
   jobsAbRead: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const copy = copyFor(t, locale);
   const { open } = useAgentChat();
   const { jobMutationsEnabled, resumeV1Enabled } = useCareerSurfaces();
 
@@ -236,6 +238,8 @@ export default function JourneySection({
       <div className="grid min-w-0 grid-cols-1 items-start gap-4 @md/main:grid-cols-2 @3xl/main:grid-cols-3">
         {stages.map((stage) => {
           const tone = STAGE_TONE[stage.key];
+          const agentRole = STAGE_AGENT_ROLE[stage.key];
+          const agentLabel = rosterAskLine(agentRole, copy);
           return (
             <Card
               key={stage.key}
@@ -284,14 +288,15 @@ export default function JourneySection({
                 <button
                   type="button"
                   data-testid={`journey-agent-${stage.key}`}
-                  onClick={() => open({ role: STAGE_AGENT_ROLE[stage.key] })}
+                  title={agentLabel}
+                  onClick={() => open({ role: agentRole })}
                   className={cn(
-                    "flex items-center gap-1.5 self-start rounded-md px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                    "flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                     tone.agent,
                   )}
                 >
                   <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                  <span>{t("dashboard.journeyAskAgent")}</span>
+                  <span className="min-w-0 truncate">{agentLabel}</span>
                 </button>
               </CardContent>
             </Card>

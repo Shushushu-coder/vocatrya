@@ -42,6 +42,22 @@ describe("AgentChatEmptyState", () => {
     expect(mark).toHaveAttribute("focusable", "false");
   });
 
+  it("shows the roster self-intro and legend without naming extensions", () => {
+    render(<AgentChatEmptyState />);
+    expect(screen.getByTestId("agent-empty-self")).toHaveTextContent(
+      "I keep your job list in shape",
+    );
+    expect(screen.getByTestId("agent-empty-self")).toHaveTextContent(
+      "For resume analysis, ask Insight.",
+    );
+    expect(screen.getByTestId("agent-roster-legend")).toHaveTextContent(
+      "switch anytime from the icons up top",
+    );
+    expect(screen.getByTestId("agent-empty-state").textContent).not.toMatch(
+      /notion/i,
+    );
+  });
+
   it("shows four role suggestions that only fill the composer", async () => {
     render(<AgentChatEmptyState />);
     const buttons = screen
