@@ -4,6 +4,10 @@
 > 依据：`MVP_FEATURES.json` 最新状态、已集成实现记录及用户人工验收反馈。
 > 状态口径：IMPLEMENTED=业务路径已接通；PARTIAL=部分实现；MISSING=尚未实现。实现、Main 集成和功能验收分别记录，`passes` 仅表示对应验收是否完成。
 
+## 已批准增量：Codex 原生会话首片（2026-11-18）
+
+`AGENT-NATIVE-CODEX-V1` 已实现，等待 Windows Electron 与真实账号验收，`passes: false`。新增显式文本会话、持久 thread 与失败恢复；Devin、搜索、业务工具、技能加载另行实施。详见 [原生会话合同及实施记录](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md)。下列数量与表格保留历史 MVP 收口口径，新增项以 JSON 台账为准。
+
 ## A. 当前范围与状态
 
 本文件为当前 MVP 台账，不再把早期开发基线、W1–W7 分派或历史待验收描述列为当前任务。逐项验收条件、实施证据及历史构建来源以 [MVP_FEATURES.json](./MVP_FEATURES.json) 为准。

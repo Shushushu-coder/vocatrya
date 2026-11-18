@@ -91,6 +91,7 @@ export function AgentChatMessages() {
     toolStreams,
     status,
     regenerate,
+    nativeSession,
     addToolApprovalResponse,
     interruptedTurn,
     dismissInterrupted,
@@ -102,7 +103,7 @@ export function AgentChatMessages() {
 
   const pastedText = resolvePastedText(messages);
   const showContinue =
-    !dismissed && (interruptedTurn || endsAwaitingReply(messages, status));
+    !nativeSession && !dismissed && (interruptedTurn || endsAwaitingReply(messages, status));
   const thinking = showThinking(messages, status);
 
   const dismiss = () => {
@@ -248,7 +249,7 @@ export function AgentChatMessages() {
                 <AgentAnswerActions
                   text={copyText}
                   onRegenerate={
-                    message.role === "assistant" &&
+                    !nativeSession && message.role === "assistant" &&
                     message.id === lastMessageId &&
                     status === "ready" &&
                     !approvalPending &&

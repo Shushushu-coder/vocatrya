@@ -1,4 +1,7 @@
 export type AgentErrorCategory =
+  | "native-context"
+  | "native-unavailable"
+  | "native-text"
   | "recovery"
   | "conversation"
   | "saved"
@@ -56,6 +59,9 @@ export function categorizeAgentErrorCode(
   code: string | null | undefined,
 ): AgentErrorCategory {
   if (!code) return "generic";
+  if (code === "NATIVE_CONTEXT_LOST") return "native-context";
+  if (code === "NATIVE_SESSION_UNAVAILABLE") return "native-unavailable";
+  if (code === "NATIVE_TEXT_ONLY") return "native-text";
   if (code === "MANAGED_AUTH_REQUIRED") return "managed-auth";
   if (["MANAGED_AI_DISABLED", "MANAGED_RUNTIME_UNAVAILABLE", "GATEWAY_AUTH", "GATEWAY_NETWORK", "GATEWAY_RESPONSE"].includes(code)) return "managed-unavailable";
   if (code === "QUOTA_EXCEEDED") return "managed-quota";
@@ -82,6 +88,9 @@ export function agentErrorCopy(category: AgentErrorCategory): {
   action: "retry" | "settings" | "new-model" | null;
 } {
   switch (category) {
+    case "native-context": return { titleKey: "agent.errors.cannotSend", bodyKey: "nativeSession.contextLost", action: null };
+    case "native-unavailable": return { titleKey: "agent.errors.cannotSend", bodyKey: "nativeSession.unavailable", action: "settings" };
+    case "native-text": return { titleKey: "agent.errors.cannotSend", bodyKey: "nativeSession.textOnly", action: null };
     case "managed-auth":
       return { titleKey: "agent.errors.cannotSend", bodyKey: "agent.errors.managedAuth", action: "settings" };
     case "managed-unavailable":

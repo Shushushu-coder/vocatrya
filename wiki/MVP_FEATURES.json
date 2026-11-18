@@ -17,6 +17,22 @@
   },
   "features": [
     {
+      "id": "AGENT-NATIVE-CODEX-V1",
+      "category": "Agent Runtime",
+      "priority": "P1",
+      "scope": "IN_SCOPE",
+      "implementationStatus": "IMPLEMENTED",
+      "implementationNotes": "2026-11-18 用户批准后实现显式 Codex 原生文本会话首片。0.169.0 版本/模型与有效配置门控、独立持久绑定、租约、失败回合封锁、显式重启、备份排除。真实 CLI + 合成本地 Responses 服务验证跨进程同 thread 与 tools=[]；定向开发测试通过。Windows Electron、真实账号与模型用户成果尚未验收。技能与 Devin 未加载。详见 NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md。",
+      "description": "用户显式新建 Codex 原生文本职业对话，同一应用会话跨回合和退出重开继续同一原生 thread。",
+      "steps": [
+        "Windows Electron fresh-native 中显式新建原生对话；打开面板与恢复界面不调用模型。",
+        "真实 Codex 账号连续对话，退出应用并重开后下一消息继续同一 thread；仅当前新消息送入运行时。",
+        "恢复或保存失败明确提示且不重放，不静默新建；显式重启后保持应用历史并使用新原生上下文。",
+        "取消、连接隔离、旧会话应用编排、备份恢复不携带原生绑定均按合同核对；搜索、业务工具和技能明确未加载。"
+      ],
+      "passes": false
+    },
+    {
       "id": "CP-UI",
       "category": "Career Profile",
       "priority": "P0",

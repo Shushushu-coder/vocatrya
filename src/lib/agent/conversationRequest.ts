@@ -290,7 +290,9 @@ export async function finishConversationRequest(request: ConversationRequest, in
       }
     }
     await reconcileConversationProposals(tx, { id: row.id, userId: row.userId }, finalMessages);
-    const saved = await tx.chatConversation.updateMany({ where: ownedWhere(request), data: { messages: JSON.stringify(finalMessages), revision: { increment: 1 }, activeRequestId: null, activeRequestExpiresAt: null } });
+    const saved = await tx.chatConversation.updateMany({ where: ownedWhere(request), data: { messages: JSON.stringify(finalMessages), revision: { increment: 1 }, activeRequestId: null, activeRequestExpiresAt: null,
+      ...(row.executionPath === "NATIVE_CODEX_V1" ? { nativeInitializationState: "READY" } : {}),
+    } });
     if (saved.count !== 1) return fail("CONVERSATION_STALE_WRITE");
     return finalMessages;
   });

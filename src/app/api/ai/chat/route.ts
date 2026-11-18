@@ -1,3 +1,4 @@
+import { nativeChatResponse } from "@/lib/agent/nativeChatResponse";
 import { loadAgentPreferences } from "@/lib/agent/preferences.server";
 import { personalInstructionsBlock, permissionInstructions, permissionModeOfContext } from "@/lib/agent/preferences";
 import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
@@ -479,6 +480,10 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   }
 
   const { conversationId } = parsed.data;
+  const nativeCandidate = await getOwnedChatConversation(userId, conversationId);
+  if (nativeCandidate?.executionPath === "NATIVE_CODEX_V1" && (parsed.data.operation !== "send" || parsed.data.newMessage.parts.some(part => part.type !== "text"))) {
+    throw new AIBusinessError("NATIVE_TEXT_ONLY", "Native sessions do not regenerate or replay tools");
+  }
   const request = await admitConversationRequest({ ...parsed.data, userId });
   request.responseMessageId = request.messages.at(-1)?.role === "assistant" ? request.messages.at(-1)!.id : generateId();
   admitted(request);
@@ -521,6 +526,12 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       return NextResponse.json(agentErrorEnvelope(error), { status: 503 });
     }
     throw error;
+  }
+  if (conversation.executionPath === "NATIVE_CODEX_V1") {
+    if (lock.kind !== "account" || !lock.model || contextOfRow(conversation).items.length) throw new AIBusinessError("NATIVE_TEXT_ONLY", "Start a plain-text native conversation without page context");
+    return nativeChatResponse({ request, signal: req.signal, connectionId: lock.connectionId, model: lock.model,
+      instructions: "You are Vocatrya, a career conversation assistant. This session has no search, business tools or skills. Never claim to have searched or saved data.\n" + preferences.personalInstructions,
+    });
   }
   const pageContext = pageContextFromConversation(contextOfRow(conversation));
 
@@ -917,6 +928,7 @@ export const POST = async (req: NextRequest) => {
       try { await cancelConversationRequest(request.userId, request.conversationId, request.requestId); }
       catch { error = new ConversationRequestError("CONVERSATION_PERSISTENCE_FAILED"); }
     }
+    if (error instanceof AIBusinessError) return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
     const failure = error instanceof ConversationRequestError ? error : new ConversationRequestError("CONVERSATION_PERSISTENCE_FAILED");
     return NextResponse.json(agentErrorEnvelope(failure), { status: failure.code === "CONVERSATION_NOT_FOUND" ? 404 : failure.code === "CONVERSATION_PERSISTENCE_FAILED" ? 500 : 409 });
   }

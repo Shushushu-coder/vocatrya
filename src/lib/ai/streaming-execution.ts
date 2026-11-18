@@ -386,6 +386,7 @@ export interface AccountRuntimeState {
   capabilities: Record<string, unknown> | null;
   runtimeVersion: string | null;
   runtimeReady: boolean;
+  nativeSession?: { version: string; models: string[]; configHash: string; ready: boolean } | null;
 }
 
 export async function fetchAccountRuntimeState(
@@ -419,6 +420,7 @@ export async function fetchAccountRuntimeState(
     capabilities?: Record<string, unknown> | null;
     runtimeVersion?: string | null;
     runtimeReady?: boolean;
+    nativeSession?: AccountRuntimeState["nativeSession"];
     code?: string;
   };
   if (body.ok !== true) {
@@ -431,6 +433,7 @@ export async function fetchAccountRuntimeState(
     capabilities: body.capabilities ?? null,
     runtimeVersion: body.runtimeVersion ?? null,
     runtimeReady: body.runtimeReady === true,
+    nativeSession: body.nativeSession,
   };
 }
 

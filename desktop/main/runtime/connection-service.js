@@ -22,6 +22,8 @@
 // guards, pending profiles, and outcome reporting — it contains no
 // provider-specific command knowledge.
 const fs = require("node:fs");
+const { createHash } = require("node:crypto");
+const { NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG_HASH, nativeSessionReady, runNativeSession } = require("./native-session");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { getRuntimeDefinition } = require("./registry");
@@ -154,6 +156,8 @@ function createConnectionService({
             })
           : null);
   const activeOps = new Map(); // guard key -> AbortController
+  const nativeRuns = new Set();
+  let nativeDisposed = false;
   // In-flight TEXT_ONLY execs per connection. Execs may run concurrently
   // on the same connection, but lifecycle ops (disconnect/reconnect/
   // verify/listModels/smoke) must not mutate the shared runtime profile
@@ -1664,6 +1668,54 @@ function createConnectionService({
   // connection state crosses this boundary — the internal bearer is the
   // same one guarding the execution endpoint, and the result is exactly
   // what the local gates would consult anyway.
+  async function executeNativeSession({ ticket, connectionId, model, prompt, instructions, nativeSession, onEvent, timeoutMs, signal } = {}) {
+    if (nativeDisposed || !nativeSession || typeof nativeSession.conversationId !== "string") return fail("NATIVE_BOUNDARY_NOT_READY");
+    const keys = [`ticket:${ticket}`, `native:${connectionId}:${nativeSession.conversationId}`];
+    const controller = acquire(keys);
+    if (!controller) return fail("NATIVE_BUSY");
+    const abort = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+    let operationId = null;
+    let registered = false;
+    try {
+      const resolved = await resolveOperation(ticket, "executeText", connectionId);
+      if (resolved.error) return resolved.error;
+      operationId = resolved.resolved.operationId;
+      const { adapter, connection } = resolved;
+      if (adapter.backendKind !== CODEX_BACKEND_KIND) return fail("NATIVE_BOUNDARY_NOT_READY");
+      if (connection.status !== "CONNECTED") return fail(connection.status === "REAUTH_REQUIRED" ? "REAUTH_REQUIRED" : "CONNECTION_DISCONNECTED");
+      if (controller.signal.aborted) return fail("NATIVE_CANCELLED");
+      const runtime = resolveRuntime(adapter);
+      if (runtime.error) return runtime.error;
+      if (!nativeSessionReady(runtime.version, model)) return fail("NATIVE_BOUNDARY_NOT_READY");
+      const identity = { runtimeVersion: runtime.version, runtimeProfileRef: connection.runtimeProfileRef, configHash: NATIVE_CONFIG_HASH };
+      if (nativeSession.threadId && Object.entries(identity).some(([key, value]) => nativeSession[key] !== value)) return fail("NATIVE_IDENTITY_MISMATCH");
+      // Managed profiles are established by login. Missing profiles cannot be
+      // silently recreated and treated as resumable sessions.
+      if (!profileManager.profileExists(connection.runtimeProfileRef)) return fail("REAUTH_REQUIRED");
+      const profileDir = profileManager.resolveProfileDir(connection.runtimeProfileRef);
+      const scope = createHash("sha256").update(`${connection.userId}:${nativeSession.conversationId}`).digest("hex");
+      const cwd = path.join(execWorkRoot || smokeWorkRoot, "codex-native", scope);
+      fs.mkdirSync(cwd, { recursive: true });
+      if (activeOps.has(`conn:${connection.id}`)) return fail("NATIVE_BUSY");
+      execAcquire(connection.id); registered = true;
+      const invocation = adapter.buildStreamingInvocation({ executablePath: runtime.executable, profileDir, baseEnv: deps.env, workingDirectory: cwd });
+      const execution = runNativeSession({ invocation, model, prompt, instructions, threadId: nativeSession.threadId, profileDir,
+        signal: controller.signal, timeoutMs: Math.min(timeoutMs || execTimeoutMs, EXEC_MAX_TIMEOUT_MS), runner,
+        onEvent: event => { if (!controller.signal.aborted) onEvent?.(event.type === "native-session" ? { ...event, ...identity } : event); },
+      });
+      nativeRuns.add(execution);
+      try { return await execution; } finally { nativeRuns.delete(execution); }
+    } catch { return fail("NATIVE_PROTOCOL_ERROR"); }
+    finally {
+      if (registered) execRelease(connectionId);
+      if (operationId) { try { await backend.completeOperation(operationId, { outcome: "consumed" }); } catch { /* ticket TTL */ } }
+      signal?.removeEventListener("abort", abort);
+      release(keys);
+    }
+  }
+
   function runtimeState({ backendKind, accountProvider } = {}) {
     const adapter = bindAdapter(backendKind, accountProvider);
     if (!adapter) {
@@ -1686,6 +1738,7 @@ function createConnectionService({
       capabilities,
       runtimeVersion: runtime.version,
       runtimeReady: true,
+      nativeSession: adapter.backendKind === CODEX_BACKEND_KIND ? { version: NATIVE_VERSION, models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, ready: runtime.version === NATIVE_VERSION } : null,
     };
   }
 
@@ -1700,8 +1753,12 @@ function createConnectionService({
     runSmoke,
     executeText,
     executeTextStream,
+    executeNativeSession,
     runtimeState,
     async dispose() {
+      nativeDisposed = true;
+      for (const [key, controller] of activeOps) if (key.startsWith("native:")) controller.abort();
+      await Promise.allSettled([...nativeRuns]);
       try {
         await codexPersistentRuntime?.disposeAll();
       } catch {

@@ -693,6 +693,9 @@ model McpAccessToken {
 }
 
 model ChatConversation {
+  executionPath          String               @default("APP_ORCHESTRATED")
+  nativeInitializationState String            @default("NEVER_ATTEMPTED")
+  nativeBinding          NativeConversationBinding?
   revision               Int                  @default(0)
   activeRequestId        String?
   activeRequestExpiresAt DateTime?
@@ -2648,4 +2651,21 @@ model AIBusinessAssignment {
 
   @@unique([userId, purpose])
   @@index([connectionId])
+}
+
+// Device-local native thread pointer. Never exported or restored.
+model NativeConversationBinding {
+  conversationId String @id
+  userId String
+  connectionId String
+  model String
+  runtimeVersion String
+  runtimeProfileRef String
+  configHash String
+  threadId String
+  promptHash String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  @@index([userId, connectionId])
 }

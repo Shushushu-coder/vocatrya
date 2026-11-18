@@ -1,4 +1,5 @@
 "use server";
+import { nativeReadiness, restartNativeContext } from "@/lib/agent/nativeSession.server";
 
 import { effectiveAgentToolNames, agentToolApproval } from "@/lib/agent/toolPermissions";
 import { resolveNotionAgentToolNames } from "@/lib/extensions/notion/service";
@@ -110,6 +111,7 @@ function snapshotOf(row: ChatConversationRow): ChatConversationSnapshot {
   return {
     id: row.id,
     revision: row.revision,
+    executionPath: row.executionPath,
     title: row.title,
     titleFallback: row.title ? null : titleFallbackFromUiMessages(messages),
     createdAt: row.createdAt.toISOString(),
@@ -202,6 +204,7 @@ export const listChatConversations = async (): Promise<{
 };
 
 export const createChatConversation = async (input?: {
+  executionPath?: "APP_ORCHESTRATED" | "NATIVE_CODEX_V1";
   permissionMode?: PermissionMode;
   messages?: UIMessage[];
   context?: ContextItemRequest[];
@@ -228,6 +231,7 @@ export const createChatConversation = async (input?: {
     }
     context.permissionMode = input?.permissionMode ?? (await loadAgentPreferences(user.id)).defaultPermission;
     const row = await createChatConversationRecord({
+      executionPath: input?.executionPath,
       userId: user.id,
       messages: input?.messages ?? [],
       context,
@@ -569,6 +573,11 @@ export const getAgentChatPreflight = async (input?: {
         };
       }
       const lock = chatLockFromRow(row);
+      if (row.executionPath === "NATIVE_CODEX_V1") {
+        if (lock.kind !== "account" || !lock.model) throw new AIBusinessError("NATIVE_SESSION_UNAVAILABLE", "Native session lock unavailable");
+        const state = await nativeReadiness(user.id, lock.connectionId, lock.model);
+        return { success: true, data: { kind: "account", connectionId: lock.connectionId, model: lock.model, provider: state.connection.provider, backendKind: state.connection.backendKind, displayName: state.connection.displayName, locked: true } };
+      }
       if (lock.kind === "managed") {
         const connection = lock.connectionId ? await prisma.aIConnection.findFirst({
           where: { id: lock.connectionId, userId: user.id },
@@ -764,9 +773,19 @@ export async function getAgentToolPermissions(input: { conversationId?: string |
     return { success: true as const, data: {
       role,
       permissionMode,
-      tools: effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools }).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull, permissionMode) })),
+      tools: (row?.executionPath === "NATIVE_CODEX_V1" ? [] : effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools })).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull, permissionMode) })),
     } };
   } catch (error) {
     return fail(error, "Could not load tool permissions");
   }
+}
+
+export async function restartNativeChat(conversationId: string) {
+  try {
+    const user = await requireUser();
+    await restartNativeContext(user.id, conversationId);
+    const row = await getOwnedChatConversation(user.id, conversationId);
+    if (!row) throw new ChatConversationNotFoundError();
+    return { success: true as const, data: snapshotOf(row) };
+  } catch (error) { return fail(error, "Could not restart native context"); }
 }

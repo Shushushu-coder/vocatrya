@@ -112,6 +112,12 @@ export function mapAgentError(
         return "That request is still being settled by Managed AI. Wait a moment, then retry.";
       case "INVOCATION_REPLAYED":
         return "That request was already completed by Managed AI. Reload the conversation to see it.";
+      case "NATIVE_CONTEXT_LOST":
+        return "Native context was not restored. No message was resent. Explicitly restart native context to continue.";
+      case "NATIVE_SESSION_UNAVAILABLE":
+        return "This connection, model or runtime version is not ready for native sessions.";
+      case "NATIVE_TEXT_ONLY":
+        return "Native sessions currently accept plain text, without page context, files, regeneration or tools.";
       case "AI_EXECUTION_TIMEOUT":
         return "That response took too long. Ask again to retry.";
       case "AI_REQUEST_TOO_LARGE":

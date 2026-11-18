@@ -29,6 +29,7 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "DataMigrationRun",
   // Derived from ChatConversation messages and rebuilt on eligible turns.
   "ConversationSummary",
+  "NativeConversationBinding",
   // Transient pre-invocation state for one canonical resume import. Its
   // durable identity is the client request id (resource/operation keys are
   // derived from it), and the settled output lands in ResumeVariantVersion.

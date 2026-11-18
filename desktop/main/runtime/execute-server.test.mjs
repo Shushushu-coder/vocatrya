@@ -44,6 +44,23 @@ const VALID_BODY = {
   permissionScope: "TEXT_ONLY",
 };
 
+it("keeps native permissions separate and rejects caller runtime paths", async () => {
+  const executeNativeSession = vi.fn(async ({ onEvent }) => {
+    onEvent({ type: "native-session", threadId: "saved" });
+    return { ok: true, text: "native" };
+  });
+  const base = await start({ executeNativeSession });
+  const body = { ...VALID_BODY, permissionScope: "NATIVE_SESSION_V1", instructions: "career", nativeSession: { conversationId: "conv", threadId: null } };
+  const path = "/internal/ai-connections/native-session-stream";
+  expect((await post(base, path, { ...body, permissionScope: "TEXT_ONLY" })).status).toBe(400);
+  expect((await post(base, path, { ...body, nativeSession: { ...body.nativeSession, cwd: "C:/outside" } })).status).toBe(400);
+  expect(executeNativeSession).not.toHaveBeenCalled();
+  const res = await post(base, path, body);
+  expect((await res.text()).trim().split("\n").map(line => JSON.parse(line))).toEqual([{ type: "native-session", threadId: "saved" }, { type: "completed", text: "native" }]);
+  expect(executeNativeSession).toHaveBeenCalledTimes(1);
+  expect((await post(base, "/internal/ai-connections/execute", body)).status).toBe(403);
+});
+
 describe("internal execution endpoint", () => {
   it("serves a valid TEXT_ONLY execution through the service", async () => {
     const executeText = vi.fn(async () => ({

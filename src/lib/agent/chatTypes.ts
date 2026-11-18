@@ -20,6 +20,7 @@ export type ChatConversationSummary = {
 export type ChatLockKind = "account" | "legacy" | "managed";
 
 export type ChatConversationSnapshot = ChatConversationSummary & {
+  executionPath?: string;
   revision: number;
   messages: UIMessage[];
   context: AgentConversationContextV1;

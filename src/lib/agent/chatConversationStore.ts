@@ -1,3 +1,4 @@
+import { nativeReadiness, NATIVE_PATH, APP_PATH } from "./nativeSession.server";
 import { decodeHistory } from "./historyCodec";
 import { ConversationRequestError } from "./conversationRequest";
 import { permissionModeOfContext } from "./preferences";
@@ -35,6 +36,8 @@ import type { AgentRole } from "./agentRoles";
  */
 export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
   select: {
+    executionPath: true;
+    nativeInitializationState: true;
     revision: true;
     id: true;
     userId: true;
@@ -52,6 +55,8 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
 }>;
 
 const CHAT_ROW_SELECT = {
+  executionPath: true,
+  nativeInitializationState: true,
   revision: true,
   id: true,
   userId: true,
@@ -147,6 +152,7 @@ export async function getNewestOwnedChatConversation(
 }
 
 export async function createChatConversationRecord(input: {
+  executionPath?: "APP_ORCHESTRATED" | "NATIVE_CODEX_V1";
   userId: string;
   messages: UIMessage[];
   context: AgentConversationContextV1;
@@ -165,6 +171,11 @@ export async function createChatConversationRecord(input: {
     resourceKey: `conversation:${conversationId}`,
     managedClient: input.managedClient,
   });
+  if (input.executionPath !== undefined && ![APP_PATH, NATIVE_PATH].includes(input.executionPath)) throw new Error("Invalid execution path");
+  if (input.executionPath === NATIVE_PATH) {
+    if (!lock.resolvedConnectionId || !lock.resolvedModel || input.messages.length || input.context.items.length) throw new Error("Native sessions start with an empty plain-text conversation");
+    await nativeReadiness(input.userId, lock.resolvedConnectionId, lock.resolvedModel);
+  }
   const firstUserText =
     input.firstUserText ?? firstUserMessageText(input.messages);
   const title = deriveConversationTitle({
@@ -174,6 +185,7 @@ export async function createChatConversationRecord(input: {
   return prisma.chatConversation.create({
     data: {
       id: conversationId,
+      executionPath: input.executionPath ?? APP_PATH,
       userId: input.userId,
       title,
       context: serializeConversationContext(input.context),

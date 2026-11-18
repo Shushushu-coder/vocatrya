@@ -24,6 +24,10 @@ export function AgentChatPanel() {
     isOpen,
     close,
     startNewConversation,
+    startNativeConversation,
+    restartNativeSession,
+    nativeSession,
+    nativeStatus,
     messages,
     status,
     brandCompletion,
@@ -107,6 +111,9 @@ export function AgentChatPanel() {
             <Plus className="h-3.5 w-3.5" />
             {compactHeader ? null : t("agent.newConversation")}
           </Button>
+          <Button data-testid="agent-new-native" title={t("nativeSession.new")} aria-label={t("nativeSession.new")}
+            className="h-6 shrink-0 px-2 text-xs" size="sm" variant="ghost" disabled={status === "streaming" || status === "submitted"}
+            onClick={() => { setHistoryOpen(false); void startNativeConversation(); }}>Codex</Button>
           <Button
             data-testid="agent-history"
             aria-label={t("agent.history")}
@@ -139,6 +146,11 @@ export function AgentChatPanel() {
           </Button>
         </div>
 
+        {nativeSession ? <div role="status" className="shrink-0 border-b px-3 py-2 text-xs text-muted-foreground">
+          <p>{t("nativeSession.status")} {t(`nativeSession.${nativeStatus}`)}</p>
+          <Button variant="ghost" size="sm" className="h-auto whitespace-normal px-0 text-xs" disabled={status === "streaming" || status === "submitted"}
+            onClick={() => void restartNativeSession()}>{t("nativeSession.restart")}</Button>
+        </div> : null}
         <div className="flex min-h-0 flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-6xl">
           <AgentProposalEntry />
           {hasTranscript ? <AgentChatMessages /> : <AgentChatEmptyState state={brandState} />}
@@ -146,7 +158,7 @@ export function AgentChatPanel() {
 
         <div className="shrink-0 border-t p-3">
           <div className="lg:mx-auto lg:w-full lg:max-w-6xl">
-            <AgentChatContextBar />
+            {nativeSession ? null : <AgentChatContextBar />}
             <AgentChatInput />
           </div>
         </div>

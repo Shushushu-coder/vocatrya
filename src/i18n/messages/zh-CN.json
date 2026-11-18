@@ -1,4 +1,15 @@
 {
+  "nativeSession": {
+    "new": "新建 Codex 原生文本对话",
+    "status": "Codex 原生会话：搜索、业务工具和技能未加载。",
+    "waiting": "发送消息时才恢复原生上文。",
+    "resumed": "已继续同一原生会话。",
+    "created": "已创建新的原生会话。",
+    "restart": "重新开始原生上下文（不携带上文）",
+    "contextLost": "原生上下文未恢复，本次消息未自动重发。请明确选择重新开始原生上下文，或返回原会话稍后再试。",
+    "unavailable": "当前连接、模型或运行时版本尚不能使用原生会话。请选择已验证的 Codex 账号连接与模型。",
+    "textOnly": "首版仅支持纯文本，不接收资料上下文、附件，不提供重新生成或工具。"
+  },
   "canonicalImport": {
     "selectionSummary": "将导入所选的 {count} 条素材，并创建草稿简历「{name}」。",
     "needsReview": "需人工复核",

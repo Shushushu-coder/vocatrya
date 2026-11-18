@@ -481,6 +481,9 @@ export const AI_BUSINESS_ERROR_CODES = {
   PERMISSION_BOUNDARY_NOT_READY: "PERMISSION_BOUNDARY_NOT_READY",
   AI_EXECUTION_TIMEOUT: "AI_EXECUTION_TIMEOUT",
   AI_EXECUTION_FAILED: "AI_EXECUTION_FAILED",
+  NATIVE_SESSION_UNAVAILABLE: "NATIVE_SESSION_UNAVAILABLE",
+  NATIVE_CONTEXT_LOST: "NATIVE_CONTEXT_LOST",
+  NATIVE_TEXT_ONLY: "NATIVE_TEXT_ONLY",
   // BYOK credential surface: the bound ApiKey row is gone or undecryptable.
   // Distinct from env-var/legacy resolution — an explicit BYOK connection
   // never falls through to another credential.

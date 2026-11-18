@@ -84,6 +84,7 @@ export function AgentChatInput() {
 function AgentChatComposer() {
   const {
     sendMessage,
+    nativeSession,
     stop,
     status,
     approvalPending,
@@ -138,10 +139,11 @@ function AgentChatComposer() {
       }
       if (files.length > 0) {
         event.preventDefault();
-        addFiles(files);
+        if (!nativeSession) addFiles(files);
         return;
       }
     }
+    if (nativeSession) return;
     const pasted = event.clipboardData.getData("text/plain");
     if (pasted.length < APP_CONSTANTS.AGENT_CHAT_PASTE_THRESHOLD) return;
     event.preventDefault();
@@ -259,7 +261,7 @@ function AgentChatComposer() {
         className="[&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:shadow-sm"
         accept={AGENT_FILE_ACCEPT}
         multiple
-        onFiles={addFiles}
+        onFiles={nativeSession ? undefined : addFiles}
         onSubmit={(message) => submit(message.text)}
       >
         {/* Controlled through PromptInputProvider: value lives in the
@@ -275,12 +277,12 @@ function AgentChatComposer() {
             header keeps only the conversation-level controls. */}
         <PromptInputFooter className="flex-wrap gap-2 border-t border-border/50 px-3 pb-3 pt-2">
           <PromptInputTools className={`min-w-0 gap-1.5 ${compact ? "basis-full" : "flex-1"}`}>
-            <AgentAddContextMenu compact={compact} />
+            {nativeSession ? null : <AgentAddContextMenu compact={compact} />}
             <AgentChatIdentity compact={compact} />
-            <AgentPermissionChip compact={compact} />
+            {nativeSession ? null : <AgentPermissionChip compact={compact} />}
           </PromptInputTools>
           <div className="ml-auto flex shrink-0 items-center gap-1">
-            <AgentContextUsage />
+            {nativeSession ? null : <AgentContextUsage />}
             <AgentDictationButton
               insertText={insertDictation}
               ownershipKey={`${activeRole}:${conversationId ?? "draft"}`}

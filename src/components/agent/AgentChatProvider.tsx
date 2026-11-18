@@ -54,6 +54,7 @@ import { useI18n } from "@/i18n";
 import {
   archiveChatConversation,
   createChatConversation,
+  restartNativeChat,
   deleteChatConversation,
   getAgentChatPreflight,
   getChatConversation,
@@ -108,6 +109,7 @@ export type AgentChatIdentity = {
 };
 
 export type AgentChatInitialConversation = {
+  executionPath?: string;
   revision: number;
   id: string;
   messages: UIMessage[];
@@ -274,6 +276,8 @@ function useAgentChatValue(
   const [identity, setIdentity] = useState<AgentChatIdentity>(() =>
     identityFromInitial(initial),
   );
+  const [nativeStatus, setNativeStatus] = useState<"waiting" | "resumed" | "created">("waiting");
+  const [nativeSession, setNativeSession] = useState(initial?.executionPath === "NATIVE_CODEX_V1");
   const [conversationId, setConversationId] = useState<string | null>(
     initial?.id ?? null,
   );
@@ -611,6 +615,11 @@ function useAgentChatValue(
       })();
     },
     onData: (part) => {
+      if (part.type === "data-native-session") {
+        const data = part.data as { conversationId: string; requestId: string; resumed: boolean };
+        if (data.conversationId === conversationIdRef.current && data.requestId === activeExecutionRef.current?.requestId) setNativeStatus(data.resumed ? "resumed" : "created");
+        return;
+      }
       if (part.type === "data-conversation") {
         const data = part.data as { conversationId: string; requestId: string; revision: number; durable?: boolean; released?: boolean };
         if (data.conversationId !== conversationIdRef.current || data.requestId !== activeExecutionRef.current?.requestId) return;
@@ -950,6 +959,7 @@ function useAgentChatValue(
       lockKind: ChatLockKind;
       resolvedModel: string | null;
       revision: number;
+      executionPath?: string;
     }) => {
       revisionRef.current = data.revision;
       durableApprovalRef.current = true;
@@ -958,6 +968,8 @@ function useAgentChatValue(
       slotPointerRef.current = data.id;
       lockKindRef.current = data.lockKind;
       setConversationId(data.id);
+      setNativeSession(data.executionPath === "NATIVE_CODEX_V1");
+      setNativeStatus("waiting");
       setContext(data.context);
       contextRef.current = data.context;
       contextSettledRef.current = true;
@@ -1025,6 +1037,7 @@ function useAgentChatValue(
       slotPointerRef.current = null;
       lockKindRef.current = null;
       setConversationId(null);
+      setNativeSession(false);
       explicitRef.current = slot.explicit;
       setExplicit(slot.explicit);
       chat.setMessages([]);
@@ -1154,6 +1167,8 @@ function useAgentChatValue(
       explicitRef.current = null;
       setExplicit(null);
       setConversationId(data.id);
+      setNativeSession(data.executionPath === "NATIVE_CODEX_V1");
+      setNativeStatus("waiting");
       setContext(data.context);
       contextRef.current = data.context;
       contextSettledRef.current = true;
@@ -1201,6 +1216,29 @@ function useAgentChatValue(
     },
     [chat, stop, resetTransient, runPreflight, snapshotActiveSlot, updateComposerSeed, setPasteChip],
   );
+
+  const startNativeConversation = useCallback(async () => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    const epoch = selectionEpochRef.current;
+    try {
+      const result = await createChatConversation({ executionPath: "NATIVE_CODEX_V1", messages: [], context: [],
+        explicit: explicitRef.current, permissionMode: draftPermissionMode, agentRole: activeRoleRef.current });
+      if (selectionEpochRef.current !== epoch) return;
+      if (!result.success || !result.data) { setActionError({ code: result.code ?? "NATIVE_SESSION_UNAVAILABLE" }); return; }
+      await selectConversation(result.data.id);
+    } finally { creatingRef.current = false; }
+  }, [draftPermissionMode, selectConversation]);
+
+  const restartNativeSession = useCallback(async () => {
+    const id = conversationIdRef.current;
+    if (!id || streamingRef.current) return;
+    const epoch = selectionEpochRef.current;
+    const result = await restartNativeChat(id);
+    if (epoch !== selectionEpochRef.current || id !== conversationIdRef.current) return;
+    if (!result.success) { setActionError({ code: result.code ?? "NATIVE_CONTEXT_LOST" }); return; }
+    await selectConversation(id);
+  }, [selectConversation]);
 
   // Top-level role switch (D1). The outgoing slot is snapshotted — draft,
   // context, model pick — and the incoming slot restores its last-active
@@ -1394,6 +1432,7 @@ function useAgentChatValue(
   }, [queued, approvalPending, chat.status, dispatch]);
 
   const regenerate = useCallback((messageId?: string) => {
+    if (nativeSession) return;
     if (regenerateInFlightRef.current || recoveryBlockedRef.current || streamingRef.current || !conversationIdRef.current) return;
     const target = messageId ?? chat.messages.at(-1)?.id;
     if (!target) return;
@@ -1412,7 +1451,7 @@ function useAgentChatValue(
     } catch {
       settle();
     }
-  }, [chat]);
+  }, [chat, nativeSession]);
 
   const clearQueued = useCallback(() => setQueued(undefined), []);
   const dismissInterrupted = useCallback(() => setInterruptedTurn(false), []);
@@ -1507,6 +1546,10 @@ function useAgentChatValue(
   };
 
   return {
+    nativeSession,
+    nativeStatus,
+    startNativeConversation,
+    restartNativeSession,
     isOpen,
     open,
     close,

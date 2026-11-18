@@ -17,6 +17,7 @@ const http = require("node:http");
 const { timingSafeEqual } = require("node:crypto");
 
 const EXECUTE_PATH = "/internal/ai-connections/execute";
+const NATIVE_STREAM_PATH = "/internal/ai-connections/native-session-stream";
 const EXECUTE_STREAM_PATH = "/internal/ai-connections/execute-stream";
 const RUNTIME_STATE_PATH = "/internal/ai-connections/runtime-state";
 const DEFAULT_MAX_BODY_BYTES = 512 * 1024;
@@ -91,7 +92,7 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
       const pathname = req.url ? req.url.split("?")[0] : "";
       const routeOk =
         (req.method === "POST" &&
-          (pathname === EXECUTE_PATH || pathname === EXECUTE_STREAM_PATH)) ||
+          (pathname === EXECUTE_PATH || pathname === EXECUTE_STREAM_PATH || pathname === NATIVE_STREAM_PATH)) ||
         (req.method === "GET" && pathname === RUNTIME_STATE_PATH);
       if (!routeOk) {
         sendJson(res, 404, { ok: false, code: "NOT_FOUND" });
@@ -148,6 +149,30 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
 
       if (!ticket || !connectionId || !model || !prompt) {
         sendJson(res, 400, { ok: false, code: "INVALID_PAYLOAD" });
+        return;
+      }
+
+      if (pathname === NATIVE_STREAM_PATH) {
+        const session = payload.nativeSession;
+        const allowed = ["conversationId", "threadId", "runtimeVersion", "runtimeProfileRef", "configHash"];
+        const valid = session && typeof session === "object" && !Array.isArray(session) &&
+          Object.keys(session).every(key => allowed.includes(key)) &&
+          typeof session.conversationId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(session.conversationId) &&
+          (session.threadId === null || (typeof session.threadId === "string" && /^[a-zA-Z0-9_-]{1,256}$/.test(session.threadId))) &&
+          ["runtimeVersion", "runtimeProfileRef", "configHash"].every(key => session[key] === undefined || (typeof session[key] === "string" && session[key].length <= 256));
+        if (payload.permissionScope !== "NATIVE_SESSION_V1" || !valid || payload.structuredOutput !== undefined ||
+            typeof payload.instructions !== "string" || payload.instructions.length > 16000 || typeof service.executeNativeSession !== "function") {
+          sendJson(res, 400, { ok: false, code: "INVALID_PAYLOAD" }); return;
+        }
+        const controller = new AbortController();
+        res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+        res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" });
+        const write = event => { if (!res.destroyed) res.write(JSON.stringify(event) + "\n"); };
+        const result = await service.executeNativeSession({ ticket, connectionId, model, prompt, instructions: payload.instructions,
+          nativeSession: session, timeoutMs, signal: controller.signal, onEvent: event => { if (event.type !== "error") write(event); },
+        });
+        write(result.ok ? { type: "completed", text: result.text } : { type: "error", code: result.code });
+        if (!res.destroyed) res.end();
         return;
       }
 

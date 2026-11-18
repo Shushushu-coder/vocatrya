@@ -967,6 +967,8 @@ export async function importBackup(
             // cross-account id that would violate the Restrict FK.
             if (model === "ChatConversation") {
               // Restored history starts inactive. A backup cannot grant execution authority.
+              payload.executionPath = "APP_ORCHESTRATED";
+              payload.nativeInitializationState = "NEVER_ATTEMPTED";
               payload.revision = 0;
               payload.activeRequestId = null;
               payload.activeRequestExpiresAt = null;

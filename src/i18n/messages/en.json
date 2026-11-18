@@ -1,4 +1,15 @@
 {
+  "nativeSession": {
+    "new": "New Codex native text conversation",
+    "status": "Codex native session: search, business tools and skills are not loaded.",
+    "waiting": "Native context resumes only when you send a message.",
+    "resumed": "Continued the same native session.",
+    "created": "Created a new native session.",
+    "restart": "Restart native context (without prior context)",
+    "contextLost": "Native context was not restored. Your message was not automatically resent. Explicitly restart native context, or return to this session later.",
+    "unavailable": "This connection, model or runtime version is not ready for native sessions. Select a verified Codex account connection and model.",
+    "textOnly": "This first version supports plain text only, without context attachments, files, regeneration or tools."
+  },
   "canonicalImport": {
     "selectionSummary": "Import {count} selected material items and create draft resume “{name}”.",
     "needsReview": "Needs review",
