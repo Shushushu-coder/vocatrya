@@ -1,8 +1,14 @@
 # Vocatrya P1 增量实施计划
 
-## 本轮调度更新（2026-11-13）
+## 当前调度与证据边界（2026-11-18）
 
-用户明确：托管 AI（AI-MANAGED）暂时不处理，不安排本阶段开发或验收。原实现状态 PARTIAL 与 passes:false 保留，不代表取消范围或已完成。
+11 月 13 日的暂缓安排已由后续获授权的定向复验接续。驱动提交 3a177c42 已经 a646e203 集成，后续 159b7b21、7c6b068e 修正双 Tab 定位与 lifecycle 独立前置；产品计时补丁未重做。
+
+本次在 main@0c81a6f6 直接核对三组 Windows Electron fresh-native/full 的 manifest、results、scope 与 launcher-result：quota 为 7 PASS/1 BLOCKED，lifecycle 为 11 PASS，entitlement 为 7 PASS，各组其余场景是 NOT_RUN。源码摘要均为 `aac4803e763930de8ded7add62a9e331dbc98a51693cee42dc963298a0dacfe2`；quota 驱动基线 159b7b21，另两组为 7c6b068e。证据具体位置见 [P1_FEATURES.json](./P1_FEATURES.json)。
+
+额度/权益拒绝的可见提示与零增量证据保留；但结果中的错误码仍未捕获（BODY_READ_FAILED、observedCode=null、hostedDenial=null），不能把原报告的权威账本补齐说法当作已核实事实。驱动仅在要求提交的无回退场景强制校验 Hosted 错误码，该场景因缺可用竞争连接仍 BLOCKED。重跑合成 no-fallback 前置通过，仅证明驱动。
+
+合成本地 Hosted/上游不等于公网网关或真实模型；lifecycle 成功不证明历史 DPAPI/退出根因。正式周期、额度、产品模型及客服规则待裁定，生产部署未完成，AI-MANAGED 保持 PARTIAL / passes:false / COMING_SOON。旧段落按日期保留历史证据，不再作为当前统一阻塞。
 
 
 > 更新日期：2026-10-31。原始评估基线：main @ `8ff63dfb`（2026-10-26），**不是当前代码版本**。最新 Main 已合入 BYOK 验证收口（`43d9795b`，merge `a8009d64`）、`match_job` 合同提案（`90a1a6af`，merge `264b463d`）与 canonical `match_job` 实现（`67a3adf6`，merge `393155fc`）；活动退役与归档补丁已在 Main `39a5a1d3` 的同一 Windows Electron 构建中完成联合复验。BYOK 已在 Main `673e3460` 的相同集成代码上完成 DeepSeek 真实服务与 Windows Electron fresh-native/full 验收，零产品代码修改。功能验收与代码集成分别记录。

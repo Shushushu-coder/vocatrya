@@ -6,14 +6,14 @@
   "baseline": {
     "gitRef": "901b9b2b",
     "date": "2026-11-16",
-    "notes": "本轮仅定向静态查看与文档整理；未构建、未执行 Windows Electron 或真实 AI 验收。上游合同 P2_MULTI_AGENT_CONTRACT_PROPOSAL.md D1–D10 已冻结，本台账不改写其状态。"
+    "notes": "历史设计评估基线；2026-11-18 实现提交 7b3a3cde 已经 45ca7f5e 集成 Main。本次在 main@0c81a6f6 核对代码与证据，不把历史基线当作当前版本。上游 P2 合同不变。"
   },
   "definitions": {
     "scope": "PROPOSED_V1 = 本提案首版方向，不自动改变既有 MVP/P1/P2/EXTENSIONS 台账，也不代表产品编码授权；DEFERRED = 备档选项，本期不实施。",
     "designStatus": "PROPOSED = 设计提案，待 Owner 逐项裁定（提案 §8 D1–D6）；CONTRACT_FROZEN = 决策项已于 2026-11-16 经 Owner 裁定冻结（提案 §13），可按冻结方案实施，不含提交/发布等额外授权；CONFIRMED_EXISTING = 需求已由现状代码满足，仅记录验收口径。",
-    "implementationStatus": "NOT_ASSESSED = 提案阶段未做系统评估；IMPLEMENTED_IN_CODE = 需求已由现状代码满足（MAO-DEFAULT）；DEFERRED = 备档不实施。",
+    "implementationStatus": "NOT_ASSESSED = 尚未系统评估；IMPLEMENTED_IN_CODE = 已由现有或已集成代码实现，不等于实际用户验收；DEFERRED = 备档不实施。",
     "steps": "待实施的验收检查点，非已通过记录；涉及未决项时须先冻结对应决策。",
-    "passes": "仅实际用户路径和必要验证全部通过后才设 true；本轮仅文档整理，全部为 false。"
+    "passes": "仅实际用户路径及必要验证全部通过后设置 true；代码实现、定向测试或集成不替代验收。"
   },
   "confirmedDecisions": [
     {
@@ -60,7 +60,7 @@
         "点击仍 open({role})：0 次 /api/ai/chat、0 次会话创建。",
         "文案不含扩展或工具名；zh-CN/en 双语齐备。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D1=(a) 单行文案生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc（7GB 堆）、ESLint 通过；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。",
+      "implementationNotes": "2026-11-16 Owner 裁定 D1=(a) 单行文案生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
       "passes": false
     },
     {
@@ -82,7 +82,7 @@
         "三处消费断言同一 key/同一生成函数。",
         "改 roster 一处即同步首页、空状态与 prompt。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D4=(a) roster 落 roleCopy.ts 生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc（7GB 堆）、ESLint 通过；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。",
+      "implementationNotes": "2026-11-16 Owner 裁定 D4=(a) roster 落 roleCopy.ts 生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
       "passes": false
     },
     {
@@ -109,7 +109,7 @@
         "只读 Notion 会话的提示词含只读指路句；含写工具会话不含。",
         "断言感知块内容与实际注册工具集、roster 一致。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D3=(a) 一期纯 prompt 指路、D5=(a) Notion 只读动态分支生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc（7GB 堆）、ESLint 通过；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。",
+      "implementationNotes": "2026-11-16 Owner 裁定 D3=(a) 一期纯 prompt 指路、D5=(a) Notion 只读动态分支生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
       "passes": false
     },
     {
@@ -134,7 +134,7 @@
         "preflight 失败态表现不随本改动退化。",
         "双语词条齐备且口吻等义。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D2=(a) 自述两行、D6=(a) 加阵容图例行生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc（7GB 堆）、ESLint 通过；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。",
+      "implementationNotes": "2026-11-16 Owner 裁定 D2=(a) 自述两行、D6=(a) 加阵容图例行生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
       "passes": false
     },
     {

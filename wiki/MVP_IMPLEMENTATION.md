@@ -6,7 +6,7 @@
 
 ## 已批准增量：Codex 原生会话首片（2026-11-18）
 
-`AGENT-NATIVE-CODEX-V1` 已实现，等待 Windows Electron 与真实账号验收，`passes: false`。新增显式文本会话、持久 thread 与失败恢复；Devin、搜索、业务工具、技能加载另行实施。详见 [原生会话合同及实施记录](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md)。下列数量与表格保留历史 MVP 收口口径，新增项以 JSON 台账为准。
+`AGENT-NATIVE-CODEX-V1` 已实现并集成。2026-11-18 独立核对已有 Windows Electron fresh-native 证据：面板/历史零模型调用、恢复重置路径且绑定为 0、同数据目录退出重开等边界通过；原始 backup-excludes-binding 仍记 FAIL（导出路径字段为 null，Owner 解释为驱动预期不符），源码排除策略与恢复结果不能冒充修正后导出断言复验；真实账号对话与原生恢复链路因缺授权连接、CLI 0.169.1 不匹配门控 0.169.0 而 BLOCKED，未成功创建原生会话的能力状态行仍未覆盖。`passes: false` 保持。新增显式文本会话、持久 thread 与失败恢复；Devin、搜索、业务工具、技能加载另行实施。详见 [原生会话合同及实施记录](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md)。下列数量与表格保留历史 MVP 收口口径，新增项以 JSON 台账为准。
 
 ## A. 当前范围与状态
 
