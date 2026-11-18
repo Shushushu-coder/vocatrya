@@ -356,7 +356,7 @@ export async function runManagedScenario(context) {
   });
   await group('lifecycle', async () => {
     let key, beforeRights, expired;
-    await step('lifecycle-connect', async () => { key = await issue('desktop-beta'); note(await redeem(key)); });
+    await step('lifecycle-connect', async () => { key = await issue('desktop-beta'); note(await redeem(key)); await assign(); });
     await step('refresh-renewal', async () => {
       const old = (await fixtureState()).subscriptions.find(row => row.hostedUserId === 'desktop-beta');
       const encrypted = sha(fs.readFileSync(files()[0]));
