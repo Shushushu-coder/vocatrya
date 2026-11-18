@@ -184,6 +184,76 @@ describe("Phase 3C interview services", () => {
     expect(reloaded.attempts[0].transcriptText).toContain("billing rewrite");
   });
 
+  it("serves a repeated feedback request from the succeeded generation without a second model run", async () => {
+    // Regression: the UI used to reach this service twice per answer (submit
+    // path + auto-effect; client server-action queueing serializes them).
+    // A repeated call after success must not create another generation row
+    // or pay another model round-trip.
+    let modelCalls = 0;
+    const inner = mockModel("ok");
+    const counting: InterviewModelPort = {
+      async resolveInterviewModel(input) {
+        const resolved = await inner.resolveInterviewModel(input);
+        return {
+          ...resolved,
+          generateJson: (prompt, opts) => {
+            modelCalls += 1;
+            return resolved.generateJson(prompt, opts);
+          },
+        };
+      },
+    };
+    const app = createInterviewRuntime({
+      db: prisma,
+      modelPort: counting,
+      knowledge: new StaticKnowledgeProvider("v1.0", "KB excerpt", "hash-v1"),
+    });
+    const { instances } = await app.createInterviewSession({
+      userId: userA,
+      coachingMode: "PRACTICE",
+      questions: [{ displayedText: "Tell me about a launch." }],
+    });
+    const submitted = await app.submitInterviewAnswer({
+      userId: userA,
+      questionInstanceId: instances[0].id,
+      textContent: "I led the launch of a billing rewrite under a two-week freeze.",
+    });
+
+    const first = await app.generateInterviewFeedback({
+      userId: userA,
+      answerAttemptId: submitted.attempt.id,
+    });
+    expect(first.generation.status).toBe("SUCCEEDED");
+    const afterFirst = modelCalls;
+
+    const second = await app.generateInterviewFeedback({
+      userId: userA,
+      answerAttemptId: submitted.attempt.id,
+    });
+    expect(second.generation.id).toBe(first.generation.id);
+    expect(second.items.map((item) => item.id)).toEqual(
+      first.items.map((item) => item.id),
+    );
+    expect(modelCalls).toBe(afterFirst);
+    const rows = await prisma.feedbackGeneration.count({
+      where: { answerAttemptId: submitted.attempt.id },
+    });
+    expect(rows).toBe(1);
+
+    // An explicit revision request is a deliberate regeneration and still
+    // produces a new versioned generation.
+    const third = await app.generateInterviewFeedback({
+      userId: userA,
+      answerAttemptId: submitted.attempt.id,
+      inputRevisionId: first.generation.inputRevisionId,
+    });
+    expect(third.generation.status).toBe("SUCCEEDED");
+    expect(third.generation.id).not.toBe(first.generation.id);
+    expect(third.generation.versionNumber).toBeGreaterThan(
+      first.generation.versionNumber,
+    );
+  });
+
   it("fails closed on missing model, invalid question, cross-user, evidence mismatch, and retry history", async () => {
     const app = runtime();
     const missing = runtime("missing");

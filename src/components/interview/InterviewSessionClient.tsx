@@ -59,6 +59,7 @@ export default function InterviewSessionClient({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const autoFeedbackFor = useRef<Record<string, boolean>>({});
+  const feedbackInFlight = useRef<Record<string, Promise<void>>>({});
 
   const instances = useMemo(
     () =>
@@ -172,31 +173,52 @@ export default function InterviewSessionClient({
         ),
       }));
       setAnswerText("");
-      await generateFeedback(result.data.attempt.id);
+      // Feedback auto-starts via the attempt-appeared effect below — calling
+      // it here as well would trigger a second generation for the same
+      // attempt (queued behind the first server action).
     } finally {
       setSubmitting(false);
     }
   };
 
-  const generateFeedback = async (attemptId: string) => {
-    setFeedbackState((current) => ({ ...current, [attemptId]: "loading" }));
-    const result = await generateInterviewFeedbackAction(attemptId);
-    if (
-      !result.success ||
-      !("data" in result) ||
-      result.data.generation.status !== "SUCCEEDED"
-    ) {
-      setFeedbackState((current) => ({ ...current, [attemptId]: "failed" }));
-      if (!result.success) toastError(result.message);
-      return;
-    }
-    setFeedbackState((current) => ({ ...current, [attemptId]: "success" }));
-    setHistory((current) => ({
-      ...current,
-      attempts: current.attempts.map((row) =>
-        row.attempt?.id === attemptId ? { ...row, feedback: result.data } : row,
-      ),
-    }));
+  // Both the submit path and the auto-effect may request feedback for the
+  // same attempt; Next.js serializes client-dispatched server actions, so
+  // an overlapping second call would still reach the server and create a
+  // duplicate generation. Share one in-flight promise per attempt instead.
+  const generateFeedback = (attemptId: string): Promise<void> => {
+    const inFlight = feedbackInFlight.current[attemptId];
+    if (inFlight) return inFlight;
+    const run = (async () => {
+      setFeedbackState((current) => ({
+        ...current,
+        [attemptId]: "loading",
+      }));
+      const result = await generateInterviewFeedbackAction(attemptId);
+      if (
+        !result.success ||
+        !("data" in result) ||
+        result.data.generation.status !== "SUCCEEDED"
+      ) {
+        setFeedbackState((current) => ({ ...current, [attemptId]: "failed" }));
+        if (!result.success) toastError(result.message);
+        return;
+      }
+      setFeedbackState((current) => ({ ...current, [attemptId]: "success" }));
+      setHistory((current) => ({
+        ...current,
+        attempts: current.attempts.map((row) =>
+          row.attempt?.id === attemptId
+            ? { ...row, feedback: result.data }
+            : row,
+        ),
+      }));
+    })().finally(() => {
+      if (feedbackInFlight.current[attemptId] === run) {
+        delete feedbackInFlight.current[attemptId];
+      }
+    });
+    feedbackInFlight.current[attemptId] = run;
+    return run;
   };
 
   const advance = async () => {

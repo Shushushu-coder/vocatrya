@@ -472,6 +472,25 @@ export function createInterviewRuntime(deps: InterviewRuntimeDeps) {
         "Answer attempt has no active transcript revision",
       );
     }
+    // Feedback generation is idempotent per answer revision: when a
+    // SUCCEEDED generation already exists for this revision, return it
+    // instead of paying for a duplicate model run. Client-side queueing of
+    // server actions, remounts and multi-window requests can all repeat the
+    // call legitimately. Callers that pass an explicit inputRevisionId are
+    // requesting a regeneration against that revision and bypass the dedup.
+    if (!input.inputRevisionId) {
+      const existing = await persistence.getCurrentFeedbackWithItemsForUser(
+        attempt.id,
+        input.userId,
+      );
+      if (
+        existing &&
+        existing.generation.status === "SUCCEEDED" &&
+        existing.generation.inputRevisionId === revisionId
+      ) {
+        return { generation: existing.generation, items: existing.items };
+      }
+    }
     const generation = await persistence.createPendingFeedbackForUser({
       actorUserId: input.userId,
       answerAttemptId: attempt.id,

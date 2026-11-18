@@ -157,6 +157,67 @@ describe("InterviewSessionClient one-question flow", () => {
     ).toBeInTheDocument();
   });
 
+  it("triggers feedback generation exactly once per submitted answer", async () => {
+    submitInterviewAnswerAction.mockResolvedValue({
+      success: true,
+      data: {
+        attempt: { id: "a-1", status: "COMPLETED" },
+        transcript: { id: "t-1", fullText: ANSWER },
+      },
+    });
+    // Defer the action resolution by a macrotask so the intermediate
+    // "attempt exists, feedback still pending" render actually commits —
+    // that is the window where the auto-effect used to fire a second
+    // generation call.
+    generateInterviewFeedbackAction.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve(feedbackSuccess()), 0),
+        ),
+    );
+    render(
+      <InterviewSessionClient sessionId="s-1" initial={freshHistory()} />,
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("interview.answerPlaceholder"),
+      { target: { value: ANSWER } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "interview.submitAnswer" }),
+    );
+    await screen.findByText(/Missing Situation Context/);
+    // One answer submission must equal one generation request — the submit
+    // path and the auto-effect must not both reach the server action.
+    expect(generateInterviewFeedbackAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not regenerate when a resumed attempt already has feedback", async () => {
+    const history = freshHistory();
+    history.attempts[0].attempt = {
+      id: "a-1",
+      status: "COMPLETED",
+    } as never;
+    history.attempts[0].transcriptText = ANSWER;
+    history.attempts[0].feedback = feedbackSuccess("a-1").data as never;
+    render(<InterviewSessionClient sessionId="s-1" initial={history} />);
+    await screen.findByText(/Missing Situation Context/);
+    expect(generateInterviewFeedbackAction).not.toHaveBeenCalled();
+  });
+
+  it("auto-generates once for a resumed attempt without feedback", async () => {
+    const history = freshHistory();
+    history.attempts[0].attempt = {
+      id: "a-1",
+      status: "COMPLETED",
+    } as never;
+    history.attempts[0].transcriptText = ANSWER;
+    generateInterviewFeedbackAction.mockResolvedValue(feedbackSuccess());
+    render(<InterviewSessionClient sessionId="s-1" initial={history} />);
+    await screen.findByText(/Missing Situation Context/);
+    expect(generateInterviewFeedbackAction).toHaveBeenCalledTimes(1);
+    expect(generateInterviewFeedbackAction).toHaveBeenCalledWith("a-1");
+  });
+
   it("keeps a failed feedback retryable and blocks advancing", async () => {
     submitInterviewAnswerAction.mockResolvedValue({
       success: true,
@@ -165,13 +226,14 @@ describe("InterviewSessionClient one-question flow", () => {
         transcript: { id: "t-1", fullText: ANSWER },
       },
     });
-    generateInterviewFeedbackAction.mockResolvedValue({
+    generateInterviewFeedbackAction.mockResolvedValueOnce({
       success: true,
       data: {
         generation: { id: "g-1", status: "FAILED", isCurrent: false },
         items: [],
       },
     });
+    generateInterviewFeedbackAction.mockResolvedValue(feedbackSuccess());
     render(
       <InterviewSessionClient sessionId="s-1" initial={freshHistory()} />,
     );
@@ -186,6 +248,11 @@ describe("InterviewSessionClient one-question flow", () => {
     expect(
       screen.queryByRole("button", { name: "interview.nextQuestion" }),
     ).toBeNull();
+    // Manual retry after failure stays available: it issues a new
+    // generation call even though the auto attempt already ran.
+    fireEvent.click(screen.getByRole("button", { name: "interview.retry" }));
+    await screen.findByText(/Missing Situation Context/);
+    expect(generateInterviewFeedbackAction).toHaveBeenCalledTimes(2);
   });
 
   it("advances to the next question through the server action", async () => {
