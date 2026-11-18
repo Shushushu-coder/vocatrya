@@ -15,7 +15,7 @@ const root = path.resolve(scriptDirectory, '../..');
 const task = path.join(root, '.tmp/managed-closure-ready');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const INPUTS = ['src', 'public', 'prisma/schema.prisma', 'prisma/migrations', 'desktop/main', 'desktop/assets', 'scripts/build-fresh-native-bootstrap.mjs', 'next.config.mjs', 'next-env.d.ts', 'eslint.config.mjs', 'package.json', 'package-lock.json', 'tsconfig.json', 'postcss.config.mjs'];
-const SUPPORT = ['desktop/e2e/launcher.mjs', 'desktop/e2e/harness.mjs', 'desktop/e2e/guards.mjs', 'desktop/e2e/scenario.mjs', 'desktop/scripts/assemble.mjs', 'desktop/scripts/scan-managed-secrets.mjs', 'desktop/scripts/prisma-runtime-filter.cjs', 'scripts/managed-closure-ready/fixture.cjs', 'scripts/managed-closure-ready/managed-desktop.mjs', 'scripts/managed-closure-ready/managed-desktop-scenario.mjs', 'scripts/managed-closure-ready/backend-observer.cjs', 'scripts/managed-closure-ready/scan-archive.cjs'];
+const SUPPORT = ['desktop/e2e/launcher.mjs', 'desktop/e2e/harness.mjs', 'desktop/e2e/guards.mjs', 'desktop/e2e/scenario.mjs', 'desktop/scripts/assemble.mjs', 'desktop/scripts/scan-managed-secrets.mjs', 'desktop/scripts/prisma-runtime-filter.cjs', 'scripts/managed-closure-ready/fixture.cjs', 'scripts/managed-closure-ready/managed-desktop.mjs', 'scripts/managed-closure-ready/managed-desktop-scenario.mjs', 'scripts/managed-closure-ready/backend-observer.cjs', 'scripts/managed-closure-ready/scan-archive.cjs', 'scripts/managed-closure-ready/no-fallback-evidence.cjs'];
 const FIXTURE_ENV = ['VOCATRYA_HOSTED_ENDPOINT', 'VOCATRYA_DESKTOP_DATA_ROOT', 'VOCATRYA_AB_RUNTIME_ENABLED', 'VOCATRYA_AB_ROLLOUT_SCOPE'];
 function invariant(value, code) { if (!value) throw Object.assign(new Error(code), { code }); }
 function inside(parent, candidate) {
@@ -189,9 +189,13 @@ async function execute(plan, owner) {
         }
       }
     });
-    if (fs.existsSync(runRoot)) fixtureApi.save(path.join(runRoot, 'launcher-result.json'), { ok: result.ok, fixtureId: plan.id, heavyRunId, fixturePidStillOwnedByMain: initial.pid, selected: plan.selected, primaryError: result.primaryError ? { name: result.primaryError.name, code: result.primaryError.code || null } : null, cleanupError: result.cleanupError ? { name: result.cleanupError.name, code: result.cleanupError.code || null } : null, sourceDigest: plan.sources.digest, executionDigest: plan.executionDigest, realAI: 'NOT_RUN', deployment: 'NOT_RUN' });
-    console.log(JSON.stringify({ ok: result.ok, heavyRunId, runRoot, fixturePid: initial.pid, fixtureKeptRunning: true, selected: plan.selected }));
-    if (!result.ok) process.exitCode = 1;
+    const scopeFile = path.join(runRoot, 'managed-evidence', 'scope.json');
+    const scope = fs.existsSync(scopeFile) ? fixtureApi.read(scopeFile) : null;
+    const usableCompetingBlocked = scope?.usableCompetingConnection === 'BLOCKED' && (scope.failed || []).length === 0 && !result.cleanupError;
+    if (fs.existsSync(runRoot)) fixtureApi.save(path.join(runRoot, 'launcher-result.json'), { ok: result.ok, status: result.ok ? 'PASS' : usableCompetingBlocked ? 'BLOCKED' : 'FAIL', fixtureId: plan.id, heavyRunId, fixturePidStillOwnedByMain: initial.pid, selected: plan.selected, primaryError: result.primaryError ? { name: result.primaryError.name, code: result.primaryError.code || null } : null, cleanupError: result.cleanupError ? { name: result.cleanupError.name, code: result.cleanupError.code || null } : null, sourceDigest: plan.sources.digest, executionDigest: plan.executionDigest, usableCompetingConnection: scope?.usableCompetingConnection || 'NOT_RUN', realAI: 'NOT_RUN', deployment: 'NOT_RUN' });
+    console.log(JSON.stringify({ ok: result.ok, status: result.ok ? 'PASS' : usableCompetingBlocked ? 'BLOCKED' : 'FAIL', reason: usableCompetingBlocked ? 'USABLE_ACCOUNT_OR_BYOK_NOT_CONFIGURED' : null, heavyRunId, runRoot, fixturePid: initial.pid, fixtureKeptRunning: true, selected: plan.selected }));
+    if (usableCompetingBlocked) process.exitCode = 2;
+    else if (!result.ok) process.exitCode = 1;
   } finally {
     const present = JSON.parse(fs.readFileSync(mutex, 'utf8'));
     invariant(present.pid === ownership.pid && present.nonce === ownership.nonce, 'LOCAL_HEAVY_LOCK_OWNERSHIP_CHANGED');
