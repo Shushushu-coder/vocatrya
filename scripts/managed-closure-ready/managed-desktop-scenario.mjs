@@ -10,6 +10,7 @@ import { register, assertDesktopSurface } from '../../desktop/e2e/scenario.mjs';
 const require = createRequire(import.meta.url);
 const { rpc, read, save, poll, jsonHttp } = require('./fixture.cjs');
 const { scanArchive } = require('./scan-archive.cjs');
+const { captureDenial, byokResolverCallable, assessNoFallback } = require('./no-fallback-evidence.cjs');
 const sha = value => createHash('sha256').update(value).digest('hex');
 export async function runManagedScenario(context) {
   const { root, runRoot, dataRoot, fixtureId, fixture, state, selected, start, stop, observationLog } = context;
@@ -18,6 +19,7 @@ export async function runManagedScenario(context) {
   const steps = ['signup-native', 'key-format-vs-rejection', 'connect-default', 'quota-setup', 'quota-ui-execution', 'quota-denial-feedback', 'quota-visible-usage', 'competing-sources-no-fallback', 'entitlement-setup', 'past-due-feedback', 'expired-period-feedback', 'no-subscription-feedback', 'lifecycle-connect', 'refresh-renewal', 'session-expiry-ui-cleanup', 'new-key-preserves-rights', 'backup-export-privacy', 'quit-reopen-connected', 'disconnect-ui', 'quit-reopen-disconnected'];
   const results = steps.map(name => ({ name, status: 'NOT_RUN' }));
   const tokens = [];
+  const secrets = [];
   const identity = { name: '托管边界合成用户', email: 'managed-' + randomUUID() + '@example.test', password: 'Synthetic-' + randomUUID() + '!' };
   let currentObservation = {}, currentName;
   const page = () => { assert.ok(state.instance?.page && !state.instance.page.isClosed(), 'LIVE_OWNED_ELECTRON_REQUIRED'); return state.instance.page; };
@@ -72,9 +74,14 @@ export async function runManagedScenario(context) {
     }
     try { await action(); row.status = 'PASS'; }
     catch (error) {
-      row.status = 'FAIL';
-      const redact = value => tokens.reduce((text, token) => text.replaceAll(token, '[REDACTED]'), String(value));
-      row.error = { name: error.name, message: redact(error.message), stack: redact(error.stack || error.message) };
+      const redact = value => secrets.concat(tokens).reduce((text, token) => text.replaceAll(token, '[REDACTED]'), String(value));
+      if (error?.code === 'BLOCKED_PREREQ') {
+        row.status = 'BLOCKED';
+        row.reason = redact(error.message);
+      } else {
+        row.status = 'FAIL';
+        row.error = { name: error.name, message: redact(error.message), stack: redact(error.stack || error.message) };
+      }
     }
     row.observation = currentObservation;
     let snapshot;
@@ -184,14 +191,29 @@ export async function runManagedScenario(context) {
     assert.equal(provenance.upstreamModelId, 'fixture-model-v1'); assert.equal(provenance.requestedModelKey, 'vocatrya-fast'); assert.ok(provenance.managedBindingId);
     note({ conversationId: row.id, managedProvenance: provenance, upstreamDelta: 1, committedUnits: 1, realModel: false });
   }
+  function competingAcceptance() {
+    const file = process.env.VOCATRYA_MANAGED_COMPETING_CONFIG;
+    if (!file) return { blocked: 'USABLE_ACCOUNT_OR_BYOK_NOT_CONFIGURED' };
+    let value;
+    try { value = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { return { blocked: 'USABLE_ACCOUNT_OR_BYOK_NOT_CONFIGURED' }; }
+    const key = value?.byok?.apiKey;
+    const account = value?.account?.runtimeProfileRef;
+    if (value?.acceptance !== 'USABLE_COMPETING_CONNECTION' || value?.byok?.callable !== true || value?.account?.callable !== true) return { blocked: 'USABLE_ACCOUNT_OR_BYOK_NOT_CONFIGURED' };
+    if (typeof key !== 'string' || key.trim().length < 8 || typeof account !== 'string' || account.trim().length < 3) return { blocked: 'USABLE_ACCOUNT_OR_BYOK_NOT_CONFIGURED' };
+    return { key: key.trim(), account: account.trim() };
+  }
   async function deniedTurn(pattern, expectedCode, requireSubmission = false) {
     const panel = await openNewChat();
     const before = await fixtureState();
-    const wireCodes = [];
+    const denials = [];
     const pending = [];
     const onResponse = response => {
       if (new URL(response.url()).pathname !== '/api/ai/chat' || response.request().method() !== 'POST') return;
-      pending.push(response.text().then(text => { for (const code of ['QUOTA_EXCEEDED', 'NOT_ENTITLED', 'MANAGED_AUTH_REQUIRED', 'MODEL_NOT_ALLOWED']) if (text.includes(code)) wireCodes.push(code); }).catch(() => {}));
+      pending.push(response.text().then(
+        text => denials.push(captureDenial(response.status(), text)),
+        () => denials.push({ httpStatus: response.status(), code: null, captureError: 'BODY_READ_FAILED' })
+      ));
     };
     page().on('response', onResponse);
     try {
@@ -208,15 +230,23 @@ export async function runManagedScenario(context) {
         if (response) await response;
       }
       await expect(panel.getByRole('alert').first()).toBeVisible();
-      await Promise.allSettled(pending);
-      if (requireSubmission) assert.ok(wireCodes.includes(expectedCode), 'backend denial code must be observed');
+      await Promise.all(pending);
+      const denial = denials.find(row => row.code === expectedCode) || denials[0] || { httpStatus: null, code: null, captureError: 'MISSING_RESPONSE' };
+      if (requireSubmission) {
+        assert.equal(denial.captureError, null, 'backend denial response must be readable');
+        assert.equal(denial.code, expectedCode, 'backend denial code must be the response code');
+      }
       const text = (await panel.getByRole('alert').allTextContents()).join('\n');
       const after = await fixtureState();
-      note({ expectedCode, observedWireCodes: wireCodes, submitted, visibleFeedback: text.slice(0, 1500), upstreamDelta: after.upstreamCount - before.upstreamCount, usageDelta: after.usage.length - before.usage.length, competingFallbackSources: 'NOT_CONFIGURED' });
-      assert.equal(after.upstreamCount, before.upstreamCount);
-      assert.equal(after.usage.length, before.usage.length);
-      assert.equal(after.usage.some(row => row.status === 'SUCCEEDED' && !before.usage.some(old => old.hostedUserId === row.hostedUserId && old.invocationKey === row.invocationKey)), false);
+      const upstreamDelta = after.upstreamCount - before.upstreamCount;
+      const usageDelta = after.usage.length - before.usage.length;
+      const newSucceeded = after.usage.some(row => row.status === 'SUCCEEDED' && !before.usage.some(old => old.hostedUserId === row.hostedUserId && old.invocationKey === row.invocationKey));
+      note({ expectedCode, observedCode: denial.code, httpStatus: denial.httpStatus, captureError: denial.captureError, submitted, visibleFeedback: text.slice(0, 1500), upstreamDelta, usageDelta, competingFallbackSources: requireSubmission ? 'PENDING_OBSERVER' : 'NOT_CONFIGURED' });
+      assert.equal(upstreamDelta, 0);
+      assert.equal(usageDelta, 0);
+      assert.equal(newSucceeded, false);
       assert.match(text, pattern, 'Visible feedback must explain the actual boundary, not only show a generic retry error');
+      return { submitted, denial, upstreamDelta, usageDelta, newSucceeded };
     } finally { page().off('response', onResponse); }
   }
   save(path.join(directory, 'results.json'), results);
@@ -258,32 +288,29 @@ export async function runManagedScenario(context) {
     await step('quota-denial-feedback', () => deniedTurn(/额度|quota|QUOTA_EXCEEDED/i, 'QUOTA_EXCEEDED'), false);
     await step('quota-visible-usage', async () => { const managed = await card(); await expect(managed.locator('dd').filter({ hasText: /^1\s*\/\s*1$/ })).toBeVisible(); const current = await fixtureState(); const quota = current.quotas.find(row => row.hostedUserId === user.user); assert.equal(quota.committedUnits, 1); assert.equal(quota.reservedUnits, 0); note({ visibleUsed: '1 / 1', committedUnits: 1, reservedUnits: 0 }); });
     await step('competing-sources-no-fallback', async () => {
+      const acceptance = competingAcceptance();
+      if (acceptance.blocked) {
+        note({ usableCompetingConnection: 'BLOCKED', competingCredentials: 'NOT_CONFIGURED', competingFallbackSources: 'NOT_CONFIGURED', syntheticAcceptance: false, realModel: 'NOT_RUN', publicGateway: 'NOT_RUN' });
+        throw Object.assign(new Error(acceptance.blocked), { code: 'BLOCKED_PREREQ' });
+      }
+      secrets.push(acceptance.key);
       const userId = query('SELECT id FROM "User" ORDER BY createdAt ASC LIMIT 1')[0]?.id;
       assert.ok(userId, 'local user required to seed competing connections');
       const now = new Date().toISOString();
       const apiKeyId = 'key-' + randomUUID(), byokId = 'conn-' + randomUUID(), accountId = 'conn-' + randomUUID();
-      // Controlled competing sources inside the same isolated account. If the
-      // managed denial silently fell back, the backend observer records the
-      // attempt: a credential-broker unseal, an exec-channel call, a spawned
-      // runtime child, or a refused non-loopback upstream connection.
-      execDb('INSERT INTO ApiKey (id,userId,provider,encryptedKey,iv,last4,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?)', apiKeyId, userId, 'deepseek', 'synthetic-ciphertext-not-real', 'os:v1', '0000', now, now);
-      execDb('INSERT INTO AIConnection (id,userId,displayName,authType,backendKind,provider,status,credentialRef,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)', byokId, userId, 'boundary-byok', 'API_KEY', 'LOCAL_BYOK', 'DEEPSEEK', 'CONNECTED', apiKeyId, now, now);
-      execDb('INSERT INTO AIConnection (id,userId,displayName,authType,backendKind,provider,status,runtimeProfileRef,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)', accountId, userId, 'boundary-account', 'ACCOUNT_LOGIN', 'CODEX_RUNTIME', 'OPENAI', 'CONNECTED', 'codex@1.0.0', now, now);
       try {
+        // Executor-supplied material only. Empty iv is the resolver's callable
+        // plaintext form. A non-callable os:v1 blob cannot satisfy this step.
+        execDb('INSERT INTO ApiKey (id,userId,provider,encryptedKey,iv,last4,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?)', apiKeyId, userId, 'deepseek', acceptance.key, '', acceptance.key.slice(-4), now, now);
+        execDb('INSERT INTO AIConnection (id,userId,displayName,authType,backendKind,provider,status,credentialRef,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)', byokId, userId, 'boundary-byok', 'API_KEY', 'LOCAL_BYOK', 'DEEPSEEK', 'CONNECTED', apiKeyId, now, now);
+        execDb('INSERT INTO AIConnection (id,userId,displayName,authType,backendKind,provider,status,runtimeProfileRef,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)', accountId, userId, 'boundary-account', 'ACCOUNT_LOGIN', 'CODEX_RUNTIME', 'OPENAI', 'CONNECTED', acceptance.account, now, now);
+        assert.equal(byokResolverCallable(query('SELECT encryptedKey,iv FROM ApiKey WHERE id=?', apiKeyId)[0]), true, 'BYOK row must be resolver-callable');
         assert.ok(observationLog && fs.existsSync(observationLog), 'backend observation log required for no-fallback evidence');
         const offset = fs.statSync(observationLog).size;
-        await deniedTurn(/额度|quota|QUOTA_EXCEEDED/i, 'QUOTA_EXCEEDED', true);
-        const events = outboundEvents(offset);
-        const incoming = events.filter(event => event.kind === 'incoming-start' && event.pathname === '/api/ai/chat' && event.method === 'POST');
-        assert.ok(incoming.length > 0, 'observer must cover the submitted backend chat request');
-        assert.ok(incoming.every(request => events.some(event => event.kind === 'incoming-finish' && event.pid === request.pid && event.requestId === request.requestId)), 'observed backend requests must finish before asserting no fallback');
-        const outbound = events.filter(event => ['fetch', 'undici', 'http-request', 'https-request', 'socket'].includes(event.kind));
-        const releaseCheck = event => event.hostname === 'api.github.com' && event.pathname === '/repos/Shushushu-coder/vocatrya/releases/latest' && event.method === 'GET';
-        const forbidden = outbound.filter(event => (/^\/(internal|credential)\//i.test(String(event.pathname)) || (!/^(localhost|127\.0\.0\.1|::1|\[::1\])$/i.test(String(event.hostname)) && !releaseCheck(event))));
-        const spawned = events.filter(event => event.kind === 'child-process');
-        note({ competingSources: ['LOCAL_BYOK', 'CODEX_RUNTIME'], competingCredentials: 'SYNTHETIC_NOT_CALLABLE', observedBackendRequests: incoming.length, outboundEvents: outbound.length, toleratedReleaseChecks: outbound.filter(releaseCheck).length, forbiddenAttempts: forbidden.map(event => `${event.kind} ${event.hostname}${event.pathname}`), childProcesses: spawned.length, competingFallbackSources: 'CONFIGURED_AND_OBSERVED' });
-        assert.equal(forbidden.length, 0, 'a managed denial must never reach the exec channel, credential broker, or a non-loopback host');
-        assert.equal(spawned.length, 0, 'managed denial must not spawn a child process');
+        const outcome = await deniedTurn(/额度|quota|QUOTA_EXCEEDED/i, 'QUOTA_EXCEEDED', true);
+        const assessment = assessNoFallback({ events: outboundEvents(offset), denial: outcome.denial, expectedCode: 'QUOTA_EXCEEDED', upstreamDelta: outcome.upstreamDelta, usageDelta: outcome.usageDelta, newSucceeded: outcome.newSucceeded });
+        note({ competingSources: ['LOCAL_BYOK', 'CODEX_RUNTIME'], competingCredentials: 'EXECUTOR_SUPPLIED', usableCompetingConnection: 'OBSERVED_WITH_EXECUTOR_CREDENTIALS', byokResolverCallable: true, accountRuntimeProbed: false, realModel: 'NOT_RUN', publicGateway: 'NOT_RUN', ...assessment, competingFallbackSources: assessment.ok ? 'CONFIGURED_AND_OBSERVED' : 'OBSERVED_FAILURE' });
+        assert.equal(assessment.ok, true, 'no-fallback evidence incomplete: ' + assessment.failures.join(','));
       } finally {
         execDb('DELETE FROM AIConnection WHERE id IN (?,?)', byokId, accountId);
         execDb('DELETE FROM ApiKey WHERE id = ?', apiKeyId);
@@ -402,8 +429,12 @@ export async function runManagedScenario(context) {
   });
   const failed = results.filter(row => row.status === 'FAIL');
   const blocked = results.filter(row => row.status === 'BLOCKED');
-  save(path.join(directory, 'scope.json'), { selected, failed: failed.map(row => row.name), blocked: blocked.map(row => row.name), notRun: results.filter(row => row.status === 'NOT_RUN').map(row => row.name), realAI: 'NOT_RUN', backup: results.find(row => row.name === 'backup-export-privacy')?.status ?? 'NOT_RUN', configuredCompetingAccountOrByokFallback: results.find(row => row.name === 'competing-sources-no-fallback')?.status ?? 'NOT_RUN', sourceAndBuild: '../snapshot-manifest.json' });
+  const competing = results.find(row => row.name === 'competing-sources-no-fallback');
+  const usableCompetingConnection = competing?.status === 'PASS' ? 'OBSERVED_WITH_EXECUTOR_CREDENTIALS' : competing?.status === 'BLOCKED' ? 'BLOCKED' : competing?.status === 'FAIL' ? 'FAIL' : 'NOT_RUN';
+  save(path.join(directory, 'scope.json'), { selected, failed: failed.map(row => row.name), blocked: blocked.map(row => row.name), notRun: results.filter(row => row.status === 'NOT_RUN').map(row => row.name), realAI: 'NOT_RUN', backup: results.find(row => row.name === 'backup-export-privacy')?.status ?? 'NOT_RUN', configuredCompetingAccountOrByokFallback: competing?.status ?? 'NOT_RUN', usableCompetingConnection, sourceAndBuild: '../snapshot-manifest.json' });
   if (failed.length) throw new Error('MANAGED_DESKTOP_ASSERTIONS_FAILED_' + failed.length);
-  if (blocked.length) throw new Error('MANAGED_DESKTOP_ASSERTIONS_BLOCKED_' + blocked.length);
+  const unexpectedBlocked = blocked.filter(row => !(row.name === 'competing-sources-no-fallback' && row.reason === 'USABLE_ACCOUNT_OR_BYOK_NOT_CONFIGURED'));
+  if (unexpectedBlocked.length) throw new Error('MANAGED_DESKTOP_ASSERTIONS_BLOCKED_' + unexpectedBlocked.length);
+  if (usableCompetingConnection === 'BLOCKED') throw Object.assign(new Error('MANAGED_DESKTOP_USABLE_COMPETING_BLOCKED'), { code: 'USABLE_COMPETING_BLOCKED' });
   if (context.previouslyObservedSteps?.length) throw new Error('PARTIAL_CONTINUATION_REQUIRES_AGGREGATE_REVIEW');
 }
