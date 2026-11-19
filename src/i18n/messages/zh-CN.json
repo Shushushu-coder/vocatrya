@@ -3001,6 +3001,36 @@
   },
   "extensions": {
     "title": "扩展工具",
+    "tabs": {
+      "connections": "连接与工具",
+      "skills": "技能",
+      "companion": "配套工具"
+    },
+    "skills": {
+      "hostedBy": "承载角色：{role}",
+      "openHost": "打开 {role}",
+      "roles": {
+        "insight": "Insight",
+        "pilot": "Pilot",
+        "reflect": "Reflect"
+      },
+      "modes": {
+        "draftOnly": "内置 · 草稿模式（不保存）"
+      },
+      "items": {
+        "resumeEvidence": {
+          "name": "简历证据深挖",
+          "description": "围绕一段经历逐步追问，帮你整理出可写进简历的证据点草稿。",
+          "howToStart": "开始方式：打开 Pilot，在空白对话界面选择「深挖一段经历」。"
+        }
+      },
+      "import": {
+        "name": "导入第三方技能",
+        "comingSoon": "敬请期待",
+        "note": "目前仅支持经过筛选的内置技能。",
+        "cta": "导入第三方技能"
+      }
+    },
     "autoApply": {
       "name": "自动网申",
       "description": "使用职业资料，快速填写招聘网站表单。",

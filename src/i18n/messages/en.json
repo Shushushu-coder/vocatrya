@@ -3001,6 +3001,36 @@
   },
   "extensions": {
     "title": "Extension tools",
+    "tabs": {
+      "connections": "Connections & tools",
+      "skills": "Skills",
+      "companion": "Companion tools"
+    },
+    "skills": {
+      "hostedBy": "Hosted by: {role}",
+      "openHost": "Open {role}",
+      "roles": {
+        "insight": "Insight",
+        "pilot": "Pilot",
+        "reflect": "Reflect"
+      },
+      "modes": {
+        "draftOnly": "Built-in · Draft mode (nothing saved)"
+      },
+      "items": {
+        "resumeEvidence": {
+          "name": "Resume evidence deep-dive",
+          "description": "Digs into one experience with follow-up questions and drafts evidence points for your resume.",
+          "howToStart": "To start: open Pilot and choose \"Dig into one experience\" on the empty chat screen."
+        }
+      },
+      "import": {
+        "name": "Import third-party skill",
+        "comingSoon": "Coming soon",
+        "note": "Only curated built-in skills are supported for now.",
+        "cta": "Import third-party skill"
+      }
+    },
     "autoApply": {
       "name": "Auto apply",
       "description": "Use your career profile to fill application forms on job sites quickly.",

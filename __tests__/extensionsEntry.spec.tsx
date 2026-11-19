@@ -3,7 +3,7 @@
 // real routes, the interview URL contract (unified config, https-only, no
 // guesses), and the desktop compat guidance that replaces the built-in
 // practice UI inside the Electron shell.
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import ExtensionsPage from "@/app/dashboard/extensions/page";
@@ -18,6 +18,7 @@ import NavLink from "@/components/NavLink";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import JourneySection from "@/components/dashboard/JourneySection";
 import { MessagesSquare } from "lucide-react";
+import { BUILT_IN_SKILLS } from "@/lib/agent/skills/registry";
 import { getNotionExtensionState } from "@/lib/extensions/notion/service";
 import { getAutoApplyExtensionStatus } from "@/lib/extensions/autoApply/status";
 
@@ -180,15 +181,16 @@ describe("extensions page", () => {
 
   it("renders the three equal-width tool cards with real detail routes", async () => {
     delete process.env[INTERVIEW_PRACTICE_URL_ENV];
-    render(await ExtensionsPage());
+    render(await ExtensionsPage({ searchParams: Promise.resolve({}) }));
     expect(
       screen.getByRole("heading", { name: "extensions.title" }),
     ).toBeInTheDocument();
-    for (const id of [
-      "extensions-card-auto-apply",
-      "extensions-card-notion",
-      "extensions-card-interview",
-    ]) {
+    // Default tab is Connections & tools: Notion only.
+    expect(screen.getByTestId("extensions-card-notion")).toBeInTheDocument();
+    expect(screen.queryByTestId("extensions-card-auto-apply")).toBeNull();
+    cleanup();
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "companion" }) }));
+    for (const id of ["extensions-card-auto-apply", "extensions-card-interview"]) {
       expect(screen.getByTestId(id)).toBeInTheDocument();
     }
     // Equal-width tracks that wrap instead of overflowing on narrow widths.
@@ -200,6 +202,8 @@ describe("extensions page", () => {
     expect(
       screen.getByRole("link", { name: "extensions.autoApply.cta" }),
     ).toHaveAttribute("href", "/dashboard/extensions/auto-apply");
+    cleanup();
+    render(await ExtensionsPage({ searchParams: Promise.resolve({}) }));
     expect(
       screen.getByRole("link", { name: "extensions.notion.cta" }),
     ).toHaveAttribute("href", "/dashboard/extensions/notion");
@@ -207,7 +211,7 @@ describe("extensions page", () => {
 
   it("marks interview practice unavailable without a configured URL — no jump", async () => {
     delete process.env[INTERVIEW_PRACTICE_URL_ENV];
-    render(await ExtensionsPage());
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "companion" }) }));
     expect(
       screen.getByTestId("extensions-interview-status"),
     ).toHaveTextContent("extensions.interview.unavailable");
@@ -221,23 +225,28 @@ describe("extensions page", () => {
 
   it("uses real connected status and manages an existing Notion connection", async () => {
     vi.mocked(getNotionExtensionState).mockResolvedValueOnce({ status: "CONNECTED" } as never);
-    render(await ExtensionsPage());
+    render(await ExtensionsPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByTestId("extensions-notion-status")).toHaveTextContent("Connected");
     expect(screen.getByTestId("extensions-notion-cta")).toHaveTextContent("extensions.notion.manageCta");
+    cleanup();
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "companion" }) }));
     expect(screen.getByTestId("extensions-auto-apply-status")).toHaveTextContent("extensions.autoApply.available");
   });
 
   it("shows status failures without breaking the other tools", async () => {
     vi.mocked(getNotionExtensionState).mockRejectedValueOnce(new Error("offline"));
     vi.mocked(getAutoApplyExtensionStatus).mockResolvedValueOnce({ available: false } as never);
-    render(await ExtensionsPage());
+    render(await ExtensionsPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByTestId("extensions-notion-status")).toHaveTextContent("extensions.notion.statusError");
+    cleanup();
+    vi.mocked(getAutoApplyExtensionStatus).mockResolvedValueOnce({ available: false } as never);
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "companion" }) }));
     expect(screen.getByTestId("extensions-auto-apply-status")).toHaveTextContent("extensions.autoApply.unavailable");
   });
 
   it("opens the configured HTTPS address in a safe new tab / external browser", async () => {
     process.env[INTERVIEW_PRACTICE_URL_ENV] = "https://practice.example.com/app";
-    render(await ExtensionsPage());
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "companion" }) }));
     const cta = screen.getByRole("link", {
       name: /extensions\.interview\.cta/,
     });
@@ -258,13 +267,54 @@ describe("extensions page", () => {
 
   it("rejects a non-HTTPS configured value the same as unset", async () => {
     process.env[INTERVIEW_PRACTICE_URL_ENV] = "http://practice.example.com";
-    render(await ExtensionsPage());
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "companion" }) }));
     expect(
       screen.getByTestId("extensions-interview-status"),
     ).toHaveTextContent("extensions.interview.unavailable");
     expect(
       screen.getByTestId("extensions-interview-cta"),
     ).toBeDisabled();
+  });
+});
+
+describe("extensions tabs and skills", () => {
+  it("defaults to the first tab and honors ?tab= deep links, ignoring unknown values", async () => {
+    render(await ExtensionsPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByTestId("extensions-tab-connections")).toHaveAttribute("data-state", "active");
+    expect(screen.getByTestId("extensions-tab-skills")).toHaveTextContent("extensions.tabs.skills");
+    cleanup();
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "bogus" }) }));
+    expect(screen.getByTestId("extensions-tab-connections")).toHaveAttribute("data-state", "active");
+    cleanup();
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "skills" }) }));
+    expect(screen.getByTestId("extensions-tab-skills")).toHaveAttribute("data-state", "active");
+    expect(screen.queryByTestId("extensions-card-notion")).toBeNull();
+  });
+
+  it("switches tabs and mirrors the choice into the URL", async () => {
+    render(await ExtensionsPage({ searchParams: Promise.resolve({}) }));
+    await userEvent.click(screen.getByTestId("extensions-tab-companion"));
+    expect(screen.getByTestId("extensions-card-interview")).toBeInTheDocument();
+    expect(window.location.search).toContain("tab=companion");
+  });
+
+  it("lists built-in skills from the registry with host, status and a Pilot entry", async () => {
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "skills" }) }));
+    expect(screen.getAllByTestId(/^extensions-skill-[a-zA-Z]+$/, { exact: false }).filter((el) => el.tagName !== "DIV" || el.getAttribute("data-testid") !== "extensions-skill-import")).toHaveLength(BUILT_IN_SKILLS.length);
+    expect(BUILT_IN_SKILLS.map((s) => s.i18nKey)).toEqual(["resumeEvidence"]);
+    expect(screen.getByText("extensions.skills.items.resumeEvidence.name")).toBeInTheDocument();
+    expect(screen.getByTestId("extensions-skill-resumeEvidence-status")).toHaveTextContent("extensions.skills.modes.draftOnly");
+    expect(screen.getByTestId("extensions-skill-resumeEvidence-host")).toHaveTextContent("extensions.skills.hostedBy");
+    expect(screen.getByTestId("extensions-skill-resumeEvidence-cta")).toBeEnabled();
+  });
+
+  it("shows a disabled coming-soon import control with no inputs", async () => {
+    render(await ExtensionsPage({ searchParams: Promise.resolve({ tab: "skills" }) }));
+    const card = screen.getByTestId("extensions-skill-import");
+    expect(screen.getByTestId("extensions-skill-import-cta")).toBeDisabled();
+    expect(card).toHaveTextContent("extensions.skills.import.comingSoon");
+    expect(card).toHaveTextContent("extensions.skills.import.note");
+    expect(card.querySelector("input, textarea, select, a[href]")).toBeNull();
   });
 });
 
