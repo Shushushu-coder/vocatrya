@@ -2,7 +2,7 @@
 
 - 记录日期：2026-11-13（2026-11-13 修订为裁定稿）。
 - 基线：`main @ 1b93c398`。上一版记录时 `src/models/agent.model.ts`、`src/models/agent.schema.ts` 的未提交修改已随 `a1c63cb0`（Notion 工具集成）合入 Main；本文按合并后代码核对。
-- 状态：**核心方向已确认，D1–D8 已收敛为带推荐的裁定稿，等用户一次裁定**。本方案整理文档，不代表授权产品编码、Migration、发布或真实数据操作。
+- 状态：**D1–D8 已裁定并全部实现（见 AGENT_WORKSPACE_UPGRADE_FEATURES.json 各条 implementationNotes），桌面验收见 1.2.3-rc 清单**；下文【待裁定】标注为当时的历史记录。本方案整理文档，不代表授权产品编码、Migration、发布或真实数据操作。
 - 配套台账：[AGENT_WORKSPACE_UPGRADE_FEATURES.json](AGENT_WORKSPACE_UPGRADE_FEATURES.json)。本方案独立记录，不改写 MVP/P1/P2 的交付范围或验收状态。
 - 标注：**【已确定】**为用户明确选定的方向；**【建议】**为本次整理给出的推荐，未经裁定不冻结；**【待裁定】**为仍需用户拍板的具体选项；**【源码事实】**仅表示定向静态查看结果，不表示实测通过。
 
