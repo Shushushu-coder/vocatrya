@@ -7,8 +7,6 @@ const chat = {
   regenerate: vi.fn(),
   resumeStream: vi.fn(),
   addToolApprovalResponse: vi.fn(),
-  interruptedTurn: false,
-  dismissInterrupted: vi.fn(),
   toolStreams: {} as Record<string, string>,
 };
 vi.mock("@/components/agent/AgentChatProvider", () => ({
@@ -92,7 +90,6 @@ describe("AgentChatMessages copy answer", () => {
     mockClipboard();
     chat.messages = [];
     chat.status = "ready";
-    chat.interruptedTurn = false;
     chat.toolStreams = {};
   });
 

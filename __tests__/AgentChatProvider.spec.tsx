@@ -192,7 +192,7 @@ function Probe() {
         carryModel
       </button>
       <span data-testid="sidebar">{String(expanded)}</span>
-      <span data-testid="state">{`${c.isOpen}|${c.approvalPending}|${c.interruptedTurn}|${holder}|${c.preflight.ok}`}</span>
+      <span data-testid="state">{`${c.isOpen}|${c.approvalPending}|${holder}|${c.preflight.ok}`}</span>
       <span data-testid="preflight-dismissed">{String(c.preflight.dismissed)}</span>
       <span data-testid="identity">{JSON.stringify(c.identity)}</span>
       <span data-testid="composer-nonce">{c.composerNonce}</span>
@@ -916,11 +916,11 @@ describe("AgentChatProvider", () => {
     setup();
     await userEvent.click(screen.getByText("open"));
     expect(screen.getByTestId("state").textContent).toContain(
-      "true|false|false|chat",
+      "true|false|chat",
     );
     await userEvent.click(screen.getByText("close"));
     expect(screen.getByTestId("state").textContent).toContain(
-      "false|false|false|null",
+      "false|false|null",
     );
   });
 
@@ -940,7 +940,7 @@ describe("AgentChatProvider", () => {
     await userEvent.click(screen.getByText("close"));
     expect(chat.stop).not.toHaveBeenCalled();
     expect(screen.getByTestId("state").textContent).toContain(
-      "false|false|false|",
+      "false|false|null",
     );
   });
 
@@ -949,7 +949,7 @@ describe("AgentChatProvider", () => {
     await userEvent.click(screen.getByText("open"));
     await userEvent.click(screen.getByText("close"));
     expect(screen.getByTestId("state").textContent).toContain(
-      "false|false|false|null",
+      "false|false|null",
     );
   });
 
@@ -965,7 +965,7 @@ describe("AgentChatProvider", () => {
     await userEvent.click(screen.getByText("close"));
     expect(chat.stop).not.toHaveBeenCalled();
     expect(screen.getByTestId("state").textContent).toContain(
-      "false|false|false|",
+      "false|false|null",
     );
 
     chat.status = "ready";
@@ -974,7 +974,7 @@ describe("AgentChatProvider", () => {
     await userEvent.click(screen.getByText("regenerate"));
     expect(chat.regenerate).toHaveBeenCalled();
     expect(screen.getByTestId("state").textContent).toContain(
-      "false|false|false|null",
+      "false|false|null",
     );
   });
 
@@ -985,7 +985,7 @@ describe("AgentChatProvider", () => {
     await userEvent.click(screen.getByText("close"));
     expect(chat.stop).not.toHaveBeenCalled();
     expect(screen.getByTestId("state").textContent).toContain(
-      "false|false|false|",
+      "false|false|null",
     );
 
     chat.status = "ready";
@@ -993,7 +993,7 @@ describe("AgentChatProvider", () => {
     await userEvent.click(screen.getByText("sendMessage"));
     expect(chat.sendMessage).toHaveBeenCalled();
     expect(screen.getByTestId("state").textContent).toContain(
-      "false|false|false|null",
+      "false|false|null",
     );
   });
 

@@ -8,8 +8,6 @@ const chat = {
   regenerate: vi.fn(),
   resumeStream: vi.fn(),
   addToolApprovalResponse: vi.fn(),
-  interruptedTurn: false,
-  dismissInterrupted: vi.fn(),
   toolStreams: {} as Record<string, string>,
   contextUsage: null as any,
   approvalPending: false,
@@ -44,7 +42,6 @@ describe("AgentChatMessages", () => {
     vi.clearAllMocks();
     chat.messages = [];
     chat.status = "ready";
-    chat.interruptedTurn = false;
     chat.toolStreams = {};
     chat.contextUsage = null;
   });
@@ -153,27 +150,27 @@ describe("AgentChatMessages", () => {
     expect(screen.getByText(new RegExp(posting.slice(0, 30)))).toBeInTheDocument();
   });
 
-  it("offers Continue on an interrupted turn and calls regenerate only on click", async () => {
-    chat.interruptedTurn = true;
-    chat.messages = [assistant([{ type: "text", text: "half a s" }])];
+  it("offers Continue on a dead turn and calls regenerate only on click", async () => {
+    chat.messages = [user([{ type: "text", text: "add a job" }])];
     render(<AgentChatMessages />);
 
     expect(chat.regenerate).not.toHaveBeenCalled();
     expect(chat.resumeStream).not.toHaveBeenCalled();
 
-    // Exact name: the answer row under the truncated reply also carries a
-    // "Regenerate answer" action — the banner's button is just "Regenerate".
+    // Exact name: the answer row under a reply carries a "Regenerate answer"
+    // action — the banner's button is just "Regenerate".
     await userEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     expect(chat.regenerate).toHaveBeenCalled();
     expect(chat.resumeStream).not.toHaveBeenCalled();
   });
 
-  it("lets the interrupted notice be dismissed", async () => {
-    chat.interruptedTurn = true;
-    chat.messages = [assistant([{ type: "text", text: "half a s" }])];
+  it("lets the continue notice be dismissed", async () => {
+    chat.messages = [user([{ type: "text", text: "add a job" }])];
     render(<AgentChatMessages />);
     await userEvent.click(screen.getByRole("button", { name: /dismiss/i }));
-    expect(chat.dismissInterrupted).toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Regenerate" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers Continue when a seeded transcript ends with a user message", () => {

@@ -312,7 +312,6 @@ function useAgentChatValue(
     toggleExpand(window.innerWidth - APP_CONSTANTS.SIDEBAR_COLLAPSED_OUTER_PX);
   }, [isPanelExpanded, sidebarExpanded, collapseSidebar, toggleExpand]);
 
-  const [interruptedTurn, setInterruptedTurn] = useState(false);
   // Presentation-only completion signal; errors, aborts and approval waits stay idle.
   const [brandCompletion, setBrandCompletion] = useState(0);
   const [identity, setIdentity] = useState<AgentChatIdentity>(() =>
@@ -685,7 +684,6 @@ function useAgentChatValue(
           ) {
             active.retried = true;
             conflictRef.current = false;
-            setInterruptedTurn(false);
             setActionError(null);
             chat.clearError();
             if (active.operation === "regenerate" && active.targetMessageId) {
@@ -1014,7 +1012,6 @@ function useAgentChatValue(
     setBrandCompletion(0);
     chat.clearError();
     setActionError(null);
-    setInterruptedTurn(false);
     composerApiRef.current = null;
     updateComposerSeed("");
     setComposerNonce((n) => n + 1);
@@ -1524,7 +1521,6 @@ function useAgentChatValue(
     (message: QueuedMessage) => {
       if (recoveryBlockedRef.current || roleSelectionPendingRef.current) return;
       conflictRef.current = false;
-      setInterruptedTurn(false);
       setActionError(null);
       if (conversationIdRef.current) return chat.sendMessage(message);
       if (creatingRef.current) {
@@ -1536,7 +1532,6 @@ function useAgentChatValue(
         try {
           const id = await createPersisted(firstText(message.parts), []);
           if (!id) return;
-          setInterruptedTurn(false);
           await chat.sendMessage(message);
         } finally {
           creatingRef.current = false;
@@ -1591,7 +1586,6 @@ function useAgentChatValue(
     regenerateTargetRef.current = target;
     conflictRef.current = false;
     setActionError(null);
-    setInterruptedTurn(false);
     const settle = () => { regenerateInFlightRef.current = false; };
     try {
       void Promise.resolve(
@@ -1605,7 +1599,6 @@ function useAgentChatValue(
   }, [chat, nativeSession]);
 
   const clearQueued = useCallback(() => setQueued(undefined), []);
-  const dismissInterrupted = useCallback(() => setInterruptedTurn(false), []);
 
   // suggest_role handoff (MAO-B): the card carries the request into the
   // target role's slot and switches to it. The text lands as a composer
@@ -1798,8 +1791,6 @@ function useAgentChatValue(
     approvalPending,
     queued,
     clearQueued,
-    interruptedTurn,
-    dismissInterrupted,
     startNewConversation,
     selectConversation,
     removeConversation,

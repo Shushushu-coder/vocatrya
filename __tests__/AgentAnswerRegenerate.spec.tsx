@@ -7,8 +7,6 @@ const chat = {
   regenerate: vi.fn(),
   resumeStream: vi.fn(),
   addToolApprovalResponse: vi.fn(),
-  interruptedTurn: false,
-  dismissInterrupted: vi.fn(),
   toolStreams: {} as Record<string, string>,
   approvalPending: false,
   conversationId: "conv-1" as string | null,
@@ -75,7 +73,6 @@ describe("AgentChatMessages regenerate answer", () => {
     vi.clearAllMocks();
     chat.messages = [];
     chat.status = "ready";
-    chat.interruptedTurn = false;
     chat.toolStreams = {};
     chat.approvalPending = false;
     chat.conversationId = "conv-1";

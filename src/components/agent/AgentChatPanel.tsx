@@ -33,7 +33,6 @@ export function AgentChatPanel() {
     conversationId,
     error,
     actionError,
-    interruptedTurn,
     approvalPending,
     panelWidth: width,
     startResize,
@@ -48,7 +47,14 @@ export function AgentChatPanel() {
   const hasTranscript = messages.some(message => message.role === "user" || message.role === "assistant");
   const brandState = useAgentBrandState({
     status, brandCompletion, isOpen, conversationId,
-    blocked: Boolean(error || actionError || interruptedTurn || approvalPending),
+    blocked: Boolean(
+      error ||
+        actionError ||
+        approvalPending ||
+        (status !== "submitted" &&
+          status !== "streaming" &&
+          messages[messages.length - 1]?.role === "user"),
+    ),
   });
 
   return (

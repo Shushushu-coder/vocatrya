@@ -93,8 +93,6 @@ export function AgentChatMessages() {
     regenerate,
     nativeSession,
     addToolApprovalResponse,
-    interruptedTurn,
-    dismissInterrupted,
     approvalPending,
     conversationId,
     contextUsage,
@@ -103,13 +101,10 @@ export function AgentChatMessages() {
 
   const pastedText = resolvePastedText(messages);
   const showContinue =
-    !nativeSession && !dismissed && (interruptedTurn || endsAwaitingReply(messages, status));
+    !nativeSession && !dismissed && endsAwaitingReply(messages, status);
   const thinking = showThinking(messages, status);
 
-  const dismiss = () => {
-    setDismissed(true);
-    dismissInterrupted();
-  };
+  const dismiss = () => setDismissed(true);
 
   const { t } = useI18n();
 
