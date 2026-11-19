@@ -13,6 +13,7 @@ import {
   NotionWriteResultCard,
 } from "./NotionResult";
 import { SuggestRoleResult } from "./SuggestRoleResult";
+import { WebpageResult } from "./WebpageResult";
 import type {
   AgentAddJobResult,
   AgentCanonicalMatchJobResult,
@@ -24,6 +25,7 @@ import type {
   AgentNotionReadResult,
   AgentNotionSearchResult,
   AgentNotionWriteResult,
+  AgentReadWebpageResult,
   AgentReviewResumeResult,
   AgentSuggestRoleResult as AgentSuggestRoleResultType,
 } from "@/models/agent.model";
@@ -81,6 +83,8 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       <ListJobsResult output={part.output as AgentListJobsResult} />
     ) : toolName === "get_job" ? (
       <GetJobResult output={part.output as AgentGetJobResult} />
+    ) : toolName === "read_webpage" ? (
+      <WebpageResult output={part.output as AgentReadWebpageResult} />
     ) : toolName === "get_resume" ? (
       <GetResumeResult output={part.output as AgentGetResumeResult} />
     ) : toolName === "review_resume" ? (

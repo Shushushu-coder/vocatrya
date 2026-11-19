@@ -323,6 +323,21 @@ export function addJobSettled(step: {
   return !(result.output as AgentAddJobResult | undefined)?.validationError;
 }
 
+// ─── read_webpage ─────────────────────────────────────────────────────────
+// `content` is nonce-delimited untrusted page text for the model; the result
+// card never renders it, only the metadata around it.
+export type AgentReadWebpageResult =
+  | {
+      ok: true;
+      url: string;
+      finalUrl: string;
+      title?: string;
+      fetchedAt: string;
+      truncated: boolean;
+      content: string;
+    }
+  | { ok: false; code: string; url?: string; status?: number };
+
 // ─── EXT-NOTION ───────────────────────────────────────────────────────────
 
 export type AgentNotionSearchItem = {

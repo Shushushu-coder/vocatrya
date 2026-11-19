@@ -15,10 +15,15 @@ const NAMED_ENTITIES: Record<string, string> = {
   "&mdash;": "—",
   "&ndash;": "–",
   "&hellip;": "…",
+  "&middot;": "·",
+  "&bull;": "•",
+  "&copy;": "©",
+  "&reg;": "®",
+  "&times;": "×",
   "&amp;": "&", // keep ampersand last so it does not undo other entities
 };
 
-function decodeEntities(input: string): string {
+export function decodeEntities(input: string): string {
   let out = input;
   // Numeric entities first (decimal + hex).
   out = out.replace(/&#(\d+);/g, (_, code) =>

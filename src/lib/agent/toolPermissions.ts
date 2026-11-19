@@ -6,7 +6,7 @@ const NOTION_CONFIRM_WRITES = ["notion_create_page", "notion_append_content", "n
 export function effectiveAgentToolNames(input: { agentRole?: string | null; freshNativeFull?: boolean; notionTools?: readonly string[] }) {
   const role = normalizeAgentRole(input.agentRole);
   const notion = new Set<string>(NOTION_ALL_TOOL_NAMES);
-  const names = ["add_job", "list_jobs", "get_job", "get_resume", "review_resume", "match_job",
+  const names = ["add_job", "list_jobs", "get_job", "read_webpage", "get_resume", "review_resume", "match_job",
     ...(input.freshNativeFull ? [] : ["generate_cover_letter"]),
     ...(input.notionTools ?? []).filter(name => notion.has(name)),
     // A sibling handoff only exists where there are siblings to hand to —

@@ -2087,6 +2087,7 @@
     "permissionTools": {
       "list_jobs": "List jobs",
       "get_job": "Read job",
+      "read_webpage": "Read a web page you shared",
       "get_resume": "Read resume",
       "review_resume": "Review resume",
       "match_job": "Analyze job match",
@@ -2165,6 +2166,24 @@
     "preparingAddJob": "Preparing to add a job…",
     "listingJobs": "Listing your jobs…",
     "readingJob": "Reading this job…",
+    "readingWebpage": "Reading the web page…",
+    "webpage": {
+      "fetchedAt": "Fetched {time}",
+      "truncated": "Page text was truncated.",
+      "untitled": "Web page",
+      "error": {
+        "URL_NOT_USER_SUPPLIED": "Only links you wrote in this chat can be read.",
+        "INVALID_URL": "That is not a valid web link.",
+        "BLOCKED_ADDRESS": "That address is not allowed (local or private network).",
+        "TIMEOUT": "The page took too long to respond.",
+        "TOO_LARGE": "The page is too large to read.",
+        "UNSUPPORTED_TYPE": "That page type is not supported (text pages only).",
+        "HTTP_ERROR": "The site returned an error status.",
+        "EXTRACTION_EMPTY": "No readable text was found on the page.",
+        "TOO_MANY_REDIRECTS": "The link redirected too many times.",
+        "FETCH_FAILED": "The page could not be reached."
+      }
+    },
     "readingResume": "Reading your resume…",
     "jobsUnavailable": "Jobs are unavailable right now — {reason}",
     "noJobOpen": "No job is open to read. Ask which jobs are saved, or open one in My Jobs.",

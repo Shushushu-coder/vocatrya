@@ -783,6 +783,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
           userId,
           pastedText,
           pageContext,
+          messages,
           model,
           provider,
           modelName,

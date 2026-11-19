@@ -28,6 +28,32 @@ const outputPart = (toolName: string, output: unknown) =>
     output,
   }) as any;
 
+describe("AgentResultCard read_webpage", () => {
+  it("renders a compact card with title, final link, fetch time and truncation", () => {
+    render(
+      <AgentResultCard
+        part={outputPart("read_webpage", {
+          ok: true,
+          url: "https://a.com/x",
+          finalUrl: "https://a.com/y",
+          title: "高级前端工程师",
+          fetchedAt: "2026-11-19T00:00:00.000Z",
+          truncated: true,
+          content: "SECRET PAGE BODY",
+        })}
+      />,
+    );
+    expect(screen.getByText("高级前端工程师")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute("href", "https://a.com/y");
+    expect(screen.queryByText(/SECRET PAGE BODY/)).toBeNull();
+    expect(screen.getByText(/truncated|截断/i)).toBeInTheDocument();
+  });
+  it("shows the failure code", () => {
+    render(<AgentResultCard part={outputPart("read_webpage", { ok: false, code: "URL_NOT_USER_SUPPLIED" })} />);
+    expect(screen.getByText(/URL_NOT_USER_SUPPLIED/)).toBeInTheDocument();
+  });
+});
+
 describe("AgentResultCard", () => {
   it("names the created job, links to it, and reports the description", () => {
     render(

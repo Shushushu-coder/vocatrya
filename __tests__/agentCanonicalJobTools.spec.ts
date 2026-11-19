@@ -36,6 +36,7 @@ describe("list_jobs and get_job", () => {
       "add_job",
       "list_jobs",
       "get_job",
+      "read_webpage",
       "get_resume",
       "review_resume",
       "match_job",

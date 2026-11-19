@@ -132,6 +132,7 @@ describe("agent chat system prompt", () => {
       "add_job_canonical",
       "list_jobs",
       "get_job",
+      "read_webpage",
       "get_resume",
       "review_resume",
       "match_job",

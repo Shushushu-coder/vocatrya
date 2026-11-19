@@ -183,6 +183,7 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(AGENT_ROLE_TOOL_ALLOWLIST.pilot).toEqual([
       "list_jobs",
       "get_job",
+      "read_webpage",
       "add_job",
       "notion_search",
       "notion_read",
@@ -196,6 +197,7 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(AGENT_ROLE_TOOL_ALLOWLIST.reflect).toEqual([
       "list_jobs",
       "get_job",
+      "read_webpage",
       "notion_search",
       "notion_read",
       "suggest_role",

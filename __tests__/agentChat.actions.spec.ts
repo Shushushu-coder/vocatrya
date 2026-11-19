@@ -143,7 +143,7 @@ describe("agentChat actions", () => {
     (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow({ agentRole: "reflect" }));
     const result = await getAgentToolPermissions({ conversationId: "row-1", agentRole: "pilot" });
     expect(result.success).toBe(true);
-    expect(result.data?.tools.map(tool => tool.name)).toEqual(["list_jobs", "get_job", "notion_read", "suggest_role"]);
+    expect(result.data?.tools.map(tool => tool.name)).toEqual(["list_jobs", "get_job", "read_webpage", "notion_read", "suggest_role"]);
     expect(prisma.chatConversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "row-1", userId: "user-1" } }));
   });
 

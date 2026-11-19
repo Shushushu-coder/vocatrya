@@ -71,7 +71,7 @@ describe("per-role tool allowlists", () => {
     for (const agentRole of [null, undefined, "future-role"]) {
       const tools = buildAgentTools({ ...toolCtx, agentRole });
       expect(Object.keys(tools)).toContain("generate_cover_letter");
-      expect(Object.keys(tools)).toHaveLength(7);
+      expect(Object.keys(tools)).toHaveLength(8);
     }
   });
 

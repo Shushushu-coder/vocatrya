@@ -1,5 +1,6 @@
 import type { ConversationRequest } from "../conversationRequest";
-import type { LanguageModel, ToolSet, UIMessageStreamWriter } from "ai";
+import type { LanguageModel, ToolSet, UIMessage, UIMessageStreamWriter } from "ai";
+import { buildReadWebpageTool } from "./readWebpage";
 import type { PageContext } from "@/models/agent.model";
 import type { NestedGenerationGuard } from "@/lib/agent/nestedGeneration";
 import { effectiveAgentToolNames } from "../toolPermissions";
@@ -25,6 +26,11 @@ export function buildAgentTools(ctx: {
   request?: ConversationRequest;
   pastedText?: string;
   pageContext?: PageContext;
+  /**
+   * This request's conversation messages. read_webpage derives the URLs the
+   * user supplied from user-role parts only (text, paste, file parts).
+   */
+  messages?: UIMessage[];
   model: LanguageModel;
   provider: string;
   modelName: string;
@@ -64,6 +70,7 @@ export function buildAgentTools(ctx: {
     add_job: buildAddJobTool(ctx.userId, ctx.pastedText, { canonical: canonicalJobs, request: ctx.request }),
     list_jobs: buildListJobsTool(ctx.userId),
     get_job: buildGetJobTool(ctx.userId, ctx.pageContext?.jobId),
+    read_webpage: buildReadWebpageTool(ctx.messages ?? []),
     get_resume: buildGetResumeTool(ctx.userId, ctx.pageContext?.resumeId),
     review_resume: buildReviewResumeTool({
       userId: ctx.userId,

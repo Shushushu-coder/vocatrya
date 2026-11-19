@@ -524,6 +524,7 @@ export async function runAccountAgentTurn(
     userId,
     pastedText,
     pageContext,
+    messages,
     model: nestedModel,
     provider,
     modelName,

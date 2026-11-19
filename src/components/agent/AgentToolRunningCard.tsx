@@ -16,7 +16,9 @@ export function AgentToolRunningCard({ part }: { part: ToolUIPart }) {
         ? t("agent.listingJobs")
         : toolName === "get_job"
           ? t("agent.readingJob")
-          : toolName === "get_resume"
+          : toolName === "read_webpage"
+            ? t("agent.readingWebpage")
+            : toolName === "get_resume"
         ? t("agent.readingResume")
         : toolName === "review_resume"
           ? t("agent.reviewingResume")

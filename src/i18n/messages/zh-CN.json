@@ -2087,6 +2087,7 @@
     "permissionTools": {
       "list_jobs": "列出职位",
       "get_job": "读取职位",
+      "read_webpage": "读取你提供的网页",
       "get_resume": "读取简历",
       "review_resume": "诊断简历",
       "match_job": "职位匹配分析",
@@ -2165,6 +2166,24 @@
     "preparingAddJob": "正在准备添加职位…",
     "listingJobs": "正在列出职位…",
     "readingJob": "正在读取这个职位…",
+    "readingWebpage": "正在读取网页…",
+    "webpage": {
+      "fetchedAt": "读取于 {time}",
+      "truncated": "网页正文已被截断。",
+      "untitled": "网页",
+      "error": {
+        "URL_NOT_USER_SUPPLIED": "只能读取你在本对话中提供的链接。",
+        "INVALID_URL": "这不是有效的网页链接。",
+        "BLOCKED_ADDRESS": "该地址不允许访问（本机或内网地址）。",
+        "TIMEOUT": "网页响应超时。",
+        "TOO_LARGE": "网页过大，无法读取。",
+        "UNSUPPORTED_TYPE": "不支持该类型的页面（仅支持文本页面）。",
+        "HTTP_ERROR": "网站返回了错误状态。",
+        "EXTRACTION_EMPTY": "未能从页面中提取到可读文本。",
+        "TOO_MANY_REDIRECTS": "链接重定向次数过多。",
+        "FETCH_FAILED": "无法访问该网页。"
+      }
+    },
     "readingResume": "正在读取简历…",
     "jobsUnavailable": "当前无法读取职位 — {reason}",
     "noJobOpen": "没有可读取的打开职位。可以询问已保存的职位，或在“我的职位”中打开一个。",

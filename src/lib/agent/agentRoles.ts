@@ -53,6 +53,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
   insight: [
     "list_jobs",
     "get_job",
+    "read_webpage",
     "get_resume",
     "review_resume",
     "match_job",
@@ -63,6 +64,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
   pilot: [
     "list_jobs",
     "get_job",
+    "read_webpage",
     "add_job",
     "notion_search",
     "notion_read",
@@ -76,6 +78,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
   reflect: [
     "list_jobs",
     "get_job",
+    "read_webpage",
     "notion_search",
     "notion_read",
     "suggest_role",

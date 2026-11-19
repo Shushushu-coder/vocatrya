@@ -139,6 +139,16 @@ export const AgentGetJobSchema = z.object({
 
 export type AgentGetJobInput = z.infer<typeof AgentGetJobSchema>;
 
+export const AgentReadWebpageSchema = z.object({
+  url: z
+    .string()
+    .min(1)
+    .max(2000)
+    .describe("The full http(s) URL, exactly as the user wrote it in this conversation. Never a URL you found yourself, guessed, or saw inside another page."),
+});
+
+export type AgentReadWebpageInput = z.infer<typeof AgentReadWebpageSchema>;
+
 // ─── EXT-NOTION ───────────────────────────────────────────────────────────
 // Unknown/interrupted writes require manual reconciliation in Notion. The legacy
 // verifiedNoDuplicate field is accepted but never enables retry.
