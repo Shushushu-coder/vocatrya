@@ -3132,6 +3132,7 @@
         "result.truncated": "(content truncated)",
         "result.viewInNotion": "Open in Notion",
         "reason.NOTION_PERMISSION_DENIED": "No permission for this action",
+        "reason.NOTION_OBJECT_NOT_FOUND": "Page not found, or not shared with the integration — share it with the Notion integration and retry",
         "reason.NOTION_RATE_LIMITED": "Notion rate limited the request — retry later",
         "reason.NOTION_NETWORK": "Network failure — outcome unknown",
         "reason.NOTION_OUTCOME_UNKNOWN": "The request's outcome is unknown",

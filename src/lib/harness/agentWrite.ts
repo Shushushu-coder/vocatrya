@@ -12,6 +12,7 @@ import {
 } from "@/lib/extensions/notion/errors";
 import {
   callNotionRemoteTool,
+  classifyNotionToolError,
   mapNotionRemoteError,
   remoteToolText,
 } from "@/lib/extensions/notion/mcpClient";
@@ -696,7 +697,7 @@ export async function executeAgentWriteTask(
         saved: false,
         tool: spec.toolName,
         status: "failed",
-        code: NOTION_ERROR.VALIDATION_FAILED,
+        code: classifyNotionToolError(callResult, NOTION_ERROR.VALIDATION_FAILED),
         detail: remoteToolText(callResult).slice(0, 500),
       }
     : spec.receipt(remoteToolText(callResult), input);

@@ -33,6 +33,7 @@ import {
 import { isNotionToolAllowed } from "@/lib/extensions/notion/capabilities";
 import {
   callNotionRemoteTool,
+  classifyNotionToolError,
   mapNotionRemoteError,
   remoteToolText,
 } from "@/lib/extensions/notion/mcpClient";
@@ -197,7 +198,10 @@ function buildNotionSearchTool(ctx: Ctx) {
           searchArgs(parsed.data),
         );
         if (result.isError) {
-          return { found: false, code: "NOTION_REMOTE_FAILED" };
+          return {
+            found: false,
+            code: classifyNotionToolError(result, NOTION_ERROR.REMOTE_FAILED),
+          };
         }
         const text = remoteToolText(result);
         const items = extractSearchItems(text);
@@ -233,7 +237,10 @@ function buildNotionReadTool(ctx: Ctx) {
         if (!args) return { found: false, code: "NOTION_TOOL_UNAVAILABLE" };
         const result = await callNotionRemoteTool(accessToken, remoteName, args);
         if (result.isError) {
-          return { found: false, code: "NOTION_REMOTE_FAILED" };
+          return {
+            found: false,
+            code: classifyNotionToolError(result, NOTION_ERROR.REMOTE_FAILED),
+          };
         }
         const text = remoteToolText(result);
         const parsedJson = tryParseJson(text);
@@ -429,7 +436,7 @@ function buildNotionUpdateContentTool(ctx: Ctx) {
             saved: false,
             tool: NOTION_TOOL.updateContent,
             status: "failed",
-            code: NOTION_ERROR.VALIDATION_FAILED,
+            code: classifyNotionToolError(result, NOTION_ERROR.VALIDATION_FAILED),
             detail: excerpt(remoteToolText(result)),
           };
         }

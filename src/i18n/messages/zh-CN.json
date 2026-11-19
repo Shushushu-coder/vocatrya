@@ -3132,6 +3132,7 @@
         "result.truncated": "（内容已截断）",
         "result.viewInNotion": "在 Notion 中打开",
         "reason.NOTION_PERMISSION_DENIED": "没有权限执行此操作",
+        "reason.NOTION_OBJECT_NOT_FOUND": "未找到该页面，或尚未与集成共享——请在 Notion 中将页面共享给集成后重试",
         "reason.NOTION_RATE_LIMITED": "Notion 限流，请稍后重试",
         "reason.NOTION_NETWORK": "网络失败，结果未知",
         "reason.NOTION_OUTCOME_UNKNOWN": "请求结果未知",

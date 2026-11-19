@@ -31,7 +31,12 @@ import {
   NOTION_WRITE_SPECS,
   notionWriteInputHash,
 } from "@/lib/agent/notionWriteSpec";
-import { mapNotionRemoteError, setNotionMcpClientFactory } from "@/lib/extensions/notion/mcpClient";
+import {
+  classifyNotionToolError,
+  mapNotionRemoteError,
+  parseRetryAfterMs,
+  setNotionMcpClientFactory,
+} from "@/lib/extensions/notion/mcpClient";
 import { setNotionOAuthFetch } from "@/lib/extensions/notion/oauth";
 import {
   disconnectNotion,
@@ -843,3 +848,136 @@ describe("remote error mapping", () => {
   });
 });
 
+describe("finer Notion error codes", () => {
+  const toolError = (text: string) => ({
+    isError: true,
+    content: [{ type: "text", text }],
+  });
+
+  it("keeps an HTTP 404 from the MCP endpoint as REMOTE_FAILED (session/endpoint, not a page)", () => {
+    const mapped = mapNotionRemoteError(new StreamableHTTPError(404, "nope"));
+    expect(mapped.code).toBe(NOTION_ERROR.REMOTE_FAILED);
+    expect(mapped.retryable).toBe(false);
+  });
+
+  it("carries Retry-After on 429 and keeps retry semantics", () => {
+    const mapped = mapNotionRemoteError(new StreamableHTTPError(429, "slow"), {
+      retryAfterMs: 7000,
+    });
+    expect(mapped.code).toBe(NOTION_ERROR.RATE_LIMITED);
+    expect(mapped.retryable).toBe(true);
+    expect(mapped.retryAfterMs).toBe(7000);
+    expect(
+      mapNotionRemoteError(new StreamableHTTPError(429, "slow")).retryAfterMs,
+    ).toBeUndefined();
+  });
+
+  it("parses Retry-After seconds and HTTP-dates", () => {
+    const now = Date.parse("2026-01-01T00:00:00Z");
+    expect(parseRetryAfterMs("3", now)).toBe(3000);
+    expect(parseRetryAfterMs("1.5", now)).toBe(1500);
+    expect(parseRetryAfterMs("Thu, 01 Jan 2026 00:00:10 GMT", now)).toBe(10_000);
+    expect(parseRetryAfterMs("Wed, 31 Dec 2025 23:00:00 GMT", now)).toBe(0);
+    expect(parseRetryAfterMs("soon", now)).toBeUndefined();
+    expect(parseRetryAfterMs("", now)).toBeUndefined();
+    expect(parseRetryAfterMs(null, now)).toBeUndefined();
+  });
+
+  it("classifies isError payloads tolerantly; unrelated errors keep the fallback", () => {
+    const fb = NOTION_ERROR.REMOTE_FAILED;
+    expect(
+      classifyNotionToolError(toolError(JSON.stringify({ code: "object_not_found" })), fb),
+    ).toBe(NOTION_ERROR.OBJECT_NOT_FOUND);
+    expect(
+      classifyNotionToolError(
+        toolError(JSON.stringify({ error: { code: "restricted_resource" } })),
+        fb,
+      ),
+    ).toBe(NOTION_ERROR.OBJECT_NOT_FOUND);
+    expect(
+      classifyNotionToolError(
+        toolError("Error: object_not_found - Could not find page with ID"),
+        fb,
+      ),
+    ).toBe(NOTION_ERROR.OBJECT_NOT_FOUND);
+    expect(
+      classifyNotionToolError(
+        { isError: true, content: [], structuredContent: { code: "restricted_resource" } },
+        fb,
+      ),
+    ).toBe(NOTION_ERROR.OBJECT_NOT_FOUND);
+    expect(
+      classifyNotionToolError(toolError(JSON.stringify({ code: "validation_error" })), fb),
+    ).toBe(fb);
+    expect(classifyNotionToolError(toolError("internal error"), fb)).toBe(fb);
+    expect(
+      classifyNotionToolError(toolError("not_object_not_found_x"), NOTION_ERROR.VALIDATION_FAILED),
+    ).toBe(NOTION_ERROR.VALIDATION_FAILED);
+  });
+
+  async function runTool(
+    name: string,
+    input: Record<string, unknown>,
+    text: string,
+    withRequest = false,
+  ) {
+    const sealed = await sealBundle({
+      v: 1,
+      accessToken: "at",
+      clientId: "client-1",
+      expiresAt: Date.now() + 3_600_000,
+    });
+    setNotionMcpClientFactory(async () => ({
+      listTools: async () => ({ tools: [] }),
+      callTool: async () => ({ isError: true, content: [{ type: "text", text }] }),
+      close: async () => undefined,
+    }));
+    const db = makeDb(connectedState(sealed));
+    const tools = buildNotionAgentTools({
+      userId: USER,
+      request: withRequest ? approvalRequest("other-call") : undefined,
+      db: db as never,
+    });
+    return tools[name].execute!(input, { toolCallId: "tc-x" } as never);
+  }
+
+  it("propagates the code into search, read and in-turn write results", async () => {
+    const nf = JSON.stringify({ code: "object_not_found" });
+    expect(await runTool(NOTION_TOOL.search, { query: "x" }, nf)).toMatchObject({
+      found: false,
+      code: "NOTION_OBJECT_NOT_FOUND",
+    });
+    expect(
+      await runTool(NOTION_TOOL.read, { target: "12345678-1234-1234-1234-123456789abc" }, nf),
+    ).toMatchObject({ found: false, code: "NOTION_OBJECT_NOT_FOUND" });
+    expect(
+      await runTool(
+        NOTION_TOOL.updateContent,
+        {
+          target: "12345678-1234-1234-1234-123456789abc",
+          edits: [{ oldText: "a", newText: "b" }],
+        },
+        nf,
+        true,
+      ),
+    ).toMatchObject({ saved: false, status: "failed", code: "NOTION_OBJECT_NOT_FOUND" });
+  });
+
+  it("unrelated isError keeps the previous codes", async () => {
+    expect(await runTool(NOTION_TOOL.search, { query: "x" }, "boom")).toMatchObject({
+      found: false,
+      code: "NOTION_REMOTE_FAILED",
+    });
+    expect(
+      await runTool(
+        NOTION_TOOL.updateContent,
+        {
+          target: "12345678-1234-1234-1234-123456789abc",
+          edits: [{ oldText: "a", newText: "b" }],
+        },
+        "boom",
+        true,
+      ),
+    ).toMatchObject({ saved: false, status: "failed", code: "NOTION_VALIDATION_FAILED" });
+  });
+});

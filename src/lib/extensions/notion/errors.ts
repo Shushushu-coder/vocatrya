@@ -14,6 +14,10 @@ export const NOTION_ERROR = {
   TOOL_UNAVAILABLE: "NOTION_TOOL_UNAVAILABLE",
   PERMISSION_DENIED: "NOTION_PERMISSION_DENIED",
   RATE_LIMITED: "NOTION_RATE_LIMITED",
+  // Object missing OR not shared with the integration (Notion reports both
+  // as object_not_found / restricted_resource) — a definite, non-retryable
+  // failure, never an unknown outcome.
+  OBJECT_NOT_FOUND: "NOTION_OBJECT_NOT_FOUND",
   NETWORK: "NOTION_NETWORK",
   OUTCOME_UNKNOWN: "NOTION_OUTCOME_UNKNOWN",
   VERIFICATION_REQUIRED: "NOTION_VERIFICATION_REQUIRED",

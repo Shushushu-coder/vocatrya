@@ -472,6 +472,37 @@ describe("executor VERIFY → DISPATCH → SETTLE", () => {
     expect(remote.calls).toHaveLength(0);
   });
 
+  it("object_not_found tool error settles a definite FAILED outcome, not UNCERTAIN", async () => {
+    await connectNotion();
+    const { proposal, taskId } = await approvedTask();
+    remote.next = async () => ({
+      isError: true,
+      content: [
+        { type: "text", text: JSON.stringify({ code: "object_not_found", message: "Could not find page" }) },
+      ],
+    });
+    const c = await claim(taskId);
+    await executeAgentWriteTask(prisma, c);
+    expect(remote.calls).toHaveLength(1);
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    const task = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: taskId },
+    });
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.FAILED);
+    expect(JSON.parse(row.outcomeJson!)).toMatchObject({
+      saved: false,
+      status: "failed",
+      code: "NOTION_OBJECT_NOT_FOUND",
+    });
+    expect(task.failureCode).toBe("NOTION_OBJECT_NOT_FOUND");
+    // Never auto-retried: a second run does not resend.
+    remote.calls = [];
+    await executeAgentWriteTask(prisma, c);
+    expect(remote.calls).toHaveLength(0);
+  });
+
   it("approved-but-undispatched expiry cancels with AUTHORIZATION_EXPIRED", async () => {
     await connectNotion();
     const { proposal, taskId } = await approvedTask();
