@@ -37,6 +37,13 @@ RC 版本号不满足 release.yml 的严格 semver 输入（`^[0-9]+\.[0-9]+\.[0
 4. `npm run desktop:release:manifest` → `npm run desktop:release:verify` → `npm run desktop:release:gate`（`--policy internal-unsigned`）。
 5. 手工分发 exe。
 
+**RC 验收与缺陷流转约束**：
+
+- **构建-提交对应**：验收结论必须标注所测构建对应的代码（tag/commit）。RC 分支后续修复一旦提交，已分发安装包即过期——其上的任何验收证据只覆盖旧代码，不得记为新修复已验收。
+- **证据分级**：台账 `passes: true` 只认 Windows Electron 实测（真实交互、真实模型行为、真实持久化核对）。Web 验证、单测、mock、合成夹具、模型口述均不构成验收，如实记 NOT_RUN/BLOCKED；工具行为须核调用记录而非回复文本。
+- **缺陷流转**：RC 上验出的缺陷修在当前 RC 分支；修复的桌面复验可并入下一 RC 构建统一实测（如 1.2.2-rc 修复 → 1.2.3-rc 验收）。并入期间台账记「已修复待桌面复验」，`passes` 不因修复提交提前置 true。
+- **数据边界**：验证一律用隔离数据根，不碰用户安装版数据目录；含 migration 的版本按风险决定是否拿旧版数据副本实测升级路径，跳过须在台账注明。
+
 ## 5. 正式版（x.y.z）流程
 
 1. 确定目标版本号，**先提交 `release-notes/<version>.md`**（此时 `package.json` 仍为旧版，属预期）。
