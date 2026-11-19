@@ -521,6 +521,61 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     }),
   }),
 
+  ANTIGRAVITY_RUNTIME: Object.freeze({
+    implemented: true,
+    login: Object.freeze({
+      // `agy acp --login` is interactive on 1.5.12. The console launch is
+      // unverified against a completed Google sign-in.
+      interaction: LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
+      surfacesAuthorizationUrl: false,
+    }),
+    auth: Object.freeze({
+      verification: AUTH_VERIFICATION.PROVISIONAL,
+      accountIdentity: false,
+      requiredMethod: "GOOGLE_ACCOUNT",
+    }),
+    models: Object.freeze({
+      // `agy models` prints a table without a Google session. That table
+      // is not a catalog.
+      strategy: MODEL_STRATEGIES.RUNTIME,
+      dynamicDiscovery: false,
+      customModel: true,
+    }),
+    execution: Object.freeze({
+      localOneShot: true,
+      acp: false,
+      streaming: false,
+      streamingVerification: VERIFICATION_STATES.PENDING,
+      streamingMechanism: "agy --print --output-format stream-json",
+      streamingVerifiedRuntimeVersion: null,
+    }),
+    permission: Object.freeze({
+      level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
+      osSandbox: "UNVERIFIED",
+      toolRestriction: "UNVERIFIED",
+      summary:
+        "agy --print is invoked with --sandbox and --mode plan. Neither " +
+        "flag has a managed permission trial on Windows.",
+    }),
+    update: Object.freeze({
+      autoUpdate: AUTO_UPDATE_STATES.UNKNOWN,
+    }),
+    verification: Object.freeze({
+      realLoginE2E: VERIFICATION_STATES.PENDING,
+      authProbe: VERIFICATION_STATES.PENDING,
+      realModelCatalog: VERIFICATION_STATES.PENDING,
+      realInferenceE2E: VERIFICATION_STATES.PENDING,
+      adversarialPermissions: VERIFICATION_STATES.PENDING,
+    }),
+    // `--json-schema` is on `agy --help` for 1.5.12. No managed trial.
+    structuredOutput: Object.freeze({
+      strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
+      mechanism: "--json-schema",
+      verification: STRUCTURED_OUTPUT_VERIFICATIONS.PENDING,
+      verifiedRuntimeVersion: null,
+    }),
+  }),
+
   // Registered in the runtime registry but intentionally without a
   // lifecycle adapter this phase — every capability is latent metadata,
   // nothing is implemented or verified.
@@ -615,9 +670,10 @@ function getAccountRuntimeCapabilities(backendKind) {
         ),
         autoUpdate: matrix.update.autoUpdate,
       },
-      // Per-connection managed profiles give true multi-account
-      // isolation for every registered runtime.
-      multiAccountIsolation: true,
+      // True when the managed profile is the credential boundary. A
+      // definition may set this false when that claim is unverified.
+      multiAccountIsolation:
+        definition.capabilities.multiAccountIsolation !== false,
     },
     login: matrix.login,
     auth: matrix.auth,

@@ -1,5 +1,5 @@
 /**
- * Settings surface tests for the consolidated account-login card: the six
+ * Settings surface tests for the consolidated account-login card: the
  * runtimes render through one shared path, provider+runtime labels
  * disambiguate the two ChatGPT entries, connect is gated on runtime
  * readiness (never silent-install), and per-connection operations mint a
@@ -38,6 +38,7 @@ const RUNTIME_DISPLAY = {
   GROK_RUNTIME: "xAI Grok CLI",
   CURSOR_RUNTIME: "Cursor Agent CLI",
   DEVIN_RUNTIME: "Devin CLI",
+  ANTIGRAVITY_RUNTIME: "Antigravity CLI",
 } as const;
 
 const CAPABILITY_STUB = (backendKind: string) => ({
@@ -67,7 +68,9 @@ const CAPABILITY_STUB = (backendKind: string) => ({
   },
   login: {
     interaction:
-      backendKind === "DEVIN_RUNTIME" || backendKind === "OPENCODE_RUNTIME"
+      backendKind === "DEVIN_RUNTIME" ||
+      backendKind === "OPENCODE_RUNTIME" ||
+      backendKind === "ANTIGRAVITY_RUNTIME"
         ? "VISIBLE_CONSOLE"
         : backendKind === "CODEX_RUNTIME" || backendKind === "CLAUDE_RUNTIME"
           ? "RUNTIME_MANAGED_BROWSER"
@@ -213,11 +216,12 @@ describe("AiConnectionsCard", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders all six runtimes with product+runtime labels", async () => {
+  it("renders every account runtime with product and runtime labels", async () => {
     installBridges();
     render(<AiConnectionsCard />);
     await waitFor(() =>
       expect(screen.getByText("Connect Devin")).toBeInTheDocument(),
+    expect(screen.getByText("Connect Antigravity")).toBeInTheDocument(),
     );
     expect(screen.getByText("via OpenAI Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("via OpenCode CLI")).toBeInTheDocument();
@@ -234,7 +238,7 @@ describe("AiConnectionsCard", () => {
     expect(screen.getByText("Connect Grok")).toBeInTheDocument();
     expect(screen.getByText("Connect Cursor")).toBeInTheDocument();
     // Runtime state chips are rendered per backend.
-    expect(screen.getAllByText(/^Ready/).length).toBe(6);
+    expect(screen.getAllByText(/^Ready/).length).toBe(7);
   });
 
   it("disables connect and shows install info when the runtime is missing", async () => {
@@ -258,7 +262,7 @@ describe("AiConnectionsCard", () => {
         screen.getByRole("button", { name: label }),
       ).toBeDisabled();
     }
-    expect(screen.getAllByText("Installation guide").length).toBe(6);
+    expect(screen.getAllByText("Installation guide").length).toBe(7);
   });
 
   it("connects through the unified ticket + startLogin path", async () => {

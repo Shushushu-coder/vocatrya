@@ -76,6 +76,7 @@ const ACCOUNT_LOGIN_DISPLAY_NAMES: Record<string, string> = {
   "CURSOR:CURSOR_RUNTIME": "Cursor",
   "GITHUB_COPILOT:COPILOT_RUNTIME": "Copilot",
   "DEVIN:DEVIN_RUNTIME": "Devin",
+  "ANTIGRAVITY:ANTIGRAVITY_RUNTIME": "Antigravity",
 };
 
 /**

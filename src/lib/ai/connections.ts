@@ -27,6 +27,7 @@ export const AI_CONNECTION_PROVIDERS = [
   "CURSOR",
   "GITHUB_COPILOT",
   "DEVIN",
+  "ANTIGRAVITY",
   "VOCATRYA",
   // BYOK providers (authType=API_KEY, backendKind=LOCAL_BYOK).
   "DEEPSEEK",
@@ -45,6 +46,7 @@ export const AI_BACKEND_KINDS = [
   "CURSOR_RUNTIME",
   "COPILOT_RUNTIME",
   "DEVIN_RUNTIME",
+  "ANTIGRAVITY_RUNTIME",
   "MANAGED_GATEWAY",
   // The user's own API key executed in-process through the AI SDK —
   // no desktop runtime, no ticket, no profile. Membership here only
@@ -198,6 +200,7 @@ export const AI_BACKEND_SUPPORTED_ACCOUNT_PROVIDERS: Record<
   CURSOR_RUNTIME: ["CURSOR"],
   COPILOT_RUNTIME: ["GITHUB_COPILOT"],
   DEVIN_RUNTIME: ["DEVIN"],
+  ANTIGRAVITY_RUNTIME: ["ANTIGRAVITY"],
 };
 
 export function supportedAccountProvidersForBackend(

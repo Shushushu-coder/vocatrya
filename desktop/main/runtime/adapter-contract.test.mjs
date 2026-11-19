@@ -21,6 +21,7 @@ const SIX = [
   "GROK_RUNTIME",
   "CURSOR_RUNTIME",
   "DEVIN_RUNTIME",
+  "ANTIGRAVITY_RUNTIME",
 ];
 
 // The valid provider/runtime matrix for ACCOUNT_LOGIN today.
@@ -32,6 +33,7 @@ const VALID_COMBINATIONS = [
   ["GROK_RUNTIME", "XAI"],
   ["CURSOR_RUNTIME", "CURSOR"],
   ["DEVIN_RUNTIME", "DEVIN"],
+  ["ANTIGRAVITY_RUNTIME", "ANTIGRAVITY"],
 ];
 
 // Invalid pairings every adapter must refuse with null (never an adapter).
@@ -58,6 +60,9 @@ const INVALID_COMBINATIONS = [
   ["CURSOR_RUNTIME", "DEVIN"],
   ["DEVIN_RUNTIME", "OPENAI"],
   ["DEVIN_RUNTIME", "CURSOR"],
+  ["ANTIGRAVITY_RUNTIME", "OPENAI"],
+  ["ANTIGRAVITY_RUNTIME", "GEMINI"],
+  ["ANTIGRAVITY_RUNTIME", "DEVIN"],
 ];
 
 function adapterFor(backendKind) {
@@ -125,6 +130,13 @@ const STATUS_FIXTURES = {
     wrongMethod: { authState: "AUTHENTICATED", authKind: "PAT" },
     unverifiableMethod: { authState: "AUTHENTICATED", authKind: "UNKNOWN" },
     valid: { authState: "AUTHENTICATED", authKind: "DEVIN_ACCOUNT" },
+  },
+  ANTIGRAVITY_RUNTIME: {
+    notAuthed: { authState: "NOT_AUTHENTICATED", authKind: null },
+    unknown: { authState: "UNKNOWN", authKind: null },
+    wrongMethod: { authState: "AUTHENTICATED", authKind: "API_KEY" },
+    unverifiableMethod: { authState: "AUTHENTICATED", authKind: "UNKNOWN" },
+    valid: { authState: "AUTHENTICATED", authKind: "GOOGLE_ACCOUNT" },
   },
 };
 

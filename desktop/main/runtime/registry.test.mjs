@@ -21,6 +21,7 @@ const EXPECTED_VENDOR_BY_BACKEND = {
   CURSOR_RUNTIME: "CURSOR",
   COPILOT_RUNTIME: "GITHUB_COPILOT",
   DEVIN_RUNTIME: "DEVIN",
+  ANTIGRAVITY_RUNTIME: "ANTIGRAVITY",
 };
 
 const EXPECTED_ACCOUNT_PROVIDERS_BY_BACKEND = {
@@ -31,13 +32,14 @@ const EXPECTED_ACCOUNT_PROVIDERS_BY_BACKEND = {
   CURSOR_RUNTIME: ["CURSOR"],
   COPILOT_RUNTIME: ["GITHUB_COPILOT"],
   DEVIN_RUNTIME: ["DEVIN"],
+  ANTIGRAVITY_RUNTIME: ["ANTIGRAVITY"],
 };
 
 describe("runtime definition registry", () => {
-  it("contains exactly the seven first-wave runtimes", () => {
-    expect(RUNTIME_DEFINITIONS).toHaveLength(7);
+  it("contains exactly the registered runtimes", () => {
+    expect(RUNTIME_DEFINITIONS).toHaveLength(8);
     const kinds = RUNTIME_DEFINITIONS.map((d) => d.backendKind);
-    expect(new Set(kinds).size).toBe(7);
+    expect(new Set(kinds).size).toBe(8);
     for (const kind of Object.keys(EXPECTED_VENDOR_BY_BACKEND)) {
       expect(kinds).toContain(kind);
     }
@@ -234,6 +236,6 @@ describe("runtime definition registry", () => {
     expect(isRegisteredBackendKind("CODEX_RUNTIME")).toBe(true);
     expect(isRegisteredBackendKind("GEMINI_RUNTIME")).toBe(false);
     expect(isRegisteredBackendKind("runtime:exec")).toBe(false);
-    expect(listRuntimeDefinitions()).toHaveLength(7);
+    expect(listRuntimeDefinitions()).toHaveLength(8);
   });
 });

@@ -33,7 +33,7 @@
 | --- | --- | --- | --- |
 | **ACTIVITY-RETIRE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 38/38，通过 |
 | **BD-ARCHIVE** | IN_SCOPE | IMPLEMENTED | Windows Electron fresh-native/full 联合复验 55/55，通过 |
-| **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | Codex 账号真实流式、错误恢复、MATCH_ANALYSIS 和 Electron 重开验收通过，`passes: true` |
+| **AI-ACCOUNT-LOGIN** | IN_SCOPE | IMPLEMENTED | Codex 账号真实流式、错误恢复、MATCH_ANALYSIS 和 Electron 重开验收通过，`passes: true`。Antigravity（`agy`）增量已登记，登录、目录、推理、流式与权限均未验证 |
 | **AI-BYOK** | IN_SCOPE | IMPLEMENTED | DeepSeek 真实 Key 服务链路 29/29、Windows Electron fresh-native/full 17/17 通过 |
 | **AI-MANAGED** | IN_SCOPE | PARTIAL | 隔离 Beta 真实网关、充值Key、记账与Electron链路已验；正式产品参数/发布及剩余边界待收口 |
 | **RESUME-BUILDER** | IN_SCOPE | IMPLEMENTED | 四项工作台修订及 B7 已集成；Windows Electron fresh-native/full 最低验收闭环，`passes: true` |
@@ -92,6 +92,8 @@
 - **2026-10-29 备份恢复修复收尾**：仅重映射已知结构化引用，正文、代码与消息 ID 保持原样；独立恢复关联使仅正文/未知工具中的历史职位引用在后续归档、上下文编辑和再次备份恢复后仍受 AI 隔离。无法安全保留关联的畸形上下文会在破坏性写入前拒绝导入，既有安全快照策略保留。定向 6 文件共 84 项、完整类型检查、改动文件 ESLint 和差异检查通过；最终补丁未执行生产构建、Windows Electron、真实 AI 或真实库操作。原桌面证据与最终补丁证据分开记录，详见 JSON。
 
 ### AI-ACCOUNT-LOGIN：账号登录型 AI
+
+- **2026-11-18 Antigravity 增量，未验证。** 设置页「Agent 账号登录」增加 Antigravity，身份是 `ANTIGRAVITY` + `ANTIGRAVITY_RUNTIME`，不复用 BYOK 的 `GEMINI`。本机 `agy` 1.5.12 的 `--help` / `agy acp --help` 已核对：登录命令是 `agy acp --login`；没有无头 `auth status` 或 `auth logout`。空 `USERPROFILE` 下 `agy models` 仍打印模型表，因此该表不能当成 Google 账号会话，模型发现保持不可用。状态解析只认 “not signed in”，其余输出是 `UNKNOWN`，不能完成 `CONNECTED`。`--print` 带上 `--sandbox` 与 `--mode plan`，提示词走 stdin；stdin 是否被 CLI 读取、流式、`--json-schema` 和 Windows 沙箱都没有托管试跑。`USERPROFILE` 能把 `~\.gemini` 挪进托管目录；官方文档中的钥匙串令牌不在这次隔离范围内，`multiAccountIsolation` 为 false。断开连接只删 Vocatrya 连接行，`--version` 不是登出，不清理钥匙串。登录、真实目录、真实推理、流式、结构化输出和权限对抗均为 `PENDING`。既有 Codex 验收不外推到 Antigravity，本项 `passes` 不因此改回 false，也不把 Antigravity 记为已验收。
 
 - 2026-10-29 集成 `68212510`：测试认证版本断言对齐已认证的 Codex 0.165.0，未放宽精确版本门控；代码/隔离测试证据已核对，真实账号业务与 Windows Electron 完整验收仍待完成。
 

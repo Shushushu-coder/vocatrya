@@ -45,6 +45,7 @@ const { CURSOR_BACKEND_KIND, cursorAdapter } = require("./cursor");
 const { GROK_BACKEND_KIND, grokAdapter } = require("./grok");
 const { OPENCODE_BACKEND_KIND, opencodeAdapter } = require("./opencode");
 const { DEVIN_BACKEND_KIND, devinAdapter } = require("./devin");
+const { ANTIGRAVITY_BACKEND_KIND, antigravityAdapter } = require("./antigravity");
 
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000; // browser auth is user-paced
 const LOGOUT_TIMEOUT_MS = 30 * 1000;
@@ -67,6 +68,7 @@ const PROVIDER_ADAPTERS = Object.freeze({
   [GROK_BACKEND_KIND]: grokAdapter,
   [OPENCODE_BACKEND_KIND]: opencodeAdapter,
   [DEVIN_BACKEND_KIND]: devinAdapter,
+  [ANTIGRAVITY_BACKEND_KIND]: antigravityAdapter,
 });
 
 // The consolidated ACCOUNT_LOGIN error taxonomy — kept in exact parity

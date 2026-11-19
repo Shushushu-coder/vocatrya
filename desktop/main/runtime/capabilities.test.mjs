@@ -27,6 +27,7 @@ const IMPLEMENTED = [
   "GROK_RUNTIME",
   "CURSOR_RUNTIME",
   "DEVIN_RUNTIME",
+  "ANTIGRAVITY_RUNTIME",
 ];
 
 describe("account runtime capability matrix", () => {
@@ -61,7 +62,7 @@ describe("account runtime capability matrix", () => {
     expect(getAccountRuntimeCapabilities(undefined)).toBeNull();
   });
 
-  it("implements exactly the six account-login runtimes", () => {
+  it("implements the account-login runtimes and leaves Copilot latent", () => {
     for (const kind of IMPLEMENTED) {
       expect(
         getAccountRuntimeCapabilities(kind).implemented,
@@ -103,6 +104,7 @@ describe("account runtime capability matrix", () => {
     expect(osSandbox("GROK_RUNTIME")).toBe("NO_OP_ON_WINDOWS");
     expect(osSandbox("CURSOR_RUNTIME")).toBe("RUNTIME_FLAG_UNVERIFIED");
     expect(osSandbox("DEVIN_RUNTIME")).toBe("UNAVAILABLE_ON_WINDOWS");
+    expect(osSandbox("ANTIGRAVITY_RUNTIME")).toBe("UNVERIFIED");
   });
 
   it("models login interaction per runtime, not per provider name", () => {
@@ -125,6 +127,9 @@ describe("account runtime capability matrix", () => {
     expect(interaction("DEVIN_RUNTIME")).toBe(
       LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
     );
+    expect(interaction("ANTIGRAVITY_RUNTIME")).toBe(
+      LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
+    );
     // Only runtimes whose CLI cannot open a browser surface an auth URL.
     const surfaces = (kind) =>
       getAccountRuntimeCapabilities(kind).login.surfacesAuthorizationUrl;
@@ -136,6 +141,7 @@ describe("account runtime capability matrix", () => {
       "CLAUDE_RUNTIME",
       "OPENCODE_RUNTIME",
       "DEVIN_RUNTIME",
+      "ANTIGRAVITY_RUNTIME",
     ]) {
       expect(surfaces(kind), kind).toBe(false);
     }
@@ -157,6 +163,8 @@ describe("account runtime capability matrix", () => {
     expect(auth("OPENCODE_RUNTIME").accountIdentity).toBe(false);
     expect(auth("CODEX_RUNTIME").accountIdentity).toBe(true);
     expect(auth("DEVIN_RUNTIME").accountIdentity).toBe(true);
+    expect(auth("ANTIGRAVITY_RUNTIME").verification).toBe("PROVISIONAL");
+    expect(auth("ANTIGRAVITY_RUNTIME").accountIdentity).toBe(false);
   });
 
   it("keeps model-catalog truth per runtime — no fake unified discovery", () => {

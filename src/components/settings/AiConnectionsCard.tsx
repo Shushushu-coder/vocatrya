@@ -76,6 +76,16 @@ const ACCOUNT_LOGIN_BACKENDS = [
       { accountProvider: "DEVIN", connectLabelKey: "settings.connectDevin" },
     ],
   },
+  {
+    backendKind: "ANTIGRAVITY_RUNTIME",
+    providerLabel: "Antigravity",
+    accountOptions: [
+      {
+        accountProvider: "ANTIGRAVITY",
+        connectLabelKey: "settings.connectAntigravity",
+      },
+    ],
+  },
 ] as const;
 
 type BackendKind = (typeof ACCOUNT_LOGIN_BACKENDS)[number]["backendKind"];
@@ -173,7 +183,7 @@ const ERROR_KEY: Record<string, string> = {
 };
 
 /**
- * Consolidated account-login surface for the six ACCOUNT_LOGIN runtimes.
+ * Consolidated account-login surface for the ACCOUNT_LOGIN runtimes.
  * Renders only inside the desktop shell — without the vocatryaAi preload
  * bridge there is no managed runtime to orchestrate, so the card stays
  * hidden on the web.

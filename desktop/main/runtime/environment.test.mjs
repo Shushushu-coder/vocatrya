@@ -26,6 +26,8 @@ const HOSTILE_BASE_ENV = {
   GH_TOKEN: "ghp_hostgh01234567890123456789012",
   GITHUB_TOKEN: "ghp_hostgithub0123456789012345678901",
   DEVIN_API_KEY: "devin-host",
+  GEMINI_API_KEY: "gemini-host",
+  GOOGLE_API_KEY: "google-host",
   UNRELATED_SECRET: "should-not-pass",
 };
 
@@ -240,6 +242,7 @@ describe("runtime process environment isolation", () => {
       "CURSOR_RUNTIME",
       "COPILOT_RUNTIME",
       "DEVIN_RUNTIME",
+      "ANTIGRAVITY_RUNTIME",
     ]) {
       const env = buildRuntimeProcessEnvironment({
         baseEnv: HOSTILE_BASE_ENV,
@@ -256,6 +259,8 @@ describe("runtime process environment isolation", () => {
         "GH_TOKEN",
         "GITHUB_TOKEN",
         "DEVIN_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
       ]) {
         expect(env[key], `${kind} leaked ${key}`).toBeUndefined();
       }
@@ -303,6 +308,7 @@ describe("runtime process environment isolation", () => {
       "OPENCODE_RUNTIME",
       "CURSOR_RUNTIME",
       "DEVIN_RUNTIME",
+      "ANTIGRAVITY_RUNTIME",
     ]) {
       const env = buildRuntimeProcessEnvironment({
         baseEnv: networked,

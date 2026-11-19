@@ -102,6 +102,7 @@ describe("provider/runtime matrix", () => {
     ["GROK_RUNTIME", "XAI"],
     ["CURSOR_RUNTIME", "CURSOR"],
     ["DEVIN_RUNTIME", "DEVIN"],
+    ["ANTIGRAVITY_RUNTIME", "ANTIGRAVITY"],
   ];
 
   it("accepts the implemented ACCOUNT_LOGIN pairs", () => {
@@ -125,6 +126,8 @@ describe("provider/runtime matrix", () => {
       ["OPENCODE_RUNTIME", "DEVIN"],
       ["GROK_RUNTIME", "OPENAI"],
       ["CURSOR_RUNTIME", "XAI"],
+      ["ANTIGRAVITY_RUNTIME", "GEMINI"],
+      ["ANTIGRAVITY_RUNTIME", "OPENAI"],
     ] as [AIBackendKind, AIConnectionProvider][]) {
       expect(
         isSupportedAccountProviderForBackend(backendKind, provider),
@@ -146,7 +149,7 @@ describe("provider/runtime matrix", () => {
 });
 
 describe("capability descriptor parity", () => {
-  it("the TS mirror and the desktop matrix agree on the six runtimes", () => {
+  it("the TS mirror and the desktop matrix agree on the account runtimes", () => {
     for (const backendKind of [
       "CODEX_RUNTIME",
       "CLAUDE_RUNTIME",
@@ -168,6 +171,15 @@ describe("capability descriptor parity", () => {
         RUNTIME_LOGIN_INTERACTIONS as readonly string[],
       ).toContain(descriptor.login.interaction);
     }
+    const antigravity = getAccountRuntimeCapabilities("ANTIGRAVITY_RUNTIME");
+    expect(antigravity.implemented).toBe(true);
+    expect(antigravity.capabilities.multiAccountIsolation).toBe(false);
+    expect(antigravity.verification.realLoginE2E).toBe("PENDING");
+    expect(antigravity.verification.realInferenceE2E).toBe("PENDING");
+    expect(antigravity.execution.streaming).toBe(false);
+    expect(antigravity.execution.streamingVerification).toBe("PENDING");
+    expect(antigravity.structuredOutput.verification).toBe("PENDING");
+    expect(antigravity.profile.credentialBoundary.length).toBeGreaterThan(0);
   });
 });
 
@@ -190,6 +202,7 @@ describe("execution seam contract", () => {
       "GROK_RUNTIME",
       "CURSOR_RUNTIME",
       "DEVIN_RUNTIME",
+      "ANTIGRAVITY_RUNTIME",
     ]) {
       expect(
         checkTextOnlyExecutionReadiness({

@@ -1,5 +1,5 @@
 // Phase C runtime definition registry — the single source of truth for the
-// seven first-wave ACCOUNT_LOGIN runtimes. Definitions are structured data
+// ACCOUNT_LOGIN runtimes. Definitions are structured data
 // only: install/update commands are never assembled from renderer input and
 // are not executed by this phase (executionEnabled: false).
 //
@@ -1073,6 +1073,100 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       modelDiscovery: true,
       streaming: true,
       acp: true,
+    },
+  },
+  {
+    backendKind: "ANTIGRAVITY_RUNTIME",
+    runtimeVendor: "ANTIGRAVITY",
+    supportedAccountProviders: ["ANTIGRAVITY"],
+    displayName: "Antigravity CLI",
+    binaries: [
+      {
+        commands: ["agy.exe", "agy.cmd", "agy"],
+        knownLocations: ["{LOCALAPPDATA}\\agy\\bin\\agy.exe"],
+      },
+    ],
+    profile: {
+      // agy 1.5.12 writes ~\\.gemini when USERPROFILE is redirected. The
+      // Google token is documented as an OS keyring entry, which this
+      // redirect does not cover. multiAccountIsolation stays false until
+      // that split is verified.
+      strategy: PROFILE_STRATEGIES.ISOLATED_ROOTS,
+      env: {
+        USERPROFILE: "$PROFILE_DIR\\home",
+        HOME: "$PROFILE_DIR\\home",
+        APPDATA: "$PROFILE_DIR\\home\\AppData\\Roaming",
+        LOCALAPPDATA: "$PROFILE_DIR\\home\\AppData\\Local",
+        XDG_CONFIG_HOME: "$PROFILE_DIR\\xdg-config",
+        XDG_DATA_HOME: "$PROFILE_DIR\\xdg-data",
+        XDG_CACHE_HOME: "$PROFILE_DIR\\xdg-cache",
+        XDG_STATE_HOME: "$PROFILE_DIR\\xdg-state",
+      },
+      credentialBoundary: ["USERPROFILE", "HOME"],
+      stripEnv: [
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_GENAI_API_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "AGY_ADC_AUTH",
+        "GOOGLE_GENAI_USE_VERTEXAI",
+        "GOOGLE_GENAI_USE_ENTERPRISE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+      ],
+    },
+    install: {
+      executionEnabled: false,
+      methods: [
+        {
+          kind: "powershell-script",
+          summary: "Official Antigravity CLI install script",
+          executable: "powershell.exe",
+          args: [
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "irm https://antigravity.google/cli/install.ps1 | iex",
+          ],
+          documentationUrl: "https://antigravity.google/docs/cli/install/",
+        },
+      ],
+    },
+    update: {
+      executionEnabled: false,
+      methods: [
+        {
+          kind: "self-update",
+          summary: "Antigravity CLI updater",
+          executable: "agy",
+          args: ["update"],
+        },
+      ],
+    },
+    versionProbe: { args: ["--version"] },
+    authProbe: {
+      // Not an auth-method probe. `agy models` on 1.5.12 prints a model
+      // table with no Google session. The adapter parser refuses to treat
+      // that table as ACCOUNT_LOGIN.
+      args: ["models"],
+      mode: "READ_ONLY",
+      notes:
+        "Provisional. agy 1.5.12 has no auth status subcommand. Output is " +
+        "not a Google-account classification.",
+    },
+    commands: {
+      login: ["acp", "--login"],
+      // No headless logout exists. See antigravity.js.
+      logout: ["--version"],
+      status: ["models"],
+      models: ["models"],
+      print: ["--print"],
+    },
+    capabilities: {
+      accountLogin: true,
+      modelDiscovery: false,
+      // File-home redirect is not keyring isolation.
+      multiAccountIsolation: false,
     },
   },
 ]);

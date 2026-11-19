@@ -72,12 +72,13 @@ describe("runtime IPC boundary", () => {
     }
   });
 
-  it("lists the seven runtimes", async () => {
+  it("lists the registered runtimes", async () => {
     const ipcMain = fakeIpcMain();
     registerRuntimeIpcHandlers(ipcMain, service);
     const list = await ipcMain.invoke("runtime:list");
-    expect(list).toHaveLength(7);
+    expect(list).toHaveLength(8);
     expect(list.map((r) => r.backendKind)).toContain("DEVIN_RUNTIME");
+    expect(list.map((r) => r.backendKind)).toContain("ANTIGRAVITY_RUNTIME");
   });
 
   it("enforces the backendKind allowlist on every keyed channel", async () => {
