@@ -88,6 +88,7 @@ const RUNTIME_CHANNELS = Object.freeze({
   getInstallInfo: "runtime:getInstallInfo",
   getUpdateInfo: "runtime:getUpdateInfo",
   checkUpdate: "runtime:checkUpdate",
+  applyUpdate: "runtime:applyUpdate",
 });
 
 const AI_CONNECTION_CHANNELS = Object.freeze({
@@ -126,6 +127,13 @@ contextBridge.exposeInMainWorld("vocatryaRuntime", {
     ipcRenderer.invoke(RUNTIME_CHANNELS.checkUpdate, {
       backendKind,
       force: options?.force === true,
+    }),
+  // Audited update execution — the renderer picks only a target enum
+  // ("latest" | "required"); everything else resolves main-side.
+  applyUpdate: (backendKind, options) =>
+    ipcRenderer.invoke(RUNTIME_CHANNELS.applyUpdate, {
+      backendKind,
+      target: options?.target === "required" ? "required" : "latest",
     }),
 });
 

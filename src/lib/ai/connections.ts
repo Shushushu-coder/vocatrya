@@ -525,7 +525,7 @@ export type AIBusinessErrorCode =
 export class AIBusinessError extends Error {
   readonly code: AIBusinessErrorCode;
 
-  constructor(code: AIBusinessErrorCode, message: string, public readonly receipt?: ManagedInvocationReceipt) {
+  constructor(code: AIBusinessErrorCode, message: string, public readonly receipt?: ManagedInvocationReceipt, public readonly details?: unknown) {
     super(message);
     this.name = "AIBusinessError";
     this.code = code;

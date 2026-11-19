@@ -8,6 +8,15 @@
     "restart": "Restart native context (without prior context)",
     "contextLost": "Native context was not restored. Your message was not automatically resent. Explicitly restart native context, or return to this session later.",
     "unavailable": "This connection, model or runtime version is not ready for native sessions. Select a verified Codex account connection and model.",
+    "unavailableConnection": "This connection cannot run native sessions. Re-verify the Codex account connection in AI Settings, or start a regular conversation instead.",
+    "unavailableRuntime": "The Codex runtime is not ready, so native sessions are unavailable. Check the runtime in AI Settings, or start a regular conversation instead.",
+    "unavailableVersion": "Native sessions require Codex CLI {required}; you have {actual}. Use the button below to update, or start a regular conversation instead.",
+    "unavailableModel": "Model {model} is not supported for native sessions. Available models: {models}; or start a regular conversation instead.",
+    "updateCli": "Update to {version}",
+    "updating": "Updating…",
+    "updateFailed": "Update did not finish ({code}). Retry from \"Version & update details\" in AI Settings or update manually.",
+    "usePlain": "Start a regular conversation",
+    "unknownVersion": "unknown",
     "textOnly": "This first version supports plain text only, without context attachments, files, regeneration or tools."
   },
   "canonicalImport": {
@@ -3407,7 +3416,13 @@
     "verifiedAvailableHint": "The available version is verified compatible with the app.",
     "unverifiedAvailableHint": "The available version has not been verified — capability certification is pinned to v{certified}. After updating, capabilities are re-evaluated against the newly probed version and are never relaxed automatically.",
     "recoveryCommand": "To restore the certified version {version}: {command}",
-    "recoveryNone": "The official channel offers no pinned-version rollback — if capability verification fails, see the install documentation."
+    "recoveryNone": "The official channel offers no pinned-version rollback — if capability verification fails, see the install documentation.",
+    "requiredHint": "A feature requires runtime version {version}",
+    "applyLatest": "Update to {version}",
+    "applyRequired": "Switch to {version}",
+    "applyDone": "Updated to v{version}",
+    "applyFailed": "Update did not finish ({code})",
+    "applyManual": "This install method cannot be updated in one click — update manually as shown above"
   },
   "agentCodeBlock": {
     "copy": "Copy code",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { XIcon } from "lucide-react";
 import type { TextUIPart, UIMessage } from "ai";
@@ -305,6 +305,24 @@ function AgentChatComposer() {
   );
 }
 
+// Structured reason carried by NATIVE_SESSION_UNAVAILABLE — the same
+// fields nativeSession.server.ts's readiness report produces. Unknown or
+// absent fields fall back to the generic copy.
+type NativeDetails = {
+  reason?: string;
+  runtimeVersion?: string | null;
+  requiredVersion?: string | null;
+  model?: string | null;
+  models?: string[] | null;
+};
+
+const NATIVE_REASON_KEY: Record<string, string> = {
+  CONNECTION_INELIGIBLE: "nativeSession.unavailableConnection",
+  RUNTIME_NOT_READY: "nativeSession.unavailableRuntime",
+  RUNTIME_VERSION_MISMATCH: "nativeSession.unavailableVersion",
+  MODEL_UNSUPPORTED: "nativeSession.unavailableModel",
+};
+
 function ChatErrorBanner() {
   const { t } = useI18n();
   const {
@@ -315,8 +333,11 @@ function ChatErrorBanner() {
     messages,
     regenerate,
     startNewConversation,
+    startNativeConversation,
     requestModelPicker,
   } = useAgentChat();
+  const [cliUpdateBusy, setCliUpdateBusy] = useState(false);
+  const [cliUpdateError, setCliUpdateError] = useState<string | null>(null);
   const parsed = error ? readAgentChatError(error) : null;
   const code =
     actionError?.code && categorizeAgentErrorCode(actionError.code) === "recovery"
@@ -324,15 +345,93 @@ function ChatErrorBanner() {
       : parsed?.code && parsed.code !== "GENERIC"
       ? parsed.code
       : (actionError?.code ?? preflight.code ?? parsed?.code ?? "GENERIC");
-  const copy = agentErrorCopy(categorizeAgentErrorCode(code));
+  const category = categorizeAgentErrorCode(code);
+  const copy = agentErrorCopy(category);
   const raw = parsed?.message ?? "";
   const showRaw = raw.length > 0 && !raw.trim().startsWith("{") && code === "GENERIC";
+  const nativeDetails =
+    category === "native-unavailable"
+      ? ((actionError?.details ?? null) as NativeDetails | null)
+      : null;
+  const canUpdateCli =
+    nativeDetails?.reason === "RUNTIME_VERSION_MISMATCH" &&
+    Boolean(nativeDetails.requiredVersion) &&
+    typeof window !== "undefined" &&
+    typeof window.vocatryaRuntime?.applyUpdate === "function";
+
+  const applyCliUpdate = async () => {
+    const runtime = window.vocatryaRuntime;
+    if (!runtime?.applyUpdate) return;
+    setCliUpdateBusy(true);
+    setCliUpdateError(null);
+    try {
+      const result = await runtime.applyUpdate("CODEX_RUNTIME", {
+        target: "required",
+      });
+      if (result.ok) {
+        clearError();
+        void startNativeConversation();
+      } else {
+        setCliUpdateError(
+          t("nativeSession.updateFailed", { code: result.code }),
+        );
+      }
+    } catch {
+      setCliUpdateError(t("nativeSession.updateFailed", { code: "ERROR" }));
+    } finally {
+      setCliUpdateBusy(false);
+    }
+  };
+
+  const nativeBody = nativeDetails?.reason
+    ? t(
+        NATIVE_REASON_KEY[nativeDetails.reason] ?? "nativeSession.unavailable",
+        {
+          required: nativeDetails.requiredVersion ?? "",
+          actual: nativeDetails.runtimeVersion ?? t("nativeSession.unknownVersion"),
+          model: nativeDetails.model ?? "",
+          models: (nativeDetails.models ?? []).join(", "),
+        },
+      )
+    : null;
 
   return (
     <Alert variant="destructive" className="flex items-start gap-2">
       <AlertDescription className="flex-1 space-y-1">
         <p className="font-medium">{t(copy.titleKey)}</p>
-        <p>{showRaw ? raw : t(copy.bodyKey)}</p>
+        <p>{showRaw ? raw : (nativeBody ?? t(copy.bodyKey))}</p>
+        {cliUpdateError ? <p className="text-xs">{cliUpdateError}</p> : null}
+        {category === "native-unavailable" ? (
+          <span className="flex flex-wrap items-center gap-2 pt-1">
+            {canUpdateCli ? (
+              <Button
+                className="h-7 px-2 text-xs"
+                disabled={cliUpdateBusy}
+                onClick={() => void applyCliUpdate()}
+                size="sm"
+                type="button"
+              >
+                {cliUpdateBusy
+                  ? t("nativeSession.updating")
+                  : t("nativeSession.updateCli", {
+                      version: nativeDetails?.requiredVersion ?? "",
+                    })}
+              </Button>
+            ) : null}
+            <Button
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                clearError();
+                void startNewConversation();
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {t("nativeSession.usePlain")}
+            </Button>
+          </span>
+        ) : null}
         {copy.action === "retry" ? (
           <Button
             className="h-7 px-2 text-xs"

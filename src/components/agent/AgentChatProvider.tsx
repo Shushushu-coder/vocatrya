@@ -331,7 +331,10 @@ function useAgentChatValue(
   const [explicit, setExplicit] = useState<ExplicitModelSelection | null>(
     initialSlot.draft?.explicit ?? null,
   );
-  const [actionError, setActionError] = useState<{ code: string } | null>(null);
+  const [actionError, setActionError] = useState<{
+    code: string;
+    details?: unknown;
+  } | null>(null);
   // Display-only dismissal of the preflight banner — it never lifts the
   // send restriction, which stays bound to identity.ok.
   const [preflightDismissed, setPreflightDismissed] = useState(false);
@@ -1225,7 +1228,7 @@ function useAgentChatValue(
       const result = await createChatConversation({ executionPath: "NATIVE_CODEX_V1", messages: [], context: [],
         explicit: explicitRef.current, permissionMode: draftPermissionMode, agentRole: activeRoleRef.current });
       if (selectionEpochRef.current !== epoch) return;
-      if (!result.success || !result.data) { setActionError({ code: result.code ?? "NATIVE_SESSION_UNAVAILABLE" }); return; }
+      if (!result.success || !result.data) { setActionError({ code: result.code ?? "NATIVE_SESSION_UNAVAILABLE", details: result.details }); return; }
       await selectConversation(result.data.id);
     } finally { creatingRef.current = false; }
   }, [draftPermissionMode, selectConversation]);

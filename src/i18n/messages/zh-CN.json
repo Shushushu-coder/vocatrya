@@ -8,6 +8,15 @@
     "restart": "重新开始原生上下文（不携带上文）",
     "contextLost": "原生上下文未恢复，本次消息未自动重发。请明确选择重新开始原生上下文，或返回原会话稍后再试。",
     "unavailable": "当前连接、模型或运行时版本尚不能使用原生会话。请选择已验证的 Codex 账号连接与模型。",
+    "unavailableConnection": "当前连接不能使用原生会话。请在 AI 设置中重新验证 Codex 账号连接，或改用普通新对话。",
+    "unavailableRuntime": "Codex 运行时未就绪，原生会话暂不可用。请在 AI 设置中检查运行时状态，或改用普通新对话。",
+    "unavailableVersion": "原生会话需要 Codex CLI {required}，当前为 {actual}。点击下方按钮更新到所需版本，或改用普通新对话。",
+    "unavailableModel": "模型 {model} 暂不支持原生会话。可用模型：{models}；或改用普通新对话。",
+    "updateCli": "更新到 {version}",
+    "updating": "正在更新…",
+    "updateFailed": "更新未完成（{code}）。可在 AI 设置的“版本与更新详情”中重试或手动更新。",
+    "usePlain": "改用普通新对话",
+    "unknownVersion": "未知版本",
     "textOnly": "首版仅支持纯文本，不接收资料上下文、附件，不提供重新生成或工具。"
   },
   "canonicalImport": {
@@ -3407,7 +3416,13 @@
     "verifiedAvailableHint": "可用版本已经过应用能力验证。",
     "unverifiedAvailableHint": "可用版本尚未经过应用能力验证——能力认证当前精确绑定 v{certified}；更新后将按新探测版本重新判定，不会自动放宽。",
     "recoveryCommand": "如需回退到认证版本 {version}：{command}",
-    "recoveryNone": "官方渠道不提供固定版本回退——如能力验证失败，请查阅安装文档。"
+    "recoveryNone": "官方渠道不提供固定版本回退——如能力验证失败，请查阅安装文档。",
+    "requiredHint": "有功能需要运行时版本 {version}",
+    "applyLatest": "更新到 {version}",
+    "applyRequired": "切换到 {version}",
+    "applyDone": "已更新到 v{version}",
+    "applyFailed": "更新未完成（{code}）",
+    "applyManual": "当前安装方式不支持一键操作，请按上方提示手动更新"
   },
   "agentCodeBlock": {
     "copy": "复制代码",

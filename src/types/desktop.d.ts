@@ -66,6 +66,16 @@ interface VocatryaRuntimeBridge {
     backendKind: string,
     options?: { force?: boolean },
   ): Promise<import("../lib/ai/runtime/update-check").RuntimeUpdateCheckResult>;
+  /**
+   * Audited update execution. `target` is a fixed enum — "latest" tracks
+   * the vendor's newest build, "required" pins the strict capability
+   * version (e.g. Codex native-session CLI). No path/args/version string
+   * crosses the bridge.
+   */
+  applyUpdate(
+    backendKind: string,
+    options?: { target?: "latest" | "required" },
+  ): Promise<import("../lib/ai/runtime/update-check").RuntimeApplyUpdateResult>;
 }
 
 interface AiConnectionOpConnection {

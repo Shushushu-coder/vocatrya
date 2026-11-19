@@ -74,10 +74,11 @@ function fail(error: unknown, fallback: string): {
   success: false;
   message: string;
   code?: string;
+  details?: unknown;
 } {
   if (error instanceof ConversationRequestError) return { success: false, message: error.message, code: error.code };
   if (error instanceof AIBusinessError) {
-    return { success: false, message: error.message, code: error.code };
+    return { success: false, message: error.message, code: error.code, ...(error.details !== undefined ? { details: error.details } : {}) };
   }
   if (error instanceof ChatConversationArchivedError) {
     return {
@@ -222,6 +223,8 @@ export const createChatConversation = async (input?: {
   data?: ChatConversationSnapshot;
   message?: string;
   code?: string;
+  /** Structured failure context (e.g. native-readiness reason + versions). */
+  details?: unknown;
 }> => {
   try {
     const user = await requireUser();

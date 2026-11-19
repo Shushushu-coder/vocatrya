@@ -116,4 +116,44 @@ export interface RuntimeUpdateCheckResult {
     args: string[];
     documentationUrl?: string;
   }[];
+  /**
+   * The strict version a managed capability requires (e.g. Codex native
+   * sessions → the certified CLI build). Null when nothing requires one.
+   * Composed by the service, absent from the raw checker result.
+   */
+  requiredVersion?: string | null;
+  /**
+   * Which one-click update targets this install flavor can execute
+   * (detection only — runtime:applyUpdate owns execution).
+   */
+  apply?: {
+    flavor: "npm-global" | "self-update" | "unknown";
+    canLatest: boolean;
+    canRequired: boolean;
+  } | null;
 }
+
+/** The target enum for runtime:applyUpdate — never a version string. */
+export type RuntimeApplyTarget = "latest" | "required";
+
+/** Result of the audited update execution channel. */
+export type RuntimeApplyUpdateResult =
+  | {
+      ok: true;
+      backendKind: string;
+      target: RuntimeApplyTarget;
+      /** Post-install re-probe — a 0 exit alone is not proof. */
+      version: string | null;
+      state: string;
+    }
+  | {
+      ok: false;
+      code:
+        | "IN_PROGRESS"
+        | "NO_TARGET"
+        | "MANUAL_REQUIRED"
+        | "UPDATE_FAILED"
+        | "UPDATE_TIMEOUT";
+      exitCode?: number | null;
+      stderrTail?: string | null;
+    };

@@ -1,9 +1,10 @@
 // Phase C Electron main IPC boundary for managed runtimes.
 //
 // The renderer may request ONLY registry-keyed operations — it supplies a
-// backendKind and nothing else. There is deliberately no channel that
-// accepts an executable path, args, cwd, env, or a command string; install
-// and update expose structured metadata while execution stays disabled.
+// backendKind and, for update execution, a fixed target enum. There is
+// deliberately no channel that accepts an executable path, args, cwd, env,
+// a version string, or a command string; installs still expose metadata
+// only, and runtime:applyUpdate resolves everything main-side.
 const { isRegisteredBackendKind } = require("./registry");
 
 const RUNTIME_IPC_CHANNELS = Object.freeze({
@@ -14,6 +15,7 @@ const RUNTIME_IPC_CHANNELS = Object.freeze({
   getInstallInfo: "runtime:getInstallInfo",
   getUpdateInfo: "runtime:getUpdateInfo",
   checkUpdate: "runtime:checkUpdate",
+  applyUpdate: "runtime:applyUpdate",
 });
 
 function readBackendKind(payload) {
@@ -65,6 +67,19 @@ function registerRuntimeIpcHandlers(ipcMain, service) {
     service.checkRuntimeUpdate(readBackendKind(payload), {
       force:
         payload && typeof payload === "object" && payload.force === true,
+    }),
+  );
+
+  // Audited update execution. The renderer selects ONLY a target enum —
+  // the executable, package name, and version are resolved main-side from
+  // registry/certification constants; no path, args, or version string is
+  // ever taken from the payload.
+  ipcMain.handle(RUNTIME_IPC_CHANNELS.applyUpdate, (_event, payload) =>
+    service.applyRuntimeUpdate(readBackendKind(payload), {
+      target:
+        payload && typeof payload === "object" && payload.target === "required"
+          ? "required"
+          : "latest",
     }),
   );
 

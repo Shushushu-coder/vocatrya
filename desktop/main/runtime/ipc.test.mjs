@@ -58,6 +58,7 @@ describe("runtime IPC boundary", () => {
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
       "runtime:checkUpdate",
+      "runtime:applyUpdate",
     ]);
     // The dangerous shapes must not exist at all.
     for (const forbidden of [
@@ -89,6 +90,7 @@ describe("runtime IPC boundary", () => {
       "runtime:getInstallInfo",
       "runtime:getUpdateInfo",
       "runtime:checkUpdate",
+      "runtime:applyUpdate",
     ]) {
       for (const bad of [
         undefined,
@@ -162,6 +164,22 @@ describe("runtime IPC boundary", () => {
     expect(result.backendKind).toBe("CODEX_RUNTIME");
     expect(result.check.status).toBe("NOT_RUN");
     expect(result.executionEnabled).toBe(false);
+  });
+
+  it("applyUpdate ignores hostile fields and refuses a missing runtime", async () => {
+    const ipcMain = fakeIpcMain();
+    registerRuntimeIpcHandlers(ipcMain, service);
+    // Codex is NOT_INSTALLED in this env → no executable is ever spawned,
+    // and renderer-supplied command fields cannot steer anything.
+    const result = await ipcMain.invoke("runtime:applyUpdate", {
+      backendKind: "CODEX_RUNTIME",
+      target: "required",
+      executable: "C:\\evil.exe",
+      args: ["/c", "evil"],
+      version: "9.9.9",
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("MANUAL_REQUIRED");
   });
 
   it("getStatus stays UNKNOWN without a managed profile and validates refs", async () => {

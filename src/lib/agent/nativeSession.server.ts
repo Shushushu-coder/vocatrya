@@ -9,16 +9,61 @@ import type { ConversationRequest } from "./conversationRequest";
 
 export const NATIVE_PATH = "NATIVE_CODEX_V1";
 export const APP_PATH = "APP_ORCHESTRATED";
-const unavailable = () => new AIBusinessError("NATIVE_SESSION_UNAVAILABLE", "Native session is not available for this connection, model or runtime version");
+export type NativeUnavailableReason =
+  | "CONNECTION_INELIGIBLE"
+  | "RUNTIME_NOT_READY"
+  | "RUNTIME_VERSION_MISMATCH"
+  | "MODEL_UNSUPPORTED";
+
+export interface NativeUnavailableDetails {
+  reason: NativeUnavailableReason;
+  /** The probed runtime version (e.g. "0.165.0"), or null when unprobed. */
+  runtimeVersion: string | null;
+  /** The version the capability certifies (e.g. "0.169.0"), when known. */
+  requiredVersion: string | null;
+  model: string | null;
+  /** The certified model allowlist, when the runtime advertises one. */
+  models: string[] | null;
+}
+
+const unavailable = (details?: NativeUnavailableDetails) => new AIBusinessError("NATIVE_SESSION_UNAVAILABLE", "Native session is not available for this connection, model or runtime version", undefined, details);
 const lost = () => new AIBusinessError("NATIVE_CONTEXT_LOST", "Native context was not restored. No message was resent. Explicitly restart native context to continue.");
 
-export async function nativeReadiness(userId: string, connectionId: string, model: string, db = prisma) {
+// Structured gate — every rejected caller learns WHICH condition failed,
+// with the expected/actual values, so the UI can give actionable guidance
+// instead of an opaque "unavailable".
+export async function nativeReadinessReport(
+  userId: string,
+  connectionId: string,
+  model: string,
+  db = prisma,
+): Promise<
+  | { ok: true; connection: Awaited<ReturnType<typeof prisma.aIConnection.findFirst>>; runtimeVersion: string; configHash: string }
+  | { ok: false; details: NativeUnavailableDetails }
+> {
+  const reject = (details: NativeUnavailableDetails) => ({ ok: false as const, details });
   const connection = await db.aIConnection.findFirst({ where: { id: connectionId, userId } });
-  if (!connection || connection.archivedAt || connection.status !== "CONNECTED" || connection.backendKind !== "CODEX_RUNTIME" || connection.authType !== "ACCOUNT_LOGIN" || classifyAIConnection(connection) !== "ACCOUNT_LOGIN" || !connection.runtimeProfileRef) throw unavailable();
+  if (!connection || connection.archivedAt || connection.status !== "CONNECTED" || connection.backendKind !== "CODEX_RUNTIME" || connection.authType !== "ACCOUNT_LOGIN" || classifyAIConnection(connection) !== "ACCOUNT_LOGIN" || !connection.runtimeProfileRef) {
+    return reject({ reason: "CONNECTION_INELIGIBLE", runtimeVersion: null, requiredVersion: null, model, models: null });
+  }
   const state = await fetchAccountRuntimeState({ backendKind: connection.backendKind, accountProvider: connection.provider });
   const capability = state.nativeSession;
-  if (!state.runtimeReady || !capability?.ready || !capability.models.includes(model) || state.runtimeVersion !== capability.version) throw unavailable();
-  return { connection, runtimeVersion: capability.version, configHash: capability.configHash };
+  if (!state.runtimeReady) {
+    return reject({ reason: "RUNTIME_NOT_READY", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model, models: capability?.models ?? null });
+  }
+  if (!capability?.ready || state.runtimeVersion !== capability.version) {
+    return reject({ reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model, models: capability?.models ?? null });
+  }
+  if (!capability.models.includes(model)) {
+    return reject({ reason: "MODEL_UNSUPPORTED", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability.version, model, models: capability.models });
+  }
+  return { ok: true, connection, runtimeVersion: capability.version, configHash: capability.configHash };
+}
+
+export async function nativeReadiness(userId: string, connectionId: string, model: string, db = prisma) {
+  const report = await nativeReadinessReport(userId, connectionId, model, db);
+  if (!report.ok) throw unavailable(report.details);
+  return { connection: report.connection!, runtimeVersion: report.runtimeVersion, configHash: report.configHash };
 }
 
 // Ownership includes the active request lease. A late stream cannot recreate

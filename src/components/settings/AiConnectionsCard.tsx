@@ -203,6 +203,12 @@ function AiConnectionsCard() {
   const [updateIpcFailed, setUpdateIpcFailed] = useState<
     Partial<Record<BackendKind, boolean>>
   >({});
+  const [applyBusy, setApplyBusy] = useState<
+    Partial<Record<BackendKind, boolean>>
+  >({});
+  const [applyOutcome, setApplyOutcome] = useState<
+    Partial<Record<BackendKind, { ok: boolean; text: string }>>
+  >({});
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingTicket, setPendingTicket] = useState<string | null>(null);
@@ -245,6 +251,58 @@ function AiConnectionsCard() {
       }
     },
     [],
+  );
+
+  // One-click update — the bridge executes an audited target ("latest" |
+  // "required"); on completion we re-probe detection AND rerun the online
+  // check so the card reflects the real installed version, not optimism.
+  const runApplyUpdate = useCallback(
+    async (backendKind: BackendKind, target: "latest" | "required") => {
+      const runtime = window.vocatryaRuntime;
+      if (!runtime || typeof runtime.applyUpdate !== "function") return;
+      setApplyBusy((prev) => ({ ...prev, [backendKind]: true }));
+      try {
+        const result = await runtime.applyUpdate(backendKind, { target });
+        setApplyOutcome((prev) => ({
+          ...prev,
+          [backendKind]: result.ok
+            ? {
+                ok: true,
+                text: t("runtimeUpdate.applyDone", {
+                  version: result.version ?? "",
+                }),
+              }
+            : {
+                ok: false,
+                text:
+                  result.code === "MANUAL_REQUIRED"
+                    ? t("runtimeUpdate.applyManual")
+                    : t("runtimeUpdate.applyFailed", { code: result.code }),
+              },
+        }));
+        void runtime
+          .detect(backendKind)
+          .then((status) =>
+            setRuntimeStates((prev) => ({
+              ...prev,
+              [backendKind]: { state: status.state, version: status.version },
+            })),
+          )
+          .catch(() => undefined);
+        void runUpdateCheck(backendKind, true);
+      } catch {
+        setApplyOutcome((prev) => ({
+          ...prev,
+          [backendKind]: {
+            ok: false,
+            text: t("runtimeUpdate.applyFailed", { code: "ERROR" }),
+          },
+        }));
+      } finally {
+        setApplyBusy((prev) => ({ ...prev, [backendKind]: false }));
+      }
+    },
+    [runUpdateCheck, t],
   );
 
   useEffect(() => {
@@ -494,6 +552,8 @@ function AiConnectionsCard() {
         const update = updateChecks[backend.backendKind];
         const updateChecking = updateBusy[backend.backendKind] === true;
         const updateFailed = updateIpcFailed[backend.backendKind] === true;
+        const applying = applyBusy[backend.backendKind] === true;
+        const applied = applyOutcome[backend.backendKind] ?? null;
         const compact = integrated && backendConnections.length === 0 && !isConnecting;
         const card = (
           <section className="min-w-0 space-y-3 rounded-lg border bg-card p-3">
@@ -521,8 +581,9 @@ function AiConnectionsCard() {
             {/* Unified install/update UX: NOT_INSTALLED and BROKEN surface
                 the registry's install metadata; UPDATE_AVAILABLE surfaces
                 update metadata. Install/update never runs implicitly — the
-                user always performs an explicit action (and runtime-side
-                execution stays disabled this phase). */}
+                user always performs an explicit action. One-click updates
+                run through the audited runtime:applyUpdate path; install
+                methods stay display-only. */}
             {(runtimeState?.state === "NOT_INSTALLED" ||
               runtimeState?.state === "BROKEN") && (
               <div className="rounded-md border border-dashed p-2 text-sm space-y-1">
@@ -648,11 +709,65 @@ function AiConnectionsCard() {
                           : t("runtimeUpdate.compatNoBaseline")}
                     </p>
                   )}
+                {/* Strict capability target (e.g. Codex native-session
+                    0.169.0) — a separate axis from "a newer build exists";
+                    offered only when the install flavor can actually pin
+                    it (npm-global). */}
+                {update?.requiredVersion &&
+                  update.currentVersion !== update.requiredVersion && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-muted-foreground">
+                        {t("runtimeUpdate.requiredHint", {
+                          version: update.requiredVersion,
+                        })}
+                      </p>
+                      {update.apply?.canRequired ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={applying}
+                          onClick={() =>
+                            void runApplyUpdate(backend.backendKind, "required")
+                          }
+                        >
+                          {applying ? (
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          ) : null}
+                          {t("runtimeUpdate.applyRequired", {
+                            version: update.requiredVersion,
+                          })}
+                        </Button>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          {t("runtimeUpdate.applyManual")}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 {update?.check.status === "UPDATE_AVAILABLE" && (
                   <>
-                    <p className="text-muted-foreground">
-                      {t("runtimeUpdate.updateHint")}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-muted-foreground">
+                        {t("runtimeUpdate.updateHint")}
+                      </p>
+                      {update.apply?.canLatest ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={applying}
+                          onClick={() =>
+                            void runApplyUpdate(backend.backendKind, "latest")
+                          }
+                        >
+                          {applying ? (
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          ) : null}
+                          {t("runtimeUpdate.applyLatest", {
+                            version: update.check.latestVersion ?? "",
+                          })}
+                        </Button>
+                      ) : null}
+                    </div>
                     {update.compatibility.available === "VERIFIED" ? (
                       <p className="text-muted-foreground">
                         {t("runtimeUpdate.verifiedAvailableHint")}
@@ -693,6 +808,15 @@ function AiConnectionsCard() {
                     {t("runtimeUpdate.checkFailedHint")}
                   </p>
                 )}
+                {applied ? (
+                  <p
+                    className={
+                      applied.ok ? "text-muted-foreground" : "text-destructive"
+                    }
+                  >
+                    {applied.text}
+                  </p>
+                ) : null}
               </div>
             )}
 

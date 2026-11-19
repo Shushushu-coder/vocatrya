@@ -12,6 +12,11 @@ const { probeRuntimeAuthState } = require("./auth-probe");
 const { RuntimeProfileManager } = require("./profiles");
 const { createRuntimeUpdateChecker } = require("./update-check");
 const {
+  applySupportFor,
+  createRuntimeUpdateApplier,
+  requiredVersionFor,
+} = require("./update-apply");
+const {
   getAccountRuntimeCapabilities,
 } = require("./capabilities");
 
@@ -36,6 +41,7 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
   // One checker per service instance: its upstream cache lives as long as
   // the main process's service (created once at startup).
   const updateChecker = createRuntimeUpdateChecker(deps);
+  const updateApplier = createRuntimeUpdateApplier(deps);
 
   function assertKnown(backendKind) {
     if (!isRegisteredBackendKind(backendKind)) {
@@ -132,7 +138,29 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
     // with its timestamp, and the exact-version compatibility axis.
     async checkRuntimeUpdate(backendKind, { force } = {}) {
       assertKnown(backendKind);
-      return updateChecker.checkRuntimeUpdate(backendKind, { force });
+      const result = await updateChecker.checkRuntimeUpdate(backendKind, {
+        force,
+      });
+      // Compose the execution surface: the strict capability-required
+      // version (e.g. Codex native-session 0.169.0) and which targets this
+      // install flavor can actually run — the renderer renders buttons
+      // from this, never guesses commands itself.
+      const definition = getRuntimeDefinition(backendKind);
+      const detected = this.detectRuntime(backendKind);
+      return {
+        ...result,
+        requiredVersion: requiredVersionFor(backendKind),
+        apply: applySupportFor(definition, detected),
+      };
+    },
+
+    // Audited one-click update execution. The renderer chooses only
+    // backendKind + a target enum ("latest" | "required"); the package,
+    // command, and pinned version all resolve from registry/certification
+    // constants inside update-apply.js — never from renderer strings.
+    async applyRuntimeUpdate(backendKind, { target } = {}) {
+      assertKnown(backendKind);
+      return updateApplier.applyRuntimeUpdate(backendKind, { target });
     },
   };
 }
