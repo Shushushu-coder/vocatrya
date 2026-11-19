@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import applyModule from "./update-apply.js";
+import nativeSession from "./native-session.js";
 
 const {
   APPLY_TARGETS,
@@ -60,6 +61,8 @@ describe("update-apply flavor detection", () => {
 describe("requiredVersionFor", () => {
   it("pins codex's strict native-session version", () => {
     expect(requiredVersionFor("CODEX_RUNTIME")).toBe("0.169.0");
+    // The install target is the newest entry of the verified list, never a stray literal.
+    expect(requiredVersionFor("CODEX_RUNTIME")).toBe(nativeSession.NATIVE_VERIFIED_VERSIONS.at(-1));
   });
 });
 

@@ -23,7 +23,7 @@
 // provider-specific command knowledge.
 const fs = require("node:fs");
 const { createHash } = require("node:crypto");
-const { NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG_HASH, nativeSessionReady, runNativeSession } = require("./native-session");
+const { NATIVE_VERSION, NATIVE_VERIFIED_VERSIONS, NATIVE_MODELS, NATIVE_CONFIG_HASH, nativeSessionReady, runNativeSession } = require("./native-session");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { getRuntimeDefinition } = require("./registry");
@@ -1704,7 +1704,7 @@ function createConnectionService({
       if (activeOps.has(`conn:${connection.id}`)) return fail("NATIVE_BUSY");
       execAcquire(connection.id); registered = true;
       const invocation = adapter.buildStreamingInvocation({ executablePath: runtime.executable, profileDir, baseEnv: deps.env, workingDirectory: cwd });
-      const execution = runNativeSession({ invocation, model, prompt, instructions, threadId: nativeSession.threadId, profileDir,
+      const execution = runNativeSession({ expectedVersion: runtime.version, invocation, model, prompt, instructions, threadId: nativeSession.threadId, profileDir,
         signal: controller.signal, timeoutMs: Math.min(timeoutMs || execTimeoutMs, EXEC_MAX_TIMEOUT_MS), runner,
         onEvent: event => { if (!controller.signal.aborted) onEvent?.(event.type === "native-session" ? { ...event, ...identity } : event); },
       });
@@ -1741,7 +1741,7 @@ function createConnectionService({
       capabilities,
       runtimeVersion: runtime.version,
       runtimeReady: true,
-      nativeSession: adapter.backendKind === CODEX_BACKEND_KIND ? { version: NATIVE_VERSION, models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, ready: runtime.version === NATIVE_VERSION } : null,
+      nativeSession: adapter.backendKind === CODEX_BACKEND_KIND ? { version: NATIVE_VERSION, verifiedVersions: [...NATIVE_VERIFIED_VERSIONS], models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, ready: NATIVE_VERIFIED_VERSIONS.includes(runtime.version) } : null,
     };
   }
 

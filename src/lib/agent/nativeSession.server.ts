@@ -18,6 +18,13 @@ export const APP_PATH = "APP_ORCHESTRATED";
 const unavailable = (details?: NativeUnavailableDetails) => new AIBusinessError("NATIVE_SESSION_UNAVAILABLE", "Native session is not available for this connection, model or runtime version", undefined, details);
 const lost = () => new AIBusinessError("NATIVE_CONTEXT_LOST", "Native context was not restored. No message was resent. Explicitly restart native context to continue.");
 
+// The binary actually installed must be one of the desktop's verified
+// versions (capability.version is only the preferred/install target). A
+// desktop that reports no list falls back to the exact preferred version.
+function runtimeVerified(state: AccountRuntimeState, capability: NonNullable<AccountRuntimeState["nativeSession"]>) {
+  return !!state.runtimeVersion && (capability.verifiedVersions ?? [capability.version]).includes(state.runtimeVersion);
+}
+
 // Structured gate — every rejected caller learns WHICH condition failed,
 // with the expected/actual values, so the UI can give actionable guidance
 // instead of an opaque "unavailable".
@@ -40,13 +47,13 @@ export async function nativeReadinessReport(
   if (!state.runtimeReady) {
     return reject({ reason: "RUNTIME_NOT_READY", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model, models: capability?.models ?? null });
   }
-  if (!capability?.ready || state.runtimeVersion !== capability.version) {
+  if (!capability?.ready || !runtimeVerified(state, capability)) {
     return reject({ reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model, models: capability?.models ?? null });
   }
   if (!capability.models.includes(model)) {
     return reject({ reason: "MODEL_UNSUPPORTED", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability.version, model, models: capability.models });
   }
-  return { ok: true, connection, runtimeVersion: capability.version, configHash: capability.configHash };
+  return { ok: true, connection, runtimeVersion: state.runtimeVersion!, configHash: capability.configHash };
 }
 
 export async function nativeReadiness(userId: string, connectionId: string, model: string, db = prisma) {
@@ -105,7 +112,7 @@ export async function resolveNativeChatEntry(
   if (!state.runtimeReady) {
     return { ok: false, details: { reason: "RUNTIME_NOT_READY", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model: null, models: capability?.models ?? null } };
   }
-  if (!capability?.ready || state.runtimeVersion !== capability.version) {
+  if (!capability?.ready || !runtimeVerified(state, capability)) {
     return { ok: false, details: { reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model: null, models: capability?.models ?? null } };
   }
   const model =

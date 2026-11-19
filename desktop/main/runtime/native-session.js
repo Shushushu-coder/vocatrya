@@ -6,9 +6,28 @@ const { createHash } = require("node:crypto");
 const { StringDecoder } = require("node:string_decoder");
 const { runRuntimeCommand } = require("./runner");
 
-const NATIVE_VERSION = "0.169.0";
-// These exact models/config were checked against the real binary using a
-// loopback synthetic Responses provider, without account credentials.
+// SAFETY gate, not a compatibility hint: the native session relies on
+// NATIVE_CONFIG + the frozen NATIVE_CATALOG to keep web search, shell,
+// apply_patch and every other tool off, and a new CLI may rename a config
+// key and silently re-enable one. A version is listed only after
+// `node desktop/scripts/verify-codex-native.mjs` passed against that exact
+// binary (loopback synthetic Responses provider, temp CODEX_HOME, no account
+// credentials). Add an entry, oldest first, with how/when it was verified;
+// the LAST entry is the newest and is what the managed updater installs.
+const NATIVE_VERIFIED_VERSIONS = Object.freeze([
+  // 0.169.0: checked against the real binary via a loopback synthetic
+  // Responses provider (no account credentials) when native sessions shipped.
+  "0.169.0",
+]);
+const NATIVE_VERSION = NATIVE_VERIFIED_VERSIONS[NATIVE_VERIFIED_VERSIONS.length - 1];
+function isNativeVersionVerified(version) {
+  return typeof version === "string" && NATIVE_VERIFIED_VERSIONS.includes(version);
+}
+// app-server's initialize reply carries userAgent "<clientInfo.name>/<codex version> (...)".
+function reportedCodexVersion(userAgent) {
+  const match = typeof userAgent === "string" ? /^vocatrya-native\/(\S+)/.exec(userAgent) : null;
+  return match ? match[1] : null;
+}
 const NATIVE_MODELS = ["gpt-5.4", "gpt-5.3-codex", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"];
 const NATIVE_CONFIG = Object.freeze({
   web_search: "disabled",
@@ -54,10 +73,10 @@ const NATIVE_CATALOG = { models: NATIVE_MODELS.map(slug => ({
 const NATIVE_CONFIG_HASH = createHash("sha256").update(JSON.stringify([NATIVE_CONFIG, NATIVE_CATALOG])).digest("hex");
 
 function nativeSessionReady(version, model) {
-  return version === NATIVE_VERSION && NATIVE_MODELS.includes(model);
+  return isNativeVersionVerified(version) && NATIVE_MODELS.includes(model);
 }
 
-function createNativeSessionParser({ model, prompt, instructions, threadId, cwd, profileDir, catalogFile }) {
+function createNativeSessionParser({ model, prompt, instructions, threadId, cwd, profileDir, catalogFile, expectedVersion, allowedVersions }) {
   let stdin;
   let buffer = "";
   let sessionId = threadId || null;
@@ -102,6 +121,13 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
     }
     if (m.error && m.id !== 4) { fail(m.id === 2 && threadId ? "NATIVE_RESUME_FAILED" : "NATIVE_PROTOCOL_ERROR"); return; }
     if (m.id === 1) {
+      // Startup self-check: trust the version the binary itself reports in the
+      // handshake, not the path-probed one. Unreported, unlisted, or different
+      // from what the caller resolved: refuse before any config or thread work.
+      // allowedVersions is only for desktop/scripts/verify-codex-native.mjs, which
+      // must run an as-yet-unlisted candidate binary to decide whether to list it.
+      const reported = reportedCodexVersion(m.result?.userAgent);
+      if (!reported || !(allowedVersions || NATIVE_VERIFIED_VERSIONS).includes(reported) || (expectedVersion && reported !== expectedVersion)) { fail("NATIVE_BOUNDARY_NOT_READY"); return; }
       phase = "checking-config";
       send({ method: "initialized" });
       if (cancelled) { fail("NATIVE_CANCELLED"); return; }
@@ -185,10 +211,10 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
   };
 }
 
-async function runNativeSession({ invocation, model, prompt, instructions, threadId, profileDir, signal, timeoutMs, onEvent, runner = runRuntimeCommand }) {
+async function runNativeSession({ allowedVersions, expectedVersion, invocation, model, prompt, instructions, threadId, profileDir, signal, timeoutMs, onEvent, runner = runRuntimeCommand }) {
   const catalogFile = path.join(invocation.cwd, "native-model-catalog.json");
   fs.writeFileSync(catalogFile, JSON.stringify(NATIVE_CATALOG));
-  const parser = createNativeSessionParser({ model, prompt, instructions, threadId, cwd: invocation.cwd, profileDir, catalogFile });
+  const parser = createNativeSessionParser({ model, prompt, instructions, threadId, cwd: invocation.cwd, profileDir, catalogFile, expectedVersion, allowedVersions });
   const controller = new AbortController();
   let grace;
   const abort = () => { parser.interrupt(); grace = setTimeout(() => controller.abort(), 1500); };
@@ -208,4 +234,4 @@ async function runNativeSession({ invocation, model, prompt, instructions, threa
   } finally { clearTimeout(grace); signal?.removeEventListener("abort", abort); }
 }
 
-module.exports = { NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, nativeSessionReady, createNativeSessionParser, runNativeSession };
+module.exports = { NATIVE_VERIFIED_VERSIONS, isNativeVersionVerified, reportedCodexVersion, NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, nativeSessionReady, createNativeSessionParser, runNativeSession };

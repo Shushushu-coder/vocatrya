@@ -53,3 +53,15 @@ it('native entry reports the exact blocker instead of failing on click',async()=
   await expect(resolveNativeChatEntry(userId)).resolves.toMatchObject({ok:false,details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.165.0',requiredVersion:'0.169.0'}});
   ctx.runtimeVersion='0.169.0';
 });
+it('readiness accepts any desktop-verified version, binds to the installed one, and fails closed otherwise',async()=>{
+  const conn=await entryConnection();
+  const mocked=await import('@/lib/ai/streaming-execution');
+  const state=(runtimeVersion:string,verifiedVersions?:string[])=>({runtimeReady:true,runtimeVersion,nativeSession:{ready:true,version:'0.170.0',...(verifiedVersions?{verifiedVersions}:{}),models:['gpt-6.1-sol'],configHash:'config'}}) as any;
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.0',['0.169.0','0.170.0']));
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.169.0'});
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.5',['0.169.0','0.170.0']));
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.169.5',requiredVersion:'0.170.0'}});
+  // An older desktop without the list still means exact-preferred-version only.
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.0'));
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH'}});
+});
