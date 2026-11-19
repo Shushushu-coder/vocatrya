@@ -116,6 +116,10 @@ describe("per-role system prompts", () => {
     expect(prompts.pilot).not.toContain("get_resume reads");
     expect(prompts.pilot).not.toContain("match_job scores");
     expect(prompts.pilot).toContain("cannot read, review or analyze resumes");
+    // B: boundary honesty answers first — the old "cannot see that data"
+    // refusal phrasing must not come back.
+    expect(prompts.pilot).not.toContain("cannot see that data yet");
+    expect(prompts.pilot).toContain("answer the part your job tools can cover");
   });
 
   // Reflect promises dialogue only — no saved-record reads it could fake.
