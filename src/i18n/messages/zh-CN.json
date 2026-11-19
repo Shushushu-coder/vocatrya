@@ -1750,6 +1750,7 @@
     "aiAssignStreamingHint": "职业对话需要逐字流式输出回复，要求运行时通过增量输出验证。",
     "aiAssignStreamingNotReady": "该运行时未通过流式输出验证。",
     "aiAssignStreamingUnverifiable": "暂时无法验证该运行时的流式能力（需要桌面端运行时通道）。",
+    "aiAssignRuntimeChecking": "正在确认运行时...",
     "aiAssignBusinessPurposes": "业务用途",
     "aiAssignOrderHint": "拖动卡片可调整顺序，仅影响本机展示。",
     "aiAssignDragToReorder": "拖拽调整顺序",

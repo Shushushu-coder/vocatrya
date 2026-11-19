@@ -6,7 +6,9 @@
 // no purpose renders a fake or non-interactive "Not provided" row.
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { toastError } from "@/lib/toast";
-import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
+import AiAssignmentsCard, {
+  clearAiAssignmentsSessionCache,
+} from "@/components/settings/AiAssignmentsCard";
 import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { clearBusinessAiAssignment, listBusinessAiAssignments, setBusinessAiAssignment } from "@/actions/aiAssignment.actions";
 
@@ -53,6 +55,10 @@ vi.mock("@/actions/managedAi.actions", () => ({
   }),
   assignManagedBusinessAiSource: vi.fn(),
 }));
+
+beforeEach(() => {
+  clearAiAssignmentsSessionCache();
+});
 
 const MATCH_ROW_TESTID = "ai-assign-row-MATCH_ANALYSIS";
 const REFLECTION_ROW_TESTID = "ai-assign-row-CAREER_REFLECTION";

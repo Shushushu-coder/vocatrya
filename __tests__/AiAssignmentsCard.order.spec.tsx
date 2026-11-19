@@ -4,7 +4,9 @@
 // must merge safely — unknown purposes dropped, new purposes appended —
 // so it can never hide a row.
 import { render, screen, waitFor } from "@testing-library/react";
-import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
+import AiAssignmentsCard, {
+  clearAiAssignmentsSessionCache,
+} from "@/components/settings/AiAssignmentsCard";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 vi.mock("@/i18n", () => {
@@ -55,6 +57,7 @@ const rowOrder = () =>
     .map((row) => row.getAttribute("data-testid"));
 
 beforeEach(() => {
+  clearAiAssignmentsSessionCache();
   window.localStorage.removeItem(APP_CONSTANTS.AI_ASSIGNMENT_ORDER_STORAGE_KEY);
 });
 
