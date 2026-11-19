@@ -17,6 +17,7 @@ const eslintConfig = [
       "__mocks__/",
       ".codex-tmp/",
       ".worktrees/",
+      ".claude/",
       ".tmp/",
       ".wave1-runtime/",
       ".playwright-cli/",

@@ -58,6 +58,7 @@ export default defineConfig({
       "**/node_modules/**",
       "docs/**",
       ".worktrees/**",
+      ".claude/**",
       ".codex-tmp/**",
       ".tmp/**",
       ".devin/**",
