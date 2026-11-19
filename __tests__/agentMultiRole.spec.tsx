@@ -13,6 +13,7 @@ import {
 } from "@/lib/agent/prompt";
 import { suggestionsForRole } from "@/lib/agent/roleSuggestions";
 import { copyFor } from "@/lib/agent/roleCopy";
+import { NOTION_ALL_TOOL_NAMES } from "@/lib/extensions/notion/constants";
 
 const toolCtx = {
   userId: "user-1",
@@ -23,13 +24,22 @@ const toolCtx = {
   writer: { write: () => {}, merge: () => {}, onError: undefined } as never,
 };
 
+// A fully-connected Notion session: the route resolves these names into
+// ctx.notionTools before build, so extension tools register alongside the
+// local registry.
+const NOTION_NAMES = [...NOTION_ALL_TOOL_NAMES];
+
 // The contract's effective set: role allowlist ∩ registered runtime tools.
 // Allowlists only ever shrink the registry, never grow it.
 describe("per-role tool allowlists", () => {
   it.each(Object.keys(AGENT_ROLE_TOOL_ALLOWLIST) as Array<"insight" | "pilot" | "reflect">)(
     "registers exactly the %s allowlist under the legacy runtime",
     (role) => {
-      const tools = buildAgentTools({ ...toolCtx, agentRole: role });
+      const tools = buildAgentTools({
+        ...toolCtx,
+        agentRole: role,
+        notionTools: NOTION_NAMES,
+      });
       expect(Object.keys(tools).sort()).toEqual(
         [...AGENT_ROLE_TOOL_ALLOWLIST[role]].sort(),
       );
@@ -41,6 +51,7 @@ describe("per-role tool allowlists", () => {
       ...toolCtx,
       freshNativeFull: true,
       agentRole: "insight",
+      notionTools: NOTION_NAMES,
     });
     expect(tools.match_job.needsApproval).toBe(true);
     expect(Object.keys(tools).sort()).toEqual(
@@ -100,6 +111,10 @@ describe("per-role system prompts", () => {
     expect(prompts.pilot).not.toContain("get_resume reads");
     expect(prompts.pilot).not.toContain("match_job scores");
     expect(prompts.pilot).toContain("cannot read, review or analyze resumes");
+    // B: boundary honesty answers first — the old "cannot see that data"
+    // refusal phrasing must not come back.
+    expect(prompts.pilot).not.toContain("cannot see that data yet");
+    expect(prompts.pilot).toContain("answer the part your job tools can cover");
   });
 
   // Reflect promises dialogue only — no saved-record reads it could fake.

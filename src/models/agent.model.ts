@@ -125,6 +125,14 @@ export type AgentListJobsResult =
   | { status: "ok"; jobs: AgentJobSummary[]; total: number; truncated: boolean }
   | { status: "unavailable"; reason: string };
 
+// What suggest_role returns to the result card: which sibling fits the
+// request and the text to prefill in its composer. The card writes nothing
+// — the user reviews the draft and presses send in the target role.
+export type AgentSuggestRoleResult = {
+  role: "insight" | "pilot" | "reflect";
+  question: string;
+};
+
 export type AgentGetJobResult =
   | {
       status: "ok";

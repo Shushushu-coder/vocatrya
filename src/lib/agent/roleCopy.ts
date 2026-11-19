@@ -46,6 +46,14 @@ export const AGENT_ROLE_FALLBACKS: Record<string, { "zh-CN": string; en: string 
     en: "General assistant",
   },
   "agent.roleSwitcher.label": { "zh-CN": "切换助手", en: "Switch assistant" },
+  "agent.suggestRoleBetterFit": {
+    "zh-CN": "这个问题 {name} 处理更合适。",
+    en: "{name} is the better fit for this.",
+  },
+  "agent.suggestRoleCta": {
+    "zh-CN": "带这个问题去问 {name}",
+    en: "Take this to {name}",
+  },
   "agent.roster.ask": {
     "zh-CN": "咨询 {name} —— {duty}",
     en: "Ask {name} — {duty}",
@@ -216,21 +224,21 @@ export function buildRoleAwarenessBlock(role: AgentRole): string {
   return [
     "You share this workspace with two sibling assistants. The user can reach either from the role icons at the top of this panel at any time. In order they are the telescope icon, the compass icon, and the chat icon.",
     siblingLines.join(" "),
-    "When the user asks for something outside your role — a write or edit you do not perform, an analysis you do not run, or an extension capability this session did not register for you — say plainly that you cannot do it, explain the division of work or the permission boundary, name the sibling who can, and point to that sibling's icon. Never describe the request as impossible, broken, unconnected, or unavailable in this app.",
+    "Always answer the user's request as far as your own capabilities reach — never refuse outright. When the request clearly belongs to a sibling — a write or edit you do not perform, an analysis you do not run, or an extension capability this session did not register for you — give the best useful answer your own tools allow, then call suggest_role with that sibling's role and the user's request copied verbatim. The app turns that call into a handoff card that carries their request to that assistant in one tap. Never describe the request as impossible, broken, unconnected, or unavailable in this app, and never claim to have done work your tools cannot do.",
   ].join(" ");
 }
 
-/** One extra limitations sentence: why, who, and which header icon. */
-export function roleRefusalHint(role: AgentRole): string {
+/** One extra limitations sentence: the boundary, the handoff tool, and the header icon. */
+export function roleHandoffHint(role: AgentRole): string {
   const name = (item: AgentRole) => rosterFallback(AGENT_ROSTER[item].nameKey, "en");
   const icon = (item: AgentRole) => AGENT_ROSTER[item].icon;
   const never =
     "Do not describe the request as impossible, broken, unconnected, or unavailable in this app.";
   if (role === "insight") {
-    return `Every write or edit, including a write through a connected extension, belongs to ${name("pilot")} because of the role boundary. Name ${name("pilot")} and point to the ${icon("pilot")} icon at the top of this panel. ${never}`;
+    return `Every write or edit, including a write through a connected extension, belongs to ${name("pilot")} because of the role boundary. Answer what you can from what you can read; when the write itself is what the user wants, call suggest_role with role "pilot" and their request copied verbatim — the card carries it to ${name("pilot")} — and you can also point to the ${icon("pilot")} icon at the top of this panel. ${never}`;
   }
   if (role === "pilot") {
-    return `Resume reviews and match analysis belong to ${name("insight")} because of the role boundary. Name ${name("insight")} and point to the ${icon("insight")} icon at the top of this panel. ${never}`;
+    return `Resume reviews and match analysis belong to ${name("insight")} because of the role boundary. Answer what you can from the job data you can read; when the analysis itself is what they want, call suggest_role with role "insight" and their request copied verbatim — the card carries it to ${name("insight")} — and you can also point to the ${icon("insight")} icon at the top of this panel. ${never}`;
   }
-  return `Writing or changing data belongs to ${name("pilot")}: name ${name("pilot")} and point to the ${icon("pilot")} icon at the top of this panel. Resume reviews and match analysis belong to ${name("insight")}: name ${name("insight")} and point to the ${icon("insight")} icon at the top of this panel. ${never}`;
+  return `Writing or changing data belongs to ${name("pilot")}: when the user clearly wants it, call suggest_role with role "pilot" and their request copied verbatim — the card carries it to ${name("pilot")} (the ${icon("pilot")} icon). Resume reviews and match analysis belong to ${name("insight")}: same handoff with role "insight" for ${name("insight")} (the ${icon("insight")} icon). Otherwise keep the conversation going and answer honestly. ${never}`;
 }

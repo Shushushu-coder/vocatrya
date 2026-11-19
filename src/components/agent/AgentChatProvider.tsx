@@ -70,6 +70,8 @@ import { AiProvider } from "@/models/ai.model";
 import { AI_CONFIGURATION_CHANGED_EVENT } from "@/lib/ai/client-events";
 import {
   AGENT_NESTED_STREAM_PART_TYPE,
+  isAgentFilePart,
+  isAgentPastePart,
   isNestedTool,
   type AgentAddJobResult,
   type AgentNestedStreamData,
@@ -174,6 +176,45 @@ function contextRequests(items: AgentConversationContextItem[]) {
     entityId: item.entityId,
     source: item.source,
   }));
+}
+
+// The handoff carries the whole request, not just its text: the paste card
+// and extracted file parts already live inside the source user message.
+// Locate the request by the suggest_role call that answered it, then
+// materialize those parts back into unsent chips on the target slot.
+function harvestTransferSource(
+  messages: UIMessage[],
+  toolCallId: string | undefined,
+): { paste: AgentPastePartData | null; files: AgentFileChip[] } | null {
+  if (!toolCallId) return null;
+  const assistantIndex = messages.findIndex(
+    (message) =>
+      message.role === "assistant" &&
+      message.parts?.some(
+        (part) => isToolUIPart(part) && part.toolCallId === toolCallId,
+      ),
+  );
+  if (assistantIndex < 0) return null;
+  for (let i = assistantIndex - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role !== "user") continue;
+    const parts = message.parts ?? [];
+    const paste = parts.find(isAgentPastePart)?.data ?? null;
+    const files = parts.filter(isAgentFilePart).map(
+      (part): AgentFileChip => ({
+        id: part.data.id,
+        name: part.data.name,
+        mediaType: part.data.mediaType,
+        size: part.data.size,
+        status: "ready",
+        chars: part.data.chars,
+        truncated: part.data.truncated,
+        text: part.data.text,
+      }),
+    );
+    return { paste, files };
+  }
+  return null;
 }
 
 function identityFromInitial(
@@ -348,7 +389,18 @@ function useAgentChatValue(
   // yet, the restored slot pointer still has to survive a snapshot.
   const slotPointerRef = useRef<string | null>(initialSlot.preservedConversationId);
   const revisionRef = useRef(initial?.revision ?? 0);
-  const activeExecutionRef = useRef<{ conversationId: string; requestId: string; existingWrites: Set<string> } | null>(null);
+  const activeExecutionRef = useRef<{
+    conversationId: string;
+    requestId: string;
+    existingWrites: Set<string>;
+    operation?: "send" | "regenerate" | "approval";
+    /** The user message a rejected "send" would re-issue. */
+    message?: UIMessage;
+    /** The tail message a rejected "regenerate" re-targets. */
+    targetMessageId?: string;
+    /** One automatic re-issue per user action, never more. */
+    retried?: boolean;
+  } | null>(null);
   const completedExecutionRef = useRef<string | null>(null);
   const recoveryRef = useRef<{ conversationId: string; requestId: string } | null>(null);
   const recoveryBlockedRef = useRef(false);
@@ -362,6 +414,10 @@ function useAgentChatValue(
   const approvalSendingRef = useRef(false);
   const durableApprovalRef = useRef(Boolean(initial));
   const conflictRef = useRef(false);
+  // Arms exactly one automatic re-issue after a CAS conflict reload: the
+  // replayed request carries retried=true, so a second rejection surfaces
+  // the banner instead of looping. A fresh user action re-arms the retry.
+  const replayNextRequestRef = useRef(false);
   const regenerateTargetRef = useRef<string | null>(null);
   // Status lags one render behind the click, so an in-flight ref is the only
   // thing that stops a fast second click from opening a second request.
@@ -568,9 +624,16 @@ function useAgentChatValue(
         const requestId = generateId();
         const id = conversationIdRef.current!;
         const last = messages.at(-1);
+        const replayed = replayNextRequestRef.current;
+        replayNextRequestRef.current = false;
         const approval = last?.parts.find(p => isToolUIPart(p) && p.state === "approval-responded" && p.approval?.id === selectedApprovalRef.current);
         const operation = trigger === "regenerate-message" ? "regenerate" : approval ? "approval" : "send";
-        activeExecutionRef.current = { conversationId: id, requestId, existingWrites: savedWriteCallIds(messages) };
+        activeExecutionRef.current = {
+          conversationId: id, requestId, existingWrites: savedWriteCallIds(messages), operation,
+          ...(replayed ? { retried: true } : {}),
+          ...(operation === "send" && last ? { message: last } : {}),
+          ...(operation === "regenerate" ? { targetMessageId: regenerateTargetRef.current ?? messageId } : {}),
+        };
         recoveryRef.current = null;
         completedExecutionRef.current = null;
         durableApprovalRef.current = false;
@@ -608,6 +671,50 @@ function useAgentChatValue(
           recoveryRef.current = null;
           chat.setMessages(result.data.messages);
           setHistoryVersion(n => n + 1);
+          // A CAS rejection means the user's own operation never ran — the
+          // reload just synced revision and transcript, so re-issuing the
+          // same intent lands without a second click. retried bounds it to
+          // one automatic re-issue per action, and a pending approval in the
+          // durable transcript wins the user's attention over any replay.
+          if (
+            !active.retried &&
+            (code === "CONVERSATION_STALE_WRITE" ||
+              code === "CONVERSATION_TURN_CONFLICT") &&
+            (active.operation === "send" || active.operation === "regenerate") &&
+            !hasPendingApproval(result.data.messages)
+          ) {
+            active.retried = true;
+            conflictRef.current = false;
+            setInterruptedTurn(false);
+            setActionError(null);
+            chat.clearError();
+            if (active.operation === "regenerate" && active.targetMessageId) {
+              regenerateTargetRef.current = active.targetMessageId;
+              regenerateInFlightRef.current = true;
+              const settle = () => {
+                regenerateInFlightRef.current = false;
+              };
+              try {
+                replayNextRequestRef.current = true;
+                void Promise.resolve(
+                  chat.regenerate({ messageId: active.targetMessageId }),
+                ).then(settle, settle);
+              } catch {
+                replayNextRequestRef.current = false;
+                settle();
+              }
+            } else if (
+              active.operation === "send" &&
+              active.message &&
+              !result.data.messages.some((m) => m.id === active.message!.id)
+            ) {
+              replayNextRequestRef.current = true;
+              void chat.sendMessage({ parts: active.message.parts });
+            } else {
+              setActionError({ code });
+            }
+            return;
+          }
           const savedWrite = [...savedWriteCallIds(result.data.messages)].some(id => !active.existingWrites.has(id));
           setActionError({ code: savedWrite && !code.startsWith("CONVERSATION_") ? "CONVERSATION_OPERATION_SAVED" : code });
           chat.clearError();
@@ -718,14 +825,13 @@ function useAgentChatValue(
   }, [chat]);
 
   const close = useCallback(() => {
-    if (streamingRef.current) {
-      stop();
-      setInterruptedTurn(true);
-      toastInfo(t("agent.generationStoppedReopen"));
-    }
+    // Closing the panel must not kill an in-flight turn: the provider stays
+    // mounted at the layout root, so the stream keeps running in the
+    // background and reopening shows the live or finished result. Stop is
+    // only ever an explicit user action.
     setIsOpen(false);
     releaseRail(AGENT_CHAT_PANEL_ID);
-  }, [stop, releaseRail, t]);
+  }, [releaseRail]);
 
   const runPreflight = useCallback(async () => {
     const epoch = ++preflightEpochRef.current;
@@ -1500,6 +1606,10 @@ function useAgentChatValue(
 
   const clearQueued = useCallback(() => setQueued(undefined), []);
   const dismissInterrupted = useCallback(() => setInterruptedTurn(false), []);
+
+  // suggest_role handoff (MAO-B): the card carries the request into the
+  // target role's slot and switches to it. The text lands as a composer
+  // draft the user reviews and sends — nothing is auto-sent across roles.
   const clearActionError = useCallback(() => setActionError(null), []);
   const requestAddContext = useCallback(
     () => setContextPickerNonce((n) => n + 1),
@@ -1549,6 +1659,54 @@ function useAgentChatValue(
     contextRef.current = result.data;
     persistActiveSlot();
   }, [persistActiveSlot]);
+
+  const transferToRole = useCallback(
+    async (role: AgentRole, text: string, sourceToolCallId?: string) => {
+      const draft = text.trim();
+      if (!draft) return;
+      // Harvest before switchRole swaps the transcript and context — the
+      // request's attachments and manual context chips travel with it.
+      const carried = harvestTransferSource(chat.messages, sourceToolCallId);
+      const carriedContext = contextRef.current.items.filter(
+        (item) => item.source === "MANUAL",
+      );
+      if (role !== activeRoleRef.current) await switchRole(role);
+      const existing = draftTextForSlot() ?? "";
+      let merged =
+        existing && existing !== draft ? `${existing}\n\n${draft}` : draft;
+      // The composer holds a single paste card — when the target slot
+      // already owns one the carried body folds into the draft text
+      // instead of clobbering it.
+      if (carried?.paste && !pasteChipRef.current)
+        setPasteChip(carried.paste);
+      else if (carried?.paste) merged = `${merged}\n\n${carried.paste.text}`;
+      fillComposer(merged);
+      if (carried && carried.files.length > 0) {
+        setFileChips((prev) => {
+          const seen = new Set(prev.map((chip) => chip.id));
+          return [
+            ...prev,
+            ...carried.files.filter((chip) => !seen.has(chip.id)),
+          ].slice(0, APP_CONSTANTS.AGENT_FILE_MAX_PER_MESSAGE);
+        });
+      }
+      if (carriedContext.length > 0) {
+        void persistContext(
+          dedupeContextItems([...contextRef.current.items, ...carriedContext]),
+        );
+      }
+      persistActiveSlot();
+    },
+    [
+      chat,
+      switchRole,
+      fillComposer,
+      persistContext,
+      persistActiveSlot,
+      setPasteChip,
+      setFileChips,
+    ],
+  );
 
   const removeContextItem = useCallback(
     (kind: AgentConversationContextItem["kind"], entityId: string) => {
@@ -1626,6 +1784,7 @@ function useAgentChatValue(
     contextUsage,
     activeRole,
     switchRole,
+    transferToRole,
     stop,
     regenerate,
     addToolApprovalResponse: (...args: Parameters<typeof chat.addToolApprovalResponse>) => {

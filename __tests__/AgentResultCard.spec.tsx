@@ -1,8 +1,11 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const sendMessage = vi.fn();
+const transferToRole = vi.fn();
+let activeRole: string = "pilot";
 vi.mock("@/components/agent/AgentChatProvider", () => ({
-  useAgentChat: () => ({ sendMessage }),
+  useAgentChat: () => ({ sendMessage, transferToRole, activeRole }),
 }));
 
 import { AgentResultCard } from "@/components/agent/AgentResultCard";
@@ -367,5 +370,41 @@ describe("AgentResultCard", () => {
     );
     expect(screen.getByText(/Dear Hiring Manager/i)).toBeInTheDocument();
     expect(screen.getByText(/Database is locked/i)).toBeInTheDocument();
+  });
+
+  // MAO-B: the card names the sibling and hands the request into that
+  // role's composer as a draft — the click itself sends nothing.
+  it("offers a one-tap transfer that fills the sibling's composer, not a send", async () => {
+    activeRole = "pilot";
+    render(
+      <AgentResultCard
+        part={outputPart("suggest_role", {
+          role: "insight",
+          question: "帮我分析这份简历和岗位的匹配度",
+        })}
+      />,
+    );
+    expect(screen.getByText(/better fit/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Voca Insight/).length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button"));
+    expect(transferToRole).toHaveBeenCalledWith(
+      "insight",
+      "帮我分析这份简历和岗位的匹配度",
+      "c1",
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("drops the transfer button when the suggested role is already active", () => {
+    activeRole = "reflect";
+    render(
+      <AgentResultCard
+        part={outputPart("suggest_role", {
+          role: "reflect",
+          question: "复盘一下这周",
+        })}
+      />,
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

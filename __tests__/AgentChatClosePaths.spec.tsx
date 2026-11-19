@@ -142,34 +142,37 @@ describe("agent chat close paths", () => {
     chat.error = undefined;
   });
 
-  it("stops the stream when the panel's close button is used", async () => {
+  // Collapsing the panel is only a view change: the provider stays mounted
+  // at the layout root, so an in-flight turn keeps streaming in the
+  // background. Stop is solely the explicit Stop button.
+  it("keeps the stream running when the panel's close button is used", async () => {
     setup();
     await openPanel();
     await act(async () => {
       await userEvent.click(screen.getByRole("button", { name: "Close chat" }));
     });
-    expect(chat.stop).toHaveBeenCalled();
+    expect(chat.stop).not.toHaveBeenCalled();
   });
 
-  it("stops the stream on Escape", async () => {
+  it("keeps the stream running on Escape", async () => {
     setup();
     await openPanel();
     await act(async () => {
       await userEvent.keyboard("{Escape}");
     });
-    expect(chat.stop).toHaveBeenCalled();
+    expect(chat.stop).not.toHaveBeenCalled();
   });
 
-  it("stops the stream when another panel takes the right rail", async () => {
+  it("keeps the stream running when another panel takes the right rail", async () => {
     setup();
     await openPanel();
     await act(async () => {
       await userEvent.click(screen.getByText("open review"));
     });
-    expect(chat.stop).toHaveBeenCalled();
+    expect(chat.stop).not.toHaveBeenCalled();
   });
 
-  it("stops the stream when the Header trigger toggles it shut", async () => {
+  it("keeps the stream running when the Header trigger toggles it shut", async () => {
     setup();
     await openPanel();
     await act(async () => {
@@ -177,7 +180,21 @@ describe("agent chat close paths", () => {
         screen.getByRole("button", { name: /close assistant/i }),
       );
     });
-    expect(chat.stop).toHaveBeenCalled();
+    expect(chat.stop).not.toHaveBeenCalled();
+  });
+
+  it("shows the still-running turn when the panel reopens mid-stream", async () => {
+    const message = { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] };
+    chat.messages = [message];
+    setup([message]);
+    await openPanel();
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Close chat" }));
+    });
+    expect(chat.stop).not.toHaveBeenCalled();
+    await openPanel();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.querySelector("svg[width='26']")).toHaveAttribute("data-state", "thinking");
   });
 
   it("flags a pending approval on the trigger", () => {
@@ -186,7 +203,9 @@ describe("agent chat close paths", () => {
     expect(screen.getByLabelText("Approval pending")).toBeInTheDocument();
   });
 
-  it("never advertises streaming on the trigger — nothing runs while closed", () => {
+  // The trigger carries no streaming badge — generation continuing in the
+  // background changes nothing about its face.
+  it("never advertises streaming on the trigger", () => {
     chat.status = "streaming";
     setup();
     expect(screen.queryByLabelText("Approval pending")).not.toBeInTheDocument();
@@ -195,15 +214,14 @@ describe("agent chat close paths", () => {
     ).toBe("Chat AI");
   });
 
-  // Closing is the only abort with no on-screen trace: the panel that would
-  // have shown it is gone, and interruptedTurn only surfaces on reopen.
-  it("toasts when closing aborts a stream", async () => {
+  // Closing no longer aborts anything, so it must stay silent.
+  it("stays silent when a running stream keeps going after close", async () => {
     setup();
     await openPanel();
     await act(async () => {
       await userEvent.click(screen.getByRole("button", { name: "Close chat" }));
     });
-    expect(vi.mocked(toastInfo).mock.calls[0]![0]).toMatch(/stopped/i);
+    expect(toastInfo).not.toHaveBeenCalled();
   });
 
   it("toasts when Clear aborts a stream", async () => {
@@ -228,9 +246,9 @@ describe("agent chat close paths", () => {
     expect(toastInfo).not.toHaveBeenCalled();
   });
 
-  // The nested generation is inside the outer streamText's tool call, so the
-  // same abort covers it — nothing keeps reviewing while the panel is shut.
-  it("stops a running nested review when the panel closes", async () => {
+  // The nested generation lives inside the outer stream, and closing only
+  // hides the panel — the review keeps running until it finishes.
+  it("keeps a running nested review alive when the panel closes", async () => {
     chat.messages = [reviewRunningMessage];
     chat.status = "streaming";
     setup([reviewRunningMessage]);
@@ -238,6 +256,6 @@ describe("agent chat close paths", () => {
     await act(async () => {
       await userEvent.click(screen.getByRole("button", { name: "Close chat" }));
     });
-    expect(chat.stop).toHaveBeenCalled();
+    expect(chat.stop).not.toHaveBeenCalled();
   });
 });

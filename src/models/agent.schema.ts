@@ -113,6 +113,17 @@ export const AgentCoverLetterSchema = z.object({
 
 export type AgentCoverLetterInput = z.infer<typeof AgentCoverLetterSchema>;
 
+// suggest_role is a UI handoff, not a capability: the model names the
+// sibling the request belongs to and echoes the user's request, and the
+// result card carries that text into the sibling's composer. No server
+// write, no approval — the echoed input is the whole output.
+export const AgentSuggestRoleSchema = z.object({
+  role: z.enum(["insight", "pilot", "reflect"]).describe("The sibling assistant the request belongs to — never your own role."),
+  question: z.string().min(1).max(4000).describe("The user's request, copied verbatim so the handoff card can carry it."),
+});
+
+export type AgentSuggestRoleInput = z.infer<typeof AgentSuggestRoleSchema>;
+
 export const AgentListJobsSchema = z.object({});
 
 export type AgentListJobsInput = z.infer<typeof AgentListJobsSchema>;

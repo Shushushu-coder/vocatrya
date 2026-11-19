@@ -191,12 +191,14 @@ describe("refusal prompts follow the registered tool set", () => {
       "notion_update_record",
       "notion_update_content",
       "notion_delete_pages",
+      "suggest_role",
     ]);
     expect(AGENT_ROLE_TOOL_ALLOWLIST.reflect).toEqual([
       "list_jobs",
       "get_job",
       "notion_search",
       "notion_read",
+      "suggest_role",
     ]);
   });
 });
