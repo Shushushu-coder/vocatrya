@@ -60,7 +60,7 @@ describe("update-apply flavor detection", () => {
 
 describe("requiredVersionFor", () => {
   it("pins codex's strict native-session version", () => {
-    expect(requiredVersionFor("CODEX_RUNTIME")).toBe("0.169.0");
+    expect(requiredVersionFor("CODEX_RUNTIME")).toBe(nativeSession.NATIVE_VERSION);
     // The install target is the newest entry of the verified list, never a stray literal.
     expect(requiredVersionFor("CODEX_RUNTIME")).toBe(nativeSession.NATIVE_VERIFIED_VERSIONS.at(-1));
   });
@@ -74,7 +74,7 @@ describe("applyRuntimeUpdate", () => {
       ...detectDeps({ executable: NPM_CODEX, versionRef }),
       runCommand: async (input) => {
         calls.push(input);
-        versionRef.value = "0.169.0";
+        versionRef.value = nativeSession.NATIVE_VERSION;
         return okRun;
       },
     });
@@ -82,7 +82,7 @@ describe("applyRuntimeUpdate", () => {
       target: "required",
     });
     expect(result.ok).toBe(true);
-    expect(result.version).toBe("0.169.0");
+    expect(result.version).toBe(nativeSession.NATIVE_VERSION);
     expect(calls).toHaveLength(1);
     expect(calls[0].executable).toBe("cmd.exe");
     expect(calls[0].args).toEqual([
@@ -92,7 +92,7 @@ describe("applyRuntimeUpdate", () => {
       "npm",
       "install",
       "-g",
-      "@openai/codex@0.169.0",
+      `@openai/codex@${nativeSession.NATIVE_VERSION}`,
     ]);
   });
 

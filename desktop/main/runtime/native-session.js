@@ -18,6 +18,10 @@ const NATIVE_VERIFIED_VERSIONS = Object.freeze([
   // 0.169.0: checked against the real binary via a loopback synthetic
   // Responses provider (no account credentials) when native sessions shipped.
   "0.169.0",
+  // 0.170.0: 2026-11-19 verify-codex-native.mjs against the npm-installed
+  // vendor codex.exe, all 7 NATIVE_MODELS: 38/38 checks, handshake 0.170.0,
+  // web_search disabled, all features false, toolsSent [] for every model.
+  "0.170.0",
 ]);
 const NATIVE_VERSION = NATIVE_VERIFIED_VERSIONS[NATIVE_VERIFIED_VERSIONS.length - 1];
 function isNativeVersionVerified(version) {
