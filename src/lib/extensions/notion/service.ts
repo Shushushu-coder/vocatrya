@@ -103,6 +103,8 @@ export function toExtensionState(row: {
           createPage: false,
           appendContent: false,
           updateRecord: false,
+          updateContent: false,
+          deletePages: false,
         },
   };
 }

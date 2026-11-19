@@ -741,7 +741,9 @@ describe("write tool approval binding and detached queue", () => {
     );
     expect(out).toMatchObject({ saved: true, tool: NOTION_TOOL.updateContent });
     expect(callTool).toHaveBeenCalledTimes(1);
-    expect(callTool.mock.calls[0][0].arguments.command).toBe("update_content");
+    expect(
+      (callTool.mock.calls as any[])[0][0].arguments.command,
+    ).toBe("update_content");
     expect(tools[NOTION_TOOL.deletePages].needsApproval).toBe(true);
     await expect(
       tools[NOTION_TOOL.deletePages].execute!(

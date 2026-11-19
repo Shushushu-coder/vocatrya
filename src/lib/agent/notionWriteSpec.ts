@@ -283,8 +283,6 @@ export function notionContentUpdateReceipt(
   resultText: string,
   pageId: string,
 ): AgentNotionWriteResult {
-  return {
-    pageId,
-    ...receiptFromWrite(NOTION_TOOL.updateContent, resultText),
-  };
+  const receipt = receiptFromWrite(NOTION_TOOL.updateContent, resultText);
+  return receipt.saved ? { pageId, ...receipt } : receipt;
 }
