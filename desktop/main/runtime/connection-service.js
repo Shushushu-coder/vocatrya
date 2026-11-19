@@ -152,6 +152,7 @@ function createConnectionService({
               spawnImpl: deps.spawnImpl,
               terminateImpl: deps.terminateImpl,
               now: deps.now,
+              diag,
               stableCwd: path.join(persistentCwdRoot, "codex-persistent"),
               buildInvocation: (input) =>
                 codexAdapter.buildStreamingInvocation(input),

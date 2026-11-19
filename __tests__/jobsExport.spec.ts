@@ -3,7 +3,7 @@ import { translate } from "@/i18n/translate";
 import { JOB_CSV_FIELD_KEYS, jobCsvHeaders, transformJobForCsv, unparseJobsCsv } from "@/lib/jobs/exportJobsCsv";
 
 const job = {
-  createdAt: new Date("2026-09-30"), applied: true, appliedDate: new Date("2026-09-01"),
+  createdAt: new Date(2026, 8, 30), applied: true, appliedDate: new Date(2026, 8, 1),
   Company: { label: "中文公司 Remote" }, JobTitle: { label: 'AI, "实习生"\n岗位' },
   jobType: "INTERNSHIP", workplaceType: "ONSITE", Location: { label: "上海 Remote" },
   JobSource: { label: "学校就业群", value: "学校就业群" }, Status: { label: "New", value: "new" },

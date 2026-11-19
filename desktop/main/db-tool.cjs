@@ -42,7 +42,6 @@ async function main() {
   try {
     // Resolves from the assembled backend bundle (backend/node_modules) in
     // production, or from the repo node_modules during development/tests.
-    // eslint-disable-next-line global-require, import/no-unresolved
     ({ PrismaClient } = require("@prisma/client"));
   } catch (error) {
     fail(`unable to load @prisma/client: ${error.message}`);

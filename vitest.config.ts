@@ -52,6 +52,9 @@ export default defineConfig({
       "e2e/**",
       "desktop/**",
       "services/**",
+      // node:test suites, run by `npm run test:node`.
+      "extensions/**",
+      "scripts/**/*.test.{mjs,cjs}",
       "**/node_modules/**",
       "docs/**",
       ".worktrees/**",

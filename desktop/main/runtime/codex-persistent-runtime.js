@@ -113,6 +113,7 @@ function createCodexPersistentRuntimeManager({
   buildInvocation,
   maxPerUser = MAX_PERSISTENT_CODEX_PROCESSES_PER_USER,
   ttlMs = PERSISTENT_CODEX_IDLE_TTL_MS,
+  diag = () => {},
 } = {}) {
   if (typeof buildInvocation !== "function") {
     throw new Error("buildInvocation is required");
@@ -178,10 +179,15 @@ function createCodexPersistentRuntimeManager({
       // instead of silently assuming the tree is gone.
       const cleanup = Promise.resolve(terminateProcess(child)).then((outcome) => {
         if (outcome && (!outcome.exited || !outcome.ok)) {
-          console.warn(`[desktop-quit] persistent runtime cleanup inconclusive (exited=${outcome.exited} ${outcome.detail})`);
+          diag({
+            operation: "persistent-runtime-cleanup",
+            code: "INCONCLUSIVE",
+            exited: outcome.exited,
+            detail: outcome.detail,
+          });
         }
       }).catch(() => {
-        console.warn("[desktop-quit] persistent runtime cleanup failed");
+        diag({ operation: "persistent-runtime-cleanup", code: "FAILED" });
       });
       pendingTerminations.add(cleanup);
       void cleanup.then(() => pendingTerminations.delete(cleanup));

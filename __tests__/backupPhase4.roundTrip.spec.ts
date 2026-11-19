@@ -7,7 +7,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { buildBackupZip, collectBackupData } from "@/lib/backup/export";
 import { importBackup } from "@/lib/backup/import";
 import { BackupError, buildManifest } from "@/lib/backup/manifest";
-import { BackupDataSchema } from "@/lib/backup/schema";
+import { BACKUP_FORMAT_VERSION, BackupDataSchema } from "@/lib/backup/schema";
 import { ResumeVariantService } from "@/lib/career/resumeVariantService";
 import { projectResumeVariantText } from "@/lib/career/resumeVariantText";
 import { seedAccount } from "./helpers/backupTestDb";
@@ -501,14 +501,14 @@ describe("Phase 4 v2 backup / restore round-trip", () => {
     }
   }, 120_000);
 
-  it("writes formatVersion 8 and omits DataMigrationRun", async () => {
+  it("writes the current formatVersion and omits DataMigrationRun", async () => {
     const { buffer } = await buildBackupZip(userId, "phase4@example.com");
     const zip = await JSZip.loadAsync(buffer);
     const manifest = JSON.parse(
       await zip.file("manifest.json")!.async("string"),
     );
     const data = JSON.parse(await zip.file("data.json")!.async("string"));
-    expect(manifest.formatVersion).toBe(8);
+    expect(manifest.formatVersion).toBe(BACKUP_FORMAT_VERSION);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(data).not.toHaveProperty("CandidateSensitiveInfo");
     expect(data).not.toHaveProperty("ResumeContactProfile");

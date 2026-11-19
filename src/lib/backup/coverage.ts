@@ -52,6 +52,11 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   // can travel. A restored install starts DISCONNECTED and the user
   // re-authorizes the workspace in place.
   "NotionConnection",
+  // Auto-apply extension pairing codes and connection tokens are hashed
+  // secrets issued to one browser extension for this install. A restored
+  // install starts unpaired and the user pairs the extension again.
+  "AutoApplyExtensionPairing",
+  "AutoApplyExtensionConnection",
 ] as const;
 
 export const BACKED_UP_PRISMA_MODELS: readonly BackupModel[] = INSERT_ORDER;

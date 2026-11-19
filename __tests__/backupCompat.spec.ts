@@ -7,7 +7,7 @@ import {
 } from "@/lib/backup/compat";
 import { BackupError } from "@/lib/backup/schema";
 import { buildManifest, readManifest } from "@/lib/backup/manifest";
-import { BackupDataSchema } from "@/lib/backup/schema";
+import { BACKUP_FORMAT_VERSION, BackupDataSchema } from "@/lib/backup/schema";
 import { LEGACY, TARGET } from "@/lib/legacy-migration/identities";
 
 describe("backup v3 compatibility", () => {
@@ -104,10 +104,10 @@ describe("backup v3 compatibility", () => {
     await expect(readManifest(zip)).rejects.toBeInstanceOf(BackupError);
   });
 
-  it("writes v9 standard backups without sensitive groups or flag true", () => {
+  it("writes current-format standard backups without sensitive groups or flag true", () => {
     const data = emptyStandardBackupData();
     const manifest = buildManifest(data, "a@b.com");
-    expect(manifest.formatVersion).toBe(9);
+    expect(manifest.formatVersion).toBe(BACKUP_FORMAT_VERSION);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(manifest.counts).not.toHaveProperty("CandidateSensitiveInfo");
     expect(JSON.stringify(data)).not.toContain("CandidateSensitiveInfo");
@@ -148,7 +148,7 @@ describe("backup v3 compatibility", () => {
     expect(manifest.counts.Task).toBe(0);
   });
 
-  it("a v5-era reader rejects the v9 wire format instead of degrading", async () => {
+  it("a v5-era reader rejects the current wire format instead of degrading", async () => {
     // The shipped v5 ManifestSchema is the literal union 1-5. If a v6 backup
     // parsed there, the tagId keys it cannot restore would be silently
     // dropped — fail-closed is the contract (BD-LINKS §6).
@@ -162,14 +162,14 @@ describe("backup v3 compatibility", () => {
       ]),
     });
     const manifest = { ...buildManifest(emptyStandardBackupData(), "a@b.com") };
-    expect(manifest.formatVersion).toBe(9);
+    expect(manifest.formatVersion).toBe(BACKUP_FORMAT_VERSION);
     expect(v5EraManifestSchema.safeParse(manifest).success).toBe(false);
 
     const zip = new JSZip();
     zip.file("manifest.json", JSON.stringify(manifest));
     // ...and this build reads the same file fine.
     await expect(readManifest(zip)).resolves.toMatchObject({
-      formatVersion: 9,
+      formatVersion: BACKUP_FORMAT_VERSION,
     });
   });
 });

@@ -11,6 +11,7 @@ import { buildManifest, readManifest } from "@/lib/backup/manifest";
 import { normalizeManifest } from "@/lib/backup/compat";
 import { buildCreateData, IdMap } from "@/lib/backup/idmap";
 import {
+  BACKUP_FORMAT_VERSION,
   BackupDataSchema,
   BackupError,
   ManifestSchema,
@@ -407,7 +408,7 @@ describe("format 4 manifest compat", () => {
   });
 
   it("rejects unknown future formats before normalization", () => {
-    for (const formatVersion of [9, 99]) {
+    for (const formatVersion of [BACKUP_FORMAT_VERSION + 1, 99]) {
       expect(
         ManifestSchema.safeParse({ ...base, formatVersion }).success,
       ).toBe(false);
@@ -457,7 +458,7 @@ describe("DateTime V1 backup round-trip", () => {
     const { buffer } = await buildBackupZip(userId, EMAIL);
     const { manifest, data } = await readZip(buffer);
 
-    expect(manifest.formatVersion).toBe(8);
+    expect(manifest.formatVersion).toBe(BACKUP_FORMAT_VERSION);
     expect(manifest.containsSensitiveData).toBe(false);
 
     const exportedStep = data.ApplicationProcessStep.find(
@@ -600,7 +601,7 @@ describe("DateTime V1 backup round-trip", () => {
       includeSensitiveData: true,
     });
     const { manifest } = await readZip(buffer);
-    expect(manifest.formatVersion).toBe(8);
+    expect(manifest.formatVersion).toBe(BACKUP_FORMAT_VERSION);
     expect(manifest.containsSensitiveData).toBe(true);
 
     await prisma.candidateSensitiveInfo.deleteMany();

@@ -224,7 +224,11 @@ export class ApplicationService {
       }
     }
     if (!firstSubmission && nextVersionId === attempt.submittedResumeVersionId &&
-      nextArtifactId === attempt.submittedResumeArtifactId && nextJdId === attempt.submittedAgainstJdVersionId) return attempt;
+      nextArtifactId === attempt.submittedResumeArtifactId && nextJdId === attempt.submittedAgainstJdVersionId) {
+      // Same shape as the write path: drop the archive-guard include.
+      const { jobOpportunity: _guard, ...replayed } = attempt;
+      return replayed;
+    }
     const changed = await tx.applicationAttempt.updateMany({
       where: {
         id: attempt.id, userId: this.userId,

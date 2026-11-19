@@ -267,7 +267,7 @@ it.each(noteActions)("keeps full A+B note $operation on its existing branch", as
   mocks.scope = "full";
   mocks.origin = CAREER_DATA_ORIGIN.migrated;
   mocks.db.jobOpportunity.findFirst.mockResolvedValue({ id: "job-1" });
-  mocks.db.jobOpportunityNote.findFirst.mockResolvedValue({ id: "note-1" });
+  mocks.db.jobOpportunityNote.findFirst.mockResolvedValue({ id: "note-1", jobOpportunity: { archivedAt: null } });
   mocks.db.jobOpportunityNote.create.mockResolvedValue({ ...note, jobOpportunityId: "job-1" });
   mocks.db.jobOpportunityNote.update.mockResolvedValue({ ...note, jobOpportunityId: "job-1" });
   expect(await call()).toMatchObject({ success: true });

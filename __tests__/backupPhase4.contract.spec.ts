@@ -28,9 +28,9 @@ import { LEGACY, TARGET } from "@/lib/legacy-migration/identities";
 const SCHEMA_PATH = path.resolve(__dirname, "../prisma/schema.prisma");
 
 describe("Phase 4 backup contract", () => {
-  it("writes formatVersion 8 and still reads v1-v7", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(8);
-    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  it("writes formatVersion 10 and still reads v1-v9", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(10);
+    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(ManifestSchema.parse({
       formatVersion: 1,
       appVersion: "1.0.0",
@@ -91,7 +91,7 @@ describe("Phase 4 backup contract", () => {
     // user-wiped) — still BACKED_UP, never INTENTIONALLY_EXCLUDED. Later
     // format bumps came from DateTime V1 sidecars, the career contract and
     // the skill↔Tag link, not from any QuestionBank payload change.
-    expect(BACKUP_FORMAT_VERSION).toBe(8);
+    expect(BACKUP_FORMAT_VERSION).toBeGreaterThanOrEqual(8);
     expect(backupCoverageStatus("QuestionBank")).toBe(
       BACKUP_COVERAGE_STATUS.BACKED_UP,
     );
@@ -178,6 +178,7 @@ describe("Phase 4 backup contract", () => {
   it("keeps deferred FKs out of the linear FK map", () => {
     const fields = DEFERRED_FKS.map((entry) => `${entry.model}.${entry.field}`).sort();
     expect(fields).toEqual([
+      "AgentOperationProposal.supersedesId",
       "AnswerAttempt.activeRevisionId",
       "ApplicationAttempt.transferredFromAttemptId",
       "InterviewSession.currentQuestionInstanceId",

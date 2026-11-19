@@ -41,6 +41,7 @@ import {
   getCompanyDetails,
   getCompanyList,
 } from "@/actions/company.actions";
+import { CAREER_JOBS_UNAVAILABLE_MESSAGE } from "@/lib/career/userMessages";
 
 let prisma: PrismaClient;
 let userId: string;
@@ -529,7 +530,7 @@ describe("blocked read family", () => {
     const result = await getCompanyList(1, 10, "applied");
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/unavailable/i);
+    expect(result.message).toBe(CAREER_JOBS_UNAVAILABLE_MESSAGE);
   });
 
   it("fails details instead of masquerading as an empty Jobs tab", async () => {

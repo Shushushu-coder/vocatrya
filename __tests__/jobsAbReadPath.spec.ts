@@ -49,7 +49,6 @@ let offerStatusId: string;
 
 beforeAll(() => {
   pushSchema(ctx.url);
-  // eslint-disable-next-line no-console
   console.log("DATABASE_URL", ctx.url);
 }, 120_000);
 
@@ -507,7 +506,6 @@ describe("PHASE 5 dashboard + CSV", () => {
 
 describe("PHASE 7 action-integration smoke", () => {
   it("create → list → detail → interview → dashboard → archive", async () => {
-    // eslint-disable-next-line no-console
     console.log("SMOKE DATABASE_URL", ctx.url);
     expect(ctx.url.startsWith("file:")).toBe(true);
     expect(ctx.dir.includes("jobsync-backup-") || ctx.dir.length > 0).toBe(

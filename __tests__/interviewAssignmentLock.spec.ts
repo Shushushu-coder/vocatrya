@@ -390,15 +390,18 @@ describe("locked account execution", () => {
       questionInstanceId: instances[0].id,
       textContent: ANSWER_TEXT,
     });
-    await app.generateInterviewFeedback({
+    const first = await app.generateInterviewFeedback({
       userId,
       answerAttemptId: submitted.attempt.id,
     });
-    // Simulate a reload: a fresh runtime reads the persisted lock only.
+    // Simulate a reload: a fresh runtime reads the persisted lock only. A
+    // plain repeat is served from the succeeded generation, so request an
+    // explicit regeneration to reach the model again.
     const app2 = runtime({ execText });
     await app2.generateInterviewFeedback({
       userId,
       answerAttemptId: submitted.attempt.id,
+      inputRevisionId: first.generation.inputRevisionId,
     });
     expect(execText).toHaveBeenCalledTimes(2);
     for (const call of execText.mock.calls) {

@@ -187,7 +187,7 @@ describe("resume builder persistence and boundaries", () => {
     const data = BackupDataSchema.parse({ ResumeVariantSection: [saved.sections[0]], ResumeVariantSectionItem: [saved.sections[0].items[0]], ResumeExpression: [saved.sections[0].items[0].expressions[0]] });
     expect(data.ResumeVariantSection![0].hiddenAt).toBeInstanceOf(Date);
     expect(data.ResumeExpression![0].originRefId).toBeTruthy();
-    expect(BACKUP_FORMAT_VERSION).toBe(8);
+    expect(BACKUP_FORMAT_VERSION).toBeGreaterThanOrEqual(8);
     expect(ManifestSchema.safeParse({ formatVersion: 8, appVersion: "test", exportedAt: new Date().toISOString(), sourceEmail: "test@example.com", counts: {}, containsSensitiveData: false }).success).toBe(true);
   });
   it("keeps pre-feature rows readable after applying the additive migration", async () => {

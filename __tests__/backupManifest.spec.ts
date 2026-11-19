@@ -6,7 +6,7 @@ import {
   openBackupZip,
   readManifest,
 } from "@/lib/backup/manifest";
-import { BackupDataSchema } from "@/lib/backup/schema";
+import { BACKUP_FORMAT_VERSION, BackupDataSchema } from "@/lib/backup/schema";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 const emptyData = BackupDataSchema.parse({});
@@ -26,7 +26,7 @@ describe("buildManifest", () => {
       ],
     });
     const manifest = buildManifest(data, "me@example.com");
-    expect(manifest.formatVersion).toBe(8);
+    expect(manifest.formatVersion).toBe(BACKUP_FORMAT_VERSION);
     expect(manifest.containsSensitiveData).toBe(false);
     expect(manifest.counts).not.toHaveProperty("CandidateSensitiveInfo");
     expect(manifest.sourceEmail).toBe("me@example.com");

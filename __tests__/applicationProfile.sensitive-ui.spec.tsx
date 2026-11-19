@@ -81,7 +81,7 @@ describe("EmergencyContactCard mask/reveal/copy", () => {
     // Reveal first so copy buttons for phone exist with full-value path via server action.
     fireEvent.click(screen.getAllByText("Show")[1]);
     await waitFor(() => expect(screen.getByTestId("emergency-phone").textContent).toContain("13800138000"));
-    const copies = screen.getAllByText("Copy");
+    const copies = screen.getAllByRole("button", { name: "Copy" });
     fireEvent.click(copies[copies.length - 1]);
     await waitFor(() => expect(copyEmergencyContactField).toHaveBeenCalled());
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("13800138000");
@@ -99,7 +99,7 @@ describe("EmergencyContactCard mask/reveal/copy", () => {
     await waitFor(() => expect(screen.getByTestId("emergency-phone").textContent).toContain("****8000"));
     fireEvent.click(screen.getAllByText("Show")[1]);
     await waitFor(() => expect(revealEmergencyContact).toHaveBeenCalled());
-    const copies = await screen.findAllByText("Copy");
+    const copies = await screen.findAllByRole("button", { name: "Copy" });
     fireEvent.click(copies[copies.length - 1]);
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(SENTINEL));
     expect(JSON.stringify((toastSuccess as unknown as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(SENTINEL);
@@ -132,7 +132,7 @@ describe("ApplicationProfileField normal copy", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(<ApplicationProfileField label="Name" value="  Alice  " />);
-    fireEvent.click(screen.getByText("Copy"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("Alice"));
   });
 });

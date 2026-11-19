@@ -16,7 +16,9 @@ it("adds concurrency fields without changing a pre-change conversation or its su
     const now = new Date().toISOString();
     await db.$executeRaw`INSERT INTO ChatConversation (id,userId,title,context,messages,resolvedConnectionId,resolvedModel,createdAt,updatedAt) VALUES ('old',${owner},'title','context',${messages},'connection','model',${now},${now})`;
     const summary = await db.conversationSummary.create({ data: { conversationId: "old", userId: owner, text: "summary", revision: 7 } });
-    const before = await db.$queryRawUnsafe<Record<string, unknown>[]>("SELECT * FROM ChatConversation WHERE id = 'old'");
+    // Later migrations (agentRole, executionPath, ...) also apply to this base;
+    // compare only the columns that exist on both sides of this change.
+    const before = await db.$queryRawUnsafe<Record<string, unknown>[]>("SELECT id,userId,title,context,messages,resolvedConnectionId,resolvedModel,createdAt,updatedAt,archivedAt FROM ChatConversation WHERE id = 'old'");
     copyMigrationBySuffix(ctx.dir, "chat_conversation_concurrency");
     migrateDeploy(ctx.url, schema);
     const after = await db.$queryRawUnsafe<Record<string, unknown>[]>("SELECT id,userId,title,context,messages,resolvedConnectionId,resolvedModel,createdAt,updatedAt,revision,activeRequestId,activeRequestExpiresAt,archivedAt FROM ChatConversation WHERE id = 'old'");

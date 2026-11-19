@@ -549,16 +549,20 @@ export function ApplicationTimelineTab({
   if (timeline.attempts.length === 0) {
     return (
       <>
-        {connections ? (
-          <JobConnectionsSummary connections={connections} />
-        ) : null}
-        <JobTabEmptyState
-          icon={CalendarClock}
-          title={t("jobs.timelineEmptyTitle")}
-          description={t("jobs.timelineEmptyDescription")}
-          actionLabel={canMutate ? t("jobs.addProcessStepWithDraft") : undefined}
-          onAction={canMutate ? openCreate : undefined}
-        />
+        {/* One leading child, mirroring the timeline <div> below, so `dialogs`
+            keeps the same index in both branches. */}
+        <>
+          {connections ? (
+            <JobConnectionsSummary connections={connections} />
+          ) : null}
+          <JobTabEmptyState
+            icon={CalendarClock}
+            title={t("jobs.timelineEmptyTitle")}
+            description={t("jobs.timelineEmptyDescription")}
+            actionLabel={canMutate ? t("jobs.addProcessStepWithDraft") : undefined}
+            onAction={canMutate ? openCreate : undefined}
+          />
+        </>
         {/* Keep the fixed dialog position (see `dialogs` above): siblings go after it. */}
         {dialogs}
         {reflectionDialog}

@@ -51,6 +51,12 @@ const ALLOWED_READERS = new Set([
   // "full" via r3ServerLauncher.mjs. It sets a synthetic child environment
   // and does not read the operator's rollout scope.
   path.join("e2e", "r3-foundation.config.ts"),
+  // Desktop E2E / closure harnesses likewise pin a synthetic scope on the
+  // disposable child they launch; none reads the operator's scope.
+  path.join("desktop", "e2e", "harness.mjs"),
+  path.join("scripts", "managed-closure-ready", "managed-desktop.mjs"),
+  path.join("scripts", "p2-closure-ready", "desktop-closure.mjs"),
+  path.join("scripts", "p2-closure-ready", "package.mjs"),
 ]);
 
 function violatingReaders(root: string): string[] {
