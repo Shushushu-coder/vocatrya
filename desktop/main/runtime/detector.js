@@ -8,6 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { getRuntimeDefinition } = require("./registry");
+const { resolveCodexInstalls } = require("./codex-install");
 
 const PATH_LOOKUP_TIMEOUT_MS = 5_000;
 const VERSION_PROBE_TIMEOUT_MS = 10_000;
@@ -196,6 +197,18 @@ function detectRuntime(backendKind, deps = {}) {
     }
     executablePath = bundle.executable;
     argsPrefix = [bundle.entrypoint];
+  } else if (backendKind === "CODEX_RUNTIME") {
+    // Several Codex CLIs can coexist; the newest verified one is selected.
+    const found = resolveCodexInstalls(definition, deps);
+    const selected = found.selected;
+    const listing = { installs: found.installs, verifiedVersions: found.verifiedVersions };
+    if (!selected) {
+      return { backendKind, runtimeVendor: definition.runtimeVendor, state: "NOT_INSTALLED", installed: false, ...listing };
+    }
+    if (!selected.ok) {
+      return { backendKind, runtimeVendor: definition.runtimeVendor, state: "BROKEN", installed: true, executablePath: selected.path, ...listing };
+    }
+    return { backendKind, runtimeVendor: definition.runtimeVendor, state: "READY", installed: true, executablePath: selected.path, version: selected.version, ...listing };
   } else {
     executablePath = findRuntimeExecutable(definition, {
       platform,

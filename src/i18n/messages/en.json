@@ -10,7 +10,7 @@
     "unavailable": "This connection, model or runtime version is not ready for native sessions. Select a verified Codex account connection and model.",
     "unavailableConnection": "This connection cannot run native sessions. Re-verify the Codex account connection in AI Settings, or start a regular conversation instead.",
     "unavailableRuntime": "The Codex runtime is not ready, so native sessions are unavailable. Check the runtime in AI Settings, or start a regular conversation instead.",
-    "unavailableVersion": "Native sessions require Codex CLI {required}; you have {actual}. Use the button below to update, or start a regular conversation instead.",
+    "unavailableVersion": "Codex CLI version {actual} is not verified for native sessions; verified: {verified}. Use the button below to switch to {required}, or start a regular conversation instead.",
     "unavailableModel": "Model {model} is not supported for native sessions. Available models: {models}; or start a regular conversation instead.",
     "updateCli": "Update to {version}",
     "updating": "Updating…",
@@ -23,7 +23,7 @@
     "leave": "Back to regular chat",
     "entryConnection": "No connected Codex account",
     "entryRuntime": "Codex runtime not ready",
-    "entryVersion": "Requires Codex CLI {required}; detected {actual}",
+    "entryVersion": "Version {actual} is not verified; verified: {verified}",
     "entryModel": "No model available for native sessions"
   },
   "canonicalImport": {
@@ -3484,7 +3484,22 @@
     "applyRequired": "Switch to {version}",
     "applyDone": "Updated to v{version}",
     "applyFailed": "Update did not finish ({code})",
-    "applyManual": "This install method cannot be updated in one click — update manually as shown above"
+    "applyManual": "This install method cannot be updated in one click — update manually as shown above",
+    "installInUse": "In use: v{version} · {path}",
+    "installVerifiedVersions": "Verified versions: {versions}",
+    "installMultiple": "Multiple installs detected — only the one marked in use is run:",
+    "installSourceStandalone": "standalone installer",
+    "installSourceNpm": "npm global",
+    "installSourceNpmStaging": "npm staging directory",
+    "installSourcePath": "PATH",
+    "installVerified": "verified",
+    "installUnverified": "not verified",
+    "installStale": "stale",
+    "installSelected": "in use",
+    "installNativeUse": "Native sessions: v{version} · {path}",
+    "installExecUse": "Streaming: v{version} · {path}",
+    "installTagNative": "native",
+    "installTagExec": "streaming"
   },
   "agentCodeBlock": {
     "copy": "Copy code",

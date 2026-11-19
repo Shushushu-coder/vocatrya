@@ -23,7 +23,8 @@
 // provider-specific command knowledge.
 const fs = require("node:fs");
 const { createHash } = require("node:crypto");
-const { NATIVE_VERSION, NATIVE_VERIFIED_VERSIONS, NATIVE_MODELS, NATIVE_CONFIG_HASH, nativeSessionReady, runNativeSession } = require("./native-session");
+const { resolveCodexInstalls } = require("./codex-install");
+const { NATIVE_VERSION,NATIVE_VERIFIED_VERSIONS, NATIVE_MODELS, NATIVE_CONFIG_HASH, nativeSessionReady, runNativeSession } = require("./native-session");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { getRuntimeDefinition } = require("./registry");
@@ -216,7 +217,9 @@ function createConnectionService({
   // may return an extensionless/.cmd shim which cannot be spawned with
   // shell:false, so the adapter unwraps it to the real vendored binary
   // before the version probe decides READY vs BROKEN.
-  function resolveRuntime(adapter) {
+  // purpose: "default" (login/verify/models/smoke), "native", or "exec"
+  // (streaming + structured exec, pinned to the capability-verified version).
+  function resolveRuntime(adapter, purpose = "default") {
     const definition = getRuntimeDefinition(adapter.backendKind);
     let executable = null;
     if (definition.bundle) {
@@ -227,6 +230,15 @@ function createConnectionService({
       if (!executable) {
         return { error: fail(CONNECTION_OP_CODES.RUNTIME_NOT_INSTALLED) };
       }
+    } else if (adapter.backendKind === CODEX_BACKEND_KIND) {
+      // The spawned binary IS the selected install: newest verified wins,
+      // shims are already unwrapped to the vendored codex.exe.
+      const found = resolveCodexInstalls(definition, deps);
+      const listing = { installs: found.installs, verifiedVersions: found.verifiedVersions };
+      const chosen = found.selections[purpose] || found.selected;
+      if (!chosen) return { error: fail(CONNECTION_OP_CODES.RUNTIME_NOT_INSTALLED), ...listing };
+      if (!chosen.ok) return { error: fail(CONNECTION_OP_CODES.RUNTIME_BROKEN), ...listing };
+      return { executable: chosen.path, version: chosen.version, ...listing, selections: found.selections };
     } else {
       const rawPath = findRuntimeExecutable(definition, {
         platform: deps.platform || process.platform,
@@ -980,7 +992,7 @@ function createConnectionService({
       execAcquire(connection.id);
       execRegistered = true;
 
-      const runtime = resolveRuntime(adapter);
+      const runtime = resolveRuntime(adapter, "exec");
       if (runtime.error) return runtime.error;
 
       // The verified structured contract is bound to the probed version —
@@ -1330,7 +1342,7 @@ function createConnectionService({
       execAcquire(connection.id);
       execRegistered = true;
 
-      const runtime = resolveRuntime(adapter);
+      const runtime = resolveRuntime(adapter, "exec");
       if (runtime.error) return runtime.error;
       if (
         verificationProbe !== true &&
@@ -1689,7 +1701,7 @@ function createConnectionService({
       if (adapter.backendKind !== CODEX_BACKEND_KIND) return fail("NATIVE_BOUNDARY_NOT_READY");
       if (connection.status !== "CONNECTED") return fail(connection.status === "REAUTH_REQUIRED" ? "REAUTH_REQUIRED" : "CONNECTION_DISCONNECTED");
       if (controller.signal.aborted) return fail("NATIVE_CANCELLED");
-      const runtime = resolveRuntime(adapter);
+      const runtime = resolveRuntime(adapter, "native");
       if (runtime.error) return runtime.error;
       if (!nativeSessionReady(runtime.version, model)) return fail("NATIVE_BOUNDARY_NOT_READY");
       const identity = { runtimeVersion: runtime.version, runtimeProfileRef: connection.runtimeProfileRef, configHash: NATIVE_CONFIG_HASH };
@@ -1726,7 +1738,7 @@ function createConnectionService({
     }
     const capabilities =
       getAccountRuntimeCapabilities(adapter.backendKind) || null;
-    const runtime = resolveRuntime(adapter);
+    const runtime = resolveRuntime(adapter, "exec");
     if (runtime.error) {
       return {
         ok: true,
@@ -1734,6 +1746,7 @@ function createConnectionService({
         runtimeVersion: null,
         runtimeReady: false,
         runtimeCode: runtime.error.code,
+        ...(runtime.installs ? { installs: runtime.installs, verifiedVersions: runtime.verifiedVersions } : {}),
       };
     }
     return {
@@ -1741,7 +1754,14 @@ function createConnectionService({
       capabilities,
       runtimeVersion: runtime.version,
       runtimeReady: true,
-      nativeSession: adapter.backendKind === CODEX_BACKEND_KIND ? { version: NATIVE_VERSION, verifiedVersions: [...NATIVE_VERIFIED_VERSIONS], models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, ready: NATIVE_VERIFIED_VERSIONS.includes(runtime.version) } : null,
+      ...(runtime.installs ? { runtimePath: runtime.executable, installs: runtime.installs, verifiedVersions: runtime.verifiedVersions } : {}),
+      // runtimeVersion/runtimePath = the streaming/exec binary; the native binary
+      // is selected separately (nativeSession.runtimeVersion/runtimePath).
+      nativeSession: adapter.backendKind === CODEX_BACKEND_KIND ? (() => {
+        const native = resolveRuntime(adapter, "native");
+        const nativeVersion = native.error ? null : native.version;
+        return { version: NATIVE_VERSION, verifiedVersions: [...NATIVE_VERIFIED_VERSIONS], models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, runtimeVersion: nativeVersion, runtimePath: native.error ? null : native.executable, ready: NATIVE_VERIFIED_VERSIONS.includes(nativeVersion) };
+      })() : null,
     };
   }
 

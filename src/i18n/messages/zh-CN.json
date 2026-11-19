@@ -10,7 +10,7 @@
     "unavailable": "当前连接、模型或运行时版本尚不能使用原生会话。请选择已验证的 Codex 账号连接与模型。",
     "unavailableConnection": "当前连接不能使用原生会话。请在 AI 设置中重新验证 Codex 账号连接，或改用普通新对话。",
     "unavailableRuntime": "Codex 运行时未就绪，原生会话暂不可用。请在 AI 设置中检查运行时状态，或改用普通新对话。",
-    "unavailableVersion": "原生会话需要 Codex CLI {required}，当前为 {actual}。点击下方按钮更新到所需版本，或改用普通新对话。",
+    "unavailableVersion": "Codex CLI 版本 {actual} 未通过原生会话验证；已验证版本：{verified}。点击下方按钮切换到 {required}，或改用普通新对话。",
     "unavailableModel": "模型 {model} 暂不支持原生会话。可用模型：{models}；或改用普通新对话。",
     "updateCli": "更新到 {version}",
     "updating": "正在更新…",
@@ -23,7 +23,7 @@
     "leave": "返回普通对话",
     "entryConnection": "未连接 Codex 账号",
     "entryRuntime": "Codex 运行时未就绪",
-    "entryVersion": "需要 Codex CLI {required}，检测到 {actual}",
+    "entryVersion": "版本 {actual} 未验证；已验证版本：{verified}",
     "entryModel": "当前没有可用于原生会话的模型"
   },
   "canonicalImport": {
@@ -3484,7 +3484,22 @@
     "applyRequired": "切换到 {version}",
     "applyDone": "已更新到 v{version}",
     "applyFailed": "更新未完成（{code}）",
-    "applyManual": "当前安装方式不支持一键操作，请按上方提示手动更新"
+    "applyManual": "当前安装方式不支持一键操作，请按上方提示手动更新",
+    "installInUse": "使用中：v{version} · {path}",
+    "installVerifiedVersions": "已验证版本：{versions}",
+    "installMultiple": "检测到多个安装——只会运行标记为使用中的那个：",
+    "installSourceStandalone": "独立安装器",
+    "installSourceNpm": "npm 全局",
+    "installSourceNpmStaging": "npm 暂存目录",
+    "installSourcePath": "PATH",
+    "installVerified": "已验证",
+    "installUnverified": "未验证",
+    "installStale": "已过期",
+    "installSelected": "使用中",
+    "installNativeUse": "原生会话：v{version} · {path}",
+    "installExecUse": "流式对话：v{version} · {path}",
+    "installTagNative": "原生",
+    "installTagExec": "流式"
   },
   "agentCodeBlock": {
     "copy": "复制代码",

@@ -94,11 +94,10 @@ it("creates a native conversation with the server-resolved Codex pair", async ()
 // errors afterwards.
 it("greys the native entry with the specific blocker", async () => {
   state.nativeSession = false;
-  state.nativeEntry = { ok: false, details: { reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: "0.165.0", requiredVersion: "0.169.0", model: null, models: ["gpt-5.4"] } };
+  state.nativeEntry = { ok: false, details: { reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: "0.165.0", requiredVersion: "0.170.0", model: null, models: ["gpt-5.4"], verifiedVersions: ["0.169.0", "0.170.0"] } };
   render(<AgentChatIdentity />);
   await userEvent.click(screen.getByTestId("agent-identity"));
-  expect(await screen.findByText(/0\.169\.0/)).toBeInTheDocument();
-  expect(screen.getByText(/0\.165\.0/)).toBeInTheDocument();
+  expect(await screen.findByText("Version 0.165.0 is not verified; verified: 0.169.0, 0.170.0")).toBeInTheDocument();
   expect(screen.queryByTestId("agent-native-entry")).not.toBeInTheDocument();
 });
 

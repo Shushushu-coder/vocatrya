@@ -314,6 +314,7 @@ type NativeDetails = {
   requiredVersion?: string | null;
   model?: string | null;
   models?: string[] | null;
+  verifiedVersions?: string[] | null;
 };
 
 const NATIVE_REASON_KEY: Record<string, string> = {
@@ -391,6 +392,7 @@ function ChatErrorBanner() {
           actual: nativeDetails.runtimeVersion ?? t("nativeSession.unknownVersion"),
           model: nativeDetails.model ?? "",
           models: (nativeDetails.models ?? []).join(", "),
+          verified: (nativeDetails.verifiedVersions ?? (nativeDetails.requiredVersion ? [nativeDetails.requiredVersion] : [])).join(", "),
         },
       )
     : null;

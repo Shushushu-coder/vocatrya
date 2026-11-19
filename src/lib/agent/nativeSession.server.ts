@@ -25,6 +25,13 @@ function runtimeVerified(state: AccountRuntimeState, capability: NonNullable<Acc
   return !!state.runtimeVersion && (capability.verifiedVersions ?? [capability.version]).includes(state.runtimeVersion);
 }
 
+// The native session may run a different binary than streaming/exec (each is
+// selected per purpose): judge native readiness by the native binary's version.
+function nativeView(state: AccountRuntimeState): AccountRuntimeState {
+  const native = state.nativeSession;
+  return native && native.runtimeVersion !== undefined ? { ...state, runtimeVersion: native.runtimeVersion } : state;
+}
+
 // Structured gate — every rejected caller learns WHICH condition failed,
 // with the expected/actual values, so the UI can give actionable guidance
 // instead of an opaque "unavailable".
@@ -42,13 +49,13 @@ export async function nativeReadinessReport(
   if (!connection || connection.archivedAt || connection.status !== "CONNECTED" || connection.backendKind !== "CODEX_RUNTIME" || connection.authType !== "ACCOUNT_LOGIN" || classifyAIConnection(connection) !== "ACCOUNT_LOGIN" || !connection.runtimeProfileRef) {
     return reject({ reason: "CONNECTION_INELIGIBLE", runtimeVersion: null, requiredVersion: null, model, models: null });
   }
-  const state = await fetchAccountRuntimeState({ backendKind: connection.backendKind, accountProvider: connection.provider });
+  const state = nativeView(await fetchAccountRuntimeState({ backendKind: connection.backendKind, accountProvider: connection.provider }));
   const capability = state.nativeSession;
   if (!state.runtimeReady) {
     return reject({ reason: "RUNTIME_NOT_READY", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model, models: capability?.models ?? null });
   }
   if (!capability?.ready || !runtimeVerified(state, capability)) {
-    return reject({ reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model, models: capability?.models ?? null });
+    return reject({ reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model, models: capability?.models ?? null, verifiedVersions: capability?.verifiedVersions ?? null });
   }
   if (!capability.models.includes(model)) {
     return reject({ reason: "MODEL_UNSUPPORTED", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability.version, model, models: capability.models });
@@ -99,10 +106,10 @@ export async function resolveNativeChatEntry(
   if (!connection) return { ok: false, details: ineligible };
   let state: AccountRuntimeState;
   try {
-    state = await fetchAccountRuntimeState({
+    state = nativeView(await fetchAccountRuntimeState({
       backendKind: connection.backendKind,
       accountProvider: connection.provider,
-    });
+    }));
   } catch {
     // The runtime-state channel is unreachable (no desktop, backend down):
     // the honest verdict is NOT_READY, not a generic failure banner.
@@ -113,7 +120,7 @@ export async function resolveNativeChatEntry(
     return { ok: false, details: { reason: "RUNTIME_NOT_READY", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model: null, models: capability?.models ?? null } };
   }
   if (!capability?.ready || !runtimeVerified(state, capability)) {
-    return { ok: false, details: { reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model: null, models: capability?.models ?? null } };
+    return { ok: false, details: { reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model: null, models: capability?.models ?? null, verifiedVersions: capability?.verifiedVersions ?? null } };
   }
   const model =
     preferred?.model && capability.models.includes(preferred.model)

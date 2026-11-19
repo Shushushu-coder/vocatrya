@@ -61,6 +61,9 @@ it('readiness accepts any desktop-verified version, binds to the installed one, 
   await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.169.0'});
   vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.5',['0.169.0','0.170.0']));
   await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.169.5',requiredVersion:'0.170.0'}});
+  // Streaming/exec may run a different binary: readiness follows the native binary's version.
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce({...state('0.165.0',['0.169.0','0.170.0']),nativeSession:{...state('0.165.0',['0.169.0','0.170.0']).nativeSession,runtimeVersion:'0.170.0'}});
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.170.0'});
   // An older desktop without the list still means exact-preferred-version only.
   vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.0'));
   await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH'}});

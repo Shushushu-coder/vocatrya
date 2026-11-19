@@ -22,6 +22,17 @@ interface VocatryaRuntimeBridge {
     installed: boolean;
     executablePath?: string;
     version?: string;
+    /** Codex only: every discovered binary and the verified list. */
+    installs?: {
+      path: string;
+      source: string;
+      version: string | null;
+      verified: boolean;
+      stale: boolean;
+      selected: boolean;
+      selectedFor?: string[];
+    }[];
+    verifiedVersions?: string[];
   }>;
   getVersion(backendKind: string): Promise<{
     backendKind: string;

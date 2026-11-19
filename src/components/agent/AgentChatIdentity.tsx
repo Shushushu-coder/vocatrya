@@ -93,6 +93,7 @@ export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
         return t("nativeSession.entryVersion", {
           required: details.requiredVersion ?? "",
           actual: details.runtimeVersion ?? t("nativeSession.unknownVersion"),
+          verified: (details.verifiedVersions ?? (details.requiredVersion ? [details.requiredVersion] : [])).join(", "),
         });
       case "MODEL_UNSUPPORTED":
         return t("nativeSession.entryModel");

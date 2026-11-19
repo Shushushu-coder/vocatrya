@@ -211,6 +211,45 @@ describe("AiConnectionsCard", () => {
     expect(within(card).queryByText(/Up to date/)).not.toBeInTheDocument();
   });
 
+  it("shows the Codex version in use, verified versions and multiple installs with stale marked", async () => {
+    installBridges();
+    const NPM = "C:/u/npm/@openai/codex/vendor/codex.exe";
+    const OLD = "C:/u/Programs/OpenAI/Codex/bin/codex.exe";
+    const STALE = "C:/u/npm/@openai/.codex-AbCd/codex.exe";
+    const detect = window.vocatryaRuntime!.detect as any;
+    window.vocatryaRuntime!.detect = vi.fn(async (backendKind: string) =>
+      backendKind === "CODEX_RUNTIME"
+        ? {
+            backendKind, runtimeVendor: "V", state: "READY", installed: true,
+            executablePath: OLD, version: "0.165.0", verifiedVersions: ["0.169.0", "0.170.0"],
+            installs: [
+              { path: OLD, source: "standalone", version: "0.165.0", verified: false, stale: false, selected: true, selectedFor: ["default", "exec"] },
+              { path: NPM, source: "npm", version: "0.170.0", verified: true, stale: false, selected: false, selectedFor: ["native"] },
+              { path: STALE, source: "npm-staging", version: "0.170.0", verified: true, stale: true, selected: false, selectedFor: [] },
+            ],
+          }
+        : detect(backendKind),
+    ) as any;
+    render(<AiConnectionsCard />);
+    const card = (await screen.findByText("via OpenAI Codex CLI")).closest("section")!;
+    const installs = await within(card).findByTestId("runtime-installs");
+    expect(installs).toHaveTextContent(`In use: v0.165.0 · ${OLD}`);
+    expect(installs).toHaveTextContent(`Native sessions: v0.170.0 · ${NPM}`);
+    expect(installs).not.toHaveTextContent("Streaming: v");
+    expect(installs).toHaveTextContent("Verified versions: v0.169.0, v0.170.0");
+    expect(installs).toHaveTextContent("Multiple installs detected");
+    const rows = within(installs).getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent("v0.165.0");
+    expect(rows[0]).toHaveTextContent("not verified");
+    expect(rows[0]).toHaveTextContent("in use");
+    expect(rows[0]).toHaveTextContent("streaming");
+    expect(rows[1]).toHaveTextContent("native");
+    expect(rows[1]).not.toHaveTextContent("in use");
+    expect(rows[2]).toHaveTextContent("stale");
+    expect(rows[2]).not.toHaveTextContent("in use");
+  });
+
   it("renders nothing outside the desktop bridge", () => {
     const { container } = render(<AiConnectionsCard />);
     expect(container).toBeEmptyDOMElement();

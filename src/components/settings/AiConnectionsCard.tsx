@@ -95,7 +95,45 @@ type RuntimeListEntry = {
   capabilities: AccountRuntimeCapabilities;
 };
 
-type RuntimeState = { state: string; version?: string };
+type RuntimeInstall = {
+  path: string;
+  source: string;
+  version: string | null;
+  verified: boolean;
+  stale: boolean;
+  selected: boolean;
+  /** Purposes this install is chosen for: default | native | exec (streaming). */
+  selectedFor?: string[];
+};
+
+type RuntimeState = {
+  state: string;
+  version?: string;
+  executablePath?: string;
+  installs?: RuntimeInstall[];
+  verifiedVersions?: string[];
+};
+
+const toRuntimeState = (status: {
+  state: string;
+  version?: string;
+  executablePath?: string;
+  installs?: RuntimeInstall[];
+  verifiedVersions?: string[];
+}): RuntimeState => ({
+  state: status.state,
+  version: status.version,
+  executablePath: status.executablePath,
+  installs: status.installs,
+  verifiedVersions: status.verifiedVersions,
+});
+
+const INSTALL_SOURCE_KEY: Record<string, string> = {
+  standalone: "runtimeUpdate.installSourceStandalone",
+  npm: "runtimeUpdate.installSourceNpm",
+  "npm-staging": "runtimeUpdate.installSourceNpmStaging",
+  path: "runtimeUpdate.installSourcePath",
+};
 
 type InstallMethod = {
   kind: string;
@@ -295,7 +333,7 @@ function AiConnectionsCard() {
           .then((status) =>
             setRuntimeStates((prev) => ({
               ...prev,
-              [backendKind]: { state: status.state, version: status.version },
+              [backendKind]: toRuntimeState(status),
             })),
           )
           .catch(() => undefined);
@@ -343,10 +381,7 @@ function AiConnectionsCard() {
         .then((status) => {
           setRuntimeStates((prev) => ({
             ...prev,
-            [backend.backendKind]: {
-              state: status.state,
-              version: status.version,
-            },
+            [backend.backendKind]: toRuntimeState(status),
           }));
           // Install metadata is fetched only when the runtime state needs
           // it — a READY runtime never pays for it.
@@ -695,6 +730,78 @@ function AiConnectionsCard() {
                       : ""}
                   </p>
                 )}
+                {runtimeState?.installs && runtimeState.installs.length > 0 && (
+                  <div className="space-y-0.5 text-muted-foreground" data-testid="runtime-installs">
+                    {runtimeState.executablePath && (
+                      <p>
+                        {t("runtimeUpdate.installInUse", {
+                          version: runtimeState.version ?? t("runtimeUpdate.versionUnknown"),
+                          path: runtimeState.executablePath,
+                        })}
+                      </p>
+                    )}
+                    {(["native", "exec"] as const).map((purpose) => {
+                      const chosen = runtimeState.installs?.find((i) =>
+                        i.selectedFor?.includes(purpose),
+                      );
+                      return chosen && !chosen.selected ? (
+                        <p key={purpose}>
+                          {t(
+                            purpose === "native"
+                              ? "runtimeUpdate.installNativeUse"
+                              : "runtimeUpdate.installExecUse",
+                            {
+                              version: chosen.version ?? t("runtimeUpdate.versionUnknown"),
+                              path: chosen.path,
+                            },
+                          )}
+                        </p>
+                      ) : null;
+                    })}
+                    {runtimeState.verifiedVersions &&
+                      runtimeState.verifiedVersions.length > 0 && (
+                        <p>
+                          {t("runtimeUpdate.installVerifiedVersions", {
+                            versions: runtimeState.verifiedVersions
+                              .map((v) => `v${v}`)
+                              .join(", "),
+                          })}
+                        </p>
+                      )}
+                    {runtimeState.installs.length > 1 && (
+                      <>
+                        <p>{t("runtimeUpdate.installMultiple")}</p>
+                        <ul className="list-disc pl-4">
+                          {runtimeState.installs.map((install) => (
+                            <li key={install.path} className="break-all">
+                              {install.path} ·{" "}
+                              {install.version
+                                ? `v${install.version}`
+                                : t("runtimeUpdate.versionUnknown")}{" "}
+                              · {t(INSTALL_SOURCE_KEY[install.source] ?? "runtimeUpdate.installSourcePath")}
+                              {" · "}
+                              {install.verified
+                                ? t("runtimeUpdate.installVerified")
+                                : t("runtimeUpdate.installUnverified")}
+                              {install.stale
+                                ? ` · ${t("runtimeUpdate.installStale")}`
+                                : ""}
+                              {install.selected
+                                ? ` · ${t("runtimeUpdate.installSelected")}`
+                                : ""}
+                              {install.selectedFor?.includes("native")
+                                ? ` · ${t("runtimeUpdate.installTagNative")}`
+                                : ""}
+                              {install.selectedFor?.includes("exec")
+                                ? ` · ${t("runtimeUpdate.installTagExec")}`
+                                : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
                 {updateFailed && !update && (
                   <p className="text-muted-foreground">
                     {t("runtimeUpdate.checkFailed")} ·{" "}
@@ -724,7 +831,13 @@ function AiConnectionsCard() {
                     offered only when the install flavor can actually pin
                     it (npm-global). */}
                 {update?.requiredVersion &&
-                  update.currentVersion !== update.requiredVersion && (
+                  update.currentVersion !== update.requiredVersion &&
+                  !(
+                    update.currentVersion &&
+                    runtimeState?.verifiedVersions?.includes(
+                      update.currentVersion,
+                    )
+                  ) && (
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-muted-foreground">
                         {t("runtimeUpdate.requiredHint", {

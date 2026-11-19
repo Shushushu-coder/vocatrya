@@ -78,6 +78,8 @@ export type NativeUnavailableDetails = {
   model: string | null;
   /** The certified model allowlist, when the runtime advertises one. */
   models: string[] | null;
+  /** Versions verified for native sessions (RUNTIME_VERSION_MISMATCH copy). */
+  verifiedVersions?: string[] | null;
 };
 
 /**

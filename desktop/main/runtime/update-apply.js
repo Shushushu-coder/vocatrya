@@ -21,6 +21,7 @@
 const { getRuntimeDefinition } = require("./registry");
 const { getAccountRuntimeCapabilities } = require("./capabilities");
 const { detectRuntime } = require("./detector");
+const { invalidateCodexDiscovery } = require("./codex-install");
 const { collectCertifiedVersions } = require("./update-check");
 const { runRuntimeCommand } = require("./runner");
 
@@ -67,6 +68,13 @@ function requiredVersionFor(backendKind) {
   return certified[0] ?? null;
 }
 
+// The npm channel is usable when the selected binary is npm-global, or (pinned
+// "required" target only) when any live discovered install is — the pin then
+// lands as an npm vendor binary the selection prefers once it is verified.
+function hasNpmInstall(detected) {
+  return Array.isArray(detected.installs) && detected.installs.some((i) => i.source === "npm" && !i.stale);
+}
+
 // What the settings surface may offer as executable targets — detection
 // only, nothing runs. Mirrors the rules applyRuntimeUpdate enforces.
 function applySupportFor(definition, detected) {
@@ -81,7 +89,7 @@ function applySupportFor(definition, detected) {
   return {
     flavor: npmGlobal ? "npm-global" : spawnable ? "self-update" : "unknown",
     canLatest: Boolean(npmGlobal && npmPackage) || Boolean(spawnable && selfUpdate),
-    canRequired: Boolean(npmGlobal && npmPackage),
+    canRequired: Boolean((npmGlobal || hasNpmInstall(detected)) && npmPackage),
   };
 }
 
@@ -110,10 +118,11 @@ function createRuntimeUpdateApplier(deps = {}) {
     if (inFlight.has(backendKind)) return fail("IN_PROGRESS");
     inFlight.add(backendKind);
     try {
+      invalidateCodexDiscovery();
       const detected = detectRuntime(backendKind, deps);
       const executable = detected.executablePath ?? null;
       const npmPackage = npmPackageFor(definition);
-      const npmGlobal = isNpmGlobalPath(executable);
+      const npmGlobal = isNpmGlobalPath(executable) || (target === "required" && hasNpmInstall(detected));
       const spawnable =
         typeof executable === "string" &&
         executable.length > 0 &&
@@ -166,12 +175,16 @@ function createRuntimeUpdateApplier(deps = {}) {
       }
       // Honest completion: re-probe the installed version after the run —
       // a 0 exit is not proof the expected binary landed.
+      invalidateCodexDiscovery();
       const after = detectRuntime(backendKind, deps);
+      // A pinned "required" install is judged by the binary native sessions
+      // will run (selected per purpose), not the login/default one.
+      const pinned = target === "required" ? after.installs?.find((i) => i.selectedFor?.includes("native")) : null;
       return {
         ok: true,
         backendKind,
         target,
-        version: after.version ?? null,
+        version: pinned?.version ?? after.version ?? null,
         state: after.state,
       };
     } finally {
