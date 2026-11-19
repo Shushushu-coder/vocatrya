@@ -130,6 +130,9 @@ export type BackupModel =
   | "QuestionBank"
   | "QuestionBankItem"
   | "InterviewPrepGoal"
+  | "AgentTask"
+  | "AgentTaskHandoff"
+  | "AgentTaskEvent"
   | "InterviewSession"
   | "QuestionInstance"
   | "AnswerAttempt"
@@ -760,6 +763,30 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     },
     scope: byUser,
   },
+  // Agent long-task ledger (user career-fact + audit trail). Domain pointers
+  // are SetNull (OPTIONAL_FKS): a task whose opportunity/goal is absent keeps
+  // its ledger. activeSessionId/activeSessionClaimedAt are runtime claims and
+  // are cleared on import. ChatConversation.agentTaskId points back here and
+  // is a DEFERRED_FK (ChatConversation inserts before AgentTask).
+  AgentTask: {
+    delegate: "agentTask",
+    owner: "userId",
+    fks: {
+      jobOpportunityId: "JobOpportunity",
+      interviewPrepGoalId: "InterviewPrepGoal",
+    },
+    scope: byUser,
+  },
+  AgentTaskHandoff: {
+    delegate: "agentTaskHandoff",
+    fks: { taskId: "AgentTask", sessionId: "ChatConversation" },
+    scope: (userId) => ({ task: { userId } }),
+  },
+  AgentTaskEvent: {
+    delegate: "agentTaskEvent",
+    fks: { taskId: "AgentTask" },
+    scope: (userId) => ({ task: { userId } }),
+  },
   InterviewSession: {
     delegate: "interviewSession",
     owner: "userId",
@@ -954,6 +981,11 @@ export const INSERT_ORDER: BackupModel[] = [
   // Prep goals insert before sessions because InterviewSession carries the
   // goal binding FK; wipe reverses this so sessions go first.
   "InterviewPrepGoal",
+  // Task ledger after the goal/opportunity it points at and after
+  // ChatConversation (handoff.sessionId); events/handoffs follow their task.
+  "AgentTask",
+  "AgentTaskHandoff",
+  "AgentTaskEvent",
   "InterviewSession",
   "QuestionInstance",
   "AnswerAttempt",
@@ -1062,6 +1094,13 @@ export const DEFERRED_FKS: ReadonlyArray<{
     model: "AnswerAttempt",
     field: "activeRevisionId",
     target: "TranscriptRevision",
+  },
+  // Session -> task link: ChatConversation inserts before AgentTask (which
+  // needs JobOpportunity/InterviewPrepGoal), so insert null and patch.
+  {
+    model: "ChatConversation",
+    field: "agentTaskId",
+    target: "AgentTask",
   },
   // Self-history chain — insert null, patch once every row of the model
   // exists; a dangling pointer degrades to null like any SetNull FK.

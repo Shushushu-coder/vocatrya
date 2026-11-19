@@ -70,6 +70,9 @@ model User {
   // Interview prep goals (additive backrelation only).
   interviewPrepGoals InterviewPrepGoal[]
 
+  // Agent long-task ledger (additive backrelation only).
+  agentTasks AgentTask[]
+
   // Phase B account-login foundation (additive backrelations only).
   aiConnections         AIConnection[]
   aiBusinessAssignments AIBusinessAssignment[]
@@ -741,9 +744,17 @@ model ChatConversation {
   // Durable operation proposals. SetNull on delete — the proposal keeps
   // the decision/dispatch evidence after its source transcript is gone.
   agentOperationProposals AgentOperationProposal[]
+  // Agent long-task session binding. NULL = ordinary chat (behavior
+  // unchanged). A task session is a Pilot-role conversation (agentRole
+  // "pilot", never NULL) linked to its AgentTask; deleting the task keeps
+  // the transcript as an ordinary chat (SetNull).
+  agentTaskId            String?
+  agentTask              AgentTask?           @relation(fields: [agentTaskId], references: [id], onDelete: SetNull)
+  agentTaskHandoffs      AgentTaskHandoff[]
 
   @@index([userId, updatedAt])
   @@index([userId, archivedAt])
+  @@index([agentTaskId])
 }
 
 /// 1:1 transcript compression cache for Career Dialogue.
@@ -870,6 +881,9 @@ model JobOpportunity {
 
   // Interview prep goals targeting this opportunity (additive backrelation).
   interviewPrepGoals InterviewPrepGoal[]
+
+  // Agent long tasks anchored on this opportunity (additive backrelation).
+  agentTasks AgentTask[]
 
   @@index([userId, status])
   @@index([userId, deadline])
@@ -2316,6 +2330,7 @@ model InterviewPrepGoal {
   jobOpportunity  JobOpportunity       @relation(fields: [jobOpportunityId], references: [id], onDelete: Restrict)
   pinnedJdVersion JobDescriptionVersion @relation(fields: [pinnedJobDescriptionVersionId], references: [id], onDelete: Restrict)
   sessions        InterviewSession[]
+  agentTasks      AgentTask[]
 
   @@unique([userId, requestKey])
   @@unique([userId, liveSlot])
@@ -2668,4 +2683,92 @@ model NativeConversationBinding {
   updatedAt DateTime @updatedAt
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@index([userId, connectionId])
+}
+
+/// Agent long-task ledger (job-search sprint). One AgentTask spans many
+/// ChatConversation sessions; each session is a disposable Pilot-role
+/// conversation linked through ChatConversation.agentTaskId. Domain entities
+/// (JobOpportunity, InterviewPrepGoal) are pointers, never copies.
+/// First template: INTERVIEW_SPRINT, anchored on a JobOpportunity.
+model AgentTask {
+  id              String    @id @default(uuid())
+  userId          String
+  title           String
+  // Template key (code constants): INTERVIEW_SPRINT.
+  templateKey     String
+  jobOpportunityId String?
+  // Reused INTERVIEW-PREP-CONTINUITY goal for the same opportunity, if one
+  // exists when the task is created. Pointer only; SetNull when the goal goes.
+  interviewPrepGoalId String?
+
+  // Template-defined milestone key (derivation logic lives in card C).
+  milestone       String
+  // ACTIVE | PAUSED | BLOCKED | DONE | ABANDONED
+  status          String    @default("ACTIVE")
+  // default-FAIL checklist (JSON): [{key,label,passes,evidenceRef}].
+  // Only code may flip passes; never a model.
+  acceptanceItems String
+  // Handoff CAS baseline: AgentTaskHandoff.revision = revision + 1 at commit.
+  revision        Int       @default(0)
+  // = templateKey:jobOpportunityId while ACTIVE/PAUSED/BLOCKED; NULL once
+  // DONE/ABANDONED. Unique per user: one live task per template+opportunity.
+  liveSlot        String?
+  // Single-active-session guard (claim CAS). Plain id, not a relation: a
+  // claim must survive/clear independently of the transcript row.
+  activeSessionId String?
+  activeSessionClaimedAt DateTime?
+  // WAITING_USER_CONFIRMATION | WAITING_SCHEDULE | MISSING_FACTS | EXTERNAL_REPLY
+  blockedReason   String?
+  blockedInputKey String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  archivedAt DateTime?
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobOpportunity    JobOpportunity?   @relation(fields: [jobOpportunityId], references: [id], onDelete: SetNull)
+  interviewPrepGoal InterviewPrepGoal? @relation(fields: [interviewPrepGoalId], references: [id], onDelete: SetNull)
+  sessions          ChatConversation[]
+  handoffs          AgentTaskHandoff[]
+  events            AgentTaskEvent[]
+
+  @@unique([userId, liveSlot])
+  @@index([userId, status])
+  @@index([jobOpportunityId])
+}
+
+/// Structured handoff note chain (append-only; read = highest revision).
+/// Table ships with the ledger migration so card B needs no second
+/// migration; the store/CAS writer is card B.
+model AgentTaskHandoff {
+  id        String   @id @default(uuid())
+  taskId    String
+  revision  Int
+  state     String
+  stateHash String
+  sessionId String?
+  generationMs Int?
+  createdAt DateTime @default(now())
+
+  task    AgentTask         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  session ChatConversation? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, revision])
+  @@index([taskId, createdAt])
+}
+
+/// Task-level append-only event log. Pointers and short codes only.
+/// Backed up (audit trail), unlike the runtime-only HarnessTaskEvent.
+model AgentTaskEvent {
+  id        String   @id @default(uuid())
+  taskId    String
+  // SESSION_START | GROUNDING | STEP | MILESTONE | BLOCKED | RESUMED |
+  // HANDOFF_COMMIT | SESSION_END | STATUS | ERROR
+  kind      String
+  payload   String
+  createdAt DateTime @default(now())
+
+  task AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }

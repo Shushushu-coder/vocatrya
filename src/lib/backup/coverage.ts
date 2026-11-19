@@ -59,6 +59,11 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   "AutoApplyExtensionConnection",
 ] as const;
 
+// Agent long-task ledger (AgentTask, AgentTaskHandoff, AgentTaskEvent) is
+// BACKED_UP through INSERT_ORDER: the task is user career-fact, handoffs are
+// its state chain, and events are the user-visible audit trail (unlike the
+// runtime-only HarnessTaskEvent above). Live session claims are cleared on
+// import; ChatConversation.agentTaskId is restored as a deferred FK.
 export const BACKED_UP_PRISMA_MODELS: readonly BackupModel[] = INSERT_ORDER;
 
 export function backupCoverageStatus(

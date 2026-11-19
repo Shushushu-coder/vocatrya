@@ -185,6 +185,11 @@ export const APP_CONSTANTS = {
   AGENT_CHAT_REVIEW_SURFACE: "chat",
   AGENT_CHAT_MATCH_SURFACE: "chat",
   AGENT_CHAT_MAX_STEPS: 4,
+  // Agent long-task ledger: a session claim older than this is stale and may
+  // be taken over by another session (crashed/abandoned client recovery).
+  AGENT_TASK_SESSION_STALE_MS: 2 * 60 * 60 * 1000,
+  // Event payloads carry pointers and short codes only.
+  AGENT_TASK_EVENT_PAYLOAD_MAX_CHARS: 2000,
   AGENT_CHAT_MAX_STORED_MESSAGES: 50,
   AGENT_CHAT_HISTORY_MESSAGES: 20,
   // Message count alone cannot bound context: one review output or resume read

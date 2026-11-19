@@ -983,6 +983,24 @@ export async function importBackup(
               // — they are evidence the call may already be out.
               payload.harnessTaskId = null;
             }
+            if (model === "AgentTask") {
+              // A backup never grants a live session claim; the single-active
+              // guard restarts empty. liveSlot embeds the opportunity id, so
+              // it is rebuilt from the remapped pointer (ids are re-minted).
+              const live = ["ACTIVE", "PAUSED", "BLOCKED"].includes(
+                String(payload.status),
+              );
+              payload = {
+                ...payload,
+                activeSessionId: null,
+                activeSessionClaimedAt: null,
+                liveSlot:
+                  live && payload.jobOpportunityId
+                    ? `${String(payload.templateKey)}:${String(payload.jobOpportunityId)}`
+                    : null,
+                acceptanceItems: remapPrepHandoff(row.acceptanceItems, idMap),
+              };
+            }
             if (model === "InterviewPrepGoal") {
               payload = {
                 ...payload,

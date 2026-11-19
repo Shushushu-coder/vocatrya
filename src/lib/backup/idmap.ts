@@ -73,6 +73,12 @@ const OPTIONAL_FKS = new Set<string>([
   // Self-history link: a dangling chain pointer degrades to null rather
   // than failing the import.
   "AgentOperationProposal.supersedesId",
+  // Agent task domain pointers are SetNull: the ledger survives a missing
+  // opportunity/goal (grounding reports the orphan). A handoff whose session
+  // transcript is absent keeps the note with a null session.
+  "AgentTask.jobOpportunityId",
+  "AgentTask.interviewPrepGoalId",
+  "AgentTaskHandoff.sessionId",
 ]);
 
 // Lock/provenance pointers that must SURVIVE dangling, not degrade: a
