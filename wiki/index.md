@@ -31,9 +31,9 @@
 | [`AGENT_WORKSPACE_UPGRADE_FEATURES.json`](./AGENT_WORKSPACE_UPGRADE_FEATURES.json) | **上述方案的功能台账**：独立记录，不改写 MVP/P1/P2 范围或验收状态。 | 跟踪该方案实施状态或安排验收时。 |
 | [`UI_1_2_0_RC_PROPOSAL.md`](./UI_1_2_0_RC_PROPOSAL.md) | **1.2.0-rc UI 调整方案**：D1–D6 已冻结；导航/头像、概览、分类区、职位排序已集成 Main。 | 修改上述 1.2.0-rc UI 区域前。 |
 | [`UI_1_2_0_RC_FEATURES.json`](./UI_1_2_0_RC_FEATURES.json) | **上述方案的功能清单**：独立维护，不改写 MVP/P1/P2/EXTENSIONS 状态。 | 核对 1.2.0-rc UI 项状态时。 |
-| [`AGENT_LONG_TASK_HARNESS_PROPOSAL.md`](./AGENT_LONG_TASK_HARNESS_PROPOSAL.md) | **Agent 长任务 Harness 实施方案**（实施设计，未实施；2026-11-16 按代码核对）。 | 设计或实施 Agent 长任务执行前。 |
+| [`AGENT_LONG_TASK_HARNESS_PROPOSAL.md`](./AGENT_LONG_TASK_HARNESS_PROPOSAL.md) | **Agent 长任务 Harness 实施方案**（2026-11-19 裁定本期仅做账本/便签/冷启动/UI，首场景面试冲刺，任务会话归 Pilot 不写 NULL；唤醒随 H06 暂缓。未实施）。 | 设计或实施 Agent 长任务执行前。 |
 | [`NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md`](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) | **已批准合同**（2026-11-17）：Codex／Devin原生会话边界；首切片 Codex 会话关联与恢复已实现（`AGENT-NATIVE-CODEX-V1`，待验收），Devin 未实施。 | 修改原生会话适配或扩展 Devin 前。 |
-| [`RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md`](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md) | **已批准合同**（2026-11-17）：简历证据深挖流程、提示内容及草稿结果；首版不保存、不加载。尚未实施。 | 实施该内置技能及后续加载接口前。 |
+| [`RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md`](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md) | **已批准合同**（2026-11-17）：简历证据深挖流程、提示内容及草稿结果；首版不保存、不加载。2026-11-19 首版纯草稿模块已入 Main（`src/lib/agent/skills/resumeEvidence/`），尚未接入角色与原生会话加载（D1/D8 待定）。 | 实施该内置技能及后续加载接口前。 |
 | [`RELEASE_RUNBOOK.md`](./RELEASE_RUNBOOK.md) | **发版标准流程**：`release-notes/<version>.md` 双语摘要编写规则与三道存在性门禁；RC 手工链路与正式版 release.yml 链路、时序窗口、签名/自动更新现状。 | 每次发版（RC 或正式版）前按流程执行；发布链路变更时同步更新。 |
 | [`archive/`](./archive/) | **历史报告归档**（2026-11-19 自仓库根迁入）：Beta2 托管端点修订、面试适配器集成/移植计划、Windows BYOK 打包验收。仅留档，不代表现状。 | 追溯上述历史决策或验收证据时。 |
 

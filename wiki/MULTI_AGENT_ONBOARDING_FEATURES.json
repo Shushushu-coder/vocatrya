@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "Vocatrya",
-  "updatedAt": "2026-11-18",
+  "updatedAt": "2026-11-19",
   "proposal": "MULTI_AGENT_ONBOARDING_PROPOSAL.md",
   "baseline": {
     "gitRef": "901b9b2b",
@@ -196,24 +196,30 @@
     {
       "id": "MAO-AUTOROUTE",
       "category": "Agent / Handoff UX",
-      "scope": "DEFERRED",
-      "designStatus": "PROPOSED",
-      "implementationStatus": "DEFERRED",
+      "scope": "PLANNED",
+      "designStatus": "DECIDED",
+      "implementationStatus": "NOT_STARTED",
       "description": "升级需求（用户 2026-11-18 记录）：发送前自动判断请求归属并静默路由到最佳角色回合，标注「已由 X 处理 · 换角色重答」，免除手动切换。与 B 的关系：B 保留为低置信度回落形态与用户可挽回路径。",
       "existingEvidence": [],
-      "recommendation": "待排期。建议高置信度自动路由 + 低置信度回落 B 转移卡的混合方案，不做无条件静默路由——错路由比可见指路更伤体验。",
+      "recommendation": "已裁定（2026-11-19）：高置信度规则路由自动发送、低置信度回落 B 转移卡；排在 1.2.3-rc 桌面验收之后实施。",
       "dependencies": [
         "MAO-SWITCHWIDGET"
       ],
       "openQuestions": [
-        "分类器形态：前置小模型调用（延迟/成本）还是规则/embedding（脆、覆盖面受限）",
-        "路由后消息归属：跨槽位搬消息、跨槽会话身份，还是单会话多角色人格",
-        "置信度阈值与回落条件、误判后的撤销/重答路径",
-        "审批、附件、上下文、持久化、恢复与可审计性在路由下的语义"
+        "高置信度阈值与规则表的具体内容，在实施前以真实误转移样本（1.2.3-rc 验收）校准"
       ],
       "steps": [],
-      "implementationNotes": "2026-11-18 用户讨论三挡方案后选定：本期只做 B；全自动路由作为明确升级需求备档，不回改 C5「不引入自动路由/编排」的当时裁定。",
-      "passes": false
+      "implementationNotes": "2026-11-18 用户讨论三挡方案后选定：本期只做 B；全自动路由作为明确升级需求备档，不回改 C5「不引入自动路由/编排」的当时裁定。 2026-11-19 用户裁定 D3：自动路由默认开启且不弹确认；其余设计按协调窗口推荐（规则分类、低置信度回落 B、目标槽位会话、可挽回重答、显式选角色跳过、发送前路由与审计元数据）。这修订了 C5「不引入自动路由」的当时裁定。未编码，passes:false。",
+      "passes": false,
+      "confirmedDecisions": [
+        "默认开启，路由后直接发送，不弹确认（用户 2026-11-19：自动路由就是为了省事）；设置中可关闭。",
+        "分类器：纯规则（复用 careerDialogueRoute 模式 + 请求所需工具归属哪个角色白名单），不额外调用模型。",
+        "高置信度才路由；低置信度不路由，回落现有 B（先答 + suggest_role 转移卡）。",
+        "消息归属：发往目标角色自己的槽位会话，等价于自动执行 transferToRole 并发送；原文、paste、文件附件、手动上下文按既有转移语义携带；不做单会话多角色人格。",
+        "可挽回：路由回合顶部标注「已由 X 处理 · 换回 Y 重答」，点击以同一载荷发给原角色；误路由回合保留在目标会话历史并标记。",
+        "用户本轮显式选择角色时跳过自动路由。",
+        "路由只发生在发送前、任何工具调用之前，审批不跨角色；路由决定（from/to/规则 id/置信度）记入消息元数据供审计。"
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Agent 长任务 Harness 完整实施方案
 
-状态：实施设计（未实施）
+状态：实施设计（未实施）；**2026-11-19 Owner 裁定本期范围与修订，见 §0.1，与正文冲突处以 §0.1 为准**
 依据：Anthropic Engineering《Effective harnesses for long-running agents》(2025-11-26)、
 《Harness design for long-running application development》(2026-03-24)、
 anthropics/cwc-long-running-agents quickstart；Vocatrya 代码库逐文件实测核对（2026-11-16）。
@@ -20,6 +20,21 @@ careerDialogueRoute 路由表；改写任何已执行 migration。
 每个会话降格为任务的一次性易失 session。
 
 ---
+
+## 0.1 Owner 裁定（2026-11-19）
+
+用户同意按协调窗口建议修订后实施（“D4 按你的想法先改”）。以下裁定覆盖正文中的冲突内容：
+
+1. **本期范围 = 卡 A（账本）、B（便签）、C（冷启动）、E（UI 最小面）**。用户在任务页/会话内显式点「继续任务」推进；**卡 D（scheduler 唤醒与无头轮次）随 H06 继续 DEFERRED，卡 F（evaluator）不进本期**。本期 migration 不加 `nextWakeupAt` 等唤醒字段，留待卡 D 另行 additive migration；§8.4、§8.5 与 §16 第 6 条移出本期。
+2. **任务会话不写 `agentRole=NULL`（废止 §4「会话 agentRole=NULL」一条）**。理由：与 `HARNESS_OPTIMIZATION_ROADMAP.json` 原则「历史兼容 agentRole=NULL 不作为新功能扩权手段」直接冲突，也与按角色划分工具/审批的多角色模型（含 MAO-AUTOROUTE）不一致。改为：任务会话归属 **Pilot** 槽位，按任务模板显式声明所需工具集，通过角色白名单的「任务扩展」入口加入并可测试，不借 NULL 扩权。
+3. **首个消费场景 = 面试冲刺**：任务绑定 JobOpportunity，复用 `INTERVIEW-PREP-CONTINUITY` 已有的面试准备目标、固定 JD 版本与逐题进度作为 milestone 推导与 acceptanceItems 的证据来源；投递跟进等其他模板后续再加。
+4. **§18 开放问题裁定**：
+   - Q1 任务创建入口：V1 仅机会详情页按钮，不新增 `propose_agent_task` 模型工具。
+   - Q2 自动唤醒默认：本期不做唤醒（见第 1 条）；将来实施时默认关闭、用户显式开启。
+   - Q3 `AgentTaskEvent` 备份：随包备份（审计价值），idmap 覆盖新外键。
+   - Q4 合成 kickoff 文案：本期固定文案，按 milestone 细化留后续。
+   - Q5 evaluator：本期不做，先用确定性 grounding verifier 观察。
+5. **排期**：会改 `contextBudget.ts`、`prompt.ts`、`accountTurn.ts` 与聊天路由，和其他聊天核心改动（MAO-AUTOROUTE 等）不并行；按 A→B→C→E 顺序串行，单一 Owner。
 
 ## 1. 事实核对结论（已逐条对照源码）
 
@@ -89,7 +104,7 @@ careerDialogueRoute 路由表；改写任何已执行 migration。
   模型想在便签里塞假 ID 没有管道——比"提示词要求写对 ID"强一个量级。
 - **Handoff 校验两段式**：zod 结构校验 + 提交前对每个实体 ID 做一次存在性复查
   （与 grounding verifier 复用同一批查询函数）。
-- **会话 agentRole=NULL**：任务 session 需要全工具注册表，写 NULL 是对既有
+- ~~**会话 agentRole=NULL**~~（2026-11-19 废止，见 §0.1 第 2 条）：任务 session 需要全工具注册表，写 NULL 是对既有
   "pre-multi-agent 通用助手"语义的**显式契约扩展**（新代码此前不写 NULL，
   见 `agentRoles.ts:10` 注释——本方案把它变为"任务会话专用标记"，前端 slotRoleFor
   已能把 NULL 归入 Pilot 槽位展示，无需 UI 改动）。
@@ -534,6 +549,8 @@ archiveAgentTask(taskId)
 | milestone 推导与域状态分歧 | 推导唯一真相是域实体；推导失败保持原 milestone 并记 Event |
 
 ## 18. 开放问题（需 Owner 决策）
+
+> 2026-11-19 已裁定，见 §0.1 第 4 条。
 
 1. **任务创建入口**：V1 建议仅"机会详情页按钮"一处；是否允许聊天中由模型建议创建（要新工具 `propose_agent_task` + approval）？
 2. **自动唤醒默认**：`nextWakeupAt` 默认 NULL（不自动跑），用户显式开启——还是按任务类型默认开？
