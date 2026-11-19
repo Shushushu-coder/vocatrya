@@ -9,16 +9,18 @@ import { desktopEnvironment, startDesktop, connectDesktop, stopDesktop, withDead
 import { register, checkNavigation, checkReopen } from "./scenario.mjs";
 import { enforceRunDirLimit, requireFreeSpace } from "./guards.mjs";
 import { runDesktopE2E } from "./launcher.mjs";
+import { runBackupExcludesBinding } from "./backupNativeScenario.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(import.meta.url);
 const args = process.argv.slice(2);
 if (args.includes("--help")) {
-  console.log("Usage: npm run test:e2e:desktop [-- --direct]\nWindows Electron fresh-native registration/navigation/restart. Rebuilds current source; uses only a unique .tmp/desktop-e2e directory. --direct is a separately labelled proxy diagnostic. See desktop/E2E.md.");
+  console.log("Usage: npm run test:e2e:desktop [-- --direct] [--scenario=backup-native]\n--scenario=backup-native runs the Codex native backup contract check (backup-excludes-binding) instead of the default flow.\nWindows Electron fresh-native registration/navigation/restart. Rebuilds current source; uses only a unique .tmp/desktop-e2e directory. --direct is a separately labelled proxy diagnostic. See desktop/E2E.md.");
   process.exit(0);
 }
 if (process.platform !== "win32") throw new Error("Desktop UI E2E requires Windows and an interactive desktop session");
-if (args.some((arg) => arg !== "--direct")) throw new Error("Unknown option; see --help");
+if (args.some((arg) => arg !== "--direct" && arg !== "--scenario=backup-native")) throw new Error("Unknown option; see --help");
+const backupScenario = args.includes("--scenario=backup-native");
 const direct = args.includes("--direct");
 const runId = randomUUID();
 
@@ -40,7 +42,7 @@ const result = await runDesktopE2E({
       return env;
     },
     assemble: assembleDesktopBackend,
-    runScenario: async ({ appRoot, dataRoot, runRoot, direct, state }) => {
+    runScenario: backupScenario ? async (context) => runBackupExcludesBinding({ ...context, electronExe: require("electron") }) : async ({ appRoot, dataRoot, runRoot, direct, state }) => {
       const launchOptions = { appRoot, dataRoot, logDirectory: path.join(runRoot, "logs"), electronExe: require("electron"), direct };
       const identity = { name: "桌面导航测试", email: `desktop-${randomUUID()}@example.test`, password: `Desktop-${randomUUID()}!` };
       state.instance = startDesktop(launchOptions);

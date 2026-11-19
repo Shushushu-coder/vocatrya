@@ -76,6 +76,16 @@ npm run test:e2e:desktop -- --direct
 
 `--direct` 是单独标记的 Chromium 直连诊断，不修改系统代理，也不能证明绕过 TUN；诊断通过不能替代默认环境通过。`ERR_FAILED`、`Target closed` 本身不足以判定代理或单实例锁是根因，需对照本轮日志与进程退出状态。
 
+## Codex 原生备份契约验收（`backup-excludes-binding`）
+
+同一启动器的定向场景，沿用相同的构建、隔离、磁盘保护与进程清理，仅在获授权的最终验收/定位时由指定执行者运行：
+
+```powershell
+npm run test:e2e:desktop -- --scenario=backup-native
+```
+
+场景在隔离源数据根注册合成账号，直接向隔离库写入一个 `NATIVE_CODEX_V1` 会话及合成 `NativeConversationBinding`（不接 Codex 运行时、不用真实账号），经应用真实的 `/api/backup/export` 导出，检查 ZIP：无 `NativeConversationBinding` 分组、任何文本条目无 thread id/`NATIVE_CODEX_V1`、导出的 `ChatConversation` 行无 `executionPath`/`nativeInitializationState` 键（设计契约，非保留）。随后退出并以全新的第二个数据根（`data-root-restore`）注册另一合成账号，经真实 `/api/backup/import` 恢复，断言 `executionPath=APP_ORCHESTRATED`、`nativeInitializationState=NEVER_ATTEMPTED`、绑定行为 0。证据与检查记录写入 `.tmp/desktop-e2e/<run>/evidence/backup-excludes-binding/`（`check.json` 含 id、status、expectation、逐项 checks 及证据路径，另有 `backup.zip`、`data.json`）。纯函数契约检查器的单测：`node --test desktop/e2e/backupContract.test.mjs`。
+
 ## 定向补验工具
 
 P2 职位关联、下一步建议及职业洞察的补验入口见 [P2 工具说明](../scripts/p2-closure-ready/README.md)。托管 AI 的本地 HTTP 边界和隔离桌面入口见 [Managed 工具说明](../scripts/managed-closure-ready/README.md)。两套工具的 prepare/validate 与重型执行分开，数据和合成凭据仅写入 `.tmp`；集成工具不表示已执行桌面验收，也不改变 Feature 的 `passes`。
