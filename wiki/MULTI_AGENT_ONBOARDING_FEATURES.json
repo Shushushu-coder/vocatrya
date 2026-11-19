@@ -35,6 +35,10 @@
     {
       "id": "C5",
       "decision": "冷启动方案参考业界 multi-agent 通行设计（GPTs 三件套、Pimcore awareness block、OctoPress handoff 确认门），不引入父子编排或自动路由。"
+    },
+    {
+      "id": "C6",
+      "decision": "2026-11-18 用户裁定：硬拒答指路改为「先答 + 一键转移」B 方案落地（suggest_role 结构化转移卡，点击切角色并入草稿，跨角色不自动发送）；全自动静默路由记录为升级需求 MAO-AUTOROUTE 备档，不在本期实现。"
     }
   ],
   "features": [
@@ -162,18 +166,53 @@
     {
       "id": "MAO-SWITCHWIDGET",
       "category": "Agent / Handoff UX",
-      "scope": "DEFERRED",
-      "designStatus": "PROPOSED",
-      "implementationStatus": "DEFERRED",
-      "description": "远期备档：模型输出结构化'建议切换'信号→UI 渲染[切到 X]/[留下]卡片→点击 switchRole 并把用户原话填入目标槽位草稿。参考 Pimcore switch_agent widget 与 OctoPress handoff 门；切换永不自动发生。",
-      "existingEvidence": [],
-      "recommendation": "一期先上 MAO-REFUSAL 纯文案指路；待实测后再评估 widget 收益（需新 UI part 类型与流转接线）。",
+      "scope": "PROPOSED_V1",
+      "designStatus": "CONTRACT_FROZEN",
+      "implementationStatus": "IMPLEMENTED_IN_CODE",
+      "description": "B 方案「先答 + 一键转移」：每角色先在自己能力内尽力回答；请求明显属于兄弟角色时调用 suggest_role 工具（UI 信号非业务写入）→ 渲染转移卡，点名目标角色并带一键按钮 → 点击 switchRole 并把用户原话并入目标槽位 composer 草稿，用户确认后再发送，跨角色不自动发送。",
+      "existingEvidence": [
+        "src/lib/agent/tools/suggestRole.ts",
+        "src/lib/agent/agentRoles.ts",
+        "src/lib/agent/toolPermissions.ts",
+        "src/lib/agent/prompt.ts",
+        "src/lib/agent/roleCopy.ts",
+        "src/components/agent/AgentResultCard/SuggestRoleResult.tsx",
+        "src/components/agent/AgentChatProvider.tsx (transferToRole)"
+      ],
+      "recommendation": "已按用户裁定实现（替代原硬拒答指路执行形态）；角色工具边界不变——当前角色不获得目标角色工具，转移只携带文本草稿。桌面验收后再评估是否升级全自动路由（MAO-AUTOROUTE）。",
       "dependencies": [
         "MAO-REFUSAL"
       ],
       "openQuestions": [],
+      "steps": [
+        "向某角色提跨域请求：角色先在自己能力内回答，不硬拒答；明显属于兄弟角色时输出 suggest_role 转移卡。",
+        "卡片显示「X 处理更合适」与本地化一键按钮；点击切换到目标角色并把原请求并入其 composer 草稿，不自动发送。",
+        "建议角色与当前角色相同时不显示按钮；不产生递归/重复转移卡。",
+        "各角色工具 allowlist 不变：suggest_role 仅注册给具名角色，通用(NULL)助手不获得；转移不携带审批、附件或业务写入。"
+      ],
+      "implementationNotes": "2026-11-16 D3 裁定 (a) 纯文案指路先行；widget 留档备查，未排期。 2026-11-18 用户实测拒答过刚，裁定先做 B「先答+一键转移」：新增 suggest_role 工具（execute 仅回显参数）、AgentSuggestRoleSchema/AgentSuggestRoleResult、SuggestRoleResult 卡片、Provider transferToRole（switchRole+fillComposer 并入草稿）、三个角色 allowlist 与 prompt/awareness 文案由硬指路改为先答后荐；i18n zh/en 与 roleCopy 回退文案补齐。定向 Vitest 与 tsc 在 release-1.2.2-rc 工作区通过；Windows Electron 真实模型与转移交互未验收，passes:false 保持。",
+      "passes": false
+    },
+    {
+      "id": "MAO-AUTOROUTE",
+      "category": "Agent / Handoff UX",
+      "scope": "DEFERRED",
+      "designStatus": "PROPOSED",
+      "implementationStatus": "DEFERRED",
+      "description": "升级需求（用户 2026-11-18 记录）：发送前自动判断请求归属并静默路由到最佳角色回合，标注「已由 X 处理 · 换角色重答」，免除手动切换。与 B 的关系：B 保留为低置信度回落形态与用户可挽回路径。",
+      "existingEvidence": [],
+      "recommendation": "待排期。建议高置信度自动路由 + 低置信度回落 B 转移卡的混合方案，不做无条件静默路由——错路由比可见指路更伤体验。",
+      "dependencies": [
+        "MAO-SWITCHWIDGET"
+      ],
+      "openQuestions": [
+        "分类器形态：前置小模型调用（延迟/成本）还是规则/embedding（脆、覆盖面受限）",
+        "路由后消息归属：跨槽位搬消息、跨槽会话身份，还是单会话多角色人格",
+        "置信度阈值与回落条件、误判后的撤销/重答路径",
+        "审批、附件、上下文、持久化、恢复与可审计性在路由下的语义"
+      ],
       "steps": [],
-      "implementationNotes": "2026-11-16 D3 裁定 (a) 纯文案指路先行；widget 留档备查，未排期。",
+      "implementationNotes": "2026-11-18 用户讨论三挡方案后选定：本期只做 B；全自动路由作为明确升级需求备档，不回改 C5「不引入自动路由/编排」的当时裁定。",
       "passes": false
     }
   ]
