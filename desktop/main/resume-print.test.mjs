@@ -116,7 +116,7 @@ describe("resume print IPC", () => {
       require: () => ({ contextBridge: { exposeInMainWorld: expose }, ipcRenderer: { invoke } }),
     });
     const bridge = expose.mock.calls.find(([name]) => name === "vocatryaResume")[1];
-    expect(Object.keys(bridge)).toEqual(["printToPDF"]);
+    expect(Object.keys(bridge)).toEqual(["printToPDF", "readPreviewPreferences", "writePreviewPreferences"]);
     bridge.printToPDF("version-1");
     expect(invoke).toHaveBeenCalledWith(CHANNEL, "version-1");
     const main = fs.readFileSync(new URL("./main.js", import.meta.url), "utf8");

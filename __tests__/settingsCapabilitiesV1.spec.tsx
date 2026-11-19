@@ -28,6 +28,17 @@ const notificationActions = vi.hoisted(() => ({
 }));
 vi.mock("@/actions/userSettings.actions", () => notificationActions);
 
+// DictationSettingsControls loads its config through a server action; the
+// real one depends on the database, so the spec pins a deterministic
+// "configured nothing" snapshot instead.
+const dictationActions = vi.hoisted(() => ({
+  getDictationSettings: vi.fn(),
+  updateDictationSettings: vi.fn(),
+  saveDictationKey: vi.fn(),
+  deleteDictationKey: vi.fn(),
+}));
+vi.mock("@/actions/dictation.actions", () => dictationActions);
+
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -53,6 +64,10 @@ beforeEach(() => {
   notificationActions.getUserSettings.mockResolvedValue({
     success: true,
     data: { userId: "u1", settings: { settings: {} } },
+  });
+  dictationActions.getDictationSettings.mockResolvedValue({
+    success: true,
+    data: { credentials: null, config: null },
   });
   notificationActions.updateNotificationSettings.mockImplementation(
     async (input: { enabled?: boolean; leadMinutes?: number }) => ({
@@ -260,19 +275,23 @@ describe("ShortcutsSettings — honest capability page", () => {
 });
 
 describe("AudioSettings — phase-1 controls", () => {
-  it("renders real controls for delivered features and keeps transcription honest", () => {
+  it("renders real controls for delivered features and keeps transcription honest", async () => {
     render(<AudioSettings />);
     const page = screen.getByTestId("audio-settings");
     for (const title of [
       "Microphone input",
       "Input level",
-      "Speech transcription & recognition",
+      "Dictation (speech-to-text)",
       "Recording test",
     ]) {
       expect(within(page).getByText(title)).toBeInTheDocument();
     }
-    // Only the transcription row keeps the badge in this phase.
-    expect(within(page).getAllByText("Not provided")).toHaveLength(1);
+    // No capability is left as an honest "Not provided" badge; the dictation
+    // row instead reports its real credential state once settings load.
+    expect(within(page).queryByText("Not provided")).not.toBeInTheDocument();
+    expect(
+      await within(page).findByTestId("dictation-key-badge"),
+    ).toHaveTextContent("Not configured");
     expect(within(page).getByTestId("audio-mic-enable")).toBeInTheDocument();
   });
 
@@ -373,9 +392,12 @@ describe("Settings V1 compact-row layout", () => {
       );
       const rows = page.querySelectorAll(".flex.flex-wrap");
       for (const row of rows) {
-        const text = row.querySelector(".min-w-0");
-        expect(text).not.toBeNull();
-        expect(text?.querySelector(".break-words")).not.toBeNull();
+        // The wrap contract governs text rows (a shrinkable text column that
+        // breaks long words). Control-only rows — the dictation key input,
+        // its test buttons — legitimately have no such column.
+        const text = row.querySelector(".min-w-0.flex-1");
+        if (!text) continue;
+        expect(text.querySelector(".break-words")).not.toBeNull();
       }
     },
   );
