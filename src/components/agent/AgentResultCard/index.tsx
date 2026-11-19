@@ -100,7 +100,10 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       toolName === "notion_update_record" ? (
       <NotionWriteResultCard output={part.output as AgentNotionWriteResult} />
     ) : toolName === "suggest_role" ? (
-      <SuggestRoleResult output={part.output as AgentSuggestRoleResultType} />
+      <SuggestRoleResult
+        output={part.output as AgentSuggestRoleResultType}
+        toolCallId={part.toolCallId}
+      />
     ) : null;
 
   return <div className="rounded-sm border p-3">{body}</div>;

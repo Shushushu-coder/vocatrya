@@ -390,6 +390,7 @@ describe("AgentResultCard", () => {
     expect(transferToRole).toHaveBeenCalledWith(
       "insight",
       "帮我分析这份简历和岗位的匹配度",
+      "c1",
     );
     expect(sendMessage).not.toHaveBeenCalled();
   });

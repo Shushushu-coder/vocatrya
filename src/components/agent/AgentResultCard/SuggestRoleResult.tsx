@@ -12,8 +12,12 @@ import type { AgentSuggestRoleResult } from "@/models/agent.model";
 // composer as a draft. The user reviews and sends; nothing auto-sends.
 export function SuggestRoleResult({
   output,
+  toolCallId,
 }: {
   output: AgentSuggestRoleResult;
+  // Lets the provider find the user request this card answers so the
+  // transfer can carry its paste card, file chips and context with it.
+  toolCallId?: string;
 }) {
   const { t, locale } = useI18n();
   const { transferToRole, activeRole } = useAgentChat();
@@ -29,7 +33,9 @@ export function SuggestRoleResult({
         <div>
           <Button
             className="h-7 px-2 text-xs"
-            onClick={() => void transferToRole(output.role, output.question)}
+            onClick={() =>
+              void transferToRole(output.role, output.question, toolCallId)
+            }
             size="sm"
             type="button"
             variant="outline"

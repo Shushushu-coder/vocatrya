@@ -69,6 +69,8 @@ import { AiProvider } from "@/models/ai.model";
 import { AI_CONFIGURATION_CHANGED_EVENT } from "@/lib/ai/client-events";
 import {
   AGENT_NESTED_STREAM_PART_TYPE,
+  isAgentFilePart,
+  isAgentPastePart,
   isNestedTool,
   type AgentAddJobResult,
   type AgentNestedStreamData,
@@ -173,6 +175,45 @@ function contextRequests(items: AgentConversationContextItem[]) {
     entityId: item.entityId,
     source: item.source,
   }));
+}
+
+// The handoff carries the whole request, not just its text: the paste card
+// and extracted file parts already live inside the source user message.
+// Locate the request by the suggest_role call that answered it, then
+// materialize those parts back into unsent chips on the target slot.
+function harvestTransferSource(
+  messages: UIMessage[],
+  toolCallId: string | undefined,
+): { paste: AgentPastePartData | null; files: AgentFileChip[] } | null {
+  if (!toolCallId) return null;
+  const assistantIndex = messages.findIndex(
+    (message) =>
+      message.role === "assistant" &&
+      message.parts?.some(
+        (part) => isToolUIPart(part) && part.toolCallId === toolCallId,
+      ),
+  );
+  if (assistantIndex < 0) return null;
+  for (let i = assistantIndex - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role !== "user") continue;
+    const parts = message.parts ?? [];
+    const paste = parts.find(isAgentPastePart)?.data ?? null;
+    const files = parts.filter(isAgentFilePart).map(
+      (part): AgentFileChip => ({
+        id: part.data.id,
+        name: part.data.name,
+        mediaType: part.data.mediaType,
+        size: part.data.size,
+        status: "ready",
+        chars: part.data.chars,
+        truncated: part.data.truncated,
+        text: part.data.text,
+      }),
+    );
+    return { paste, files };
+  }
+  return null;
 }
 
 function identityFromInitial(
@@ -1524,18 +1565,6 @@ function useAgentChatValue(
   // suggest_role handoff (MAO-B): the card carries the request into the
   // target role's slot and switches to it. The text lands as a composer
   // draft the user reviews and sends — nothing is auto-sent across roles.
-  const transferToRole = useCallback(
-    async (role: AgentRole, text: string) => {
-      const draft = text.trim();
-      if (!draft) return;
-      if (role !== activeRoleRef.current) await switchRole(role);
-      const existing = draftTextForSlot() ?? "";
-      fillComposer(
-        existing && existing !== draft ? `${existing}\n\n${draft}` : draft,
-      );
-    },
-    [switchRole, fillComposer],
-  );
   const clearActionError = useCallback(() => setActionError(null), []);
   const requestAddContext = useCallback(
     () => setContextPickerNonce((n) => n + 1),
@@ -1585,6 +1614,54 @@ function useAgentChatValue(
     contextRef.current = result.data;
     persistActiveSlot();
   }, [persistActiveSlot]);
+
+  const transferToRole = useCallback(
+    async (role: AgentRole, text: string, sourceToolCallId?: string) => {
+      const draft = text.trim();
+      if (!draft) return;
+      // Harvest before switchRole swaps the transcript and context — the
+      // request's attachments and manual context chips travel with it.
+      const carried = harvestTransferSource(chat.messages, sourceToolCallId);
+      const carriedContext = contextRef.current.items.filter(
+        (item) => item.source === "MANUAL",
+      );
+      if (role !== activeRoleRef.current) await switchRole(role);
+      const existing = draftTextForSlot() ?? "";
+      let merged =
+        existing && existing !== draft ? `${existing}\n\n${draft}` : draft;
+      // The composer holds a single paste card — when the target slot
+      // already owns one the carried body folds into the draft text
+      // instead of clobbering it.
+      if (carried?.paste && !pasteChipRef.current)
+        setPasteChip(carried.paste);
+      else if (carried?.paste) merged = `${merged}\n\n${carried.paste.text}`;
+      fillComposer(merged);
+      if (carried && carried.files.length > 0) {
+        setFileChips((prev) => {
+          const seen = new Set(prev.map((chip) => chip.id));
+          return [
+            ...prev,
+            ...carried.files.filter((chip) => !seen.has(chip.id)),
+          ].slice(0, APP_CONSTANTS.AGENT_FILE_MAX_PER_MESSAGE);
+        });
+      }
+      if (carriedContext.length > 0) {
+        void persistContext(
+          dedupeContextItems([...contextRef.current.items, ...carriedContext]),
+        );
+      }
+      persistActiveSlot();
+    },
+    [
+      chat,
+      switchRole,
+      fillComposer,
+      persistContext,
+      persistActiveSlot,
+      setPasteChip,
+      setFileChips,
+    ],
+  );
 
   const removeContextItem = useCallback(
     (kind: AgentConversationContextItem["kind"], entityId: string) => {

@@ -200,6 +200,26 @@ function Probe() {
       <span data-testid="review-stream">{c.toolStreams["rv1"] ?? ""}</span>
       <span data-testid="job-writes">{c.jobWrites}</span>
       <span data-testid="paste-chip">{c.pasteChip?.text ?? ""}</span>
+      <span data-testid="file-chips">
+        {c.fileChips.map((chip) => chip.name).join(",")}
+      </span>
+      <button
+        onClick={() =>
+          void c.transferToRole("insight", "帮我分析这份简历和岗位的匹配度", "sc1")
+        }
+      >
+        transferToInsight
+      </button>
+      <button
+        onClick={() =>
+          void c.transferToRole("pilot", "帮我分析这份简历和岗位的匹配度", "sc1")
+        }
+      >
+        transferToPilot
+      </button>
+      <button onClick={() => void c.transferToRole("pilot", "只有文本的请求")}>
+        transferNoId
+      </button>
       <span data-testid="context-usage">
         {c.contextUsage ? `${c.contextUsage.estimatedInputTokens}:${c.contextUsage.droppedTurnCount}` : ""}
       </span>
@@ -1607,6 +1627,109 @@ describe("AgentChatProvider", () => {
     // And it clears with the conversation state on a new draft.
     await userEvent.click(screen.getByText("newConversation"));
     expect(screen.getByTestId("context-usage").textContent).toBe("");
+  });
+
+  // MAO-B: a transfer moves the WHOLE request — the paste card, extracted
+  // file parts and manually attached context chips land on the sibling's
+  // composer, not just the question text.
+  const transferMessages = () => [
+    {
+      id: "u1",
+      role: "user",
+      parts: [
+        { type: "text", text: "帮我分析这份简历和岗位的匹配度" },
+        {
+          type: "data-paste",
+          id: "pa1",
+          data: { id: "pa1", text: "PASTE_BODY", chars: 10, truncated: false },
+        },
+        {
+          type: "data-file",
+          id: "f1",
+          data: {
+            id: "f1",
+            name: "resume.pdf",
+            mediaType: "application/pdf",
+            size: 10,
+            chars: 9,
+            truncated: false,
+            text: "FILE_BODY",
+          },
+        },
+      ],
+    },
+    {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-suggest_role",
+          toolCallId: "sc1",
+          state: "output-available",
+          input: { role: "insight", question: "帮我分析这份简历和岗位的匹配度" },
+          output: { role: "insight", question: "帮我分析这份简历和岗位的匹配度" },
+        },
+      ],
+    },
+  ];
+
+  it("carries the request's paste card, file parts and manual context on transfer", async () => {
+    const conv = conversation(transferMessages());
+    (conv as any).context = {
+      version: 1,
+      items: [
+        {
+          kind: "job",
+          entityId: "job-9",
+          labelSnapshot: "Acme Engineer",
+          source: "MANUAL",
+        },
+      ],
+    };
+    render(
+      <SidebarProvider initialExpanded>
+        <RightRailProvider>
+          <AgentChatProvider initialConversation={conv}>
+            <Probe />
+          </AgentChatProvider>
+        </RightRailProvider>
+      </SidebarProvider>,
+    );
+    act(() => chat.setMessages(transferMessages()));
+    await userEvent.click(screen.getByText("transferToInsight"));
+    expect(screen.getByTestId("active-role").textContent).toBe("insight");
+    expect(screen.getByTestId("composer-seed").textContent).toBe(
+      "帮我分析这份简历和岗位的匹配度",
+    );
+    expect(screen.getByTestId("paste-chip").textContent).toBe("PASTE_BODY");
+    expect(screen.getByTestId("file-chips").textContent).toBe("resume.pdf");
+    expect(screen.getByTestId("context-items").textContent).toBe("job:job-9");
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("folds the carried paste body into the draft when the target already owns a paste card", async () => {
+    setup();
+    act(() => chat.setMessages(transferMessages()));
+    await userEvent.click(screen.getByText("setPaste"));
+    expect(screen.getByTestId("paste-chip").textContent).toBe("body");
+    await userEvent.click(screen.getByText("transferToPilot"));
+    // Same role — no switch — but the occupied paste card is never clobbered;
+    // the carried body joins the draft text instead.
+    expect(screen.getByTestId("paste-chip").textContent).toBe("body");
+    expect(screen.getByTestId("composer-seed").textContent).toBe(
+      "帮我分析这份简历和岗位的匹配度\n\nPASTE_BODY",
+    );
+    expect(screen.getByTestId("file-chips").textContent).toBe("resume.pdf");
+  });
+
+  it("transfers text only when the source request cannot be located", async () => {
+    setup();
+    await userEvent.click(screen.getByText("transferNoId"));
+    expect(screen.getByTestId("composer-seed").textContent).toBe(
+      "只有文本的请求",
+    );
+    expect(screen.getByTestId("paste-chip").textContent).toBe("");
+    expect(screen.getByTestId("file-chips").textContent).toBe("");
   });
 });
 
