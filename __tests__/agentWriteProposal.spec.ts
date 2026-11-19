@@ -277,6 +277,30 @@ async function claim(taskId: string, owner = "runner-1") {
 // ---------------------------------------------------------------------------
 
 describe("decision CAS", () => {
+  it("concurrent same-decision approvals settle idempotently with one task", async () => {
+    await connectNotion();
+    const proposal = await makeProposal();
+    const decide = () =>
+      decideOperationProposal(prisma, { userId, proposalId: proposal.id, decision: "approve" });
+    const results = await Promise.allSettled([decide(), decide(), decide()]);
+    expect(results.every((r) => r.status === "fulfilled")).toBe(true);
+    const states = results.map((r) => (r as PromiseFulfilledResult<{ state: string }>).value.state);
+    expect(states.filter((s) => s === "approved")).toHaveLength(1);
+    expect(states.filter((s) => s === "already")).toHaveLength(2);
+    expect(await prisma.harnessTask.count()).toBe(1);
+  });
+
+  it("concurrent opposite decisions: exactly one wins, the loser gets PROPOSAL_ALREADY_DECIDED", async () => {
+    await connectNotion();
+    const proposal = await makeProposal();
+    const results = await Promise.allSettled([
+      decideOperationProposal(prisma, { userId, proposalId: proposal.id, decision: "approve" }),
+      decideOperationProposal(prisma, { userId, proposalId: proposal.id, decision: "reject" }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const loser = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect(loser.reason).toMatchObject({ code: "PROPOSAL_ALREADY_DECIDED" });
+  });
   it("approves atomically with one task; same replay returns, opposite conflicts", async () => {
     await connectNotion();
     const proposal = await makeProposal();

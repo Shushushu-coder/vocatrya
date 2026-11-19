@@ -65,6 +65,14 @@ function onRequest(
   })();
 }
 
+function armExpiryTimer() {
+  if (expiryTimer) clearTimeout(expiryTimer);
+  expiryTimer = setTimeout(() => {
+    closeNotionCallbackListener();
+  }, NOTION_OAUTH_PENDING_TTL_MS + 30_000);
+  expiryTimer.unref?.();
+}
+
 /**
  * Bind the loopback callback listener on a pool port. Returns the bound
  * port. The listener closes itself when the pending flow's TTL elapses —
@@ -76,6 +84,9 @@ export async function ensureNotionCallbackListener(
 ): Promise<number> {
   if (activeServer) {
     handlerRef = handler;
+    // A restarted flow reuses the listener: re-arm the expiry so the previous
+    // flow's older timer cannot close it while the new flow is still pending.
+    armExpiryTimer();
     return activeServer.port;
   }
   handlerRef = handler;
@@ -92,10 +103,7 @@ export async function ensureNotionCallbackListener(
     const address = server.address();
     const boundPort = address && typeof address !== "string" ? address.port : port;
     activeServer = { server, port: boundPort };
-    expiryTimer = setTimeout(() => {
-      closeNotionCallbackListener();
-    }, NOTION_OAUTH_PENDING_TTL_MS + 30_000);
-    expiryTimer.unref?.();
+    armExpiryTimer();
     return boundPort;
   }
   throw new Error("NOTION_CALLBACK_UNAVAILABLE");
