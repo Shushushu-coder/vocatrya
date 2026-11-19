@@ -172,6 +172,26 @@ describe("InterviewPrepSection", () => {
     );
   });
 
+  it("routes continue to the extensions entry inside the desktop shell", async () => {
+    const goal = goalFixture();
+    getGoal.mockResolvedValue(ok(goal));
+    continueGoal.mockResolvedValue(ok(goal));
+    window.vocatryaWindow = { setTheme: vi.fn() };
+    try {
+      await renderLoaded();
+      await userEvent.setup().click(screen.getByTestId("prep-continue"));
+      await waitFor(() => expect(continueGoal).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(push).toHaveBeenCalledWith("/dashboard/extensions"),
+      );
+      expect(push).not.toHaveBeenCalledWith(
+        "/dashboard/interview-prep/sess-1",
+      );
+    } finally {
+      delete window.vocatryaWindow;
+    }
+  });
+
   it("shows JD drift truthfully instead of a fabricated up-to-date state", async () => {
     getGoal.mockResolvedValue(
       ok(

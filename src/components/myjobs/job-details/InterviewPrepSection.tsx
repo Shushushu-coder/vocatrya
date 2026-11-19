@@ -32,6 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { isDesktopShell } from "@/components/desktop/desktopShell";
 import { toastError } from "@/lib/toast";
 import { useI18n } from "@/i18n";
 
@@ -123,6 +124,13 @@ export function InterviewPrepSection({ jobId }: { jobId: string }) {
   /** Route strictly by the server's freshly verified DTO — never the
    *  rendered goal, which may be an older round's stale closure. */
   const followAction = (target: PrepGoalDTO) => {
+    // Desktop shell retires the built-in practice UI (EXT-INTERVIEW-WEB);
+    // the extension tools page owns the practice entry there — same target
+    // as the interview moved card's CTA. Web build keeps the local routes.
+    if (isDesktopShell()) {
+      router.push("/dashboard/extensions");
+      return true;
+    }
     const action = target.nextAction;
     if (action.kind === "START_PRACTICE") {
       router.push(
