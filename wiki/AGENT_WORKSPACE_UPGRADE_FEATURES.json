@@ -16,22 +16,10 @@
     "passes": "仅实际用户路径和必要数据、权限验证全部通过后才设 true；本轮仅整理文档，全部为 false。"
   },
   "confirmedDecisions": [
-    {
-      "id": "C1",
-      "decision": "升级 Agent 窗口，覆盖模型选择、上下文、内容添加、审批与听写。"
-    },
-    {
-      "id": "C2",
-      "decision": "本地文件纳入首版方向，具体格式与传递方式按 D3/D4 裁定。"
-    },
-    {
-      "id": "C3",
-      "decision": "听写仅使用 API，不使用本地转写模型；交互参考 Codex。"
-    },
-    {
-      "id": "C4",
-      "decision": "听写纳入整体方案一节，不另建独立听写文档。"
-    }
+    { "id": "C1", "decision": "升级 Agent 窗口，覆盖模型选择、上下文、内容添加、审批与听写。" },
+    { "id": "C2", "decision": "本地文件纳入首版方向，具体格式与传递方式按 D3/D4 裁定。" },
+    { "id": "C3", "decision": "听写仅使用 API，不使用本地转写模型；交互参考 Codex。" },
+    { "id": "C4", "decision": "听写纳入整体方案一节，不另建独立听写文档。" }
   ],
   "features": [
     {
@@ -50,14 +38,8 @@
       ],
       "recommendation": "卡片行统一承载职位/简历/粘贴文本/文件；底部工具栏聚合添加、模型、上下文估算、麦克风与发送/停止；模型选择器从头部迁入；窄面板折叠与 aria-label 沿用现有写法。",
       "dependencies": [],
-      "openQuestions": [
-        "D8"
-      ],
-      "steps": [
-        "窄面板下各入口可操作且无横向溢出。",
-        "键盘、焦点及按钮可访问名称覆盖主要流程。",
-        "发送、停止、加载与失败状态反馈清楚。"
-      ],
+      "openQuestions": ["D8"],
+      "steps": ["窄面板下各入口可操作且无横向溢出。", "键盘、焦点及按钮可访问名称覆盖主要流程。", "发送、停止、加载与失败状态反馈清楚。"],
       "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：统一输入区落地，卡片行承载上下文 chip 与未发送粘贴卡，底部工具栏聚合添加菜单、模型选择与用量估算；粘贴卡移入 provider 态并随角色槽位序列化；窄面板（<480px）与 aria-label 沿用既有写法。切片 A 按 D1–D8 备料包推荐裁定执行；执行窗口五轴评审修复一处工具栏弹层随 composer 重挂载误开的回归。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，执行窗口 devin:legend-music）：窄面板 402px 可操作无横向溢出、键盘焦点链与可访问名称、发送/停止/加载/失败状态反馈均实测通过；11/11 场景全过，无已确认缺陷。证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/（截图、results.json、stub-requests.json、db.json、trace.zip）及 b8b430ce-6d1e-4de5-83b8-5d8d3ff0fa73/。",
       "passes": true
     },
@@ -74,18 +56,9 @@
         "src/components/agent/AgentChatProvider.tsx"
       ],
       "recommendation": "维持换模型开新会话契约；选择器在锁定时明示后果；新草稿携带输入文本、上下文条目与未发送附件（当前实现会清空，需补齐）。",
-      "dependencies": [
-        "AWU-COMPOSER"
-      ],
-      "openQuestions": [
-        "D1",
-        "D8"
-      ],
-      "steps": [
-        "新会话所选模型与后端实际执行身份一致。",
-        "已有会话切换流程清楚，重试及重新生成不静默改写旧绑定。",
-        "按冻结规则验证草稿、上下文和附件去向；连接失效不静默回退。"
-      ],
+      "dependencies": ["AWU-COMPOSER"],
+      "openQuestions": ["D1", "D8"],
+      "steps": ["新会话所选模型与后端实际执行身份一致。", "已有会话切换流程清楚，重试及重新生成不静默改写旧绑定。", "按冻结规则验证草稿、上下文和附件去向；连接失效不静默回退。"],
       "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：模型选择器迁入底部工具栏；既有会话换模型开新会话并显式携带草稿文本、MANUAL 上下文与粘贴卡（D1），锁态弹层补充携带文案、不加二次确认；AUTO 页面上下文保留重解析并经 dedupeContextItems 合并；修复了既往槽位快照时序导致草稿残留复活的不一致。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，devin:legend-music）：换模型开新会话并携带草稿/上下文/粘贴卡、锁态弹层文案、AUTO 重解析去重、stub 真实调用 awu-stub-v1、旧会话绑定不变实测通过，passes:true；证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/。",
       "passes": true
     },
@@ -102,17 +75,9 @@
         "src/app/api/ai/chat/route.ts"
       ],
       "recommendation": "工具栏显示「估算用量/应用预算」，展开区分模型容量（有元数据时）、应用预算与分项用量并说明裁剪；首版只读自动管理。contextSize 现仅进服务端日志，需回传客户端。",
-      "dependencies": [
-        "AWU-COMPOSER"
-      ],
-      "openQuestions": [
-        "D2"
-      ],
-      "steps": [
-        "显示值及裁剪提示与后端组装结果相符，不将 16k 应用预算冒充模型容量。",
-        "添加或移除上下文后展示及实际请求同步变化。",
-        "超预算行为与审批和当前回合保留规则兼容；若持久化设置，验证重新打开。"
-      ],
+      "dependencies": ["AWU-COMPOSER"],
+      "openQuestions": ["D2"],
+      "steps": ["显示值及裁剪提示与后端组装结果相符，不将 16k 应用预算冒充模型容量。", "添加或移除上下文后展示及实际请求同步变化。", "超预算行为与审批和当前回合保留规则兼容；若持久化设置，验证重新打开。"],
       "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：route 以 transient data-context-usage 回传组装估算（account/managed 路径，conversationId+requestId 双校验），工具栏显示估算/应用预算、分项展开与裁剪提示；Legacy 会话不显示不伪报（D2 首版只读自动管理）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，devin:legend-music）：工具栏估算 ≈637/16k 与后端 estimatedInputTokens: 637 一致、分项展开与裁剪提示、Legacy 不显示不伪报实测通过，passes:true；证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/。",
       "passes": true
     },
@@ -132,21 +97,9 @@
         "src/lib/agent/conversationRequest.ts"
       ],
       "recommendation": "首批 txt/md/pdf/docx 经服务端提取文本进入上下文（建议 ≤10MB、≤3 个/条、≤50k 字截断）；卡片含预览、状态与移除；图片/OCR/原生多模态延后。",
-      "dependencies": [
-        "AWU-COMPOSER",
-        "AWU-CONTEXT"
-      ],
-      "openQuestions": [
-        "D1",
-        "D3",
-        "D4"
-      ],
-      "steps": [
-        "冻结首批格式与限制后，验证选择、解析、预览、移除及实际模型请求中的内容。",
-        "超限、损坏、加密、无文本、格式不支持及取消不伪报成功。",
-        "只读取用户所选文件，后端校验限制，文件内容不授予工具权限。",
-        "按冻结生命周期验证会话恢复、文件删除和缓存清理；发送内容及外发对象可理解。"
-      ],
+      "dependencies": ["AWU-COMPOSER", "AWU-CONTEXT"],
+      "openQuestions": ["D1", "D3", "D4"],
+      "steps": ["冻结首批格式与限制后，验证选择、解析、预览、移除及实际模型请求中的内容。", "超限、损坏、加密、无文本、格式不支持及取消不伪报成功。", "只读取用户所选文件，后端校验限制，文件内容不授予工具权限。", "按冻结生命周期验证会话恢复、文件删除和缓存清理；发送内容及外发对象可理解。"],
       "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-b @990c91a6（merge b6249cb6）：选择/拖入/粘贴 txt/md/pdf/docx → POST /api/ai/agent-file-extract（auth+限流、≤10MB、magic 嗅探、≤50k 字）→ data-file part 仅携服务端提取文本，准入复核数量/形状/上限，提取文本仅注入到达轮并以 (attached file: name) 占位后续轮；AgentChatInput/ContextBar/Provider/fileChip 改造，i18n 各 +13 key。定向 vitest 45 项+相邻受影响 252 项、完整 tsc 通过；Windows Electron 与会话生命周期实测未执行，passes:false 保持。 2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收通过：docx 附件经服务端提取（1,912 字符）随消息发出并到达真实模型，添加/移除/预览及会话中表现确认。",
       "passes": true
     },
@@ -166,14 +119,8 @@
       ],
       "recommendation": "保留现有逐工具 needsApproval 策略与持久执行台账；卡片统一对象/动作/影响预览、参数展开与待批准/处理中/已执行/已拒绝/失败状态；不新增全部允许。",
       "dependencies": [],
-      "openQuestions": [
-        "D5"
-      ],
-      "steps": [
-        "审批卡展示与后端待执行参数一致。",
-        "拒绝后不执行相应写入，批准或重试不重复执行。",
-        "按冻结规则验证审批中输入、关闭及刷新恢复，前端状态不能绕过后端授权。"
-      ],
+      "openQuestions": ["D5"],
+      "steps": ["审批卡展示与后端待执行参数一致。", "拒绝后不执行相应写入，批准或重试不重复执行。", "按冻结规则验证审批中输入、关闭及刷新恢复，前端状态不能绕过后端授权。"],
       "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-a @14449561（merge dc3cb354）：审批卡接管五态生命周期（请求/已响应/已执行/已拒绝/失败），输出态须携带 approval 记录方归属审批卡，拒绝态仅状态行不重复结果卡；逐工具 needsApproval 策略不变（D5）。切片 A 按 D1–D8 备料包推荐裁定执行。定向测试 6 文件 199 项、改动文件 ESLint、完整 tsc 及 Main 合并后复验通过；生产构建、Windows Electron 与 E2E 未执行。 2026-11-14 Windows Electron fresh-native 生产构建验收（main@55dc0e20 隔离快照，devin:legend-music）：审批卡五态链路实测——批准→已执行不重复、拒绝仅状态行不执行且职位数不变、失败态渲染、第二张卡批准正确执行，passes:true；证据 .tmp/awu-a-verify/rerun-mwgbzt9c/evidence/。",
       "passes": true
     },
@@ -190,9 +137,7 @@
         "src/lib/ai/credential-store.ts"
       ],
       "recommendation": "转写服务独立配置（provider+model+凭据，可复用同 provider 的 BYOK key）；首版录完再传，首选 gpt-transcribe（$0.0045/分钟，25MB 上限，支持中文与术语提示），Gemini 音频为候选；Managed/账号登录连接无转写面，DeepSeek 无音频端点，Ollama 排除。",
-      "dependencies": [
-        "AWU-COMPOSER"
-      ],
+      "dependencies": ["AWU-COMPOSER"],
       "technicalDecision": {
         "execution": "API_ONLY",
         "localModel": false,
@@ -200,33 +145,13 @@
         "model": null,
         "credentialMode": null,
         "candidates": [
-          {
-            "provider": "OPENAI",
-            "model": "gpt-transcribe",
-            "mode": "file-upload",
-            "pricing": "$0.0045/min",
-            "note": "whisper-1 与 gpt-4o-transcribe 系列已弃用，2027-02-26 停服；Realtime 转写约 $0.05/min，建议延后",
-            "source": "developers.openai.com，2026-11-13 查阅"
-          },
-          {
-            "provider": "GEMINI",
-            "model": null,
-            "mode": "audio-in-chat",
-            "pricing": "按 token 计费",
-            "note": "内联 <20MB 或 Files API（免费、≤2GB、48h）",
-            "source": "ai.google.dev，2026-11-13 查阅"
-          }
+          { "provider": "OPENAI", "model": "gpt-transcribe", "mode": "file-upload", "pricing": "$0.0045/min", "note": "whisper-1 与 gpt-4o-transcribe 系列已弃用，2027-02-26 停服；Realtime 转写约 $0.05/min，建议延后", "source": "developers.openai.com，2026-11-13 查阅" },
+          { "provider": "GEMINI", "model": null, "mode": "audio-in-chat", "pricing": "按 token 计费", "note": "内联 <20MB 或 Files API（免费、≤2GB、48h）", "source": "ai.google.dev，2026-11-13 查阅" }
         ],
         "notes": "提供商、模型和凭据方式待裁定；Codex 等 Managed 连接不可视为可用转写服务。"
       },
       "openQuestions": [],
-      "steps": [
-        "在隔离 Windows Electron fresh-native 环境完成授权录音到真实 API 再到草稿的路径。",
-        "普通话、中英混说、公司名和职位名样本核对质量及耗时，不能只用 Mock 证明转写可用。",
-        "已有草稿不被覆盖，不自动发送；失败、权限拒绝、取消和迟到响应按冻结规则处理。",
-        "切换会话、继续输入及关闭面板时结果不串写，麦克风和临时音频按约定释放。",
-        "设置及凭据安全可用，明确音频去向；不下载或启动本地转写模型。"
-      ],
+      "steps": ["在隔离 Windows Electron fresh-native 环境完成授权录音到真实 API 再到草稿的路径。", "普通话、中英混说、公司名和职位名样本核对质量及耗时，不能只用 Mock 证明转写可用。", "已有草稿不被覆盖，不自动发送；失败、权限拒绝、取消和迟到响应按冻结规则处理。", "切换会话、继续输入及关闭面板时结果不串写，麦克风和临时音频按约定释放。", "设置及凭据安全可用，明确音频去向；不下载或启动本地转写模型。"],
       "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-c @3da20b1c（merge 92d6dbd6）+ 挂载收口 2820a675：D6 独立 dictation 设置（shared 复用 provider BYOK / dedicated 独立凭据行），OpenAI /v1/audio/transcriptions 与 Gemini generateContent 适配、统一 wire 错误码、60s 预算与取消共享信号；D7 录完再转、插入草稿不自动发送、音频仅内存、失败保留一次重试、归属切换迟到响应丢弃；AudioSettings 麦克风生命周期提取至 src/lib/audio/microphone.ts；AgentDictationButton 按交接清单挂入统一工具栏（insertDictationText 入草稿，ownership=activeRole:conversationId）；i18n 追加 dictation 顶层命名空间 46 key。定向 vitest 106 项+挂载相邻 53 项、完整 tsc、改动 ESLint 通过；真实 API、Windows Electron fresh-native 实测未执行，passes:false 保持。",
       "passes": false
     }
@@ -237,170 +162,78 @@
       "status": "PENDING_DECISION",
       "topic": "模型切换与草稿、附件保留规则",
       "recommendation": "沿用换模型新建会话；新草稿携带输入文本、上下文条目与未发送附件（现状为清空）。",
-      "alternatives": [
-        "同会话换模型（改锁定契约，首版不建议）",
-        "维持清空现状（丢草稿，不建议）"
-      ],
+      "alternatives": ["同会话换模型（改锁定契约，首版不建议）", "维持清空现状（丢草稿，不建议）"],
       "impact": "startNewConversation/enterDraft 增加携带参数；输入区状态需可进槽位快照；不动后端锁定。",
-      "decisionNeeded": [
-        "携带范围",
-        "是否加切换确认"
-      ]
+      "decisionNeeded": ["携带范围", "是否加切换确认"]
     },
     {
       "id": "D2",
       "status": "PENDING_DECISION",
       "topic": "上下文只读展示或档位配置、数值及持久化",
       "recommendation": "工具栏估算用量/应用预算，展开显示模型容量（有元数据时）、分项与裁剪说明；首版只读自动管理。",
-      "alternatives": [
-        "精简/扩展档位（建议后续）",
-        "仅近上限显示（不建议）",
-        "真实 tokenizer（首版不建议）"
-      ],
+      "alternatives": ["精简/扩展档位（建议后续）", "仅近上限显示（不建议）", "真实 tokenizer（首版不建议）"],
       "impact": "路由需回传 contextSize；展示前端为主，不改预算行为；16k 是应用预算非模型窗口。",
-      "decisionNeeded": [
-        "是否开放档位",
-        "裁剪提示位置"
-      ]
+      "decisionNeeded": ["是否开放档位", "裁剪提示位置"]
     },
     {
       "id": "D3",
       "status": "PENDING_DECISION",
       "topic": "首批文件格式、容量、数量、OCR、多模态与超预算处理",
       "recommendation": "txt/md/pdf/docx 服务端提取文本；建议 ≤10MB、≤3 个/条、≤50k 字截断；.doc 不支持；OCR/图片/原生多模态延后。",
-      "alternatives": [
-        "FileUIPart 原生文件通道（绕开提取与预算，首版不建议）",
-        "首版含图片/OCR（无既有能力，建议延后）"
-      ],
+      "alternatives": ["FileUIPart 原生文件通道（绕开提取与预算，首版不建议）", "首版含图片/OCR（无既有能力，建议延后）"],
       "impact": "新增上传入口与 data-file 类 part 准入放行；复用 extract-text 按 Agent 场景定限制与错误语义。",
-      "decisionNeeded": [
-        "限制数值",
-        "入口方式（选择/拖放/粘贴）",
-        "图片是否确认延后"
-      ]
+      "decisionNeeded": ["限制数值", "入口方式（选择/拖放/粘贴）", "图片是否确认延后"]
     },
     {
       "id": "D4",
       "status": "PENDING_DECISION",
       "topic": "原文件保存、会话恢复、删除、缓存及外发说明",
       "recommendation": "卡片预览即实际外发提取文本；文本随消息持久化，不存原文件；仅用户所选文件，明示外发对象。",
-      "alternatives": [
-        "原件落盘（敏感数据责任，不建议）",
-        "发送路径/引用（无权限实现且泄露路径，不建议）",
-        "消费后存根化（无消费语义，首版保留全文）"
-      ],
+      "alternatives": ["原件落盘（敏感数据责任，不建议）", "发送路径/引用（无权限实现且泄露路径，不建议）", "消费后存根化（无消费语义，首版保留全文）"],
       "impact": "会话 JSON 体积增长需与存贮上限同校验；提取文本计入上下文显式通道。",
-      "decisionNeeded": [
-        "提取文本长期保留接受度",
-        "敏感资料提示边界"
-      ]
+      "decisionNeeded": ["提取文本长期保留接受度", "敏感资料提示边界"]
     },
     {
       "id": "D5",
       "status": "PENDING_DECISION",
       "topic": "是否扩展审批模式及其失效、恢复与后端授权语义",
       "recommendation": "首版保留逐工具逐次审批与执行台账，只改进卡片预览与状态区分。",
-      "alternatives": [
-        "会话级/全部允许（需后端授权模型，另立决策）",
-        "只读模式（超出范围）"
-      ],
+      "alternatives": ["会话级/全部允许（需后端授权模型，另立决策）", "只读模式（超出范围）"],
       "impact": "首版前端为主；新模式必须同步后端校验与持久化语义。",
-      "decisionNeeded": [
-        "是否接受首版不动审批策略"
-      ]
+      "decisionNeeded": ["是否接受首版不动审批策略"]
     },
     {
       "id": "D6",
       "status": "PENDING_DECISION",
       "topic": "转写 API 提供商、模型、网络、凭据、费用和额度",
       "recommendation": "独立听写配置；首选 gpt-transcribe（$0.0045/min，≤25MB，支持中文/术语提示），Gemini 音频候选；BYOK 凭据复用，Managed 不可转写。",
-      "alternatives": [
-        "实时转写（约 $0.05/min，建议延后）",
-        "产品托管代付（商业模式待定）",
-        "复用聊天连接（不可行/混淆）"
-      ],
+      "alternatives": ["实时转写（约 $0.05/min，建议延后）", "产品托管代付（商业模式待定）", "复用聊天连接（不可行/混淆）"],
       "impact": "新增设置区块与服务端转写路由；复用 credential-store；不引入本地模型。",
-      "decisionNeeded": [
-        "首版 provider 范围",
-        "BYOK-only 或托管",
-        "费用提示方式"
-      ]
+      "decisionNeeded": ["首版 provider 范围", "BYOK-only 或托管", "费用提示方式"]
     },
     {
       "id": "D7",
       "status": "PENDING_DECISION",
       "topic": "录音时长、实时字幕、插入位置、跨会话归属、取消重试与音频保留清理",
       "recommendation": "录完再转、插入发起草稿、不自动发送；建议 120s 上限；音频仅内存，取消丢弃、失败保留一次重试；切换按取消处理并丢弃迟到结果；仅未取消且归属有效的响应插入发起草稿。",
-      "alternatives": [
-        "按住说话（可后续并存）",
-        "先展示再确认插入（多一步，不建议）",
-        "迟到结果仍写当前会话（串写风险，不建议）"
-      ],
+      "alternatives": ["按住说话（可后续并存）", "先展示再确认插入（多一步，不建议）", "迟到结果仍写当前会话（串写风险，不建议）"],
       "impact": "复用 AudioSettings 录音生命周期需提取共享逻辑；输入区新增录音状态机。",
-      "decisionNeeded": [
-        "时长上限",
-        "重试是否保留音频",
-        "迟到结果归属"
-      ]
+      "decisionNeeded": ["时长上限", "重试是否保留音频", "迟到结果归属"]
     },
     {
       "id": "D8",
       "status": "PENDING_DECISION",
       "topic": "最终布局、快捷键、高保真设计需求与交付排期",
       "recommendation": "按 §3 统一输入区示意实施；A 统一输入区 → B 本地文件 → C API 听写，按用户成果串行，共享文件单一 Owner。",
-      "alternatives": [
-        "B/C 并行（需输入区文件显式交接）",
-        "先高保真稿（建议直接按示意实施）"
-      ],
+      "alternatives": ["B/C 并行（需输入区文件显式交接）", "先高保真稿（建议直接按示意实施）"],
       "impact": "阶段拆分按独立用户成果，不机械按前后端或六个 Feature 切分。",
-      "decisionNeeded": [
-        "阶段顺序",
-        "高保真需求",
-        "快捷键补充"
-      ]
+      "decisionNeeded": ["阶段顺序", "高保真需求", "快捷键补充"]
     }
   ],
   "implementationSlices": [
-    {
-      "id": "A",
-      "outcome": "统一输入区：添加菜单、模型按钮、上下文估算指示、审批卡状态优化、窄面板与无障碍",
-      "sharedFiles": [
-        "src/components/agent/AgentChatInput.tsx",
-        "src/components/agent/AgentChatContextBar.tsx",
-        "src/components/agent/AgentChatIdentity.tsx",
-        "src/components/agent/AgentApprovalCard.tsx",
-        "src/components/agent/AgentChatPanel.tsx",
-        "src/app/api/ai/chat/route.ts",
-        "src/i18n/messages/"
-      ],
-      "dependsOn": []
-    },
-    {
-      "id": "B",
-      "outcome": "本地文件进入会话：选择/拖入/粘贴 → 服务端提取 → 卡片 → 外发并可重开查看",
-      "sharedFiles": [
-        "src/components/agent/AgentChatInput.tsx",
-        "src/lib/agent/conversationRequest.ts",
-        "src/lib/agent/contextBudget.ts",
-        "src/lib/ai/import/extract-text.ts"
-      ],
-      "dependsOn": [
-        "A"
-      ]
-    },
-    {
-      "id": "C",
-      "outcome": "API 听写：转写配置 + 麦克风 → 录音/取消/转写 → 文字入草稿",
-      "sharedFiles": [
-        "src/components/settings/AudioSettings.tsx",
-        "src/components/agent/AgentChatInput.tsx",
-        "src/components/agent/AgentChatProvider.tsx"
-      ],
-      "dependsOn": [
-        "A",
-        "D6"
-      ]
-    }
+    { "id": "A", "outcome": "统一输入区：添加菜单、模型按钮、上下文估算指示、审批卡状态优化、窄面板与无障碍", "sharedFiles": ["src/components/agent/AgentChatInput.tsx", "src/components/agent/AgentChatContextBar.tsx", "src/components/agent/AgentChatIdentity.tsx", "src/components/agent/AgentApprovalCard.tsx", "src/components/agent/AgentChatPanel.tsx", "src/app/api/ai/chat/route.ts", "src/i18n/messages/"], "dependsOn": [] },
+    { "id": "B", "outcome": "本地文件进入会话：选择/拖入/粘贴 → 服务端提取 → 卡片 → 外发并可重开查看", "sharedFiles": ["src/components/agent/AgentChatInput.tsx", "src/lib/agent/conversationRequest.ts", "src/lib/agent/contextBudget.ts", "src/lib/ai/import/extract-text.ts"], "dependsOn": ["A"] },
+    { "id": "C", "outcome": "API 听写：转写配置 + 麦克风 → 录音/取消/转写 → 文字入草稿", "sharedFiles": ["src/components/settings/AudioSettings.tsx", "src/components/agent/AgentChatInput.tsx", "src/components/agent/AgentChatProvider.tsx"], "dependsOn": ["A", "D6"] }
   ],
   "validation": {
     "status": "NOT_RUN",
