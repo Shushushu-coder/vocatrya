@@ -35,6 +35,7 @@
 | [`NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md`](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) | **已批准合同**（2026-11-17）：Codex／Devin原生会话边界；首切片 Codex 会话关联与恢复已实现（`AGENT-NATIVE-CODEX-V1`，待验收），Devin 未实施。 | 修改原生会话适配或扩展 Devin 前。 |
 | [`RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md`](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md) | **已批准合同**（2026-11-17）：简历证据深挖流程、提示内容及草稿结果；首版不保存、不加载。2026-11-19 首版纯草稿模块已入 Main（`src/lib/agent/skills/resumeEvidence/`），D1 已裁定挂 Pilot（宿主接线实施中），原生会话加载（D8）待定。 | 实施该内置技能及后续加载接口前。 |
 | [`RELEASE_RUNBOOK.md`](./RELEASE_RUNBOOK.md) | **发版标准流程**：`release-notes/<version>.md` 双语摘要编写规则与三道存在性门禁；RC 手工链路与正式版 release.yml 链路、时序窗口、签名/自动更新现状。 | 每次发版（RC 或正式版）前按流程执行；发布链路变更时同步更新。 |
+| [`RC_1_2_3_ACCEPTANCE.md`](./RC_1_2_3_ACCEPTANCE.md) | **1.2.3-rc 桌面验收清单**：汇总 1.2.2-rc 修复复验、Notion 剩余步骤、Codex 原生会话、其他已实现待验收项；未开始。 | 1.2.3-rc 收口构建后实测，或新增待验收项时。 |
 | [`archive/`](./archive/) | **历史报告归档**（2026-11-19 自仓库根迁入）：Beta2 托管端点修订、面试适配器集成/移植计划、Windows BYOK 打包验收。仅留档，不代表现状。 | 追溯上述历史决策或验收证据时。 |
 
 ## 使用原则
