@@ -27,7 +27,9 @@
 
 - **用户指定任务**：读取对应 Feature、相关代码及当前修改，直接执行，不重新规划整个 MVP。
 - **任务调度请求**：当用户询问“下一步做什么”“现在能做什么”“能否并行”“拆分/分配任务”或“生成执行 Agent 指令”等问题时，按需读取 `AGENTS_PROMPTS.md`，据此选择任务、控制粒度、判断并行并生成指令；不因调度请求自动实施。
+- **发版任务**：执行 RC 或正式版发布前，先读 `wiki/RELEASE_RUNBOOK.md` 按对应链路执行；`release-notes/<version>.md`（zh-CN + en 两段）必须在版本生效前提交，缺失会被打包、release-gate 与 release.yml 三道门禁拦截。
 - 不默认扫描整个仓库、追溯 Git 历史或运行启动测试。
+- 本仓库已建 CodeGraph 索引（`.codegraph/`，派生产物不提交）：定位符号、查调用方/被调方、评估改动影响面（`impact`）或牵连测试（`affected`）等有增益时，优先 `codegraph explore`/`node` 或对应 MCP 工具，再按需 grep/read 核实；大批量变更后 `codegraph sync` 保持同步。
 
 ## 5. Session Handoff
 

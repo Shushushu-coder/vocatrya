@@ -29,6 +29,7 @@
 | [`MULTI_AGENT_ONBOARDING_FEATURES.json`](./MULTI_AGENT_ONBOARDING_FEATURES.json) | **上述提案的功能台账**：MAO-ENTRY/ROSTER/REFUSAL/EMPTYSTATE/DEFAULT/SWITCHWIDGET 六项，含确认决策、验收检查点与 `passes`。 | 跟踪该提案实施状态或安排验收时。 |
 | [`NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md`](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) | **待批准提案**：Codex／Devin原生会话边界，首切片建议仅Codex会话关联与恢复；不代表已实施。 | 原生会话适配编码及接口裁定前。 |
 | [`RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md`](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md) | **待批准提案**：简历证据深挖流程、提示内容及草稿结果；首版不保存、不加载。 | 内置技能内容及后续加载接口裁定前。 |
+| [`RELEASE_RUNBOOK.md`](./RELEASE_RUNBOOK.md) | **发版标准流程**：`release-notes/<version>.md` 双语摘要编写规则与三道存在性门禁；RC 手工链路与正式版 release.yml 链路、时序窗口、签名/自动更新现状。 | 每次发版（RC 或正式版）前按流程执行；发布链路变更时同步更新。 |
 
 ## 使用原则
 
