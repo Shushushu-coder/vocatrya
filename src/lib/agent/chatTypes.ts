@@ -63,6 +63,33 @@ export type EligibleChatModel = {
   provider: string;
 };
 
+export type NativeUnavailableReason =
+  | "CONNECTION_INELIGIBLE"
+  | "RUNTIME_NOT_READY"
+  | "RUNTIME_VERSION_MISMATCH"
+  | "MODEL_UNSUPPORTED";
+
+export type NativeUnavailableDetails = {
+  reason: NativeUnavailableReason;
+  /** The probed runtime version (e.g. "0.165.0"), or null when unprobed. */
+  runtimeVersion: string | null;
+  /** The version the capability certifies (e.g. "0.169.0"), when known. */
+  requiredVersion: string | null;
+  model: string | null;
+  /** The certified model allowlist, when the runtime advertises one. */
+  models: string[] | null;
+};
+
+/**
+ * The Codex pair a NEW native conversation would lock to, resolved against
+ * connected Codex account connections and the runtime's native gate — the
+ * model picker probes this before offering the entry, so an unavailable
+ * entry renders grey with a reason instead of failing on click.
+ */
+export type NativeChatEntry =
+  | { ok: true; connectionId: string; model: string; displayName: string }
+  | { ok: false; details: NativeUnavailableDetails };
+
 export type AgentToolPermissionSnapshot = {
   permissionMode?: import("./preferences").PermissionMode;
   role: AgentRole | null;

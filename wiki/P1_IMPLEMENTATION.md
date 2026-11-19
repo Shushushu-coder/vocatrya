@@ -93,6 +93,7 @@
 
 ### AI-ACCOUNT-LOGIN：账号登录型 AI
 
+- **2026-11-18 UX 修正已编码待验证：已连接服务不再显示「连接」按钮。** 真实数据根排查确认重复连接成因：`AiConnectionsCard` 的「连接 xx」按钮只检查运行时 READY，不检查同 `accountProvider` 是否已有连接行；`connect()` 每次 mint 新 ticket 建新行，用户在「ChatGPT via Codex 已连接」状态下再点一次就重开登录并产生第二条连接（实机上 `4f2d49ca` DISCONNECTED + `621eabf1` CONNECTED 并存，既有会话锁还指向已断开的旧行）。已获用户确认的收敛方向：同一 `accountProvider` 存在连接行（非仅判断 backendKind，OpenCode Go/Zen 同 runtime 属两个 provider）时隐藏对应「连接 xx」按钮，重认证/重连走已有连接行的「重新连接」；同 provider 多账号若确有需要，以次级「再添加一个账号」+确认为准。配套的聊天面板原生会话入口修正记录于 [MVP_IMPLEMENTATION.md](./MVP_IMPLEMENTATION.md)。已实现：`AiConnectionsCard` 按 `accountProvider` 隐藏已有连接行的「连接 xx」按钮（连接行上的重新连接/断开/验证/模型/冒烟动作不变），定向组件测试通过；桌面实测未执行。
 - **2026-11-18 Antigravity 增量，未验证。** 设置页「Agent 账号登录」增加 Antigravity，身份是 `ANTIGRAVITY` + `ANTIGRAVITY_RUNTIME`，不复用 BYOK 的 `GEMINI`。本机 `agy` 1.5.12 的 `--help` / `agy acp --help` 已核对：登录命令是 `agy acp --login`；没有无头 `auth status` 或 `auth logout`。空 `USERPROFILE` 下 `agy models` 仍打印模型表，因此该表不能当成 Google 账号会话，模型发现保持不可用。状态解析只认 “not signed in”，其余输出是 `UNKNOWN`，不能完成 `CONNECTED`。`--print` 带上 `--sandbox` 与 `--mode plan`，提示词走 stdin；stdin 是否被 CLI 读取、流式、`--json-schema` 和 Windows 沙箱都没有托管试跑。`USERPROFILE` 能把 `~\.gemini` 挪进托管目录；官方文档中的钥匙串令牌不在这次隔离范围内，`multiAccountIsolation` 为 false。断开连接只删 Vocatrya 连接行，`--version` 不是登出，不清理钥匙串。登录、真实目录、真实推理、流式、结构化输出和权限对抗均为 `PENDING`。既有 Codex 验收不外推到 Antigravity，本项 `passes` 不因此改回 false，也不把 Antigravity 记为已验收。
 
 - 2026-10-29 集成 `68212510`：测试认证版本断言对齐已认证的 Codex 0.165.0，未放宽精确版本门控；代码/隔离测试证据已核对，真实账号业务与 Windows Electron 完整验收仍待完成。

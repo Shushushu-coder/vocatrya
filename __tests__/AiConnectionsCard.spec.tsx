@@ -219,10 +219,10 @@ describe("AiConnectionsCard", () => {
   it("renders every account runtime with product and runtime labels", async () => {
     installBridges();
     render(<AiConnectionsCard />);
-    await waitFor(() =>
-      expect(screen.getByText("Connect Devin")).toBeInTheDocument(),
-    expect(screen.getByText("Connect Antigravity")).toBeInTheDocument(),
-    );
+    await waitFor(() => {
+      expect(screen.getByText("Connect Devin")).toBeInTheDocument();
+      expect(screen.getByText("Connect Antigravity")).toBeInTheDocument();
+    });
     expect(screen.getByText("via OpenAI Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("via OpenCode CLI")).toBeInTheDocument();
     expect(screen.getByText("Connect ChatGPT")).toBeInTheDocument();
@@ -383,4 +383,44 @@ it("uses the selected OpenCode product from the compact connect menu", async () 
   await user.click(connect);
   await user.click(await screen.findByRole("menuitem", { name: "Connect OpenCode Zen" }));
   expect(actionMocks.mintAiConnectionTicket).toHaveBeenCalledWith(expect.objectContaining({ backendKind: "OPENCODE_RUNTIME", accountProvider: "OPENCODE_ZEN" }));
+});
+
+// Re-clicking "Connect" on an already-connected provider mints a duplicate
+// connection row and another login jump — the button hides per provider
+// (Go connected still offers Zen, a different product on the same runtime).
+it("hides connect for providers that already have a connection row", async () => {
+  installBridges({
+    connections: [
+      {
+        id: "c1",
+        provider: "OPENAI",
+        authType: "ACCOUNT_LOGIN",
+        backendKind: "CODEX_RUNTIME",
+        displayName: "ChatGPT via Codex",
+        status: "CONNECTED",
+      },
+      {
+        id: "c2",
+        provider: "OPENCODE_GO",
+        authType: "ACCOUNT_LOGIN",
+        backendKind: "OPENCODE_RUNTIME",
+        displayName: "OpenCode Go",
+        status: "DISCONNECTED",
+      },
+    ],
+  });
+  render(<AiConnectionsCard />);
+  await screen.findByText("ChatGPT via Codex");
+  expect(
+    screen.queryByRole("button", { name: "Connect ChatGPT" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Connect OpenCode Go" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Connect OpenCode Zen" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Connect Claude" }),
+  ).toBeInTheDocument();
 });

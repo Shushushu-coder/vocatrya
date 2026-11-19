@@ -1,5 +1,5 @@
 "use server";
-import { nativeReadiness, restartNativeContext } from "@/lib/agent/nativeSession.server";
+import { nativeReadiness, resolveNativeChatEntry, restartNativeContext } from "@/lib/agent/nativeSession.server";
 
 import { effectiveAgentToolNames, agentToolApproval } from "@/lib/agent/toolPermissions";
 import { resolveNotionAgentToolNames } from "@/lib/extensions/notion/service";
@@ -64,6 +64,7 @@ import type {
   ChatConversationSummary,
   EligibleChatModel,
   ExplicitModelSelection,
+  NativeChatEntry,
 } from "@/lib/agent/chatTypes";
 import {
   normalizeAgentRole,
@@ -438,6 +439,32 @@ export const listEligibleChatModels = async (): Promise<{
     return { success: true, data };
   } catch (error) {
     return fail(error, "Failed to list models.");
+  }
+};
+
+/**
+ * The Codex pair a NEW native conversation would lock to, probed before the
+ * user clicks the native entry — unavailable renders grey with a reason in
+ * the model menu instead of erroring afterwards. `preferred` is the draft's
+ * explicit pick: a usable Codex connection and allowlisted model win over the
+ * default resolution.
+ */
+export const getNativeChatEntry = async (input?: {
+  preferred?: ExplicitModelSelection | null;
+}): Promise<{
+  success: boolean;
+  data?: NativeChatEntry;
+  message?: string;
+  code?: string;
+}> => {
+  try {
+    const user = await requireUser();
+    return {
+      success: true,
+      data: await resolveNativeChatEntry(user.id, input?.preferred ?? null),
+    };
+  } catch (error) {
+    return fail(error, "Failed to check native session availability.");
   }
 };
 

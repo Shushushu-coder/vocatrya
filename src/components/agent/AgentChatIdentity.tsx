@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Lock, ChevronDown } from "lucide-react";
-import { listEligibleChatModels } from "@/actions/agentChat.actions";
+import {
+  getNativeChatEntry,
+  listEligibleChatModels,
+} from "@/actions/agentChat.actions";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +15,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useI18n } from "@/i18n";
-import type { EligibleChatModel, ExplicitModelSelection } from "@/lib/agent/chatTypes";
+import type {
+  EligibleChatModel,
+  ExplicitModelSelection,
+  NativeChatEntry,
+  NativeUnavailableDetails,
+} from "@/lib/agent/chatTypes";
 
 // Lives in the composer toolbar (AWU-MODEL). The popover opens upward, and a
 // pick on an existing conversation starts a new draft carrying the composer's
@@ -24,11 +32,15 @@ export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
     identity,
     setDraftModel,
     startNewConversation,
+    startNativeConversation,
+    nativeSession,
+    explicit,
     modelPickerNonce,
   } = useAgentChat();
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [models, setModels] = useState<EligibleChatModel[]>([]);
+  const [nativeEntry, setNativeEntry] = useState<NativeChatEntry | null>(null);
 
   // Same mount-vs-bump rule as AgentAddContextMenu: the nonce outlives the
   // toolbar remount that carries it, so the value at mount is already seen.
@@ -41,20 +53,26 @@ export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
   }, [modelPickerNonce]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || nativeSession) return;
     let cancelled = false;
     void listEligibleChatModels().then((result) => {
       if (cancelled || !result.success || !result.data) return;
       setModels(result.data);
     });
+    void getNativeChatEntry({ preferred: explicit }).then((result) => {
+      if (cancelled || !result.success || !result.data) return;
+      setNativeEntry(result.data);
+    });
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, nativeSession, explicit]);
 
   const locked = Boolean(conversationId) && identity.locked;
   const legacy = Boolean(conversationId) && identity.persistedLegacy;
-  const label = legacy
+  const label = nativeSession
+    ? t("nativeSession.badge")
+    : legacy
     ? identity.model
       ? t("agent.legacyIdentity", { model: identity.model })
       : t("agent.legacyIdentityUnknown")
@@ -64,6 +82,24 @@ export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
           connection: identity.displayName,
         })
       : (identity.model ?? t(identity.code === "AI_NOT_CONFIGURED" ? "agent.configureAi" : "agent.selectModel"));
+
+  const nativeReasonText = (details: NativeUnavailableDetails | undefined) => {
+    switch (details?.reason) {
+      case "CONNECTION_INELIGIBLE":
+        return t("nativeSession.entryConnection");
+      case "RUNTIME_NOT_READY":
+        return t("nativeSession.entryRuntime");
+      case "RUNTIME_VERSION_MISMATCH":
+        return t("nativeSession.entryVersion", {
+          required: details.requiredVersion ?? "",
+          actual: details.runtimeVersion ?? t("nativeSession.unknownVersion"),
+        });
+      case "MODEL_UNSUPPORTED":
+        return t("nativeSession.entryModel");
+      default:
+        return t("nativeSession.unavailable");
+    }
+  };
 
   const choose = (model: EligibleChatModel) => {
     const selection: ExplicitModelSelection = {
@@ -102,7 +138,27 @@ export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" className="w-72 space-y-2 p-3">
-        {locked && !picking ? (
+        {nativeSession ? (
+          <>
+            <p className="text-sm font-medium">{t("nativeSession.entry")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("nativeSession.textOnly")}
+            </p>
+            {identity.model ? (
+              <p className="text-xs text-muted-foreground">{identity.model}</p>
+            ) : null}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setOpen(false);
+                void startNewConversation({ carry: true });
+              }}
+            >
+              {t("nativeSession.leave")}
+            </Button>
+          </>
+        ) : locked && !picking ? (
           <>
             <p className="text-sm">
               {t("agent.lockTitle", { model: identity.model ?? "" })}
@@ -150,6 +206,53 @@ export function AgentChatIdentity({ compact = false }: { compact?: boolean }) {
                 <Link href="/dashboard/settings?section=ai-services">{t("agent.goToAiSettings")}</Link>
               </Button>
             )}
+            <div className="border-t pt-2">
+              {nativeEntry === null ? (
+                <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                  {t("settings.checking")}
+                </p>
+              ) : nativeEntry.ok ? (
+                <button
+                  type="button"
+                  data-testid="agent-native-entry"
+                  className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-muted"
+                  onClick={() => {
+                    setOpen(false);
+                    setPicking(false);
+                    void startNativeConversation({
+                      connectionId: nativeEntry.connectionId,
+                      model: nativeEntry.model,
+                    });
+                  }}
+                >
+                  <span className="block truncate text-sm">
+                    {t("nativeSession.entry")}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {t("nativeSession.textOnly")} · {nativeEntry.model}
+                  </span>
+                </button>
+              ) : (
+                <div className="px-2 py-1.5">
+                  <p className="text-sm text-muted-foreground">
+                    {t("nativeSession.entry")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {nativeReasonText(nativeEntry.details)}
+                  </p>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="link"
+                    className="h-auto px-0 text-xs"
+                  >
+                    <Link href="/dashboard/settings?section=ai-services">
+                      {t("agent.goToAiSettings")}
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </PopoverContent>

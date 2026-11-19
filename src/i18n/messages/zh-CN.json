@@ -17,7 +17,14 @@
     "updateFailed": "更新未完成（{code}）。可在 AI 设置的“版本与更新详情”中重试或手动更新。",
     "usePlain": "改用普通新对话",
     "unknownVersion": "未知版本",
-    "textOnly": "首版仅支持纯文本，不接收资料上下文、附件，不提供重新生成或工具。"
+    "textOnly": "首版仅支持纯文本，不接收资料上下文、附件，不提供重新生成或工具。",
+    "entry": "Codex 原生对话",
+    "badge": "Codex 原生",
+    "leave": "返回普通对话",
+    "entryConnection": "未连接 Codex 账号",
+    "entryRuntime": "Codex 运行时未就绪",
+    "entryVersion": "需要 Codex CLI {required}，检测到 {actual}",
+    "entryModel": "当前没有可用于原生会话的模型"
   },
   "canonicalImport": {
     "selectionSummary": "将导入所选的 {count} 条素材，并创建草稿简历「{name}」。",

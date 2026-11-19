@@ -58,6 +58,7 @@ import {
   deleteChatConversation,
   getAgentChatPreflight,
   getChatConversation,
+  getNativeChatEntry,
   listChatConversations,
   resolveDraftPageContext,
   cancelChatConversationRequest,
@@ -1220,18 +1221,59 @@ function useAgentChatValue(
     [chat, stop, resetTransient, runPreflight, snapshotActiveSlot, updateComposerSeed, setPasteChip],
   );
 
-  const startNativeConversation = useCallback(async () => {
-    if (creatingRef.current) return;
-    creatingRef.current = true;
-    const epoch = selectionEpochRef.current;
-    try {
-      const result = await createChatConversation({ executionPath: "NATIVE_CODEX_V1", messages: [], context: [],
-        explicit: explicitRef.current, permissionMode: draftPermissionMode, agentRole: activeRoleRef.current });
-      if (selectionEpochRef.current !== epoch) return;
-      if (!result.success || !result.data) { setActionError({ code: result.code ?? "NATIVE_SESSION_UNAVAILABLE", details: result.details }); return; }
-      await selectConversation(result.data.id);
-    } finally { creatingRef.current = false; }
-  }, [draftPermissionMode, selectConversation]);
+  const startNativeConversation = useCallback(
+    async (selection?: ExplicitModelSelection | null) => {
+      if (creatingRef.current) return;
+      creatingRef.current = true;
+      const epoch = selectionEpochRef.current;
+      // The runtime-state probe behind creation has no bound — a hung
+      // endpoint must not leave sends queued behind creatingRef forever.
+      let expired = false;
+      const timer = setTimeout(() => {
+        expired = true;
+        creatingRef.current = false;
+        if (selectionEpochRef.current === epoch) {
+          setActionError({ code: "NATIVE_SESSION_UNAVAILABLE" });
+        }
+      }, 30_000);
+      try {
+        let resolved = selection ?? null;
+        // Callers without a pair (error-banner retry) resolve the entry
+        // themselves; the menu passes the pair it already probed.
+        if (!resolved) {
+          const entry = await getNativeChatEntry({ preferred: explicitRef.current });
+          if (selectionEpochRef.current !== epoch || expired) return;
+          if (!entry.success || !entry.data) {
+            setActionError({ code: entry.code ?? "NATIVE_SESSION_UNAVAILABLE" });
+            return;
+          }
+          if (!entry.data.ok) {
+            setActionError({ code: "NATIVE_SESSION_UNAVAILABLE", details: entry.data.details });
+            return;
+          }
+          resolved = { connectionId: entry.data.connectionId, model: entry.data.model };
+        }
+        const result = await createChatConversation({
+          executionPath: "NATIVE_CODEX_V1",
+          messages: [],
+          context: [],
+          explicit: resolved,
+          permissionMode: draftPermissionMode,
+          agentRole: activeRoleRef.current,
+        });
+        if (selectionEpochRef.current !== epoch || expired) return;
+        if (!result.success || !result.data) {
+          setActionError({ code: result.code ?? "NATIVE_SESSION_UNAVAILABLE", details: result.details });
+          return;
+        }
+        await selectConversation(result.data.id);
+      } finally {
+        clearTimeout(timer);
+        creatingRef.current = false;
+      }
+    },
+    [draftPermissionMode, selectConversation],
+  );
 
   const restartNativeSession = useCallback(async () => {
     const id = conversationIdRef.current;

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto';
 import { seedAccount } from './helpers/backupTestDb';
-import { beginNativeTurn, saveNativeBinding, restartNativeContext, nativeReadiness } from '@/lib/agent/nativeSession.server';
+import { beginNativeTurn, saveNativeBinding, restartNativeContext, nativeReadiness, resolveNativeChatEntry } from '@/lib/agent/nativeSession.server';
 import type { ConversationRequest } from '@/lib/agent/conversationRequest';
 import db from '@/lib/db';
 import { buildBackupZip } from '@/lib/backup/export';
@@ -26,3 +26,29 @@ it('runtime drift and connection ownership are gated before a native request',as
 it('backup round-trip preserves messages but clears native execution and binding',async()=>{const row=await conversation();const req=request(row);await beginNativeTurn(req);await saveNativeBinding(req,session,{connectionId,model:'gpt-6.1-sol',promptHash:'p'});await db.chatConversation.updateMany({where:{userId},data:{activeRequestId:null,activeRequestExpiresAt:null}});const {buffer}=await buildBackupZip(userId,'native-test@vocatrya.test');await importBackup(buffer,userId,'native-test@vocatrya.test',true);expect(await db.nativeConversationBinding.count({where:{userId}})).toBe(0);const restored=await db.chatConversation.findMany({where:{userId}});expect(restored.length).toBeGreaterThan(0);expect(restored.every(x=>x.executionPath==='APP_ORCHESTRATED'&&x.nativeInitializationState==='NEVER_ATTEMPTED')).toBe(true);});
 
 it('uncertain turns with saved native history require explicit restart',async()=>{const row=await conversation();const req=request(row);await beginNativeTurn(req);await saveNativeBinding(req,session,{connectionId,model:'gpt-6.1-sol',promptHash:'p'});await expect(beginNativeTurn(req)).rejects.toMatchObject({code:'NATIVE_CONTEXT_LOST'});});
+
+// The native entry resolves its own Codex pair instead of the generic chat
+// lock: a non-Codex default must not make the entry CONNECTION_INELIGIBLE.
+// The backup round-trip above wipes connection rows (credentials are never
+// exported), so each case re-creates its own Codex connection.
+async function entryConnection(){return (await db.aIConnection.create({data:{userId,provider:'OPENAI',backendKind:'CODEX_RUNTIME',displayName:'entry-fixture',runtimeProfileRef:'rp_entry'}})).id;}
+it('native entry resolves the connected Codex pair with an allowlisted model',async()=>{
+  const conn=await entryConnection();
+  const entry=await resolveNativeChatEntry(userId);
+  expect(entry).toMatchObject({ok:true,connectionId:conn,model:'gpt-6.1-sol'});
+});
+it('native entry prefers the draft pick when it is an allowlisted model',async()=>{
+  const conn=await entryConnection();
+  const mocked=await import('@/lib/ai/streaming-execution');
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce({runtimeReady:true,runtimeVersion:'0.169.0',nativeSession:{ready:true,version:'0.169.0',models:['gpt-5.4','gpt-6.1-sol'],configHash:'config'}} as any);
+  await expect(resolveNativeChatEntry(userId,{connectionId:conn,model:'gpt-5.4'})).resolves.toMatchObject({ok:true,connectionId:conn,model:'gpt-5.4'});
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce({runtimeReady:true,runtimeVersion:'0.169.0',nativeSession:{ready:true,version:'0.169.0',models:['gpt-5.4','gpt-6.1-sol'],configHash:'config'}} as any);
+  await expect(resolveNativeChatEntry(userId,{connectionId:'other',model:'not-allowlisted'})).resolves.toMatchObject({ok:true,connectionId:conn,model:'gpt-5.4'});
+});
+it('native entry reports the exact blocker instead of failing on click',async()=>{
+  await expect(resolveNativeChatEntry('other')).resolves.toMatchObject({ok:false,details:{reason:'CONNECTION_INELIGIBLE'}});
+  await entryConnection();
+  ctx.runtimeVersion='0.165.0';
+  await expect(resolveNativeChatEntry(userId)).resolves.toMatchObject({ok:false,details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.165.0',requiredVersion:'0.169.0'}});
+  ctx.runtimeVersion='0.169.0';
+});

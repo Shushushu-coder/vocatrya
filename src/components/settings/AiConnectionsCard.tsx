@@ -844,15 +844,27 @@ function AiConnectionsCard() {
                   </span>
                 </>
               ) : (
-                backend.accountOptions.map((option) => (
-                  <Button
-                    key={option.accountProvider}
-                    onClick={() => connect(backend, option.accountProvider)}
-                    disabled={busy !== null || runtimeState?.state !== "READY"}
-                  >
-                    {t(option.connectLabelKey)}
-                  </Button>
-                ))
+                // A connect button always mints a NEW connection row — an
+                // existing row for the same account provider already covers
+                // re-auth through its own "Reconnect", so the button hides
+                // instead of spawning a duplicate login and a second row.
+                // Gated per provider, not per backend: OpenCode Go/Zen are
+                // two products on one runtime.
+                backend.accountOptions.map((option) =>
+                  backendConnections.some(
+                    (c) => c.provider === option.accountProvider,
+                  ) ? null : (
+                    <Button
+                      key={option.accountProvider}
+                      onClick={() => connect(backend, option.accountProvider)}
+                      disabled={
+                        busy !== null || runtimeState?.state !== "READY"
+                      }
+                    >
+                      {t(option.connectLabelKey)}
+                    </Button>
+                  ),
+                )
               )}
             </div>
 

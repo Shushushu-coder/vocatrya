@@ -17,7 +17,14 @@
     "updateFailed": "Update did not finish ({code}). Retry from \"Version & update details\" in AI Settings or update manually.",
     "usePlain": "Start a regular conversation",
     "unknownVersion": "unknown",
-    "textOnly": "This first version supports plain text only, without context attachments, files, regeneration or tools."
+    "textOnly": "This first version supports plain text only, without context attachments, files, regeneration or tools.",
+    "entry": "Codex native conversation",
+    "badge": "Codex native",
+    "leave": "Back to regular chat",
+    "entryConnection": "No connected Codex account",
+    "entryRuntime": "Codex runtime not ready",
+    "entryVersion": "Requires Codex CLI {required}; detected {actual}",
+    "entryModel": "No model available for native sessions"
   },
   "canonicalImport": {
     "selectionSummary": "Import {count} selected material items and create draft resume “{name}”.",

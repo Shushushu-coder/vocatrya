@@ -4,27 +4,16 @@ import type { PrismaClient } from "@prisma/client";
 import prisma from "@/lib/db";
 import { AIBusinessError, classifyAIConnection } from "@/lib/ai/connections";
 import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
-import { fetchAccountRuntimeState } from "@/lib/ai/streaming-execution";
+import { fetchAccountRuntimeState, type AccountRuntimeState } from "@/lib/ai/streaming-execution";
 import type { ConversationRequest } from "./conversationRequest";
+import type {
+  ExplicitModelSelection,
+  NativeChatEntry,
+  NativeUnavailableDetails,
+} from "./chatTypes";
 
 export const NATIVE_PATH = "NATIVE_CODEX_V1";
 export const APP_PATH = "APP_ORCHESTRATED";
-export type NativeUnavailableReason =
-  | "CONNECTION_INELIGIBLE"
-  | "RUNTIME_NOT_READY"
-  | "RUNTIME_VERSION_MISMATCH"
-  | "MODEL_UNSUPPORTED";
-
-export interface NativeUnavailableDetails {
-  reason: NativeUnavailableReason;
-  /** The probed runtime version (e.g. "0.165.0"), or null when unprobed. */
-  runtimeVersion: string | null;
-  /** The version the capability certifies (e.g. "0.169.0"), when known. */
-  requiredVersion: string | null;
-  model: string | null;
-  /** The certified model allowlist, when the runtime advertises one. */
-  models: string[] | null;
-}
 
 const unavailable = (details?: NativeUnavailableDetails) => new AIBusinessError("NATIVE_SESSION_UNAVAILABLE", "Native session is not available for this connection, model or runtime version", undefined, details);
 const lost = () => new AIBusinessError("NATIVE_CONTEXT_LOST", "Native context was not restored. No message was resent. Explicitly restart native context to continue.");
@@ -64,6 +53,69 @@ export async function nativeReadiness(userId: string, connectionId: string, mode
   const report = await nativeReadinessReport(userId, connectionId, model, db);
   if (!report.ok) throw unavailable(report.details);
   return { connection: report.connection!, runtimeVersion: report.runtimeVersion, configHash: report.configHash };
+}
+
+/**
+ * Resolves the Codex pair a NEW native conversation would lock to. The native
+ * entry must NOT reuse the generic chat lock — when the default assignment is
+ * another provider that lock is never a Codex connection and creation can only
+ * fail. Instead this picks the user's connected Codex account itself (the
+ * draft's pick wins when it is a usable Codex connection), probes the same
+ * gates nativeReadiness checks, and reports WHICH condition fails so the
+ * picker can grey the entry with a reason instead of erroring on click.
+ * Creation still re-validates through nativeReadiness inside
+ * createChatConversationRecord.
+ */
+export async function resolveNativeChatEntry(
+  userId: string,
+  preferred?: ExplicitModelSelection | null,
+  db = prisma,
+): Promise<NativeChatEntry> {
+  const connections = await db.aIConnection.findMany({
+    where: {
+      userId,
+      backendKind: "CODEX_RUNTIME",
+      authType: "ACCOUNT_LOGIN",
+      archivedAt: null,
+      status: "CONNECTED",
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  const usable = connections.filter(
+    (c) => classifyAIConnection(c) === "ACCOUNT_LOGIN" && c.runtimeProfileRef,
+  );
+  const connection =
+    (preferred?.connectionId
+      ? usable.find((c) => c.id === preferred.connectionId)
+      : undefined) ?? usable[0];
+  const ineligible = { reason: "CONNECTION_INELIGIBLE", runtimeVersion: null, requiredVersion: null, model: null, models: null } as const;
+  if (!connection) return { ok: false, details: ineligible };
+  let state: AccountRuntimeState;
+  try {
+    state = await fetchAccountRuntimeState({
+      backendKind: connection.backendKind,
+      accountProvider: connection.provider,
+    });
+  } catch {
+    // The runtime-state channel is unreachable (no desktop, backend down):
+    // the honest verdict is NOT_READY, not a generic failure banner.
+    return { ok: false, details: { ...ineligible, reason: "RUNTIME_NOT_READY" } };
+  }
+  const capability = state.nativeSession;
+  if (!state.runtimeReady) {
+    return { ok: false, details: { reason: "RUNTIME_NOT_READY", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model: null, models: capability?.models ?? null } };
+  }
+  if (!capability?.ready || state.runtimeVersion !== capability.version) {
+    return { ok: false, details: { reason: "RUNTIME_VERSION_MISMATCH", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability?.version ?? null, model: null, models: capability?.models ?? null } };
+  }
+  const model =
+    preferred?.model && capability.models.includes(preferred.model)
+      ? preferred.model
+      : capability.models[0];
+  if (!model) {
+    return { ok: false, details: { reason: "MODEL_UNSUPPORTED", runtimeVersion: state.runtimeVersion ?? null, requiredVersion: capability.version, model: preferred?.model ?? null, models: capability.models } };
+  }
+  return { ok: true, connectionId: connection.id, model, displayName: connection.displayName };
 }
 
 // Ownership includes the active request lease. A late stream cannot recreate
