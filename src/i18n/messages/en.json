@@ -1741,6 +1741,7 @@
     "aiAssignStreamingHint": "Career Dialogue streams replies token by token and requires a runtime verified for incremental output.",
     "aiAssignStreamingNotReady": "This runtime does not have verified streaming output.",
     "aiAssignStreamingUnverifiable": "Streaming capability cannot be verified right now (the desktop runtime channel is unavailable).",
+    "aiAssignRuntimeChecking": "Checking the runtime...",
     "aiAssignBusinessPurposes": "Business purposes",
     "aiAssignOrderHint": "Drag cards to reorder — display order is stored on this device only.",
     "aiAssignDragToReorder": "Drag to reorder",

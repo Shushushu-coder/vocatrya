@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { GripVertical, Loader2 } from "lucide-react";
 import {
   DndContext,
@@ -157,6 +157,85 @@ type InterviewResolution = {
   connectionId?: string;
 };
 
+// Shown while a desktop version probe is still running. Distinct from a
+// finished fail-closed verdict so the picker does not say "not verified"
+// before the binary has been checked.
+const RUNTIME_CHECKING = "RUNTIME_CHECKING";
+
+type AssignmentSessionSnapshot = {
+  connections: ConnectionSummary[];
+  assignments: Record<string, BusinessAssignmentSummary>;
+  managed: ManagedAiOverview | null;
+  interview: InterviewResolution | null;
+  runtimeCaps: Record<string, AccountRuntimeCapabilities>;
+};
+
+// Survives leaving the settings section. The card unmounts on every
+// section change; without this, each return restarts the server reads
+// and the main-process version probes.
+let sessionSnapshot: AssignmentSessionSnapshot | null = null;
+// backendKind → probed version. A present key (even null) means the
+// probe already finished, so a later visit must not spawn again.
+const probedVersions: Record<string, string | null> = {};
+const versionProbes = new Map<string, Promise<string | null>>();
+
+function visibleConnections(rows: ConnectionSummary[]): ConnectionSummary[] {
+  return rows.filter((connection) =>
+    connection.backendKind !== BYOK_BACKEND_KIND ||
+    SETTINGS_BYOK_PROVIDERS.some((provider) => provider.toUpperCase() === connection.provider),
+  );
+}
+
+function runtimeBackendKinds(rows: ConnectionSummary[]): string[] {
+  return [...new Set(
+    rows
+      .map((connection) => connection.backendKind)
+      .filter((kind) => kind.length > 0 && kind !== BYOK_BACKEND_KIND),
+  )];
+}
+
+function hasProbedVersion(kind: string): boolean {
+  return Object.prototype.hasOwnProperty.call(probedVersions, kind);
+}
+
+function versionsFor(rows: ConnectionSummary[]): Record<string, string | null> {
+  const next: Record<string, string | null> = {};
+  for (const kind of runtimeBackendKinds(rows)) {
+    if (hasProbedVersion(kind)) next[kind] = probedVersions[kind];
+  }
+  return next;
+}
+
+function draftsFrom(
+  assignments: Record<string, BusinessAssignmentSummary>,
+): Record<string, Draft> {
+  const drafts: Record<string, Draft> = {};
+  for (const [purpose, assignment] of Object.entries(assignments)) {
+    drafts[purpose] = assignmentDraft(assignment);
+  }
+  return drafts;
+}
+
+function rememberSnapshot(next: AssignmentSessionSnapshot) {
+  sessionSnapshot = next;
+}
+
+function streamingBlockMessageKey(block: string): string {
+  if (block === RUNTIME_CHECKING) return "settings.aiAssignRuntimeChecking";
+  if (block === "UNVERIFIABLE") return "settings.aiAssignStreamingUnverifiable";
+  if (block === "STRUCTURED_OUTPUT_NOT_VERIFIED") {
+    return "settings.aiAssignStructuredNotVerified";
+  }
+  return "settings.aiAssignStreamingNotReady";
+}
+
+/** Drops the in-memory settings snapshot. Tests use this between cases. */
+export function clearAiAssignmentsSessionCache(): void {
+  sessionSnapshot = null;
+  for (const key of Object.keys(probedVersions)) delete probedVersions[key];
+  versionProbes.clear();
+}
+
 function connectionLabel(connection: ConnectionSummary): string {
   // displayName already carries the product + runtime (e.g. "ChatGPT via
   // Codex", "OpenCode Go") so two accounts on the same runtime stay
@@ -221,33 +300,50 @@ function SortablePurposeCard({
  */
 function AiAssignmentsCard() {
   const { t } = useI18n();
-  const [loading, setLoading] = useState(true);
+  const aliveRef = useRef(true);
+  const draftsDirtyRef = useRef(false);
+  const [loading, setLoading] = useState(sessionSnapshot === null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [connections, setConnections] = useState<ConnectionSummary[]>([]);
+  const [connections, setConnections] = useState<ConnectionSummary[]>(
+    sessionSnapshot?.connections ?? [],
+  );
   const [assignments, setAssignments] = useState<
     Record<string, BusinessAssignmentSummary>
-  >({});
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  >(sessionSnapshot?.assignments ?? {});
+  const [drafts, setDrafts] = useState<Record<string, Draft>>(() =>
+    draftsFrom(sessionSnapshot?.assignments ?? {}),
+  );
   const [catalogs, setCatalogs] = useState<Record<string, ModelEntry[]>>({});
   const [catalogBusy, setCatalogBusy] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [interview, setInterview] = useState<InterviewResolution | null>(null);
+  const [interview, setInterview] = useState<InterviewResolution | null>(
+    sessionSnapshot?.interview ?? null,
+  );
   // backendKind → structured-output readiness. Empty map = bridge absent
   // (plain web/dev) — marking is skipped for advisory gates; streaming
   // purposes treat absence as unverifiable instead.
   const [runtimeCaps, setRuntimeCaps] = useState<
     Record<string, AccountRuntimeCapabilities>
-  >({});
-  // backendKind → probed installed version. Streaming verification is
-  // bound to an exact runtime version, so the readiness check needs the
-  // live probe, not just the static descriptor.
+  >(sessionSnapshot?.runtimeCaps ?? {});
+  // backendKind → probed installed version. A missing key means the probe
+  // has not finished; null means it finished without a version. Streaming
+  // verification is bound to an exact runtime version.
   const [runtimeVersions, setRuntimeVersions] = useState<
     Record<string, string | null>
-  >({});
+  >(() => versionsFor(sessionSnapshot?.connections ?? []));
+  // backendKinds whose version probe is still in flight. Streaming options
+  // on these runtimes stay disabled with a checking label.
+  const [probingBackends, setProbingBackends] = useState<string[]>(() =>
+    runtimeBackendKinds(sessionSnapshot?.connections ?? []).filter(
+      (kind) => !hasProbedVersion(kind) && versionProbes.has(kind),
+    ),
+  );
   // The Managed source's live state: its provisioned connection plus the
   // catalog models the Hosted authority currently offers. null = Hosted
   // unreachable — the Managed option still renders with its error code.
-  const [managed, setManaged] = useState<ManagedAiOverview | null>(null);
+  const [managed, setManaged] = useState<ManagedAiOverview | null>(
+    sessionSnapshot?.managed ?? null,
+  );
   // Business-grid display order — a per-device cosmetic preference kept in
   // localStorage; GLOBAL_DEFAULT is not part of it.
   const [rowOrder, setRowOrder] = useState<string[]>([
@@ -314,8 +410,13 @@ function AiAssignmentsCard() {
   };
 
   const load = useCallback(async (savedPurpose?: string) => {
-    setLoading(true);
-    setLoadFailed(false);
+    // A snapshot means this visit can paint immediately. The server read
+    // still runs, but it must not put the spinner back up.
+    const hadSnapshot = sessionSnapshot !== null;
+    if (!hadSnapshot) {
+      setLoading(true);
+      setLoadFailed(false);
+    }
     try {
       const [connResult, assignResult, interviewResult, managedResult] = await Promise.all([
         listAssignableAiConnections(),
@@ -323,42 +424,32 @@ function AiAssignmentsCard() {
         resolveBusinessAiConfig({ purpose: "INTERVIEW" }).catch(() => ({ success: false, data: undefined })),
         getManagedAiOverview().catch(() => ({ success: false, data: undefined })),
       ]);
+      let nextManaged = sessionSnapshot?.managed ?? null;
       if (managedResult.success && managedResult.data) {
-        setManaged(managedResult.data);
+        nextManaged = managedResult.data;
+        setManaged(nextManaged);
       }
+      let nextCaps = sessionSnapshot?.runtimeCaps ?? {};
       const runtime = window.vocatryaRuntime;
       if (runtime) {
         try {
           const runtimes = await runtime.list();
-          const next: Record<string, AccountRuntimeCapabilities> = {};
-          const versions: Record<string, string | null> = {};
+          const listed: Record<string, AccountRuntimeCapabilities> = {};
           for (const entry of runtimes) {
-            if (entry.capabilities) next[entry.backendKind] = entry.capabilities;
-            versions[entry.backendKind] = null;
+            if (entry.capabilities) listed[entry.backendKind] = entry.capabilities;
           }
-          // Version probes run `runtime --version` — cheap and bounded —
-          // and the streaming gate is meaningless without them.
-          await Promise.all(
-            Object.keys(versions).map(async (backendKind) => {
-              try {
-                const probe = await runtime.getVersion(backendKind);
-                versions[backendKind] = probe?.version ?? null;
-              } catch {
-                versions[backendKind] = null;
-              }
-            }),
-          );
-          setRuntimeCaps(next);
-          setRuntimeVersions(versions);
+          nextCaps = listed;
+          setRuntimeCaps(listed);
         } catch {
-          // Capability lookup is advisory — never block the card on it.
+          // The static capability list is advisory — a bridge failure
+          // leaves streaming purposes fail-closed.
         }
       }
+      const nextConnections = connResult.success && connResult.data
+        ? visibleConnections(connResult.data)
+        : (sessionSnapshot?.connections ?? []);
       if (connResult.success && connResult.data) {
-        setConnections(connResult.data.filter((connection) =>
-          connection.backendKind !== BYOK_BACKEND_KIND ||
-          SETTINGS_BYOK_PROVIDERS.some((provider) => provider.toUpperCase() === connection.provider),
-        ));
+        setConnections(nextConnections);
       }
       if (!assignResult.success || !assignResult.data) {
         throw new Error(assignResult.message || t("settings.aiConnErrGeneric"));
@@ -370,25 +461,77 @@ function AiAssignmentsCard() {
         nextDrafts[assignment.purpose] = assignmentDraft(assignment);
       }
       setAssignments(nextAssignments);
+      // Keep in-progress edits when a cached card refreshes in the
+      // background. A full replace is only safe on the first load, or for
+      // the purpose that was just saved.
+      const preserveDrafts = hadSnapshot && draftsDirtyRef.current && !savedPurpose;
+      if (!preserveDrafts) draftsDirtyRef.current = false;
       setDrafts((previous) => savedPurpose
         ? { ...previous, [savedPurpose]: nextDrafts[savedPurpose] ?? { connectionId: "", model: "" } }
-        : nextDrafts);
+        : preserveDrafts
+          ? previous
+          : nextDrafts);
+      let nextInterview = sessionSnapshot?.interview ?? null;
       if (interviewResult.success && interviewResult.data) {
-        setInterview(interviewResult.data);
+        nextInterview = interviewResult.data;
+        setInterview(nextInterview);
+      }
+      rememberSnapshot({
+        connections: nextConnections,
+        assignments: nextAssignments,
+        managed: nextManaged,
+        interview: nextInterview,
+        runtimeCaps: nextCaps,
+      });
+      const pending = runtime
+        ? runtimeBackendKinds(nextConnections).filter((kind) => !hasProbedVersion(kind))
+        : [];
+      if (aliveRef.current) setProbingBackends(pending);
+      // The assignment grid does not need version probes. Those spawn a
+      // process per runtime on the Electron main thread, so they run
+      // after the card is visible and only for backends the user can pick.
+      if (aliveRef.current) setLoading(false);
+      if (runtime && pending.length > 0) {
+        await Promise.all(pending.map(async (backendKind) => {
+          let pendingProbe = versionProbes.get(backendKind);
+          if (!pendingProbe) {
+            pendingProbe = runtime.getVersion(backendKind)
+              .then((probe) => probe?.version ?? null)
+              .catch(() => null)
+              .then((version) => {
+                probedVersions[backendKind] = version;
+                return version;
+              });
+            versionProbes.set(backendKind, pendingProbe);
+          }
+          const version = await pendingProbe;
+          if (!aliveRef.current) return;
+          setRuntimeVersions((previous) => ({ ...previous, [backendKind]: version }));
+          setProbingBackends((previous) => previous.filter((kind) => kind !== backendKind));
+        }));
       }
     } catch {
-      setLoadFailed(true);
-      toastError(t("settings.aiAssignLoadFailed"));
+      // A failed refresh keeps the snapshot on screen. The error state is
+      // only for a first load that has nothing to show.
+      if (!hadSnapshot && sessionSnapshot === null) {
+        setLoadFailed(true);
+        toastError(t("settings.aiAssignLoadFailed"));
+      }
     } finally {
-      setLoading(false);
+      if (aliveRef.current) setLoading(false);
     }
   }, [t]);
 
   useEffect(() => {
+    aliveRef.current = true;
     void load();
+    return () => {
+      aliveRef.current = false;
+    };
   }, [load]);
 
   const setDraft = (purpose: string, patch: Partial<Draft>) => {
+    draftsDirtyRef.current = true;
     setDrafts((prev) => {
       const current = prev[purpose] ?? { connectionId: "", model: "" };
       return { ...prev, [purpose]: { ...current, ...patch } };
@@ -510,6 +653,7 @@ function AiAssignmentsCard() {
     // BYOK streams natively through the AI SDK — real incremental output,
     // no runtime verification surface exists to consult.
     if (isByokConnection(connection)) return null;
+    if (probingBackends.includes(connection.backendKind)) return RUNTIME_CHECKING;
     const caps = runtimeCaps[connection.backendKind];
     if (!caps) return "UNVERIFIABLE";
     const runtimeVersion = runtimeVersions[connection.backendKind];
@@ -546,6 +690,12 @@ function AiAssignmentsCard() {
   const applySaved = (assignment: BusinessAssignmentSummary) => {
     setAssignments((previous) => ({ ...previous, [assignment.purpose]: assignment }));
     setDrafts((previous) => ({ ...previous, [assignment.purpose]: assignmentDraft(assignment) }));
+    if (sessionSnapshot) {
+      rememberSnapshot({
+        ...sessionSnapshot,
+        assignments: { ...sessionSnapshot.assignments, [assignment.purpose]: assignment },
+      });
+    }
     refreshInterviewPreview(assignment.purpose);
     window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
     toastSuccess(t("settings.aiAssignSaved"));
@@ -602,15 +752,7 @@ function AiAssignmentsCard() {
       const connection = connections.find((c) => c.id === draft.connectionId);
       const block = connection ? streamingBlockReason(connection) : null;
       if (connection && block !== null) {
-        toastError(
-          t(
-            block === "UNVERIFIABLE"
-              ? "settings.aiAssignStreamingUnverifiable"
-              : block === "STRUCTURED_OUTPUT_NOT_VERIFIED"
-                ? "settings.aiAssignStructuredNotVerified"
-                : "settings.aiAssignStreamingNotReady",
-          ),
-        );
+        toastError(t(streamingBlockMessageKey(block)));
         return;
       }
     }
@@ -645,6 +787,11 @@ function AiAssignmentsCard() {
         setAssignments((previous) => {
           const next = { ...previous };
           delete next[purpose];
+          if (sessionSnapshot) {
+            const assignments = { ...sessionSnapshot.assignments };
+            delete assignments[purpose];
+            rememberSnapshot({ ...sessionSnapshot, assignments });
+          }
           return next;
         });
         setDrafts((previous) => ({ ...previous, [purpose]: { connectionId: "", model: "" } }));
@@ -798,11 +945,7 @@ function AiAssignmentsCard() {
                       ? "settings.aiAssignStructuredNotVerified"
                       : isTextOnlyPurpose
                         ? "settings.aiAssignTextOnlyNotReady"
-                        : streamBlock === "UNVERIFIABLE"
-                          ? "settings.aiAssignStreamingUnverifiable"
-                          : streamBlock === "STRUCTURED_OUTPUT_NOT_VERIFIED"
-                            ? "settings.aiAssignStructuredNotVerified"
-                            : "settings.aiAssignStreamingNotReady";
+                        : streamingBlockMessageKey(streamBlock ?? "");
                     // Streaming purposes fail closed: an unverifiable
                     // runtime (bridge absent) is just as unassignable as
                     // a verified-incompatible one.

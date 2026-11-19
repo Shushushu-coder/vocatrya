@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
+import AiAssignmentsCard, {
+  clearAiAssignmentsSessionCache,
+} from "@/components/settings/AiAssignmentsCard";
 import { toastError } from "@/lib/toast";
 
 vi.mock("@/i18n", () => {
@@ -37,6 +39,9 @@ vi.mock("@/actions/managedAi.actions", () => ({
   assignManagedBusinessAiSource: assignManaged,
 }));
 const COMING_SOON = { availability: "COMING_SOON", connection: null, entitlement: null, usage: null, models: [], errorCode: null };
+beforeEach(() => {
+  clearAiAssignmentsSessionCache();
+});
 beforeAll(() => {
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   window.HTMLElement.prototype.hasPointerCapture = vi.fn();
