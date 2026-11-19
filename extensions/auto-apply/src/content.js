@@ -2143,7 +2143,8 @@
     }
 
     const closestPopup = element.closest('[role="combobox"],[class*="select"],[class*="picker"]');
-    if (closestPopup) {
+    // 祖先若涵盖多个其他控件（整页/整表单容器），其内的 listbox/option 不属于本字段
+    if (closestPopup && isSingleFieldChoiceScope(closestPopup, element)) {
       const popup = closestPopup.querySelector('[role="listbox"],[role="menu"],[class*="dropdown"],[class*="option"]');
       if (popup) {
         return popup;
@@ -2151,6 +2152,81 @@
     }
 
     return null;
+  }
+
+  const CHOICE_FIELD_CONTROL_SELECTOR = 'input:not([type="hidden"]),select,textarea,[role="combobox"]';
+  const CHOICE_POPUP_SELECTOR = [
+    '[role="listbox"]',
+    '[role="menu"]',
+    '[class*="dropdown"]',
+    '[class*="Dropdown"]',
+    '[class*="popup"]',
+    '[class*="popper"]',
+    '[class*="select-menu"]'
+  ].join(",");
+
+  // 容器只含本字段自己的控件（含其搜索输入框）才可作为选项采集范围；否则是整页/整表单级祖先
+  function isSingleFieldChoiceScope(scope, element) {
+    if (!scope || !scope.querySelectorAll) {
+      return false;
+    }
+    const others = Array.from(scope.querySelectorAll(CHOICE_FIELD_CONTROL_SELECTOR)).filter((control) => {
+      return control !== element && !(element && element.contains && element.contains(control)) && !(control.contains && control.contains(element));
+    });
+    // 触发元素本身是输入类控件时，容器内不应再有别的控件；触发元素是 div 触发器时，允许一个内置搜索输入框
+    const selfIsControl = Boolean(element && element.matches && element.matches(CHOICE_FIELD_CONTROL_SELECTOR));
+    return others.length <= (selfIsControl ? 0 : 1);
+  }
+
+  function getVisibleChoicePopups() {
+    return Array.from(document.querySelectorAll(CHOICE_POPUP_SELECTOR)).filter((popup) => {
+      return popup instanceof Element && !popup.closest(`#${PANEL_ID}`) && isVisible(popup);
+    });
+  }
+
+  // 解析"本字段自己的"选项浮层：1) 单字段容器 2) aria-controls/aria-owns 指向的浮层（可在 body 级 portal）
+  // 3) 点击后新出现且唯一的 portal 浮层。多个无关新浮层视为歧义，不采纳，避免混入其他下拉。
+  function resolveChoicePopupRoots(element, container, before) {
+    const roots = [];
+    const add = (root) => {
+      if (root && !roots.includes(root)) {
+        roots.push(root);
+      }
+    };
+
+    if (container && container !== document.body && container !== document.documentElement && isSingleFieldChoiceScope(container, element)) {
+      add(container);
+    }
+
+    const owners = [element];
+    if (container && container.querySelectorAll) {
+      owners.push(...Array.from(container.querySelectorAll('[aria-controls],[aria-owns]')));
+    }
+    const linked = [];
+    for (const owner of owners) {
+      if (!owner || !owner.getAttribute) {
+        continue;
+      }
+      const ids = `${owner.getAttribute("aria-controls") || ""} ${owner.getAttribute("aria-owns") || ""}`.split(/\s+/).filter(Boolean);
+      for (const id of ids) {
+        const target = document.getElementById(id);
+        if (target && !target.closest(`#${PANEL_ID}`)) {
+          linked.push(target);
+        }
+      }
+    }
+    linked.forEach(add);
+
+    const previous = before instanceof Set ? before : new Set();
+    const fresh = getVisibleChoicePopups().filter((popup) => !previous.has(popup));
+    const topLevel = fresh.filter((popup) => !fresh.some((other) => other !== popup && other.contains(popup)));
+    const linkedFresh = topLevel.filter((popup) => linked.some((target) => popup === target || popup.contains(target)));
+    if (linkedFresh.length) {
+      linkedFresh.forEach(add);
+    } else if (!linked.length && topLevel.length === 1) {
+      add(topLevel[0]);
+    }
+    return roots;
   }
 
   function getControlType(element) {
@@ -7003,13 +7079,15 @@
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
   }
 
-  async function waitForAntdDropdown(before, timeoutMs = 1600) {
+  async function waitForAntdDropdown(before, timeoutMs = 1600, linkedId = "") {
     const deadline = Date.now() + timeoutMs;
     const previous = before instanceof Set ? before : new Set(getVisibleAntdSelectDropdowns());
     while (Date.now() < deadline) {
       const dropdowns = getVisibleAntdSelectDropdowns();
       const fresh = dropdowns.filter((dropdown) => !previous.has(dropdown));
-      const dropdown = fresh[fresh.length - 1] || dropdowns[dropdowns.length - 1];
+      const linked = linkedId ? dropdowns.find((item) => item.querySelector(`[id="${CSS.escape(linkedId)}"]`)) : null;
+      // 优先本控件 aria-controls 指向的浮层；其次新出现的；最后仅当页面只有唯一可见浮层时才沿用，避免取到其他下拉
+      const dropdown = linked || fresh[fresh.length - 1] || (dropdowns.length === 1 ? dropdowns[0] : null);
       if (dropdown && dropdown.querySelector(".ant-select-item-option")) {
         return dropdown;
       }
@@ -7041,7 +7119,11 @@
     const selector = selectHost.querySelector(".ant-select-selector") || selectHost;
     clickActionElement(selector);
 
-    const dropdown = await waitForAntdDropdown(new Set(getVisibleAntdSelectDropdowns()), 1600);
+    const dropdown = await waitForAntdDropdown(
+      new Set(getVisibleAntdSelectDropdowns()),
+      1600,
+      (selectHost.querySelector("input[aria-controls]") || element)?.getAttribute?.("aria-controls") || ""
+    );
     if (!dropdown) {
       closeOverlaysViaOutsideClick();
       return { ok: false, reason: "选项面板未出现" };
@@ -7303,6 +7385,8 @@
     }
 
     container.scrollIntoView({ block: "center", inline: "nearest" });
+    const popupsBefore = new Set(getVisibleChoicePopups());
+    const resolveRoots = () => resolveChoicePopupRoots(element, container, popupsBefore);
     clickActionElement(element instanceof Element ? element : container);
     if (container !== element) {
       clickActionElement(container);
@@ -7310,12 +7394,12 @@
     await sleep(220);
 
     const target = normalizeChoiceValue(value, inferFieldLabel(field));
-    const hierarchicalResult = await tryFillHierarchicalChoiceOptions(value, target);
+    const hierarchicalResult = await tryFillHierarchicalChoiceOptions(value, target, resolveRoots);
     if (hierarchicalResult.ok) {
       return hierarchicalResult;
     }
 
-    const options = findVisibleChoiceOptions(container);
+    const options = findVisibleChoiceOptions(resolveRoots());
     const matched = options.find((option) => choiceTextMatches(getElementText(option), target) || choiceTextMatches(option.getAttribute("aria-label") || "", target));
 
     if (matched) {
@@ -7331,7 +7415,7 @@
     if (searchInput) {
       setNativeValue(searchInput, value);
       await sleep(160);
-      const retryOptions = findVisibleChoiceOptions(container);
+      const retryOptions = findVisibleChoiceOptions(resolveRoots());
       const retryMatched = retryOptions.find((option) => choiceTextMatches(getElementText(option), target) || choiceTextMatches(option.getAttribute("aria-label") || "", target));
       if (retryMatched) {
         clickActionElement(retryMatched);
@@ -7343,7 +7427,7 @@
     return { ok: false, reason: "no matching option found" };
   }
 
-  async function tryFillHierarchicalChoiceOptions(value, target) {
+  async function tryFillHierarchicalChoiceOptions(value, target, resolveRoots) {
     const parts = splitHierarchicalChoiceValue(value);
     if (parts.length < 2) {
       return { ok: false, reason: "not hierarchical" };
@@ -7351,7 +7435,7 @@
 
     let matchedAny = false;
     for (const part of parts) {
-      const options = findVisibleChoiceOptions(document);
+      const options = findVisibleChoiceOptions(typeof resolveRoots === "function" ? resolveRoots() : []);
       const matched = options.find((option) => {
         const text = getElementText(option);
         return choiceTextMatches(text, part) || choiceTextMatches(text, target);
@@ -7400,7 +7484,8 @@
     return element.parentElement || element;
   }
 
-  function findVisibleChoiceOptions(container) {
+  // scopes: 本字段选项浮层根（数组或返回数组的函数）。不再回退到 document，避免混入全页其他下拉/列表项。
+  function findVisibleChoiceOptions(scopes) {
     const selectors = [
       '[role="option"]',
       "[aria-selected]",
@@ -7414,7 +7499,8 @@
       '[class*="select-item"]',
       '[class*="dropdown-item"]'
     ].join(",");
-    const roots = [container && container.querySelectorAll ? container : null, document].filter(Boolean);
+    const rootList = typeof scopes === "function" ? scopes() : scopes;
+    const roots = (Array.isArray(rootList) ? rootList : [rootList]).filter((root) => root && root.querySelectorAll);
     const seen = new Set();
     const options = [];
 
@@ -8057,6 +8143,10 @@
     isSemanticallyIncompatible,
     getDateRangeEndIndex,
     getFrameworkHiddenControlHost,
+    getOptions,
+    resolveChoicePopupRoots,
+    findVisibleChoiceOptions,
+    isSingleFieldChoiceScope,
     getControlCurrentValue,
     parseProfileDateParts,
     formatDatePartsForPicker,
