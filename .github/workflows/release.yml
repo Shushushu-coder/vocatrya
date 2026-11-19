@@ -12,10 +12,6 @@ on:
 # Nothing is committed until the `publish` job's atomic push, so a failed run
 # leaves no git side effects and can be re-run with the same input.
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: gsync/jobsync
-
 permissions:
   contents: read
 
@@ -111,74 +107,11 @@ jobs:
 
       - run: npm test
 
-  build:
-    needs: [prepare, verify]
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-            slug: amd64
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-            slug: arm64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # The version is imported by the version route and backup/manifest, so
-      # it has to be in the build context even though it is not committed yet.
-      - name: Apply release version to build context
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ matrix.slug }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.slug }}
-
-      - name: Export digest
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${DIGEST#sha256:}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: digest-${{ matrix.slug }}
-          path: /tmp/digests/*
-          retention-days: 1
-          if-no-files-found: error
-
   publish:
-    needs: [prepare, build]
+    needs: [prepare, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -187,20 +120,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests
-          pattern: digest-*
-          merge-multiple: true
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Bump version and update CHANGELOG
         env:
@@ -284,26 +203,6 @@ jobs:
           git tag -a "$TAG" -m "Release $TAG"
           git push --atomic origin HEAD:main "refs/tags/$TAG"
 
-      # The image tags are created after the git push, so a rejected push (main
-      # moved) leaves only unreferenced digests. If this step fails, the refs
-      # are already pushed: re-run `imagetools create` with the digests from
-      # this run's artifacts rather than re-running the workflow.
-      - name: Push multi-arch manifest
-        working-directory: /tmp/digests
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          MAJOR="${VERSION%%.*}"
-          MINOR="${VERSION%.*}"
-          IMAGE="$REGISTRY/$IMAGE_NAME"
-
-          docker buildx imagetools create \
-            -t "$IMAGE:$VERSION" \
-            -t "$IMAGE:$MINOR" \
-            -t "$IMAGE:$MAJOR" \
-            -t "$IMAGE:latest" \
-            $(printf "$IMAGE@sha256:%s " *)
-
       # Notes come from the curated release-notes/<version>.md file prepared
       # in the CHANGELOG step, not --generate-notes: that builds its body from
       # merged PRs, and dev is merged to main directly.
@@ -317,14 +216,5 @@ jobs:
 
       - name: Summary
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
           TAG: ${{ needs.prepare.outputs.tag }}
-        run: |
-          MAJOR="${VERSION%%.*}"
-          MINOR="${VERSION%.*}"
-          {
-            echo "### Released $TAG"
-            echo ""
-            echo "Image: \`$REGISTRY/$IMAGE_NAME\`"
-            echo "Tags: \`$VERSION\`, \`$MINOR\`, \`$MAJOR\`, \`latest\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: echo "### Released $TAG" >> "$GITHUB_STEP_SUMMARY"

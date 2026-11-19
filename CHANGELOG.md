@@ -1,5 +1,7 @@
 # Changelog
 
+> 1.2 起的版本（含 RC）以 [`release-notes/`](release-notes/) 双语摘要为准；本文件仅由正式版 release.yml 自动追加，以下 1.1.x 及更早条目继承自上游 JobSync。
+
 ## [1.1.20](https://github.com/Gsync/jobsync/compare/v1.1.19...v1.1.20) (2026-09-14)
 
 

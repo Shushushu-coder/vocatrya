@@ -35,6 +35,7 @@
 | [`NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md`](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) | **待批准提案**：Codex／Devin原生会话边界，首切片建议仅Codex会话关联与恢复；不代表已实施。 | 原生会话适配编码及接口裁定前。 |
 | [`RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md`](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md) | **待批准提案**：简历证据深挖流程、提示内容及草稿结果；首版不保存、不加载。 | 内置技能内容及后续加载接口裁定前。 |
 | [`RELEASE_RUNBOOK.md`](./RELEASE_RUNBOOK.md) | **发版标准流程**：`release-notes/<version>.md` 双语摘要编写规则与三道存在性门禁；RC 手工链路与正式版 release.yml 链路、时序窗口、签名/自动更新现状。 | 每次发版（RC 或正式版）前按流程执行；发布链路变更时同步更新。 |
+| [`archive/`](./archive/) | **历史报告归档**（2026-11-19 自仓库根迁入）：Beta2 托管端点修订、面试适配器集成/移植计划、Windows BYOK 打包验收。仅留档，不代表现状。 | 追溯上述历史决策或验收证据时。 |
 
 ## 使用原则
 

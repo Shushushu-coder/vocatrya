@@ -481,35 +481,7 @@ describe("ensureFreshNativeState", () => {
 });
 
 describe("fresh-native startup entrypoints", () => {
-  it("keeps Docker and Desktop flag defaults unchanged", () => {
-    const entrypoint = fs.readFileSync(
-      path.join(REPO_ROOT, "docker-entrypoint.sh"),
-      "utf8",
-    );
-    const migrateAt = entrypoint.indexOf("prisma@6.19.0 migrate deploy");
-    const activateAt = entrypoint.indexOf(
-      "fresh-native-runtime/ensure-fresh-native.cjs",
-    );
-    const serverAt = entrypoint.indexOf("node server.js");
-    expect(migrateAt).toBeGreaterThanOrEqual(0);
-    expect(activateAt).toBeGreaterThan(migrateAt);
-    expect(serverAt).toBeGreaterThan(activateAt);
-    expect(entrypoint).not.toContain("VOCATRYA_AB_RUNTIME_ENABLED");
-    expect(entrypoint).not.toContain("VOCATRYA_AB_ROLLOUT_SCOPE");
-    expect(entrypoint).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED=(true|false)/);
-    expect(entrypoint).not.toMatch(
-      /VOCATRYA_AB_ROLLOUT_SCOPE=(none|full|resume_v1)/,
-    );
-
-    const dockerfile = fs.readFileSync(
-      path.join(REPO_ROOT, "Dockerfile"),
-      "utf8",
-    );
-    expect(dockerfile).toContain(
-      "node scripts/build-fresh-native-bootstrap.mjs",
-    );
-    expect(dockerfile).toContain("fresh-native-runtime");
-
+  it("keeps Desktop flag defaults unchanged", () => {
     const runtime = fs.readFileSync(
       path.join(REPO_ROOT, "desktop", "main", "runtime.js"),
       "utf8",
@@ -517,18 +489,6 @@ describe("fresh-native startup entrypoints", () => {
     expect(runtime).not.toContain('VOCATRYA_AB_ROLLOUT_SCOPE: "none"');
     expect(runtime).not.toMatch(/VOCATRYA_AB_RUNTIME_ENABLED:\s*"true"/);
     expect(runtime).not.toMatch(/VOCATRYA_AB_ROLLOUT_SCOPE:\s*"full"/);
-
-    const compose = fs.readFileSync(
-      path.join(REPO_ROOT, "docker-compose.yml"),
-      "utf8",
-    );
-    expect(compose).not.toContain(
-      "VOCATRYA_AB_RUNTIME_ENABLED=${VOCATRYA_AB_RUNTIME_ENABLED:-false}",
-    );
-    expect(compose).not.toContain(
-      "VOCATRYA_AB_ROLLOUT_SCOPE=${VOCATRYA_AB_ROLLOUT_SCOPE:-none}",
-    );
-    expect(compose).not.toContain("__VOCATRYA_AB_UNSET__");
 
     const example = fs.readFileSync(
       path.join(REPO_ROOT, ".env.example"),

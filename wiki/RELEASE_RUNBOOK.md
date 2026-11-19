@@ -1,6 +1,6 @@
 # Vocatrya 发版 Runbook
 
-每次发版（RC 内测版与正式版）的标准流程、门禁位置与失败处理。Windows 安装包由**本地流水线**产出；`.github/workflows/release.yml` 只发布 Docker 镜像（ghcr.io）与 GitHub Release 页，不产 exe、不上传 exe。
+每次发版（RC 内测版与正式版）的标准流程、门禁位置与失败处理。Windows 安装包由**本地流水线**产出；`.github/workflows/release.yml` 只负责 bump、CHANGELOG、tag 与 GitHub Release 页，不产 exe、不上传 exe（2026-11-19 起不再构建 Docker 镜像，上游 JobSync 的 Docker/Web 部署链路已退役）。
 
 **2026-11-18 起**：发版强制要求仓库内 `release-notes/<version>.md` 双语更新摘要，缺失或缺段时三道门禁各自拦截（见 §2）。应用内「设置 → 关于 → 更新说明」展示当前版本与最新版本摘要，数据通路见 §3。
 
@@ -22,7 +22,7 @@
 ## 3. 应用内消费通路
 
 - 「当前版本」：`GET /api/release-notes` 读安装包随附的 `release-notes/<version>.md`，按 UI locale 提取对应段（缺则回退另一语言）。
-  - 安装版：`assemble.mjs` 把 `release-notes/` 拷至 backend 根（backend cwd 即该目录）；dev/浏览器直读仓库 `release-notes/`；Docker 镜像经 Dockerfile `COPY`。
+  - 安装版：`assemble.mjs` 把 `release-notes/` 拷至 backend 根（backend cwd 即该目录）；dev/浏览器直读仓库 `release-notes/`。
   - 可用 `VOCATRYA_RELEASE_NOTES_DIR` 覆盖目录。
 - 「最新版本」：仅当 `isNewerVersion(latest, current)` 成立时展示，摘要取自 GitHub release 正文（即发版时写入的同一文件），并附发布页链接。**老格式 release 正文（commit 自动拼接）没有 locale 分段，只显示版本号与链接**，属预期降级。
 - 更新说明卡位于「设置 → 关于」上方；两来源皆无内容时整卡不渲染。
@@ -50,8 +50,7 @@ RC 版本号不满足 release.yml 的严格 semver 输入（`^[0-9]+\.[0-9]+\.[0
 2. Actions → `Release`（workflow_dispatch）输入 bump（patch/minor/major/semver）：
    - **prepare**：解析目标版本 → notes 门禁；
    - **verify**：`npm ci` / `prisma generate` / `tsc --noEmit` / `lint` / `test`；
-   - **build**：Docker amd64 + arm64 镜像按 digest 推 ghcr.io；
-   - **publish**：`npm version` bump、自动更新 `CHANGELOG.md`、atomic push main + tag、推 docker manifest、`gh release create`（正文 = notes 文件 + 追加 `## Links`/Full Changelog 链接）。
+   - **publish**：`npm version` bump、自动更新 `CHANGELOG.md`、atomic push main + tag、`gh release create`（正文 = notes 文件 + 追加 `## Links`/Full Changelog 链接）。
 3. tag 落到 main 后，在**该 tag 对应提交**上本地跑 `npm run desktop:installer`（此时 package.json 已是新版，门禁命中同一 notes 文件）。
 4. manifest → verify → gate，产出 exe。
 5. 分发；如需挂到 Release 页：`gh release upload v<version> Vocatrya-Setup-<version>-x64.exe`（当前无自动化）。

@@ -40,8 +40,6 @@ const ALLOWED_READERS = new Set([
   path.join("src", "lib", "career", "capabilities.ts"),
   path.join("src", "lib", "career", "rolloutScope.ts"),
   path.join("src", "lib", "career", "identities.ts"),
-  "docker-compose.yml",
-  "docker-entrypoint.sh",
   ".env.example",
   // Windows Desktop Shell POC forces the disposable backend scope to
   // fail-closed "none" for isolation. It never reads the scope to enable

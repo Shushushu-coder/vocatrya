@@ -2,7 +2,7 @@
 
 <p align="center"><strong>面向中国求职市场的 local-first Windows 桌面职业与求职管理软件</strong></p>
 
-Vocatrya 当前主要交付形态是 **Windows Electron 桌面应用**，Next.js 提供内部界面和本地后端。浏览器与 Docker 路径保留用于 Web 开发和兼容验证，不代表当前桌面产品的完整体验。
+Vocatrya 当前主要交付形态是 **Windows Electron 桌面应用**，Next.js 提供内部界面和本地后端。浏览器路径保留用于 Web 开发和兼容验证，不代表当前桌面产品的完整体验。
 
 源码启动：Windows 安装依赖后，按 [桌面开发与 E2E](desktop/E2E.md) 在独立 Worktree 设置隔离数据目录、构建并启动开发桌面壳。这是源码开发路径，不会安装或发布应用。
 
@@ -17,7 +17,6 @@ Vocatrya 当前主要交付形态是 **Windows Electron 桌面应用**，Next.js
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/Shushushu-coder/vocatrya" alt="License"></a>
   <a href="https://github.com/Shushushu-coder/vocatrya/stargazers"><img src="https://img.shields.io/github/stars/Shushushu-coder/vocatrya?style=social" alt="GitHub Stars"></a>
-  <img src="https://img.shields.io/badge/self--hosted-Docker-blue" alt="Self-hosted with Docker">
 </p>
 
 > **Upstream Attribution:**
@@ -54,49 +53,30 @@ Vocatrya is a free, open-source companion for your job search: track application
 
 ## Quick Start
 
-Windows 桌面源码启动与验收请先阅读 [桌面开发与 E2E](desktop/E2E.md)。以下步骤仅适用于 **Web / Docker 兼容运行**。
-
-Make sure [Docker](https://www.docker.com) is installed and running, then:
+Windows 桌面源码启动与验收请先阅读 [桌面开发与 E2E](desktop/E2E.md)。以下步骤仅适用于 **Web 兼容运行**（开发用）。
 
 ```sh
 git clone https://github.com/Shushushu-coder/vocatrya.git
 cd vocatrya
-docker compose up
+npm install
+cp .env.example .env
+npx prisma migrate dev
+npm run dev
 ```
 
-> **Note:** The first startup builds the app image, which can take a few minutes — if the app is unreachable right after `docker compose up`, wait a bit before accessing it in your browser.
-
-Open [http://localhost:3737](http://localhost:3737) and create your account. That's it!
-
-API keys for AI providers can be configured in **Settings** after signing in.
+Open [http://localhost:3737](http://localhost:3737) and create your account. API keys for AI providers can be configured in **Settings** after signing in. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup.
 
 ### Configuration (Optional)
 
-Environment variables can be set in `docker-compose.yml`:
+Environment variables can be set in `.env` (see `.env.example`):
 
 | Variable | Description |
 |---|---|
 | `TZ` | Your timezone (e.g. `America/Edmonton`). **Set this on remote servers** to avoid activity time shifts. |
-| `AUTH_SECRET` | Auto-generated if not set. To set manually: `openssl rand -base64 32` |
+| `AUTH_SECRET` | Required for web runs. Generate with `openssl rand -base64 32`. |
 | `ENCRYPTION_KEY` | Encrypts the API keys you save in Settings. **Set your own** (`openssl rand -base64 32`) before adding any keys, and never change it afterwards — a new value makes every stored API key unrecoverable. |
-| `NEXTAUTH_URL` | The address you open Vocatrya at. Defaults to `http://localhost:3737`; on a homelab server, use the server's IP or hostname. |
-| `MCP_ENABLED` | Set to `false` to turn off the [MCP server](#mcp-server-ai-agent-integration). Enabled by default in `docker-compose.yml`. |
-
-### Updating
-
-From the project directory, run the deploy script to pull the latest changes and rebuild:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Shushushu-coder/vocatrya/main/deploy.sh | sudo bash -s
-```
-
-On **Windows**, run the PowerShell equivalent from the project directory instead (`deploy.sh` needs WSL or Git Bash; `deploy.ps1` runs natively):
-
-```powershell
-.\deploy.ps1
-```
-
->Note: If you are updating in a homelab environment, edit `NEXTAUTH_URL` in your `.env` file to use your server IP address instead of `localhost`. See `.env.example` for the expected format.
+| `NEXTAUTH_URL` | The address you open Vocatrya at. Defaults to `http://localhost:3737`. |
+| `MCP_ENABLED` | Set to `false` to turn off the [MCP server](#mcp-server-ai-agent-integration). |
 
 ## Features in Detail
 
