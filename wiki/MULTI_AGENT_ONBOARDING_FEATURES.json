@@ -60,8 +60,8 @@
         "点击仍 open({role})：0 次 /api/ai/chat、0 次会话创建。",
         "文案不含扩展或工具名；zh-CN/en 双语齐备。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D1=(a) 单行文案生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
-      "passes": false
+      "implementationNotes": "2026-11-16 Owner 裁定 D1=(a) 单行文案生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。 2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收通过：首页三卡具名入口+职责句、面板空状态自述+图例行、默认 Pilot 及重开恢复上次角色、双语文案确认；真实模型指路有实测——Pilot 对「讲解简历」请求正确说明分工并指路 Insight。用户同场提出角色不应拒答而应回答+软推荐切换的新设计方向，MAO-REFUSAL 指路刚性修订另行裁定，不回改本次验收结论。",
+      "passes": true
     },
     {
       "id": "MAO-ROSTER",
@@ -82,8 +82,8 @@
         "三处消费断言同一 key/同一生成函数。",
         "改 roster 一处即同步首页、空状态与 prompt。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D4=(a) roster 落 roleCopy.ts 生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
-      "passes": false
+      "implementationNotes": "2026-11-16 Owner 裁定 D4=(a) roster 落 roleCopy.ts 生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。 2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收通过：首页三卡具名入口+职责句、面板空状态自述+图例行、默认 Pilot 及重开恢复上次角色、双语文案确认；真实模型指路有实测——Pilot 对「讲解简历」请求正确说明分工并指路 Insight。用户同场提出角色不应拒答而应回答+软推荐切换的新设计方向，MAO-REFUSAL 指路刚性修订另行裁定，不回改本次验收结论。",
+      "passes": true
     },
     {
       "id": "MAO-REFUSAL",
@@ -109,8 +109,8 @@
         "只读 Notion 会话的提示词含只读指路句；含写工具会话不含。",
         "断言感知块内容与实际注册工具集、roster 一致。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D3=(a) 一期纯 prompt 指路、D5=(a) Notion 只读动态分支生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
-      "passes": false
+      "implementationNotes": "2026-11-16 Owner 裁定 D3=(a) 一期纯 prompt 指路、D5=(a) Notion 只读动态分支生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。 2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收通过：首页三卡具名入口+职责句、面板空状态自述+图例行、默认 Pilot 及重开恢复上次角色、双语文案确认；真实模型指路有实测——Pilot 对「讲解简历」请求正确说明分工并指路 Insight。用户同场提出角色不应拒答而应回答+软推荐切换的新设计方向，MAO-REFUSAL 指路刚性修订另行裁定，不回改本次验收结论。",
+      "passes": true
     },
     {
       "id": "MAO-EMPTYSTATE",
@@ -134,8 +134,8 @@
         "preflight 失败态表现不随本改动退化。",
         "双语词条齐备且口吻等义。"
       ],
-      "implementationNotes": "2026-11-16 Owner 裁定 D2=(a) 自述两行、D6=(a) 加阵容图例行生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。",
-      "passes": false
+      "implementationNotes": "2026-11-16 Owner 裁定 D2=(a) 自述两行、D6=(a) 加阵容图例行生效（提案 §13）。未编码，passes:false。 2026-11-18 Main 集成 Owner 复核集成：AGENT_ROSTER 单一文案源落 roleCopy.ts，首页具名入口/空状态自述+图例行/prompt 阵容感知块与只读 Notion 指路均已编码；定向 Vitest 31/31、完整 tsc 尚无有效完成证据（原执行会话中断，tsc-full.log/tsc-full2.log 均为空）；ESLint 为原 Owner 报告，未在本次独立复跑；agentMultiRole 4 项 allowlist 断言失败与基线一致（既有 opt-in 断言不一致，非本次引入）。真实模型指路质量与桌面行为未验收，passes:false 保持。 2026-11-18 独立核对 main@0c81a6f6：实现与提交可核实；重跑 agentRosterGuidance.spec.tsx、AgentChatEmptyState.spec.tsx 共 19/19 通过。真实模型指路与桌面角色行为未验收；原 31/31 及 allowlist 基线对照属于 Owner 报告，本次未独立复跑全部集合。 2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收通过：首页三卡具名入口+职责句、面板空状态自述+图例行、默认 Pilot 及重开恢复上次角色、双语文案确认；真实模型指路有实测——Pilot 对「讲解简历」请求正确说明分工并指路 Insight。用户同场提出角色不应拒答而应回答+软推荐切换的新设计方向，MAO-REFUSAL 指路刚性修订另行裁定，不回改本次验收结论。",
+      "passes": true
     },
     {
       "id": "MAO-DEFAULT",
@@ -156,8 +156,8 @@
         "全新用户首次打开面板落 Pilot。",
         "重开面板恢复上次激活角色。"
       ],
-      "implementationNotes": "2026-11-16 源码核对确认现状已满足需求；同日 Owner 补充项裁定：首次默认 Pilot + 重开恢复上次激活角色（现状语义，不改代码）。仅验收未执行，passes:false。",
-      "passes": false
+      "implementationNotes": "2026-11-16 源码核对确认现状已满足需求；同日 Owner 补充项裁定：首次默认 Pilot + 重开恢复上次激活角色（现状语义，不改代码）。仅验收未执行，passes:false。 2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收通过：全新用户首开面板落 Pilot、切换角色后重开恢复上次激活角色均确认。",
+      "passes": true
     },
     {
       "id": "MAO-SWITCHWIDGET",

@@ -100,8 +100,8 @@
       "dependencies": ["AWU-COMPOSER", "AWU-CONTEXT"],
       "openQuestions": ["D1", "D3", "D4"],
       "steps": ["冻结首批格式与限制后，验证选择、解析、预览、移除及实际模型请求中的内容。", "超限、损坏、加密、无文本、格式不支持及取消不伪报成功。", "只读取用户所选文件，后端校验限制，文件内容不授予工具权限。", "按冻结生命周期验证会话恢复、文件删除和缓存清理；发送内容及外发对象可理解。"],
-      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-b @990c91a6（merge b6249cb6）：选择/拖入/粘贴 txt/md/pdf/docx → POST /api/ai/agent-file-extract（auth+限流、≤10MB、magic 嗅探、≤50k 字）→ data-file part 仅携服务端提取文本，准入复核数量/形状/上限，提取文本仅注入到达轮并以 (attached file: name) 占位后续轮；AgentChatInput/ContextBar/Provider/fileChip 改造，i18n 各 +13 key。定向 vitest 45 项+相邻受影响 252 项、完整 tsc 通过；Windows Electron 与会话生命周期实测未执行，passes:false 保持。",
-      "passes": false
+      "implementationNotes": "2026-11-14 Main 集成 codex/awu-slice-b @990c91a6（merge b6249cb6）：选择/拖入/粘贴 txt/md/pdf/docx → POST /api/ai/agent-file-extract（auth+限流、≤10MB、magic 嗅探、≤50k 字）→ data-file part 仅携服务端提取文本，准入复核数量/形状/上限，提取文本仅注入到达轮并以 (attached file: name) 占位后续轮；AgentChatInput/ContextBar/Provider/fileChip 改造，i18n 各 +13 key。定向 vitest 45 项+相邻受影响 252 项、完整 tsc 通过；Windows Electron 与会话生命周期实测未执行，passes:false 保持。 2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收通过：docx 附件经服务端提取（1,912 字符）随消息发出并到达真实模型，添加/移除/预览及会话中表现确认。",
+      "passes": true
     },
     {
       "id": "AWU-APPROVAL",

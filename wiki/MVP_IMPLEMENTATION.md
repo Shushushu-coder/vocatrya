@@ -8,6 +8,19 @@
 
 `AGENT-NATIVE-CODEX-V1` 已实现并集成。2026-11-18 独立核对已有 Windows Electron fresh-native 证据：面板/历史零模型调用、恢复重置路径且绑定为 0、同数据目录退出重开等边界通过；原始 backup-excludes-binding 仍记 FAIL（导出路径字段为 null，Owner 解释为驱动预期不符），源码排除策略与恢复结果不能冒充修正后导出断言复验；真实账号对话与原生恢复链路因缺授权连接、CLI 0.169.1 不匹配门控 0.169.0 而 BLOCKED，未成功创建原生会话的能力状态行仍未覆盖。`passes: false` 保持。新增显式文本会话、持久 thread 与失败恢复；Devin、搜索、业务工具、技能加载另行实施。详见 [原生会话合同及实施记录](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md)。下列数量与表格保留历史 MVP 收口口径，新增项以 JSON 台账为准。
 
+### 已编码待验证：原生会话入口 UX 修正（2026-11-18 用户确认方向，同日编码）
+
+对真实安装版（`a43a25b0`，落后 HEAD 两个提交）及其数据根排查确认：面板头部裸「Codex」按钮外观像当前模型、实际动作是新建原生会话；按钮复用普通会话锁解析，默认指派为 Devin 时固定 CONNECTION_INELIGIBLE，错误仅提供「前往 AI 设置」出口，形成点击—报错死循环；且创建请求无超时兜底，挂起时按钮静默失效并阻塞发送。已获用户确认的收敛方向：
+
+- 移除头部裸「Codex」按钮；原生会话入口并入底部模型芯片（`AgentChatIdentity`），作为「模式」条目而非又一个模型条目。打开入口菜单时对「已连接 Codex 账号 + CLI 恰好 0.169.0 + 白名单模型」做就绪探测，不可用时置灰并写明具体缺口及修复入口，而不是点击后才报错。
+- 原生模式内芯片显示「Codex 原生」模式徽标，提供「返回普通对话」一键出口（等于携带当前草稿的新普通对话）；被锁定的原生会话不再把模型对摆成可选择器形态。
+- 合同边界不变：仍要求显式新建原生对话、`executionPath` 创建时固定、打开面板/恢复界面不调用模型、会话锁创建后不变。本修正只调整入口位置与可用性表达，不改 [NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) 条款。
+- 实现注意点：入口须自行解析「已连接 Codex 连接 + 原生白名单模型」，不复用普通会话锁（否则默认非 Codex 时必然 CONNECTION_INELIGIBLE）；`startNativeConversation` 的 `creatingRef` 需要超时或失败兜底；模型选择器仅列指派对，已连接但未指派的 Codex 连接不可被普通芯片选中。
+
+同批 UX 修正「已连接服务不再显示『连接』按钮」归属 `AI-ACCOUNT-LOGIN`，记录于 [P1_IMPLEMENTATION.md](./P1_IMPLEMENTATION.md)。
+
+实现落点：`nativeSession.server.ts` 新增 `resolveNativeChatEntry`（直连已连接 Codex 连接 + 原生白名单模型，不复用普通会话锁；返回具体不可用原因）；`agentChat.actions.ts` 新增 `getNativeChatEntry` 供菜单打开时就绪探测；`AgentChatIdentity` 加原生模式条目（置灰含原因与设置链接）、原生模式徽标与「返回普通对话」；`AgentChatPanel` 移除头部裸「Codex」按钮，状态条加退出动作；`AgentChatProvider` 的 `startNativeConversation` 接受显式 Codex 对或自解析，并给 `creatingRef` 加 30s 超时兜底。定向单测与类型检查通过；桌面实测与真实账号验收未执行，`passes` 不变。
+
 ## A. 当前范围与状态
 
 本文件为当前 MVP 台账，不再把早期开发基线、W1–W7 分派或历史待验收描述列为当前任务。逐项验收条件、实施证据及历史构建来源以 [MVP_FEATURES.json](./MVP_FEATURES.json) 为准。
@@ -83,6 +96,17 @@
 ### 已有非阻塞观察
 
 Task 的 5,000 条合成数据性能记录为平均 309.0ms、最大 549.2ms/页，平均略高于 300ms 参考预算。保留该观察，不把正确性和功能验收通过写成全部性能指标达标，也不自动新增优化任务。
+
+#### 2026-11-18 两个预存在测试失败（缩放 diff 验证中复现，非其引入）——已修复 `a8c358db`
+
+缩放/快捷键 diff（`ed720dea`）逐条契约验证通过并提交；验证中复现 2 个测试失败，经独立窗口（devin:tartan-copper，exchange `thread-exchange-8c4f12e6`）只读审计确认均为 HEAD 预存在的测试陈旧，严重度低、无产品 bug。修复由并行窗口在 `a8c358db`「test: refresh stale assertions for resume bridge and audio page」落地（只改测试文件），本窗口复验通过：`resume-print.test.mjs` 21/21、`settingsCapabilitiesV1.spec.tsx` 20/20。
+
+1. `desktop/main/resume-print.test.mjs`「preload exposes only a version-id invocation for resume printing」：断言 `Object.keys(vocatryaResume) === ["printToPDF"]` 在 `b368961b` 引入时正确；`4cd5006d` 为 bridge 增加 `readPreviewPreferences`/`writePreviewPreferences` 后断言未跟进。修复：期望值补全为三项（保留窄暴露面白名单意图，不拆 bridge）。
+2. `__tests__/settingsCapabilitiesV1.spec.tsx` 两个 AudioSettings 用例：spec 写于 AWU-DICTATION（`3da20b1c`）前，旧「Speech transcription & recognition — Not provided」占位行已被真实 `DictationSettingsControls` 替换。
+   - 用例 A：缺失标题实为 `"Speech transcription & recognition"`（新标题 `dictation.title`="Dictation (speech-to-text)"，`en.json:3460`）；连带 `spec:275` 的 `"Not provided"` 徽章已整页消失（dictation 徽章文案为 `dictation-key-badge`="Not configured"）。
+   - 用例 B（compact-row）：违规行是 `DictationSettingsControls.tsx` API key 行与 `DictationTestControls.tsx:20` 按钮行——纯控件行、非 `.min-w-0.flex-1` 文本列。
+   - 修复：`vi.mock("@/actions/dictation.actions")` 确定性返回 `{success:true,data:{credentials:null,config:null}}`；标题改为 `"Dictation (speech-to-text)"`；`:275` 改为断言页内无 "Not provided" 并 `findByTestId("dictation-key-badge")`="Not configured"；compact-row 断言收窄到 `.min-w-0.flex-1` 文本列、纯控件行跳过。
+   - DOM 证据：`.wave1-runtime/evidence/set08-dom/audio-settings.html`。
 
 ## C. 依赖、合同与所有权
 

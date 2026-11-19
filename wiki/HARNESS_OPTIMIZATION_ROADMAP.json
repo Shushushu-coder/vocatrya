@@ -65,14 +65,15 @@
     "uiIntegration": {
       "recordedOn": "2026-11-17",
       "commit": "62ff16e1",
-      "status": "MERGED_PENDING_ACCEPTANCE",
+      "status": "MERGED_DESKTOP_UI_ACCEPTED",
       "scope": "顶部账号登录/托管 AI 双 Tab；第二 Tab 区分自接 API 与托管 API，控制器保持挂载。",
       "validation": {
         "componentTests": "56/56 PASS",
         "scopedTypeScript": "PASS",
         "eslint": "PASS",
         "diffCheck": "PASS",
-        "windowsElectron": "NOT_RUN",
+        "windowsElectron": "PASS",
+        "windowsElectronEvidence": "2026-11-18 用户于 1.2.2-rc Windows 安装版（a43a25b0）人工验收：双 Tab 渲染与切换、未连接服务紧凑列表、业务用途网格排序及 AI 指派交互通过；不含真实桌面 OAuth",
         "realDesktopOAuth": "NOT_RUN"
       },
       "evidence": ".worktrees/ai-services-tabs/.tmp/integration-verify/",
