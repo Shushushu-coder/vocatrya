@@ -26,8 +26,15 @@ import {
  *   summary → oldest historical tool line → oldest complete turn →
  *   page-context line.
  * Never dropped and never sliced: fixed instructions, the current user
- * message, approval state, the current paste head, and the current tool
- * result. A current user message over `currentUserTokens` is rejected.
+ * message, approval state, the current paste head, the current tool
+ * result, and (task sessions only) the system-maintained task handoff line.
+ * A current user message over `currentUserTokens` is rejected.
+ *
+ * Task handoff: included only when the caller passes BOTH `agentTaskId` and a
+ * non-empty `handoffLine`; otherwise every code path below is identical to
+ * the pre-handoff behavior. A line over `handoffTokens` is dropped whole and
+ * reported as `handoffDropped` (the write side caps size, so this is a guard
+ * against stale or hand-edited data, not a drop-order step).
  */
 
 export const CAREER_DIALOGUE_CONTEXT_BUDGETS = {
@@ -36,6 +43,8 @@ export const CAREER_DIALOGUE_CONTEXT_BUDGETS = {
   historyTokens: 3_000,
   maxRecentTurns: 6,
   summaryTokens: 1_000,
+  /** Task handoff line (task sessions only). Never in the drop order. */
+  handoffTokens: APP_CONSTANTS.AGENT_TASK_HANDOFF_TOKENS,
   /** Older tool bodies. The current session tool result is not charged here. */
   historicalToolTokens: 2_000,
   currentUserTokens: 6_000,
@@ -66,6 +75,11 @@ export type CareerDialogueContextSize = {
   toolResultTokens: number;
   summaryChars: number;
   summaryTokens: number;
+  /** Task handoff line as included (0 when absent or dropped). */
+  handoffChars: number;
+  handoffTokens: number;
+  /** True when a supplied handoff line exceeded `handoffTokens`. */
+  handoffDropped: boolean;
   dynamicChars: number;
   dynamicTokens: number;
   estimatedInputTokens: number;
@@ -114,6 +128,16 @@ export type CareerDialogueContextInput = {
    * does not register.
    */
   agentRole?: string | null;
+  /**
+   * ChatConversation.agentTaskId. The handoff line is honored only when this
+   * is set, so a non-task conversation can never receive one.
+   */
+  agentTaskId?: string | null;
+  /**
+   * Rendered, system-maintained task state (already verified by the caller).
+   * Never dropped by the budgeter; see the file header.
+   */
+  handoffLine?: string;
 };
 
 export type CareerDialogueContextSuccess = {
@@ -605,6 +629,15 @@ export function buildCareerDialogueContext(
 
   let summaryLine = summary ? `Earlier conversation summary:\n${summary}` : undefined;
 
+  // Task handoff: task sessions only. Fixed once here and never reassigned,
+  // so dropLowest cannot touch it.
+  const handoffCandidate =
+    input.agentTaskId && input.handoffLine?.trim() ? input.handoffLine.trim() : undefined;
+  const handoffDropped = Boolean(
+    handoffCandidate && estimateContextTokens(handoffCandidate) > budgets.handoffTokens,
+  );
+  const handoffLine = handoffDropped ? undefined : handoffCandidate;
+
   const historyDialogue = () =>
     history.flatMap((rendered) =>
       rendered.lines.filter((line) => line.kind === "dialogue").map((line) => line.text),
@@ -635,6 +668,7 @@ export function buildCareerDialogueContext(
   const assemble = (): string[] => {
     const lines: string[] = [];
     if (summaryLine) lines.push(summaryLine);
+    if (handoffLine) lines.push(handoffLine);
     for (const rendered of history) lines.push(...dialogueText(rendered, droppedTools));
     if (includeCurrent && currentRendered && !history.includes(currentRendered)) {
       lines.push(...dialogueText(currentRendered, droppedTools));
@@ -757,6 +791,9 @@ export function buildCareerDialogueContext(
     toolResultTokens: tokensOf(toolText),
     summaryChars: summary?.length ?? 0,
     summaryTokens: summary ? estimateContextTokens(summary) : 0,
+    handoffChars: handoffLine?.length ?? 0,
+    handoffTokens: handoffLine ? estimateContextTokens(handoffLine) : 0,
+    handoffDropped,
     dynamicChars: dynamicText.length,
     dynamicTokens: tokensOf(transcriptLines),
     estimatedInputTokens: fixedTokens + tokensOf(transcriptLines),
@@ -791,5 +828,10 @@ export function careerDialogueContextLogFields(
     currentUserTokens: size.currentUserTokens,
     historyTokens: size.historyTokens,
     dynamicTokens: size.dynamicTokens,
+    // Only task sessions that carry a handoff add these fields, so non-task
+    // log lines keep their exact pre-handoff shape.
+    ...(size.handoffTokens > 0 || size.handoffDropped
+      ? { handoffUnits: size.handoffTokens, handoffDropped: size.handoffDropped ? 1 : 0 }
+      : {}),
   };
 }
