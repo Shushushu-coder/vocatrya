@@ -12,6 +12,7 @@ import {
   NotionSearchResultCard,
   NotionWriteResultCard,
 } from "./NotionResult";
+import { SuggestRoleResult } from "./SuggestRoleResult";
 import type {
   AgentAddJobResult,
   AgentCanonicalMatchJobResult,
@@ -24,6 +25,7 @@ import type {
   AgentNotionSearchResult,
   AgentNotionWriteResult,
   AgentReviewResumeResult,
+  AgentSuggestRoleResult as AgentSuggestRoleResultType,
 } from "@/models/agent.model";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
@@ -97,6 +99,8 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       toolName === "notion_append_content" ||
       toolName === "notion_update_record" ? (
       <NotionWriteResultCard output={part.output as AgentNotionWriteResult} />
+    ) : toolName === "suggest_role" ? (
+      <SuggestRoleResult output={part.output as AgentSuggestRoleResultType} />
     ) : null;
 
   return <div className="rounded-sm border p-3">{body}</div>;

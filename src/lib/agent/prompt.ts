@@ -8,7 +8,7 @@ import {
 import {
   AGENT_ROSTER,
   buildRoleAwarenessBlock,
-  roleRefusalHint,
+  roleHandoffHint,
   rosterFallback,
 } from "./roleCopy";
 
@@ -69,7 +69,7 @@ const REFLECT_CAPABILITIES =
   "You have exactly two capabilities. list_jobs lists the jobs currently visible in My Jobs: call it when the user asks which jobs they have, which they recently added, or how many are saved. get_job reads one of those jobs, using the id list_jobs returned or the job open on the current page: call it when the user asks about a saved job's title, company, location, status, source, or description. Both only read — everything else is plain conversation. Use them to ground a discussion in their real data when it helps; do not call them when the conversation does not need the data.";
 
 const INSIGHT_LIMITATIONS =
-  "You cannot add or update a job, manage application attempts, submit an application, write a cover letter, edit a resume or a resume variant, or edit career evidence. If asked for any of them, say plainly that you cannot do that — Voca Pilot handles adding jobs. You cannot read their tasks, notes, activities or settings in this version. Never state a job count or an application status you have not read from list_jobs or get_job, and never claim to have performed an action you have no tool for. You can read resumes only through get_resume or review_resume, and you can read saved jobs only through list_jobs or get_job — never describe a resume or a job you have not read.";
+  "You cannot add or update a job, manage application attempts, submit an application, write a cover letter, edit a resume or a resume variant, or edit career evidence. If asked for any of them, answer the part you can and say plainly which part is not yours — Voca Pilot handles adding jobs. You cannot read their tasks, notes, activities or settings in this version. Never state a job count or an application status you have not read from list_jobs or get_job, and never claim to have performed an action you have no tool for. You can read resumes only through get_resume or review_resume, and you can read saved jobs only through list_jobs or get_job — never describe a resume or a job you have not read.";
 
 const PILOT_LIMITATIONS =
   "You cannot read, review or analyze resumes, run a match analysis, or write a cover letter — Voca Insight handles analysis. You cannot update a saved job, manage application attempts, edit career evidence, or read their tasks, notes, activities or settings in this version. If asked about any of them, say plainly that you cannot see that data yet. Never state a job count or an application status you have not read from list_jobs or get_job, and never claim to have performed an action you have no tool for.";
@@ -110,7 +110,7 @@ export function buildAgentChatSystemPrompt(
       INSIGHT_ROLE,
       languageInstruction,
       insightCapabilities(fresh),
-      `${INSIGHT_LIMITATIONS} ${roleRefusalHint("insight")}`,
+      `${INSIGHT_LIMITATIONS} ${roleHandoffHint("insight")}`,
       buildRoleAwarenessBlock("insight"),
       AGENT_CHAT_PROMPT_SECTIONS.safety,
     ]);
@@ -120,7 +120,7 @@ export function buildAgentChatSystemPrompt(
       PILOT_ROLE,
       languageInstruction,
       fresh ? PILOT_CAPABILITIES_FRESH : PILOT_CAPABILITIES,
-      `${PILOT_LIMITATIONS} ${roleRefusalHint("pilot")}`,
+      `${PILOT_LIMITATIONS} ${roleHandoffHint("pilot")}`,
       buildRoleAwarenessBlock("pilot"),
       fresh
         ? AGENT_CHAT_FRESH_FULL_SECTIONS.paste
@@ -133,7 +133,7 @@ export function buildAgentChatSystemPrompt(
       REFLECT_ROLE,
       languageInstruction,
       REFLECT_CAPABILITIES,
-      `${REFLECT_LIMITATIONS} ${roleRefusalHint("reflect")}`,
+      `${REFLECT_LIMITATIONS} ${roleHandoffHint("reflect")}`,
       buildRoleAwarenessBlock("reflect"),
       AGENT_CHAT_PROMPT_SECTIONS.safety,
     ]);
@@ -210,6 +210,8 @@ export const AGENT_TOOL_DESCRIPTIONS = {
     "Append markdown content to the end of one Notion page in the connected workspace. Shows the exact target page and the full content on a confirmation card — nothing is written until the user confirms. On success returns the page id; report it and never claim a write you have not confirmed.",
   notion_update_record:
     "Update properties of one database row (a page) in the connected Notion workspace. Shows the exact row and the property changes on a confirmation card — nothing is written until the user confirms. Read the record first and never guess property names or formats. On success returns the page id; report it and never claim a write you have not confirmed.",
+  suggest_role:
+    "Hand the user's request to a sibling assistant. Call it when the request clearly belongs to another role's capabilities, after giving the best answer your own tools allow. Pass that sibling's role and the user's request copied verbatim — the app shows a card that carries it into that assistant's composer in one tap. Never call it with your own role.",
 } as const;
 
 const NOTION_WRITE_TOOL_NAMES = new Set([
@@ -292,7 +294,7 @@ export function buildNotionPromptSection(
     const handoff =
       options?.agentRole === "pilot"
         ? ""
-        : ` Those writes belong to ${pilot} when that role's session has them registered. Suggest the user switch using the ${icon} icon at the top of this panel.`;
+        : ` Those writes belong to ${pilot} when that role's session has them registered — call suggest_role with role "pilot" to hand the request off, or point to the ${icon} icon at the top of this panel.`;
     parts.push(boundary + handoff);
   }
   parts.push(

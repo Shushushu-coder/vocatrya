@@ -23,13 +23,28 @@ const toolCtx = {
   writer: { write: () => {}, merge: () => {}, onError: undefined } as never,
 };
 
+// A fully-connected Notion session: the route resolves these names into
+// ctx.notionTools before build, so extension tools register alongside the
+// local registry.
+const NOTION_NAMES = [
+  "notion_search",
+  "notion_read",
+  "notion_create_page",
+  "notion_append_content",
+  "notion_update_record",
+];
+
 // The contract's effective set: role allowlist ∩ registered runtime tools.
 // Allowlists only ever shrink the registry, never grow it.
 describe("per-role tool allowlists", () => {
   it.each(Object.keys(AGENT_ROLE_TOOL_ALLOWLIST) as Array<"insight" | "pilot" | "reflect">)(
     "registers exactly the %s allowlist under the legacy runtime",
     (role) => {
-      const tools = buildAgentTools({ ...toolCtx, agentRole: role });
+      const tools = buildAgentTools({
+        ...toolCtx,
+        agentRole: role,
+        notionTools: NOTION_NAMES,
+      });
       expect(Object.keys(tools).sort()).toEqual(
         [...AGENT_ROLE_TOOL_ALLOWLIST[role]].sort(),
       );
@@ -41,6 +56,7 @@ describe("per-role tool allowlists", () => {
       ...toolCtx,
       freshNativeFull: true,
       agentRole: "insight",
+      notionTools: NOTION_NAMES,
     });
     expect(tools.match_job.needsApproval).toBe(true);
     expect(Object.keys(tools).sort()).toEqual(

@@ -913,13 +913,15 @@ describe("AgentChatProvider", () => {
     expect(screen.getByTestId("sidebar").textContent).toBe("false");
   });
 
-  it("stops the stream on close and flags the turn interrupted", async () => {
+  it("keeps the stream running on close without flagging the turn", async () => {
     chat.status = "streaming";
     setup();
     await userEvent.click(screen.getByText("open"));
     await userEvent.click(screen.getByText("close"));
-    expect(chat.stop).toHaveBeenCalled();
-    expect(screen.getByTestId("state").textContent).toContain("|true|");
+    expect(chat.stop).not.toHaveBeenCalled();
+    expect(screen.getByTestId("state").textContent).toContain(
+      "false|false|false|",
+    );
   });
 
   it("does not flag an interrupted turn when nothing was streaming", async () => {
@@ -936,16 +938,17 @@ describe("AgentChatProvider", () => {
   // close() aborts through stop(), so the chat is idle by the time the user
   // sees the Continue button — the rerender is what the real status callback
   // does here.
-  it("clears the interrupted flag when the turn is resumed with Continue", async () => {
+  it("lets the turn be rerun with regenerate after closing mid-stream", async () => {
     chat.status = "streaming";
     const { rerender } = setup();
     await userEvent.click(screen.getByText("open"));
     await userEvent.click(screen.getByText("close"));
-    expect(screen.getByTestId("state").textContent).toContain("|true|");
+    expect(chat.stop).not.toHaveBeenCalled();
+    expect(screen.getByTestId("state").textContent).toContain(
+      "false|false|false|",
+    );
 
     chat.status = "ready";
-    // A stopped turn leaves the transcript on the user's own message — that
-    // is the tail a Continue actually reruns.
     chat.messages = [{ id: "u1", role: "user", parts: [{ type: "text", text: "add a job" }] }];
     rerender(tree());
     await userEvent.click(screen.getByText("regenerate"));
@@ -955,12 +958,15 @@ describe("AgentChatProvider", () => {
     );
   });
 
-  it("clears the interrupted flag when the user sends a new message instead", async () => {
+  it("lets the user send a new message after closing mid-stream", async () => {
     chat.status = "streaming";
     const { rerender } = setup();
     await userEvent.click(screen.getByText("open"));
     await userEvent.click(screen.getByText("close"));
-    expect(screen.getByTestId("state").textContent).toContain("|true|");
+    expect(chat.stop).not.toHaveBeenCalled();
+    expect(screen.getByTestId("state").textContent).toContain(
+      "false|false|false|",
+    );
 
     chat.status = "ready";
     rerender(tree());
@@ -1860,6 +1866,72 @@ describe("conversation client concurrency protocol", () => {
     expect(chatInit().sendAutomaticallyWhen({ messages: [approvalMessage] })).toBe(false);
     await userEvent.click(screen.getByText("approve"));
     expect(chat.addToolApprovalResponse).toHaveBeenCalledTimes(1);
+  });
+  it("replays a rejected send once after reloading the conflict, then surfaces a second rejection", async () => {
+    setup();
+    const execution = beginExecution(false);
+    const saved = { ...conversation([{ id: "old", role: "assistant", parts: [{ type: "text", text: "kept" }] }]), revision: 7 };
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: saved });
+    await act(async () =>
+      chatInit().onError(
+        Object.assign(new Error("conflict"), { code: "CONVERSATION_STALE_WRITE", conversationRequestId: execution.requestId }),
+      ),
+    );
+    // The send never landed server-side, so the replay re-issues exactly
+    // that intent — one click, no conflict banner.
+    expect(chat.sendMessage).toHaveBeenCalledTimes(1);
+    expect(chat.sendMessage.mock.calls[0][0]).toEqual({
+      parts: [{ type: "text", text: "hi" }],
+    });
+    // The armed replay stamps retried on the next prepared request; a
+    // second CAS rejection stops there instead of looping.
+    const replay = chatInit().transport.prepareSendMessagesRequest({
+      messages: [{ id: "u2", role: "user", parts: [{ type: "text", text: "hi" }] }],
+      trigger: "submit-message",
+    });
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: { ...saved, revision: 8 } });
+    await act(async () =>
+      chatInit().onError(
+        Object.assign(new Error("conflict"), { code: "CONVERSATION_TURN_CONFLICT", conversationRequestId: replay.body.requestId }),
+      ),
+    );
+    expect(chat.sendMessage).toHaveBeenCalledTimes(1);
+  });
+  it("replays a rejected regenerate on its recorded target after reloading the conflict", async () => {
+    setup();
+    const tail = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "q" }] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "a" }] },
+    ];
+    const prepared = chatInit().transport.prepareSendMessagesRequest({
+      messages: tail,
+      trigger: "regenerate-message",
+      messageId: "a1",
+    });
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: { ...conversation(tail), revision: 7 } });
+    await act(async () =>
+      chatInit().onError(
+        Object.assign(new Error("conflict"), { code: "CONVERSATION_TURN_CONFLICT", conversationRequestId: prepared.body.requestId }),
+      ),
+    );
+    expect(chat.regenerate).toHaveBeenCalledWith({ messageId: "a1" });
+    // Disarm the armed replay flag so it cannot leak into the next test.
+    chatInit().transport.prepareSendMessagesRequest({
+      messages: tail,
+      trigger: "submit-message",
+    });
+  });
+  it("does not replay non-conversation errors after reloading", async () => {
+    setup();
+    const execution = beginExecution(false);
+    vi.mocked(getChatConversation).mockResolvedValueOnce({ success: true, data: { ...conversation([]), revision: 7 } });
+    await act(async () =>
+      chatInit().onError(
+        Object.assign(new Error("boom"), { code: "MODEL_UNAVAILABLE", conversationRequestId: execution.requestId }),
+      ),
+    );
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+    expect(chat.regenerate).not.toHaveBeenCalled();
   });
 
   it.each(["reject", "typed"])("handles %s reload failure and leaves local authority blocked", async (failure) => {

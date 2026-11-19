@@ -2320,6 +2320,8 @@
     "roleSwitcher": {
       "label": "Switch assistant"
     },
+    "suggestRoleBetterFit": "{name} is the better fit for this.",
+    "suggestRoleCta": "Take this to {name}",
     "roster": {
       "ask": "Ask {name} — {duty}",
       "legend": "Insight analyzes · Pilot does · Reflect talks — switch anytime from the icons up top",

@@ -2320,6 +2320,8 @@
     "roleSwitcher": {
       "label": "切换助手"
     },
+    "suggestRoleBetterFit": "这个问题 {name} 处理更合适。",
+    "suggestRoleCta": "带这个问题去问 {name}",
     "roster": {
       "ask": "咨询 {name} —— {duty}",
       "legend": "Insight 帮你看 · Pilot 帮你干 · Reflect 陪你聊——顶部图标随时换",

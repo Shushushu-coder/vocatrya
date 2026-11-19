@@ -11,6 +11,7 @@ import { buildReviewResumeTool } from "./reviewResume";
 import { buildMatchJobTool } from "./matchJob";
 import { buildCanonicalMatchJobTool } from "./canonicalMatchJob";
 import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
+import { buildSuggestRoleTool } from "./suggestRole";
 import { buildNotionAgentTools } from "./notion";
 import type { PermissionMode } from "../preferences";
 
@@ -93,6 +94,10 @@ export function buildAgentTools(ctx: {
       guard: nestedGuard,
       request: ctx.request,
     }),
+    // Registered unconditionally and pruned by the allowlist filter like
+    // every other tool: named roles keep it (their allowlists name it),
+    // the NULL general assistant drops it — it has no siblings to hand to.
+    suggest_role: buildSuggestRoleTool(),
   };
 
   if (ctx.freshNativeFull) {
