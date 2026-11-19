@@ -1,5 +1,19 @@
 # Vocatrya 扩展功能决策与实施方向
 
+## 用户裁定（2026-11-19）
+
+以下裁定覆盖本文较早的同类表述：
+
+- **Notion**：用户告知已自行实测；台账 `passes` 待补记所测构建/版本与覆盖步骤后再更新（证据分级见 RELEASE_RUNBOOK §4）。
+- **自动网申**：继续暂停。当前基于开源 OpenJobAutofill 改造，后续可能重点重写；在重写方向确定前不派验收或修复窗口。
+- **网页面试练习**：Web 端正在开发，完成后由扩展入口访问；目标地址届时配置。
+- **联网搜索不接入**：Vocatrya Agent 暂时不能自行联网搜索或浏览；需要联网搜索时使用账号登录的原生 Agent。§6「联网搜索」移出范围，「企业与岗位调研」Skill 的检索部分随之依赖原生 Agent 或用户提供的资料。
+- **网页读取**：实施，限读取用户在会话中明确提供的网址（代码强制），不跟随页面内链接、不自行检索。
+- **浏览器操作**：首批站点样本在开始实施时再选。
+- **邮件/日历**：首批供应商为 **Outlook（Microsoft Graph）与网易邮箱**（网易按其官方支持的 IMAP/授权码等方式在实施时核实）；日历先 Outlook。
+- **Skills 首批顺序与角色**（确认）：岗位拆解与匹配（Insight）→ 面试追问训练（Reflect）→ 岗位定制简历（Pilot）→ 求职计划制定（Pilot，依赖 D4 长任务）→ 企业与岗位调研（Insight，检索依赖原生 Agent/用户资料）；STAR 暂不单独做（简历证据合同 D3 本版不并入）。简历证据深挖已由 Pilot 承载（2026-11-19 裁定）。
+- **扩展页布局**：确认「连接与工具 / 技能 / 配套工具」三标签；第三方 Skill 导入以禁用的「敬请期待」呈现。实施中。
+
 ## 新增范围确认（2026-11-17）
 
 用户已同意新增 MCP／工具能力及求职 Skills，具体清单、优先级、难度和待定事项见本文 §6。本次仅登记后续范围，不启动开发，不改变既有 Feature 的实现或验收状态；首批指本次新增能力的交付优先级，不代表纳入 MVP 必交范围。原三卡片决策是已有交付基线，新增入口实施时在其上扩展。
@@ -10,13 +24,13 @@
 
 **Notion 与自动网申本轮收口，暂停继续派发验收或修复窗口。** 这是用户当前的任务调度决定，不表示所有历史验收条件已满足，也不将 `passes:false` 改为通过。只有用户重新指定具体缺陷或验收范围时再启动；残留观察不自动成为下一轮任务。
 
-- **自动网申**：手动导入、配对及按需同步均已有实现与实际验证。真实小红书页面覆盖基本资料、教育与实习条目、日期和预填保护；真实 options 页与隔离本地 Next 服务/SQLite 的配对、同步、失败重试及撤销后迟到响应共 20 项通过。最终补丁已随 `a36fb9ab` 集成 Main（merge `071f48e0`）；主协调插件定向测试 33/33、最终新增块相关合成 Chromium 11/11 通过。最后的 DOM 归属安全补修未重新执行真实 ATS；排名选项采集结论待核实，AI 成功路径及跨站覆盖未完成，本轮未运行 Windows Electron。保持 `PARTIAL / passes:false`。
-- **Notion**：Web 隔离环境中，真实 OAuth、search/read、create/append，以及 update_record 的提案→人工批准→持久任务→远端写入→读回已有证据；update_record 的拒绝不派发、远端不存在目标准确失败也已核对，主协调定向测试 56/56 通过。update_record 产品源码零修改，核验记录随 `a36fb9ab` 集成。真实写入的宿主是 Web；既有 Electron 合成凭据机制证据不能合并宣称为 Electron+真实写入同轮通过。OAuth listener 定时器等执行窗口观察保留，不自动派修。保持 `PARTIAL / passes:false`。
+- **自动网申**：手动导入、配对及按需同步均已有实现与实际验证。真实小红书页面覆盖基本资料、教育与实习条目、日期和预填保护；真实 options 页与隔离本地 Next 服务/SQLite 的配对、同步、失败重试及撤销后迟到响应共 20 项通过。最终补丁已随 `a36fb9ab` 集成 Main（merge `071f48e0`）；主协调插件定向测试 33/33、最终新增块相关合成 Chromium 11/11 通过。最后的 DOM 归属安全补修未重新执行真实 ATS；排名选项采集混入全页下拉已于 2026-11-19 修复（`9cb4f131`，原真实页副本已不可找回，真实页复核并入下次网申验收），AI 成功路径及跨站覆盖未完成，本轮未运行 Windows Electron。保持 `PARTIAL / passes:false`。
+- **Notion**：Web 隔离环境中，真实 OAuth、search/read、create/append，以及 update_record 的提案→人工批准→持久任务→远端写入→读回已有证据；update_record 的拒绝不派发、远端不存在目标准确失败也已核对，主协调定向测试 56/56 通过。update_record 产品源码零修改，核验记录随 `a36fb9ab` 集成。真实写入的宿主是 Web；既有 Electron 合成凭据机制证据不能合并宣称为 Electron+真实写入同轮通过。OAuth listener 旧定时器已于 2026-11-19 修复（`b151af79`），并新增「页面不存在或未共享」错误码与限流 Retry-After（`dbbfa06a`）；审批队列 409 未复现。保持 `PARTIAL / passes:false`。
 - **网页面试练习**：沿用用户暂停决定，不安排目标地址接入或补验。
 
 原始证据分别位于 `.worktrees/auto-apply-final-verify/.tmp/auto-apply-final-verify/`、`.worktrees/notion-update-record/.tmp/notion-update-record/`，更早轮次来源见 [EXTENSIONS_FEATURES.json](./EXTENSIONS_FEATURES.json) 的逐轮记录。临时证据不随 Git 自动同步，本次不清理或搬迁。
 
-后续已产出 [Codex／Devin 原生会话适配最小合同提案](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) 与 [简历证据深挖 Skill 内容及结果合同提案](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md)。两份已完成协调核验，仍待批准、未加载或实施；首版推荐分别收敛到 Codex 会话关联/恢复及证据草稿输出，不自动授权放开原生工具权限、保存职业素材或改写会话契约。自动网申页面识别方向仍属于已登记的后续范围，不据此重新包装为当前优先任务。
+后续已产出 [Codex／Devin 原生会话适配最小合同提案](./NATIVE_SESSION_ADAPTER_CONTRACT_PROPOSAL.md) 与 [简历证据深挖 Skill 内容及结果合同提案](./RESUME_EVIDENCE_SKILL_CONTRACT_PROPOSAL.md)。两份均已于 2026-11-17 获用户批准：Codex 原生会话首片已实现（待桌面验收，CLI 已验证版本清单见 MVP 台账）；简历证据深挖首版已实现并由 Pilot 承载（草稿模式，不保存）。仍不自动授权放开原生工具权限、保存职业素材或改写会话契约。自动网申页面识别方向仍属于已登记的后续范围，不据此重新包装为当前优先任务。
 
 > 以下保留 2026-11-13 起的历史实施过程。涉及“尚未实现／待验收”的旧轮次表述按当时证据理解；当前摘要及机器可读台账优先，不覆盖其宿主与版本边界。
 
