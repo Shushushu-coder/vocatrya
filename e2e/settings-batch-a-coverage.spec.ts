@@ -349,7 +349,7 @@ test("SET-08 pages mount honest capability states and do not write settings", as
   await expect(page.getByTestId("shortcuts-env-note")).toHaveText(
     "This environment is not the desktop app: shortcuts marked “Desktop app only” do not fire here.",
   );
-  await expect(shortcuts.getByText("Desktop app only", { exact: true })).toHaveCount(4);
+  await expect(shortcuts.getByText("Desktop app only", { exact: true })).toHaveCount(7);
   await expect(shortcuts.getByText("Show or hide the main window", { exact: true })).toBeVisible();
   await expect(shortcuts.getByText(/restored and focused/, { exact: false })).toBeVisible();
   await expect(page.getByTestId("shortcut-global-status")).toHaveText("Off");
@@ -451,7 +451,7 @@ test("public zh-CN and en bundles, nine entries, and section priority hold", asy
     const shortcuts = page.getByTestId("shortcuts-settings");
     await expect(shortcuts.getByRole("heading", { name: "快捷键", exact: true })).toBeVisible();
     await expect(page.getByTestId("shortcuts-env-note")).toContainText("当前环境不是桌面应用");
-    await expect(shortcuts.getByText("仅桌面应用", { exact: true })).toHaveCount(4);
+    await expect(shortcuts.getByText("仅桌面应用", { exact: true })).toHaveCount(7);
     await expect(shortcuts.getByText("系统级全局快捷键", { exact: true })).toBeVisible();
     await expect(shortcuts.getByText("显示或隐藏主窗口", { exact: true })).toBeVisible();
     await expect(page.getByTestId("shortcut-global-status")).toHaveText("未启用");

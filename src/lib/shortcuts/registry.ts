@@ -14,7 +14,10 @@ export type ShortcutScope = "window" | "desktopOnly" | "global";
 export type WindowShortcutActionId =
   | "toggleSidebar"
   | "historyBack"
-  | "historyForward";
+  | "historyForward"
+  | "zoomIn"
+  | "zoomOut"
+  | "zoomReset";
 
 export type ShortcutActionId = WindowShortcutActionId | "toggleWindow";
 
@@ -30,6 +33,9 @@ export type ShortcutAction = {
   // same target semantics.
   suppressInEditable: boolean;
   suppressWhileComposing: boolean;
+  // Extra chords that match only while the stored combo is still the
+  // default. A rebind replaces the whole set with the one recorded combo.
+  defaultAliases?: readonly string[];
 };
 
 export const SHORTCUT_ACTIONS: Record<ShortcutActionId, ShortcutAction> = {
@@ -65,10 +71,54 @@ export const SHORTCUT_ACTIONS: Record<ShortcutActionId, ShortcutAction> = {
     suppressInEditable: false,
     suppressWhileComposing: false,
   },
+  // Page zoom. Mod+Equal is the unshifted "=+" key. Mod+Shift+Plus is that
+  // same key with Shift held. Mod+Plus is the numpad plus. Aliases stay
+  // live only while the stored combo is still Mod+Equal.
+  zoomIn: {
+    id: "zoomIn",
+    scope: "desktopOnly",
+    defaultCombo: "Mod+Equal",
+    defaultAliases: ["Mod+Shift+Plus", "Mod+Plus"],
+    rebindable: true,
+    suppressInEditable: false,
+    suppressWhileComposing: true,
+  },
+  zoomOut: {
+    id: "zoomOut",
+    scope: "desktopOnly",
+    defaultCombo: "Mod+Minus",
+    rebindable: true,
+    suppressInEditable: false,
+    suppressWhileComposing: true,
+  },
+  zoomReset: {
+    id: "zoomReset",
+    scope: "desktopOnly",
+    defaultCombo: "Mod+0",
+    rebindable: true,
+    suppressInEditable: false,
+    suppressWhileComposing: true,
+  },
 };
+
+// Chords that currently fire this action. Aliases join only while the
+// stored combo is still the shipped default.
+export function matchingCombos(
+  action: ShortcutAction,
+  stored: string | null,
+): string[] {
+  if (!stored) return [];
+  if (stored === action.defaultCombo && action.defaultAliases?.length) {
+    return [stored, ...action.defaultAliases];
+  }
+  return [stored];
+}
 
 export const WINDOW_ACTION_IDS = [
   "toggleSidebar",
   "historyBack",
   "historyForward",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
 ] as const satisfies readonly WindowShortcutActionId[];

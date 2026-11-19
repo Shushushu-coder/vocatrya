@@ -1,6 +1,6 @@
 // Vocatrya desktop keybinding store — the device-level companion document
 // to desktop-settings.json, kept in the same app-owned config directory.
-// It persists the three window-level rebindable combos plus the global
+// It persists the window-level rebindable combos plus the global
 // show/hide hotkey intent (enabled flag + combo).
 //
 // Canonical combo grammar mirrors src/lib/shortcuts/combos.ts and must stay
@@ -18,7 +18,16 @@ const WINDOW_ACTION_IDS = Object.freeze([
   "toggleSidebar",
   "historyBack",
   "historyForward",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
 ]);
+
+// Live only while zoomIn is still stored as its default. A rebind replaces
+// the whole match set with that one combo. Keep this list identical to
+// SHORTCUT_ACTIONS.zoomIn.defaultAliases in src/lib/shortcuts/registry.ts.
+const ZOOM_IN_DEFAULT = "Mod+Equal";
+const ZOOM_IN_ALIASES = Object.freeze(["Mod+Shift+Plus", "Mod+Plus"]);
 
 const GLOBAL_ACTION_ID = "toggleWindow";
 
@@ -28,6 +37,9 @@ const WINDOW_BINDING_DEFAULTS = Object.freeze({
   toggleSidebar: "Mod+B",
   historyBack: "Alt+Left",
   historyForward: "Alt+Right",
+  zoomIn: ZOOM_IN_DEFAULT,
+  zoomOut: "Mod+Minus",
+  zoomReset: "Mod+0",
 });
 
 const GLOBAL_TOGGLE_DEFAULT_COMBO = "Mod+Alt+V";
@@ -80,6 +92,24 @@ function isValidCombo(combo) {
     seen.add(part);
   }
   return seen.has("Mod") || seen.has("Alt");
+}
+
+// Combos that currently fire `actionId`, including zoom-in aliases while
+// that action is still on its shipped default.
+function heldCombos(state, actionId) {
+  if (!isPlainObject(state)) return [];
+  if (actionId === GLOBAL_ACTION_ID) {
+    const global = state.globalToggleWindow;
+    return isPlainObject(global) && global.enabled && typeof global.combo === "string"
+      ? [global.combo]
+      : [];
+  }
+  const combo = isPlainObject(state.window) ? state.window[actionId] : null;
+  if (typeof combo !== "string" || !combo) return [];
+  if (actionId === "zoomIn" && combo === ZOOM_IN_DEFAULT) {
+    return [combo, ...ZOOM_IN_ALIASES];
+  }
+  return [combo];
 }
 
 function isPlainObject(value) {
@@ -232,7 +262,10 @@ module.exports = {
   KEYBINDINGS_FILE_NAME,
   WINDOW_ACTION_IDS,
   WINDOW_BINDING_DEFAULTS,
+  ZOOM_IN_ALIASES,
+  ZOOM_IN_DEFAULT,
   createKeybindingsStore,
+  heldCombos,
   isValidCombo,
   sanitizeKeybindings,
 };

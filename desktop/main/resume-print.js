@@ -19,6 +19,14 @@ function registerResumePrintIpc({ ipcMain, BrowserWindow, window, origin, timeou
         },
       });
       windows.add(hidden);
+      // Same origin and session as the main window. Isolate and pin 100%
+      // before navigation so the user's page zoom cannot reflow the PDF.
+      try {
+        hidden.webContents.setZoomMode("isolated");
+      } catch { /* Older runtimes keep the default mode. */ }
+      try {
+        hidden.webContents.setZoomFactor(1);
+      } catch { /* Print still proceeds at the runtime's default factor. */ }
       const url = `${origin}/resume-print/${encodeURIComponent(versionId)}`;
       const failure = new Promise((_, reject) => {
         timer = setTimeout(() => reject(Object.assign(new Error("Print timed out"), { code: "timeout" })), timeoutMs);

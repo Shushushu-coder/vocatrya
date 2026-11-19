@@ -27,6 +27,36 @@ describe("resolved window theme", () => {
     handler(event, "light", "light"); expect(nativeTheme.themeSource).toBe("light");
     handler(event, "dark", "system"); expect(nativeTheme.themeSource).toBe("system");
   });
+  it("keeps the zoom-adjusted overlay height when the theme changes", () => {
+    const ipcMain = { handle: vi.fn(), removeHandler: vi.fn() };
+    const mainFrame = { url: "http://127.0.0.1:3737/dashboard" };
+    const window = {
+      isDestroyed: () => false,
+      webContents: { mainFrame },
+      setIcon: vi.fn(),
+      setTitleBarOverlay: vi.fn(),
+    };
+    registerWindowThemeIpc({
+      ipcMain,
+      nativeTheme: { themeSource: "system" },
+      window,
+      origin: "http://127.0.0.1:3737",
+      assetsRoot: "assets",
+      platform: "win32",
+      titleBarOverlay: (theme) => ({
+        height: 54,
+        color: theme === "dark" ? "#09090b" : "#ffffff",
+        symbolColor: theme === "dark" ? "#e4e4e7" : "#020817",
+      }),
+    });
+    const handler = ipcMain.handle.mock.calls[0][1];
+    handler({ sender: window.webContents, senderFrame: mainFrame }, "dark", "dark");
+    expect(window.setTitleBarOverlay).toHaveBeenCalledWith({
+      height: 54,
+      color: "#09090b",
+      symbolColor: "#e4e4e7",
+    });
+  });
   it("rejects subframes, foreign senders, origins and invalid themes", () => {
     const { handler, event } = setup();
     expect(() => handler(event, "system")).toThrow("Invalid resolved theme");

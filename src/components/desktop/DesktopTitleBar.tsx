@@ -97,6 +97,9 @@ const HELP_ACTIONS = [
   { action: "toggleSidebar", labelKey: "shortcuts.toggleSidebar" },
   { action: "historyBack", labelKey: "shortcuts.goBack" },
   { action: "historyForward", labelKey: "shortcuts.goForward" },
+  { action: "zoomIn", labelKey: "shortcuts.zoomIn" },
+  { action: "zoomOut", labelKey: "shortcuts.zoomOut" },
+  { action: "zoomReset", labelKey: "shortcuts.zoomReset" },
 ] as const;
 
 function ShortcutHelp() {

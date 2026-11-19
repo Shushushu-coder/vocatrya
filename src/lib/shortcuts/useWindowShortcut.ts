@@ -10,7 +10,11 @@
 
 import { useEffect, useRef } from "react";
 import { comboMatchesEvent } from "./combos";
-import { SHORTCUT_ACTIONS, type WindowShortcutActionId } from "./registry";
+import {
+  matchingCombos,
+  SHORTCUT_ACTIONS,
+  type WindowShortcutActionId,
+} from "./registry";
 import { useShortcutSnapshot } from "./bindings";
 import { isDesktopShell } from "@/components/desktop/desktopShell";
 
@@ -20,12 +24,14 @@ export function useWindowShortcut(
 ) {
   const combo = useShortcutSnapshot().window[actionId];
   const action = SHORTCUT_ACTIONS[actionId];
+  const combos = matchingCombos(action, combo).join("\n");
   const desktopOnly = action.scope === "desktopOnly";
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
   useEffect(() => {
-    if (!combo) return;
+    const active = combos ? combos.split("\n") : [];
+    if (active.length === 0) return;
     if (desktopOnly && !isDesktopShell()) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (action.suppressWhileComposing && event.isComposing) return;
@@ -35,10 +41,10 @@ export function useWindowShortcut(
           return;
         }
       }
-      if (!comboMatchesEvent(event, combo)) return;
+      if (!active.some((candidate) => comboMatchesEvent(event, candidate))) return;
       handlerRef.current(event);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [combo, desktopOnly, action]);
+  }, [combos, desktopOnly, action]);
 }

@@ -218,6 +218,28 @@ describe("global toggle hotkey", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("suspends the OS registration without writing the enabled flag", () => {
+    const { root, store } = makeStore();
+    const globalShortcut = makeGlobalShortcut();
+    const { hotkey } = makeHotkey({ store, globalShortcut, window: null });
+    hotkey.setGlobalToggle({ enabled: true });
+    expect(hotkey.status().registered).toBe(true);
+
+    hotkey.suspend();
+    expect(hotkey.status().enabled).toBe(true);
+    expect(hotkey.status().registered).toBe(false);
+    expect(store.read().globalToggleWindow.enabled).toBe(true);
+    expect(globalShortcut.isRegistered("CommandOrControl+Alt+V")).toBe(false);
+
+    hotkey.suspend();
+    hotkey.resume();
+    expect(hotkey.status().registered).toBe(false);
+    hotkey.resume();
+    expect(hotkey.status().registered).toBe(true);
+    expect(store.read().globalToggleWindow.enabled).toBe(true);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("restore on startup applies a stored enabled intent", () => {
     const { root, store } = makeStore();
     store.setGlobalToggle({ enabled: true, combo: "Mod+Shift+Space" });
@@ -243,11 +265,13 @@ describe("global toggle hotkey", () => {
 });
 
 describe("IPC channel contract", () => {
-  it("exposes the three channels the preload invokes", () => {
+  it("exposes the channels the preload invokes", () => {
     expect(GLOBAL_SHORTCUT_IPC_CHANNELS).toEqual({
       getState: "desktopShortcuts:getState",
       setWindowBinding: "desktopShortcuts:setWindowBinding",
       setGlobalToggle: "desktopShortcuts:setGlobalToggle",
+      suspend: "desktopShortcuts:suspendGlobal",
+      resume: "desktopShortcuts:resumeGlobal",
     });
   });
 });

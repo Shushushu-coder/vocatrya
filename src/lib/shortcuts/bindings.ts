@@ -9,6 +9,7 @@
 
 import { useSyncExternalStore } from "react";
 import {
+  matchingCombos,
   SHORTCUT_ACTIONS,
   WINDOW_ACTION_IDS,
   type ShortcutActionId,
@@ -154,24 +155,28 @@ export function useShortcutSnapshot(): ShortcutSnapshot {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
+function heldCombos(
+  state: Pick<ShortcutSnapshot, "window" | "global">,
+  actionId: ShortcutActionId,
+): string[] {
+  if (actionId === "toggleWindow") {
+    return state.global.enabled ? [state.global.combo] : [];
+  }
+  return matchingCombos(SHORTCUT_ACTIONS[actionId], state.window[actionId]);
+}
+
 // Conflict check across every rebindable action: two live actions may
 // never share a canonical combo. Cleared (null) bindings never conflict.
+// Zoom-in's default aliases count as held by zoom-in until it is rebound.
 export function findComboConflict(
   state: Pick<ShortcutSnapshot, "window" | "global">,
   actionId: ShortcutActionId,
   combo: string,
 ): ShortcutActionId | null {
-  if (actionId !== "toggleWindow") {
-    for (const id of WINDOW_ACTION_IDS) {
-      if (id !== actionId && state.window[id] === combo) return id;
-    }
-    if (state.global.enabled && state.global.combo === combo) {
-      return "toggleWindow";
-    }
-    return null;
-  }
-  for (const id of WINDOW_ACTION_IDS) {
-    if (state.window[id] === combo) return id;
+  const ids: ShortcutActionId[] = [...WINDOW_ACTION_IDS, "toggleWindow"];
+  for (const id of ids) {
+    if (id === actionId) continue;
+    if (heldCombos(state, id).includes(combo)) return id;
   }
   return null;
 }

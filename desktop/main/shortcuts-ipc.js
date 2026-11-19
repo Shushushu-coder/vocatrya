@@ -12,6 +12,7 @@
 const {
   GLOBAL_ACTION_ID,
   WINDOW_ACTION_IDS,
+  heldCombos,
   isValidCombo,
 } = require("./keybindings");
 const { GLOBAL_SHORTCUT_IPC_CHANNELS } = require("./global-shortcuts");
@@ -59,18 +60,12 @@ function readGlobalTogglePayload(payload) {
 // Two live actions may never share a canonical combo. Returns the id of
 // the action already holding `combo`, or null. The enabled global hotkey
 // participates because a shared combo would double-fire while focused.
+// Zoom-in's default aliases count as held until that action is rebound.
 function findConflict(state, actionId, combo) {
-  if (actionId !== GLOBAL_ACTION_ID) {
-    for (const id of WINDOW_ACTION_IDS) {
-      if (id !== actionId && state.window[id] === combo) return id;
-    }
-    if (state.globalToggleWindow.enabled && state.globalToggleWindow.combo === combo) {
-      return GLOBAL_ACTION_ID;
-    }
-    return null;
-  }
-  for (const id of WINDOW_ACTION_IDS) {
-    if (state.window[id] === combo) return id;
+  const ids = [...WINDOW_ACTION_IDS, GLOBAL_ACTION_ID];
+  for (const id of ids) {
+    if (id === actionId) continue;
+    if (heldCombos(state, id).includes(combo)) return id;
   }
   return null;
 }
@@ -162,6 +157,12 @@ function registerShortcutsIpc(ipcMain, { store, hotkey, getWindow, getOrigin }) 
       service.setWindowBinding(payload),
     [GLOBAL_SHORTCUT_IPC_CHANNELS.setGlobalToggle]: (_event, payload) =>
       service.setGlobalToggle(payload),
+    [GLOBAL_SHORTCUT_IPC_CHANNELS.suspend]: () => {
+      hotkey.suspend();
+    },
+    [GLOBAL_SHORTCUT_IPC_CHANNELS.resume]: () => {
+      hotkey.resume();
+    },
   };
   for (const [channel, handler] of Object.entries(handlers)) {
     ipcMain.handle(channel, (event, payload) => {

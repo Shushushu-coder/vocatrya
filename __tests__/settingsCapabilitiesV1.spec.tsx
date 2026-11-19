@@ -186,7 +186,7 @@ describe("ShortcutsSettings — honest capability page", () => {
     await waitFor(() =>
       expect(
         within(page).getAllByText("Desktop app only"),
-      ).toHaveLength(4),
+      ).toHaveLength(7),
     );
   });
 

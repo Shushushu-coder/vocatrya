@@ -8,17 +8,14 @@ const {
   GLOBAL_TOGGLE_DEFAULT_COMBO,
   KEYBINDINGS_FILE_NAME,
   WINDOW_ACTION_IDS,
+  WINDOW_BINDING_DEFAULTS,
   createKeybindingsStore,
   isValidCombo,
   sanitizeKeybindings,
 } = createRequire(import.meta.url)("./keybindings.js");
 
 const DEFAULT_STATE = {
-  window: {
-    toggleSidebar: "Mod+B",
-    historyBack: "Alt+Left",
-    historyForward: "Alt+Right",
-  },
+  window: { ...WINDOW_BINDING_DEFAULTS },
   globalToggleWindow: { enabled: false, combo: GLOBAL_TOGGLE_DEFAULT_COMBO },
 };
 
@@ -125,6 +122,7 @@ describe("keybindings store", () => {
     });
     expect(state).toEqual({
       window: {
+        ...WINDOW_BINDING_DEFAULTS,
         toggleSidebar: "Alt+S",
         historyBack: null,
         historyForward: "Alt+Right",
@@ -140,6 +138,9 @@ describe("keybindings store", () => {
       "toggleSidebar",
       "historyBack",
       "historyForward",
+      "zoomIn",
+      "zoomOut",
+      "zoomReset",
     ]);
     for (const id of WINDOW_ACTION_IDS) {
       expect(typeof DEFAULT_STATE.window[id]).toBe("string");

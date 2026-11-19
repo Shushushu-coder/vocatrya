@@ -192,7 +192,10 @@ interface VocatryaDesktopLifecycleState {
 type WindowShortcutActionId =
   | "toggleSidebar"
   | "historyBack"
-  | "historyForward";
+  | "historyForward"
+  | "zoomIn"
+  | "zoomOut"
+  | "zoomReset";
 
 interface VocatryaShortcutState {
   window: Record<WindowShortcutActionId, string | null>;
@@ -237,6 +240,12 @@ interface VocatryaDesktopBridge {
     enabled?: boolean;
     combo?: string;
   }): Promise<VocatryaShortcutWriteResult>;
+  /** Drop the OS hotkey registration without changing the saved enabled flag. */
+  suspendGlobalShortcut(): Promise<void>;
+  resumeGlobalShortcut(): Promise<void>;
+  getZoomFactor(): Promise<number>;
+  adjustZoom(direction: "in" | "out" | "reset"): Promise<number>;
+  onZoomFactor(callback: (factor: number) => void): () => void;
 }
 
 interface Window {

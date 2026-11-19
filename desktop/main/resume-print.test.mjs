@@ -17,6 +17,8 @@ function setup({ load, ready, print, timeoutMs = 30_000 } = {}) {
         setWindowOpenHandler: vi.fn(), getURL: () => this.url,
         executeJavaScript: vi.fn(ready || (() => Promise.resolve(true))),
         printToPDF: vi.fn(print || (() => Promise.resolve(Buffer.from("%PDF-test")))),
+        setZoomMode: vi.fn(),
+        setZoomFactor: vi.fn(),
       });
       this.loadURL = vi.fn(async (url) => { this.url = url; if (load) await load(this, url); });
       this.destroy = vi.fn(() => { this.destroyed = true; this.emit("closed"); });
@@ -41,6 +43,10 @@ describe("resume print IPC", () => {
     expect(hidden[0].loadURL).toHaveBeenCalledWith(`${origin}/resume-print/version-1`);
     expect(hidden[0].options).toMatchObject({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, session: window.webContents.session } });
     expect(hidden[0].webContents.executeJavaScript.mock.calls[0][0]).toContain('dataset.resumePrintReady === expected');
+    expect(hidden[0].webContents.setZoomMode).toHaveBeenCalledWith("isolated");
+    expect(hidden[0].webContents.setZoomFactor).toHaveBeenCalledWith(1);
+    expect(hidden[0].webContents.setZoomMode.mock.invocationCallOrder[0]).toBeLessThan(hidden[0].loadURL.mock.invocationCallOrder[0]);
+    expect(hidden[0].webContents.setZoomFactor.mock.invocationCallOrder[0]).toBeLessThan(hidden[0].loadURL.mock.invocationCallOrder[0]);
     expect(hidden[0].webContents.printToPDF).toHaveBeenCalledWith({ pageSize: "A4", landscape: false, printBackground: true, preferCSSPageSize: true });
     expect(hidden[0].destroy).toHaveBeenCalledOnce();
   });

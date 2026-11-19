@@ -51,6 +51,8 @@ const NAMED_EVENT_KEYS: Record<string, string> = {
   "-": "Minus",
   "=": "Equal",
   "+": "Plus",
+  // Numpad plus reports "Add" on some platforms and "+" on others.
+  Add: "Plus",
 };
 
 // Keys that are modifiers themselves — pressing one during capture means

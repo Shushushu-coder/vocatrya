@@ -15,12 +15,12 @@ const { registerWindowThemeIpc } = require("./window-theme");
 function createMainWindowIpcRegistry() {
   let activeRelease = null;
 
-  function registerWindowIpc({ ipcMain, BrowserWindow, nativeTheme, window, origin, assetsRoot }) {
+  function registerWindowIpc({ ipcMain, BrowserWindow, nativeTheme, window, origin, assetsRoot, titleBarOverlay }) {
     if (activeRelease) activeRelease();
     const unregisters = [];
     try {
       unregisters.push(registerResumePrintIpc({ ipcMain, BrowserWindow, window, origin }));
-      unregisters.push(registerWindowThemeIpc({ ipcMain, nativeTheme, window, origin, assetsRoot }));
+      unregisters.push(registerWindowThemeIpc({ ipcMain, nativeTheme, window, origin, assetsRoot, titleBarOverlay }));
     } catch (error) {
       // Never leak a half-registered surface: a duplicate-channel failure
       // rolls our handlers back and leaves the foreign owner untouched.

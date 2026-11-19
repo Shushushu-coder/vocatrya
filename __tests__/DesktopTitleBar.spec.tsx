@@ -118,7 +118,8 @@ describe("DesktopTitleBar", () => {
       await screen.findByText("Expand or collapse the sidebar")
     ).toBeInTheDocument();
     expect(screen.getByText("Go back one page")).toBeInTheDocument();
-    expect(screen.getByText("Ctrl")).toBeInTheDocument();
+    expect(screen.getAllByText("Ctrl").length).toBeGreaterThan(0);
+    expect(screen.getByText("=")).toBeInTheDocument();
     expect(screen.getAllByText("Alt")).toHaveLength(2);
     await user.keyboard("{Escape}");
   });

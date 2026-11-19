@@ -276,6 +276,9 @@
     "toggleSidebar": "展开或收起侧边栏",
     "goBack": "后退一页",
     "goForward": "前进一页",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "zoomReset": "恢复 100%",
     "closeHint": "按 Esc 关闭此面板。"
   },
   "auth": {

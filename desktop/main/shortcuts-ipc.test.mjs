@@ -55,6 +55,9 @@ describe("shortcuts IPC service", () => {
         toggleSidebar: "Mod+B",
         historyBack: "Alt+Left",
         historyForward: "Alt+Right",
+        zoomIn: "Mod+Equal",
+        zoomOut: "Mod+Minus",
+        zoomReset: "Mod+0",
       },
       global: {
         enabled: false,
@@ -173,6 +176,7 @@ describe("findConflict", () => {
       },
       globalToggleWindow: { enabled: false, combo: "Mod+Alt+V" },
     };
+    expect(findConflict(base, "historyForward", "Mod+Equal")).toBeNull();
     expect(findConflict(base, "historyForward", "Mod+B")).toBe("toggleSidebar");
     expect(findConflict(base, "historyForward", "Mod+Alt+V")).toBeNull();
     expect(
@@ -195,6 +199,37 @@ describe("findConflict", () => {
         "Alt+Left",
       ),
     ).toBe("historyBack");
+  });
+
+  it("treats zoom-in default aliases as taken, and frees them after a rebind", () => {
+    const base = {
+      window: {
+        toggleSidebar: "Mod+B",
+        historyBack: "Alt+Left",
+        historyForward: "Alt+Right",
+        zoomIn: "Mod+Equal",
+        zoomOut: "Mod+Minus",
+        zoomReset: "Mod+0",
+      },
+      globalToggleWindow: { enabled: false, combo: "Mod+Alt+V" },
+    };
+    expect(findConflict(base, "historyBack", "Mod+Shift+Plus")).toBe("zoomIn");
+    expect(findConflict(base, "historyBack", "Mod+Plus")).toBe("zoomIn");
+    expect(findConflict(base, "zoomIn", "Mod+Shift+Plus")).toBeNull();
+    expect(
+      findConflict(
+        { ...base, window: { ...base.window, zoomIn: "Mod+Shift+K" } },
+        "historyBack",
+        "Mod+Equal",
+      ),
+    ).toBeNull();
+    expect(
+      findConflict(
+        { ...base, window: { ...base.window, zoomIn: "Mod+Shift+K" } },
+        "historyBack",
+        "Mod+Shift+Plus",
+      ),
+    ).toBeNull();
   });
 });
 
@@ -246,7 +281,7 @@ describe("registerShortcutsIpc sender trust", () => {
 
   it("release removes every registered handler", () => {
     const { handlers, release, root } = makeHarness();
-    expect(handlers.size).toBe(3);
+    expect(handlers.size).toBe(5);
     release();
     expect(handlers.size).toBe(0);
     fs.rmSync(root, { recursive: true, force: true });

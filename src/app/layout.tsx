@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { DesktopTitleBar } from "@/components/desktop/DesktopTitleBar";
+import { DesktopZoom } from "@/components/desktop/DesktopZoom";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,7 @@ export default async function RootLayout({ children }: Readonly<Props>) {
             {/* Desktop-only window chrome; CSS hides it outside Electron, so
                 the web build and the hidden print window render unchanged. */}
             <DesktopTitleBar />
+            <DesktopZoom />
             {children}
             <Toaster />
           </ThemeProvider>

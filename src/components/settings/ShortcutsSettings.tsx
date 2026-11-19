@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { Lock } from "lucide-react";
 import { useI18n } from "@/i18n";
 import type { Locale } from "@/i18n";
 import { Badge } from "../ui/badge";
@@ -15,6 +16,7 @@ import {
   isModifierKey,
 } from "@/lib/shortcuts/combos";
 import {
+  matchingCombos,
   SHORTCUT_ACTIONS,
   type ShortcutActionId,
   type WindowShortcutActionId,
@@ -64,6 +66,7 @@ function ShortcutRow({
   name,
   description,
   keys,
+  chords,
   joiner,
   note,
   aside,
@@ -72,6 +75,7 @@ function ShortcutRow({
   name: string;
   description: string;
   keys?: string[];
+  chords?: string[][];
   joiner?: "+" | "/";
   note?: ReactNode;
   aside?: ReactNode;
@@ -91,8 +95,12 @@ function ShortcutRow({
         </p>
         {note}
       </div>
-      <div className="flex shrink-0 items-center gap-2 pt-0.5">
-        {keys && <KeyCombo keys={keys} joiner={joiner} />}
+      <div className="inline-flex max-w-full flex-wrap items-center justify-end gap-2 pt-0.5">
+        {chords
+          ? chords.map((chord) => (
+              <KeyCombo key={chord.join("+")} keys={chord} />
+            ))
+          : keys && <KeyCombo keys={keys} joiner={joiner} />}
         {aside}
       </div>
     </div>
@@ -116,6 +124,15 @@ function ShortcutGroup({
 
 type RowErrors = Partial<Record<ShortcutActionId, string>>;
 
+type Capture =
+  | { action: ShortcutActionId; stage: "listen" }
+  | {
+      action: ShortcutActionId;
+      stage: "review";
+      combo: string;
+      conflict: ShortcutActionId | null;
+    };
+
 // The rebindable actions: the three window-scope bindings plus the global
 // show/hide hotkey. Recording a new combo uses a capture-phase window
 // listener so the pressed keys never reach the app's own shortcuts — and
@@ -124,7 +141,7 @@ function ShortcutsSettings() {
   const copy = useCopy();
   const snapshot = useShortcutSnapshot();
   const [desktopShell, setDesktopShell] = useState<boolean | null>(null);
-  const [recording, setRecording] = useState<ShortcutActionId | null>(null);
+  const [capture, setCapture] = useState<Capture | null>(null);
   const [rowErrors, setRowErrors] = useState<RowErrors>({});
   const [saving, setSaving] = useState(false);
   const snapshotRef = useRef(snapshot);
@@ -213,18 +230,33 @@ function ShortcutsSettings() {
     [setRowError],
   );
 
-  // Capture-phase keydown while recording: stopImmediatePropagation keeps
-  // the candidate combo away from the app's own window shortcuts. Esc
-  // cancels; a bare modifier press means the user is still composing; an
-  // unbindable key or a conflict reports the reason inline.
+  const recording = capture?.action ?? null;
+
+  // Hide the OS-level hotkey while a combo is being captured. This does
+  // not write the saved enabled flag. Window shortcuts are already stopped
+  // by the capture-phase listener below.
   useEffect(() => {
-    if (!recording) return;
-    const action = recording;
+    if (!capture) return;
+    const bridge = window.vocatryaDesktop;
+    if (!bridge || typeof bridge.suspendGlobalShortcut !== "function") return;
+    void bridge.suspendGlobalShortcut();
+    return () => {
+      void bridge.resumeGlobalShortcut?.();
+    };
+  }, [capture]);
+
+  // Capture-phase keydown while listening: stopImmediatePropagation keeps
+  // the candidate combo away from the app's own window shortcuts. Esc
+  // cancels; a bare modifier press means the user is still composing.
+  // A finished combo is shown for confirmation and is not written yet.
+  useEffect(() => {
+    if (!capture || capture.stage !== "listen") return;
+    const action = capture.action;
     const onKeyDown = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.key === "Escape") {
-        setRecording(null);
+        setCapture(null);
         return;
       }
       if (isModifierKey(event.key)) return;
@@ -237,27 +269,24 @@ function ShortcutsSettings() {
             en: "A shortcut needs Ctrl or Alt plus a letter, digit, function key, or named key.",
           }),
         );
-        setRecording(null);
+        setCapture(null);
         return;
       }
       const conflict = findComboConflict(snapshotRef.current, action, combo);
-      if (conflict) {
-        setRowError(
-          action,
-          copyRef.current("settings.shortcutsConflict", {
-            "zh-CN": "该组合键已被其他快捷键使用。",
-            en: "This combination is already used by another shortcut.",
-          }),
-        );
-        setRecording(null);
-        return;
-      }
-      setRecording(null);
-      void saveCombo(action, combo);
+      setRowError(
+        action,
+        conflict
+          ? copyRef.current("settings.shortcutsConflict", {
+              "zh-CN": "该组合键已被其他快捷键使用。",
+              en: "This combination is already used by another shortcut.",
+            })
+          : null,
+      );
+      setCapture({ action, stage: "review", combo, conflict });
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [recording, saveCombo, setRowError]);
+  }, [capture, setRowError]);
 
   const editable = snapshot.loaded && snapshot.bridgeAvailable;
   const loading = !snapshot.loaded;
@@ -292,7 +321,7 @@ function ShortcutsSettings() {
           disabled={saving || recording !== null}
           onClick={() => {
             setRowError(action, null);
-            setRecording(action);
+            setCapture({ action, stage: "listen" });
           }}
           data-testid={`shortcut-rebind-${action}`}
         >
@@ -325,6 +354,55 @@ function ShortcutsSettings() {
           {copy("settings.shortcutsReset", {
             "zh-CN": "恢复默认",
             en: "Reset",
+          })}
+        </Button>
+      </>
+    );
+  }
+
+  function captureAside(action: ShortcutActionId) {
+    if (!capture || capture.action !== action) return null;
+    if (capture.stage === "listen") {
+      return (
+        <span className="text-xs text-muted-foreground">
+          {copy("settings.shortcutsRecording", {
+            "zh-CN": "按下新的组合键，Esc 取消。",
+            en: "Press the new combination — Esc cancels.",
+          })}
+        </span>
+      );
+    }
+    return (
+      <>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={saving || capture.conflict !== null}
+          onClick={() => {
+            const combo = capture.combo;
+            setCapture(null);
+            void saveCombo(action, combo);
+          }}
+          data-testid={`shortcut-commit-${action}`}
+        >
+          {copy("settings.shortcutsSave", {
+            "zh-CN": "保存",
+            en: "Save",
+          })}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={saving}
+          onClick={() => {
+            setRowError(action, null);
+            setCapture(null);
+          }}
+          data-testid={`shortcut-cancel-${action}`}
+        >
+          {copy("settings.shortcutsCancel", {
+            "zh-CN": "取消",
+            en: "Cancel",
           })}
         </Button>
       </>
@@ -391,7 +469,56 @@ function ShortcutsSettings() {
       }),
       scopeNote: desktopOnlyBadge,
     },
+    {
+      action: "zoomIn",
+      name: copy("shortcuts.zoomIn", {
+        "zh-CN": "放大",
+        en: "Zoom in",
+      }),
+      description: copy("settings.shortcutsZoomInScope", {
+        "zh-CN":
+          "放大整个窗口内容。默认同时接受 Ctrl+=、Ctrl+Shift++ 和小键盘加号；改绑后只保留录下的那一条。",
+        en: "Enlarges the whole window. Ctrl+=, Ctrl+Shift++ and numpad + all work until this shortcut is rebound.",
+      }),
+      scopeNote: desktopOnlyBadge,
+    },
+    {
+      action: "zoomOut",
+      name: copy("shortcuts.zoomOut", {
+        "zh-CN": "缩小",
+        en: "Zoom out",
+      }),
+      description: copy("settings.shortcutsZoomScope", {
+        "zh-CN": "缩小整个窗口内容。输入框聚焦时同样生效。",
+        en: "Shrinks the whole window, including while a text input is focused.",
+      }),
+      scopeNote: desktopOnlyBadge,
+    },
+    {
+      action: "zoomReset",
+      name: copy("shortcuts.zoomReset", {
+        "zh-CN": "恢复 100%",
+        en: "Reset zoom",
+      }),
+      description: copy("settings.shortcutsZoomResetScope", {
+        "zh-CN": "把窗口内容恢复到 100%。",
+        en: "Restores the window contents to 100%.",
+      }),
+      scopeNote: desktopOnlyBadge,
+    },
   ];
+
+  function chordsFor(action: WindowShortcutActionId): string[][] | undefined {
+    if (capture?.action === action && capture.stage === "review") {
+      return [comboToDisplayKeys(capture.combo)];
+    }
+    if (capture?.action === action) return undefined;
+    const combo = snapshot.window[action];
+    if (!combo) return undefined;
+    return matchingCombos(SHORTCUT_ACTIONS[action], combo).map((item) =>
+      comboToDisplayKeys(item),
+    );
+  }
 
   const globalState = snapshot.global;
   const globalStatus = !globalState.enabled
@@ -457,24 +584,11 @@ function ShortcutsSettings() {
             testId={`shortcut-row-${row.action}`}
             name={row.name}
             description={row.description}
-            keys={
-              recording === row.action
-                ? undefined
-                : snapshot.window[row.action]
-                  ? comboToDisplayKeys(snapshot.window[row.action])
-                  : undefined
-            }
+            chords={chordsFor(row.action)}
             note={rowNote(row.action)}
             aside={
               <>
-                {recording === row.action && (
-                  <span className="text-xs text-muted-foreground">
-                    {copy("settings.shortcutsRecording", {
-                      "zh-CN": "按下新的组合键，Esc 取消。",
-                      en: "Press the new combination — Esc cancels.",
-                    })}
-                  </span>
-                )}
+                {captureAside(row.action)}
                 {recording !== row.action &&
                   snapshot.window[row.action] === null && (
                     <span className="text-xs text-muted-foreground">
@@ -509,10 +623,12 @@ function ShortcutsSettings() {
               "窗口隐藏或最小化时按组合键唤出并聚焦；窗口可见且聚焦时将其隐藏。应用未运行时不生效。",
             en: "Hidden or minimized windows are restored and focused; a visible, focused window hides. Inactive while the app is not running.",
           })}
-          keys={
-            recording === "toggleWindow"
-              ? undefined
-              : comboToDisplayKeys(globalState.combo)
+          chords={
+            capture?.action === "toggleWindow" && capture.stage === "review"
+              ? [comboToDisplayKeys(capture.combo)]
+              : capture?.action === "toggleWindow"
+                ? undefined
+                : [comboToDisplayKeys(globalState.combo)]
           }
           note={rowNote(
             "toggleWindow",
@@ -579,14 +695,7 @@ function ShortcutsSettings() {
                   data-testid="shortcut-global-toggle"
                 />
               )}
-              {recording === "toggleWindow" && (
-                <span className="text-xs text-muted-foreground">
-                  {copy("settings.shortcutsRecording", {
-                    "zh-CN": "按下新的组合键，Esc 取消。",
-                    en: "Press the new combination — Esc cancels.",
-                  })}
-                </span>
-              )}
+              {captureAside("toggleWindow")}
               {editControls("toggleWindow")}
             </>
           }
@@ -610,6 +719,7 @@ function ShortcutsSettings() {
           })}
           keys={["←", "→"]}
           joiner="/"
+          aside={<Lock className="size-3 text-muted-foreground" aria-hidden="true" />}
         />
         <ShortcutRow
           name={copy("shortcuts.toggleSidebar", {

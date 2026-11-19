@@ -35,6 +35,7 @@ const { createDesktopSettingsStore, DESKTOP_SETTINGS_FILE_NAME } = require("./de
 const { createKeybindingsStore, KEYBINDINGS_FILE_NAME } = require("./keybindings");
 const { createGlobalToggleHotkey } = require("./global-shortcuts");
 const { registerShortcutsIpc } = require("./shortcuts-ipc");
+const { createZoomController, registerZoomIpc, ZOOM_FILE_NAME } = require("./zoom");
 const { registerInputPreferencesIpc } = require("./input-preferences");
 const { registerResumePreviewPreferencesIpc } = require("./resume-preview-preferences");
 const { registerAgentRoleSlotsIpc, AGENT_ROLE_SLOTS_FILE_NAME } = require("./agent-role-slots");
@@ -377,11 +378,17 @@ if (!singleInstance) {
   // Device-level keybindings sit beside desktop-settings.json in the same
   // app-owned config directory — window-scope rebinds plus the global
   // show/hide hotkey intent.
+  const configDir = foundationLayout
+    ? foundationLayout.configDir
+    : path.join(stateRoot(), "config");
   const keybindingsStore = createKeybindingsStore({
-    filePath: path.join(
-      foundationLayout ? foundationLayout.configDir : path.join(stateRoot(), "config"),
-      KEYBINDINGS_FILE_NAME,
-    ),
+    filePath: path.join(configDir, KEYBINDINGS_FILE_NAME),
+  });
+  const zoomController = createZoomController({
+    filePath: path.join(configDir, ZOOM_FILE_NAME),
+    getWindow: () => mainWindow,
+    nativeTheme,
+    logger: console,
   });
   const desktopLifecycle = createDesktopLifecycle({
     app,
@@ -431,11 +438,7 @@ if (!singleInstance) {
       ...(process.platform === "win32"
         ? {
             titleBarStyle: "hidden",
-            titleBarOverlay: {
-              height: 36,
-              color: nativeTheme.shouldUseDarkColors ? "#09090b" : "#ffffff",
-              symbolColor: nativeTheme.shouldUseDarkColors ? "#e4e4e7" : "#020817",
-            },
+            titleBarOverlay: zoomController.overlayOptions(),
           }
         : {}),
       webPreferences: {
@@ -443,6 +446,7 @@ if (!singleInstance) {
         nodeIntegration: false,
         sandbox: true,
         preload: path.join(__dirname, "preload.js"),
+        zoomFactor: zoomController.factor(),
       },
     });
     if (process.platform === "win32") {
@@ -452,6 +456,7 @@ if (!singleInstance) {
       });
     }
     desktopLifecycle.attachWindow(mainWindow);
+    zoomController.attach(mainWindow);
     const origin = `http://127.0.0.1:${backendPort}`;
     configureNavigation(mainWindow, origin);
     const createdWindow = mainWindow;
@@ -460,6 +465,7 @@ if (!singleInstance) {
     mainWindowIpc.registerWindowIpc({
       ipcMain, BrowserWindow, nativeTheme, window: createdWindow, origin,
       assetsRoot: app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "assets"),
+      titleBarOverlay: (theme) => zoomController.overlayOptions(theme),
     });
     createdWindow.on("closed", () => {
       // A stale "closed" must never detach the window that replaced this one.
@@ -487,6 +493,8 @@ if (!singleInstance) {
       // File/Edit/View/Window menu frees the top of the window for the
       // custom titlebar. Text-editing accelerators (Ctrl+C/V/X/A/Z/Y) are
       // native to Chromium edit controls and keep working without it.
+      // Page zoom (Ctrl +/-/0) is not: those accelerators lived on the
+      // View menu, so the shell owns them through webContents.setZoomFactor.
       Menu.setApplicationMenu(null);
       // Real tray surface from the first launch: restore + explicit quit are
       // always reachable, and close-to-tray has somewhere to hide to the
@@ -509,6 +517,11 @@ if (!singleInstance) {
         getOrigin: () => (backendPort ? `http://127.0.0.1:${backendPort}` : null),
       });
       globalToggleHotkey.apply();
+      registerZoomIpc(ipcMain, {
+        controller: zoomController,
+        getWindow: () => mainWindow,
+        getOrigin: () => (backendPort ? `http://127.0.0.1:${backendPort}` : null),
+      });
       registerInputPreferencesIpc({
         ipcMain,
         filePath: path.join(foundationLayout ? foundationLayout.configDir : path.join(stateRoot(), "config"), "input-preferences.json"),

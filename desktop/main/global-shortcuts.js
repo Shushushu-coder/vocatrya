@@ -22,6 +22,8 @@ const GLOBAL_SHORTCUT_IPC_CHANNELS = Object.freeze({
   getState: "desktopShortcuts:getState",
   setWindowBinding: "desktopShortcuts:setWindowBinding",
   setGlobalToggle: "desktopShortcuts:setGlobalToggle",
+  suspend: "desktopShortcuts:suspendGlobal",
+  resume: "desktopShortcuts:resumeGlobal",
 });
 
 // Canonical combo -> Electron accelerator. "Mod" is the platform primary
@@ -90,6 +92,11 @@ function createGlobalToggleHotkey({
     return comboToAccelerator(combo);
   }
 
+  // Recording a new combo must not flip the persisted enabled flag. A
+  // suspend count drops the OS registration and apply() stays quiet until
+  // the matching resume.
+  let suspendCount = 0;
+
   function releaseHeld() {
     if (!heldAccelerator) return;
     try {
@@ -106,6 +113,7 @@ function createGlobalToggleHotkey({
     const desired = store.read().globalToggleWindow;
     releaseHeld();
     lastError = null;
+    if (suspendCount > 0) return null;
     if (!desired.enabled) return null;
     const accelerator = acceleratorFor(desired.combo);
     if (!accelerator) {
@@ -168,7 +176,19 @@ function createGlobalToggleHotkey({
     return { ok: true };
   }
 
+  function suspend() {
+    suspendCount += 1;
+    if (suspendCount === 1) releaseHeld();
+  }
+
+  function resume() {
+    if (suspendCount === 0) return;
+    suspendCount -= 1;
+    if (suspendCount === 0) apply();
+  }
+
   function dispose() {
+    suspendCount = 0;
     releaseHeld();
     try {
       globalShortcut.unregisterAll();
@@ -180,8 +200,10 @@ function createGlobalToggleHotkey({
   return {
     apply,
     dispose,
+    resume,
     setGlobalToggle,
     status,
+    suspend,
     toggle,
     get heldAccelerator() {
       return heldAccelerator;

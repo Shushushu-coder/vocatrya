@@ -2,7 +2,7 @@ const path = require("node:path");
 
 // ICO 16/24px entries are explicit Optical symbols. All larger entries are
 // byte-identical to static icon.ico, so Electron's ICON_BIG stays app identity.
-function registerWindowThemeIpc({ ipcMain, nativeTheme, window, origin, assetsRoot, platform = process.platform }) {
+function registerWindowThemeIpc({ ipcMain, nativeTheme, window, origin, assetsRoot, platform = process.platform, titleBarOverlay }) {
   const channel = "window:setTheme";
   ipcMain.handle(channel, (event, theme, preference = theme) => {
     if (window.isDestroyed() || event.sender !== window.webContents ||
@@ -21,9 +21,11 @@ function registerWindowThemeIpc({ ipcMain, nativeTheme, window, origin, assetsRo
     // The caption-button overlay must match the renderer-drawn titlebar,
     // which uses --background/--foreground (globals.css).
     try {
-      window.setTitleBarOverlay(theme === "dark"
-        ? { height: 36, color: "#09090b", symbolColor: "#e4e4e7" }
-        : { height: 36, color: "#ffffff", symbolColor: "#020817" });
+      window.setTitleBarOverlay(typeof titleBarOverlay === "function"
+        ? titleBarOverlay(theme)
+        : theme === "dark"
+          ? { height: 36, color: "#09090b", symbolColor: "#e4e4e7" }
+          : { height: 36, color: "#ffffff", symbolColor: "#020817" });
     } catch {
       // Pre-overlay Electron builds: icon swap above still applies.
     }

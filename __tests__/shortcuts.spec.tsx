@@ -34,6 +34,9 @@ function mockBridge(state?: {
       toggleSidebar: "Mod+B",
       historyBack: "Alt+Left",
       historyForward: "Alt+Right",
+      zoomIn: "Mod+Equal",
+      zoomOut: "Mod+Minus",
+      zoomReset: "Mod+0",
       ...state?.window,
     },
     global: {
@@ -52,6 +55,8 @@ function mockBridge(state?: {
         return { ok: true as const, state: JSON.parse(JSON.stringify(current)) };
       },
     ),
+    suspendGlobalShortcut: vi.fn(async () => {}),
+    resumeGlobalShortcut: vi.fn(async () => {}),
     setGlobalShortcut: vi.fn(
       async (input: { enabled?: boolean; combo?: string }) => {
         if (input.enabled !== undefined) current.global.enabled = input.enabled;
@@ -86,6 +91,7 @@ describe("combo normalization", () => {
     expect(normalizeEventKey("Escape")).toBe("Esc");
     expect(normalizeEventKey(",")).toBe("Comma");
     expect(normalizeEventKey("+")).toBe("Plus");
+    expect(normalizeEventKey("Add")).toBe("Plus");
     expect(normalizeEventKey("F12")).toBe("F12");
     expect(normalizeEventKey("Control")).toBeNull();
     expect(normalizeEventKey("?")).toBeNull();
@@ -211,7 +217,7 @@ describe("ShortcutsSettings — browser surface", () => {
       expect(screen.getByTestId("shortcuts-env-note")).toBeInTheDocument(),
     );
     expect(page.querySelector("button, input, select, [role='switch']")).toBeNull();
-    expect(screen.getAllByText("Desktop app only")).toHaveLength(4);
+    expect(screen.getAllByText("Desktop app only")).toHaveLength(7);
     expect(screen.getByText("Show or hide the main window")).toBeInTheDocument();
     const kbds = [...page.querySelectorAll("kbd")].map((k) => k.textContent);
     expect(kbds).toEqual(expect.arrayContaining(["Ctrl", "B", "Alt", "←", "→", "V"]));
@@ -233,6 +239,9 @@ describe("ShortcutsSettings — desktop bridge surface", () => {
       ctrlKey: true,
       shiftKey: true,
     });
+    expect(bridge.setWindowShortcut).not.toHaveBeenCalled();
+    expect(bridge.suspendGlobalShortcut).toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("shortcut-commit-toggleSidebar"));
     await waitFor(() =>
       expect(bridge.setWindowShortcut).toHaveBeenCalledWith({
         action: "toggleSidebar",
@@ -315,6 +324,9 @@ describe("ShortcutsSettings — desktop bridge surface", () => {
           toggleSidebar: "Mod+B",
           historyBack: "Alt+Left",
           historyForward: "Alt+Right",
+          zoomIn: "Mod+Equal",
+          zoomOut: "Mod+Minus",
+          zoomReset: "Mod+0",
         },
         global: {
           enabled: true,

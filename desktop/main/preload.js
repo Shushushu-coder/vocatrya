@@ -200,6 +200,14 @@ const DESKTOP_SHORTCUT_CHANNELS = Object.freeze({
   getState: "desktopShortcuts:getState",
   setWindowBinding: "desktopShortcuts:setWindowBinding",
   setGlobalToggle: "desktopShortcuts:setGlobalToggle",
+  suspend: "desktopShortcuts:suspendGlobal",
+  resume: "desktopShortcuts:resumeGlobal",
+});
+
+const DESKTOP_ZOOM_CHANNELS = Object.freeze({
+  get: "desktopZoom:get",
+  adjust: "desktopZoom:adjust",
+  changed: "desktopZoom:changed",
 });
 
 contextBridge.exposeInMainWorld("vocatryaDesktop", {
@@ -223,4 +231,21 @@ contextBridge.exposeInMainWorld("vocatryaDesktop", {
     ipcRenderer.invoke(DESKTOP_SHORTCUT_CHANNELS.setWindowBinding, input),
   setGlobalShortcut: (input) =>
     ipcRenderer.invoke(DESKTOP_SHORTCUT_CHANNELS.setGlobalToggle, input),
+  // Ephemeral: hides the OS hotkey while a combo is being recorded and
+  // does not write the user's enabled flag.
+  suspendGlobalShortcut: () =>
+    ipcRenderer.invoke(DESKTOP_SHORTCUT_CHANNELS.suspend),
+  resumeGlobalShortcut: () =>
+    ipcRenderer.invoke(DESKTOP_SHORTCUT_CHANNELS.resume),
+  getZoomFactor: () => ipcRenderer.invoke(DESKTOP_ZOOM_CHANNELS.get),
+  adjustZoom: (direction) =>
+    ipcRenderer.invoke(DESKTOP_ZOOM_CHANNELS.adjust, direction),
+  onZoomFactor: (callback) => {
+    const listener = (_event, factor) => {
+      if (typeof factor === "number") callback(factor);
+    };
+    ipcRenderer.on(DESKTOP_ZOOM_CHANNELS.changed, listener);
+    return () =>
+      ipcRenderer.removeListener(DESKTOP_ZOOM_CHANNELS.changed, listener);
+  },
 });
