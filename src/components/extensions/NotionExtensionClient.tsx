@@ -23,6 +23,8 @@ const CAPABILITIES: Array<{ key: NotionCopyKey; flag: keyof NotionExtensionState
   { key: "cap.createPage", flag: "createPage" },
   { key: "cap.appendContent", flag: "appendContent" },
   { key: "cap.updateRecord", flag: "updateRecord" },
+  { key: "cap.updateContent", flag: "updateContent" },
+  { key: "cap.deletePages", flag: "deletePages" },
 ];
 
 export function NotionExtensionClient() {

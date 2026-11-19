@@ -95,7 +95,9 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       <NotionReadResultCard output={part.output as AgentNotionReadResult} />
     ) : toolName === "notion_create_page" ||
       toolName === "notion_append_content" ||
-      toolName === "notion_update_record" ? (
+      toolName === "notion_update_record" ||
+      toolName === "notion_update_content" ||
+      toolName === "notion_delete_pages" ? (
       <NotionWriteResultCard output={part.output as AgentNotionWriteResult} />
     ) : null;
 

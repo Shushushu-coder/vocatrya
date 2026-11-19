@@ -210,12 +210,18 @@ export const AGENT_TOOL_DESCRIPTIONS = {
     "Append markdown content to the end of one Notion page in the connected workspace. Shows the exact target page and the full content on a confirmation card — nothing is written until the user confirms. On success returns the page id; report it and never claim a write you have not confirmed.",
   notion_update_record:
     "Update properties of one database row (a page) in the connected Notion workspace. Shows the exact row and the property changes on a confirmation card — nothing is written until the user confirms. Read the record first and never guess property names or formats. On success returns the page id; report it and never claim a write you have not confirmed.",
+  notion_update_content:
+    "Edit text already on one Notion page. Runs immediately, with no confirmation card. Read the page first and copy oldText from that read. Each edit replaces one exact span with newText; an empty newText deletes that span; to insert, keep the anchor inside newText. It does not delete the page and it does not remove child pages or databases. On success report the page id. If the result is unknown or a span did not match, read the page again before repeating that span.",
+  notion_delete_pages:
+    "Move one or more Notion pages to Trash. Always shows one confirmation card listing every page in targets, and nothing is deleted until the user confirms that single card. Put the whole batch in one targets array — never call this once per page. Database rows are pages and belong in the same array. Do not pass a database. On success report the page ids; never claim a delete the tool result did not confirm.",
 } as const;
 
 const NOTION_WRITE_TOOL_NAMES = new Set([
   "notion_create_page",
   "notion_append_content",
   "notion_update_record",
+  "notion_update_content",
+  "notion_delete_pages",
 ]);
 const NOTION_READ_TOOL_NAMES = new Set(["notion_search", "notion_read"]);
 
@@ -279,16 +285,29 @@ export function buildNotionPromptSection(
   if (registered.has("notion_update_record")) {
     writes.push("notion_update_record changes database row properties");
   }
+  if (registered.has("notion_delete_pages")) {
+    writes.push(
+      "notion_delete_pages moves every page in one targets array to Trash",
+    );
+  }
   if (writes.length > 0) {
+    const batch = registered.has("notion_delete_pages")
+      ? " One notion_delete_pages call is one card for every page in its targets array, so never split a batch into separate calls."
+      : "";
     parts.push(
-      `${joinClauses(writes)}. Every write shows the exact target and the full content on a confirmation card and nothing is sent until the user presses Confirm — if they press Cancel, read their reason and try again with corrected arguments. When a write returns saved: true, report the page id or link it returned; never claim or describe a write you have not confirmed through a tool result. If a write returns unknown or verification_required, inspect through the named read tool and reconcile manually in Notion. Automatic retry of unresolved writes is blocked, even if verifiedNoDuplicate is true — never repeat the write, it could land twice. Only send the user asked for: never add local data they did not name, and strip sensitive fields.`,
+      `${joinClauses(writes)}. Each of those writes shows the exact target and the full content on a confirmation card and nothing is sent until the user presses Confirm.${batch} If they press Cancel, read their reason and try again with corrected arguments. When a write returns saved: true, report the page id or link it returned; never claim or describe a write you have not confirmed through a tool result. If a write returns unknown or verification_required, inspect through the named read tool and reconcile manually in Notion. Automatic retry of unresolved writes is blocked, even if verifiedNoDuplicate is true — never repeat the write, it could land twice. Only send the user asked for: never add local data they did not name, and strip sensitive fields.`,
+    );
+  }
+  if (registered.has("notion_update_content")) {
+    parts.push(
+      "notion_update_content edits text already on a page and runs immediately, with no confirmation card. Read the page first. Each edit replaces one exact oldText span with newText; an empty newText removes that span. It does not delete the page, and it does not remove child pages or databases.",
     );
   }
   if (hasReads && !hasWrites) {
     const pilot = rosterFallback(AGENT_ROSTER.pilot.nameKey, "en");
     const icon = AGENT_ROSTER.pilot.icon;
     const boundary =
-      "Your Notion access in this session is read-only. Creating a page, appending content, and updating a record are not registered for you. Do not say Notion is disconnected, and do not claim a write permission you were not given.";
+      "Your Notion access in this session is read-only. Creating a page, appending content, editing page text, updating a record, and deleting pages are not registered for you. Do not say Notion is disconnected, and do not claim a write permission you were not given.";
     const handoff =
       options?.agentRole === "pilot"
         ? ""

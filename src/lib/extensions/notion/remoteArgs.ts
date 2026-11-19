@@ -110,6 +110,56 @@ export function appendContentCandidates(input: {
   ];
 }
 
+/** In-place body edits. Never sets allow_deleting_content — child pages stay. */
+export function updateContentCandidates(input: {
+  pageId: string;
+  edits: Array<{ oldText: string; newText: string; replaceAll?: boolean }>;
+}): Array<Record<string, unknown>> {
+  const content_updates = input.edits.map((edit) => {
+    const row: Record<string, unknown> = {
+      old_str: edit.oldText,
+      new_str: edit.newText,
+    };
+    if (edit.replaceAll) row.replace_all_matches = true;
+    return row;
+  });
+  const { pageId } = input;
+  return [
+    {
+      page_id: pageId,
+      command: "update_content",
+      update_content: { content_updates },
+      allow_async: false,
+    },
+    {
+      page_id: pageId,
+      command: "update_content",
+      content_updates,
+      allow_async: false,
+    },
+  ];
+}
+
+/** One remote call for the whole batch. user_confirmed is our card, already given. */
+export function deletePagesCandidates(
+  targets: string[],
+): Array<Record<string, unknown>> {
+  const page_ids: string[] = [];
+  const seen = new Set<string>();
+  for (const target of targets) {
+    const id = normalizeNotionTarget(target);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    page_ids.push(id);
+  }
+  if (page_ids.length === 0) return [];
+  return [
+    { page_ids, user_confirmed: true },
+    { pages: page_ids.map((page_id) => ({ page_id })), user_confirmed: true },
+    { ids: page_ids, user_confirmed: true },
+  ];
+}
+
 export function updateRecordCandidates(input: {
   pageId: string;
   properties: Record<string, unknown>;

@@ -177,6 +177,35 @@ export const AgentNotionUpdateRecordSchema = z.object({
   ...notionWriteCommon,
 });
 
+const notionContentEdit = z.object({
+  oldText: z.string().min(1).max(8000).describe("Exact text copied from a notion_read of this page. It must match one place unless replaceAll is true."),
+  newText: z.string().max(8000).describe("Replacement text. An empty string deletes oldText. To insert, keep the surrounding anchor inside newText."),
+  replaceAll: z.boolean().optional().describe("Replace every exact match of oldText. Omit when the span is unique."),
+});
+
+export const AgentNotionUpdateContentSchema = z.object({
+  target: z.string().min(1).max(2000).describe("The Notion page URL or id whose body to edit — from an earlier notion_search/notion_read result or one the user named."),
+  edits: z.array(notionContentEdit).min(1).max(20).describe("In-place body edits applied together. This tool runs immediately and does not delete the page."),
+}).superRefine((value, ctx) => {
+  const total = value.edits.reduce((sum, edit) => sum + edit.oldText.length + edit.newText.length, 0);
+  if (total > 8000) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "The edits together exceed 8000 characters. Split them into a later call.",
+      path: ["edits"],
+    });
+  }
+});
+
+export type AgentNotionUpdateContentInput = z.infer<typeof AgentNotionUpdateContentSchema>;
+
+export const AgentNotionDeletePagesSchema = z.object({
+  targets: z.array(z.string().min(1).max(2000)).min(1).max(20).describe("Every page to move to Trash, in this one call. Pass the whole batch here — a second call asks the user again. Each entry is a URL or id from notion_search, notion_read, or the user. Database rows count as pages. Do not include a database itself."),
+  ...notionWriteCommon,
+});
+
+export type AgentNotionDeletePagesInput = z.infer<typeof AgentNotionDeletePagesSchema>;
+
 export type AgentNotionUpdateRecordInput = z.infer<
   typeof AgentNotionUpdateRecordSchema
 >;

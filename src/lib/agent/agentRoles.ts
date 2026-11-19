@@ -68,6 +68,8 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "notion_create_page",
     "notion_append_content",
     "notion_update_record",
+    "notion_update_content",
+    "notion_delete_pages",
   ],
   reflect: ["list_jobs", "get_job", "notion_search", "notion_read"],
 };

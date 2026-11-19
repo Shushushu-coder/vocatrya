@@ -355,6 +355,8 @@ export type AgentNotionWriteResult =
       saved: true;
       tool: string;
       pageId?: string;
+      /** Every page a batch delete moved. Present on notion_delete_pages. */
+      pageIds?: string[];
       url?: string;
       title?: string;
       warnings?: string[];

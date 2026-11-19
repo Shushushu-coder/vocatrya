@@ -20,6 +20,14 @@ import {
 import { NOTION_ERROR } from "@/lib/extensions/notion/errors";
 import { NOTION_TOOL } from "@/lib/extensions/notion/constants";
 import {
+  deletePagesCandidates,
+  updateContentCandidates,
+} from "@/lib/extensions/notion/remoteArgs";
+import {
+  AgentNotionDeletePagesSchema,
+  AgentNotionUpdateContentSchema,
+} from "@/models/agent.schema";
+import {
   NOTION_WRITE_SPECS,
   notionWriteInputHash,
 } from "@/lib/agent/notionWriteSpec";
@@ -282,7 +290,18 @@ describe("capability intersection", () => {
       createPage: true,
       appendContent: true,
       updateRecord: true,
+      updateContent: true,
+      deletePages: false,
     });
+    expect(
+      notionCapabilityFlags([
+        "notion-search",
+        "notion-fetch",
+        "notion-create-pages",
+        "notion-update-page",
+        "notion-delete-pages",
+      ]).deletePages,
+    ).toBe(true);
   });
 
   it("gates on live connection state", () => {
@@ -312,6 +331,7 @@ describe("capability intersection", () => {
       "notion-fetch",
       "notion-create-pages",
       "notion-update-page",
+      "notion-delete-pages",
     ])];
     const base = {
       userId: USER,
@@ -329,13 +349,19 @@ describe("capability intersection", () => {
         "notion_create_page",
         "notion_append_content",
         "notion_update_record",
+        "notion_update_content",
+        "notion_delete_pages",
       ]),
     );
+    expect(pilot.notion_update_content?.needsApproval).toBeUndefined();
+    expect(pilot.notion_delete_pages?.needsApproval).toBe(true);
     const insight = buildAgentTools({ ...base, agentRole: "insight" });
     expect(insight.notion_search).toBeTruthy();
     expect(insight.notion_read).toBeTruthy();
     expect(insight.notion_create_page).toBeUndefined();
     expect(insight.notion_append_content).toBeUndefined();
+    expect(insight.notion_update_content).toBeUndefined();
+    expect(insight.notion_delete_pages).toBeUndefined();
     const general = buildAgentTools({ ...base, agentRole: null });
     expect(general.notion_create_page).toBeTruthy();
     const none = buildAgentTools({ ...base, notionTools: [] });
@@ -686,6 +712,97 @@ describe("write tool approval binding and detached queue", () => {
     );
     expect(receipt.saved).toBe(true);
     expect((receipt as { url?: string }).url).toBe("https://www.notion.so/12345678123412341234123456789abc");
+  });
+
+  it("writes a body edit in the turn without an approval", async () => {
+    const sealed = await sealBundle({
+      v: 1,
+      accessToken: "at",
+      clientId: "client-1",
+      expiresAt: Date.now() + 3_600_000,
+    });
+    const callTool = vi.fn(async () => ({
+      isError: false,
+      content: [{ type: "text", text: JSON.stringify({ id: "12345678-1234-1234-1234-123456789abc" }) }],
+    }));
+    setNotionMcpClientFactory(async () => ({
+      listTools: async () => ({ tools: [] }),
+      callTool,
+      close: async () => undefined,
+    }));
+    const state = connectedState(sealed);
+    const { tools } = toolset(state, approvalRequest("other-call"));
+    const out = await tools[NOTION_TOOL.updateContent].execute!(
+      {
+        target: "12345678-1234-1234-1234-123456789abc",
+        edits: [{ oldText: "验证码：12345", newText: "验证码：123" }],
+      },
+      { toolCallId: "tc-edit" } as never,
+    );
+    expect(out).toMatchObject({ saved: true, tool: NOTION_TOOL.updateContent });
+    expect(callTool).toHaveBeenCalledTimes(1);
+    expect(callTool.mock.calls[0][0].arguments.command).toBe("update_content");
+    expect(tools[NOTION_TOOL.deletePages].needsApproval).toBe(true);
+    await expect(
+      tools[NOTION_TOOL.deletePages].execute!(
+        { targets: ["page-a", "page-b"] },
+        { toolCallId: "tc-delete" } as never,
+      ),
+    ).rejects.toBeInstanceOf(ConversationRequestError);
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("edits page text in place and deletes a batch in one confirmed call", () => {
+    const edits = updateContentCandidates({
+      pageId: "page-1",
+      edits: [{ oldText: "验证码：12345", newText: "验证码：123" }, { oldText: "旧段落", newText: "", replaceAll: true }],
+    });
+    expect(edits[0]).toMatchObject({
+      command: "update_content",
+      allow_async: false,
+      update_content: {
+        content_updates: [
+          { old_str: "验证码：12345", new_str: "验证码：123" },
+          { old_str: "旧段落", new_str: "", replace_all_matches: true },
+        ],
+      },
+    });
+    expect(JSON.stringify(edits)).not.toContain("allow_deleting_content");
+    const batch = deletePagesCandidates([
+      "https://www.notion.so/page-11111111111111111111111111111111",
+      "22222222222222222222222222222222",
+      "22222222222222222222222222222222",
+    ]);
+    expect(batch[0]).toEqual({
+      page_ids: [
+        "11111111111111111111111111111111",
+        "22222222222222222222222222222222",
+      ],
+      user_confirmed: true,
+    });
+    expect(batch.every((args) => args.user_confirmed === true)).toBe(true);
+    expect(AgentNotionUpdateContentSchema.safeParse({
+      target: "page-1",
+      edits: [{ oldText: "验证码：12345", newText: "" }],
+    }).success).toBe(true);
+    expect(AgentNotionUpdateContentSchema.safeParse({
+      target: "page-1",
+      edits: [{ oldText: "", newText: "x" }],
+    }).success).toBe(false);
+    expect(AgentNotionDeletePagesSchema.safeParse({
+      targets: Array.from({ length: 21 }, (_, i) => `page-${i}`),
+    }).success).toBe(false);
+    const receipt = NOTION_WRITE_SPECS[NOTION_TOOL.deletePages].receipt(
+      JSON.stringify({ ok: true }),
+      { targets: ["page-a", "page-b"] },
+    );
+    expect(receipt.saved).toBe(true);
+    expect(receipt.saved && receipt.pageIds).toEqual(["page-a", "page-b"]);
+    const pending = NOTION_WRITE_SPECS[NOTION_TOOL.deletePages].receipt(
+      JSON.stringify({ task_id: "task-1", status: "pending" }),
+      { targets: ["page-a"] },
+    );
+    expect(pending.saved).toBe(false);
   });
 
   it("verifyOf names a read-path check per tool, never the write tool", () => {

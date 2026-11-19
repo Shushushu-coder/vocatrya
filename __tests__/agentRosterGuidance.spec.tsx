@@ -30,6 +30,8 @@ const NOTION_ALL = [
   "notion_create_page",
   "notion_append_content",
   "notion_update_record",
+  "notion_update_content",
+  "notion_delete_pages",
 ] as const;
 
 const READ_ONLY = "Your Notion access in this session is read-only";
@@ -84,6 +86,8 @@ describe("refusal prompts follow the registered tool set", () => {
     "notion_create_page",
     "notion_append_content",
     "notion_update_record",
+    "notion_update_content",
+    "notion_delete_pages",
   ];
 
   it("points a read-only Insight session at Pilot and does not grant writes", () => {
@@ -111,6 +115,10 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(prompt).toContain("notion_create_page creates a page");
     expect(prompt).toContain("notion_append_content appends");
     expect(prompt).toContain("notion_update_record changes");
+    expect(prompt).toContain("notion_update_content edits text already on a page");
+    expect(prompt).toContain("no confirmation card");
+    expect(prompt).toContain("notion_delete_pages moves every page");
+    expect(prompt).toContain("never split a batch");
     expect(prompt).not.toContain(READ_ONLY);
     expect(prompt).toContain(rosterDuty("insight", "en"));
     expect(prompt).toContain("telescope icon");
@@ -149,6 +157,8 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(section).toContain("notion_create_page creates a page");
     expect(section).not.toContain("notion_append_content");
     expect(section).not.toContain("notion_update_record");
+    expect(section).not.toContain("notion_update_content");
+    expect(section).not.toContain("notion_delete_pages");
     expect(section).not.toContain(READ_ONLY);
   });
 
@@ -179,6 +189,8 @@ describe("refusal prompts follow the registered tool set", () => {
       "notion_create_page",
       "notion_append_content",
       "notion_update_record",
+      "notion_update_content",
+      "notion_delete_pages",
     ]);
     expect(AGENT_ROLE_TOOL_ALLOWLIST.reflect).toEqual([
       "list_jobs",

@@ -142,6 +142,8 @@ describe("agent chat system prompt", () => {
       "notion_create_page",
       "notion_append_content",
       "notion_update_record",
+      "notion_update_content",
+      "notion_delete_pages",
     ]);
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("list_jobs");
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("get_job");

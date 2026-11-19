@@ -3,6 +3,7 @@ import "server-only";
 import {
   AgentNotionAppendContentSchema,
   AgentNotionCreatePageSchema,
+  AgentNotionDeletePagesSchema,
   AgentNotionUpdateRecordSchema,
 } from "@/models/agent.schema";
 import type {
@@ -14,6 +15,7 @@ import { NOTION_TOOL } from "@/lib/extensions/notion/constants";
 import {
   appendContentCandidates,
   createPageCandidates,
+  deletePagesCandidates,
   normalizeNotionTarget,
   parentFor,
   updateRecordCandidates,
@@ -173,7 +175,92 @@ export const NOTION_WRITE_SPECS: Record<string, NotionWriteSpec> = {
       ).join(", "),
     }),
   },
+  [NOTION_TOOL.deletePages]: {
+    toolName: NOTION_TOOL.deletePages,
+    schema: AgentNotionDeletePagesSchema,
+    remoteRequirementsTool: NOTION_TOOL.deletePages,
+    candidates: (input) =>
+      deletePagesCandidates(
+        Array.isArray(input.targets) ? (input.targets as string[]) : [],
+      ),
+    receipt: (text, input) => deletePagesReceipt(text, input),
+    verifyOf: (input) => ({
+      tool: "notion_read",
+      target: Array.isArray(input.targets)
+        ? (input.targets[0] as string)
+        : undefined,
+    }),
+    summaryOf: (input) => {
+      const targets = Array.isArray(input.targets)
+        ? (input.targets as string[])
+        : [];
+      return {
+        target: targets.length === 1 ? targets[0] : `${targets.length} pages`,
+        content: targets.join("\n"),
+      };
+    },
+  },
 };
+
+const ASYNC_STATUSES = ["pending", "queued", "running", "in_progress"];
+
+function looksAsync(parsed: Record<string, unknown> | null): boolean {
+  if (!parsed) return false;
+  return Boolean(
+    parsed.task_id ||
+      parsed.task ||
+      parsed.object === "task" ||
+      ASYNC_STATUSES.includes(String(parsed.status)),
+  );
+}
+
+/** Delete succeeds without a new page URL. An async handle stays unknown. */
+function deletePagesReceipt(
+  resultText: string,
+  input: Record<string, unknown>,
+): AgentNotionWriteResult {
+  const parsed = tryParseJson(resultText);
+  const targets = Array.isArray(input.targets)
+    ? (input.targets as unknown[]).filter((item): item is string => typeof item === "string")
+    : [];
+  const pageIds = targets.map((target) => normalizeNotionTarget(target));
+  if (looksAsync(parsed)) {
+    return {
+      saved: false,
+      tool: NOTION_TOOL.deletePages,
+      status: "unknown",
+      code: NOTION_ERROR.OUTCOME_UNKNOWN,
+      detail:
+        "Notion returned no completed delete receipt. Check Trash before trying again; automatic retry is blocked.",
+    };
+  }
+  const message =
+    parsed && typeof parsed.message === "string"
+      ? parsed.message
+      : parsed && typeof parsed.error === "string"
+        ? parsed.error
+        : resultText;
+  if (
+    parsed?.error ||
+    parsed?.name === "validation_error" ||
+    parsed?.code === "validation_error" ||
+    /user_confirmed/i.test(message)
+  ) {
+    return {
+      saved: false,
+      tool: NOTION_TOOL.deletePages,
+      status: "failed",
+      code: NOTION_ERROR.VALIDATION_FAILED,
+      detail: message.slice(0, 500),
+    };
+  }
+  return {
+    saved: true,
+    tool: NOTION_TOOL.deletePages,
+    pageId: pageIds.length === 1 ? pageIds[0] : undefined,
+    pageIds,
+  };
+}
 
 export function isDetachedWriteTool(name: string): boolean {
   return name in NOTION_WRITE_SPECS;
@@ -189,4 +276,15 @@ export function notionWriteDedupeInput(
 
 export function notionWriteInputHash(input: Record<string, unknown>): string {
   return hashCanonical(notionWriteDedupeInput(input));
+}
+
+/** Body edits return the same page receipt as other update-page writes. */
+export function notionContentUpdateReceipt(
+  resultText: string,
+  pageId: string,
+): AgentNotionWriteResult {
+  return {
+    pageId,
+    ...receiptFromWrite(NOTION_TOOL.updateContent, resultText),
+  };
 }

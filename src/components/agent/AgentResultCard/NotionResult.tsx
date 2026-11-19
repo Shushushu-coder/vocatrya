@@ -114,15 +114,23 @@ export function NotionWriteResultCard({
   if (output.saved) {
     return (
       <div className="text-sm">
-        <p className="font-medium">{t["result.saved"]}</p>
+        <p className="font-medium">
+          {output.tool === "notion_delete_pages" ? t["result.deleted"] : t["result.saved"]}
+        </p>
         {output.title && (
           <p className="mt-0.5 text-muted-foreground">{output.title}</p>
         )}
-        {output.pageId && (
+        {output.pageIds && output.pageIds.length > 1 ? (
+          <ul className="mt-1 list-disc pl-4 text-xs text-muted-foreground">
+            {output.pageIds.map((id) => (
+              <li key={id} className="break-all">{id}</li>
+            ))}
+          </ul>
+        ) : output.pageId ? (
           <p className="mt-0.5 break-all text-xs text-muted-foreground">
             {output.pageId}
           </p>
-        )}
+        ) : null}
         {output.url && (
           <a
             href={output.url}

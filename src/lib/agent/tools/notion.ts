@@ -10,6 +10,7 @@ import {
 import {
   AgentNotionReadSchema,
   AgentNotionSearchSchema,
+  AgentNotionUpdateContentSchema,
 } from "@/models/agent.schema";
 import type {
   AgentNotionReadResult,
@@ -44,12 +45,15 @@ import {
 } from "@/lib/extensions/notion/store";
 import {
   fetchArgs,
+  normalizeNotionTarget,
   pickRemoteArgs,
   searchArgs,
+  updateContentCandidates,
 } from "@/lib/extensions/notion/remoteArgs";
 import { tryParseJson } from "@/lib/extensions/notion/remote";
 import {
   NOTION_WRITE_SPECS,
+  notionContentUpdateReceipt,
   notionWriteInputHash,
 } from "../notionWriteSpec";
 
@@ -380,6 +384,81 @@ function buildNotionWriteTool(ctx: Ctx, toolName: string) {
   });
 }
 
+/**
+ * Body edits run in the turn. They do not open a confirmation card and they
+ * do not enter the detached-write ledger. A missed span comes back as a
+ * remote validation error; an unknown transport result must be re-read.
+ */
+function buildNotionUpdateContentTool(ctx: Ctx) {
+  return tool({
+    description: AGENT_TOOL_DESCRIPTIONS.notion_update_content,
+    inputSchema: AgentNotionUpdateContentSchema,
+    execute: async (raw): Promise<AgentNotionWriteResult> => {
+      const parsed = AgentNotionUpdateContentSchema.safeParse(raw);
+      if (!parsed.success) {
+        return {
+          saved: false,
+          tool: NOTION_TOOL.updateContent,
+          status: "failed",
+          code: NOTION_ERROR.VALIDATION_FAILED,
+          detail: parsed.error.issues.map((issue) => issue.message).join("; "),
+        };
+      }
+      const pageId = normalizeNotionTarget(parsed.data.target);
+      try {
+        const { accessToken, remoteName, inputSchema } = await resolveRemote(
+          ctx.userId,
+          NOTION_TOOL.updateContent,
+          ctx.db ?? prisma,
+        );
+        const args = pickRemoteArgs(
+          inputSchema,
+          updateContentCandidates({ pageId, edits: parsed.data.edits }),
+        );
+        if (!args) {
+          return {
+            saved: false,
+            tool: NOTION_TOOL.updateContent,
+            status: "failed",
+            code: NOTION_ERROR.TOOL_UNAVAILABLE,
+          };
+        }
+        const result = await callNotionRemoteTool(accessToken, remoteName, args);
+        if (result.isError) {
+          return {
+            saved: false,
+            tool: NOTION_TOOL.updateContent,
+            status: "failed",
+            code: NOTION_ERROR.VALIDATION_FAILED,
+            detail: excerpt(remoteToolText(result)),
+          };
+        }
+        return notionContentUpdateReceipt(remoteToolText(result), pageId);
+      } catch (error) {
+        const mapped = isNotionError(error) ? error : mapNotionRemoteError(error);
+        const unknown =
+          mapped.code === NOTION_ERROR.OUTCOME_UNKNOWN ||
+          mapped.code === NOTION_ERROR.NETWORK ||
+          mapped.code === NOTION_ERROR.VERIFICATION_REQUIRED;
+        return {
+          saved: false,
+          tool: NOTION_TOOL.updateContent,
+          status:
+            mapped.code === NOTION_ERROR.REAUTH_REQUIRED
+              ? "reauth_required"
+              : unknown
+                ? "unknown"
+                : "failed",
+          code: mapped.code,
+          detail: unknown
+            ? "The edit may have reached Notion. Read the page before trying the same span again."
+            : undefined,
+        };
+      }
+    },
+  });
+}
+
 export function buildNotionAgentTools(ctx: Ctx): ToolSet {
   return {
     [NOTION_TOOL.search]: buildNotionSearchTool(ctx),
@@ -393,5 +472,7 @@ export function buildNotionAgentTools(ctx: Ctx): ToolSet {
       ctx,
       NOTION_TOOL.updateRecord,
     ),
+    [NOTION_TOOL.updateContent]: buildNotionUpdateContentTool(ctx),
+    [NOTION_TOOL.deletePages]: buildNotionWriteTool(ctx, NOTION_TOOL.deletePages),
   };
 }

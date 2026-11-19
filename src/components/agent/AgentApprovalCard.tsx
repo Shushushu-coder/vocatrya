@@ -120,6 +120,10 @@ function NotionWriteBody({
   const target = text(input.target);
   const title = text(input.title);
   const content = text(input.content);
+  const pages =
+    toolName === NOTION_TOOL.deletePages && Array.isArray(input.targets)
+      ? [...new Set(input.targets.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim()))]
+      : [];
   const properties =
     input.properties && typeof input.properties === "object"
       ? JSON.stringify(input.properties, null, 2)
@@ -143,6 +147,17 @@ function NotionWriteBody({
           <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs">
             {content}
           </pre>
+        </div>
+      )}
+      {pages.length > 0 && (
+        <div className="mt-2 rounded-sm border bg-muted/20 p-2">
+          <p className="text-xs text-muted-foreground">{nt["approval.pages"]}</p>
+          <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-auto pl-4 text-xs">
+            {pages.map((page) => (
+              <li key={page} className="break-all">{page}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">{nt["approval.deleteNote"]}</p>
         </div>
       )}
       {properties && (

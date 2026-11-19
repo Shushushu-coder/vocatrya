@@ -31,6 +31,7 @@ export const NOTION_REMOTE = {
   fetch: "notion-fetch",
   createPages: "notion-create-pages",
   updatePage: "notion-update-page",
+  deletePages: "notion-delete-pages",
   asyncTask: "notion-get-async-task",
 } as const;
 
@@ -41,6 +42,8 @@ export const NOTION_TOOL = {
   createPage: "notion_create_page",
   appendContent: "notion_append_content",
   updateRecord: "notion_update_record",
+  updateContent: "notion_update_content",
+  deletePages: "notion_delete_pages",
 } as const;
 
 export const NOTION_READ_TOOL_NAMES = [
@@ -51,6 +54,8 @@ export const NOTION_WRITE_TOOL_NAMES = [
   NOTION_TOOL.createPage,
   NOTION_TOOL.appendContent,
   NOTION_TOOL.updateRecord,
+  NOTION_TOOL.updateContent,
+  NOTION_TOOL.deletePages,
 ] as const;
 export const NOTION_ALL_TOOL_NAMES = [
   ...NOTION_READ_TOOL_NAMES,
@@ -69,6 +74,8 @@ export const NOTION_REMOTE_REQUIREMENTS: Record<string, readonly string[]> = {
   [NOTION_TOOL.createPage]: [NOTION_REMOTE.createPages],
   [NOTION_TOOL.appendContent]: [NOTION_REMOTE.updatePage],
   [NOTION_TOOL.updateRecord]: [NOTION_REMOTE.updatePage],
+  [NOTION_TOOL.updateContent]: [NOTION_REMOTE.updatePage],
+  [NOTION_TOOL.deletePages]: [NOTION_REMOTE.deletePages],
 };
 
 // Bounded result sizes — Notion content must not swamp the model context or

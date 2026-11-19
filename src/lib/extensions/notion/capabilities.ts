@@ -11,6 +11,8 @@ export type NotionCapabilityFlags = {
   createPage: boolean;
   appendContent: boolean;
   updateRecord: boolean;
+  updateContent: boolean;
+  deletePages: boolean;
 };
 
 const CAPABILITY_OF_TOOL: Record<string, keyof NotionCapabilityFlags> = {
@@ -19,6 +21,8 @@ const CAPABILITY_OF_TOOL: Record<string, keyof NotionCapabilityFlags> = {
   [NOTION_TOOL.createPage]: "createPage",
   [NOTION_TOOL.appendContent]: "appendContent",
   [NOTION_TOOL.updateRecord]: "updateRecord",
+  [NOTION_TOOL.updateContent]: "updateContent",
+  [NOTION_TOOL.deletePages]: "deletePages",
 };
 
 /**
@@ -52,6 +56,8 @@ export function notionCapabilityFlags(
     createPage: false,
     appendContent: false,
     updateRecord: false,
+    updateContent: false,
+    deletePages: false,
   };
   for (const name of tools) {
     const cap = CAPABILITY_OF_TOOL[name];

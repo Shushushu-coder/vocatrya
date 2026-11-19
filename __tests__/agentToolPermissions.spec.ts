@@ -9,4 +9,8 @@ it("describes conditional local and mandatory external approvals accurately", ()
   expect(agentToolApproval("match_job", true)).toBe("always");
   expect(agentToolApproval("match_job", false)).toBe("none");
   expect(agentToolApproval("notion_create_page", false)).toBe("always");
+  expect(agentToolApproval("notion_update_content", false, "ask")).toBe("none");
+  expect(agentToolApproval("notion_update_content", false, "full")).toBe("none");
+  expect(agentToolApproval("notion_delete_pages", false, "ask")).toBe("always");
+  expect(agentToolApproval("notion_delete_pages", false, "full")).toBe("always");
 });

@@ -73,6 +73,7 @@ const APPROVAL_BOUND_TOOL_RECEIPTS = new Set([
   "notion_create_page",
   "notion_append_content",
   "notion_update_record",
+  "notion_delete_pages",
 ]);
 export function pendingApprovals(messages: UIMessage[]) {
   return messages.flatMap(message => message.parts.filter(isToolUIPart)

@@ -13,6 +13,8 @@ const writeTools = new Set([
   "notion_create_page",
   "notion_append_content",
   "notion_update_record",
+  "notion_update_content",
+  "notion_delete_pages",
 ]);
 
 export function hasWriteReceipt(message: UIMessage) {
