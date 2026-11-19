@@ -9,8 +9,10 @@ import {
 } from "@/lib/agent/roleCopy";
 import { suggestionsForRole } from "@/lib/agent/roleSuggestions";
 import { useI18n } from "@/i18n";
-import { BriefcaseBusiness, FileText, Plus } from "lucide-react";
+import { useState } from "react";
+import { BriefcaseBusiness, FileText, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ResumeEvidenceStartDialog } from "./ResumeEvidenceStartDialog";
 import { EmptyStateAgentPresence } from "./EmptyStateAgentPresence";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import type { VocatryaMotionState } from "@/components/brand/VocatryaMark";
@@ -21,6 +23,9 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
   const { freshNativeFull } = useCareerSurfaces();
   const { fillComposer, activeRole, context, requestAddContext } =
     useAgentChat();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  // Resume Evidence is hosted by Pilot only (contract D1); NULL role = Pilot slot.
+  const isPilot = (activeRole ?? "pilot") === "pilot";
   const copy = copyFor(t, locale);
   const self = rosterSelfLines(activeRole, copy);
   const items = context?.items ?? [];
@@ -89,7 +94,26 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
           <Plus size={14} aria-hidden="true" />
           {t("agent.addContext")}
         </Button>
+        {isPilot && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-testid="resume-evidence-entry"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <Search size={14} aria-hidden="true" />
+            {t("agent.resumeEvidence.entry")}
+          </Button>
+        )}
       </div>
+      {isPilot && (
+        <ResumeEvidenceStartDialog
+          open={evidenceOpen}
+          onOpenChange={setEvidenceOpen}
+        />
+      )}
       <p data-testid="agent-roster-legend" className="max-w-md text-xs text-muted-foreground">
         {copy(AGENT_ROSTER_LEGEND_KEY)}
       </p>

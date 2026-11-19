@@ -15,6 +15,8 @@ import { AgentMarkdown } from "@/components/agent/AgentMarkdown";
 import { AgentMatchContent } from "@/components/agent/AgentMatchContent";
 import { AgentResultCard } from "@/components/agent/AgentResultCard";
 import { AgentReviewContent } from "@/components/agent/AgentReviewContent";
+import { ResumeEvidenceAssistantText } from "@/components/agent/ResumeEvidenceDraftCard";
+import { hasResumeEvidenceDraftBlock } from "@/lib/agent/skills/resumeEvidence";
 import { AgentStatusRow } from "@/components/agent/AgentStatusRow";
 import { AgentToolRunningCard } from "@/components/agent/AgentToolRunningCard";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
@@ -158,6 +160,10 @@ export function AgentChatMessages() {
                       </p>
                     );
                   }
+                  // Resume Evidence drafts render as a read-only card; every
+                  // other assistant text is untouched.
+                  if (hasResumeEvidenceDraftBlock(part.text))
+                    return <ResumeEvidenceAssistantText key={i} text={part.text} />;
                   return <AgentMarkdown key={i} text={part.text} />;
                 }
                 if (isAgentPastePart(part))

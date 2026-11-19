@@ -35,6 +35,7 @@ import {
   buildPageContextMessage,
   buildPasteContextMessage,
 } from "@/lib/agent/prompt";
+import { buildResumeEvidencePromptAddendum } from "@/lib/agent/skills/resumeEvidence/session";
 import { LOCALE_COOKIE_NAME, normalizeLocale } from "@/i18n";
 import {
   resolvePastedText,
@@ -243,7 +244,8 @@ async function accountChatResponse({
     freshNativeFull,
     agentRole,
     notionTools,
-  }) + personalInstructionsBlock(personalInstructions) + permissionInstructions(permissionMode);
+  }) + personalInstructionsBlock(personalInstructions) + permissionInstructions(permissionMode)
+    + buildResumeEvidencePromptAddendum({ messages, agentRole });
 
   // Route on the full request. Budgeting happens inside the turn, after
   // the local router has seen the current utterance.
@@ -740,7 +742,8 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     freshNativeFull,
     agentRole: conversation.agentRole,
     notionTools,
-  }) + personalInstructionsBlock(preferences.personalInstructions) + permissionInstructions(permissionMode);
+  }) + personalInstructionsBlock(preferences.personalInstructions) + permissionInstructions(permissionMode)
+    + buildResumeEvidencePromptAddendum({ messages, agentRole: conversation.agentRole });
 
   const turnSpan = startSpan("agent.chat.turn", {
     ...genAiRequestAttrs({
