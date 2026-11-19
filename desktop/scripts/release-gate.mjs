@@ -93,6 +93,15 @@ export function evaluateReleaseGate(options = {}) {
     );
   }
 
+  const releaseNotesPath = path.join(root, "release-notes", `${expectedVersion}.md`);
+  if (!fs.existsSync(releaseNotesPath)) {
+    failures.push(
+      failure("RELEASE_NOTES_MISSING", "Curated release notes absent: release-notes/" + expectedVersion + ".md"),
+    );
+  } else {
+    findings.push("release notes present: release-notes/" + expectedVersion + ".md");
+  }
+
   if (
     manifest.runtime?.migrationCount !== expectedFingerprint.migrationCount ||
     manifest.runtime?.migrationNamesSha256 !== expectedFingerprint.migrationNamesSha256

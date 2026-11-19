@@ -47,6 +47,7 @@ RUN mkdir -p /data/files/resumes && chown -R nextjs:nodejs /data/files/resumes
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/release-notes ./release-notes
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/fresh-native-runtime ./fresh-native-runtime

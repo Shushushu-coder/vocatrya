@@ -20,6 +20,7 @@ import ShortcutsSettings from "@/components/settings/ShortcutsSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
 import InputPreferencesSettings from "@/components/settings/InputPreferencesSettings";
 import AboutSettings from "@/components/settings/AboutSettings";
+import ReleaseNotesCard from "@/components/settings/ReleaseNotesCard";
 import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 import SettingsSidebar, {
   isSettingsSection,
@@ -248,9 +249,13 @@ function Settings() {
             </SectionShell>
           )}
           {activeSection === "about" && (
-            // AboutSettings renders its own page-level title.
+            // Both cards render their own page-level titles; the curated
+            // update summary sits above the About facts.
             <SectionShell id="about">
-              <AboutSettings />
+              <div className="space-y-6">
+                <ReleaseNotesCard />
+                <AboutSettings />
+              </div>
             </SectionShell>
           )}
           {PENDING_SECTION_META[activeSection] && (

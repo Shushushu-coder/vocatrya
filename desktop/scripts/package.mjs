@@ -74,6 +74,23 @@ fs.rmSync(stageRoot, { recursive: true, force: true });
 fs.rmSync(distRoot, { recursive: true, force: true });
 fs.mkdirSync(stageRoot, { recursive: true });
 
+const version = packageVersion();
+// Release notes gate: every shipped install carries curated notes for its
+// version, so fail before the expensive build when the file is absent or
+// missing a locale section.
+const releaseNotesPath = path.join(repoRoot, "release-notes", `${version}.md`);
+if (!fs.existsSync(releaseNotesPath)) {
+  throw new Error(`Release notes missing for ${version}: expected release-notes/${version}.md`);
+}
+{
+  const notesSource = fs.readFileSync(releaseNotesPath, "utf8");
+  for (const section of ["zh-CN", "en"]) {
+    if (!new RegExp(`^## ${section}\\s*$`, "m").test(notesSource)) {
+      throw new Error(`Release notes gate: release-notes/${version}.md is missing its '## ${section}' section`);
+    }
+  }
+}
+
 if (!args.skipNextBuild) {
   run("npm", ["run", "build"], { shell: true });
 }
@@ -94,7 +111,6 @@ generateNotices({
   backendNodeModules: path.join(stageRoot, "resources", "backend", "node_modules"),
 });
 
-const version = packageVersion();
 const buildInfo = {
   appVersion: version,
   buildCommit: gitCommit(),

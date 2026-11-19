@@ -64,6 +64,7 @@
 
 - 除版本号外，**构建事实**（构建提交、构建时间）随版本自动同步：来源为打包期 `resources/build-info.json`，经 `VOCATRYA_BUILD_COMMIT`/`VOCATRYA_BUILT_AT` env 注入 backend 并经 document meta 下发；仅打包安装显示，Web/dev 无此行。
 - **发布说明本轮不同步**：About 不新增 release notes 字段；后续如需，采用仓库内 `release-notes/<version>.md` + release-gate 存在性校验，不采用 CHANGELOG.md 或运行时拉取 GitHub 作权威源。
+- **发布说明已实施（2026-11-18）**：按上述冻结方案落地——仓库内 `release-notes/<version>.md` 单文件双语（`## zh-CN`/`## en` 分段），About 上方新增更新说明卡展示当前版本与（有更新时）最新版本摘要；最新版本摘要来自 GitHub release body（即发版时写入的同一文件），非权威源拉取。存在性校验位于 `package.mjs` 前置检查、`release-gate.mjs` 与 release.yml prepare 关卡；release 正文改用该文件，CHANGELOG.md 保持自动生成。
 - 同步范围排除：第三方 AI 运行时版本、备份/迁移/协议格式版本、扩展自身版本线（manifest 与上游基线分开标注）。
 - 同轮残留修复：备份 manifest `appVersion` 收敛到 `resolveAppVersion()`；`streaming.js`/`grok.js` 的 ACP `clientInfo.version` 改用真实应用版本；`isNewerVersion` 改为预发布感知比较；扩展详情页实际 vendored 版本与上游基线分开显示；`prepareDatabase` 的 `appVersion` 加 `isPackaged` 门槛。此项不授权本轮升版、构建或发布。
 

@@ -2011,10 +2011,17 @@
       "builtAtLabel": "Built at",
       "licenseLabel": "Open-source license",
       "diagnosticsTitle": "Diagnostics",
-      "diagnosticsDescription": "Copies version and environment facts to attach when reporting issues. Contains no credentials, keys, personal data, or local file paths.",
+      "diagnosticsDescription": "Reporting a problem? Click the button below to copy the app version and environment details, then paste them into your report — it helps us find the cause faster. No accounts, keys, personal data, or file paths are included.",
       "copyDiagnostics": "Copy diagnostics",
       "diagnosticsCopied": "Copied",
       "copyDiagnosticsFailed": "Could not copy diagnostics."
+    },
+    "releaseNotes": {
+      "title": "Release notes",
+      "description": "What changed in the current and latest versions.",
+      "currentVersion": "Current version {version}",
+      "latestVersion": "Latest version {version}",
+      "viewReleasePage": "View release page"
     },
     "archiveDescription": "Archived jobs and conversations are kept read-only here. Restore moves them back; nothing expires or is deleted.",
     "archiveSearchPlaceholder": "Search archived items",

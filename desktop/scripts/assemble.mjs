@@ -138,6 +138,9 @@ export function assembleDesktopBackend({
   copyFiltered(standalone, assembledBackendRoot);
   copyFiltered(path.join(root, "public"), path.join(assembledBackendRoot, "public"));
   copyFiltered(path.join(root, ".next", "static"), path.join(assembledBackendRoot, ".next", "static"));
+  // Curated bilingual release notes: the backend cwd is the assembled root,
+  // so /api/release-notes reads release-notes/<version>.md from here.
+  copyFiltered(path.join(root, "release-notes"), path.join(assembledBackendRoot, "release-notes"));
   const prismaRuntime = assemblePrismaRuntime({ repoRoot: root, backendRoot: assembledBackendRoot });
   const freshNativeBootstrap = buildFreshNativeBootstrap({
     repoRoot: root,

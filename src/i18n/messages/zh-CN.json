@@ -2011,10 +2011,17 @@
       "builtAtLabel": "构建时间",
       "licenseLabel": "开源许可",
       "diagnosticsTitle": "诊断信息",
-      "diagnosticsDescription": "复制版本与环境事实，供反馈问题时附加；不包含凭据、密钥、个人数据或本机文件路径。",
+      "diagnosticsDescription": "遇到问题要反馈时，点下面的按钮，版本号、运行环境等信息会自动复制好，直接粘贴发给开发者即可。不包含账号、密钥、个人数据或文件路径。",
       "copyDiagnostics": "复制诊断信息",
       "diagnosticsCopied": "已复制",
       "copyDiagnosticsFailed": "复制诊断信息失败。"
+    },
+    "releaseNotes": {
+      "title": "更新说明",
+      "description": "当前版本与最新版本的更新内容摘要。",
+      "currentVersion": "当前版本 {version}",
+      "latestVersion": "最新版本 {version}",
+      "viewReleasePage": "查看发布页面"
     },
     "archiveDescription": "已归档的职位与对话在此只读保留。恢复后回到活跃列表，内容不会过期或被删除。",
     "archiveSearchPlaceholder": "搜索归档内容",

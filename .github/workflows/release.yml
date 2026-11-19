@@ -73,6 +73,23 @@ jobs:
           echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
           echo "Releasing $TAG (previous: ${PREV_TAG:-none})" >> "$GITHUB_STEP_SUMMARY"
 
+      # Curated bilingual notes are authoritative: the file becomes the GitHub
+      # release body and ships inside the installer, so it must exist — with
+      # both locale sections — before any build work starts.
+      - name: Gate release notes
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          NOTES="release-notes/${VERSION}.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::Missing $NOTES. Write curated bilingual notes ('## zh-CN' and '## en' sections) before releasing."
+            exit 1
+          fi
+          if ! grep -qE '^## zh-CN[[:space:]]*$' "$NOTES" || ! grep -qE '^## en[[:space:]]*$' "$NOTES"; then
+            echo "::error::$NOTES must contain '## zh-CN' and '## en' sections."
+            exit 1
+          fi
+
   verify:
     needs: prepare
     runs-on: ubuntu-latest
@@ -236,10 +253,13 @@ jobs:
 
           CHANGELOG_ENTRY="## [$VERSION]($COMPARE_URL) ($TODAY)"$'\n'$'\n'"${SECTIONS}"
 
-          # Same body without the version heading: the release title is the tag.
-          printf '%s\n' "$SECTIONS" > "$RUNNER_TEMP/release-notes.md"
+          # The release body is the curated notes file (gated in `prepare`),
+          # not the generated SECTIONS — those still feed CHANGELOG.md below.
+          # The app's settings surface reads the same locale sections from the
+          # installed copy and, for the latest check, from this release body.
+          cp "release-notes/${VERSION}.md" "$RUNNER_TEMP/release-notes.md"
           if [ -n "$COMPARE_URL" ]; then
-            printf '\n**Full Changelog**: %s\n' "$COMPARE_URL" >> "$RUNNER_TEMP/release-notes.md"
+            printf '\n## Links\n\n**Full Changelog**: %s\n' "$COMPARE_URL" >> "$RUNNER_TEMP/release-notes.md"
           fi
 
           if [ -f CHANGELOG.md ]; then
@@ -284,8 +304,9 @@ jobs:
             -t "$IMAGE:latest" \
             $(printf "$IMAGE@sha256:%s " *)
 
-      # Notes come from the CHANGELOG step, not --generate-notes: that builds
-      # its body from merged PRs, and dev is merged to main directly.
+      # Notes come from the curated release-notes/<version>.md file prepared
+      # in the CHANGELOG step, not --generate-notes: that builds its body from
+      # merged PRs, and dev is merged to main directly.
       # If this step alone fails, the tag is already pushed: run
       # `gh release create <tag> --notes-file <file>` rather than re-running.
       - name: Create GitHub Release
