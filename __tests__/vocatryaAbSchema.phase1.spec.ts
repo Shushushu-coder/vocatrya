@@ -3,19 +3,15 @@ import fs from "fs";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { BackupDataSchema } from "@/lib/backup/schema";
 import {
-  copyFoundationMigrationInto,
-  copyMigrationBySuffix,
+  copyRemainingMigrations,
   makeAbTestDbUrl,
   migrateDeploy,
   preparePrismaProject,
-  PROCESS_STEP_DEADLINE_MIGRATION,
-  CAMPUS_CORE_FIELDS_MIGRATION,
-  INTERVIEW_REFLECTION_MIGRATION,
-  CANDIDATE_PROFILE_MIGRATION,
-  PHASE3A_INTERVIEW_MIGRATION,
-  ACCOUNT_LOGIN_FOUNDATION_MIGRATION,
-  RESUME_TITLE_SNAPSHOT_MIGRATION,
+  preparePrismaProjectThrough,
 } from "./helpers/abSchemaTestDb";
+
+// Last migration before the A+B foundation; the "legacy" database state.
+const LEGACY_CUTOFF_MIGRATION = "contact_default_role";
 
 const LEGACY_TABLES = [
   "User",
@@ -173,33 +169,13 @@ describe("Vocatrya A+B phase 1 schema", () => {
 
   describe("existing legacy-like database", () => {
     const ctx = makeAbTestDbUrl();
-    const schemaPath = preparePrismaProject(ctx.dir, {
-      excludeFoundation: true,
-      excludeSuffix: [
-        PROCESS_STEP_DEADLINE_MIGRATION,
-        CAMPUS_CORE_FIELDS_MIGRATION,
-        INTERVIEW_REFLECTION_MIGRATION,
-        CANDIDATE_PROFILE_MIGRATION,
-        // Phase 3A Interview migration needs the A+B foundation tables
-        // (JobDescriptionVersion composite unique), so it joins the
-        // upgrade wave instead of the legacy base.
-        PHASE3A_INTERVIEW_MIGRATION,
-        // Phase B ALTERs InterviewSession/MatchAnalysis/JobDescriptionParse/
-        // ResumeVariantVersion — all created in the waves above — so it is
-        // the last migration of the upgrade wave, not the legacy base.
-        ACCOUNT_LOGIN_FOUNDATION_MIGRATION,
-        // M1 ALTERs these same foundation/Interview owners.
-        "add_managed_ai_core_contracts",
-        // Resume items exist only after the foundation upgrade wave.
-        RESUME_TITLE_SNAPSHOT_MIGRATION,
-        // DateTime V1 ALTERs ApplicationProcessStep/JobOpportunity, which are
-        // created by the A+B foundation, so it joins the upgrade wave.
-        "datetime_v1_additive_columns",
-        // The career contract migration depends on the campus career tables
-        // and the CandidateProfile rename, so it joins the upgrade wave.
-        "career_v1_schema_contract",
-      ],
-    });
+    // Legacy base = the full migration history up to (and including) the last
+    // migration before the A+B foundation. Everything after it is applied as
+    // the upgrade wave, in timestamp order, derived from the filesystem.
+    const schemaPath = preparePrismaProjectThrough(
+      ctx.dir,
+      LEGACY_CUTOFF_MIGRATION,
+    );
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
 
     afterAll(async () => {
@@ -210,101 +186,95 @@ describe("Vocatrya A+B phase 1 schema", () => {
     it("leaves legacy Job / Resume / Company rows unchanged", async () => {
       migrateDeploy(ctx.url, schemaPath);
 
-      const user = await prisma.user.create({
-        data: {
-          name: "Legacy User",
-          email: "legacy-ab@example.com",
-          password: "x",
-        },
-      });
-      // Insert through SQL so the generated client cannot mention A+B columns
-      // that do not exist until the foundation migration runs.
-      const companyId = "legacy-company-1";
+      // Seed through raw SQL using only columns that exist at the cutoff; the
+      // generated client targets the latest schema and would reference later
+      // columns.
+      const ids = {
+        user: "legacy-user-1",
+        company: "legacy-company-1",
+        title: "legacy-title-1",
+        status: "legacy-status-1",
+        profile: "legacy-profile-1",
+        resume: "legacy-resume-1",
+        job: "legacy-job-1",
+      };
+      const createdAt = new Date("2026-01-15T00:00:00.000Z").getTime();
+      const appliedDate = new Date("2026-01-16T00:00:00.000Z").getTime();
+      const dueDate = new Date("2026-02-01T00:00:00.000Z").getTime();
+      const description = "Build widgets. Do not mutate this text.";
+      await prisma.$executeRaw`
+        INSERT INTO "User" ("id", "name", "email", "password")
+        VALUES (${ids.user}, ${"Legacy User"}, ${"legacy-ab@example.com"}, ${"x"})
+      `;
       await prisma.$executeRaw`
         INSERT INTO "Company" ("id", "label", "value", "createdBy", "watched", "websiteUrl")
-        VALUES (${companyId}, ${"Acme"}, ${"acme"}, ${user.id}, ${1}, ${"https://acme.example.com"})
+        VALUES (${ids.company}, ${"Acme"}, ${"acme"}, ${ids.user}, ${1}, ${"https://acme.example.com"})
       `;
-      const company = { id: companyId, label: "Acme", createdBy: user.id };
-      const title = await prisma.jobTitle.create({
-        data: { label: "Engineer", value: "engineer", createdBy: user.id },
-      });
-      const status = await prisma.jobStatus.create({
-        data: { label: "Applied", value: "applied-ab-phase1" },
-      });
-      const profile = await prisma.profile.create({ data: { userId: user.id } });
-      const resume = await prisma.resume.create({
-        data: { profileId: profile.id, title: "Legacy Resume" },
-      });
-      const job = await prisma.job.create({
-        data: {
-          userId: user.id,
-          description: "Build widgets. Do not mutate this text.",
-          jobType: "FT",
-          createdAt: new Date("2026-01-15T00:00:00.000Z"),
-          applied: true,
-          appliedDate: new Date("2026-01-16T00:00:00.000Z"),
-          dueDate: new Date("2026-02-01T00:00:00.000Z"),
-          statusId: status.id,
-          jobTitleId: title.id,
-          companyId: company.id,
-          resumeId: resume.id,
-        },
-      });
+      await prisma.$executeRaw`
+        INSERT INTO "JobTitle" ("id", "label", "value", "createdBy")
+        VALUES (${ids.title}, ${"Engineer"}, ${"engineer"}, ${ids.user})
+      `;
+      await prisma.$executeRaw`
+        INSERT INTO "JobStatus" ("id", "label", "value")
+        VALUES (${ids.status}, ${"Applied"}, ${"applied-ab-phase1"})
+      `;
+      await prisma.$executeRaw`
+        INSERT INTO "Profile" ("id", "userId") VALUES (${ids.profile}, ${ids.user})
+      `;
+      await prisma.$executeRaw`
+        INSERT INTO "Resume" ("id", "profileId", "title", "updatedAt")
+        VALUES (${ids.resume}, ${ids.profile}, ${"Legacy Resume"}, ${createdAt})
+      `;
+      await prisma.$executeRaw`
+        INSERT INTO "Job" ("id", "userId", "description", "jobType", "createdAt", "applied", "appliedDate", "dueDate", "statusId", "jobTitleId", "companyId", "resumeId")
+        VALUES (${ids.job}, ${ids.user}, ${description}, ${"FT"}, ${createdAt}, ${1}, ${appliedDate}, ${dueDate}, ${ids.status}, ${ids.title}, ${ids.company}, ${ids.resume})
+      `;
 
-      const beforeCompany = await prisma.$queryRaw<
-        Array<{
-          id: string;
-          label: string;
-          value: string;
-          createdBy: string;
-          websiteUrl: string | null;
-        }>
-      >`SELECT "id", "label", "value", "createdBy", "websiteUrl" FROM "Company" WHERE "id" = ${company.id}`;
+      const count = async (table: string) =>
+        Number(
+          (
+            await prisma.$queryRawUnsafe<Array<{ n: number | bigint }>>(
+              `SELECT COUNT(*) as n FROM "${table}"`,
+            )
+          )[0].n,
+        );
       const before = {
-        jobs: await prisma.job.count(),
-        resumes: await prisma.resume.count(),
-        companies: await prisma.$queryRaw<Array<{ n: number }>>`SELECT COUNT(*) as n FROM "Company"`,
-        jobRow: await prisma.job.findUniqueOrThrow({ where: { id: job.id } }),
-        resumeRow: await prisma.resume.findUniqueOrThrow({
-          where: { id: resume.id },
-        }),
-        companyRow: beforeCompany[0],
+        jobs: await count("Job"),
+        resumes: await count("Resume"),
+        companies: await count("Company"),
       };
+      expect(before).toEqual({ jobs: 1, resumes: 1, companies: 1 });
 
-      copyFoundationMigrationInto(ctx.dir);
-      copyMigrationBySuffix(ctx.dir, PROCESS_STEP_DEADLINE_MIGRATION);
-      copyMigrationBySuffix(ctx.dir, CAMPUS_CORE_FIELDS_MIGRATION);
-      copyMigrationBySuffix(ctx.dir, INTERVIEW_REFLECTION_MIGRATION);
-      copyMigrationBySuffix(ctx.dir, CANDIDATE_PROFILE_MIGRATION);
-      // Timestamp-ordered after the foundation, so it applies last.
-      copyMigrationBySuffix(ctx.dir, PHASE3A_INTERVIEW_MIGRATION);
-      copyMigrationBySuffix(ctx.dir, ACCOUNT_LOGIN_FOUNDATION_MIGRATION);
-      copyMigrationBySuffix(ctx.dir, RESUME_TITLE_SNAPSHOT_MIGRATION);
-      copyMigrationBySuffix(ctx.dir, "add_managed_ai_core_contracts");
-      copyMigrationBySuffix(ctx.dir, "datetime_v1_additive_columns");
-      copyMigrationBySuffix(ctx.dir, "career_v1_schema_contract");
+      copyRemainingMigrations(ctx.dir);
       migrateDeploy(ctx.url, schemaPath);
+      // Refresh SQLite prepared statement metadata after the table rebuilds.
+      await prisma.$disconnect();
 
       expect(await prisma.job.count()).toBe(before.jobs);
       expect(await prisma.resume.count()).toBe(before.resumes);
-      expect(await prisma.company.count()).toBe(Number(before.companies[0].n));
+      expect(await prisma.company.count()).toBe(before.companies);
 
       const jobAfter = await prisma.job.findUniqueOrThrow({
-        where: { id: job.id },
+        where: { id: ids.job },
       });
       const resumeAfter = await prisma.resume.findUniqueOrThrow({
-        where: { id: resume.id },
+        where: { id: ids.resume },
       });
       const companyAfter = await prisma.company.findUniqueOrThrow({
-        where: { id: company.id },
+        where: { id: ids.company },
       });
 
-      expect(jobAfter.description).toBe(before.jobRow.description);
-      expect(jobAfter.resumeId).toBe(resume.id);
+      expect(jobAfter.description).toBe(description);
+      expect(jobAfter.resumeId).toBe(ids.resume);
       expect(jobAfter.applied).toBe(true);
-      expect(resumeAfter.title).toBe(before.resumeRow.title);
-      expect(companyAfter.label).toBe(before.companyRow.label);
-      expect(companyAfter.createdBy).toBe(user.id);
+      expect(jobAfter.createdAt.getTime()).toBe(createdAt);
+      expect(jobAfter.appliedDate?.getTime()).toBe(appliedDate);
+      expect(jobAfter.dueDate?.getTime()).toBe(dueDate);
+      expect(resumeAfter.title).toBe("Legacy Resume");
+      expect(companyAfter.label).toBe("Acme");
+      expect(companyAfter.value).toBe("acme");
+      expect(companyAfter.websiteUrl).toBe("https://acme.example.com");
+      expect(companyAfter.createdBy).toBe(ids.user);
       expect(companyAfter.notes).toBeNull();
       expect(companyAfter.sizeLabel).toBeNull();
       expect(companyAfter.headquarters).toBeNull();

@@ -2,12 +2,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { makeAbTestDbUrl, preparePrismaProject, migrateDeploy, copyMigrationBySuffix } from "./helpers/abSchemaTestDb";
+import { makeAbTestDbUrl, preparePrismaProject, preparePrismaProjectThrough, migrateDeploy, copyMigrationBySuffix, copyRemainingMigrations } from "./helpers/abSchemaTestDb";
 import { seedAccount } from "./helpers/backupTestDb";
 
 import { assertRequiredMigrationInvariants, verifyActiveManagedConstraint } from "./helpers/managedMigrationInvariant";
 
 const suffix = "add_managed_ai_core_contracts";
+// "prior" = DB as of the last migration before the chat_conversation_multi
+// rebuild, i.e. everything that predates the managed contracts and the later
+// ChatConversation rebuilds. All newer migrations are applied afterwards.
+const PRIOR_CUTOFF_MIGRATION = "add_chat_conversation_ai_lock";
 const owners = ["InterviewSession", "ChatConversation", "AutomationRun", "ResumeVariantVersion", "MatchAnalysis", "JobDescriptionParse"];
 const sql = fs.readFileSync(path.resolve(__dirname, "../prisma/migrations/20261008000000_add_managed_ai_core_contracts/migration.sql"), "utf8");
 
@@ -21,13 +25,22 @@ describe("Managed M1 official migrations", () => {
 
   it.each(["fresh", "current", "prior"])("migrate deploy upgrades %s DB and preserves old rows semantically", async (baseline) => {
     const ctx = makeAbTestDbUrl();
-    const later = ["chat_conversation_multi", "conversation_summary", "resume_material_title_snapshot", "chat_conversation_concurrency"];
-    const schema = preparePrismaProject(ctx.dir, { excludeSuffix: baseline === "fresh" ? [] : [suffix, ...(baseline === "prior" ? later : [])] });
+    const schema = baseline === "prior"
+      ? preparePrismaProjectThrough(ctx.dir, PRIOR_CUTOFF_MIGRATION)
+      : preparePrismaProject(ctx.dir, { excludeSuffix: baseline === "fresh" ? [] : [suffix] });
     const client = new PrismaClient({ datasources: { db: { url: ctx.url } } });
     try {
       migrateDeploy(ctx.url, schema);
       if (baseline !== "fresh") {
-        const userId = await seedAccount(client, `${baseline}@example.com`);
+        // The prior DB is seeded with raw SQL (cutoff-era columns only); the
+        // generated client targets the latest schema.
+        let userId: string;
+        if (baseline === "prior") {
+          userId = `${baseline}-user`;
+          await client.$executeRaw`INSERT INTO User (id, name, email, password) VALUES (${userId}, 'Test User', ${`${baseline}@example.com`}, 'x')`;
+        } else {
+          userId = await seedAccount(client, `${baseline}@example.com`);
+        }
         const stamp = new Date().toISOString();
         await client.$executeRaw`INSERT INTO AIConnection (id, userId, provider, backendKind, displayName, status, updatedAt)
           VALUES ('account', ${userId}, 'OPENAI', 'CODEX_RUNTIME', 'Own account', 'CONNECTED', ${stamp})`;
@@ -40,8 +53,8 @@ describe("Managed M1 official migrations", () => {
         const snapshots = await Promise.all(["AIConnection", "InterviewSession", "ChatConversation"].map(async (table) => ({
           table, rows: await client.$queryRawUnsafe<Record<string, unknown>[]>(`SELECT * FROM "${table}" ORDER BY id`),
         })));
-        copyMigrationBySuffix(ctx.dir, suffix);
-        if (baseline === "prior") for (const name of later) copyMigrationBySuffix(ctx.dir, name);
+        if (baseline === "prior") copyRemainingMigrations(ctx.dir);
+        else copyMigrationBySuffix(ctx.dir, suffix);
         migrateDeploy(ctx.url, schema);
         await client.$disconnect(); // refresh SQLite prepared SELECT * column metadata after ALTER
         for (const { table, rows } of snapshots) {

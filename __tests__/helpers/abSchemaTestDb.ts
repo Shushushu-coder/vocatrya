@@ -83,3 +83,49 @@ export function copyMigrationBySuffix(projectDir: string, suffix: string): void 
 export function copyFoundationMigrationInto(projectDir: string): void {
   copyMigrationBySuffix(projectDir, AB_FOUNDATION_MIGRATION);
 }
+
+export function listMigrationNames(): string[] {
+  return fs
+    .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+/**
+ * Prepare a project containing only the migrations up to and including the
+ * one whose name ends with `cutoffSuffix` (timestamp order). This models the
+ * database "as of" that migration; later migrations may rebuild tables, so a
+ * prior state must never mix newer migrations in and apply older ones later.
+ */
+export function preparePrismaProjectThrough(
+  dir: string,
+  cutoffSuffix: string,
+): string {
+  const names = listMigrationNames();
+  const cutoff = names.findIndex((name) => name.endsWith(cutoffSuffix));
+  if (cutoff < 0) {
+    throw new Error(`Missing ${cutoffSuffix} migration`);
+  }
+  const schemaPath = path.join(dir, "schema.prisma");
+  fs.copyFileSync(SCHEMA_PATH, schemaPath);
+  const dest = path.join(dir, "migrations");
+  fs.mkdirSync(dest, { recursive: true });
+  for (const name of names.slice(0, cutoff + 1)) {
+    fs.cpSync(path.join(MIGRATIONS_DIR, name), path.join(dest, name), {
+      recursive: true,
+    });
+  }
+  return schemaPath;
+}
+
+/** Copy every migration not yet present in the project (the upgrade wave). */
+export function copyRemainingMigrations(projectDir: string): void {
+  const dest = path.join(projectDir, "migrations");
+  for (const name of listMigrationNames()) {
+    if (fs.existsSync(path.join(dest, name))) continue;
+    fs.cpSync(path.join(MIGRATIONS_DIR, name), path.join(dest, name), {
+      recursive: true,
+    });
+  }
+}
