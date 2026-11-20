@@ -120,10 +120,13 @@ export async function admitConversationRequest(input: ConversationOperation & {
         messages.push(message);
       } else if (input.operation === "regenerate") {
         const index = messages.findIndex(m => m.id === input.targetMessageId);
-        // A stopped turn persists only the user message: the client's partial
-        // answer never reached the durable transcript. Regenerating it means
-        // answering that unanswered user tail again, with nothing to drop.
-        const stoppedTurn = index < 0 && messages.at(-1)?.role === "user";
+        const tail = messages.at(-1);
+        // A stopped turn persists only the user message. The stopped banner
+        // calls regenerate() with no assistant id, so the request names that
+        // persisted user id. A partial answer the server never stored arrives
+        // as an unknown id. Either way, re-answer the unanswered tail and
+        // drop nothing. An earlier user id is not this shape.
+        const stoppedTurn = tail?.role === "user" && (index < 0 || index === messages.length - 1);
         if (stoppedTurn) {
           if (pending.length) return { error: "CONVERSATION_TURN_CONFLICT" as const };
         } else {

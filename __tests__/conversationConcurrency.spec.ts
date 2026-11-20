@@ -170,7 +170,34 @@ describe("real SQLite request authority with two independent clients", () => {
   it("regenerate after a stop still refuses while an approval is pending", async () => {
     await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([proposal(), user("u")]) } });
     await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "partial" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "u" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
     expect((await load()).activeRequestId).toBeNull();
+  });
+  it("regenerate after a stop re-answers when the client targets the persisted user tail", async () => {
+    // Measured path: stop leaves the user message as the durable tail, and the
+    // stopped banner sends that user id. The new turn must not copy it.
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u1"), assistant("a1"), user("u2")]) } });
+    const admitted = await admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "u2" }, a);
+    expect(admitted.messages.map(m => m.id)).toEqual(["u1", "a1", "u2"]);
+    expect(JSON.parse((await load()).messages).map((m: UIMessage) => m.id)).toEqual(["u1", "a1", "u2"]);
+    expect((await load()).activeRequestId).toBe("r");
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r2", expectedRevision: 1, operation: "regenerate", targetMessageId: "u2" }, b)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+    expect((await load()).activeRequestId).toBe("r");
+    expect(JSON.parse((await load()).messages).map((m: UIMessage) => m.id)).toEqual(["u1", "a1", "u2"]);
+    await cancelConversationRequest(userId, conversationId, "r", a);
+  });
+  it("regenerate of an earlier user message stays refused when a later user is the tail", async () => {
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u1"), assistant("a1"), user("u2")]) } });
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "u1" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+    expect((await load()).activeRequestId).toBeNull();
+    expect(JSON.parse((await load()).messages).map((m: UIMessage) => m.id)).toEqual(["u1", "a1", "u2"]);
+  });
+  it("a turn that is still executing rejects regenerate of its user tail", async () => {
+    await send("live");
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 1, operation: "regenerate", targetMessageId: "live" }, b)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+    expect((await load()).activeRequestId).toBe("live");
+    expect(JSON.parse((await load()).messages).map((m: UIMessage) => m.id)).toEqual(["live"]);
+    await cancelConversationRequest(userId, conversationId, "live", a);
   });
   it("regenerate on a missing id is still refused when the tail is an answer", async () => {
     await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u"), assistant()]) } });
