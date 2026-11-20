@@ -39,7 +39,7 @@
 1. 设置 → AI 连接卡显示：在用版本与路径、原生会话所用二进制（本机应为 npm 0.170.0）、流式所用二进制（本机应为 0.165.0）、已验证版本、多重安装提示（`2043ff98`）。
 2. 普通 Codex 流式对话仍正常（未因选择逻辑退化）。
 3. 新建 Codex 原生会话，跨回合续接；完整退出重开后继续同一 thread。
-4. 备份契约：`npm run test:e2e:desktop -- --scenario=backup-native`，输出 `CHECK backup-excludes-binding PASS`（`8e009807`，首次运行，场景本身也需确认可用）。2026-11-19 首次在验收快照运行即失败：`Command failed: git rev-parse HEAD`，疑为驱动在无 git 信息的目录取提交号（待查，交验收执行者先做驱动最小修正）。
+4. 备份契约：从源码 Git 检出或 Worktree 运行 `npm run test:e2e:desktop -- --scenario=backup-native`，核对 `CHECK backup-excludes-binding PASS`。2026-11-19 首次运行在验收 Worktree 根读取 HEAD 失败，日志缺少 Git stderr，原因未确认。同一入口后续读取 `0f9c4659` 并在补齐快照输入后通过，见预验收证据。驱动现于创建运行目录前校验源码 HEAD，读取版本和文件清单时排除继承的仓库局部 Git 环境变量，失败时记录入口目录和 Git 错误。冻结版仍待复验。
 
 ## D. 其他已实现待验收
 

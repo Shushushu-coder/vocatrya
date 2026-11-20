@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import path from "node:path";
 import { runDesktopE2E, startDiskMonitor, BUILD_DISK_CHECK_INTERVAL_MS } from "./launcher.mjs";
 import { InsufficientDiskSpaceError, MIN_PREFLIGHT_FREE_BYTES, MIN_STAGE_FREE_BYTES } from "./guards.mjs";
 
@@ -56,7 +57,7 @@ function makeDeps(overrides = {}) {
       mkdirSync: (target) => record("mkdir", target),
       copyFileSync: (source, target) => record("copy", target),
       symlinkSync: () => record("symlink"),
-      existsSync: () => false,
+      existsSync: (file) => file === path.join(ROOT, ".git"),
       readFileSync: () => Buffer.from("x"),
     },
     execFileSync: () => "deadbeef\n",
@@ -133,7 +134,7 @@ test("snapshot copies and hashes extension source inputs", async () => {
       return "deadbeef\n";
     },
   });
-  harness.deps.fs.existsSync = (file) => file.endsWith("manifest.json") || file.endsWith("page.tsx");
+  harness.deps.fs.existsSync = (file) => file === path.join(ROOT, ".git") || file.endsWith("manifest.json") || file.endsWith("page.tsx");
   harness.deps.fs.readFileSync = (file) => { reads.push(file); return Buffer.from("input"); };
   succeedingBuild(harness);
   const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
@@ -143,6 +144,59 @@ test("snapshot copies and hashes extension source inputs", async () => {
 });
 
 function pathSuffix(relative) { return relative.replaceAll("/", process.platform === "win32" ? "\\" : "/"); }
+
+test("a Git HEAD failure reports stderr and checkout path before creating a run directory", async () => {
+  const harness = makeDeps({
+    execFileSync: (command, args, options) => {
+      assert.equal(command, "git");
+      if (args[1] === "--local-env-vars") return "GIT_DIR\n";
+      assert.deepEqual(args, ["rev-parse", "--verify", "HEAD^{commit}"]);
+      assert.equal(options.cwd, ROOT);
+      throw Object.assign(new Error("Command failed"), { stderr: "fatal: Needed a single revision\n" });
+    },
+  });
+  const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
+  assert.equal(result.ok, false);
+  assert.ok(harness.stderr[0].includes(ROOT));
+  assert.ok(harness.stderr[0].includes("fatal: Needed a single revision"));
+  assert.equal(idx(harness.calls, "mkdir"), -1);
+  assert.equal(idx(harness.calls, "spawn"), -1);
+});
+
+test("HEAD and the source file list ignore inherited Git worktree and index overrides", async (t) => {
+  const overrides = { GIT_DIR: "other/.git", GIT_WORK_TREE: "other", GIT_INDEX_FILE: "other/index" };
+  for (const [name, value] of Object.entries(overrides)) {
+    const previous = process.env[name];
+    process.env[name] = value;
+    t.after(() => {
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    });
+  }
+  const gitCalls = [];
+  const harness = makeDeps({
+    execFileSync: (_command, args, options) => {
+      if (args[1] === "--local-env-vars") return Object.keys(overrides).join("\n");
+      gitCalls.push(args[0]);
+      for (const name of Object.keys(overrides)) assert.equal(options.env[name], undefined);
+      assert.equal(options.cwd, ROOT);
+      return args[0] === "rev-parse" ? "deadbeef\n" : "";
+    },
+  });
+  succeedingBuild(harness);
+  const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
+  assert.equal(result.ok, true);
+  assert.ok(gitCalls.includes("rev-parse"));
+  assert.ok(gitCalls.includes("ls-files"));
+});
+
+test("a source root without its own Git metadata cannot inherit a parent's HEAD", async () => {
+  const harness = makeDeps({ execFileSync: () => assert.fail("Git must not be called") });
+  harness.deps.fs.existsSync = () => false;
+  const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
+  assert.match(result.primaryError.message, /Run the driver from a Git checkout or worktree/);
+  assert.equal(idx(harness.calls, "mkdir"), -1);
+});
 
 test("the run-dir limit aborts before mkdir, spawn or assembly", async () => {
   const harness = makeDeps();

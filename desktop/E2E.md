@@ -84,6 +84,8 @@ npm run test:e2e:desktop -- --direct
 npm run test:e2e:desktop -- --scenario=backup-native
 ```
 
+从源码 Git 检出或 Worktree 运行该命令。驱动检查该目录的 HEAD，并在隔离的 `app/` 快照中构建。
+
 场景在隔离源数据根注册合成账号，直接向隔离库写入一个 `NATIVE_CODEX_V1` 会话及合成 `NativeConversationBinding`（不接 Codex 运行时、不用真实账号），经应用真实的 `/api/backup/export` 导出，检查 ZIP：无 `NativeConversationBinding` 分组、任何文本条目无 thread id/`NATIVE_CODEX_V1`、导出的 `ChatConversation` 行无 `executionPath`/`nativeInitializationState` 键（设计契约，非保留）。随后退出并以全新的第二个数据根（`data-root-restore`）注册另一合成账号，经真实 `/api/backup/import` 恢复，断言 `executionPath=APP_ORCHESTRATED`、`nativeInitializationState=NEVER_ATTEMPTED`、绑定行为 0。证据与检查记录写入 `.tmp/desktop-e2e/<run>/evidence/backup-excludes-binding/`（`check.json` 含 id、status、expectation、逐项 checks 及证据路径，另有 `backup.zip`、`data.json`）。纯函数契约检查器的单测：`node --test desktop/e2e/backupContract.test.mjs`。
 
 ## 定向补验工具
