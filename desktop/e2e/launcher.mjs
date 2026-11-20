@@ -102,7 +102,7 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
   const result = { runId, runRoot, ok: false, primaryError: null, cleanupError: null, diskGuarded: false, buildTerminatedOnCleanup: false };
 
   function sourceFiles() {
-    return d.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src", "public", "extensions", "prisma/schema.prisma", "prisma/migrations", "desktop/main", "desktop/assets", "scripts/build-fresh-native-bootstrap.mjs", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "package.json", "package-lock.json", "tsconfig.json", "postcss.config.mjs"], { cwd: root }).toString().split("\0").filter(Boolean);
+    return d.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src", "public", "extensions", "prisma/schema.prisma", "prisma/migrations", "desktop/main", "desktop/assets", "scripts/build-fresh-native-bootstrap.mjs", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "package.json", "package-lock.json", "tsconfig.json", "postcss.config.mjs", "release-notes"], { cwd: root }).toString().split("\0").filter(Boolean);
   }
 
   function sourceDigest() {

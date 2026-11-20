@@ -14,7 +14,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDirectory, '../..');
 const task = path.join(root, '.tmp/managed-closure-ready');
 const hash = value => createHash('sha256').update(value).digest('hex');
-const INPUTS = ['src', 'public', 'prisma/schema.prisma', 'prisma/migrations', 'desktop/main', 'desktop/assets', 'scripts/build-fresh-native-bootstrap.mjs', 'next.config.mjs', 'next-env.d.ts', 'eslint.config.mjs', 'package.json', 'package-lock.json', 'tsconfig.json', 'postcss.config.mjs'];
+const INPUTS = ['src', 'public', 'prisma/schema.prisma', 'prisma/migrations', 'desktop/main', 'desktop/assets', 'scripts/build-fresh-native-bootstrap.mjs', 'next.config.mjs', 'next-env.d.ts', 'eslint.config.mjs', 'package.json', 'package-lock.json', 'tsconfig.json', 'postcss.config.mjs', 'release-notes'];
 const SUPPORT = ['desktop/e2e/launcher.mjs', 'desktop/e2e/harness.mjs', 'desktop/e2e/guards.mjs', 'desktop/e2e/scenario.mjs', 'desktop/scripts/assemble.mjs', 'desktop/scripts/scan-managed-secrets.mjs', 'desktop/scripts/prisma-runtime-filter.cjs', 'scripts/managed-closure-ready/fixture.cjs', 'scripts/managed-closure-ready/managed-desktop.mjs', 'scripts/managed-closure-ready/managed-desktop-scenario.mjs', 'scripts/managed-closure-ready/backend-observer.cjs', 'scripts/managed-closure-ready/scan-archive.cjs', 'scripts/managed-closure-ready/no-fallback-evidence.cjs'];
 const FIXTURE_ENV = ['VOCATRYA_HOSTED_ENDPOINT', 'VOCATRYA_DESKTOP_DATA_ROOT', 'VOCATRYA_AB_RUNTIME_ENABLED', 'VOCATRYA_AB_ROLLOUT_SCOPE'];
 function invariant(value, code) { if (!value) throw Object.assign(new Error(code), { code }); }
