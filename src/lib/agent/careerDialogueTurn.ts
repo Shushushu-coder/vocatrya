@@ -184,6 +184,8 @@ export async function runCareerDialogueTurn(
     directChat: true,
     freshNativeFull: input.freshNativeFull,
     agentRole: input.agentRole,
+    agentTaskId: input.agentTaskId,
+    handoffLine: input.handoffLine,
   });
   const answerChars = await streamFinalAnswer({
     userId: input.userId,

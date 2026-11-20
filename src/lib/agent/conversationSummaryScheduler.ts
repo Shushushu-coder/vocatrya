@@ -337,7 +337,7 @@ export async function condenseCareerDialogueSummary(
   }
 }
 
-function defaultSummarySchedulerDeps(): SummarySchedulerDeps {
+export function defaultSummarySchedulerDeps(): SummarySchedulerDeps {
   return {
     now: () => Date.now(),
     repository: createPrismaSummaryRepository(),

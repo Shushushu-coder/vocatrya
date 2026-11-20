@@ -147,6 +147,26 @@ describe("agentChat actions", () => {
     expect(prisma.chatConversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "row-1", userId: "user-1" } }));
   });
 
+  it("permissions list the task extension for an active bound Pilot session and fail closed otherwise", async () => {
+    const taskRow = ownedRow({ agentRole: "pilot", agentTaskId: "task-1" });
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(taskRow);
+    const names = async () => (await getAgentToolPermissions({ conversationId: "row-1" })).data?.tools.map(tool => tool.name) ?? [];
+    // The resolver cannot read the task: no extension (fail closed).
+    expect(await names()).not.toContain("match_job");
+    (prisma as any).agentTask = { findFirst: vi.fn(async () => ({ templateKey: "INTERVIEW_SPRINT" })) };
+    expect(await names()).toEqual(expect.arrayContaining(["match_job", "get_resume"]));
+    expect((prisma as any).agentTask.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "task-1", userId: "user-1", status: "ACTIVE" }) }));
+    // A task that is not ACTIVE/owned resolves to nothing.
+    (prisma as any).agentTask = { findFirst: vi.fn(async () => null) };
+    expect(await names()).not.toContain("match_job");
+    // An ordinary Pilot row never queries the task table.
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow({ agentRole: "pilot" }));
+    (prisma as any).agentTask = { findFirst: vi.fn() };
+    expect(await names()).not.toContain("match_job");
+    expect((prisma as any).agentTask.findFirst).not.toHaveBeenCalled();
+    delete (prisma as any).agentTask;
+  });
+
   it("permissions reject conversations the caller does not own", async () => {
     (prisma.chatConversation.findFirst as any).mockResolvedValue(null);
     expect(await getAgentToolPermissions({ conversationId: "foreign", agentRole: "pilot" })).toMatchObject({ success: false, code: "CONVERSATION_NOT_FOUND" });
@@ -188,6 +208,18 @@ describe("agentChat actions", () => {
     const result = await getChatConversation("row-1");
     expect(result.success).toBe(true);
     expect(result.data?.messages).toEqual([]);
+  });
+
+  it("snapshots carry agentTaskId only for task sessions; ordinary snapshots keep their shape", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow({ agentRole: "pilot", agentTaskId: "task-1" }));
+    const task = await getChatConversation("row-1");
+    expect(task.data?.agentTaskId).toBe("task-1");
+    expect((prisma.chatConversation.findFirst as any).mock.calls[0][0].select).toMatchObject({ agentTaskId: true });
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow({ agentRole: "pilot", agentTaskId: null }));
+    const plain = await getChatConversation("row-1");
+    expect(plain.data).not.toHaveProperty("agentTaskId");
+    (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow());
+    expect((await getChatConversation("row-1")).data).not.toHaveProperty("agentTaskId");
   });
 
   it("createChatConversation persists a null lock when nothing is configured", async () => {

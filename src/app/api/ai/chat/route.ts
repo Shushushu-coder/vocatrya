@@ -94,11 +94,27 @@ import {
 import { AIBusinessError, classifyAIConnection } from "@/lib/ai/connections";
 import { loadFreshConversationSummary } from "@/lib/agent/conversationSummaryStore";
 import { scheduleCareerDialogueSummary } from "@/lib/agent/conversationSummaryScheduler";
+import {
+  resolveTaskSessionContext,
+  type TaskSessionContext,
+} from "@/lib/agent/task/agentTaskBootstrap";
+import { scheduleTaskHandoff } from "@/lib/agent/task/agentTaskHandoffTrigger";
 
 // The one terminal tool whose stop condition is not "was it called" — see
 // addJobSettled.
 const addJobSettledStop: StopCondition<any> = ({ steps }) =>
   addJobSettled(steps[steps.length - 1] ?? {});
+
+// Task-session handoff trigger. scheduleTaskHandoff is already fire-and-forget
+// and non-throwing; the catch is the last line of defence so a handoff problem
+// can never surface in the user's turn (their reply is already committed).
+function triggerTaskHandoff(input: Parameters<typeof scheduleTaskHandoff>[0]) {
+  try {
+    scheduleTaskHandoff(input);
+  } catch {
+    log.info("[agent-task] handoff", { status: "failed", reason: "trigger" });
+  }
+}
 
 // One structured line per turn. Sizes and outcomes only — never the pasted
 // posting and never the extracted arguments.
@@ -158,6 +174,7 @@ async function accountChatResponse({
   request,
   agentRole,
   notionTools,
+  taskSession,
   managed,
 }: {
   permissionMode: import("@/lib/agent/preferences").PermissionMode;
@@ -184,6 +201,12 @@ async function accountChatResponse({
    * the route's admission step. Empty/omitted registers nothing.
    */
   notionTools?: readonly string[];
+  /**
+   * Agent long-task session context (Pilot conversation bound to an ACTIVE
+   * task), resolved by the route. Null/omitted for ordinary conversations,
+   * which then take none of the task paths below.
+   */
+  taskSession?: TaskSessionContext | null;
   /** Managed-locked turn — provenance + operation identity (M4). */
   managed?: import("@/lib/agent/accountTurn").ManagedTurnContext;
 }) {
@@ -244,6 +267,7 @@ async function accountChatResponse({
     freshNativeFull,
     agentRole,
     notionTools,
+    taskExtraTools: taskSession?.extraTools,
   }) + personalInstructionsBlock(personalInstructions) + permissionInstructions(permissionMode)
     + buildResumeEvidencePromptAddendum({ messages, agentRole });
 
@@ -356,6 +380,9 @@ async function accountChatResponse({
           agentRole,
           notionTools,
           permissionMode,
+          agentTaskId: taskSession?.taskId,
+          handoffLine: taskSession?.handoffLine,
+          taskExtraTools: taskSession?.extraTools,
         });
         contextSize = result.contextSize;
         // The budgeter's estimate for the turn that just ran, streamed back
@@ -442,6 +469,16 @@ async function accountChatResponse({
         resolvedModel: lock.model,
         messages: request.messages,
       });
+      // Task sessions only. Fire-and-forget and self-containing: a handoff
+      // failure is logged and backed off, never surfaced to this turn.
+      if (taskSession) {
+        triggerTaskHandoff({
+          userId,
+          conversationId,
+          taskId: taskSession.taskId,
+          messages: request.messages,
+        });
+      }
     },
     onError: mapTurnError,
   });
@@ -537,6 +574,15 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   }
   const pageContext = pageContextFromConversation(contextOfRow(conversation));
 
+  // Agent long-task harness: null (no DB access) unless the conversation is
+  // bound to a task, so ordinary chats are untouched.
+  const taskSession = await resolveTaskSessionContext(prisma, {
+    userId,
+    agentTaskId: conversation.agentTaskId,
+    agentRole: conversation.agentRole,
+    locale: normalizeLocale(req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value),
+  });
+
   // One resolution per turn. Fresh-native full keeps add_job and withholds
   // match_job and generate_cover_letter. Any AB_ENABLED + full runtime,
   // including migrated full, writes add_job through the canonical service.
@@ -571,6 +617,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       request,
       agentRole: conversation.agentRole,
       notionTools,
+      taskSession,
       managed: managedTurn,
     });
   }
@@ -691,6 +738,11 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   // in history looking permanent — the model replayed one for two turns.
   // Recency is what has to beat it, so this rides at the end of the messages
   // rather than in the system prompt. A pasted posting still lands last.
+  // The legacy path has no budgeter transcript to extend, so a task session's
+  // verified state line rides as a context message ahead of the page line.
+  if (lastIsUser && taskSession?.handoffLine) {
+    modelMessages.push({ role: "user", content: taskSession.handoffLine });
+  }
   if (lastIsUser) {
     modelMessages.push({
       role: "user",
@@ -742,6 +794,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     freshNativeFull,
     agentRole: conversation.agentRole,
     notionTools,
+    taskExtraTools: taskSession?.extraTools,
   }) + personalInstructionsBlock(preferences.personalInstructions) + permissionInstructions(permissionMode)
     + buildResumeEvidencePromptAddendum({ messages, agentRole: conversation.agentRole });
 
@@ -793,6 +846,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
           agentRole: conversation.agentRole,
           notionTools,
           permissionMode,
+          taskExtraTools: taskSession?.extraTools,
         });
         prefixMetrics = measureTurnPrefix({
           userId,
@@ -906,6 +960,14 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
         resolvedModel: null,
         messages: request.messages,
       });
+      if (taskSession) {
+        triggerTaskHandoff({
+          userId,
+          conversationId,
+          taskId: taskSession.taskId,
+          messages: request.messages,
+        });
+      }
     },
     // NOTE: this signature takes the error directly, unlike streamText's
     // onError which takes { error }.

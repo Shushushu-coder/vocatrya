@@ -59,6 +59,12 @@ export interface AgentTaskTemplate {
   /** Terminal milestone; reaching it is card C's call, never a model's. */
   doneMilestone: string;
   acceptanceItems: readonly AcceptanceItemDefinition[];
+  /**
+   * 任务扩展: tools a task session needs beyond its role's allowlist. They are
+   * added ONLY for a Pilot conversation bound to an ACTIVE task of this
+   * template (see taskExtraToolsFor); approval policy stays per tool name.
+   */
+  extraTools: readonly string[];
 }
 
 export const INTERVIEW_SPRINT_MILESTONE = {
@@ -100,6 +106,10 @@ export const INTERVIEW_SPRINT_TEMPLATE: AgentTaskTemplate = {
       evidenceKind: ACCEPTANCE_EVIDENCE_KIND.INTERVIEW_SESSION,
     },
   ],
+  // jd-fit-reviewed needs a real match analysis (Insight-only in Pilot's
+  // allowlist); get_resume lets the sprint ground answers in the resume.
+  // match_job keeps its approval gate (approval is decided per tool name).
+  extraTools: ["match_job", "get_resume"],
 };
 
 const TEMPLATES: Record<AgentTaskTemplateKey, AgentTaskTemplate> = {
@@ -156,7 +166,16 @@ export function parseAcceptanceItems(
   return items;
 }
 
-/* ---- Card C contract stubs (types only; no derivation logic here) ---- */
+/**
+ * Extra tools for a task session of `templateKey`, or [] for an unknown
+ * template. Pure; whether a conversation may use them is decided by
+ * resolveTaskSessionTools (bound + ACTIVE + owned).
+ */
+export function taskExtraToolsFor(templateKey: string): readonly string[] {
+  return isAgentTaskTemplateKey(templateKey) ? TEMPLATES[templateKey].extraTools : [];
+}
+
+/* ---- Card C derivation contract types (logic: agentTaskMilestone.ts) ---- */
 
 /** Domain facts card C will load (ownership-scoped) to derive a milestone. */
 export interface TaskMilestoneDerivationInput {

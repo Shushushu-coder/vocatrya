@@ -269,6 +269,9 @@ export function renderCareerDialoguePrompt(input: {
   summary?: CareerDialogueContextInput["summary"];
   freshNativeFull?: boolean;
   agentRole?: string | null;
+  /** Task session only (ChatConversation.agentTaskId) + its verified state line. */
+  agentTaskId?: string | null;
+  handoffLine?: string;
 }): { prompt: string; size: CareerDialogueContextSize } {
   const lastIsUser = input.messages[input.messages.length - 1]?.role === "user";
   const pasteBlock =
@@ -307,6 +310,8 @@ export function renderCareerDialoguePrompt(input: {
     fixedOverheadText,
     freshNativeFull: input.freshNativeFull,
     agentRole: input.agentRole,
+    agentTaskId: input.agentTaskId,
+    handoffLine: input.handoffLine,
   });
   if (!budget.ok) {
     throw new AIBusinessError(
@@ -446,6 +451,14 @@ export type AccountAgentTurnInput = {
    * the route). Registered into the toolset before the role allowlist runs.
    */
   notionTools?: readonly string[];
+  /**
+   * Task session (agent long-task harness). All three come from the route's
+   * resolveTaskSessionContext and are absent for ordinary conversations,
+   * which therefore run byte-identically to before.
+   */
+  agentTaskId?: string | null;
+  handoffLine?: string;
+  taskExtraTools?: readonly string[] | null;
   /** Injected for tests; production uses the default clients. */
   deps?: StreamExecutionDeps;
 };
@@ -533,6 +546,7 @@ export async function runAccountAgentTurn(
     request: input.request,
     agentRole: input.agentRole,
     notionTools: input.notionTools,
+    taskExtraTools: input.taskExtraTools,
     permissionMode: input.permissionMode,
   });
   const toolsBlock = describeToolsForPrompt(tools);
@@ -560,6 +574,8 @@ export async function runAccountAgentTurn(
       correction: extra?.correction,
       freshNativeFull: input.freshNativeFull,
       agentRole: input.agentRole,
+      agentTaskId: input.agentTaskId,
+      handoffLine: input.handoffLine,
     });
     contextSize = rendered.size;
     return rendered.prompt;

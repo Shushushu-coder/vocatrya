@@ -48,6 +48,7 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
     resolvedModel: true;
     managedAiProvenance: true;
     agentRole: true;
+    agentTaskId: true;
     archivedAt: true;
     createdAt: true;
     updatedAt: true;
@@ -67,6 +68,7 @@ const CHAT_ROW_SELECT = {
   resolvedModel: true,
   managedAiProvenance: true,
   agentRole: true,
+  agentTaskId: true,
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -160,6 +162,11 @@ export async function createChatConversationRecord(input: {
   firstUserText?: string | null;
   /** Role fixed at creation — immutable for the row's lifetime. */
   agentRole?: AgentRole | null;
+  /**
+   * Binds the new row to an owned agent task (resumeAgentTask only; the
+   * caller has already verified ownership). Requires a Pilot role.
+   */
+  agentTaskId?: string | null;
   /** Injected for tests; production uses the default Hosted client. */
   managedClient?: import("@/lib/ai/managed-client").HostedManagedClient;
 }): Promise<ChatConversationRow> {
@@ -194,6 +201,7 @@ export async function createChatConversationRecord(input: {
       resolvedModel: lock.resolvedModel,
       managedAiProvenance: lock.managedAiProvenance ?? null,
       agentRole: input.agentRole ?? null,
+      ...(input.agentTaskId ? { agentTaskId: input.agentTaskId } : {}),
     },
     select: CHAT_ROW_SELECT,
   });

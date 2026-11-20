@@ -29,6 +29,11 @@ export type ChatConversationSnapshot = ChatConversationSummary & {
   resolvedModel: string | null;
   /** Non-null on archived rows — Archive Center read-only views use it. */
   archivedAt: string | null;
+  /**
+   * Agent long-task binding. Present (non-null) only on task sessions;
+   * omitted otherwise so ordinary snapshots keep their shape.
+   */
+  agentTaskId?: string | null;
 };
 
 export type AgentChatPreflight =

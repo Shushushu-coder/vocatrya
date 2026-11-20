@@ -54,6 +54,12 @@ export function buildAgentTools(ctx: {
    * Absent or empty registers nothing — the extension is strictly opt-in.
    */
   notionTools?: readonly string[];
+  /**
+   * Task-session extension (resolveTaskSessionTools): extra tools for a Pilot
+   * conversation bound to an ACTIVE task. Absent/null leaves the role
+   * allowlist untouched.
+   */
+  taskExtraTools?: readonly string[] | null;
 }): ToolSet {
   // One per request, so no two nested tools run at once but two users never
   // block each other.

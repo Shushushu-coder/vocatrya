@@ -3,7 +3,13 @@ import { AGENT_ROLE_TOOL_ALLOWLIST, normalizeAgentRole } from "./agentRoles";
 
 const NOTION_CONFIRM_WRITES = ["notion_create_page", "notion_append_content", "notion_update_record", "notion_delete_pages"];
 
-export function effectiveAgentToolNames(input: { agentRole?: string | null; freshNativeFull?: boolean; notionTools?: readonly string[] }) {
+/**
+ * `taskExtraTools` is the output of resolveTaskSessionTools (task/agentTaskTools.ts):
+ * non-empty only for a Pilot conversation bound to an ACTIVE owned task. It can
+ * only re-admit tools the runtime already registers (the base list below), and
+ * only for Pilot; every other role/conversation is filtered exactly as before.
+ */
+export function effectiveAgentToolNames(input: { agentRole?: string | null; freshNativeFull?: boolean; notionTools?: readonly string[]; taskExtraTools?: readonly string[] | null }) {
   const role = normalizeAgentRole(input.agentRole);
   const notion = new Set<string>(NOTION_ALL_TOOL_NAMES);
   const names = ["add_job", "list_jobs", "get_job", "get_resume", "review_resume", "match_job",
@@ -13,7 +19,8 @@ export function effectiveAgentToolNames(input: { agentRole?: string | null; fres
     // the general assistant registers the full registry instead.
     ...(role ? ["suggest_role"] : []),
   ];
-  return names.filter(name => !role || AGENT_ROLE_TOOL_ALLOWLIST[role].includes(name));
+  const extra = role === "pilot" ? input.taskExtraTools ?? [] : [];
+  return names.filter(name => !role || AGENT_ROLE_TOOL_ALLOWLIST[role].includes(name) || extra.includes(name));
 }
 
 export function agentToolApproval(name: string, freshNativeFull: boolean, mode: import("./preferences").PermissionMode = "ask"): "always" | "conditional" | "none" {
