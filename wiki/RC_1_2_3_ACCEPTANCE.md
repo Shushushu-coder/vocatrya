@@ -1,8 +1,18 @@
 # 1.2.3-rc 桌面验收清单
 
-状态：**预验收进行中**。2026-11-19 验收窗口已在 `0f9c4659` 上开始预验收；同日用户决定 1.2.3-rc 继续追加 D4 长任务（已入 Main `62158e4c`）、错误提示合并、简历证据保存三项，三项合入后冻结再构建。未打 tag、未发布。凡涉及聊天核心（A 组、D4、D6 及 F 组）的结论须以冻结后的构建为准，`0f9c4659` 上的结果仅作预验收参考。改动收口、按 [RELEASE_RUNBOOK](./RELEASE_RUNBOOK.md) §4 构建安装包后，由单一指定执行者（或用户）在 Windows Electron 上串行实测。
+状态：**已冻结，待正式验收**（2026-11-19）。冻结点为本文件所在的 main 提交（含 `dee66e28` 及之前全部代码）；此后 1.2.3-rc 只接受验收发现的缺陷修复。此前：**预验收**。2026-11-19 验收窗口已在 `0f9c4659` 上开始预验收；同日用户决定 1.2.3-rc 继续追加 D4 长任务（已入 Main `62158e4c`）、错误提示合并、简历证据保存三项，三项合入后冻结再构建。未打 tag、未发布。凡涉及聊天核心（A 组、D4、D6 及 F 组）的结论须以冻结后的构建为准，`0f9c4659` 上的结果仅作预验收参考。改动收口、按 [RELEASE_RUNBOOK](./RELEASE_RUNBOOK.md) §4 构建安装包后，由单一指定执行者（或用户）在 Windows Electron 上串行实测。
 
 规则（摘自 RELEASE_RUNBOOK §4）：结论须标注所测安装包的构建提交；只认 Windows Electron 实测；一律使用隔离数据根，不碰用户安装版数据；台账 `passes` 只在对应 Feature 全部步骤通过后由 Main 集成 Owner 更新。
+
+## 预验收结果 @ `0f9c4659`（2026-11-19，Windows Electron fresh-native，隔离数据根）
+
+仅作参考，正式结论以冻结构建为准。证据在验收快照 `.worktrees/rc-1-2-3-accept/.tmp/rc-1-2-3-accept/runs/` 与 `.tmp/desktop-e2e/72d76f05-…/`。
+
+- PASS：C4 backup-native 8/8（驱动修正后）；A1 面板 X／Esc／Header 三路径；A4 开关面板不触发模型；EXT-INTERVIEW-WEB 桌面入口隐藏与旧路由提示 ×4；AWU-DICTATION 设置页音频区存在（仅 UI）。
+- FAIL → 已修复待复验：A2 停止后立即「重新生成」永久 409（停止的回合只持久化用户消息）——`a763f38e`；`/dashboard/extensions` 整页 500（服务端页面调用 `"use client"` 模块导出）——`9921b609`，阻断了 D5、Notion 卡片与 EXT-INTERVIEW-WEB 卡片检查。
+- NOT_RUN：A1 右栏挤占（当前 UI 无第二个右栏持有者，路径不可达）；D1 面试准备去重；D6 `read_webpage`（需测试 URL）；D4 简历证据多轮。
+- BLOCKED（需凭据或外部条件）：A4–A5 真实 `suggest_role`、D7 深度匹配真实模型、C1–C3 Codex 原生会话、B 组与 D3 Notion、D2 真实转写、EXT-INTERVIEW-WEB 目标 HTTPS 地址未定。
+- 驱动修正：快照源码清单补 `release-notes`（`dee66e28`）；A 组夹具须用两段协议（decision JSON + answer）。
 
 ## A. 1.2.2-rc 缺陷修复复验（MVP / MULTI_AGENT_ONBOARDING）
 
