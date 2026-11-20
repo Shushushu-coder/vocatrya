@@ -3,21 +3,11 @@
 import { useState, type ReactNode } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export const EXTENSIONS_TAB_IDS = [
-  "connections",
-  "skills",
-  "companion",
-] as const;
-export type ExtensionsTabId = (typeof EXTENSIONS_TAB_IDS)[number];
-
-export function resolveExtensionsTab(
-  raw: string | string[] | undefined,
-): ExtensionsTabId {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return (EXTENSIONS_TAB_IDS as readonly string[]).includes(value ?? "")
-    ? (value as ExtensionsTabId)
-    : "connections";
-}
+import {
+  EXTENSIONS_TAB_IDS,
+  resolveExtensionsTab,
+  type ExtensionsTabId,
+} from "./extensionsTab";
 
 // The server page resolves ?tab= for deep links; switching tabs mirrors the
 // choice back into the URL without a navigation round trip.
