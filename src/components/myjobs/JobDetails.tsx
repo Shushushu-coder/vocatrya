@@ -53,6 +53,7 @@ import {
 } from "@/lib/career/capabilities";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
 import { useI18n } from "@/i18n";
+import { JobTaskButton } from "./job-details/JobTaskButton";
 
 const LEGACY_JOB_DETAIL_TABS = [
   "description",
@@ -283,6 +284,11 @@ function JobDetails({
           onDelete={() => setDeleteAlertOpen(true)}
           onAddNote={onAddNote}
           onChangeStatus={onChangeStatus}
+          taskAction={
+            prepSurfaceEnabled && !isArchived ? (
+              <JobTaskButton jobOpportunityId={job.id} />
+            ) : undefined
+          }
         />
 
         <JobSummaryCard

@@ -121,6 +121,7 @@ function Probe() {
       >
         sendMessage
       </button>
+      <span data-testid="active-task">{c.activeTaskId ?? "none"}</span>
       <span data-testid="panel-width">{c.panelWidth}</span>
       <span data-testid="active-role">{c.activeRole}</span>
       <span data-testid="composer-seed">{c.composerSeed}</span>
@@ -352,6 +353,24 @@ describe("AgentChatProvider", () => {
       </SidebarProvider>,
     );
     expect(screen.getByTestId("active-role").textContent).toBe("insight");
+  });
+
+  it("restores the task binding of the loaded conversation on mount", () => {
+    render(
+      <SidebarProvider initialExpanded>
+        <RightRailProvider>
+          <AgentChatProvider initialConversation={{ ...conversation([], "pilot"), agentTaskId: "task-9" }}>
+            <Probe />
+          </AgentChatProvider>
+        </RightRailProvider>
+      </SidebarProvider>,
+    );
+    expect(screen.getByTestId("active-task").textContent).toBe("task-9");
+  });
+
+  it("has no task binding for an ordinary conversation", () => {
+    render(tree());
+    expect(screen.getByTestId("active-task").textContent).toBe("none");
   });
 
   // Each role keeps its own conversation slot: switching away and back
