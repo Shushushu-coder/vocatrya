@@ -6,7 +6,7 @@ import {
 } from "./identities";
 import { assertResumeV1Writable } from "./capabilities";
 
-function detailCreateKey(
+export function detailCreateKey(
   type: CareerMaterialType,
 ): keyof Prisma.CareerMaterialItemCreateInput {
   switch (type) {
@@ -103,47 +103,64 @@ export class CareerMaterialService {
     detail?: Record<string, unknown>;
   }) {
     await this.gate();
-    return this.db.$transaction(async (tx) => {
-      const item = await this.requireOwned(input.id, tx);
-      const type = assertType(item.type);
-      const nestedKey = detailCreateKey(type);
+    return this.db.$transaction((tx) => this.updateWithin(tx, input));
+  }
 
-      // A linked SKILL row takes its display name from the live Tag; letting a
-      // generic detail patch rewrite skillName at the same time would create a
-      // second name source. The dedicated setSkillTag path owns that column
-      // while tagId is set (unlink snapshots the last visible label itself).
-      if (type === "SKILL" && input.detail && "skillName" in input.detail) {
-        const skill = await tx.careerSkillDetail.findUnique({
-          where: { materialItemId: item.id },
-          select: { tagId: true },
-        });
-        if (skill?.tagId) {
-          throw new CareerRuntimeError(
-            "INVALID_MATERIAL_DETAIL",
-            "Skill name follows the linked tag; unlink it to edit text.",
-          );
-        }
-      }
+  /**
+   * Update body for callers that already hold a transaction (no gate check:
+   * the caller gates). Same semantics as update().
+   */
+  async updateWithin(
+    tx: Prisma.TransactionClient,
+    input: {
+      id: string;
+      title?: string;
+      startDate?: Date | null;
+      endDate?: Date | null;
+      isCurrent?: boolean;
+      notes?: string | null;
+      detail?: Record<string, unknown>;
+    },
+  ) {
+    const item = await this.requireOwned(input.id, tx);
+    const type = assertType(item.type);
+    const nestedKey = detailCreateKey(type);
 
-      return tx.careerMaterialItem.update({
-        where: { id: item.id },
-        data: {
-          title: input.title ?? item.title,
-          startDate: input.startDate === undefined ? item.startDate : input.startDate,
-          endDate: input.endDate === undefined ? item.endDate : input.endDate,
-          isCurrent: input.isCurrent ?? item.isCurrent,
-          notes: input.notes === undefined ? item.notes : input.notes,
-          origin: "USER",
-          ...(input.detail
-            ? {
-                [nestedKey]: {
-                  update: input.detail,
-                },
-              }
-            : {}),
-        },
-        include: detailInclude(type),
+    // A linked SKILL row takes its display name from the live Tag; letting a
+    // generic detail patch rewrite skillName at the same time would create a
+    // second name source. The dedicated setSkillTag path owns that column
+    // while tagId is set (unlink snapshots the last visible label itself).
+    if (type === "SKILL" && input.detail && "skillName" in input.detail) {
+      const skill = await tx.careerSkillDetail.findUnique({
+        where: { materialItemId: item.id },
+        select: { tagId: true },
       });
+      if (skill?.tagId) {
+        throw new CareerRuntimeError(
+          "INVALID_MATERIAL_DETAIL",
+          "Skill name follows the linked tag; unlink it to edit text.",
+        );
+      }
+    }
+
+    return tx.careerMaterialItem.update({
+      where: { id: item.id },
+      data: {
+        title: input.title ?? item.title,
+        startDate: input.startDate === undefined ? item.startDate : input.startDate,
+        endDate: input.endDate === undefined ? item.endDate : input.endDate,
+        isCurrent: input.isCurrent ?? item.isCurrent,
+        notes: input.notes === undefined ? item.notes : input.notes,
+        origin: "USER",
+        ...(input.detail
+          ? {
+              [nestedKey]: {
+                update: input.detail,
+              },
+            }
+          : {}),
+      },
+      include: detailInclude(type),
     });
   }
 

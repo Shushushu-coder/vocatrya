@@ -12,7 +12,7 @@ import {
 
 export const RESUME_EVIDENCE_SKILL_TITLE = "简历证据深挖";
 export const RESUME_EVIDENCE_SKILL_DESCRIPTION =
-  "逐轮追问一段经历里的个人贡献、行动、结果和时间，形成待用户确认的职业素材草稿；首版只产出草稿，不保存。";
+  "逐轮追问一段经历里的个人贡献、行动、结果和时间，形成待用户确认的职业素材草稿；你只产出草稿，保存由用户在草稿卡片上预览确认后由应用完成。";
 
 /** Mirrors NativeSkillContentV1 in the native-session contract (not yet consumed). */
 export interface ResumeEvidenceSkillContent {
@@ -44,7 +44,7 @@ export const RESUME_EVIDENCE_PROMPT_SECTIONS = {
 
 满足以下全部条件后，给出阶段总结并告诉用户可以停止：没有未解决冲突；个人贡献已说明或已跳过；至少有一条个人行动或行动已跳过；结果已说明或已跳过；时间已说明或已跳过。证据名称不是停止条件。澄清满 ${RESUME_EVIDENCE_MAX_CLARIFY_ROUNDS} 轮时必须总结，并请用户决定是否结束。
 
-阶段总结和最终 JSON 都是草稿，artifactKind 为 skill_result_draft。用户认可一句表达，只记录 suggestedExpressions[].userAcceptedWording 的措辞接受意向。首版的 saveAuthorized 和 persisted 必须始终为 false。用户提到保存只能作为后续意向；你不能生成授权或保存回执，必须明确说明本技能只产出草稿。
+阶段总结和最终 JSON 都是草稿，artifactKind 为 skill_result_draft。用户认可一句表达，只记录 suggestedExpressions[].userAcceptedWording 的措辞接受意向。首版的 saveAuthorized 和 persisted 必须始终为 false。你自己不能保存，也不能生成授权或保存回执；用户想保存时，告诉用户确认草稿后可在草稿卡片上点「保存到职业资料」，经预览确认后由应用写入（EMPLOYMENT 与 CUSTOM 类型仍只能保留草稿）。
 
 不要收集内部推理，不要索取证件、证明人、家庭、账号或与这段经历无关的敏感信息。不要调用或声称调用了匹配、面试训练、简历改写、归档或外部笔记。`,
 
@@ -65,7 +65,7 @@ stopped：不再追问。输出完整结果。条件已满且用户结束时 sto
   // Output shape only restates the fixed values of the result contract; the
   // validator in ./contract is the authority and rejects anything else.
   resultFormat: `结果草稿：每次需要展示草稿时，输出一个 json 代码块，结构为 ${RESUME_EVIDENCE_CONTRACT_VERSION}。固定值：contractVersion=${RESUME_EVIDENCE_CONTRACT_VERSION}；skillId=${RESUME_EVIDENCE_SKILL_ID}；skillVersion=${RESUME_EVIDENCE_SKILL_VERSION}；artifactKind=skill_result_draft；exampleKind=model_output；authorization.scope=single_experience，authorization.fullLibraryScanned=false；materialMapping.operation=draft_only，callsExistingEntrypoints=[]，evidenceToAdd[].kindOnWrite=FACT，verificationStatusOnWrite=USER_AUTHORED，originOnWrite=USER；saveGate.saveAuthorized=false，saveGate.persisted=false；suggestedExpressions[].saveAuthorized=false。
-confirmedFacts 只放 user_stated 或 source_material，每条带 sourceRefs；pending、conflicts、skipped、assumptions 分别存放待确认、冲突、跳过和推断；建议表达的 basisFactIds 必须都是已确认事实 id；未被用户接受的建议表达不得放进 evidenceToAdd；没有量化指标时 outcomes[].quantified=false 且 metricText=null；EMPLOYMENT 与 CUSTOM 类型的 futureOperation 只能是 draft_only；未知日期写 null，只有用户明确给出完整 YYYY-MM-DD 才填日期。
+confirmedFacts 只放 user_stated 或 source_material，每条带 sourceRefs；pending、conflicts、skipped、assumptions 分别存放待确认、冲突、跳过和推断；建议表达的 basisFactIds 必须都是已确认事实 id；未被用户接受的建议表达不得放进 evidenceToAdd；没有量化指标时 outcomes[].quantified=false 且 metricText=null；EMPLOYMENT 与 CUSTOM 类型的 futureOperation 只能是 draft_only；其他类型在可以停止时，用户点名了已有素材则 futureOperation=update_existing，否则 create_new；blockedWrites 只写白名单以外、无法写入的列及原因，不要沿用初始草稿里的 DRAFT_ONLY_V1；未知日期写 null，只有用户明确给出完整 YYYY-MM-DD 才填日期。
 停止字段：session.stage 为五个阶段之一；stopReason 仅在 stopped 时非空；停止条件满足时 sufficiency.met=true 且 missingSlots 为空，否则列出缺失槽位；summarizing、ready_to_stop、stopped 阶段 next.questionBudget=0。`,
 } as const;
 
