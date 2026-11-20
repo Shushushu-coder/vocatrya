@@ -101,12 +101,12 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
   const state = { buildChild: null, instance: null, interrupted: false };
   const result = { runId, runRoot, ok: false, primaryError: null, cleanupError: null, diskGuarded: false, buildTerminatedOnCleanup: false };
 
-  function sourceFiles() {
-    return d.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src", "public", "extensions", "prisma/schema.prisma", "prisma/migrations", "desktop/main", "desktop/assets", "scripts/build-fresh-native-bootstrap.mjs", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "package.json", "package-lock.json", "tsconfig.json", "postcss.config.mjs", "release-notes"], { cwd: root }).toString().split("\0").filter(Boolean);
+  function sourceFiles(gitOptions) {
+    return d.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src", "public", "extensions", "prisma/schema.prisma", "prisma/migrations", "desktop/main", "desktop/assets", "scripts/build-fresh-native-bootstrap.mjs", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "package.json", "package-lock.json", "tsconfig.json", "postcss.config.mjs", "release-notes"], gitOptions).toString().split("\0").filter(Boolean);
   }
 
-  function sourceDigest() {
-    const files = sourceFiles();
+  function sourceDigest(gitOptions) {
+    const files = sourceFiles(gitOptions);
     const hash = createHash("sha256");
     for (const file of [...new Set(files)].sort()) {
       hash.update(file);
@@ -204,17 +204,33 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
       }
       throw error;
     }
+    let commit;
+    const gitOptions = { cwd: root, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] };
+    try {
+      if (!d.fs.existsSync(path.join(root, ".git"))) {
+        throw new Error("Run the driver from a Git checkout or worktree");
+      }
+      // Git hooks can export repository-local overrides for a different checkout.
+      // Both HEAD and the source file list must come from this worktree.
+      const localVars = new Set(d.execFileSync("git", ["rev-parse", "--local-env-vars"], gitOptions).trim().split(/\s+/));
+      gitOptions.env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !localVars.has(name.toUpperCase())));
+      commit = d.execFileSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], gitOptions).trim();
+    } catch (error) {
+      const detail = String(error.stderr ?? "").trim() || error.message;
+      result.primaryError = new Error(`Could not resolve desktop E2E source HEAD (cwd=${root}): ${detail}`, { cause: error });
+      d.onError(`FAIL Windows Electron fresh-native E2E: ${result.primaryError.message}`);
+      return result;
+    }
     d.fs.mkdirSync(appRoot, { recursive: true });
     try {
-      const commit = d.execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-      const digest = sourceDigest();
+      const digest = sourceDigest(gitOptions);
       d.onLog(`Desktop E2E: commit=${commit} source=${digest} host=Electron mode=fresh-native proxy=${direct ? "DIRECT DIAGNOSTIC" : "SYSTEM (unchanged)"}`);
       d.onLog(`Isolated run: ${runRoot}`);
       // Build from explicit source inputs only. Next otherwise loads the
       // user's checkout .env files even when the child environment is
       // allowlisted. The snapshot also prevents contention with a developer's
       // .next server.
-      for (const file of [...new Set(sourceFiles())]) {
+      for (const file of [...new Set(sourceFiles(gitOptions))]) {
         const source = path.join(root, file);
         if (!d.fs.existsSync(source)) continue;
         const destination = path.join(appRoot, file);
@@ -222,7 +238,7 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
         d.fs.copyFileSync(source, destination);
       }
       d.fs.symlinkSync(path.join(root, "node_modules"), path.join(appRoot, "node_modules"), "junction");
-      if (sourceDigest() !== digest) throw new Error("Source changed while snapshotting; rerun against a stable checkout");
+      if (sourceDigest(gitOptions) !== digest) throw new Error("Source changed while snapshotting; rerun against a stable checkout");
       // Stage-boundary disk checks: each verification sits after one heavy
       // stage and before the next, so a drained volume aborts instead of
       // failing midway. The async build is additionally watched by the
@@ -233,7 +249,7 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
       d.requireFreeSpace({ runId, stage: "next-build", target: runRoot, minimumBytes: MIN_STAGE_FREE_BYTES });
       // The unmodified desktop main resolves its backend relative to this copy.
       d.assemble({ repoRoot: appRoot, outputRoot: path.join(appRoot, ".codex-tmp", "desktop-poc") });
-      if (sourceDigest() !== digest) throw new Error("Source changed during assembly; rerun against a stable checkout");
+      if (sourceDigest(gitOptions) !== digest) throw new Error("Source changed during assembly; rerun against a stable checkout");
       d.requireFreeSpace({ runId, stage: "backend-assembly", target: runRoot, minimumBytes: MIN_STAGE_FREE_BYTES });
       d.onLog("PASS current-source build/assembly identity");
       await d.runScenario({ runId, appRoot, dataRoot, runRoot, direct, state });
