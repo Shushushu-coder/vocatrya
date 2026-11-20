@@ -1,6 +1,6 @@
 # Agent 长任务 Harness 完整实施方案
 
-状态：实施设计（未实施）；**2026-11-19 Owner 裁定本期范围与修订，见 §0.1，与正文冲突处以 §0.1 为准**
+状态：**本期卡 A/B/C/E 已实现并集成 Main（2026-11-19，merge `62158e4c`；卡 A `1e431d85`、B `a214e1a2`、C `9b2380ac`、E `b6697f25`），待 1.2.3-rc 桌面验收**；Web 开发态隔离数据已核对创建入口、任务卡折叠/展开/切换、刷新恢复绑定任务，真实模型回合与 Windows Electron 未执行；卡 D/F 与材料变更弹窗未实施。**2026-11-19 Owner 裁定本期范围与修订，见 §0.1，与正文冲突处以 §0.1 为准**
 依据：Anthropic Engineering《Effective harnesses for long-running agents》(2025-11-26)、
 《Harness design for long-running application development》(2026-03-24)、
 anthropics/cwc-long-running-agents quickstart；Vocatrya 代码库逐文件实测核对（2026-11-16）。
