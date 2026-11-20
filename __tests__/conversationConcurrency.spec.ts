@@ -158,6 +158,24 @@ describe("real SQLite request authority with two independent clients", () => {
     expect((await load()).messages).toContain("a1");
     await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "u2" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
   });
+  it("regenerate after a stop re-answers the unanswered user tail", async () => {
+    // A stopped turn persisted only the user message; the client still holds
+    // its partial answer under an id the server never saw.
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u1"), assistant("a1"), user("u2")]) } });
+    const admitted = await admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "partial-never-saved" }, a);
+    expect(admitted.messages.map(m => m.id)).toEqual(["u1", "a1", "u2"]);
+    expect((await load()).activeRequestId).toBe("r");
+    await cancelConversationRequest(userId, conversationId, "r", a);
+  });
+  it("regenerate after a stop still refuses while an approval is pending", async () => {
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([proposal(), user("u")]) } });
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "partial" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+    expect((await load()).activeRequestId).toBeNull();
+  });
+  it("regenerate on a missing id is still refused when the tail is an answer", async () => {
+    await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([user("u"), assistant()]) } });
+    await expect(admitConversationRequest({ userId, conversationId, requestId: "r", expectedRevision: 0, operation: "regenerate", targetMessageId: "gone" }, a)).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });
+  });
   it("regenerate refuses to rerun while a pending approval exists anywhere in the transcript", async () => {
     await a.chatConversation.update({ where: { id: conversationId }, data: { messages: JSON.stringify([proposal(), user("u"), assistant()]) } });
     await expect(regen("r")).rejects.toMatchObject({ code: "CONVERSATION_TURN_CONFLICT" });

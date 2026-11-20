@@ -120,28 +120,36 @@ export async function admitConversationRequest(input: ConversationOperation & {
         messages.push(message);
       } else if (input.operation === "regenerate") {
         const index = messages.findIndex(m => m.id === input.targetMessageId);
-        if (pending.length || index < 0 || index !== messages.length - 1 || messages[index].role !== "assistant" || regenerateTailHasWriteReceipt(messages))
-          return { error: "CONVERSATION_TURN_CONFLICT" as const };
-        // C06: a queued stub is not a write receipt — the tail must not be
-        // regenerated while any detached-write proposal it carries is
-        // committed (approved/queued/running/dispatched/settled). The
-        // proposal row is the authority; a missing task row never disarms
-        // this guard.
-        const tailToolCallIds = messages[index].parts
-          .filter(part => isToolUIPart(part) && isDetachedWriteTool(getToolName(part)))
-          .map(part => (isToolUIPart(part) ? part.toolCallId : ""))
-          .filter(Boolean);
-        if (tailToolCallIds.length) {
-          const committed = await tx.agentOperationProposal.findFirst({
-            where: {
-              conversationId: row.id,
-              toolCallId: { in: tailToolCallIds },
-              status: "APPROVED",
-            },
-          });
-          if (committed) return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        // A stopped turn persists only the user message: the client's partial
+        // answer never reached the durable transcript. Regenerating it means
+        // answering that unanswered user tail again, with nothing to drop.
+        const stoppedTurn = index < 0 && messages.at(-1)?.role === "user";
+        if (stoppedTurn) {
+          if (pending.length) return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        } else {
+          if (pending.length || index < 0 || index !== messages.length - 1 || messages[index].role !== "assistant" || regenerateTailHasWriteReceipt(messages))
+            return { error: "CONVERSATION_TURN_CONFLICT" as const };
+          // C06: a queued stub is not a write receipt — the tail must not be
+          // regenerated while any detached-write proposal it carries is
+          // committed (approved/queued/running/dispatched/settled). The
+          // proposal row is the authority; a missing task row never disarms
+          // this guard.
+          const tailToolCallIds = messages[index].parts
+            .filter(part => isToolUIPart(part) && isDetachedWriteTool(getToolName(part)))
+            .map(part => (isToolUIPart(part) ? part.toolCallId : ""))
+            .filter(Boolean);
+          if (tailToolCallIds.length) {
+            const committed = await tx.agentOperationProposal.findFirst({
+              where: {
+                conversationId: row.id,
+                toolCallId: { in: tailToolCallIds },
+                status: "APPROVED",
+              },
+            });
+            if (committed) return { error: "CONVERSATION_TURN_CONFLICT" as const };
+          }
+          messages.splice(index);
         }
-        messages.splice(index);
       } else {
         const proposal = pending.find(p => p.part.approval?.id === input.approvalId);
         if (!proposal || proposal.message.role !== "assistant" || proposal.message.id !== messages.at(-1)?.id || typeof input.decision !== "boolean" || !proposal.part.toolCallId || !proposal.part.type.startsWith("tool-") || proposal.part.input === undefined)
