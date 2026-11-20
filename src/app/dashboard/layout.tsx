@@ -20,6 +20,7 @@ import { CareerSurfacesProvider } from "@/context/CareerSurfacesContext";
 import { isLegacyResumeEditorReadOnly } from "@/lib/career/capabilities";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
+import { ErrorNoticeHost } from "@/components/common/ErrorNoticeHost";
 import StaleSessionSignOut from "@/components/StaleSessionSignOut";
 import ReminderScheduler from "@/components/reminders/ReminderScheduler";
 import { auth, signOut } from "@/auth";
@@ -104,6 +105,7 @@ export default async function RootLayout({
                   {/* Container, not viewport, queries: the docked chat panel
                     shrinks this box without changing the viewport width. */}
                   <main className="@container/main flex-1 p-4 sm:px-4 sm:py-0">
+                    <ErrorNoticeHost />
                     <div className="items-start gap-4 md:gap-4 @3xl/main:grid @3xl/main:grid-cols-3">
                       {children}
                     </div>

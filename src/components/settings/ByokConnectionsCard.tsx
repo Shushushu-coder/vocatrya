@@ -17,6 +17,7 @@ import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { Label } from "../ui/label";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { reportErrorNotice, resolveErrorNotice } from "@/lib/errorNotices";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -220,12 +221,16 @@ function ByokConnectionsCard() {
         const reauth = result.data.filter((r) => r.status === "reauth_required").length;
         const unavailable = result.data.filter((r) => r.status === "unavailable").length;
         if (reauth === 0 && unavailable === 0) {
+          resolveErrorNotice("byok-credentials:REAUTH_REQUIRED");
           toastSuccess(t("settings.byokVerifyOk"), t("settings.byokStorageTitle"));
         } else {
-          toastError(
-            t("settings.byokVerifyIssues", { reauth, unavailable }),
-            t("settings.byokStorageTitle"),
-          );
+          // Persistent until keys are re-entered and a later check is clean,
+          // so it lives top-left instead of a disappearing toast.
+          reportErrorNotice({
+            kind: "byok-credentials:REAUTH_REQUIRED",
+            title: t("common.errorNoticeByokTitle"),
+            message: t("settings.byokVerifyIssues", { reauth, unavailable }),
+          });
         }
         await fetchKeys();
         await fetchStorageStatus();

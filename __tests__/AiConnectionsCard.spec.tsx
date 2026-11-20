@@ -9,6 +9,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AiServicesLayout from "@/components/settings/AiServicesLayout";
 import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
+import { ErrorNoticeHost } from "@/components/common/ErrorNoticeHost";
+import { resetErrorNoticesForTests } from "@/lib/errorNotices";
 
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
@@ -462,4 +464,17 @@ it("hides connect for providers that already have a connection row", async () =>
   expect(
     screen.getByRole("button", { name: "Connect Claude" }),
   ).toBeInTheDocument();
+});
+
+it("mirrors a REAUTH_REQUIRED connection into one top-left error notice", async () => {
+  resetErrorNoticesForTests();
+  installBridges({ connections: [
+    { id: "a", backendKind: "CODEX_RUNTIME", displayName: "A", status: "REAUTH_REQUIRED" },
+    { id: "b", backendKind: "CLAUDE_RUNTIME", displayName: "B", status: "REAUTH_REQUIRED" },
+  ] });
+  render(<><ErrorNoticeHost /><AiServicesLayout><AiConnectionsCard /></AiServicesLayout></>);
+  const notices = await screen.findAllByTestId("error-notice");
+  expect(notices).toHaveLength(1);
+  expect(notices[0]).toHaveAttribute("data-kind", "ai-connection:REAUTH_REQUIRED");
+  resetErrorNoticesForTests();
 });

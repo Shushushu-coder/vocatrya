@@ -9,6 +9,7 @@ import SettingsDrawer from "./SettingsDrawer";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { useConditionNotice } from "@/components/common/useConditionNotice";
 import { useI18n } from "@/i18n";
 import {
   listAiConnections,
@@ -264,9 +265,13 @@ function AiConnectionsCard() {
   const [models, setModels] = useState<Record<string, ModelEntry[]>>({});
   const [smokeText, setSmokeText] = useState<Record<string, string>>({});
 
+  // null until the first successful listAiConnections read.
+  const [connectionsChecked, setConnectionsChecked] = useState(false);
+
   const refresh = useCallback(async () => {
     const result = await listAiConnections();
     if (result.success && result.data) {
+      setConnectionsChecked(true);
       setConnections(
         result.data.filter((c) =>
           ACCOUNT_LOGIN_BACKENDS.some((b) => b.backendKind === c.backendKind),
@@ -274,6 +279,21 @@ function AiConnectionsCard() {
       );
     }
   }, []);
+
+  // Persistent condition, mirrored top-left from the status read above. The
+  // per-action toasts below (connect/verify failures) stay bottom-right.
+  useConditionNotice(
+    connectionsChecked ? connections.some((c) => c.status === "REAUTH_REQUIRED") : null,
+    {
+      kind: "ai-connection:REAUTH_REQUIRED",
+      title: t("common.errorNoticeAiReauthTitle"),
+      message: t("common.errorNoticeAiReauthMessage"),
+      action: {
+        label: t("common.errorNoticeReconnect"),
+        href: "/dashboard/settings?section=ai-services",
+      },
+    },
+  );
 
   // The single online update-check path — the automatic mount-time check
   // and the manual recheck share it. force bypasses the upstream cache;
