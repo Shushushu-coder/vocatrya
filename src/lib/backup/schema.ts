@@ -11,8 +11,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 10;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export const BACKUP_FORMAT_VERSION = 11;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -30,6 +30,7 @@ export const ManifestSchema = z.object({
     z.literal(8),
     z.literal(9),
     z.literal(10),
+    z.literal(11),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -408,6 +409,9 @@ const ChatConversation = z.object({
   // Optional: backups taken before conversation archive have no such key,
   // and undefined restores as NULL (unarchived).
   archivedAt: optDt.optional(),
+  // Optional: backups taken before agent long tasks have no such key, and
+  // undefined restores as NULL (ordinary chat). Patched after AgentTask exists.
+  agentTaskId: optId.optional(),
   createdAt: dt,
   updatedAt: dt,
 });
@@ -1351,6 +1355,50 @@ const InterviewPrepGoal = z.object({
   updatedAt: dt,
 });
 
+// Agent long-task ledger (user career-fact + audit trail). The live session
+// claim (activeSessionId/activeSessionClaimedAt) is runtime state: it travels
+// verbatim but is cleared on import. acceptanceItems embeds evidence entity
+// ids and is remapped; handoff state stays verbatim so its stateHash holds
+// (orphaned pointers surface as grounding discrepancies).
+const AgentTask = z.object({
+  id,
+  title: str,
+  templateKey: str,
+  jobOpportunityId: optId,
+  interviewPrepGoalId: optId,
+  milestone: str,
+  status: str,
+  acceptanceItems: str,
+  revision: int,
+  liveSlot: optStr,
+  activeSessionId: optStr,
+  activeSessionClaimedAt: optDt,
+  blockedReason: optStr,
+  blockedInputKey: optStr,
+  createdAt: dt,
+  updatedAt: dt,
+  archivedAt: optDt,
+});
+
+const AgentTaskHandoff = z.object({
+  id,
+  taskId: id,
+  revision: int,
+  state: str,
+  stateHash: str,
+  sessionId: optId,
+  generationMs: optInt,
+  createdAt: dt,
+});
+
+const AgentTaskEvent = z.object({
+  id,
+  taskId: id,
+  kind: str,
+  payload: str,
+  createdAt: dt,
+});
+
 // REM-V1 derived schedule records. targetId is polymorphic (sourceType
 // selects the referenced table), so it is carried verbatim and remapped
 // per sourceType at restore time.
@@ -1454,6 +1502,9 @@ export const BackupDataSchema = z.object({
   QuestionBank: group(QuestionBank),
   QuestionBankItem: group(QuestionBankItem),
   InterviewPrepGoal: group(InterviewPrepGoal),
+  AgentTask: group(AgentTask),
+  AgentTaskHandoff: group(AgentTaskHandoff),
+  AgentTaskEvent: group(AgentTaskEvent),
   InterviewSession: group(InterviewSession),
   QuestionInstance: group(QuestionInstance),
   AnswerAttempt: group(AnswerAttempt),

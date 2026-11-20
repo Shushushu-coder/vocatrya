@@ -55,6 +55,8 @@ type JobDetailsHeaderProps = {
   onDelete: () => void;
   onAddNote: () => void;
   onChangeStatus: (status: JobStatus) => void;
+  /** Slot for the job-search task entry (card E). */
+  taskAction?: React.ReactNode;
 };
 
 export function JobDetailsHeader({
@@ -72,6 +74,7 @@ export function JobDetailsHeader({
   onDelete,
   onAddNote,
   onChangeStatus,
+  taskAction,
 }: JobDetailsHeaderProps) {
   const { t } = useI18n();
   const { jobMutationsEnabled } = useCareerSurfaces();
@@ -118,6 +121,7 @@ export function JobDetailsHeader({
             {t("settings.archivedBadge")}
           </Badge>
         )}
+        {!archived && taskAction}
         {!archived && showAiActions && (
           <Button
             variant="outline"

@@ -124,6 +124,8 @@ export type AgentChatInitialConversation = {
   titleFallback: string | null;
   /** Persisted role — decides which slot this row mounts into. */
   agentRole?: AgentRole | null;
+  /** Persisted task binding, so the task card restores its selection on reload. */
+  agentTaskId?: string | null;
 };
 
 type QueuedMessage = { parts: UIMessage["parts"] };
@@ -319,6 +321,10 @@ function useAgentChatValue(
   );
   const [nativeStatus, setNativeStatus] = useState<"waiting" | "resumed" | "created">("waiting");
   const [nativeSession, setNativeSession] = useState(initial?.executionPath === "NATIVE_CODEX_V1");
+  // Agent long-task binding of the open conversation (card E task card).
+  const [taskBinding, setTaskBinding] = useState<{ conversationId: string; taskId: string } | null>(
+    initial?.id && initial.agentTaskId ? { conversationId: initial.id, taskId: initial.agentTaskId } : null,
+  );
   const [conversationId, setConversationId] = useState<string | null>(
     initial?.id ?? null,
   );
@@ -1274,6 +1280,7 @@ function useAgentChatValue(
       explicitRef.current = null;
       setExplicit(null);
       setConversationId(data.id);
+      setTaskBinding(data.agentTaskId ? { conversationId: data.id, taskId: data.agentTaskId } : null);
       setNativeSession(data.executionPath === "NATIVE_CODEX_V1");
       setNativeStatus("waiting");
       setContext(data.context);
@@ -1552,6 +1559,20 @@ function useAgentChatValue(
     [approvalPending, dispatch],
   );
 
+  // Open a task session (card E): activate it in the Pilot slot and, for a
+  // freshly created session, send the fixed kickoff text as the first turn.
+  const openTaskSession = useCallback(
+    async (input: { conversationId: string; kickoffText?: string }) => {
+      open();
+      const ok = await selectConversation(input.conversationId);
+      if (ok && input.kickoffText) {
+        sendMessage({ parts: [{ type: "text", text: input.kickoffText }] });
+      }
+      return ok;
+    },
+    [open, selectConversation, sendMessage],
+  );
+
   // External composer writes (D8): suggestions fill the input without
   // touching the chat — no request, no conversation, no model call. The
   // composer's registered setter applies it while mounted; unmounted, the
@@ -1793,6 +1814,8 @@ function useAgentChatValue(
     clearQueued,
     startNewConversation,
     selectConversation,
+    openTaskSession,
+    activeTaskId: taskBinding && taskBinding.conversationId === conversationId ? taskBinding.taskId : null,
     removeConversation,
     archiveConversation,
     historyVersion,

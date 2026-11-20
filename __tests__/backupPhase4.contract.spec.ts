@@ -28,9 +28,9 @@ import { LEGACY, TARGET } from "@/lib/legacy-migration/identities";
 const SCHEMA_PATH = path.resolve(__dirname, "../prisma/schema.prisma");
 
 describe("Phase 4 backup contract", () => {
-  it("writes formatVersion 10 and still reads v1-v9", () => {
-    expect(BACKUP_FORMAT_VERSION).toBe(10);
-    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  it("writes formatVersion 11 and still reads v1-v10", () => {
+    expect(BACKUP_FORMAT_VERSION).toBe(11);
+    expect([...SUPPORTED_BACKUP_FORMAT_VERSIONS]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(ManifestSchema.parse({
       formatVersion: 1,
       appVersion: "1.0.0",
@@ -181,6 +181,7 @@ describe("Phase 4 backup contract", () => {
       "AgentOperationProposal.supersedesId",
       "AnswerAttempt.activeRevisionId",
       "ApplicationAttempt.transferredFromAttemptId",
+      "ChatConversation.agentTaskId",
       "InterviewSession.currentQuestionInstanceId",
       "JobDescriptionVersion.currentParseId",
       "JobOpportunity.currentJdVersionId",

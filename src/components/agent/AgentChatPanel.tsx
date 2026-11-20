@@ -11,6 +11,7 @@ import { AgentChatInput } from "@/components/agent/AgentChatInput";
 import { AgentChatMessages } from "@/components/agent/AgentChatMessages";
 import { AgentProposalEntry } from "@/components/agent/AgentProposalStatus";
 import { AgentRoleSwitcher } from "@/components/agent/AgentRoleSwitcher";
+import { AgentTaskCard } from "@/components/agent/AgentTaskCard";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { copyFor, AGENT_ROLE_KEYS } from "@/lib/agent/roleCopy";
 import { useI18n } from "@/i18n";
@@ -158,6 +159,9 @@ export function AgentChatPanel() {
           </div>
         </div> : null}
         <div className="flex min-h-0 flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-6xl">
+          <div className="shrink-0 px-3 pt-2 empty:hidden">
+            <AgentTaskCard />
+          </div>
           <AgentProposalEntry />
           {hasTranscript ? <AgentChatMessages /> : <AgentChatEmptyState state={brandState} />}
         </div>

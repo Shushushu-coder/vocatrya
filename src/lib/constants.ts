@@ -185,6 +185,21 @@ export const APP_CONSTANTS = {
   AGENT_CHAT_REVIEW_SURFACE: "chat",
   AGENT_CHAT_MATCH_SURFACE: "chat",
   AGENT_CHAT_MAX_STEPS: 4,
+  // Agent long-task ledger: a session claim older than this is stale and may
+  // be taken over by another session (crashed/abandoned client recovery).
+  AGENT_TASK_SESSION_STALE_MS: 2 * 60 * 60 * 1000,
+  // Event payloads carry pointers and short codes only.
+  AGENT_TASK_EVENT_PAYLOAD_MAX_CHARS: 2000,
+  // Agent task handoff (card B). The handoff row is a never-drop context
+  // section; the write side caps prose so a rendered row fits this budget.
+  AGENT_TASK_HANDOFF_TOKENS: 1_500,
+  AGENT_TASK_HANDOFF_SUMMARY_MAX_CHARS: 1500,
+  AGENT_TASK_HANDOFF_MAX_NEXT_ACTIONS: 5,
+  AGENT_TASK_HANDOFF_NEXT_ACTION_MAX_CHARS: 300,
+  AGENT_TASK_HANDOFF_MAX_POINTERS: 20,
+  AGENT_TASK_HANDOFF_MAX_CONSTRAINTS: 10,
+  AGENT_TASK_HANDOFF_CONSTRAINT_MAX_CHARS: 200,
+  AGENT_TASK_HANDOFF_TRANSCRIPT_MAX_CHARS: 12_000,
   AGENT_CHAT_MAX_STORED_MESSAGES: 50,
   AGENT_CHAT_HISTORY_MESSAGES: 20,
   // Message count alone cannot bound context: one review output or resume read

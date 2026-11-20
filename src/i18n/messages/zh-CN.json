@@ -3641,5 +3641,44 @@
     "dispatched": "已发送至 Notion",
     "approved": "已批准——等待执行器",
     "loadFailed": "无法加载操作状态"
+  },
+  "agentTask": {
+    "createForJob": "为此机会创建求职任务",
+    "openTask": "打开任务",
+    "creating": "正在创建任务…",
+    "createFailed": "无法创建任务",
+    "openFailed": "无法打开任务",
+    "titleInterview": "面试冲刺",
+    "cardLabel": "任务进度",
+    "progressCount": "已完成 {done}/{total}",
+    "switchTask": "切换任务",
+    "acceptance": "验收项",
+    "blockedReason": "受阻原因",
+    "nextStep": "下一步",
+    "continueTask": "继续任务",
+    "continuing": "正在打开…",
+    "expand": "展开任务详情",
+    "collapse": "收起任务详情",
+    "heldElsewhere": "该任务已有另一个会话正在推进",
+    "noNextStep": "暂无待办",
+    "milestone": {
+      "PREPARING": "准备中",
+      "PRACTICING": "练习中",
+      "REVIEWING": "复盘中",
+      "DONE": "已完成"
+    },
+    "status": {
+      "ACTIVE": "进行中",
+      "PAUSED": "已暂停",
+      "BLOCKED": "受阻",
+      "DONE": "已完成",
+      "ABANDONED": "已放弃"
+    },
+    "blocked": {
+      "WAITING_USER_CONFIRMATION": "等待你确认",
+      "WAITING_SCHEDULE": "等待约定时间",
+      "MISSING_FACTS": "缺少你需提供的信息",
+      "EXTERNAL_REPLY": "等待外部回复"
+    }
   }
 }

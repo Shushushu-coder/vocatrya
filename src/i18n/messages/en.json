@@ -3641,5 +3641,44 @@
     "dispatched": "Dispatched to Notion",
     "approved": "Approved — waiting for runner",
     "loadFailed": "Could not load operation status"
+  },
+  "agentTask": {
+    "createForJob": "Create job-search task for this opportunity",
+    "openTask": "Open task",
+    "creating": "Creating task…",
+    "createFailed": "Could not create the task",
+    "openFailed": "Could not open the task",
+    "titleInterview": "Interview sprint",
+    "cardLabel": "Task progress",
+    "progressCount": "{done}/{total} done",
+    "switchTask": "Switch task",
+    "acceptance": "Acceptance items",
+    "blockedReason": "Blocked",
+    "nextStep": "Next step",
+    "continueTask": "Continue task",
+    "continuing": "Opening…",
+    "expand": "Show task details",
+    "collapse": "Hide task details",
+    "heldElsewhere": "Another session is already working on this task",
+    "noNextStep": "Nothing queued yet",
+    "milestone": {
+      "PREPARING": "Preparing",
+      "PRACTICING": "Practicing",
+      "REVIEWING": "Reviewing",
+      "DONE": "Done"
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "PAUSED": "Paused",
+      "BLOCKED": "Blocked",
+      "DONE": "Done",
+      "ABANDONED": "Abandoned"
+    },
+    "blocked": {
+      "WAITING_USER_CONFIRMATION": "Waiting for your confirmation",
+      "WAITING_SCHEDULE": "Waiting for a scheduled time",
+      "MISSING_FACTS": "Missing information from you",
+      "EXTERNAL_REPLY": "Waiting for an external reply"
+    }
   }
 }
