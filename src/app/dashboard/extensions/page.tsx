@@ -12,6 +12,7 @@ import { getNotionExtensionState } from "@/lib/extensions/notion/service";
 import ExtensionsTabs, { resolveExtensionsTab } from "./ExtensionsTabs";
 import SkillsPanel from "./SkillsPanel";
 import { notionT } from "@/lib/extensions/notion/copy";
+import { NotionStatusNotice } from "@/components/extensions/NotionStatusNotice";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -64,6 +65,7 @@ export default async function ExtensionsPage({
       data-testid="extensions-list"
       className="grid grid-cols-1 gap-4 @md/main:grid-cols-2 @3xl/main:grid-cols-3"
     >
+      <NotionStatusNotice status={notionState?.status ?? null} />
       <Card data-testid="extensions-card-notion" className="h-full">
         <CardContent className="flex h-full flex-col gap-3 px-4 py-4">
           <div className="flex items-center gap-2">

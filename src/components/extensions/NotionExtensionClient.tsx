@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/i18n";
+import { NotionStatusNotice } from "./NotionStatusNotice";
 import { notionCopy, type NotionCopyKey } from "@/lib/extensions/notion/copy";
 import type { NotionExtensionState } from "@/lib/extensions/notion/service";
 import {
@@ -134,6 +135,7 @@ export function NotionExtensionClient() {
 
   return (
     <div className="space-y-4">
+      <NotionStatusNotice status={state?.status ?? null} />
       <Link
         href="/dashboard/extensions"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
