@@ -3,7 +3,7 @@ import { CAREER_MATERIAL_TYPE } from "./identities";
 import { isValidIsoDate } from "./candidateProfileService";
 import { normalizeOptionalText } from "./opportunityService";
 
-type DetailFieldKind = "string" | "float" | "datetime" | "dateonly" | "boolean";
+export type DetailFieldKind = "string" | "float" | "datetime" | "dateonly" | "boolean";
 
 const INVALID_DETAIL_MESSAGE = "Invalid material detail field.";
 
@@ -32,7 +32,7 @@ const FORBIDDEN_DETAIL_KEYS = new Set([
  * Field names match the current Prisma detail models. EMPLOYMENT and CUSTOM
  * are intentionally omitted: this action surface does not edit them.
  */
-const APPLICATION_PROFILE_DETAIL_FIELDS = {
+export const APPLICATION_PROFILE_DETAIL_FIELDS = {
   EDUCATION: {
     institution: "string",
     degree: "string",
