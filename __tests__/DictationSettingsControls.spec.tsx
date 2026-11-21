@@ -1,7 +1,9 @@
 // AWU-DICTATION settings block: provider/model/credential editing stays
 // inside the dictation namespace, key save/delete goes through the
-// dictation actions, and only metadata ever renders.
-import { render, screen, waitFor } from "@testing-library/react";
+// dictation actions, and only metadata ever renders. N-2: dictation is
+// Gemini-only — the provider picker offers a single option and the key
+// guidance links to Google AI Studio.
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DictationSettingsControls } from "@/components/settings/DictationSettingsControls";
 
@@ -18,7 +20,6 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 const EMPTY_CREDENTIALS = {
-  openai: { shared: null, dedicated: null },
   gemini: { shared: null, dedicated: null },
 };
 
@@ -45,21 +46,19 @@ beforeEach(() => {
 });
 
 describe("DictationSettingsControls", () => {
-  it("keeps unsaved provider and model edits when saving a dedicated key", async () => {
+  it("keeps unsaved model and credential edits when saving a dedicated key", async () => {
     actions.getDictationSettings.mockResolvedValue(settings({ config: {
-      provider: "openai", model: "gpt-transcribe", credentialMode: "shared",
+      provider: "gemini", model: "gemini-3.5-flash-lite", credentialMode: "shared",
     } }));
     const user = userEvent.setup();
     render(<DictationSettingsControls />);
-    await screen.findByTestId("dictation-provider");
-    await user.selectOptions(screen.getByTestId("dictation-provider"), "gemini");
+    await screen.findByTestId("dictation-model");
     await user.clear(screen.getByTestId("dictation-model"));
     await user.type(screen.getByTestId("dictation-model"), "gemini-3.5-transcribe");
     await user.selectOptions(screen.getByTestId("dictation-credential-mode"), "dedicated");
-    await user.type(screen.getByTestId("dictation-key-input"), "synthetic-key");
+    await user.type(screen.getByTestId("dictation-key-input"), "AIza-key");
     await user.click(screen.getByTestId("dictation-key-save"));
     await waitFor(() => expect(screen.getByTestId("dictation-key-badge")).toHaveTextContent("1234"));
-    expect(screen.getByTestId("dictation-provider")).toHaveValue("gemini");
     expect(screen.getByTestId("dictation-model")).toHaveValue("gemini-3.5-transcribe");
     expect(screen.getByTestId("dictation-credential-mode")).toHaveValue("dedicated");
     expect(actions.getDictationSettings).toHaveBeenCalledTimes(1);
@@ -67,11 +66,13 @@ describe("DictationSettingsControls", () => {
     await user.click(screen.getByTestId("dictation-save"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Test transcription" })).toBeEnabled());
   });
-  it("renders provider/model/credential fields after loading", async () => {
+
+  it("renders Gemini as the only provider option after loading", async () => {
     render(<DictationSettingsControls />);
-    await waitFor(() =>
-      expect(screen.getByTestId("dictation-provider")).toBeInTheDocument(),
-    );
+    const select = await screen.findByTestId("dictation-provider");
+    expect(
+      (await within(select).findAllByRole("option")).map(o => (o as HTMLOptionElement).value),
+    ).toEqual(["gemini"]);
     expect(screen.getByTestId("dictation-model")).toBeInTheDocument();
     expect(
       screen.getByTestId("dictation-credential-mode"),
@@ -79,6 +80,14 @@ describe("DictationSettingsControls", () => {
     expect(screen.getByTestId("dictation-key-badge")).toHaveTextContent(
       "Not configured",
     );
+  });
+
+  it("links the API key guidance to Google AI Studio", async () => {
+    render(<DictationSettingsControls />);
+    const link = await screen.findByTestId("dictation-get-key-link");
+    expect(link).toHaveAttribute("href", "https://aistudio.google.com/api-keys");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
 
   it("restores the persisted config and shows the key badge", async () => {
@@ -124,11 +133,11 @@ describe("DictationSettingsControls", () => {
     );
     const model = screen.getByTestId("dictation-model");
     await user.clear(model);
-    await user.type(model, "gpt-transcribe");
+    await user.type(model, "gemini-3.5-transcribe");
     await user.click(screen.getByTestId("dictation-save"));
     expect(actions.updateDictationSettings).toHaveBeenCalledWith({
-      provider: "openai",
-      model: "gpt-transcribe",
+      provider: "gemini",
+      model: "gemini-3.5-transcribe",
       credentialMode: "shared",
     });
   });
@@ -145,13 +154,13 @@ describe("DictationSettingsControls", () => {
     );
     await user.type(
       screen.getByTestId("dictation-key-input"),
-      "sk-dictation",
+      "AIza-dictation",
     );
     await user.click(screen.getByTestId("dictation-key-save"));
     expect(actions.saveDictationKey).toHaveBeenCalledWith({
-      provider: "openai",
+      provider: "gemini",
       credentialMode: "dedicated",
-      key: "sk-dictation",
+      key: "AIza-dictation",
     });
     expect(actions.saveDictationKey.mock.calls[0]![0]).not.toHaveProperty(
       "credentialMode",
@@ -163,13 +172,13 @@ describe("DictationSettingsControls", () => {
     actions.getDictationSettings.mockResolvedValue(
       settings({
         config: {
-          provider: "openai",
-          model: "gpt-transcribe",
+          provider: "gemini",
+          model: "gemini-3.5-flash-lite",
           credentialMode: "dedicated",
         },
         credentials: {
           ...EMPTY_CREDENTIALS,
-          openai: {
+          gemini: {
             shared: null,
             dedicated: { last4: "9999", protection: "os" },
           },
@@ -185,7 +194,7 @@ describe("DictationSettingsControls", () => {
     );
     await user.click(screen.getByTestId("dictation-key-delete"));
     expect(actions.deleteDictationKey).toHaveBeenCalledWith({
-      provider: "openai",
+      provider: "gemini",
       credentialMode: "dedicated",
     });
   });

@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url);
 const { startCredentialBroker } = require("./credential-broker.js");
 const { createDictationTransport } = require("./dictation-transport.js");
 const token = "synthetic-internal-token";
-const target = "https://api.openai.com/v1/audio/transcriptions";
+const target = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent";
 
 async function run(fetchImpl, test) {
   const broker = await startCredentialBroker({ token, dictationTransport: createDictationTransport(fetchImpl) });
@@ -21,7 +21,8 @@ describe("desktop dictation network transport", () => {
     const upstream = vi.fn();
     await run(upstream, async request => {
       expect((await request(target, "Bearer wrong")).status).toBe(401);
-      for (const url of ["http://127.0.0.1:1234", `${target}?key=secret`, `${target}/extra`, "https://api.openai.com.evil/v1/audio/transcriptions"]) {
+      for (const url of ["http://127.0.0.1:1234", `${target}?key=secret`, `${target}/extra`,
+        "https://api.openai.com/v1/audio/transcriptions", "https://generativelanguage.googleapis.com.evil/v1beta/models/m:generateContent"]) {
         expect((await request(url)).status).toBe(400);
       }
       expect(upstream).not.toHaveBeenCalled();
@@ -36,7 +37,7 @@ describe("desktop dictation network transport", () => {
       expect(await response.json()).toEqual({ error: { code: "invalid_api_key" } });
       expect(upstream).toHaveBeenCalledWith(target, expect.objectContaining({
         redirect: "error", body: Buffer.from("{}"),
-        headers: { "content-type": "application/json", authorization: "Bearer synthetic-provider-key" },
+        headers: { "content-type": "application/json", "x-goog-api-key": "synthetic-provider-key" },
       }));
       expect(JSON.stringify(upstream.mock.calls)).not.toContain(token);
     });

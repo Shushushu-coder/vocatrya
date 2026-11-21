@@ -17,7 +17,7 @@ import {
 import { DICTATION_ERROR_CODES } from "@/lib/dictation/config";
 
 const CONFIGURED = {
-  dictation: { provider: "openai", model: "gpt-transcribe" },
+  dictation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
 };
 
 function db(overrides: {
@@ -52,8 +52,8 @@ describe("dictationSettingsFromDocument", () => {
     expect(
       dictationSettingsFromDocument(JSON.stringify(CONFIGURED)),
     ).toEqual({
-      provider: "openai",
-      model: "gpt-transcribe",
+      provider: "gemini",
+      model: "gemini-3.5-flash-lite",
       credentialMode: "shared",
     });
   });
@@ -62,14 +62,18 @@ describe("dictationSettingsFromDocument", () => {
     ["not json", "not json"],
     ["empty document", "{}"],
     ["dictation not an object", JSON.stringify({ dictation: 5 })],
-    ["missing model", JSON.stringify({ dictation: { provider: "openai" } })],
+    ["missing model", JSON.stringify({ dictation: { provider: "gemini" } })],
     [
       "unknown provider",
       JSON.stringify({ dictation: { provider: "ollama", model: "x" } }),
     ],
     [
+      "legacy openai config (N-2)",
+      JSON.stringify({ dictation: { provider: "openai", model: "gpt-transcribe" } }),
+    ],
+    [
       "oversized model",
-      JSON.stringify({ dictation: { provider: "openai", model: "x".repeat(200) } }),
+      JSON.stringify({ dictation: { provider: "gemini", model: "x".repeat(200) } }),
     ],
   ])("treats %s as not configured", (_name, raw) => {
     expect(dictationSettingsFromDocument(raw)).toBeNull();
@@ -95,21 +99,21 @@ describe("credentialProviderFor", () => {
   it("points shared mode at the provider's BYOK row", () => {
     expect(
       credentialProviderFor({
-        provider: "openai",
+        provider: "gemini",
         model: "m",
         credentialMode: "shared",
       }),
-    ).toBe("openai");
+    ).toBe("gemini");
   });
 
   it("points dedicated mode at the dictation-namespaced row", () => {
     expect(
       credentialProviderFor({
-        provider: "openai",
+        provider: "gemini",
         model: "m",
         credentialMode: "dedicated",
       }),
-    ).toBe("dictation-openai");
+    ).toBe("dictation-gemini");
   });
 });
 
@@ -119,11 +123,11 @@ describe("resolveDictationConfig", () => {
       keyRow: { encryptedKey: "enc", iv: "os:v1:x" },
     });
     const result = await resolveDictationConfig("u1", store as never);
-    expect(result.settings.model).toBe("gpt-transcribe");
+    expect(result.settings.model).toBe("gemini-3.5-flash-lite");
     expect(result.apiKey).toBe("sk-live");
     expect(apiKeyFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: "u1", provider: "openai" },
+        where: { userId: "u1", provider: "gemini" },
       }),
     );
   });
@@ -132,8 +136,8 @@ describe("resolveDictationConfig", () => {
     const { store, apiKeyFindFirst } = db({
       settings: JSON.stringify({
         dictation: {
-          provider: "openai",
-          model: "gpt-transcribe",
+          provider: "gemini",
+          model: "gemini-3.5-flash-lite",
           credentialMode: "dedicated",
         },
       }),
@@ -142,7 +146,7 @@ describe("resolveDictationConfig", () => {
     await resolveDictationConfig("u1", store as never);
     expect(apiKeyFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: "u1", provider: "dictation-openai" },
+        where: { userId: "u1", provider: "dictation-gemini" },
       }),
     );
   });
