@@ -7,6 +7,7 @@ import codex from "./codex.js";
 const {
   CODEX_CURATED_MODELS,
   CODEX_SMOKE_PROMPT,
+  codexAdapter,
   buildCodexExecInvocation,
   buildCodexLoginInvocation,
   buildCodexLogoutInvocation,
@@ -259,6 +260,41 @@ describe("codex invocation builders", () => {
     expect(inv.env.CODEX_HOME).toBe(PROFILE_DIR);
     // No broad-write or bypass flags ever appear.
     expect(inv.args.join(" ")).not.toMatch(/workspace-write|danger|full-access/);
+  });
+});
+
+describe("listModels capture bound", () => {
+  it("returns every list-visible model from a catalog larger than 256KB", async () => {
+    const models = [];
+    for (let i = 0; i < 30; i++) {
+      models.push({
+        slug: `gpt-catalog-${i}`,
+        display_name: `Model ${i}`,
+        visibility: i === 3 ? "hide" : "list",
+        description: "x".repeat(20_000),
+      });
+    }
+    const stdout = JSON.stringify({ models });
+    expect(Buffer.byteLength(stdout)).toBeGreaterThan(256 * 1024);
+    const result = await codexAdapter.listModels({
+      executablePath: "C:\\x\\codex.exe",
+      profileDir: PROFILE_DIR,
+      baseEnv: { PATH: "C:\\Windows", SystemRoot: "C:\\Windows" },
+      runner: async (invocation) => {
+        const cap = invocation.maxCaptureBytes ?? 256 * 1024;
+        return {
+          exitCode: 0,
+          stdout: stdout.slice(0, cap),
+          stderr: "",
+          timedOut: false,
+        };
+      },
+    });
+    expect(result.dynamicDiscoverySupported).toBe(true);
+    expect(result.models.map((model) => model.id)).toEqual(
+      models.filter((model) => model.visibility === "list").map((model) => model.slug),
+    );
+    expect(result.models.every((model) => model.source === "RUNTIME")).toBe(true);
   });
 });
 

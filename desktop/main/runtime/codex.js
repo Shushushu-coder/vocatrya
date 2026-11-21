@@ -354,6 +354,10 @@ const codexAdapter = {
         ...invocation,
         timeoutMs,
         signal,
+        // `codex debug models` JSON is several hundred KB. The runner's
+        // default 256KB cap truncates it, JSON.parse fails, and the UI
+        // falls back to the old curated list.
+        maxCaptureBytes: 8 * 1024 * 1024,
       });
       if (result.error || result.timedOut || result.exitCode !== 0) continue;
       const models = parseCodexModelCatalog(result.stdout);
