@@ -313,14 +313,22 @@ describe("execution seam contract", () => {
         permissionScope: "TEXT_ONLY",
       }),
     ).toEqual({ ready: false, code: "STREAMING_NOT_VERIFIED" });
-    // Devin passed managed delta verification on 3000.10.31: ready only
-    // when the installed binary matches the verified version.
+    // Devin streaming PASS is the verified list: the probed 3000.10.31
+    // build and the local 3000.14.30821 build. A neighbor stays closed.
     expect(
       checkStreamingExecutionReadiness({
         capabilities: cap("DEVIN_RUNTIME"),
         connectionStatus: "CONNECTED",
         permissionScope: "TEXT_ONLY",
         runtimeVersion: "3000.10.31",
+      }),
+    ).toEqual({ ready: true });
+    expect(
+      checkStreamingExecutionReadiness({
+        capabilities: cap("DEVIN_RUNTIME"),
+        connectionStatus: "CONNECTED",
+        permissionScope: "TEXT_ONLY",
+        runtimeVersion: "3000.14.30821",
       }),
     ).toEqual({ ready: true });
     expect(

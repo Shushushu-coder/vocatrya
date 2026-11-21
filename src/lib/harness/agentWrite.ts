@@ -5,6 +5,7 @@ import type {
   AgentNotionWriteResult,
   AgentNotionWriteVerify,
 } from "@/models/agent.model";
+import { NOTION_DELETE_PAGES_REMOTE_BATCH } from "@/models/agent.schema";
 import {
   NOTION_ERROR,
   NotionError,
@@ -17,11 +18,13 @@ import {
   remoteToolText,
 } from "@/lib/extensions/notion/mcpClient";
 import { resolveNotionAccessToken } from "@/lib/extensions/notion/service";
+import { NOTION_TOOL } from "@/lib/extensions/notion/constants";
 import { pickRemoteArgs } from "@/lib/extensions/notion/remoteArgs";
 import { resolveNotionRemoteMeta } from "@/lib/agent/tools/notion";
 import {
   NOTION_WRITE_SPECS,
   notionWriteInputHash,
+  type NotionWriteSpec,
 } from "@/lib/agent/notionWriteSpec";
 import { effectiveAgentToolNames } from "@/lib/agent/toolPermissions";
 import {
@@ -206,6 +209,143 @@ function settleOutcome(
     },
     outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
     code: mapped.code,
+  };
+}
+
+type DeleteIdField = "page_ids" | "ids" | "pages";
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+/** The id list on the remote args the schema picker already chose. */
+function deletePageIdField(
+  args: Record<string, unknown>,
+): { field: DeleteIdField; ids: string[] } | null {
+  if (isStringArray(args.page_ids)) return { field: "page_ids", ids: args.page_ids };
+  if (isStringArray(args.ids)) return { field: "ids", ids: args.ids };
+  if (!Array.isArray(args.pages)) return null;
+  const ids: string[] = [];
+  for (const page of args.pages) {
+    if (!page || typeof page !== "object") return null;
+    const pageId = (page as { page_id?: unknown }).page_id;
+    if (typeof pageId !== "string") return null;
+    ids.push(pageId);
+  }
+  return { field: "pages", ids };
+}
+
+function argsForDeleteBatch(
+  args: Record<string, unknown>,
+  field: DeleteIdField,
+  ids: string[],
+): Record<string, unknown> {
+  if (field === "pages") {
+    return { ...args, pages: ids.map((page_id) => ({ page_id })) };
+  }
+  return { ...args, [field]: ids };
+}
+
+function chunkIds(ids: string[], size: number): string[][] {
+  const batches: string[][] = [];
+  for (let index = 0; index < ids.length; index += size) {
+    batches.push(ids.slice(index, index + size));
+  }
+  return batches;
+}
+
+function receiptFromCall(
+  callResult: { isError?: boolean; content: Array<{ type: string; text?: string }> },
+  spec: NotionWriteSpec,
+  input: Record<string, unknown>,
+): AgentNotionWriteResult {
+  return callResult.isError
+    ? {
+        saved: false,
+        tool: spec.toolName,
+        status: "failed",
+        code: classifyNotionToolError(callResult, NOTION_ERROR.VALIDATION_FAILED),
+        detail: remoteToolText(callResult).slice(0, 500),
+      }
+    : spec.receipt(remoteToolText(callResult), input);
+}
+
+/** Some pages are already in Trash. Do not send the rest, and do not retry the whole batch. */
+function partialDeleteReceipt(
+  toolName: string,
+  deleted: string[],
+  verify: AgentNotionWriteVerify,
+): AgentNotionWriteResult {
+  const detail = `Moved ${deleted.length} pages to Trash (${deleted.join(", ")}). The remaining pages were not sent. Reconcile in Notion; automatic retry is blocked.`;
+  return {
+    saved: false,
+    tool: toolName,
+    status: "unknown",
+    code: NOTION_ERROR.OUTCOME_UNKNOWN,
+    verify,
+    detail: detail.slice(0, 500),
+  };
+}
+
+/**
+ * notion-delete-pages accepts NOTION_DELETE_PAGES_REMOTE_BATCH ids per call.
+ * One approved batch may be larger; each slice is its own remote call, and
+ * the stored receipt lists every page that actually moved.
+ */
+async function callDeletePages(
+  accessToken: string,
+  remoteName: string,
+  args: Record<string, unknown>,
+  spec: NotionWriteSpec,
+  input: Record<string, unknown>,
+  verify: AgentNotionWriteVerify,
+  signal?: AbortSignal,
+): Promise<AgentNotionWriteResult> {
+  const listed = deletePageIdField(args);
+  const batches =
+    listed && listed.ids.length > NOTION_DELETE_PAGES_REMOTE_BATCH
+      ? chunkIds(listed.ids, NOTION_DELETE_PAGES_REMOTE_BATCH)
+      : null;
+  if (!listed || !batches) {
+    const callResult = await callNotionRemoteTool(accessToken, remoteName, args, {
+      signal,
+    });
+    return receiptFromCall(callResult, spec, input);
+  }
+
+  const deleted: string[] = [];
+  for (let index = 0; index < batches.length; index += 1) {
+    if (index > 0 && signal?.aborted) {
+      return partialDeleteReceipt(spec.toolName, deleted, verify);
+    }
+    const batch = batches[index];
+    let callResult;
+    try {
+      callResult = await callNotionRemoteTool(
+        accessToken,
+        remoteName,
+        argsForDeleteBatch(args, listed.field, batch),
+        { signal },
+      );
+    } catch (error) {
+      if (deleted.length === 0) throw error;
+      return partialDeleteReceipt(spec.toolName, deleted, verify);
+    }
+    const batchResult = receiptFromCall(callResult, spec, {
+      ...input,
+      targets: batch,
+    });
+    if (!batchResult.saved) {
+      if (deleted.length === 0) return batchResult;
+      return partialDeleteReceipt(spec.toolName, deleted, verify);
+    }
+    deleted.push(...(batchResult.pageIds ?? batch));
+  }
+  return {
+    saved: true,
+    tool: spec.toolName,
+    pageId: deleted.length === 1 ? deleted[0] : undefined,
+    pageIds: deleted,
   };
 }
 
@@ -677,11 +817,28 @@ export async function executeAgentWriteTask(
   }
 
   // ---------------------------------------------------------------- SETTLE
-  let callResult;
+  // Delete batches larger than the remote cap are several calls. The dispatch
+  // marker already covers every slice: a crash mid-loop never resends.
+  let result: AgentNotionWriteResult;
   try {
-    callResult = await callNotionRemoteTool(accessToken, meta.remoteName, args, {
-      signal: opts.signal,
-    });
+    result =
+      spec.toolName === NOTION_TOOL.deletePages
+        ? await callDeletePages(
+            accessToken,
+            meta.remoteName,
+            args,
+            spec,
+            input,
+            verify,
+            opts.signal,
+          )
+        : receiptFromCall(
+            await callNotionRemoteTool(accessToken, meta.remoteName, args, {
+              signal: opts.signal,
+            }),
+            spec,
+            input,
+          );
   } catch (error) {
     const settled = settleOutcome(spec.toolName, error, verify);
     await settle({
@@ -692,15 +849,6 @@ export async function executeAgentWriteTask(
     });
     return;
   }
-  const result: AgentNotionWriteResult = callResult.isError
-    ? {
-        saved: false,
-        tool: spec.toolName,
-        status: "failed",
-        code: classifyNotionToolError(callResult, NOTION_ERROR.VALIDATION_FAILED),
-        detail: remoteToolText(callResult).slice(0, 500),
-      }
-    : spec.receipt(remoteToolText(callResult), input);
   if (!result.saved && result.status === "unknown") result.verify = verify;
   await settle({
     outcomeStatus: result.saved

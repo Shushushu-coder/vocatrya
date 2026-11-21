@@ -220,8 +220,14 @@ export const AgentNotionUpdateContentSchema = z.object({
 
 export type AgentNotionUpdateContentInput = z.infer<typeof AgentNotionUpdateContentSchema>;
 
+/** One notion-delete-pages remote call. The executor slices page ids to this. */
+export const NOTION_DELETE_PAGES_REMOTE_BATCH = 20;
+
+/** One confirmation card names the whole batch. Remote calls stay at the batch above. */
+export const NOTION_DELETE_PAGES_CARD_LIMIT = 100;
+
 export const AgentNotionDeletePagesSchema = z.object({
-  targets: z.array(z.string().min(1).max(2000)).min(1).max(20).describe("Every page to move to Trash, in this one call. Pass the whole batch here — a second call asks the user again. Each entry is a URL or id from notion_search, notion_read, or the user. Database rows count as pages. Do not include a database itself."),
+  targets: z.array(z.string().min(1).max(2000)).min(1).max(NOTION_DELETE_PAGES_CARD_LIMIT).describe("Every page to move to Trash, in this one call. Pass the whole batch here — a second call asks the user again. Each entry is a URL or id from notion_search, notion_read, or the user. Database rows count as pages. Do not include a database itself."),
   ...notionWriteCommon,
 });
 

@@ -20,6 +20,7 @@ import {
   AI_EXECUTION_MAX_TIMEOUT_MS,
 } from "@/lib/ai/execution";
 import type { PrismaClient } from "@prisma/client";
+import { streamingRuntimeVersionMatches } from "@/lib/ai/runtime/capabilities";
 
 /**
  * Backend client for the desktop's streaming execution seam
@@ -527,7 +528,7 @@ export async function checkStreamingTurnReadiness(input: {
           localOneShot?: boolean;
           streaming?: boolean;
           streamingVerification?: string;
-          streamingVerifiedRuntimeVersion?: string | null;
+          streamingVerifiedRuntimeVersion?: string | readonly string[] | null;
         };
       }
     | null;
@@ -551,13 +552,16 @@ export async function checkStreamingTurnReadiness(input: {
   }
   const verifiedVersion = capabilities.execution.streamingVerifiedRuntimeVersion;
   // A PASS without a bound version is as unverifiable as a drift — the
-  // helper (checkStreamingExecutionReadiness) enforces the same: !bound
-  // || mismatch → NOT_VERIFIED. Keep the two paths identical.
-  if (!verifiedVersion || state.runtimeVersion !== verifiedVersion) {
+  // helper (checkStreamingExecutionReadiness) enforces the same membership
+  // rule. Keep the two paths identical.
+  if (!streamingRuntimeVersionMatches(verifiedVersion, state.runtimeVersion)) {
+    const listed = Array.isArray(verifiedVersion)
+      ? verifiedVersion.join(", ")
+      : verifiedVersion;
     fail(
       AI_BUSINESS_ERROR_CODES.STREAMING_NOT_VERIFIED,
-      verifiedVersion
-        ? `Runtime version changed since verification (${state.runtimeVersion} != ${verifiedVersion})`
+      listed
+        ? `Runtime version changed since verification (${state.runtimeVersion} != ${listed})`
         : "The runtime's streaming PASS is not bound to a version",
     );
   }

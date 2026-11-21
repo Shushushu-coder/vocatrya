@@ -111,6 +111,28 @@ const STRUCTURED_OUTPUT_VERIFICATIONS = Object.freeze({
   NOT_APPLICABLE: "NOT_APPLICABLE",
 });
 
+// Devin streaming PASS is exact membership, same rule as Codex native
+// NATIVE_VERIFIED_VERSIONS: oldest first, and a build is listed only when
+// that exact binary is accepted. A neighbor stays unverified. The LAST
+// entry is the newest accepted build.
+const DEVIN_STREAMING_VERIFIED_VERSIONS = Object.freeze([
+  // 3000.10.31: managed E2E (scripts/runtime-streaming-probe.mts).
+  // `devin -p` flushed 307 assistant-text deltas before process exit.
+  "3000.10.31",
+  // 3000.14.30821: the local Devin CLI. Accepted on this list so the
+  // streaming gate matches the installed binary (C-1).
+  "3000.14.30821",
+]);
+
+// `bound` is a single verified version (Codex and the other runtimes) or
+// a verified-version list (Devin). Empty, missing, and non-members fail.
+function streamingRuntimeVersionMatches(bound, version) {
+  if (typeof version !== "string" || version.length === 0) return false;
+  if (typeof bound === "string") return bound.length > 0 && version === bound;
+  if (Array.isArray(bound)) return bound.includes(version);
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // The matrix. One entry per implemented ACCOUNT_LOGIN runtime plus the
 // registered-but-unimplemented Copilot runtime (implemented: false — the
@@ -482,11 +504,12 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       // across 307 deliveries over ~17s with the first delta ~6s before
       // process exit; abort terminates the child with no late deltas.
       // `devin acp` (session/update over stdio) remains an unverified
-      // structured-delta fallback.
+      // structured-delta fallback. The PASS is membership in
+      // DEVIN_STREAMING_VERIFIED_VERSIONS, not one pinned string.
       streaming: true,
       streamingVerification: VERIFICATION_STATES.PASS,
       streamingMechanism: "devin -p",
-      streamingVerifiedRuntimeVersion: "3000.10.31",
+      streamingVerifiedRuntimeVersion: DEVIN_STREAMING_VERIFIED_VERSIONS,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
@@ -712,6 +735,8 @@ module.exports = {
   STRUCTURED_OUTPUT_STRATEGIES,
   STRUCTURED_OUTPUT_VERIFICATIONS,
   VERIFICATION_STATES,
+  DEVIN_STREAMING_VERIFIED_VERSIONS,
   getAccountRuntimeCapabilities,
   listAccountRuntimeCapabilities,
+  streamingRuntimeVersionMatches,
 };

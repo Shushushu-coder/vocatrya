@@ -221,11 +221,12 @@ export interface AccountRuntimeCapabilities {
     /** The candidate/verified delta transport, or null when none exists. */
     streamingMechanism?: string | null;
     /**
-     * The runtime binary version the streaming verification ran against.
-     * A PASS applies only to this exact version — a runtime update is a
-     * new, unverified surface until a managed run proves deltas again.
+     * The runtime binary version the streaming verification ran against,
+     * or the exact-membership list of accepted builds (Devin). A PASS
+     * applies only to that version or to a listed member — anything else
+     * stays unverified.
      */
-    streamingVerifiedRuntimeVersion?: string | null;
+    streamingVerifiedRuntimeVersion?: string | readonly string[] | null;
     acp?: boolean;
   };
   permission: {
@@ -332,6 +333,25 @@ export function checkTextOnlyExecutionReadiness({
 }
 
 /**
+ * Exact binding for a streaming PASS. A string must match that version.
+ * A list matches only its members. Keep this identical to
+ * `streamingRuntimeVersionMatches` in desktop/main/runtime/capabilities.js.
+ */
+export function streamingRuntimeVersionMatches(
+  bound: string | readonly string[] | null | undefined,
+  runtimeVersion: string | null | undefined,
+): boolean {
+  if (typeof runtimeVersion !== "string" || runtimeVersion.length === 0) {
+    return false;
+  }
+  if (typeof bound === "string") {
+    return bound.length > 0 && runtimeVersion === bound;
+  }
+  if (Array.isArray(bound)) return bound.includes(runtimeVersion);
+  return false;
+}
+
+/**
  * Pure pre-flight check for a streaming conversation turn (Career
  * Dialogue): same gates as the one-shot check plus verified incremental
  * output bound to the installed runtime version. execution.streaming is
@@ -340,7 +360,8 @@ export function checkTextOnlyExecutionReadiness({
  * downgrade to a buffered one-shot, which would be fake streaming). A PASS
  * verdict is bound to `streamingVerifiedRuntimeVersion`; the caller must
  * supply `runtimeVersion` — the version probed on the installed binary —
- * and any mismatch (including an absent one) is STREAMING_NOT_VERIFIED.
+ * and any mismatch (including an absent one, or a version missing from
+ * a verified list) is STREAMING_NOT_VERIFIED.
  */
 export function checkStreamingExecutionReadiness({
   capabilities,
@@ -363,14 +384,18 @@ export function checkStreamingExecutionReadiness({
   if (!capabilities.execution.streaming) {
     return { ready: false, code: "STREAMING_NOT_SUPPORTED" };
   }
-  // Verified-version binding: a PASS only applies to the runtime version
-  // it was actually measured on. PENDING/FAIL, a missing bound version,
-  // and any version drift all fail closed here.
+  // Verified-version binding: a PASS applies to the measured version or
+  // to a member of the verified list. PENDING/FAIL, a missing binding,
+  // and any other version fail closed here.
   if (capabilities.execution.streamingVerification !== "PASS") {
     return { ready: false, code: "STREAMING_NOT_VERIFIED" };
   }
-  const bound = capabilities.execution.streamingVerifiedRuntimeVersion;
-  if (!bound || runtimeVersion !== bound) {
+  if (
+    !streamingRuntimeVersionMatches(
+      capabilities.execution.streamingVerifiedRuntimeVersion,
+      runtimeVersion,
+    )
+  ) {
     return { ready: false, code: "STREAMING_NOT_VERIFIED" };
   }
   if (connectionStatus === "REAUTH_REQUIRED") {

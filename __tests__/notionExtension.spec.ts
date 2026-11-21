@@ -26,6 +26,7 @@ import {
 import {
   AgentNotionDeletePagesSchema,
   AgentNotionUpdateContentSchema,
+  NOTION_DELETE_PAGES_CARD_LIMIT,
 } from "@/models/agent.schema";
 import {
   NOTION_WRITE_SPECS,
@@ -798,6 +799,9 @@ describe("write tool approval binding and detached queue", () => {
     }).success).toBe(false);
     expect(AgentNotionDeletePagesSchema.safeParse({
       targets: Array.from({ length: 21 }, (_, i) => `page-${i}`),
+    }).success).toBe(true);
+    expect(AgentNotionDeletePagesSchema.safeParse({
+      targets: Array.from({ length: NOTION_DELETE_PAGES_CARD_LIMIT + 1 }, (_, i) => `page-${i}`),
     }).success).toBe(false);
     const receipt = NOTION_WRITE_SPECS[NOTION_TOOL.deletePages].receipt(
       JSON.stringify({ ok: true }),

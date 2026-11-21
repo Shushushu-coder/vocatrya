@@ -43,6 +43,7 @@ import {
   AGENT_PROPOSAL_STATUS,
 } from "@/lib/agent/operationProposalContract";
 import { notionWriteInputHash } from "@/lib/agent/notionWriteSpec";
+import { AgentNotionDeletePagesSchema } from "@/models/agent.schema";
 import { admitConversationRequest } from "@/lib/agent/conversationRequest";
 import { NOTION_REMOTE } from "@/lib/extensions/notion/constants";
 import { NOTION_STATUS } from "@/lib/extensions/notion/store";
@@ -141,6 +142,7 @@ async function connectNotion() {
       availableTools: JSON.stringify([
         { name: NOTION_REMOTE.createPages },
         { name: NOTION_REMOTE.updatePage },
+        { name: NOTION_REMOTE.deletePages },
         { name: NOTION_REMOTE.search },
         { name: NOTION_REMOTE.fetch },
       ]),
@@ -408,6 +410,104 @@ describe("executor VERIFY → DISPATCH → SETTLE", () => {
     if (res.state !== "approved") throw new Error("not approved");
     return { proposal, taskId: res.taskId };
   }
+
+  it("chunks a delete larger than 20 pages and aggregates every page id", async () => {
+    await connectNotion();
+    const targets = Array.from({ length: 22 }, (_, index) => `page-${index}`);
+    const input = AgentNotionDeletePagesSchema.parse({ targets });
+    const conversation = await prisma.chatConversation.create({
+      data: { userId, messages: "[]" },
+    });
+    const proposal = await prisma.agentOperationProposal.create({
+      data: {
+        userId,
+        conversationId: conversation.id,
+        messageId: null,
+        toolCallId: `tc-${randomUUID()}`,
+        approvalId: `ap-${randomUUID()}`,
+        turnKey: `turn-${randomUUID()}`,
+        toolName: "notion_delete_pages",
+        inputJson: JSON.stringify(input),
+        inputHash: notionWriteInputHash(input),
+        materialJson: JSON.stringify({ workspaceId: "ws-1" }),
+        status: AGENT_PROPOSAL_STATUS.PROPOSED,
+        expiresAt: new Date(Date.now() + 7 * 24 * 3600_000),
+      },
+    });
+    const res = await decideOperationProposal(prisma, {
+      userId,
+      proposalId: proposal.id,
+      decision: "approve",
+    });
+    if (res.state !== "approved") throw new Error("not approved");
+    await harnessRunnerTick(prisma, undefined, FEATURE_ON);
+
+    expect(remote.calls).toHaveLength(2);
+    expect(remote.calls[0].name).toBe(NOTION_REMOTE.deletePages);
+    expect(remote.calls[0].arguments?.page_ids).toHaveLength(20);
+    expect(remote.calls[1].arguments?.page_ids).toEqual(["page-20", "page-21"]);
+    expect(remote.calls.every((call) => call.arguments?.user_confirmed === true)).toBe(true);
+
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.SUCCEEDED);
+    expect(JSON.parse(row.outcomeJson!)).toMatchObject({
+      saved: true,
+      pageIds: targets,
+    });
+  });
+
+  it("stops a chunked delete after a later batch fails and does not claim the rest", async () => {
+    await connectNotion();
+    const targets = Array.from({ length: 22 }, (_, index) => `page-${index}`);
+    const input = AgentNotionDeletePagesSchema.parse({ targets });
+    const conversation = await prisma.chatConversation.create({
+      data: { userId, messages: "[]" },
+    });
+    const proposal = await prisma.agentOperationProposal.create({
+      data: {
+        userId,
+        conversationId: conversation.id,
+        messageId: null,
+        toolCallId: `tc-${randomUUID()}`,
+        approvalId: `ap-${randomUUID()}`,
+        turnKey: `turn-${randomUUID()}`,
+        toolName: "notion_delete_pages",
+        inputJson: JSON.stringify(input),
+        inputHash: notionWriteInputHash(input),
+        materialJson: JSON.stringify({ workspaceId: "ws-1" }),
+        status: AGENT_PROPOSAL_STATUS.PROPOSED,
+        expiresAt: new Date(Date.now() + 7 * 24 * 3600_000),
+      },
+    });
+    remote.next = async (call) => {
+      const ids = call.arguments?.page_ids as string[];
+      if (ids.length < 20) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: JSON.stringify({ code: "validation_error", message: "nope" }) }],
+        };
+      }
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+    };
+    const res = await decideOperationProposal(prisma, {
+      userId,
+      proposalId: proposal.id,
+      decision: "approve",
+    });
+    if (res.state !== "approved") throw new Error("not approved");
+    await harnessRunnerTick(prisma, undefined, FEATURE_ON);
+
+    expect(remote.calls).toHaveLength(2);
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.UNCERTAIN);
+    const outcome = JSON.parse(row.outcomeJson!) as { saved?: boolean; detail?: string };
+    expect(outcome.saved).toBe(false);
+    expect(outcome.detail).toContain("Moved 20 pages");
+  });
 
   it("dispatches once and settles the receipt atomically", async () => {
     await connectNotion();

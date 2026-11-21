@@ -36,7 +36,10 @@ const {
 const { runRuntimeCommand } = require("./runner");
 const { RuntimeProfileManager } = require("./profiles");
 const { AUTH_PROBE_TIMEOUT_MS } = require("./auth-probe");
-const { getAccountRuntimeCapabilities } = require("./capabilities");
+const {
+  getAccountRuntimeCapabilities,
+  streamingRuntimeVersionMatches,
+} = require("./capabilities");
 const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
 const {
   createCodexPersistentRuntimeManager,
@@ -1346,7 +1349,10 @@ function createConnectionService({
       if (runtime.error) return runtime.error;
       if (
         verificationProbe !== true &&
-        runtime.version !== execCaps.execution.streamingVerifiedRuntimeVersion
+        !streamingRuntimeVersionMatches(
+          execCaps.execution.streamingVerifiedRuntimeVersion,
+          runtime.version,
+        )
       ) {
         if (
           codexPersistentRuntime &&

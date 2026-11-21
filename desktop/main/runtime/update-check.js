@@ -243,12 +243,21 @@ async function fetchLatestVersion(check, deps) {
 
 // The exact-version capability certifications bound by the runtime's
 // capability descriptor (streaming + structured-output verification).
+function addCertifiedVersion(versions, bound) {
+  if (typeof bound === "string" && bound) {
+    versions.add(bound);
+    return;
+  }
+  if (!Array.isArray(bound)) return;
+  for (const version of bound) {
+    if (typeof version === "string" && version) versions.add(version);
+  }
+}
+
 function collectCertifiedVersions(capabilities) {
   const versions = new Set();
-  const streaming = capabilities?.execution?.streamingVerifiedRuntimeVersion;
-  const structured = capabilities?.structuredOutput?.verifiedRuntimeVersion;
-  if (typeof streaming === "string" && streaming) versions.add(streaming);
-  if (typeof structured === "string" && structured) versions.add(structured);
+  addCertifiedVersion(versions, capabilities?.execution?.streamingVerifiedRuntimeVersion);
+  addCertifiedVersion(versions, capabilities?.structuredOutput?.verifiedRuntimeVersion);
   return [...versions];
 }
 

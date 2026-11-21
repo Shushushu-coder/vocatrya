@@ -15,8 +15,10 @@ const {
   STRUCTURED_OUTPUT_STRATEGIES,
   STRUCTURED_OUTPUT_VERIFICATIONS,
   VERIFICATION_STATES,
+  DEVIN_STREAMING_VERIFIED_VERSIONS,
   getAccountRuntimeCapabilities,
   listAccountRuntimeCapabilities,
+  streamingRuntimeVersionMatches,
 } = capabilities;
 const { getRuntimeDefinition, listRuntimeDefinitions } = registry;
 
@@ -331,12 +333,13 @@ describe("account runtime capability matrix", () => {
 
   it("reports streaming honestly — only managed-verified runtimes pass", () => {
     // DEVIN_RUNTIME earned PASS through a real managed E2E (devin -p
-    // incremental stdout on 3000.10.31); CODEX_RUNTIME earned it through
-    // the app-server delta channel on 0.165.0. The other four remain
-    // PENDING — a documented stream mode without a managed delta run
-    // never flips streaming to true.
+    // incremental stdout on 3000.10.31) and accepts the listed local
+    // build 3000.14.30821. CODEX_RUNTIME earned it through the app-server
+    // delta channel on 0.165.0. The other runtimes remain PENDING — a
+    // documented stream mode without a managed delta run never flips
+    // streaming to true.
     const VERIFIED_STREAMING = {
-      DEVIN_RUNTIME: "3000.10.31",
+      DEVIN_RUNTIME: DEVIN_STREAMING_VERIFIED_VERSIONS,
       CODEX_RUNTIME: "0.165.0",
     };
     for (const kind of IMPLEMENTED) {
@@ -350,7 +353,7 @@ describe("account runtime capability matrix", () => {
         expect(execution.streamingVerification, kind).toBe(
           VERIFICATION_STATES.PASS,
         );
-        expect(execution.streamingVerifiedRuntimeVersion, kind).toBe(bound);
+        expect(execution.streamingVerifiedRuntimeVersion, kind).toEqual(bound);
       } else {
         expect(execution.streaming, kind).toBe(false);
         expect(execution.streamingVerification, kind).toBe(
@@ -404,6 +407,37 @@ describe("account runtime capability matrix", () => {
       expect(
         version === caps.structuredOutput.verifiedRuntimeVersion,
         `structured ${String(version)}`,
+      ).toBe(false);
+    }
+  });
+
+  it("accepts only the listed Devin streaming versions", () => {
+    const bound = getAccountRuntimeCapabilities("DEVIN_RUNTIME").execution
+      .streamingVerifiedRuntimeVersion;
+    expect(bound).toEqual(["3000.10.31", "3000.14.30821"]);
+    expect(DEVIN_STREAMING_VERIFIED_VERSIONS.at(-1)).toBe("3000.14.30821");
+    expect(new Set(DEVIN_STREAMING_VERIFIED_VERSIONS).size).toBe(
+      DEVIN_STREAMING_VERIFIED_VERSIONS.length,
+    );
+    for (const version of ["3000.10.31", "3000.14.30821"]) {
+      expect(streamingRuntimeVersionMatches(bound, version), version).toBe(
+        true,
+      );
+    }
+    // Fail-closed membership. Neighbors and empty values stay unverified.
+    for (const version of [
+      "3000.10.30",
+      "3000.10.32",
+      "3000.14.30820",
+      "3000.14.30822",
+      "3000.14",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(
+        streamingRuntimeVersionMatches(bound, version),
+        `streaming ${String(version)}`,
       ).toBe(false);
     }
   });
