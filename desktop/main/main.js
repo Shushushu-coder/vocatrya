@@ -1,9 +1,10 @@
 const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, nativeTheme, nativeImage, Menu, Tray, session, globalShortcut } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
-const { DESKTOP_APP_ID } = require("./installer-identity");
+const { DESKTOP_APP_ID, PRODUCT_NAME } = require("./installer-identity");
 
-app.setAppUserModelId(DESKTOP_APP_ID);
+const appUserModelId = app.isPackaged ? DESKTOP_APP_ID : `${DESKTOP_APP_ID}.development`;
+app.setAppUserModelId(appUserModelId);
 const {
   DEFAULT_PORT_ATTEMPTS,
   allocateLoopbackPort,
@@ -20,7 +21,7 @@ const {
 const { resolveAndEnsureDesktopLayout, buildDesktopFilesystemConfig } = require("./local-data");
 const { loadOrCreateDesktopSecrets } = require("./secrets");
 const { prepareDatabase } = require("./database-migration");
-const { runStartupSequence } = require("./startup");
+const { runStartupSequence, startupPageUrl } = require("./startup");
 const { createRuntimeStatusService } = require("./runtime/service");
 const { registerRuntimeIpcHandlers } = require("./runtime/ipc");
 const { createMainWindowIpcRegistry } = require("./window-ipc");
@@ -85,6 +86,9 @@ if (!singleInstance) {
   let mainWindow;
   let backend;
   let backendPort;
+  let backendReady = false;
+  let splashPainted = false;
+  let splashLoad;
   let execServer = null;
   let connectionOps = null;
   let execServerUrl = null;
@@ -179,11 +183,7 @@ if (!singleInstance) {
   function showStartupFailure(error) {
     const message = `Vocatrya desktop backend failed to start.\n\n${error.message}\n\nLogs: ${logDirectory}`;
     console.error(message);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<h1>Vocatrya startup failed</h1><p>${message.replaceAll("\n", "<br>")}</p>`)}`);
-    } else {
-      dialog.showErrorBox("Vocatrya startup failed", message);
-    }
+    dialog.showErrorBox("Vocatrya startup failed", message);
   }
 
   function showBackendCrash(code, signal) {
@@ -243,7 +243,7 @@ if (!singleInstance) {
       // launch and must succeed before any backend spawn is attempted.
       // Backend port/readiness retries stay inside startBackend and never
       // re-run migration or backup. Any backup/migration/integrity failure
-      // is fail-closed: no backend start, no window.
+      // is fail-closed: no backend start or application page.
       await runStartupSequence({
         prepareDatabase: () =>
           prepareDatabase({
@@ -264,6 +264,7 @@ if (!singleInstance) {
             },
           }),
         startBackend: async () => {
+          if (desktopLifecycle.isQuitting()) throw new Error("Desktop is shutting down");
           const started = await startBackendWithRetry({
             attempts: DEFAULT_PORT_ATTEMPTS,
             allocatePort: allocateLoopbackPort,
@@ -311,7 +312,7 @@ if (!singleInstance) {
           return started;
         },
         createWindow: async () => {
-          await createMainWindow();
+          await openMainWindow();
         },
         onFailure: async () => {
           migrationChild = null;
@@ -397,9 +398,9 @@ if (!singleInstance) {
     nativeImage,
     trayIconPath: desktopIconPath(),
     settingsStore: desktopSettingsStore,
-    getWindow: () => mainWindow,
+    getWindow: () => backendReady || splashPainted ? mainWindow : null,
     createWindow: async () => {
-      await createMainWindow();
+      if (backendReady) await openMainWindow();
     },
   });
 
@@ -418,19 +419,21 @@ if (!singleInstance) {
   // arms their release on "closed" before the first load settles.
   const mainWindowIpc = createMainWindowIpcRegistry();
 
-  async function createMainWindow() {
+  function createMainWindow() {
+    if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+
     const iconPath = desktopIconPath();
     const startMinimized = desktopLifecycle.shouldStartMinimized();
-    mainWindow = new BrowserWindow({
+    const createdWindow = new BrowserWindow({
       icon: iconPath,
+      title: PRODUCT_NAME,
+      backgroundColor: nativeTheme.shouldUseDarkColors ? "#09090b" : "#ffffff",
       width: 1280,
       height: 820,
       minWidth: 960,
       minHeight: 640,
       autoHideMenuBar: true,
-      // Minimized launch: the window never flashes visible — it stays hidden
-      // until ready-to-show, then opens straight into the minimized state.
-      show: !startMinimized,
+      show: false,
       // Windows controls-overlay titlebar: the renderer draws the bar itself
       // (preload marks documents data-desktop, DesktopTitleBar fills the
       // strip), while the OS keeps the native caption buttons so Snap
@@ -449,17 +452,40 @@ if (!singleInstance) {
         zoomFactor: zoomController.factor(),
       },
     });
+    mainWindow = createdWindow;
     if (process.platform === "win32") {
-      mainWindow.setAppDetails({
-        appId: DESKTOP_APP_ID,
-        appIconPath: iconPath,
+      createdWindow.setAppDetails({
+        appId: appUserModelId,
+        appIconPath: app.isPackaged ? process.execPath : iconPath,
+        appIconIndex: 0,
+        ...(app.isPackaged && {
+          relaunchCommand: `"${process.execPath}"`,
+          relaunchDisplayName: PRODUCT_NAME,
+        }),
       });
     }
-    desktopLifecycle.attachWindow(mainWindow);
-    zoomController.attach(mainWindow);
+    desktopLifecycle.attachWindow(createdWindow);
+    zoomController.attach(createdWindow);
+    createdWindow.once("ready-to-show", () => {
+      splashPainted = true;
+      if (!startMinimized && !createdWindow.isDestroyed() && !desktopLifecycle.isQuitting()) {
+        createdWindow.show();
+      }
+    });
+    createdWindow.on("closed", () => {
+      if (mainWindow === createdWindow) mainWindow = undefined;
+    });
+    return createdWindow;
+  }
+
+  async function openMainWindow() {
+    await splashLoad;
+    if (desktopLifecycle.isQuitting()) return;
+
+    backendReady = true;
+    const createdWindow = createMainWindow();
     const origin = `http://127.0.0.1:${backendPort}`;
-    configureNavigation(mainWindow, origin);
-    const createdWindow = mainWindow;
+    configureNavigation(createdWindow, origin);
     // IPC cleanup is armed on "closed" BEFORE loadURL: a window closed
     // mid-load still releases its channels so a later window can register.
     mainWindowIpc.registerWindowIpc({
@@ -467,11 +493,12 @@ if (!singleInstance) {
       assetsRoot: app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "assets"),
       titleBarOverlay: (theme) => zoomController.overlayOptions(theme),
     });
-    createdWindow.on("closed", () => {
-      // A stale "closed" must never detach the window that replaced this one.
-      if (mainWindow === createdWindow) mainWindow = undefined;
-    });
     await createdWindow.loadURL(resolveColdStartEntry(origin));
+    if (createdWindow.isDestroyed()) return;
+    const history = createdWindow.webContents.navigationHistory;
+    if (history.getEntryAtIndex(0)?.url.startsWith("data:text/html")) {
+      history.removeEntryAtIndex(0);
+    }
   }
 
   app.on("second-instance", () => {
@@ -496,6 +523,11 @@ if (!singleInstance) {
       // Page zoom (Ctrl +/-/0) is not: those accelerators lived on the
       // View menu, so the shell owns them through webContents.setZoomFactor.
       Menu.setApplicationMenu(null);
+      const startupWindow = createMainWindow();
+      const logo = nativeImage.createFromPath(desktopIconPath()).toDataURL();
+      splashLoad = startupWindow.loadURL(startupPageUrl(logo)).catch((error) => {
+        if (!startupWindow.isDestroyed()) console.error("Could not show desktop startup screen", error);
+      });
       // Real tray surface from the first launch: restore + explicit quit are
       // always reachable, and close-to-tray has somewhere to hide to the
       // moment the user enables it.
@@ -597,9 +629,10 @@ if (!singleInstance) {
           `Vocatrya ${buildInfo.appVersion} commit ${buildInfo.buildCommit} (${DESKTOP_APP_ID})`,
         );
       }
+      if (desktopLifecycle.isQuitting()) return;
       const windowOpened = await startBackend();
       if (!windowOpened) {
-        await createMainWindow();
+        await openMainWindow();
       }
     } catch (error) {
       if (!shuttingDown) {

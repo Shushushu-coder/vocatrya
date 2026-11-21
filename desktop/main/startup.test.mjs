@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runStartupSequence } from "./startup.js";
+import { runStartupSequence, startupPageUrl } from "./startup.js";
 
 function deferred() {
   let resolve;
@@ -78,7 +78,7 @@ describe("startup sequencing", () => {
     expect(spawnCalls).toBe(3);
   });
 
-  it("does not open a window when the backend never becomes ready", async () => {
+  it("does not load the application page when the backend never becomes ready", async () => {
     let windowCalls = 0;
     await expect(
       runStartupSequence({
@@ -93,4 +93,13 @@ describe("startup sequencing", () => {
     ).rejects.toThrow(/readiness/);
     expect(windowCalls).toBe(0);
   });
+});
+
+it("shows the embedded Vocatrya logo while startup is pending", () => {
+  const logo = "data:image/png;base64,AAAA";
+  const url = startupPageUrl(logo);
+  const html = decodeURIComponent(url.slice(url.indexOf(",") + 1));
+  expect(html).toContain(`<img src="${logo}" alt="Vocatrya">`);
+  expect(html).toContain("place-items: center");
+  expect(html).toContain("default-src 'none'");
 });

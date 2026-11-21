@@ -50,7 +50,9 @@ describe("electron-builder configuration", () => {
     expect(yml).not.toMatch(/signAndEditExecutable:\s*false/);
     const main = read("desktop/main/main.js");
     expect(main).toContain('path.join(process.resourcesPath, "icon.ico")');
-    expect(main).toContain("appIconPath: iconPath");
+    expect(main).toContain("appIconPath: app.isPackaged ? process.execPath : iconPath");
+    expect(main).toContain("appIconIndex: 0");
+    expect(main).toContain("relaunchDisplayName: PRODUCT_NAME");
     const icon = fs.readFileSync(path.join(repoRoot, "desktop/assets/icon.ico"));
     expect(icon.readUInt16LE(2)).toBe(1);
     expect(icon.readUInt16LE(4)).toBe(7);
