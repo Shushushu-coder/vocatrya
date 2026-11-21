@@ -24,6 +24,8 @@
 4. 跨领域请求：真实模型调用 `suggest_role`（核对工具调用记录，不信口述）→ 转交卡 → 点击切换角色，原文、粘贴卡、文件附件与手动上下文并入目标草稿，不自动发送。
 5. 目标角色使用自己的工具集与会话，附件与审批行为无回退。
 
+**A2 定向复验 PASS（2026-11-20）**。Windows Electron fresh-native，隔离数据，源码 `4dff9e6e`，Next 构建 `mQLVfy89bbGAyzULjJAiB`。用本地模型夹具挂起实际在途回合，点击停止后保留同一用户消息。首次点击「重新生成」返回 HTTP 200，触发新上游调用并显示回答。SQLite 核对原会话只有原用户消息和一条新回答，无重复请求或冲突提示。证据：[A2 日志](../.tmp/rc-1-2-3-a2-c4/a2.log)。
+
 ## B. Notion（EXT-NOTION）
 
 用户已在 1.2.2-rc（a43a25b0）实测连接、AI 读写、断开。1.2.3-rc 补测剩余步骤，清单细节见 [EXTENSIONS_IMPLEMENTATION](./EXTENSIONS_IMPLEMENTATION.md) §3「发布前验收 Checklist」：
@@ -40,6 +42,8 @@
 2. 普通 Codex 流式对话仍正常（未因选择逻辑退化）。
 3. 新建 Codex 原生会话，跨回合续接；完整退出重开后继续同一 thread。
 4. 备份契约：从源码 Git 检出或 Worktree 运行 `npm run test:e2e:desktop -- --scenario=backup-native`，核对 `CHECK backup-excludes-binding PASS`。2026-11-19 首次运行在验收 Worktree 根读取 HEAD 失败，日志缺少 Git stderr，原因未确认。同一入口后续读取 `0f9c4659` 并在补齐快照输入后通过，见预验收证据。驱动现于创建运行目录前校验源码 HEAD，读取版本和文件清单时排除继承的仓库局部 Git 环境变量，失败时记录入口目录和 Git 错误。冻结版仍待复验。
+
+**C4 定向复验 PASS（2026-11-20，9/9）**。同一 `4dff9e6e` 构建在 Windows Electron fresh-native 下完成快照校验和装配。用合成原生会话通过真实接口导出，并在第二套隔离数据中导入。导出排除原生绑定和 thread ID，源库绑定保留，恢复后的绑定行数为 0，会话状态为 `APP_ORCHESTRATED / NEVER_ATTEMPTED`。证据：[C4 检查记录](../.tmp/desktop-e2e/4fc1a833-acec-458a-bd0f-b86bf03a4bc5/evidence/backup-excludes-binding/check.json)。
 
 ## D. 其他已实现待验收
 
@@ -70,3 +74,58 @@
 ## 维护
 
 1.2.3-rc 新增待验收项时追加到对应分组；实测后在各条后标注 PASS / FAIL / NOT_RUN 与构建提交，再由 Main 集成 Owner 同步对应台账。
+
+## 2026-11-20 用户桌面实测记录（构建提交待标注）
+
+原则：本轮只记录问题、不改代码；后续修复以最优方案为导向再立项。
+
+### 验收结果
+
+- **A 组 PASS**（用户实测）。
+- **B 组部分通过**：连接、AI 读写、编辑正文可用；**删除子页面失败**，记 FAIL 待根因（见问题 B-1）。
+- **C 组 FAIL**：切到 Devin 配置后旧会话仍用旧模型（会话固定模型，预期）；新会话报「AI 运行时版本已变化或能力尚未验证」（根因见问题 C-1）。
+- **D 组**：D4 简历证据多轮深挖未测（仅验证了草稿卡存在），记 NOT_RUN。
+- **F 组**：全部 NOT_RUN。
+
+### 待解决问题清单
+
+- **B-1 Notion 删除子页面失败（根因已定位，Vocatrya 侧缺陷）**：目标页「测试vocatrya」下有 22 个子页面，模型正确地将全部子页面放入一个 `targets` 数组并排除了父页面与「投递记录」database，但 `AgentNotionDeletePagesSchema.targets` 上限为 `max(20)`（`src/models/agent.schema.ts:224`），参数校验失败、工具调用未提交，界面表现为「删除操作未能提交」。Notion 官方 `notion-delete-pages` 单次上限同为 20 页，schema 上限与远端上限恰好相撞：超过 20 页的批次无任何可行路径（提示词又要求整批一次调用）。**建议修法**：确认卡仍覆盖全部目标，harness executor 在 `agentWrite.ts` 派发时把 `page_ids` 按 20/批自动分片多次远端调用并聚合回执；备选是放宽 schema 上限但由执行器分片（卡片内容不变）。不推荐让模型拆成多次调用——每次调用各要一张确认卡。
+- **B-2 Notion 缺恢复/整库删除能力（功能缺口，非本轮缺陷）**：Notion MCP 已提供 `notion-restore-pages`（一次最多 20 个页面/数据库回收站恢复；父级仍在回收站时须先恢复父级；workspace 顶层私有页暂不支持 API 恢复）与 `notion-delete-databases`（整库连同行进回收站，需 `user_confirmed`）。是否接入 `notion_restore_pages` / `notion_delete_databases` 及其确认卡、回执与去重语义，待评估立项。
+- **C-1 Devin 运行时版本漂移导致新会话无法发送**：本机 Devin CLI `3000.14.30821`，而 `desktop/main/runtime/capabilities.js` DEVIN_RUNTIME 的 streaming/structuredOutput PASS 绑定 `3000.10.31` 精确版本，版本不等触发 fail-closed `STREAMING_NOT_VERIFIED`。门禁按设计工作，但暴露产品缺口：Devin 后台自动更新使每次升级都打断聊天，且应用内无重新验证入口（需跑 `scripts/runtime-streaming-probe.mts` / `structured-output-probe.mts` 后手工更新绑定版本）。可选方向：对新版重跑探针更新绑定；改为已验证版本列表（对齐 Codex native `NATIVE_VERIFIED_VERSIONS` 模式）；或应用内显式提示「运行时已更新，需重新验证」并给出恢复路径。
+- **D-1（NOT_RUN）**：简历证据深挖多轮（Pilot 空白页入口 → 选经历 → 多轮追问 → 草稿卡校验）。
+- **F-1（NOT_RUN）**：D4 长任务全组、错误提示合并、简历证据保存，均未实测。
+
+### UI 反馈（非验收项，待排期评估）
+
+长等待时建议在 Agent 面板展示模型的 thinking/reasoning 过程，而不是一直显示「响应比平时慢…正在生成…」；参考 craftstation 的呈现方式。
+
+## G. 新增提案：飞书 MCP 连接与工具（2026-11-20 调研，待用户裁定）
+
+用户提出在「连接与工具」新增飞书 MCP。以下为调研结论与建议方案，**未实现、未排期**；裁定后按 EXT-NOTION 同类流程立项。
+
+### 官方可选底座
+
+| 方案 | 说明 | 评估 |
+| --- | --- | --- |
+| 飞书远程 MCP（官方托管） | 仅「云文档」少量工具（search-doc、fetch-file 等），面向开发者代码集成 | 工具面太窄，不满足「连接与工具」预期，排除 |
+| `@larksuiteoapi/lark-mcp`（官方 OpenAPI MCP，Beta） | 飞书 OpenAPI 全量封装为 MCP 工具；stdio / streamable HTTP；`--tools` 白名单、`--token-mode`、`--language zh` | **推荐底座**。npm 包带 keytar 原生依赖（Windows 用 Credential Manager），打包需 spike 验证 |
+| 直连飞书 OpenAPI 自封装 | 仿 Notion service 自实现 OAuth/工具层 | 契约最可控但工作量最大，工具面需逐个封装；仅当 lark-mcp 不可用时考虑 |
+
+### 认证与凭据
+
+- 飞书要求用户自建应用（开放平台创建，得 App ID/Secret），权限按 API 粒度申请，企业租户可能需管理员审核——平台规则，无绕过路径。
+- **首期建议：应用身份（tenant_access_token）**。能力边界=应用被授权的文档/资源范围（用户把文档分享给应用或机器人）；凭据走 Vocatrya 密封存储，可控、可撤销、可进备份排除清单。
+- 用户身份（user_access_token）能力更强（个人可见文档、消息、日历），但 `lark-mcp --oauth` 自带 localhost:3000 回调与独立 token 存储（keytar），凭据不在 Vocatrya 手里，与密封存储/备份/撤销契约冲突；自实现 UAT OAuth + 刷新则工作量大。**首期不做，后续按需单独评估。**
+
+### 首期建议范围
+
+- 连接：设置页填 App ID/Secret（或引导创建应用），密封存储，断开即清除。
+- 工具白名单（云文档域）：搜索云文档、读取文档/wiki、创建文档、追加/块级编辑内容；写操作复用 proposal→人工批准→harness task→回执链路，确认卡展示外发内容，未知结果不自动重试。
+- 明确不做：IM 消息、日历、多维表格写入、任何「代用户发送」类动作。
+
+### 待定问题
+
+1. lark-mcp 在 Electron 安装包内的运行形态：后端 spawn stdio 子进程 vs streamable HTTP 本地服务；原生依赖打包验证。
+2. 应用凭据的录入 UX：手动填 App ID/Secret vs 引导式创建向导。
+3. 工具命名与参数：lark-mcp 工具名为 OpenAPI 路径风格（如 `docx.v1.documentBlock.list`），需决定 agent-facing 工具的封装粒度（粗粒度语义工具 vs 透传）。
+4. 与 Notion 的一致性：错误分类、限流 Retry-After、object_not_found 类错误码对齐。
