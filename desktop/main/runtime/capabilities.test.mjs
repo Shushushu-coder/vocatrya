@@ -151,7 +151,9 @@ describe("account runtime capability matrix", () => {
 
   it("describes auth verification mechanism and account-identity support", () => {
     const auth = (kind) => getAccountRuntimeCapabilities(kind).auth;
-    expect(auth("GROK_RUNTIME").verification).toBe("ACP_STDIO");
+    for (const kind of ["GROK_RUNTIME", "ANTIGRAVITY_RUNTIME"]) {
+      expect(auth(kind).verification, kind).toBe("ACP_STDIO");
+    }
     for (const kind of [
       "CODEX_RUNTIME",
       "CLAUDE_RUNTIME",
@@ -165,7 +167,7 @@ describe("account runtime capability matrix", () => {
     expect(auth("OPENCODE_RUNTIME").accountIdentity).toBe(false);
     expect(auth("CODEX_RUNTIME").accountIdentity).toBe(true);
     expect(auth("DEVIN_RUNTIME").accountIdentity).toBe(true);
-    expect(auth("ANTIGRAVITY_RUNTIME").verification).toBe("PROVISIONAL");
+    // Antigravity authenticate() returns the tier, never an identity.
     expect(auth("ANTIGRAVITY_RUNTIME").accountIdentity).toBe(false);
   });
 

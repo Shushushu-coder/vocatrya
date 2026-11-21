@@ -64,6 +64,20 @@ function classifyAuthProbeOutput({ exitCode, stdout, stderr }) {
   return "UNKNOWN";
 }
 
+// ACP_STDIO probes live on the provider adapter (they carry provider-
+// specific method ids and classification). Lazy requires keep the module
+// graph cycle-free.
+function acpStdioProbeFor(backendKind) {
+  switch (backendKind) {
+    case "GROK_RUNTIME":
+      return require("./grok").runGrokAcpAuthProbe;
+    case "ANTIGRAVITY_RUNTIME":
+      return require("./antigravity").runAntigravityAcpAuthProbe;
+    default:
+      return null;
+  }
+}
+
 // probeRuntimeAuthState({ backendKind, executablePath, profileDir, baseEnv, runner })
 //   → { backendKind, authState, raw: {exitCode, timedOut} }
 // profileDir is required: an auth probe outside the managed profile would
@@ -93,13 +107,18 @@ async function probeRuntimeAuthState({
     return { backendKind, authState: "UNKNOWN", reason: "PROFILE_REQUIRED" };
   }
 
-  // Some runtimes have no one-shot status command — Grok's only verified
-  // auth surface is the ACP stdio handshake (`agent --no-leader stdio`,
-  // authenticate(cached_token)). The adapter owns that exchange; this probe
-  // delegates so getRuntimeStatus stays truthful for ACP_STDIO backends.
+  // Some runtimes have no one-shot status command — their only verified
+  // auth surface is the ACP stdio handshake (Grok: agent --no-leader stdio
+  // + authenticate(cached_token); Antigravity: acp +
+  // authenticate(oauth-personal)). The adapter owns that exchange; this
+  // probe delegates so getRuntimeStatus stays truthful for ACP_STDIO
+  // backends.
   if (probe.kind === "ACP_STDIO") {
-    const { runGrokAcpAuthProbe } = require("./grok");
-    const result = await runGrokAcpAuthProbe({
+    const acpProbe = acpStdioProbeFor(backendKind);
+    if (!acpProbe) {
+      return { backendKind, authState: "UNKNOWN", reason: "NO_PROBE_DEFINED" };
+    }
+    const result = await acpProbe({
       executablePath,
       profileDir,
       baseEnv,

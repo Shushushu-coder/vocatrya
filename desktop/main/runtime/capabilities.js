@@ -386,7 +386,9 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     verification: Object.freeze({
       realLoginE2E: VERIFICATION_STATES.PENDING,
       // The ACP initialize/authenticate exchange was verified against
-      // real grok builds — a real OAuth login E2E has not been run.
+      // real grok builds (1.0.34/1.0.41, re-verified on 1.0.92:
+      // auth_mode "Oidc", cached_token absent when signed out) — a real
+      // OAuth login E2E has not been run.
       authProbe: VERIFICATION_STATES.PASS,
       realModelCatalog: VERIFICATION_STATES.PASS,
       realInferenceE2E: VERIFICATION_STATES.PENDING,
@@ -547,13 +549,17 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
   ANTIGRAVITY_RUNTIME: Object.freeze({
     implemented: true,
     login: Object.freeze({
-      // `agy acp --login` is interactive on 1.5.12. The console launch is
-      // unverified against a completed Google sign-in.
+      // `agy acp --login` is interactive on 1.5.14: it prints the Google
+      // OAuth URL on stdout and reads the pasted authorization code from
+      // stdin inside the console. The console launch is unverified
+      // against a completed Google sign-in.
       interaction: LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
       surfacesAuthorizationUrl: false,
     }),
     auth: Object.freeze({
-      verification: AUTH_VERIFICATION.PROVISIONAL,
+      // `agy acp` ACP handshake — initialize + authenticate(oauth-personal).
+      verification: AUTH_VERIFICATION.ACP_STDIO,
+      // authenticate() reports the account tier, never an identity.
       accountIdentity: false,
       requiredMethod: "GOOGLE_ACCOUNT",
     }),
@@ -585,12 +591,17 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     }),
     verification: Object.freeze({
       realLoginE2E: VERIFICATION_STATES.PENDING,
-      authProbe: VERIFICATION_STATES.PENDING,
+      // The ACP initialize + authenticate(oauth-personal) exchange was
+      // exercised against a real agy 1.5.14 build — cached-credential
+      // success ({_meta.antigravity.tier}) and the interactive-block
+      // negative shape were both observed. A full `acp --login` → probe
+      // round-trip through the app has not been run.
+      authProbe: VERIFICATION_STATES.PASS,
       realModelCatalog: VERIFICATION_STATES.PENDING,
       realInferenceE2E: VERIFICATION_STATES.PENDING,
       adversarialPermissions: VERIFICATION_STATES.PENDING,
     }),
-    // `--json-schema` is on `agy --help` for 1.5.12. No managed trial.
+    // `--json-schema` is on `agy --help` for 1.5.12/1.5.14. No managed trial.
     structuredOutput: Object.freeze({
       strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
       mechanism: "--json-schema",
