@@ -44,8 +44,6 @@ vi.mock("@/actions/userSettings.actions", () => ({
     success: true,
     data: { settings: { ai: {} } },
   })),
-  updateInterviewAiSettings: vi.fn(),
-  clearInterviewAiSettings: vi.fn(),
 }));
 
 import {

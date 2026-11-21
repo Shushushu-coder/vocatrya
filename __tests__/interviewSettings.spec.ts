@@ -6,7 +6,6 @@ import {
   getInterviewConfig,
   hasInterviewConfig,
   mergeAiSettingsForUpdate,
-  normalizeInterviewInput,
   parseUserSettingsJson,
 } from "@/lib/interview/interviewSettings";
 
@@ -75,7 +74,6 @@ describe("interview settings contract", () => {
         ai: { interview: { provider: "  ", model: "  " } },
       }),
     ).toBeUndefined();
-    expect(normalizeInterviewInput({ provider: "", model: "" })).toBeUndefined();
   });
 
   it("invalid JSON yields defaults with no interview", () => {
@@ -83,12 +81,6 @@ describe("interview settings contract", () => {
     expect(parsed.ai.provider).toBe(AiProvider.OLLAMA);
     expect(parsed.ai.interview).toBeUndefined();
     expect(hasInterviewConfig(parsed)).toBe(false);
-  });
-
-  it("trims provider/model whitespace", () => {
-    expect(
-      normalizeInterviewInput({ provider: "  openai ", model: " gpt-4o " }),
-    ).toEqual({ provider: "openai", model: "gpt-4o" });
   });
 
   it("merge preserves interview across global-ai updates", () => {

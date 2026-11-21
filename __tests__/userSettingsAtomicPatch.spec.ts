@@ -40,10 +40,8 @@ vi.mock("@/actions/shared", () => ({
 }));
 
 import {
-  clearInterviewAiSettings,
   getUserSettings,
   updateDisplaySettings,
-  updateInterviewAiSettings,
   updateUserSettings,
 } from "@/actions/userSettings.actions";
 
@@ -644,35 +642,6 @@ describe("userSettings.actions over the CAS primitive", () => {
     expect(result.data.settings.display.theme).toBe("dark");
     // Create materializes the same defaults the old upsert did.
     expect(harness.store.document.ai).toEqual({ provider: "ollama" });
-  });
-
-  it("updateInterviewAiSettings stores the normalized pair; clear removes it", async () => {
-    const set = await updateInterviewAiSettings({
-      provider: " openai ",
-      model: " gpt-4o ",
-    });
-    expect(set.success).toBe(true);
-    let ai = harness.store.document.ai as Record<string, unknown>;
-    expect(ai.interview).toEqual({ provider: "openai", model: "gpt-4o" });
-    expect(ai.provider).toBe("ollama");
-
-    const cleared = await clearInterviewAiSettings();
-    expect(cleared.success).toBe(true);
-    ai = harness.store.document.ai as Record<string, unknown>;
-    expect("interview" in ai).toBe(false);
-    expect(ai.provider).toBe("ollama");
-    expect(harness.store.document.display).toEqual({ theme: "system" });
-  });
-
-  it("updateInterviewAiSettings rejects incomplete pairs before any write", async () => {
-    const result = await updateInterviewAiSettings({
-      provider: "",
-      model: "",
-    });
-    expect(result).toMatchObject({ success: false });
-    expect(result.message).toContain("required");
-    expect(harness.store.counts.updateMany).toBe(0);
-    expect(harness.store.counts.create).toBe(0);
   });
 
   it("maps exhausted CAS retries to SETTINGS_CONFLICT", async () => {
