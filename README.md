@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./public/images/vocatrya-logo.svg" alt="Vocatrya logo" width="96">
+  <img src="./public/images/vocatrya-app-icon.svg" alt="Vocatrya logo" width="96">
 </p>
 
 <h1 align="center">Vocatrya</h1>
