@@ -10,6 +10,7 @@ const icons: Record<string, string> = {
   Devin: "devin-color.svg",
   DeepSeek: "deepseek-color.svg",
   OpenRouter: "openrouter-color.svg",
+  Antigravity: "antigravity-color.svg",
 };
 
 export default function AiServiceIcon({ name }: { name: string }) {

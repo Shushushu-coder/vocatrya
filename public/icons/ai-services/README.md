@@ -16,6 +16,7 @@ https://github.com/lobehub/lobe-icons/tree/55746b0b082258211121c70bd26e6878fd3bd
 | Devin | devin-color.svg | Color |
 | DeepSeek | deepseek-color.svg | Color |
 | OpenRouter | openrouter-color.svg | Color |
+| Antigravity | antigravity-color.svg | Color |
 
 MIT license: see `LICENSE.lobe-icons`. Brand trademarks belong to their owners.
 Keep upstream colors and geometry; do not apply grayscale, inversion or CSS fill overrides.
