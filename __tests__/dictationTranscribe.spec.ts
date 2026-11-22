@@ -1,6 +1,7 @@
-// AWU-DICTATION provider adapters: request shape per provider and the
-// stable wire-code mapping for every failure surface. fetchImpl is
-// injected so no network ever runs.
+// AWU-DICTATION provider adapter: the Gemini request shapes per protocol
+// and the stable wire-code mapping for every failure surface. fetchImpl is
+// injected so no network ever runs. Dictation is Gemini-only (N-2) — the
+// shared HTTP error mapper is exercised through the generateContent path.
 import {
   DictationError,
   transcribeDictationAudio,
@@ -16,9 +17,9 @@ const audio = {
 
 function opts(overrides: Partial<TranscribeOptions> = {}): TranscribeOptions {
   return {
-    provider: "openai",
-    model: "gpt-transcribe",
-    apiKey: "sk-test",
+    provider: "gemini",
+    model: "gemini-3.5-flash-lite",
+    apiKey: "AIza-test",
     audio,
     ...overrides,
   };
@@ -31,23 +32,30 @@ function okJson(body: unknown, status = 200): Response {
   });
 }
 
-describe("transcribeDictationAudio — OpenAI", () => {
-  it("posts the clip to the OpenAI transcriptions endpoint and returns the text", async () => {
-    const doFetch = vi.fn(async () => okJson({ text: " transcript " }));
-    const text = await transcribeDictationAudio(opts({ fetchImpl: doFetch }));
-    expect(text).toBe(" transcript ");
-    expect(doFetch).toHaveBeenCalledTimes(1);
-    const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://api.openai.com/v1/audio/transcriptions");
-    expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>).authorization).toBe(
-      "Bearer sk-test",
+describe("transcribeDictationAudio — Gemini generateContent", () => {
+  it("sends inline audio to generateContent and joins the text parts", async () => {
+    const doFetch = vi.fn(async () =>
+      okJson({
+        candidates: [
+          { content: { parts: [{ text: "hello " }, { text: "world" }] } },
+        ],
+      }),
     );
-    const form = init.body as FormData;
-    expect(form.get("model")).toBe("gpt-transcribe");
-    const file = form.get("file") as File;
-    expect(file.name).toBe("dictation.webm");
-    expect(file.type).toBe("audio/webm");
+    const text = await transcribeDictationAudio(opts({ fetchImpl: doFetch }));
+    expect(text).toBe("hello world");
+    const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+    );
+    expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe(
+      "AIza-test",
+    );
+    const body = JSON.parse(init.body as string);
+    const part = body.contents[0].parts[0];
+    expect(part.inline_data.mime_type).toBe("audio/webm");
+    expect(part.inline_data.data).toBe(audio.bytes.toString("base64"));
+    // The key stays in a header, never in the URL.
+    expect(url).not.toContain("AIza-test");
   });
 
   it.each([
@@ -97,27 +105,33 @@ describe("transcribeDictationAudio — OpenAI", () => {
     const noText = vi.fn(async () => okJson({}));
     await expect(
       transcribeDictationAudio(opts({ fetchImpl: noText })),
-    ).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.PROVIDER_ERROR });
+    ).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.EMPTY_RESULT });
   });
 
   it("never echoes provider error bodies in the thrown message", async () => {
     const doFetch = vi.fn(async () =>
-      okJson({ error: { message: "sk-test leaked" } }, 401),
+      okJson({ error: { message: "AIza-test leaked" } }, 401),
     );
     try {
       await transcribeDictationAudio(opts({ fetchImpl: doFetch }));
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(DictationError);
-      expect((error as Error).message).not.toContain("sk-test");
+      expect((error as Error).message).not.toContain("AIza-test");
     }
+  });
+
+  it("identifies Gemini key rejection without exposing the upstream message", async () => {
+    await expect(transcribeDictationAudio(opts({ fetchImpl: vi.fn(async () => okJson({
+      error: { message: "synthetic secret", details: [{ reason: "API_KEY_INVALID" }] },
+    }, 400)) }))).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.AUTH_FAILED,
+      message: "The transcription service rejected the configured API key" });
   });
 });
 
-describe("transcribeDictationAudio — Gemini", () => {
+describe("transcribeDictationAudio — Gemini Interactions", () => {
   it("classifies the Interactions array error envelope without leaking its message", async () => {
     await expect(transcribeDictationAudio(opts({
-      provider: "gemini",
       model: "gemini-3.5-transcribe",
       fetchImpl: vi.fn(async () => okJson([{
         error: { message: "synthetic secret", details: [{ reason: "API_KEY_INVALID" }] },
@@ -131,13 +145,13 @@ describe("transcribeDictationAudio — Gemini", () => {
 
   it.each([[], [null], null])("falls back to HTTP status for an unusable error envelope %#", async body => {
     await expect(transcribeDictationAudio(opts({
-      provider: "gemini", model: "gemini-3.5-transcribe",
+      model: "gemini-3.5-transcribe",
       fetchImpl: vi.fn(async () => okJson(body, 400)),
     }))).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.INVALID_AUDIO, upstreamStatus: 400 });
   });
   it("routes a dedicated transcription model to Interactions and preserves verbatim mode", async () => {
     const doFetch = vi.fn(async () => okJson({ status: "completed", output_text: "实际转写" }));
-    await expect(transcribeDictationAudio(opts({ provider: "gemini", model: "models/gemini-3.5-transcribe", fetchImpl: doFetch,
+    await expect(transcribeDictationAudio(opts({ model: "models/gemini-3.5-transcribe", fetchImpl: doFetch,
       audio: { ...audio, mimeType: "audio/webm;codecs=opus" } }))).resolves.toBe("实际转写");
     const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/interactions");
@@ -147,16 +161,9 @@ describe("transcribeDictationAudio — Gemini", () => {
   });
 
   it("rejects incomplete interactions even when partial text exists", async () => {
-    await expect(transcribeDictationAudio(opts({ provider: "gemini", model: "gemini-3.5-transcribe",
+    await expect(transcribeDictationAudio(opts({ model: "gemini-3.5-transcribe",
       fetchImpl: vi.fn(async () => okJson({ status: "incomplete", output_text: "partial" })) })))
       .rejects.toMatchObject({ code: DICTATION_ERROR_CODES.PROVIDER_ERROR });
-  });
-
-  it("identifies Gemini key rejection without exposing the upstream message", async () => {
-    await expect(transcribeDictationAudio(opts({ provider: "gemini", fetchImpl: vi.fn(async () => okJson({
-      error: { message: "synthetic secret", details: [{ reason: "API_KEY_INVALID" }] },
-    }, 400)) }))).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.AUTH_FAILED,
-      message: "The transcription service rejected the configured API key" });
   });
 
   it.each([
@@ -167,44 +174,5 @@ describe("transcribeDictationAudio — Gemini", () => {
     controller.abort(new Error(reason));
     await expect(transcribeDictationAudio(opts({ signal: controller.signal,
       fetchImpl: vi.fn(async () => { throw controller.signal.reason; }) }))).rejects.toMatchObject({ code });
-  });
-  it("sends inline audio to generateContent and joins the text parts", async () => {
-    const doFetch = vi.fn(async () =>
-      okJson({
-        candidates: [
-          { content: { parts: [{ text: "hello " }, { text: "world" }] } },
-        ],
-      }),
-    );
-    const text = await transcribeDictationAudio(
-      opts({
-        provider: "gemini",
-        model: "gemini-2.5-flash",
-        fetchImpl: doFetch,
-      }),
-    );
-    expect(text).toBe("hello world");
-    const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-    );
-    expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe(
-      "sk-test",
-    );
-    const body = JSON.parse(init.body as string);
-    const part = body.contents[0].parts[0];
-    expect(part.inline_data.mime_type).toBe("audio/webm");
-    expect(part.inline_data.data).toBe(audio.bytes.toString("base64"));
-    // The key stays in a header, never in the URL.
-    expect(url).not.toContain("sk-test");
-  });
-
-  it("reports an empty candidate list as EMPTY_RESULT", async () => {
-    const doFetch = vi.fn(async () => okJson({ candidates: [] }));
-    await expect(
-      transcribeDictationAudio(
-        opts({ provider: "gemini", model: "gemini-2.5-flash", fetchImpl: doFetch }),
-      ),
-    ).rejects.toMatchObject({ code: DICTATION_ERROR_CODES.EMPTY_RESULT });
   });
 });

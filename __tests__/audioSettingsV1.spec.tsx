@@ -21,7 +21,6 @@ vi.mock("@/actions/dictation.actions", () => ({
     data: {
       config: null,
       credentials: {
-        openai: { shared: null, dedicated: null },
         gemini: { shared: null, dedicated: null },
       },
     },

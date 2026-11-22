@@ -20,6 +20,7 @@ import {
 import {
   DICTATION_CREDENTIAL_MODES,
   DICTATION_DEFAULT_MODELS,
+  DICTATION_GEMINI_KEY_URL,
   DICTATION_MODELS,
   DICTATION_PROVIDERS,
   DICTATION_PROVIDER_LABELS,
@@ -39,8 +40,8 @@ export function DictationSettingsControls() {
   const loadFailureMessage = useRef(t("dictation.saveFailed"));
   loadFailureMessage.current = t("dictation.saveFailed");
   const [loading, setLoading] = useState(true);
-  const [provider, setProvider] = useState<DictationProvider>("openai");
-  const [model, setModel] = useState(DICTATION_DEFAULT_MODELS.openai);
+  const [provider, setProvider] = useState<DictationProvider>("gemini");
+  const [model, setModel] = useState(DICTATION_DEFAULT_MODELS.gemini);
   const [credentialMode, setCredentialMode] =
     useState<DictationCredentialMode>("shared");
   const [credentials, setCredentials] =
@@ -119,8 +120,7 @@ export function DictationSettingsControls() {
         toastSuccess(t("dictation.keySaved"));
         setKeyInput("");
         setCredentials(current => ({
-          openai: current?.openai ?? { shared: null, dedicated: null },
-          gemini: current?.gemini ?? { shared: null, dedicated: null },
+          ...current,
           [provider]: { ...current?.[provider], shared: current?.[provider].shared ?? null,
             dedicated: current?.[provider].dedicated ?? null, [credentialMode]: result.data },
         }));
@@ -316,6 +316,18 @@ export function DictationSettingsControls() {
                 {t("dictation.sharedKeyHint")}
               </p>
             ) : null}
+            <p className="text-xs text-muted-foreground">
+              {t("dictation.geminiKeyHint")}{" "}
+              <a
+                href={DICTATION_GEMINI_KEY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline-offset-4 hover:underline"
+                data-testid="dictation-get-key-link"
+              >
+                {t("dictation.getApiKey")}
+              </a>
+            </p>
           </div>
 
           <div className="flex items-center gap-3">

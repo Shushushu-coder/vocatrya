@@ -33,11 +33,11 @@ import { APP_CONSTANTS } from "@/lib/constants";
 
 const CONFIGURED = {
   settings: {
-    provider: "openai",
-    model: "gpt-transcribe",
+    provider: "gemini",
+    model: "gemini-3.5-flash-lite",
     credentialMode: "shared",
   },
-  apiKey: "sk-live",
+  apiKey: "AIza-live",
 };
 
 // Duck-typed upload part — the route itself only requires this shape.
@@ -96,9 +96,9 @@ describe("POST /api/ai/dictation", () => {
     });
     expect(transcribeDictationAudio).toHaveBeenCalledWith(
       expect.objectContaining({
-        provider: "openai",
-        model: "gpt-transcribe",
-        apiKey: "sk-live",
+        provider: "gemini",
+        model: "gemini-3.5-flash-lite",
+        apiKey: "AIza-live",
         audio: expect.objectContaining({
           mimeType: "audio/webm",
           fileName: "dictation.webm",
@@ -173,7 +173,7 @@ describe("POST /api/ai/dictation", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.code).toBe(DICTATION_ERROR_CODES.CREDENTIAL_UNAVAILABLE);
-    expect(JSON.stringify(body)).not.toContain("sk-live");
+    expect(JSON.stringify(body)).not.toContain("AIza-live");
   });
 
   it.each([
@@ -193,12 +193,12 @@ describe("POST /api/ai/dictation", () => {
   });
 
   it("reports an unexpected adapter throw as a generic 500", async () => {
-    transcribeDictationAudio.mockRejectedValue(new Error("sk-live exploded"));
+    transcribeDictationAudio.mockRejectedValue(new Error("AIza-live exploded"));
     const res = await POST(req());
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.code).toBe(DICTATION_ERROR_CODES.PROVIDER_ERROR);
-    expect(JSON.stringify(body)).not.toContain("sk-live");
+    expect(JSON.stringify(body)).not.toContain("AIza-live");
   });
 
   // The client aborting — cancel, panel close, conversation switch — must

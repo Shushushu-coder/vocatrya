@@ -5,11 +5,15 @@
  * the `dictation` top-level namespace of the user settings document carries
  * {provider, model, credentialMode}. Credentials are ApiKey rows on the
  * same protected store as BYOK keys — "shared" mode reads the provider's
- * existing row ("openai"), "dedicated" mode a dictation-namespaced row
- * ("dictation-openai") so a separate key never collides with chat BYOK.
+ * existing row ("gemini"), "dedicated" mode a dictation-namespaced row
+ * ("dictation-gemini") so a separate key never collides with chat BYOK.
+ *
+ * Gemini-only since N-2: a stored document naming another provider fails
+ * isDictationProvider and surfaces as "not configured" — the record itself
+ * is left untouched for the user to re-save.
  */
 
-export const DICTATION_PROVIDERS = ["openai", "gemini"] as const;
+export const DICTATION_PROVIDERS = ["gemini"] as const;
 export type DictationProvider = (typeof DICTATION_PROVIDERS)[number];
 
 export const DICTATION_CREDENTIAL_MODES = ["shared", "dedicated"] as const;
@@ -23,27 +27,27 @@ export interface DictationSettings {
 }
 
 export const DICTATION_DEFAULT_MODELS: Record<DictationProvider, string> = {
-  openai: "gpt-transcribe",
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-3.5-flash-lite",
 };
 
 // Keep legacy selections working; each model is paired with its actual API.
 export const DICTATION_MODELS: Record<DictationProvider, readonly string[]> = {
-  openai: ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"],
-  gemini: ["gemini-3.5-transcribe", "gemini-2.5-flash", "gemini-2.5-pro"],
+  gemini: ["gemini-3.5-flash-lite", "gemini-3.5-transcribe", "gemini-2.5-flash", "gemini-2.5-pro"],
 };
 
-export function dictationProtocol(provider: DictationProvider, model: string) {
-  if (provider === "openai") return "openai-transcriptions";
+export function dictationProtocol(model: string) {
   return /^gemini-3\.5-transcribe(?:-\d{4}-\d{2}-\d{2})?$/.test(model.replace(/^models\//, ""))
     ? "gemini-interactions"
     : "gemini-generate-content";
 }
 
 export const DICTATION_PROVIDER_LABELS: Record<DictationProvider, string> = {
-  openai: "OpenAI",
   gemini: "Google Gemini",
 };
+
+/** Where the dictation Gemini key is created — the UI links here. */
+export const DICTATION_GEMINI_KEY_URL =
+  "https://aistudio.google.com/api-keys";
 
 /** ApiKey.provider value used by the dedicated-credential row. */
 export function dictationApiKeyProvider(

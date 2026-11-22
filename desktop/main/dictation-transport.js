@@ -4,7 +4,6 @@ const MAX_BODY_BYTES = 17 * 1024 * 1024; // 12 MB clip plus base64/JSON overhead
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 function allowedTarget(value) {
-  if (value === "https://api.openai.com/v1/audio/transcriptions") return "openai";
   if (value === "https://generativelanguage.googleapis.com/v1beta/interactions" ||
       /^https:\/\/generativelanguage\.googleapis\.com\/v1beta\/models\/[A-Za-z0-9._-]+:generateContent$/.test(value)) return "gemini";
   return null;
@@ -42,7 +41,7 @@ function createDictationTransport(fetchImpl) {
         method: "POST",
         headers: {
           "content-type": contentType,
-          ...(provider === "openai" ? { authorization: `Bearer ${key}` } : { "x-goog-api-key": key }),
+          "x-goog-api-key": key,
         },
         body: Buffer.concat(chunks),
         redirect: "error",

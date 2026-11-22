@@ -45,14 +45,11 @@ export interface TranscribeOptions {
   fetchImpl?: typeof fetch;
 }
 
-const OPENAI_TRANSCRIBE_URL =
-  "https://api.openai.com/v1/audio/transcriptions";
 const GEMINI_GENERATE_URL =
   "https://generativelanguage.googleapis.com/v1beta/models";
 
 // Dictation prompt for the chat-style Gemini path: verbatim transcription,
-// original language kept, no commentary. OpenAI's dedicated endpoint needs
-// no instruction text.
+// original language kept, no commentary.
 const GEMINI_TRANSCRIBE_PROMPT =
   "Transcribe the audio verbatim. Preserve the original language(s) and " +
   "terminology. Output only the transcription text, with no commentary, " +
@@ -75,8 +72,8 @@ function upstreamError(err: unknown, signal?: AbortSignal): DictationError {
 async function httpError(res: Response, signal?: AbortSignal): Promise<DictationError> {
   // Inspect only structured codes. Never echo upstream text or key material.
   try {
-    // Interactions can wrap an error in an array; generateContent and
-    // OpenAI return a single object. Classify both through the same path.
+    // Interactions can wrap an error in an array; generateContent returns
+    // a single object. Classify both through the same path.
     const parsed = await res.json();
     const body = Array.isArray(parsed) ? parsed[0] : parsed;
     if (res.status === 504 && body?.code === DICTATION_ERROR_CODES.TIMEOUT) return mapHttpStatus(504);
@@ -121,53 +118,12 @@ function mapHttpStatus(status: number, upstreamStatus = status): DictationError 
   }
 }
 
-async function transcribeWithOpenAi(
-  opts: TranscribeOptions,
-  doFetch: typeof fetch,
-): Promise<string> {
-  const form = new FormData();
-  form.append("model", opts.model);
-  form.append(
-    "file",
-    new Blob([new Uint8Array(opts.audio.bytes)], { type: opts.audio.mimeType }),
-    opts.audio.fileName,
-  );
-  let res: Response;
-  try {
-    res = await doFetch(OPENAI_TRANSCRIBE_URL, {
-      method: "POST",
-      headers: { authorization: `Bearer ${opts.apiKey}` },
-      body: form,
-      redirect: "error",
-      signal: opts.signal ?? null,
-    });
-  } catch (err) {
-    throw upstreamError(err, opts.signal);
-  }
-  if (!res.ok) {
-    throw await httpError(res, opts.signal);
-  }
-  let parsed: unknown;
-  try {
-    parsed = await res.json();
-  } catch (err) {
-    if (opts.signal?.aborted) throw upstreamError(err, opts.signal);
-    throw new DictationError(DICTATION_ERROR_CODES.PROVIDER_ERROR, "The transcription service returned an unreadable response");
-  }
-  const text = (parsed as { text?: unknown })?.text;
-  if (typeof text !== "string") {
-    throw new DictationError(DICTATION_ERROR_CODES.PROVIDER_ERROR, "The transcription service returned no text");
-  }
-  if (!text.trim()) throw new DictationError(DICTATION_ERROR_CODES.EMPTY_RESULT, "The transcription service returned no text");
-  return text;
-}
-
 async function transcribeWithGemini(
   opts: TranscribeOptions,
   doFetch: typeof fetch,
 ): Promise<string> {
   const model = opts.model.replace(/^models\//, "");
-  const interactions = dictationProtocol("gemini", model) === "gemini-interactions";
+  const interactions = dictationProtocol(model) === "gemini-interactions";
   const mimeType = opts.audio.mimeType.split(";")[0].trim().toLowerCase();
   const body = {
     contents: [
@@ -255,8 +211,6 @@ export async function transcribeDictationAudio(
 ): Promise<string> {
   const doFetch = opts.fetchImpl ?? dictationFetch;
   switch (opts.provider) {
-    case "openai":
-      return transcribeWithOpenAi(opts, doFetch);
     case "gemini":
       return transcribeWithGemini(opts, doFetch);
     default:

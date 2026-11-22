@@ -15,7 +15,7 @@ import {
 import { log } from "@/lib/telemetry";
 
 // The multipart body is a single recorded clip produced under
-// AGENT_DICTATION_MAX_DURATION_MS — well under provider caps (OpenAI 25MB).
+// AGENT_DICTATION_MAX_DURATION_MS — well under the provider request cap.
 const MAX_AUDIO_BYTES = APP_CONSTANTS.AGENT_DICTATION_MAX_AUDIO_BYTES;
 // Slightly above the audio cap for multipart overhead; rejects oversized
 // uploads before the body is even parsed.

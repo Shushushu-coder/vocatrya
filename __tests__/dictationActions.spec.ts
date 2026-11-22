@@ -55,9 +55,11 @@ describe("updateDictationSettings", () => {
   it("rejects unknown providers and missing fields before any write", async () => {
     for (const input of [
       { provider: "ollama", model: "x", credentialMode: "shared" },
-      { provider: "openai", model: "", credentialMode: "shared" },
-      { provider: "openai", model: "x", credentialMode: "bogus" },
-      { provider: "openai", model: "x".repeat(200), credentialMode: "shared" },
+      // N-2: a previously selectable provider is now refused as well.
+      { provider: "openai", model: "x", credentialMode: "shared" },
+      { provider: "gemini", model: "", credentialMode: "shared" },
+      { provider: "gemini", model: "x", credentialMode: "bogus" },
+      { provider: "gemini", model: "x".repeat(200), credentialMode: "shared" },
     ]) {
       const result = await updateDictationSettings(input);
       expect(result.success).toBe(false);
@@ -71,8 +73,8 @@ describe("updateDictationSettings", () => {
     });
     prisma.userSettings.updateMany.mockResolvedValue({ count: 1 });
     const result = await updateDictationSettings({
-      provider: "openai",
-      model: "gpt-transcribe",
+      provider: "gemini",
+      model: "gemini-3.5-flash-lite",
       credentialMode: "shared",
     });
     expect(result.success).toBe(true);
@@ -81,8 +83,8 @@ describe("updateDictationSettings", () => {
     };
     const doc = JSON.parse(write.data.settings);
     expect(doc.dictation).toEqual({
-      provider: "openai",
-      model: "gpt-transcribe",
+      provider: "gemini",
+      model: "gemini-3.5-flash-lite",
       credentialMode: "shared",
     });
     // The chat AI selection is untouched by the dictation write.
@@ -94,7 +96,8 @@ describe("saveDictationKey", () => {
   it("rejects unknown providers and empty keys", async () => {
     for (const input of [
       { provider: "ollama", credentialMode: "dedicated", key: "x" },
-      { provider: "openai", credentialMode: "dedicated", key: "  " },
+      { provider: "openai", credentialMode: "dedicated", key: "x" },
+      { provider: "gemini", credentialMode: "dedicated", key: "  " },
     ]) {
       expect((await saveDictationKey(input)).success).toBe(false);
     }
@@ -108,14 +111,14 @@ describe("saveDictationKey", () => {
       data: { last4: "1234", protection: "os" },
     });
     const result = await saveDictationKey({
-      provider: "openai",
+      provider: "gemini",
       credentialMode: "shared",
-      key: "sk-new",
+      key: "AIza-new",
     });
     expect(result.success).toBe(true);
     expect(saveApiKey).toHaveBeenCalledWith({
-      provider: "openai",
-      key: "sk-new",
+      provider: "gemini",
+      key: "AIza-new",
     });
     // No direct write — the BYOK path owns the row and its projection.
     expect(prisma.apiKey.upsert).not.toHaveBeenCalled();
@@ -123,9 +126,9 @@ describe("saveDictationKey", () => {
 
   it("seals dedicated keys onto a dictation-namespaced row", async () => {
     const result = await saveDictationKey({
-      provider: "openai",
+      provider: "gemini",
       credentialMode: "dedicated",
-      key: "sk-dict",
+      key: "AIza-dict",
     });
     expect(result.success).toBe(true);
     expect(saveApiKey).not.toHaveBeenCalled();
@@ -133,8 +136,8 @@ describe("saveDictationKey", () => {
       where: { userId_provider: { userId: string; provider: string } };
       create: { provider: string };
     };
-    expect(upsert.where.userId_provider.provider).toBe("dictation-openai");
-    expect(upsert.create.provider).toBe("dictation-openai");
+    expect(upsert.where.userId_provider.provider).toBe("dictation-gemini");
+    expect(upsert.create.provider).toBe("dictation-gemini");
     expect(result.data).toMatchObject({ last4: "wxyz", protection: "os" });
   });
 });
@@ -142,7 +145,7 @@ describe("saveDictationKey", () => {
 describe("deleteDictationKey", () => {
   it("refuses to delete shared BYOK keys", async () => {
     const result = await deleteDictationKey({
-      provider: "openai",
+      provider: "gemini",
       credentialMode: "shared",
     });
     expect(result.success).toBe(false);
@@ -166,16 +169,16 @@ describe("getDictationSettings", () => {
     prisma.userSettings.findUnique.mockResolvedValue({
       settings: JSON.stringify({
         dictation: {
-          provider: "openai",
-          model: "gpt-transcribe",
+          provider: "gemini",
+          model: "gemini-3.5-flash-lite",
           credentialMode: "dedicated",
         },
       }),
     });
     prisma.apiKey.findMany.mockResolvedValue([
-      { provider: "openai", last4: "aaaa", iv: "os:v1:x", encryptedKey: "ENC1" },
+      { provider: "gemini", last4: "aaaa", iv: "os:v1:x", encryptedKey: "ENC1" },
       {
-        provider: "dictation-openai",
+        provider: "dictation-gemini",
         last4: "bbbb",
         iv: "",
         encryptedKey: "ENC2",
@@ -184,14 +187,15 @@ describe("getDictationSettings", () => {
     const result = await getDictationSettings();
     expect(result.success).toBe(true);
     expect(result.data?.config).toEqual({
-      provider: "openai",
-      model: "gpt-transcribe",
+      provider: "gemini",
+      model: "gemini-3.5-flash-lite",
       credentialMode: "dedicated",
     });
-    expect(result.data?.credentials.openai).toEqual({
+    expect(result.data?.credentials.gemini).toEqual({
       shared: { last4: "aaaa", protection: "os" },
       dedicated: { last4: "bbbb", protection: "none" },
     });
+    expect(result.data?.credentials).not.toHaveProperty("openai");
     expect(JSON.stringify(result)).not.toContain("ENC");
   });
 });

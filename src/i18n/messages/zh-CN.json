@@ -3608,6 +3608,8 @@
     "sharedKeyPlaceholder": "粘贴你的 API key",
     "dedicatedKeyPlaceholder": "粘贴听写专用 API key",
     "sharedKeyHint": "保存在该服务的 BYOK key 下——更新它也会同时更新 BYOK 聊天使用的 key。",
+    "geminiKeyHint": "听写使用 Google Gemini 转写，需要 AI Studio 生成的 API key（通常以 AIza 开头）。",
+    "getApiKey": "在 Google AI Studio 获取 API key",
     "saveKey": "保存 key",
     "deleteKey": "删除 key",
     "keySaved": "听写 API key 已保存。",

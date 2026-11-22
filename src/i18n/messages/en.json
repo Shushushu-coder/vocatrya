@@ -3608,6 +3608,8 @@
     "sharedKeyPlaceholder": "Paste your API key",
     "dedicatedKeyPlaceholder": "Paste your dictation API key",
     "sharedKeyHint": "Saved under the provider's BYOK key — updating it also updates the key used for BYOK chat.",
+    "geminiKeyHint": "Dictation uses Google Gemini and needs a Gemini API key (it usually starts with AIza).",
+    "getApiKey": "Get an API key in Google AI Studio",
     "saveKey": "Save key",
     "deleteKey": "Delete key",
     "keySaved": "Dictation API key saved.",
