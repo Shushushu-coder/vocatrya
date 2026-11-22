@@ -30,6 +30,7 @@ import {
   HARNESS_TASK_STATUS,
 } from "@/lib/harness/types";
 import {
+  createProposalsForResponseMessage,
   decideOperationProposal,
   getOperationProposal,
   prepareConversationDelete,
@@ -411,6 +412,40 @@ describe("executor VERIFY → DISPATCH → SETTLE", () => {
     return { proposal, taskId: res.taskId };
   }
 
+  async function approvedDeleteTask(targetCount = 22) {
+    const targets = Array.from(
+      { length: targetCount },
+      (_, index) => `page-${index}`,
+    );
+    const input = AgentNotionDeletePagesSchema.parse({ targets });
+    const conversation = await prisma.chatConversation.create({
+      data: { userId, messages: "[]" },
+    });
+    const proposal = await prisma.agentOperationProposal.create({
+      data: {
+        userId,
+        conversationId: conversation.id,
+        messageId: null,
+        toolCallId: `tc-${randomUUID()}`,
+        approvalId: `ap-${randomUUID()}`,
+        turnKey: `turn-${randomUUID()}`,
+        toolName: "notion_delete_pages",
+        inputJson: JSON.stringify(input),
+        inputHash: notionWriteInputHash(input),
+        materialJson: JSON.stringify({ workspaceId: "ws-1" }),
+        status: AGENT_PROPOSAL_STATUS.PROPOSED,
+        expiresAt: new Date(Date.now() + 7 * 24 * 3600_000),
+      },
+    });
+    const res = await decideOperationProposal(prisma, {
+      userId,
+      proposalId: proposal.id,
+      decision: "approve",
+    });
+    if (res.state !== "approved") throw new Error("not approved");
+    return { proposal, taskId: res.taskId, targets };
+  }
+
   it("chunks a delete larger than 20 pages and aggregates every page id", async () => {
     await connectNotion();
     const targets = Array.from({ length: 22 }, (_, index) => `page-${index}`);
@@ -505,6 +540,175 @@ describe("executor VERIFY → DISPATCH → SETTLE", () => {
     });
     expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.UNCERTAIN);
     const outcome = JSON.parse(row.outcomeJson!) as { saved?: boolean; detail?: string };
+    expect(outcome.saved).toBe(false);
+    expect(outcome.detail).toContain("Moved 20 pages");
+  });
+
+  it("mints one card for a >20 delete batch at finish, then dispatches it sliced", async () => {
+    await connectNotion();
+    const targets = Array.from({ length: 22 }, (_, index) => `page-${index}`);
+    const conversation = await prisma.chatConversation.create({
+      data: { userId, messages: "[]" },
+    });
+    // The finish-time entry the original B-1 failure died in: one
+    // approval-requested part with 22 targets must produce exactly one
+    // proposal row carrying the whole batch.
+    const created = await prisma.$transaction((tx) =>
+      createProposalsForResponseMessage(tx, {
+        userId,
+        conversationId: conversation.id,
+        turnKey: `turn-${randomUUID()}`,
+        message: {
+          id: "msg-delete-22",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-notion_delete_pages",
+              toolCallId: "tc-delete-22",
+              state: "approval-requested",
+              input: { targets },
+              approval: { id: "ap-delete-22" },
+            },
+          ],
+        } as never,
+      }),
+    );
+    expect(created).toBe(1);
+    const proposal = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { toolCallId: "tc-delete-22" },
+    });
+    expect(JSON.parse(proposal.inputJson)).toMatchObject({ targets });
+    const dto = await getOperationProposal(prisma, {
+      userId,
+      proposalId: proposal.id,
+    });
+    expect(dto?.target).toBe("22 pages");
+
+    const res = await decideOperationProposal(prisma, {
+      userId,
+      proposalId: proposal.id,
+      decision: "approve",
+    });
+    if (res.state !== "approved") throw new Error("not approved");
+    await harnessRunnerTick(prisma, undefined, FEATURE_ON);
+
+    expect(
+      remote.calls.map((call) => (call.arguments?.page_ids as string[]).length),
+    ).toEqual([20, 2]);
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.SUCCEEDED);
+    expect(JSON.parse(row.outcomeJson!)).toMatchObject({
+      saved: true,
+      pageIds: targets,
+    });
+  });
+
+  it("withdraw of an approved proposal before dispatch cancels the task — nothing is sent", async () => {
+    await connectNotion();
+    const { proposal, taskId } = await approvedTask();
+    const res = await withdrawOperationProposal(prisma, {
+      userId,
+      proposalId: proposal.id,
+    });
+    expect(res.state).toBe("withdrawn");
+
+    await harnessRunnerTick(prisma, undefined, FEATURE_ON);
+    expect(remote.calls).toHaveLength(0);
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    const task = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: taskId },
+    });
+    expect(row.status).toBe(AGENT_PROPOSAL_STATUS.WITHDRAWN);
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.CANCELLED);
+    expect(task.status).toBe(HARNESS_TASK_STATUS.CANCELLED);
+  });
+
+  it("a task withdrawn mid-claim is settled by the sweeper, never dispatched", async () => {
+    await connectNotion();
+    const { proposal, taskId } = await approvedTask();
+    const c = await claim(taskId);
+    // The task is claimed RUNNING; the user withdraws before the remote
+    // call. The executor only serves RUNNING rows — a CANCELLING row is
+    // not dispatched, and the sweeper settles it once the lease lapses.
+    const res = await withdrawOperationProposal(prisma, {
+      userId,
+      proposalId: proposal.id,
+    });
+    expect(res.state).toBe("withdrawn");
+    const mid = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: taskId },
+    });
+    expect(mid.status).toBe(HARNESS_TASK_STATUS.CANCELLING);
+
+    await executeAgentWriteTask(prisma, c);
+    expect(remote.calls).toHaveLength(0);
+    await prisma.harnessTask.update({
+      where: { id: taskId },
+      data: { leaseUntil: new Date(Date.now() - 1000) },
+    });
+    await harnessRunnerTick(prisma, undefined, FEATURE_ON);
+    expect(remote.calls).toHaveLength(0);
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    const task = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: taskId },
+    });
+    expect(row.status).toBe(AGENT_PROPOSAL_STATUS.WITHDRAWN);
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.CANCELLED);
+    expect(task.status).toBe(HARNESS_TASK_STATUS.CANCELLED);
+  });
+
+  it("a transport failure mid-batch keeps the settled ids and never resends", async () => {
+    await connectNotion();
+    const { proposal, taskId } = await approvedDeleteTask();
+    remote.next = async (call) => {
+      const ids = call.arguments?.page_ids as string[];
+      if (ids.length < 20) throw new Error("ECONNRESET");
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+    };
+    const c = await claim(taskId);
+    await executeAgentWriteTask(prisma, c);
+    expect(remote.calls).toHaveLength(2);
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.UNCERTAIN);
+    const outcome = JSON.parse(row.outcomeJson!) as {
+      saved?: boolean;
+      detail?: string;
+    };
+    expect(outcome.saved).toBe(false);
+    expect(outcome.detail).toContain("Moved 20 pages");
+    remote.calls = [];
+    await executeAgentWriteTask(prisma, c);
+    expect(remote.calls).toHaveLength(0);
+  });
+
+  it("a cancel observed between batches stops before the next remote call", async () => {
+    await connectNotion();
+    const { proposal, taskId } = await approvedDeleteTask();
+    const controller = new AbortController();
+    remote.next = async () => {
+      controller.abort();
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+    };
+    const c = await claim(taskId);
+    await executeAgentWriteTask(prisma, c, { signal: controller.signal });
+    // The second slice is never sent; the moved pages are the whole receipt.
+    expect(remote.calls).toHaveLength(1);
+    const row = await prisma.agentOperationProposal.findUniqueOrThrow({
+      where: { id: proposal.id },
+    });
+    expect(row.outcomeStatus).toBe(AGENT_PROPOSAL_OUTCOME.UNCERTAIN);
+    const outcome = JSON.parse(row.outcomeJson!) as {
+      saved?: boolean;
+      detail?: string;
+    };
     expect(outcome.saved).toBe(false);
     expect(outcome.detail).toContain("Moved 20 pages");
   });
