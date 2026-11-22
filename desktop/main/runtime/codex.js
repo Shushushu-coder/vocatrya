@@ -20,6 +20,34 @@ const { promptStdinWriter } = require("./prompt-input");
 
 const CODEX_BACKEND_KIND = "CODEX_RUNTIME";
 
+const ANSI_PATTERN = new RegExp(
+  [
+    "\\x1b\\[[0-9;?]*[A-Za-z]",
+    "\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)",
+    "\\x1b\\([0-9A-Z]",
+    "\\x1b.",
+  ].join("|"),
+  "g",
+);
+
+// `codex login` starts the local callback server, tries to open the system
+// browser itself, and unconditionally prints the authorize URL on stderr
+// within the first second ("If your browser did not open, navigate to this
+// URL to authenticate:" — verified on codex-cli 0.165.0 and 0.171.0). The
+// CLI's own browser-open attempt is best-effort and can silently fail in
+// packaged spawn contexts, so the URL is the recovery entry the renderer
+// surfaces. Only the official OpenAI authorize endpoint may surface — the
+// local callback URL (localhost:1455) printed in the same block and any
+// foreign origin must never reach the UI.
+const CODEX_LOGIN_URL_RE =
+  /https:\/\/auth\.openai\.com\/oauth\/authorize\?[^\s"'<>)\]]+/i;
+
+function extractCodexLoginUrl(text) {
+  if (typeof text !== "string") return null;
+  const match = text.replace(ANSI_PATTERN, "").match(CODEX_LOGIN_URL_RE);
+  return match ? match[0] : null;
+}
+
 // Smoke contract (spec §23): the prompt asks the model to echo a fixed
 // marker; the run needs no file access, so it uses the strongest sandbox
 // the CLI supports (read-only) in a Vocatrya-owned temporary directory.
@@ -312,6 +340,7 @@ const codexAdapter = {
   buildLogoutInvocation: buildCodexLogoutInvocation,
   buildStatusInvocation: buildCodexStatusInvocation,
   parseAuthStatus: parseCodexLoginStatus,
+  extractLoginUrl: extractCodexLoginUrl,
   checkLoginPolicy: null,
 
   // Post-login verification: only a ChatGPT account session counts.
@@ -534,6 +563,7 @@ module.exports = {
   buildCodexModelsInvocation,
   buildCodexStatusInvocation,
   codexAdapter,
+  extractCodexLoginUrl,
   parseCodexLoginStatus,
   parseCodexModelCatalog,
   resolveCodexExecutable,

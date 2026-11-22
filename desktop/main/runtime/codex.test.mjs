@@ -12,6 +12,7 @@ const {
   buildCodexLoginInvocation,
   buildCodexLogoutInvocation,
   buildCodexModelsInvocation,
+  extractCodexLoginUrl,
   parseCodexLoginStatus,
   parseCodexModelCatalog,
   resolveCodexExecutable,
@@ -143,6 +144,54 @@ describe("parseCodexLoginStatus", () => {
         stderr: "Error checking login status: io error",
       }).authState,
     ).toBe("UNKNOWN");
+  });
+});
+
+describe("extractCodexLoginUrl", () => {
+  // Real stderr shape captured from `codex login` on codex-cli 0.165.0
+  // and 0.171.0 (managed CODEX_HOME, piped stdio): the server line, the
+  // authorize URL on its own line, then the device-auth hint.
+  const AUTH_URL =
+    "https://auth.openai.com/oauth/authorize?response_type=code&client_id=app_x&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+email+offline_access&code_challenge_method=S256&id_token_add_organizations=true&state=abc";
+  const LOGIN_STDERR = [
+    "Starting local login server on http://localhost:1455",
+    "If your browser did not open, navigate to this URL to authenticate:",
+    AUTH_URL,
+    "On a remote or headless machine? Use `codex login --device-auth` instead.",
+  ].join("\n");
+
+  it("extracts the OpenAI authorize URL from the real login stderr block", () => {
+    expect(extractCodexLoginUrl(LOGIN_STDERR)).toBe(AUTH_URL);
+    // The adapter surface is the same function the service wires up.
+    expect(codexAdapter.extractLoginUrl(LOGIN_STDERR)).toBe(AUTH_URL);
+  });
+
+  it("survives ANSI-wrapped output and a URL split across chunks", () => {
+    expect(
+      extractCodexLoginUrl(`\x1b[32mopen\x1b[0m ${AUTH_URL} now`),
+    ).toBe(AUTH_URL);
+    const first = "If your browser did not open, navigate to this URL:\nhttps://auth.openai.com/oauth/auth";
+    const second = "orize?response_type=code&state=x";
+    expect(extractCodexLoginUrl(first)).toBeNull();
+    expect(extractCodexLoginUrl(first + second)).toBe(
+      "https://auth.openai.com/oauth/authorize?response_type=code&state=x",
+    );
+  });
+
+  it("never surfaces the local callback URL or a foreign origin", () => {
+    for (const text of [
+      "Starting local login server on http://localhost:1455",
+      "Starting local login server on http://127.0.0.1:1455",
+      "open http://auth.openai.com/oauth/authorize?x=1",
+      "open https://auth.openai.com.evil.example/oauth/authorize?x=1",
+      "open https://evil.example.com/oauth/authorize?x=1",
+      "javascript:alert(1)",
+      "no url here",
+      "",
+      null,
+    ]) {
+      expect(extractCodexLoginUrl(text), String(text)).toBeNull();
+    }
   });
 });
 

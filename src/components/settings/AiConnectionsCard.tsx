@@ -447,9 +447,10 @@ function AiConnectionsCard() {
   );
 
   // The vendor's authorize URL surfaces mid-login for runtimes whose
-  // capability descriptor marks surfacesAuthorizationUrl — the spawned
-  // CLI cannot open a browser itself (OpenCode/Grok/Cursor). Cleared when
-  // the login ends. Never persisted.
+  // capability descriptor marks surfacesAuthorizationUrl — either because
+  // the spawned CLI cannot open a browser itself (Grok/Cursor), or as the
+  // fallback entry when its own browser attempt may fail (Codex).
+  // Cleared when the login ends. Never persisted.
   useEffect(() => {
     const unsubscribe = window.vocatryaAi?.onOAuthUrl?.(setOauthUrl);
     return () => unsubscribe?.();

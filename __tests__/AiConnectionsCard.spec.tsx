@@ -77,9 +77,11 @@ const CAPABILITY_STUB = (backendKind: string) => ({
         : backendKind === "CODEX_RUNTIME" || backendKind === "CLAUDE_RUNTIME"
           ? "RUNTIME_MANAGED_BROWSER"
           : "BROWSER",
-    surfacesAuthorizationUrl: ["GROK_RUNTIME", "CURSOR_RUNTIME"].includes(
-      backendKind,
-    ),
+    surfacesAuthorizationUrl: [
+      "CODEX_RUNTIME",
+      "GROK_RUNTIME",
+      "CURSOR_RUNTIME",
+    ].includes(backendKind),
   },
   auth: {
     verification: "STATUS_COMMAND",
