@@ -197,12 +197,12 @@ describe("startLogin", () => {
       {
         match: (h) => h === "login",
         respond: (inv) => {
-          inv.onStderr?.(
-            "Starting local login server on http://localhost:1455\n" +
-              "If your browser did not open, navigate to this URL to authenticate:\n" +
-              `${AUTH_URL}\n` +
-              "On a remote or headless machine? Use `codex login --device-auth` instead.\n",
-          );
+          const split = AUTH_URL.indexOf("code&");
+          inv.onStderr?.(AUTH_URL.slice(0, split));
+          expect(oauthEvents).toEqual([]);
+          inv.onStderr?.(AUTH_URL.slice(split));
+          expect(oauthEvents).toEqual([]);
+          inv.onStderr?.("\n");
           return respond({})(inv);
         },
       },

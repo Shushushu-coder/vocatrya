@@ -173,7 +173,8 @@ describe("extractCodexLoginUrl", () => {
     const first = "If your browser did not open, navigate to this URL:\nhttps://auth.openai.com/oauth/auth";
     const second = "orize?response_type=code&state=x";
     expect(extractCodexLoginUrl(first)).toBeNull();
-    expect(extractCodexLoginUrl(first + second)).toBe(
+    expect(extractCodexLoginUrl(first + second)).toBeNull();
+    expect(extractCodexLoginUrl(first + second + "\n")).toBe(
       "https://auth.openai.com/oauth/authorize?response_type=code&state=x",
     );
   });

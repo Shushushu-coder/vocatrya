@@ -45,7 +45,11 @@ const CODEX_LOGIN_URL_RE =
 function extractCodexLoginUrl(text) {
   if (typeof text !== "string") return null;
   const match = text.replace(ANSI_PATTERN, "").match(CODEX_LOGIN_URL_RE);
-  return match ? match[0] : null;
+  if (!match) return null;
+  // A chunk can end inside the query string. Wait for the CLI's trailing
+  // delimiter before the service latches this one-shot recovery URL.
+  const clean = text.replace(ANSI_PATTERN, "");
+  return match.index + match[0].length < clean.length ? match[0] : null;
 }
 
 // Smoke contract (spec §23): the prompt asks the model to echo a fixed
