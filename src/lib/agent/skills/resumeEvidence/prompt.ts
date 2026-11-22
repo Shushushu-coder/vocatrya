@@ -29,6 +29,8 @@ export const RESUME_EVIDENCE_PROMPT_SECTIONS = {
 
 你只使用本次授权包里的 experienceText、optional existingMaterial、purpose、targetJdText，以及用户在这次对话里的后续回答。授权包以外的职业资料、简历、附件、敏感身份信息和外部系统都不在范围内。没有 JD 时继续工作，不要索取 JD。
 
+授权包随本会话的第一条用户消息只出现一次；之后本会话里用户的每条回答都是同一授权范围内的材料，按 kind=user_turn 登记来源，不会因为轮到后面的轮次而失效。不要要求用户重新贴出已经在本会话里给过的内容。
+
 认识地位只有五类，不能混写：
 - user_stated：用户在对话里明确说的话。
 - source_material：授权包原文里已经写明的话。
@@ -67,11 +69,32 @@ stopped：不再追问。输出完整结果。条件已满且用户结束时 sto
   resultFormat: `结果草稿：每次需要展示草稿时，输出一个 json 代码块，结构为 ${RESUME_EVIDENCE_CONTRACT_VERSION}。固定值：contractVersion=${RESUME_EVIDENCE_CONTRACT_VERSION}；skillId=${RESUME_EVIDENCE_SKILL_ID}；skillVersion=${RESUME_EVIDENCE_SKILL_VERSION}；artifactKind=skill_result_draft；exampleKind=model_output；authorization.scope=single_experience，authorization.fullLibraryScanned=false；materialMapping.operation=draft_only，callsExistingEntrypoints=[]，evidenceToAdd[].kindOnWrite=FACT，verificationStatusOnWrite=USER_AUTHORED，originOnWrite=USER；saveGate.saveAuthorized=false，saveGate.persisted=false；suggestedExpressions[].saveAuthorized=false。
 confirmedFacts 只放 user_stated 或 source_material，每条带 sourceRefs；pending、conflicts、skipped、assumptions 分别存放待确认、冲突、跳过和推断；建议表达的 basisFactIds 必须都是已确认事实 id；未被用户接受的建议表达不得放进 evidenceToAdd；没有量化指标时 outcomes[].quantified=false 且 metricText=null；EMPLOYMENT 与 CUSTOM 类型的 futureOperation 只能是 draft_only；其他类型在可以停止时，用户点名了已有素材则 futureOperation=update_existing，否则 create_new；blockedWrites 只写白名单以外、无法写入的列及原因，不要沿用初始草稿里的 DRAFT_ONLY_V1；未知日期写 null，只有用户明确给出完整 YYYY-MM-DD 才填日期。
 停止字段：session.stage 为五个阶段之一；stopReason 仅在 stopped 时非空；停止条件满足时 sufficiency.met=true 且 missingSlots 为空，否则列出缺失槽位；summarizing、ready_to_stop、stopped 阶段 next.questionBudget=0。`,
+
+  // Field-level restatement of the same contract: every required field, enum
+  // value and cross-field rule the validator enforces. Without this list the
+  // model has to guess field names and its draft always fails validation.
+  fieldSpec: `字段清单：草稿必须包含下列每个字段，字段名与取值逐字照用；多余的键不要加，枚举以外的值不要写。
+session: {stage: 五个阶段之一；stopReason: "sufficient"|"insufficient_user_stop"|null（非 stopped 一律 null）；roundIndex: 已发出的澄清轮数整数，首轮为 0；focus: "conflict"|"personal_contribution"|"action"|"result"|"difficulty"|"time_range"|"evidence_pointer"|"jd_relevance"|null（停止后为 null）；sufficiency: {met: 布尔，missingSlots: 槽位名数组}}。
+authorization: {scope: "single_experience"，fullLibraryScanned: false，purpose: "resume_bullet"|"interview_story"|"career_record"|"unspecified"（照抄授权包），targetJdRef: 指向 JD 来源的 ref 或 null}。
+sourceRefs: 来源登记表，每项 {ref: 本结果内唯一字符串，kind: "pasted_text"|"existing_material"|"existing_evidence"|"user_turn"|"optional_jd"，label: 简短说明，stableId: 引用已有素材或证据时用包内的数据库 id、否则 null，excerpt: 原文摘录}。授权包 experienceText 登记为 pasted_text；用户点名的素材为 existing_material、其每条证据为 existing_evidence；授权包附带的 JD 为 optional_jd；用户在本会话里的每条回答各登记一条 user_turn。confirmedFacts、pending、conflicts、contributions、actions、outcomes 里的每个 sourceRefs 值以及 authorization.targetJdRef，都必须先在这份 sourceRefs 里登记。
+confirmedFacts[]: {id, text, slot: "conflict"|"personal_contribution"|"action"|"result"|"difficulty"|"time_range"|"evidence_pointer"|"jd_relevance"|"organization"|"role"|"context"|"metric"，epistemic: "user_stated"|"source_material"，sourceRefs: 至少一个已登记 ref，attribution: "personal"|"team"|"mixed"|"unknown"}。
+pending[]: {id, text, slot（同上枚举）, reason: "unknown"|"not_disclosed"|"unquantified"|"conflict"|"not_yet_asked", sourceRefs: 已登记 ref 数组，可为空}。
+conflicts[]: {id, topic, left: {text, sourceRefs 至少一个}, right: {text, sourceRefs 至少一个}, resolution: "open"|"user_resolved"}。
+contributions[]: {id, statement, attribution（同上枚举）, actionIds: actions 的 id 数组, outcomeIds: outcomes 的 id 数组, sourceRefs 至少一个，epistemic: "user_stated"|"source_material"}。
+actions[]: {id, statement, actor: "personal"|"team"|"mixed"|"unknown", sourceRefs 至少一个，epistemic: "user_stated"|"source_material"}。
+outcomes[]: {id, statement, quantified: 布尔, metricText: 用户原话指标或 null, attribution（同上枚举）, sourceRefs 至少一个，epistemic: "user_stated"|"source_material"}。quantified=false 时 metricText 必须为 null。
+suggestedExpressions[]: {id, text, basisFactIds: 全部为 confirmedFacts 的 id 且至少一个，epistemic: "suggested_wording"，userAcceptedWording: 布尔（仅用户明确接受这句措辞时为 true），saveAuthorized: false}。
+assumptions[]: {id, text, epistemic: "assumption"（可省略）, promoted: 布尔（用户亲自确认前保持 false）, sourceRefs: 已登记 ref 数组（可省略）}。
+skipped[]: {id, slot（同 confirmedFacts 枚举）, reason: "user_skip"|"user_unknown"|"user_private"|"no_metric", note: 说明}。
+materialMapping: {operation: "draft_only"，careerMaterialItemId: 用户点名的素材 id 或 null，type: 素材类型枚举之一或 null，parent: {title: 字符串或 null, startDate: "YYYY-MM-DD" 或 null, endDate: "YYYY-MM-DD" 或 null, isCurrent: 布尔或 null, notes: 字符串或 null}，detail: {白名单列名: 字符串值}（值一律写字符串；只放已确认且属于该类型白名单的列，其余进 blockedWrites），evidenceToAdd[]: {content: 事实句, metricText: 指标原文或 null, kindOnWrite: "FACT", semanticRole: "responsibility"|"action"|"outcome"|"metric"|"skill_usage"|"output"|"context"|"other", basisFactIds: 至少一个 confirmedFacts 的 id, userAcceptedAsEvidence: 布尔（仅用户明确同意这句作为证据点时为 true）}，blockedWrites[]: {code, message}（白名单外或不可写的内容逐条登记），verificationStatusOnWrite: "USER_AUTHORED"，originOnWrite: "USER"，callsExistingEntrypoints: []，futureOperation: "create_new"|"update_existing"|"draft_only"，futureEntrypoints: 字符串数组（可保存时登记将来由应用调用的既有入口名 createApplicationMaterial、updateApplicationMaterial、addApplicationMaterialEvidence 中适用的项；这些只是合同枚举值，不是你可以调用的工具；不可保存时写 []）}。素材类型枚举：EMPLOYMENT|INTERNSHIP|PROJECT|RESEARCH|PUBLICATION|COMPETITION|CAMPUS_ACTIVITY|EDUCATION|AWARD|SKILL|CERTIFICATION|LANGUAGE|CUSTOM。
+saveGate: {wordingAccepted: 布尔（用户已接受至少一句建议表达时为 true），saveAuthorized: false，persisted: false，mustConfirmBeforeSave: 保存前仍需用户确认的事项字符串数组}。
+next: {recommendation: "ask"|"summarize"|"offer_stop"|"wait_for_save_confirmation"|"hand_to_user"，questionBudget: 0|1|2，userControls: 子集于 ["纠正","换方向","跳过","结束","查看阶段总结"] 的字符串数组}。
+交叉规则：met=true 要求 missingSlots 为空且没有 open 冲突；met=false 必须列出 missingSlots；stage=stopped 必须给 stopReason 且 focus=null，其余阶段 stopReason 必为 null；stopReason="sufficient" 与 stage="ready_to_stop" 都要求 met=true；stage 为 summarizing、ready_to_stop、stopped 时 questionBudget=0，questionBudget=2 仅当 focus="personal_contribution"；confirmedFacts 为空时 evidenceToAdd 必须为空；建议表达原文不得出现在 evidenceToAdd[].content；sufficiency 放在 session 里，不放在顶层；每轮输出的是完整草稿，不是差异。`,
 } as const;
 
 export function buildResumeEvidenceInstructions(): string {
   const s = RESUME_EVIDENCE_PROMPT_SECTIONS;
-  return [s.main, s.stages, s.resultFormat].join("\n\n");
+  return [s.main, s.stages, s.resultFormat, s.fieldSpec].join("\n\n");
 }
 
 export function buildResumeEvidenceSkillContent(): ResumeEvidenceSkillContent {

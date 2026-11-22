@@ -1,9 +1,9 @@
 import {
   FACT_SLOTS,
   RESUME_EVIDENCE_SKILL_ID,
-  parseResumeEvidenceDraftText,
   type ResumeEvidenceDraft,
 } from "./contract";
+import { splitResumeEvidenceDraftText } from "./draftText";
 import {
   createResumeEvidenceFlowState,
   evaluateSufficiency,
@@ -42,6 +42,12 @@ export interface ResumeEvidenceSession {
   lastDraft: ResumeEvidenceDraft | null;
   /** roundIndex of the latest summarizing draft (0 when none). */
   lastSummaryRound: number;
+  /**
+   * Validation errors of the latest draft attempt after the pack when it
+   * failed the contract; null once a newer attempt passes. The model never
+   * sees the UI's invalid card, so the state block feeds these back to it.
+   */
+  lastAttemptErrors: string[] | null;
 }
 
 export function deriveResumeEvidenceSession(
@@ -57,25 +63,37 @@ export function deriveResumeEvidenceSession(
     }
   });
   if (packIndex < 0) {
-    return { active: false, packIndex, lastDraft: null, lastSummaryRound: 0 };
+    return {
+      active: false,
+      packIndex,
+      lastDraft: null,
+      lastSummaryRound: 0,
+      lastAttemptErrors: null,
+    };
   }
   let lastDraft: ResumeEvidenceDraft | null = null;
   let lastSummaryRound = 0;
+  let lastAttemptErrors: string[] | null = null;
   for (let i = packIndex + 1; i < messages.length; i++) {
     const m = messages[i];
     if (m.role !== "assistant") continue;
     const text = textOf(m);
     if (!text.includes(RESUME_EVIDENCE_SKILL_ID)) continue;
-    const parsed = parseResumeEvidenceDraftText(text);
-    if (!parsed.ok) continue;
-    lastDraft = parsed.draft;
-    if (parsed.draft.session.stage === "summarizing") {
-      lastSummaryRound = parsed.draft.session.roundIndex;
+    for (const seg of splitResumeEvidenceDraftText(text)) {
+      if (seg.kind === "draft") {
+        lastDraft = seg.draft;
+        lastAttemptErrors = null;
+        if (seg.draft.session.stage === "summarizing") {
+          lastSummaryRound = seg.draft.session.roundIndex;
+        }
+      } else if (seg.kind === "invalid") {
+        lastAttemptErrors = seg.errors;
+      }
     }
   }
   // A stopped run hands the conversation back to normal Pilot.
   const active = lastDraft?.session.stage !== "stopped";
-  return { active, packIndex, lastDraft, lastSummaryRound };
+  return { active, packIndex, lastDraft, lastSummaryRound, lastAttemptErrors };
 }
 
 /** Slot statuses implied by a draft: confirmed facts / skips / pending-open. */
@@ -121,9 +139,19 @@ export function flowStateFromDraft(
 }
 
 function stateBlock(session: ResumeEvidenceSession): string {
+  const feedback = session.lastAttemptErrors?.length
+    ? [
+        `上一份草稿块未通过合同校验（共 ${session.lastAttemptErrors.length} 处）：`,
+        ...session.lastAttemptErrors.slice(0, 5),
+        "按字段清单修正后重新输出完整草稿块；不要放弃使用本会话已有的授权材料。",
+      ]
+    : [];
   const draft = session.lastDraft;
   if (!draft) {
-    return "【技能运行状态】尚无已校验的草稿：这是第一轮。按 stage=intake 处理，不要假设任何点已确认或已跳过。";
+    return [
+      "【技能运行状态】尚无已校验的草稿：这是第一轮。按 stage=intake 处理，不要假设任何点已确认或已跳过。",
+      ...feedback,
+    ].join("\n");
   }
   const state = flowStateFromDraft(draft, session.lastSummaryRound);
   const sufficiency = evaluateSufficiency(state);
@@ -134,6 +162,7 @@ function stateBlock(session: ResumeEvidenceSession): string {
     `个人贡献=${state.personalContribution}；行动=${state.action}；结果=${state.result}；时间=${state.timeRange}。`,
     `停止条件${sufficiency.met ? "已满足" : `未满足，缺：${sufficiency.missingSlots.join("、")}`}；按顺序下一个重点：${focus ?? "无"}。`,
     "沿用上一份草稿里已确认、已跳过和冲突的内容，每次输出完整的最新草稿；不要重问已确认或已跳过的点。",
+    ...feedback,
   ].join("\n");
 }
 

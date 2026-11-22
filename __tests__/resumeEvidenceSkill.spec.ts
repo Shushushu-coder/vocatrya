@@ -312,12 +312,15 @@ describe("authorization pack and initial draft", () => {
 });
 
 describe("resume evidence prompt assembly", () => {
-  it("assembles main, stage and result-format sections in order", () => {
+  it("assembles main, stage, result-format and field-spec sections in order", () => {
     const text = buildResumeEvidenceInstructions();
     const s = RESUME_EVIDENCE_PROMPT_SECTIONS;
     expect(text.indexOf(s.main)).toBe(0);
     expect(text.indexOf(s.stages)).toBeGreaterThan(text.indexOf(s.main));
     expect(text.indexOf(s.resultFormat)).toBeGreaterThan(text.indexOf(s.stages));
+    expect(text.indexOf(s.fieldSpec)).toBeGreaterThan(
+      text.indexOf(s.resultFormat),
+    );
   });
 
   it("carries the contract rules the draft-only first version depends on", () => {
@@ -338,17 +341,54 @@ describe("resume evidence prompt assembly", () => {
     }
   });
 
+  it("states the field contract a draft must satisfy", () => {
+    const text = buildResumeEvidenceInstructions();
+    // One needle per structure the acceptance run's drafts missed.
+    for (const needle of [
+      "epistemic",
+      "attribution",
+      "sourceRefs",
+      "user_turn",
+      "pasted_text",
+      "existing_material",
+      "existing_evidence",
+      "optional_jd",
+      "roundIndex",
+      "missingSlots",
+      "contributions",
+      "statement",
+      "basisFactIds",
+      "userAcceptedWording",
+      "userAcceptedAsEvidence",
+      "kindOnWrite",
+      "semanticRole",
+      "careerMaterialItemId",
+      "verificationStatusOnWrite",
+      "originOnWrite",
+      "mustConfirmBeforeSave",
+      "questionBudget",
+      "personal_contribution",
+      "user_skip",
+      "not_yet_asked",
+      "no_metric",
+      "YYYY-MM-DD",
+    ]) {
+      expect(text).toContain(needle);
+    }
+  });
+
   it("does not instruct any write, confirm, archive or tool call", () => {
     const text = buildResumeEvidenceInstructions();
+    // futureEntrypoints enum names are draft vocabulary the validator
+    // requires; the model is told they are not callable tools.
     for (const banned of [
       "confirm()",
       "USER_CONFIRMED",
-      "createApplicationMaterial",
-      "addApplicationMaterialEvidence",
       "archiveApplicationMaterial",
     ]) {
       expect(text).not.toContain(banned);
     }
+    expect(text).toContain("不是你可以调用的工具");
   });
 
   it("builds skill content requiring only multi_turn_user_input", () => {
@@ -449,6 +489,65 @@ describe("resume evidence draft validation", () => {
       d.next.questionBudget = 2;
     });
     expect(bad.ok).toBe(false);
+  });
+
+  it("rejects the shape a model guesses without the field spec (acceptance regression)", () => {
+    // Mirrors the 79539337 acceptance draft: plausible but improvised names —
+    // `recognition` for `epistemic`, `text` for `statement`, no top-level
+    // sourceRefs registry, sufficiency/next/purpose misplaced, and every
+    // required per-item field dropped.
+    const guessed = {
+      contractVersion: "resume-evidence-result/v0.1",
+      skillId: RESUME_EVIDENCE_SKILL_ID,
+      skillVersion: RESUME_EVIDENCE_SKILL_VERSION,
+      artifactKind: "skill_result_draft",
+      exampleKind: "model_output",
+      session: { stage: "stopped", stopReason: "sufficient", purpose: null, questionBudget: 0, next: {} },
+      authorization: { scope: "single_experience", fullLibraryScanned: false },
+      confirmedFacts: [
+        { id: "f1", text: "任职时间为 2023-03 至 2024-06。", recognition: "source_material", sourceRefs: ["experienceText"] },
+      ],
+      pending: [],
+      conflicts: [],
+      skipped: [{ slot: "purpose", reason: "未说明用途。" }],
+      assumptions: [],
+      outcomes: [{ text: "拆单接口 P99 从 1.8s 降到 420ms。", quantified: true, metricText: "P99", sourceRefs: ["experienceText"] }],
+      suggestedExpressions: [
+        { id: "e1", text: "……", basisFactIds: ["f1"], userAcceptedWording: null, saveAuthorized: false },
+      ],
+      materialMapping: { operation: "draft_only", callsExistingEntrypoints: [], futureOperation: "create_new", evidenceToAdd: [], blockedWrites: [] },
+      sufficiency: { met: true, missingSlots: [] },
+      saveGate: { saveAuthorized: false, persisted: false },
+    };
+    const r = validateResumeEvidenceDraft(guessed);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    const joined = r.errors.join("\n");
+    // The failures are the exact fields the field spec now spells out.
+    for (const needle of [
+      "sourceRefs",
+      "session.roundIndex",
+      "session.focus",
+      "session.sufficiency",
+      "authorization.purpose",
+      "authorization.targetJdRef",
+      "contributions",
+      "actions",
+      "materialMapping.type",
+      "materialMapping.parent",
+      "materialMapping.detail",
+      "materialMapping.verificationStatusOnWrite",
+      "materialMapping.originOnWrite",
+      "materialMapping.futureEntrypoints",
+      "saveGate.wordingAccepted",
+      "saveGate.mustConfirmBeforeSave",
+      "next",
+      "epistemic",
+      "slot",
+      "attribution",
+    ]) {
+      expect(joined).toContain(needle);
+    }
   });
 
   it("keeps an unresolved-contribution draft with empty evidence valid", () => {
