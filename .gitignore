@@ -83,6 +83,8 @@ evals/*/_investigate-*
 # Windows Desktop Shell POC disposable runtime/data/evidence (never commit).
 .codex-tmp/
 .tmp/
+# Root-level scratch exports may contain local provider configuration.
+/.tmp-*
 
 # Generated Node 20 fresh-native bootstrap (scripts/build-fresh-native-bootstrap.mjs).
 /fresh-native-runtime/
