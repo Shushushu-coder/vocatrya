@@ -133,14 +133,15 @@ describe("account runtime capability matrix", () => {
     expect(interaction("ANTIGRAVITY_RUNTIME")).toBe(
       LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
     );
-    // Only runtimes whose CLI cannot open a browser surface an auth URL.
+    // An auth URL surfaces when the spawned CLI cannot open a browser at
+    // all (Grok/Cursor) — or as the recovery entry when its own browser
+    // attempt may silently fail (Codex, LOGIN-1).
     const surfaces = (kind) =>
       getAccountRuntimeCapabilities(kind).login.surfacesAuthorizationUrl;
-    for (const kind of ["GROK_RUNTIME", "CURSOR_RUNTIME"]) {
+    for (const kind of ["CODEX_RUNTIME", "GROK_RUNTIME", "CURSOR_RUNTIME"]) {
       expect(surfaces(kind), kind).toBe(true);
     }
     for (const kind of [
-      "CODEX_RUNTIME",
       "CLAUDE_RUNTIME",
       "OPENCODE_RUNTIME",
       "DEVIN_RUNTIME",

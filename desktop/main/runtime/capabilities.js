@@ -143,7 +143,11 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     implemented: true,
     login: Object.freeze({
       interaction: LOGIN_INTERACTIONS.RUNTIME_MANAGED_BROWSER,
-      surfacesAuthorizationUrl: false,
+      // The CLI opens the browser itself where it can, but that attempt
+      // is best-effort (it silently failed in packaged acceptance —
+      // LOGIN-1). `codex login` also prints the authorize URL on stderr
+      // unconditionally, so it is surfaced as the recovery entry.
+      surfacesAuthorizationUrl: true,
     }),
     auth: Object.freeze({
       verification: AUTH_VERIFICATION.STATUS_COMMAND,

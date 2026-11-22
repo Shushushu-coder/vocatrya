@@ -16,6 +16,7 @@ let invocations;
 let runnerScript;
 let backend;
 let service;
+let oauthEvents;
 
 // Runner dispatch: each test installs handlers keyed on the command head.
 // Default handler fails loudly so unexpected invocations surface.
@@ -67,6 +68,7 @@ function makeDeps() {
       return { status: 0, stdout: "codex-cli 0.154.0\n", stderr: "" };
     },
     runner: vi.fn(runnerImpl),
+    notifyOAuthUrl: (e) => oauthEvents.push(e),
   };
 }
 
@@ -92,6 +94,7 @@ beforeEach(() => {
   smokeWorkRoot = fs.mkdtempSync(path.join(os.tmpdir(), "vocatrya-smoke-"));
   invocations = [];
   runnerScript = [];
+  oauthEvents = [];
   backend = {
     resolveTicket: vi.fn(async () => ({
       ok: true,
@@ -182,6 +185,71 @@ describe("startLogin", () => {
       runtimeProfileRef: profileRef,
       accountIdentity: null,
     });
+  });
+
+  it("surfaces the authorize URL the CLI prints on stderr (LOGIN-1 recovery entry)", async () => {
+    // Verified stderr shape: codex-cli 0.165.0/0.171.0 prints the
+    // auth.openai.com authorize URL even when its browser-open attempt
+    // silently fails — the card must get a working entry either way.
+    const AUTH_URL =
+      "https://auth.openai.com/oauth/authorize?response_type=code&client_id=app_x&state=s";
+    runnerScript = [
+      {
+        match: (h) => h === "login",
+        respond: (inv) => {
+          const split = AUTH_URL.indexOf("code&");
+          inv.onStderr?.(AUTH_URL.slice(0, split));
+          expect(oauthEvents).toEqual([]);
+          inv.onStderr?.(AUTH_URL.slice(split));
+          expect(oauthEvents).toEqual([]);
+          inv.onStderr?.("\n");
+          return respond({})(inv);
+        },
+      },
+      {
+        match: (h) => h === "login status",
+        respond: respond({ stdout: "Logged in using ChatGPT\n" }),
+      },
+    ];
+    const result = await service.startLogin({
+      backendKind: "CODEX_RUNTIME",
+      ticket: "t1",
+    });
+    expect(result.ok).toBe(true);
+    expect(oauthEvents).toEqual([
+      {
+        backendKind: "CODEX_RUNTIME",
+        accountProvider: "OPENAI",
+        url: AUTH_URL,
+      },
+    ]);
+  });
+
+  it("never surfaces the local callback URL or foreign origins", async () => {
+    runnerScript = [
+      {
+        match: (h) => h === "login",
+        respond: (inv) => {
+          inv.onStderr?.(
+            "Starting local login server on http://localhost:1455\n",
+          );
+          inv.onStdout?.(
+            "see https://evil.example.com/oauth/authorize?x=1\n",
+          );
+          return respond({})(inv);
+        },
+      },
+      {
+        match: (h) => h === "login status",
+        respond: respond({ stdout: "Logged in using ChatGPT\n" }),
+      },
+    ];
+    const result = await service.startLogin({
+      backendKind: "CODEX_RUNTIME",
+      ticket: "t1",
+    });
+    expect(result.ok).toBe(true);
+    expect(oauthEvents).toEqual([]);
   });
 
   it("rejects unsupported backends without touching profiles", async () => {
