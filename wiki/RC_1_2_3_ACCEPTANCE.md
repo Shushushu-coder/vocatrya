@@ -1,5 +1,34 @@
 # 1.2.3-rc 桌面验收清单
 
+## 当前结论（2026-11-22，窗口 1 验收与主协调证据复核）
+
+**核心验收部分通过，尚未闭环，不能升正式版。** 下文 2026-11-20/21 的记录保留为历史；当前状态以本节为准。窗口 1 已完成 Windows Electron / fresh-native 验收并退出，主协调本轮核验已有截图、隔离 SQLite 和构建记录，未重复启动桌面或调用模型。
+
+- 冻结源码与安装包提交：`79539337a12bf36d08979f0900cbb1b35d52a3af`；生产 win-unpacked，Electron `44.4.3`、Node `20.20.2`、73 migrations。安装包 SHA-256：`e8b2f996999a203efe7c6234f24e91f574e7b330ad696c13c4da3bc5ac4c6317`。主协调独立核对文件哈希、`resources/build-info.json` 与 `release-gate-internal-unsigned.json`（PASS）；打包门禁通过不等于功能验收通过。未打 tag、未发布。
+- 证据根：`.worktrees/rc-core-acceptance/.tmp/rc-core-acceptance/`；报告 `evidence/ACCEPTANCE-REPORT.md`，隔离数据库 `data-root/data/vocatrya.db`。产物在 `installer-build/app/.codex-tmp/windows-installer/dist/`。这些本地证据不随 Git 提交，后续执行须核实仍可访问。
+- 模型：真实 Codex `gpt-6-luna`。产品登录入口失败后，经用户授权在同一隔离 CODEX_HOME 中通过 shell 完成登录；隔离 `config.toml` 设置 `code_mode=false`，用于规避该安装缺少 code-mode-host 的问题。后续复用须记录此运行条件，不得据此判产品登录入口通过，也不共享可变数据或凭据。
+
+| 项目 | 当前结论 | 已覆盖及剩余条件 |
+| --- | --- | --- |
+| F-1 长任务 | **PARTIAL / match_job 路径 FAIL** | 创建、Pilot 绑定、卡片展开/折叠/切换、面板重开保持、切会话重置、退出重开和普通会话通过。数据库有 2 个任务、2 次 HANDOFF_COMMIT、3 次 RESUMED，且有真实 Reflect 回复；这证明交接账本与会话路径，不能替代匹配业务步骤完成证据。`match_job` 到 tool-input-available 后报 CONVERSATION_TURN_CONFLICT，未到审批卡；隔离库 MatchAnalysis 与 AgentToolExecution 均为 0。 |
+| F-2 错误提示合并 | **已测项 PASS，折叠 NOT_RUN** | 三个接线条件源、同类合并、恢复消失、关闭不代表恢复已测；超过 3 条折叠无法由本轮真实条件触发，单测不替代该桌面条件，整体验收尚未覆盖全部要求。 |
+| F-3 / D4 简历证据 | **PARTIAL / 保存链 BLOCKED** | 入口、授权包、真实多轮澄清与阶段总结、无效草稿拦截通过；未产出通过 validateResumeEvidenceDraft 的草稿，预览、USER_CONFIRMED、事务、防重复、blockedWrites、差异更新、字段校验、资料重开均 NOT_RUN。模型实收提示/上下文与合同、校验器之间的责任环节仍待定位，不能仅归因为模型，也不得为通过而放宽合同。 |
+| N-1 | **PASS** | 设置页旧面试 AI 板块移除；不外推为 D1 面试准备流程通过。 |
+| N-2 / D2 听写 | **设置与兼容 PASS；真实转写有用户人工通过记录** | 本包已测 Gemini-only、默认 gemini-3.5-flash-lite、AI Studio key 入口及旧 OpenAI 配置不改写/按未配置处理。用户已确认 1.2.3-rc 听写手测成功，具体包/构建及样本、失败重试等覆盖待核，不笼统记为从未测试，也不外推全部 AWU-DICTATION 步骤通过。 |
+
+### 新缺陷与后续归属
+
+1. **CORE-1 / match_job 审批回合冲突**：干净任务会话及重启后均复现；同会话 suggest_role 可持久化是对照结果。交聊天回合/审批入口 Coding Owner 定位提交与 revision 冲突，修复后在包含修复的产物上复验。当前不认定所有审批工具均失败。最小复现：`evidence/f1/defect-match-job-turn-conflict.txt`。
+2. **LOGIN-1 / Codex 登录授权入口不可达**：codex login 启动且监听 127.0.0.1:1455，但系统浏览器未打开、卡片无授权链接。适配器未提供 extractLoginUrl 是已识别的恢复入口缺口；CLI 是否实际输出 URL、浏览器未启动的完整原因仍待定位。交运行时登录入口 Coding Owner。证据：`evidence/setup/codex-login-entry-defect.txt`。shell 登录绕行不算产品路径通过。
+3. **CORE-2 / 简历草稿合规路径受阻**：交简历证据 Coding Owner 检查实际提示、授权材料生命周期、输出合同与校验错误；保持既有保存与确认边界。
+
+### 窗口交接与未完成事项
+
+- 窗口 2：驱动已准备，尚无真实 Notion / Electron 验收结果。复用上述产物，独立 fresh-native 数据；按已有授权补齐/删除指定 22 个测试子页并验证指定测试行。真实 OAuth consent、撤销及断网需到场景时配合。不得把窗口 1 未配置 Notion 算作 Notion 产品失败。
+- 窗口 3：官方来源隔离 Codex `0.170.0` 已准备，进程级 PATH 下可被现有选择器选为 native（15/15 轻量检查）；无须改全局安装或放宽门禁。此前“无合格版本”前置已有隔离解决方案，**C1–C3 真实 Electron 会话仍未验收**。Grok/Cursor 服务与组件链路检查通过，实际 Electron IPC/系统浏览器及登录中卡片卸载导致 URL 丢失的假设仍待验证；不得当作已确认根因。
+- 桌面资源由窗口 1 释放后按窗口 2→3 串行交接；主协调本轮检查未发现 Vocatrya/Electron 实例。Devin/Grok/Antigravity 的真实账号未指定，不沿用本机账号；Codex gpt6-luna 授权继续有效，无需重复询问。
+- 历史 A 组、C4 证据保留；B 组真实写入/凭据边界、C 组及其他未执行的 D 组项目继续待验。对应 Feature 未满足全部步骤，passes 保持 false；没有将窗口 1 报告的整组 PASS 直接转为台账通过。
+
 状态：**2026-11-20 用户桌面实测完成，部分通过**。冻结点为 main `dee66e28`（含之前全部代码），构建提交 `4dff9e6e`（Next 构建 `mQLVfy89bbGAyzULjJAiB`）。冻结后追加 D4 长任务（`62158e4c`）、错误提示合并（`57f0251a`）、简历证据保存（`1149f436`）均已入 Main。A 组、C4 定向复验 PASS；B 组部分通过（删除页面 FAIL，见 B-1）；C 组 FAIL（Devin 版本漂移，见 C-1）；F 组（三项追加功能）全部 NOT_RUN；详见「2026-11-20 用户桌面实测记录」节及「验收结论与发布就绪判断」节。未打 tag、未发布。2026-11-21：B-1、C-1 及验收中新发现的三项缺陷已有代码修复入 Main（`7a827cb4`、`6d9e1638`），均待新安装包桌面复验，见「修复进展与复测状态」节。
 
 规则（摘自 RELEASE_RUNBOOK §4）：结论须标注所测安装包的构建提交；只认 Windows Electron 实测；一律使用隔离数据根，不碰用户安装版数据；台账 `passes` 只在对应 Feature 全部步骤通过后由 Main 集成 Owner 更新。

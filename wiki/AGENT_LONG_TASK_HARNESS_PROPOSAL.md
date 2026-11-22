@@ -1,5 +1,7 @@
 # Agent 长任务 Harness 完整实施方案
 
+2026-11-22 验收更新：Windows Electron / fresh-native，构建 `79539337`、真实 Codex `gpt-6-luna`。创建、任务卡、手动切换与面板重开保持、退出重开恢复及普通会话通过；隔离库已核对交接事件。但任务会话 `match_job` 在审批卡前触发 `CONVERSATION_TURN_CONFLICT`，无匹配业务产物，整体为**部分通过，审批路径 FAIL**。交聊天回合/审批入口 Owner 修复；不能以 HANDOFF_COMMIT 或模型回复证明匹配步骤已执行。证据、运行条件与剩余项见 [RC 验收当前结论](./RC_1_2_3_ACCEPTANCE.md)。下段为集成时历史状态。
+
 状态：**本期卡 A/B/C/E 已实现并集成 Main（2026-11-19，merge `62158e4c`；卡 A `1e431d85`、B `a214e1a2`、C `9b2380ac`、E `b6697f25`），待 1.2.3-rc 桌面验收**；Web 开发态隔离数据已核对创建入口、任务卡折叠/展开/切换、刷新恢复绑定任务，真实模型回合与 Windows Electron 未执行；卡 D/F 与材料变更弹窗未实施。**2026-11-19 Owner 裁定本期范围与修订，见 §0.1，与正文冲突处以 §0.1 为准**
 依据：Anthropic Engineering《Effective harnesses for long-running agents》(2025-11-26)、
 《Harness design for long-running application development》(2026-03-24)、
