@@ -26,8 +26,11 @@ export function effectiveAgentToolNames(input: { agentRole?: string | null; fres
 export function agentToolApproval(name: string, freshNativeFull: boolean, mode: import("./preferences").PermissionMode = "ask"): "always" | "conditional" | "none" {
   // Body edits apply immediately. Page deletion keeps a card in every mode, including full.
   if (name === "notion_update_content") return "none";
+  // Canonical match_job's gate is constant in every mode (contract D3): the
+  // durable execution binds to the admitted approval turn — no mode lifts it.
+  if (name === "match_job" && freshNativeFull) return "always";
   if (mode === "full" && ["add_job", "match_job", "notion_create_page", "notion_append_content", "notion_update_record"].includes(name)) return "none";
   if (mode === "rules" && ["add_job", "match_job"].includes(name)) return "none";
-  if (NOTION_CONFIRM_WRITES.includes(name) || (name === "match_job" && freshNativeFull)) return "always";
+  if (NOTION_CONFIRM_WRITES.includes(name)) return "always";
   return name === "add_job" ? "conditional" : "none";
 }

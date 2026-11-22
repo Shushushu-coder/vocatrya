@@ -26,7 +26,11 @@ describe("Agent preferences and creation-time permission contract", () => {
   it("auto-approves only known local business writes in rules mode", () => {
     expect(agentToolApproval("add_job", true, "ask")).toBe("conditional");
     expect(agentToolApproval("add_job", true, "rules")).toBe("none");
-    expect(agentToolApproval("match_job", true, "rules")).toBe("none");
+    // Canonical match_job is approval-bound (contract D3), not a reversible
+    // local write — rules/full modes never lift its gate.
+    expect(agentToolApproval("match_job", true, "rules")).toBe("always");
+    expect(agentToolApproval("match_job", true, "full")).toBe("always");
+    expect(agentToolApproval("match_job", false, "rules")).toBe("none");
     expect(agentToolApproval("notion_create_page", true, "rules")).toBe("always");
     expect(agentToolApproval("notion_create_page", true, "full")).toBe("none");
     expect(agentToolApproval("future_unknown_write", true, "rules")).toBe("none"); // Not registered; no capability is added.

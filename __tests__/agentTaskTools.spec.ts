@@ -183,6 +183,16 @@ describe("registry (buildAgentTools)", () => {
     expect(tools.match_job.needsApproval).toBeTruthy();
   });
 
+  it("keeps the gate in a task session under rules mode (CORE-1)", () => {
+    // Task conversations default to permissionMode "rules"; de-gating the
+    // canonical variant there made the send turn execute it without an
+    // admitted approval and die on CONVERSATION_TURN_CONFLICT.
+    const tools = buildAgentTools(
+      ctxFor({ freshNativeFull: true, canonicalJobs: true, taskExtraTools: EXTRAS, permissionMode: "rules" }),
+    );
+    expect(tools.match_job.needsApproval).toBe(true);
+  });
+
   it("non-Pilot roles ignore the extension in the live registry", () => {
     const plain = Object.keys(buildAgentTools(ctxFor({ agentRole: "reflect" }))).sort();
     const withExtra = Object.keys(buildAgentTools(ctxFor({ agentRole: "reflect", taskExtraTools: EXTRAS }))).sort();

@@ -146,8 +146,12 @@ export function buildAgentTools(ctx: {
   // Only known reversible local operations are automatically approved.
   // Detached external writes retain their proposal gate even in Full access;
   // the server settles their approval from the persisted choice atomically.
+  // Canonical match_job keeps its gate in every mode (contract D3): its
+  // durable execution binds to the admitted approval turn, so lifting
+  // needsApproval only strands the call in a turn conflict.
   if (ctx.permissionMode === "rules" || ctx.permissionMode === "full") {
     for (const name of ["add_job", "match_job"]) {
+      if (name === "match_job" && ctx.freshNativeFull) continue;
       if (tools[name]) tools[name].needsApproval = false;
     }
   }

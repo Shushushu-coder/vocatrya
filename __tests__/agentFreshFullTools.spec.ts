@@ -35,6 +35,32 @@ describe("buildAgentTools under fresh + full", () => {
     );
   });
 
+  it("keeps canonical match_job approval-gated in rules and full modes", () => {
+    // Regression for CORE-1: de-gating the canonical variant in a non-ask
+    // mode let the send turn execute it directly, where the approval-bound
+    // guard rejected the call as CONVERSATION_TURN_CONFLICT.
+    for (const permissionMode of ["rules", "full", "ask"] as const) {
+      const tools = buildAgentTools({
+        ...toolCtx,
+        freshNativeFull: true,
+        permissionMode,
+      });
+      expect(tools.match_job.needsApproval).toBe(true);
+    }
+  });
+
+  it("still de-gates only the legacy variants in rules and full modes", () => {
+    for (const permissionMode of ["rules", "full"] as const) {
+      const tools = buildAgentTools({
+        ...toolCtx,
+        freshNativeFull: false,
+        permissionMode,
+      });
+      expect(tools.match_job.needsApproval).toBe(false);
+      expect(tools.add_job.needsApproval).toBe(false);
+    }
+  });
+
   it("keeps add_job canonical for migrated full without hiding match or cover letter", () => {
     const tools = buildAgentTools({
       ...toolCtx,
