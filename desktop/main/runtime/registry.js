@@ -1168,8 +1168,8 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       args: ["acp"],
       mode: "READ_ONLY",
       notes:
-        "ACP initialize + authenticate(oauth-personal). Method-pinned: " +
-        "only a personal Google OAuth session satisfies the method.",
+        "Post-login only: ACP initialize + authenticate(oauth-personal). " +
+        "Passive queries return UNKNOWN because authenticate may launch OAuth.",
     },
     commands: {
       // Prints the accounts.google.com OAuth URL on stdout and reads the

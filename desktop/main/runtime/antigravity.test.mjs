@@ -81,6 +81,7 @@ function probeWith(child, extra = {}) {
     baseEnv: { PATH: "C:\\Windows" },
     spawnImpl: spawn,
     terminateImpl,
+    allowInteractiveAuth: true,
     ...extra,
   });
   return { profileDir, result, spawnState, terminateCalls };
@@ -228,6 +229,22 @@ describe("parseAntigravityPrintResult", () => {
 });
 
 describe("runAntigravityAcpAuthProbe", () => {
+  it("does not spawn or authenticate during a passive status query", async () => {
+    const child = makeAgyChild(() => { throw new Error("must not authenticate"); });
+    const { profileDir, result, spawnState } = probeWith(child, { allowInteractiveAuth: false });
+    expect((await result).authState).toBe("UNKNOWN");
+    expect(spawnState.calls).toHaveLength(0);
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  it("keeps an unexpected process exit UNKNOWN", async () => {
+    const child = makeAgyChild(() => null);
+    const { profileDir, result } = probeWith(child);
+    setImmediate(() => child.emit("close", 1));
+    expect((await result).authState).toBe("UNKNOWN");
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
   const initializeOk = {
     protocolVersion: 1,
     authMethods: [
@@ -294,7 +311,7 @@ describe("runAntigravityAcpAuthProbe", () => {
     fs.rmSync(profileDir, { recursive: true, force: true });
   });
 
-  it("bounds a held authenticate() (interactive loopback) as NOT_AUTHENTICATED", async () => {
+  it("keeps a held authenticate() UNKNOWN instead of assuming signed out", async () => {
     const child = makeAgyChild((msg) =>
       msg.method === "initialize"
         ? { jsonrpc: "2.0", id: msg.id, result: initializeOk }
@@ -304,7 +321,7 @@ describe("runAntigravityAcpAuthProbe", () => {
       timeoutMs: 60,
     });
     const status = await result;
-    expect(status.authState).toBe("NOT_AUTHENTICATED");
+    expect(status.authState).toBe("UNKNOWN");
     // The process tree (including a launched browser) is torn down.
     expect(terminateCalls).toHaveLength(1);
     fs.rmSync(profileDir, { recursive: true, force: true });

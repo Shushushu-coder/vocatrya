@@ -204,7 +204,7 @@ describe("runtime auth probe", () => {
     }
   });
 
-  it("delegates ANTIGRAVITY_RUNTIME ACP probes to the antigravity adapter", async () => {
+  it("keeps passive Antigravity status unknown without spawning OAuth", async () => {
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "agy-acp-"));
     const spawned = [];
     const terminated = [];
@@ -225,13 +225,9 @@ describe("runtime auth probe", () => {
           terminated.push(child);
         },
       });
-      expect(result.authState).toBe("AUTHENTICATED");
-      expect(spawned).toHaveLength(1);
-      expect(spawned[0].args[0]).toBe("acp");
-      const appDataIdx = spawned[0].args.indexOf("--app-data-dir");
-      expect(spawned[0].args[appDataIdx + 1]).toBe("antigravity-cli");
-      expect(spawned[0].env.USERPROFILE).toBe(path.join(profileDir, "home"));
-      expect(terminated).toHaveLength(1);
+      expect(result.authState).toBe("UNKNOWN");
+      expect(spawned).toHaveLength(0);
+      expect(terminated).toHaveLength(0);
     } finally {
       fs.rmSync(profileDir, { recursive: true, force: true });
     }

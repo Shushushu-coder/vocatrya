@@ -214,21 +214,26 @@ function isPlainObject(value) {
 //   signal, spawnImpl, terminateImpl})
 //   → { authState, authKind, authMethod, accountIdentity, providerMetadata }
 //
-// A successful authenticate() is method-pinned evidence: only a personal
-// Google OAuth session satisfies oauth-personal, so AUTHENTICATED here is
-// always GOOGLE_ACCOUNT — never an API-key or enterprise method. A pending
-// authenticate at the probe bound means the interactive loopback took over
-// (no cached credential to confirm) → NOT_AUTHENTICATED; fail-closed, a
-// slow language-server boot degrades to the same actionable state.
+// A successful authenticate() is method-pinned evidence of personal Google
+// OAuth. The exchange can launch OAuth when no cached credential exists, so
+// only the post-login path may request it. Passive queries return UNKNOWN.
+// Timeouts and unexpected exits cannot prove a missing credential.
 function runAntigravityAcpAuthProbe({
   executablePath,
   profileDir,
   baseEnv,
   timeoutMs = 15_000,
+  allowInteractiveAuth = false,
   signal,
   spawnImpl = spawn,
   terminateImpl = terminateChildTree,
 } = {}) {
+  // authenticate may launch OAuth and mint tokens. Only an explicit login
+  // operation may invoke it; background status queries have no read-only
+  // account signal on this runtime.
+  if (!allowInteractiveAuth) {
+    return Promise.resolve(antigravityAuthResult("UNKNOWN"));
+  }
   try {
     ensureAntigravityHome(profileDir);
   } catch {
@@ -267,22 +272,17 @@ function runAntigravityAcpAuthProbe({
       }
       // Resolve only after the child is actually down — an interactive
       // loopback browser is a descendant of this process tree.
-      void Promise.resolve(terminateImpl(child)).then(() =>
-        resolve(outcome),
+      void Promise.resolve().then(() => terminateImpl(child)).then(
+        () => resolve(outcome),
+        () => resolve(antigravityAuthResult("UNKNOWN")),
       );
     };
 
     const onAbort = () => finish(antigravityAuthResult("UNKNOWN"));
 
     const timer = setTimeout(() => {
-      // authenticate() only holds the request when it has launched the
-      // interactive OAuth flow — there is no cached personal Google
-      // credential to confirm.
-      finish(
-        antigravityAuthResult(
-          authenticateSent ? "NOT_AUTHENTICATED" : "UNKNOWN",
-        ),
-      );
+      // A timeout cannot distinguish absent credentials from a slow server.
+      finish(antigravityAuthResult("UNKNOWN"));
     }, timeoutMs);
     signal?.addEventListener("abort", onAbort, { once: true });
     if (signal?.aborted) {
@@ -399,11 +399,7 @@ function runAntigravityAcpAuthProbe({
     child.stderr?.on("data", () => {});
     child.once("error", () => finish(antigravityAuthResult("UNKNOWN")));
     child.once("close", () =>
-      finish(
-        antigravityAuthResult(
-          authenticateSent ? "NOT_AUTHENTICATED" : "UNKNOWN",
-        ),
-      ),
+      finish(antigravityAuthResult("UNKNOWN")),
     );
 
     send({
