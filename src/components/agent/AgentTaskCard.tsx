@@ -17,10 +17,9 @@ import { useI18n } from "@/i18n";
  */
 export function AgentTaskCard() {
   const { t } = useI18n();
-  const { isOpen, conversationId, activeTaskId, status } = useAgentChat();
+  const { isOpen, conversationId, activeTaskId, selectedTaskId, setSelectedTaskId, status } = useAgentChat();
   const { openTask, pendingTaskId } = useOpenAgentTask();
   const [cards, setCards] = useState<AgentTaskCardDTO[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -40,14 +39,10 @@ export function AgentTaskCard() {
     void refresh();
   }, [isOpen, conversationId, activeTaskId, status, refresh]);
 
-  // A manual pick wins until the open conversation changes; otherwise the
-  // task bound to the open conversation (restored on reload), then the first.
-  useEffect(() => {
-    setSelectedId(null);
-  }, [activeTaskId]);
-
+  // A manual pick wins until the open conversation's bound task changes
+  // (the provider resets it); otherwise the bound task, then the first.
   const current =
-    cards.find((card) => card.task.id === selectedId) ??
+    cards.find((card) => card.task.id === selectedTaskId) ??
     cards.find((card) => card.task.id === activeTaskId) ??
     cards[0];
   if (!current) return null;
@@ -72,7 +67,7 @@ export function AgentTaskCard() {
             data-testid="agent-task-switch"
             className="min-w-0 max-w-[45%] shrink truncate rounded-sm border bg-background px-1 py-0.5 text-xs"
             value={task.id}
-            onChange={(event) => setSelectedId(event.target.value)}
+            onChange={(event) => setSelectedTaskId(event.target.value)}
           >
             {cards.map((card) => (
               <option key={card.task.id} value={card.task.id}>

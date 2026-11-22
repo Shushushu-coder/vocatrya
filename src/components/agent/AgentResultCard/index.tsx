@@ -33,6 +33,18 @@ import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 
+// A queued detached-write stub is a placeholder, not an outcome — the
+// approval card's hydrated proposal status narrates the real lifecycle
+// beside it, and rendering it as a result reads as a false "write failed".
+function isQueuedWriteStub(output: unknown): boolean {
+  return (
+    typeof output === "object" &&
+    output !== null &&
+    (output as { saved?: unknown }).saved === false &&
+    (output as { status?: unknown }).status === "queued"
+  );
+}
+
 export function AgentResultCard({ part }: { part: ToolUIPart }) {
   const { t } = useI18n();
   const { regenerate } = useAgentChat();
@@ -104,7 +116,9 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       toolName === "notion_update_record" ||
       toolName === "notion_update_content" ||
       toolName === "notion_delete_pages" ? (
-      <NotionWriteResultCard output={part.output as AgentNotionWriteResult} />
+      isQueuedWriteStub(part.output) ? null : (
+        <NotionWriteResultCard output={part.output as AgentNotionWriteResult} />
+      )
     ) : toolName === "suggest_role" ? (
       <SuggestRoleResult
         output={part.output as AgentSuggestRoleResultType}
@@ -112,5 +126,5 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       />
     ) : null;
 
-  return <div className="rounded-sm border p-3">{body}</div>;
+  return body ? <div className="rounded-sm border p-3">{body}</div> : null;
 }

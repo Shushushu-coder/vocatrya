@@ -146,7 +146,16 @@ function resolveCodexInstalls(definition, deps = {}) {
     selections,
     verifiedVersions,
     installs: all.map((i) => {
-      const selectedFor = PURPOSES.filter((p) => selections[p] === i);
+      // A purpose tag marks a qualified pick, not the fail-closed `def`
+      // fallback: native requires a listed version, exec the exact
+      // streaming target. Fallback rows keep only `default`, so the UI
+      // never brands a binary the gate itself would refuse.
+      const selectedFor = PURPOSES.filter((p) => {
+        if (selections[p] !== i) return false;
+        if (p === "native") return verifiedVersions.includes(i.version);
+        if (p === "exec") return target !== null && i.version === target;
+        return true;
+      });
       return { path: i.path, source: i.source, version: i.version, verified: i.verified, stale: i.stale, selected: selectedFor.includes("default"), selectedFor };
     }),
   };

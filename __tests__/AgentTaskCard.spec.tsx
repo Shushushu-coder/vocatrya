@@ -10,9 +10,15 @@ vi.mock("@/actions/agentTask.actions", () => ({
   listAgentTaskCards: (...a: unknown[]) => listAgentTaskCards(...a),
   resumeAgentTask: (...a: unknown[]) => resumeAgentTask(...a),
 }));
-vi.mock("@/components/agent/AgentChatProvider", () => ({
-  useAgentChat: () => chat,
-}));
+vi.mock("@/components/agent/AgentChatProvider", async () => {
+  const { useState } = await import("react");
+  return {
+    useAgentChat: () => {
+      const [selectedTaskId, setSelectedTaskId] = useState(null);
+      return { ...chat, selectedTaskId, setSelectedTaskId };
+    },
+  };
+});
 vi.mock("@/lib/toast", () => ({ toastError: vi.fn(), toastSuccess: vi.fn() }));
 
 import { AgentTaskCard } from "@/components/agent/AgentTaskCard";

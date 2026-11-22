@@ -325,6 +325,9 @@ function useAgentChatValue(
   const [taskBinding, setTaskBinding] = useState<{ conversationId: string; taskId: string } | null>(
     initial?.id && initial.agentTaskId ? { conversationId: initial.id, taskId: initial.agentTaskId } : null,
   );
+  // The task card's manual pick lives in the provider so a panel close —
+  // which unmounts the card — does not lose it.
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(
     initial?.id ?? null,
   );
@@ -1751,6 +1754,17 @@ function useAgentChatValue(
     [persistContext],
   );
 
+  const activeTaskId =
+    taskBinding && taskBinding.conversationId === conversationId
+      ? taskBinding.taskId
+      : null;
+
+  // Same reset the card applied to its local pick: a bound-task change
+  // (conversation switch) clears the manual selection.
+  useEffect(() => {
+    setSelectedTaskId(null);
+  }, [activeTaskId]);
+
   const busy = streamingRef.current || approvalPending;
 
   const preflight = {
@@ -1815,7 +1829,9 @@ function useAgentChatValue(
     startNewConversation,
     selectConversation,
     openTaskSession,
-    activeTaskId: taskBinding && taskBinding.conversationId === conversationId ? taskBinding.taskId : null,
+    activeTaskId,
+    selectedTaskId,
+    setSelectedTaskId,
     removeConversation,
     archiveConversation,
     historyVersion,
