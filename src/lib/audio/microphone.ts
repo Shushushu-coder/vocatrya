@@ -103,8 +103,8 @@ export function stopMediaStream(stream: MediaStream | null | undefined): void {
 
 /**
  * Preferred MediaRecorder containers, most portable first. `audio/mp4`
- * (AAC) is the only type both target transcription providers accept;
- * Chromium falls through to webm/opus, which OpenAI still accepts.
+ * (AAC) is the most portable type the transcription service accepts;
+ * Chromium falls through to webm/opus, which Gemini also accepts.
  */
 const RECORDING_MIME_CANDIDATES = [
   "audio/mp4",
