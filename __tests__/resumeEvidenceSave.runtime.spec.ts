@@ -472,6 +472,145 @@ describe("Resume Evidence save: server-side validation", () => {
     expect(again).toMatchObject({ success: true, data: { alreadySaved: true } });
     expect(await counts()).toEqual({ materials: 1, evidence: 2 });
   });
+});
+
+describe("Resume Evidence save: model-shaped draft", () => {
+  /**
+   * A raw JSON draft in the shape the field spec describes — what a real model
+   * emits once it knows the contract (acceptance scenario: pasted experience +
+   * user_turn confirmations, savable PROJECT type).
+   */
+  const modelShapedDraft = () => ({
+    contractVersion: "resume-evidence-result/v0.1",
+    skillId: "vocatrya.skill.resume-evidence-deep-dive",
+    skillVersion: "0.1.0-proposal",
+    artifactKind: "skill_result_draft",
+    exampleKind: "model_output",
+    session: {
+      stage: "ready_to_stop",
+      stopReason: null,
+      roundIndex: 2,
+      focus: null,
+      sufficiency: { met: true, missingSlots: [] },
+    },
+    authorization: {
+      scope: "single_experience",
+      fullLibraryScanned: false,
+      purpose: "unspecified",
+      targetJdRef: null,
+    },
+    sourceRefs: [
+      { ref: "src-paste", kind: "pasted_text", label: "经历原文", stableId: null, excerpt: "负责订单履约系统重构" },
+      { ref: "src-turn-1", kind: "user_turn", label: "用户确认数字", stableId: null, excerpt: "P99 从 1.8s 降到 420ms 是我负责的" },
+    ],
+    confirmedFacts: [
+      { id: "f-act", text: "定位超时热点并改写拆单协议。", slot: "action", epistemic: "source_material", sourceRefs: ["src-paste"], attribution: "personal" },
+      { id: "f-met", text: "拆单接口 P99 从 1.8s 降到 420ms。", slot: "metric", epistemic: "user_stated", sourceRefs: ["src-turn-1"], attribution: "personal" },
+    ],
+    pending: [],
+    conflicts: [],
+    contributions: [
+      { id: "c1", statement: "用户个人完成热点定位与协议改写。", attribution: "personal", actionIds: ["a1"], outcomeIds: ["o1"], sourceRefs: ["src-turn-1"], epistemic: "user_stated" },
+    ],
+    actions: [
+      { id: "a1", statement: "定位超时热点，改写拆单协议。", actor: "personal", sourceRefs: ["src-paste"], epistemic: "source_material" },
+    ],
+    outcomes: [
+      { id: "o1", statement: "拆单接口 P99 从 1.8s 降到 420ms。", quantified: true, metricText: "P99：1.8s → 420ms", attribution: "personal", sourceRefs: ["src-turn-1"], epistemic: "user_stated" },
+    ],
+    suggestedExpressions: [
+      { id: "e1", text: "负责订单履约系统重构，拆单接口 P99 从 1.8s 降至 420ms。", basisFactIds: ["f-act", "f-met"], epistemic: "suggested_wording", userAcceptedWording: true, saveAuthorized: false },
+    ],
+    assumptions: [],
+    skipped: [
+      { id: "s1", slot: "evidence_pointer", reason: "user_unknown", note: "没有提供证据名称。" },
+    ],
+    materialMapping: {
+      operation: "draft_only",
+      careerMaterialItemId: null,
+      type: "PROJECT",
+      parent: { title: "订单履约系统重构", startDate: null, endDate: null, isCurrent: null, notes: null },
+      detail: { roleTitle: "后端工程师", projectType: "履约系统" },
+      evidenceToAdd: [
+        { content: "定位超时热点并改写拆单协议。", metricText: null, kindOnWrite: "FACT", semanticRole: "action", basisFactIds: ["f-act"], userAcceptedAsEvidence: true },
+        { content: "拆单接口 P99 从 1.8s 降到 420ms。", metricText: "P99：1.8s → 420ms", kindOnWrite: "FACT", semanticRole: "metric", basisFactIds: ["f-met"], userAcceptedAsEvidence: true },
+      ],
+      blockedWrites: [] as { code: string; message: string }[],
+      verificationStatusOnWrite: "USER_AUTHORED",
+      originOnWrite: "USER",
+      callsExistingEntrypoints: [],
+      futureOperation: "create_new",
+      futureEntrypoints: ["createApplicationMaterial", "addApplicationMaterialEvidence"],
+    },
+    saveGate: {
+      wordingAccepted: true,
+      saveAuthorized: false,
+      persisted: false,
+      mustConfirmBeforeSave: ["素材标题与两条事实点措辞"],
+    },
+    next: {
+      recommendation: "wait_for_save_confirmation",
+      questionBudget: 0,
+      userControls: ["纠正", "结束"],
+    },
+  });
+
+  it("a spec-shaped draft validates, previews, confirms and reads back", async () => {
+    const draft = modelShapedDraft();
+    const pv = await previewResumeEvidenceSave(draft);
+    expect(pv.success).toBe(true);
+    if (!pv.success || !pv.data) throw new Error("preview failed");
+    expect(pv.data).toMatchObject({
+      operation: "create_new",
+      type: "PROJECT",
+      verificationStatus: "USER_CONFIRMED",
+    });
+    expect(await counts()).toEqual({ materials: 0, evidence: 0 });
+
+    const ok = await confirmResumeEvidenceSave(draft, pv.data.digest);
+    expect(ok).toMatchObject({ success: true, data: { evidenceCount: 2, alreadySaved: false } });
+    if (!ok.success || !ok.data) throw new Error("confirm failed");
+
+    // Re-read the stored rows.
+    const item = await prisma.careerMaterialItem.findUniqueOrThrow({
+      where: { id: ok.data.materialId },
+      include: { evidence: { orderBy: { sortOrder: "asc" } }, projectDetail: true },
+    });
+    expect(item.verificationStatus).toBe("USER_CONFIRMED");
+    expect(item.origin).toBe("USER");
+    expect(item.title).toBe("订单履约系统重构");
+    expect(item.projectDetail).toMatchObject({ roleTitle: "后端工程师", projectType: "履约系统" });
+    expect(item.evidence.map((e) => [e.kind, e.verificationStatus, e.content])).toEqual([
+      ["FACT", "USER_CONFIRMED", "定位超时热点并改写拆单协议。"],
+      ["FACT", "USER_CONFIRMED", "拆单接口 P99 从 1.8s 降到 420ms。"],
+    ]);
+    expect(item.evidence[1].metricText).toBe("P99：1.8s → 420ms");
+
+    // A repeat confirm is detected from stored rows, writing nothing new.
+    const again = await confirmResumeEvidenceSave(draft, pv.data.digest);
+    expect(again).toMatchObject({ success: true, data: { alreadySaved: true } });
+    expect(await counts()).toEqual({ materials: 1, evidence: 2 });
+  });
+
+  it("the same draft with unaccepted evidence and a real blocked write saves nothing", async () => {
+    const draft = modelShapedDraft();
+    (draft.materialMapping.evidenceToAdd[0] as { userAcceptedAsEvidence: boolean }).userAcceptedAsEvidence = false;
+    draft.materialMapping.blockedWrites = [
+      { code: "DETAIL_COLUMN_NOT_ALLOWED", message: "salary 不在白名单" },
+    ];
+    await expect(previewResumeEvidenceSave(draft)).resolves.toMatchObject({
+      success: false,
+      code: "blocked_writes",
+    });
+    expect(await counts()).toEqual({ materials: 0, evidence: 0 });
+    // Without the blocked write the unaccepted evidence is named instead.
+    draft.materialMapping.blockedWrites = [];
+    await expect(confirmResumeEvidenceSave(draft, "x")).resolves.toMatchObject({
+      success: false,
+      code: "evidence_not_accepted",
+    });
+    expect(await counts()).toEqual({ materials: 0, evidence: 0 });
+  });
 
   it("actions refuse to write when career writes are disabled", async () => {
     process.env[AB_RUNTIME_FEATURE_ENV] = "false";

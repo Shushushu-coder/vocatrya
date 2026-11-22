@@ -1,6 +1,7 @@
 import { AGENT_ROLE_TOOL_ALLOWLIST } from "@/lib/agent/agentRoles";
 import {
   RESUME_EVIDENCE_PACK_MARKER,
+  RESUME_EVIDENCE_SKILL_ID,
   buildResumeEvidenceAuthorizationMessage,
   buildResumeEvidenceInstructions,
   buildResumeEvidencePromptAddendum,
@@ -141,6 +142,43 @@ describe("Resume Evidence session derivation and prompt injection", () => {
     expect(text).toContain("个人贡献=confirmed");
     expect(text).toContain("时间=skipped");
     expect(text).toContain("下一个重点：conflict");
+  });
+
+  it("feeds the last failed draft's validation errors back to the model", () => {
+    const bad = { skillId: RESUME_EVIDENCE_SKILL_ID, artifactKind: "skill_result_draft" };
+    const messages = [u(pack), a(fenced(bad))];
+    const session = deriveResumeEvidenceSession(messages);
+    expect(session.lastDraft).toBeNull();
+    expect(session.lastAttemptErrors!.length).toBeGreaterThan(0);
+    const text = buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" });
+    expect(text).toContain("未通过合同校验");
+    expect(text).toContain(session.lastAttemptErrors![0]);
+  });
+
+  it("keeps the last valid draft as state while reporting a newer invalid attempt", () => {
+    const draft = baseDraft();
+    draft.session.stage = "clarifying";
+    const bad = { skillId: RESUME_EVIDENCE_SKILL_ID, artifactKind: "skill_result_draft" };
+    const messages = [u(pack), a(fenced(draft)), u("修改一下"), a(fenced(bad))];
+    const session = deriveResumeEvidenceSession(messages);
+    expect(session.lastDraft?.session.stage).toBe("clarifying");
+    expect(session.lastAttemptErrors!.length).toBeGreaterThan(0);
+    const text = buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" });
+    expect(text).toContain("stage=clarifying");
+    expect(text).toContain("未通过合同校验");
+  });
+
+  it("clears the failure feedback once a newer draft validates", () => {
+    const bad = { skillId: RESUME_EVIDENCE_SKILL_ID };
+    const draft = baseDraft();
+    draft.session.stage = "clarifying";
+    const messages = [u(pack), a(fenced(bad)), a(fenced(draft))];
+    const session = deriveResumeEvidenceSession(messages);
+    expect(session.lastDraft).not.toBeNull();
+    expect(session.lastAttemptErrors).toBeNull();
+    expect(
+      buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" }),
+    ).not.toContain("未通过合同校验");
   });
 
   it("ignores an invalid draft and a stopped run ends the mode", () => {
