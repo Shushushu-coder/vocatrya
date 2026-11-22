@@ -24,12 +24,8 @@ Vocatrya 当前主要交付形态是 **Windows Electron 桌面应用**，Next.js
 
 Vocatrya is a free, open-source companion for your job search: track applications, manage and export resumes, and ask a built-in AI assistant to review a resume, match it against a job, write a cover letter, or add a job from a posting you paste in — all self-hosted on your own server, so your data stays under your control. AI features can run entirely locally via Ollama or through your choice of cloud provider, and Vocatrya's built-in MCP server lets AI agents like Claude Desktop add jobs and interview questions straight from your chat.
 
-![App Snapshot](./screenshots/jobsync-dashboard.png?raw=true "Vocatrya dashboard")
-
 ## Key Features
 - **Application Tracker:** Keep a detailed record of all your job applications, including company details, job titles, application dates, and current status.
-
-  ![Jobs Applied List](./screenshots/jobsync-jobs.png?raw=true "Jobsync Jobs Page")
 
 - **Monitoring Dashboard:** Visualize your job search progress with an interactive dashboard that provides insights into your application activities, success rates, and upcoming tasks.
 
@@ -98,8 +94,6 @@ The reviews, matches and letters are the same analyses the dedicated panels used
 The assistant is deliberately narrow about what it can see: it reads your resumes and the single job you're looking at, and nothing else. It can't list or search your jobs, and it can't see tasks or activities. Pasted postings are also treated as untrusted text, so instructions hidden inside a posting can't make the assistant act on your data.
 
 Pick a model under **Settings > AI Settings** before using the panel — it needs one that supports tool calling, and it will tell you rather than guessing if none is set. See [known-good models](#supported-ai-model-providers) for the ones that have been tested, including a fully local option.
-
-![AI Job Match](./screenshots/jobsync-ai-jobmatch.gif)
 
 ### PDF Resume Export
 

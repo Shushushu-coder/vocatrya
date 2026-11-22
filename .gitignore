@@ -100,3 +100,12 @@ evals/*/_investigate-*
 
 # Launch-video workspace (Remotion/HyperFrames), not committed until one is chosen
 /video/
+
+# Internal agent/dev docs maintained locally, not published to the remote
+/AGENTS.md
+/AGENTS_PROMPTS.md
+/AGENTS_VALIDATION.md
+/CLAUDE.md
+/BYOK_WINDOWS_SECURE_STORAGE_MIGRATION_DESIGN.md
+/RESUME_EXPORT_CORE_REPORT.md
+/wiki/
