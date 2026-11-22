@@ -1107,6 +1107,14 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         XDG_STATE_HOME: "$PROFILE_DIR\\xdg-state",
       },
       credentialBoundary: ["USERPROFILE", "HOME"],
+      // Browser-facing login only: `acp --login` may hand its OAuth URL to
+      // the system browser, and Chrome/Edge resolve the user-data dir from
+      // %LOCALAPPDATA%/%APPDATA% — redirected roots would launch a fresh
+      // unsigned browser profile. Restoring those roots for the login
+      // process keeps the browser on the user's signed-in profile. The
+      // credential lands in the OS keyring regardless of env, so nothing
+      // credential-bearing is exposed; USERPROFILE/HOME stay managed.
+      browserLoginEnvPassthrough: ["APPDATA", "LOCALAPPDATA"],
       stripEnv: [
         "GEMINI_API_KEY",
         "GOOGLE_API_KEY",
@@ -1173,7 +1181,9 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       // `agy models` prints the model table regardless of sign-in — the
       // adapter never treats it as a catalog or an auth signal.
       models: ["models"],
-      print: ["--print"],
+      // --print is a VALUE flag on 1.5.14; the stdin prompt channel is
+      // `--print=` + stream-json in/out (see antigravity.js).
+      print: ["--print="],
     },
     capabilities: {
       accountLogin: true,

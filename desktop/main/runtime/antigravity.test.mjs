@@ -12,6 +12,7 @@ const {
   buildAntigravityLogoutInvocation,
   buildAntigravityPrintInvocation,
   classifyAntigravityAuthError,
+  parseAntigravityPrintResult,
   resolveAntigravityExecutable,
   runAntigravityAcpAuthProbe,
 } = adapter;
@@ -103,7 +104,12 @@ describe("antigravity adapter", () => {
     const login = buildAntigravityLoginInvocation({
       executablePath: "C:\\agy\\agy.exe",
       profileDir,
-      baseEnv: { PATH: "C:\\Windows", GEMINI_API_KEY: "secret" },
+      baseEnv: {
+        PATH: "C:\\Windows",
+        GEMINI_API_KEY: "secret",
+        APPDATA: "C:\\Host\\AppData\\Roaming",
+        LOCALAPPDATA: "C:\\Host\\AppData\\Local",
+      },
     });
     expect(login.executable).toBe("cmd.exe");
     expect(login.args).toContain("acp");
@@ -118,7 +124,12 @@ describe("antigravity adapter", () => {
     const geminiIdx = login.args.indexOf("--gemini-dir");
     expect(path.isAbsolute(login.args[geminiIdx + 1])).toBe(true);
     expect(login.env.GEMINI_API_KEY).toBeUndefined();
+    // Credential boundary stays managed; browser-facing roots are restored
+    // so a spawned browser keeps the user's signed-in profile.
     expect(login.env.USERPROFILE).toBe(path.join(profileDir, "home"));
+    expect(login.env.HOME).toBe(path.join(profileDir, "home"));
+    expect(login.env.APPDATA).toBe("C:\\Host\\AppData\\Roaming");
+    expect(login.env.LOCALAPPDATA).toBe("C:\\Host\\AppData\\Local");
 
     const logout = buildAntigravityLogoutInvocation({
       executablePath: "C:\\agy\\agy.exe",
@@ -129,7 +140,7 @@ describe("antigravity adapter", () => {
     fs.rmSync(profileDir, { recursive: true, force: true });
   });
 
-  it("keeps the print prompt off argv", () => {
+  it("keeps the print prompt off argv and pipes it as stream-json", () => {
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "agy-profile-"));
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "agy-work-"));
     const prompt = "VOCATRYA_ANTIGRAVITY_OK";
@@ -142,8 +153,14 @@ describe("antigravity adapter", () => {
       prompt,
     });
     expect(invocation.args).not.toContain(prompt);
+    // --print is a value flag on 1.5.14: the stdin channel needs the
+    // empty attached form plus stream-json in/out.
+    expect(invocation.args).toContain("--print=");
+    expect(invocation.args).toContain("--input-format");
+    expect(invocation.args).toContain("stream-json");
     expect(invocation.args).toContain("--sandbox");
-    expect(invocation.args).toContain("--mode");
+    // --mode plan is a documented no-op with slash commands disabled.
+    expect(invocation.args).not.toContain("--mode");
     expect(invocation.args).not.toContain("--dangerously-skip-permissions");
     expect(invocation.env.GOOGLE_API_KEY).toBeUndefined();
     expect(invocation.cwd).toBe(work);
@@ -154,7 +171,13 @@ describe("antigravity adapter", () => {
         chunks.push(String(value));
       },
     });
-    expect(chunks.join("")).toBe(prompt);
+    expect(JSON.parse(chunks.join(""))).toEqual({
+      event: "user",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: prompt }],
+      },
+    });
     expect(
       antigravityAdapter.loginFailureCode({
         authState: "AUTHENTICATED",
@@ -163,6 +186,44 @@ describe("antigravity adapter", () => {
     ).toBe("UNSUPPORTED_AUTH_METHOD");
     fs.rmSync(profileDir, { recursive: true, force: true });
     fs.rmSync(work, { recursive: true, force: true });
+  });
+});
+
+describe("parseAntigravityPrintResult", () => {
+  it("extracts the terminal result response from the stream-json transcript", () => {
+    const stdout = [
+      JSON.stringify({ event: "init", init: { cwd: "C:\\work" } }),
+      JSON.stringify({
+        event: "step_update",
+        step_update: { step_index: 1, state: "DONE", text_delta: "ignored" },
+      }),
+      JSON.stringify({
+        event: "result",
+        result: { status: "SUCCESS", response: "VOCATRYA_ANTIGRAVITY_OK\n" },
+      }),
+    ].join("\n");
+    expect(parseAntigravityPrintResult({ stdout, stderr: "", exitCode: 0 }))
+      .toEqual({
+        text: "VOCATRYA_ANTIGRAVITY_OK\n",
+        reportedError: false,
+      });
+  });
+
+  it("marks a non-SUCCESS result and falls back on garbage", () => {
+    const failed = JSON.stringify({
+      event: "result",
+      result: { status: "ERROR", response: "turn failed" },
+    });
+    expect(
+      parseAntigravityPrintResult({ stdout: failed, stderr: "", exitCode: 1 }),
+    ).toEqual({ text: "turn failed", reportedError: true });
+    expect(
+      parseAntigravityPrintResult({
+        stdout: "not json at all",
+        stderr: "",
+        exitCode: 2,
+      }).reportedError,
+    ).toBe(true);
   });
 });
 

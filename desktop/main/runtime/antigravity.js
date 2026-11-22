@@ -28,9 +28,22 @@
 //   and fails closed.
 // - `agy models` prints the model table regardless of sign-in state. It is
 //   never an auth signal.
+// - `agy --print` is a VALUE flag on 1.5.14 (`--print "prompt"`, aliases
+//   -p/--prompt): a bare `--print` errors "flag needs an argument" and
+//   swallows the next flag as its value. The stdin-driven form is
+//   `--print=` + `--input-format stream-json`/`--output-format
+//   stream-json`: stdin takes one NDJSON {"event":"user","message":
+//   {role,content}} line per turn; stdout emits init/step_update/result
+//   events and the terminal result carries result.response. Verified
+//   live on 1.5.14.
+// - `--mode plan` is a no-op while `--disable-slash-commands` is set
+//   ("--mode plan has no effect while slash command expansion is
+//   disabled") — it is dropped from the exec args; --sandbox + the
+//   default request-review permission mode remain the gate.
 //
-// Verification of catalog, inference, streaming, and permissions is
-// PENDING. The login-verify ACP probe is verified on 1.5.14.
+// Verification of streaming and adversarial permissions is PENDING. The
+// login-verify ACP probe and the --print exec surface are verified on
+// 1.5.14.
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -80,11 +93,18 @@ function ensureAntigravityHome(profileDir, { mkdirSyncImpl = fs.mkdirSync } = {}
   mkdirSyncImpl(path.join(profileDir, "home"), { recursive: true });
 }
 
-function antigravityEnv({ profileDir, baseEnv }) {
+// browserLogin — only for `acp --login`: if the CLI hands the OAuth URL
+// to the system browser, the spawned browser resolves its user-data dir
+// from %LOCALAPPDATA%/%APPDATA%; redirected roots would launch a fresh
+// unsigned profile. The registry-declared passthrough restores those host
+// roots for the login process; the credential boundary (USERPROFILE/HOME)
+// stays managed and the OAuth token lands in the OS keyring regardless.
+function antigravityEnv({ profileDir, baseEnv, browserLogin = false }) {
   return buildRuntimeProcessEnvironment({
     baseEnv: baseEnv || process.env,
     definition: antigravityDefinition(),
     profileDir,
+    browserLogin,
   });
 }
 
@@ -125,7 +145,7 @@ function buildAntigravityLoginInvocation({
       "antigravity-cli",
     ],
     cwd: profileDir,
-    env: antigravityEnv({ profileDir, baseEnv }),
+    env: antigravityEnv({ profileDir, baseEnv, browserLogin: true }),
   };
 }
 
@@ -405,6 +425,16 @@ function runAntigravityAcpAuthProbe({
   });
 }
 
+// The prompt must not ride argv. `--print=` (empty attached value) +
+// stream-json input moves it onto stdin as an NDJSON user event — the
+// only stdin prompt channel 1.5.14 exposes.
+function antigravityStreamUserMessage(prompt) {
+  return `${JSON.stringify({
+    event: "user",
+    message: { role: "user", content: [{ type: "text", text: prompt }] },
+  })}\n`;
+}
+
 function buildAntigravityPrintInvocation({
   executablePath,
   profileDir,
@@ -415,13 +445,13 @@ function buildAntigravityPrintInvocation({
 }) {
   ensureAntigravityHome(profileDir);
   const commandArgs = [
-    "--print",
+    "--print=",
+    "--input-format",
+    "stream-json",
     "--output-format",
-    "text",
+    "stream-json",
     "--sandbox",
     "--disable-slash-commands",
-    "--mode",
-    "plan",
   ];
   if (typeof model === "string" && model.length > 0) {
     commandArgs.push("--model", model);
@@ -432,18 +462,53 @@ function buildAntigravityPrintInvocation({
     cwd: workingDirectory,
     env: antigravityEnv({ profileDir, baseEnv }),
     stdinPipe: true,
-    onStdinReady: promptStdinWriter(prompt),
+    onStdinReady: promptStdinWriter(antigravityStreamUserMessage(prompt)),
   };
 }
 
+// stdout is an NDJSON event stream. The terminal `{"event":"result"}`
+// event carries `result.response`; intermediate step_update text_delta
+// events are ignored for extraction. Anything unparsable degrades to the
+// last non-empty line so a hard CLI error is still surfaced.
 function parseAntigravityPrintResult({ stdout, stderr, exitCode }) {
-  const lines = `${stdout || ""}\n${stderr || ""}`
+  const lines = `${stdout || ""}`
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const marker = lines.find((line) => line === ANTIGRAVITY_SMOKE_EXPECTED);
+  let response;
+  for (const line of lines) {
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (
+      msg?.event === "result" &&
+      typeof msg?.result?.response === "string"
+    ) {
+      response = msg.result.response;
+      if (msg.result.status && msg.result.status !== "SUCCESS") {
+        return {
+          text: response,
+          reportedError: true,
+        };
+      }
+    }
+  }
+  if (response !== undefined) {
+    return {
+      text: response,
+      reportedError:
+        exitCode !== 0 && exitCode !== undefined && exitCode !== null,
+    };
+  }
+  const fallbackLines = `${stdout || ""}\n${stderr || ""}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   return {
-    text: marker ?? lines[lines.length - 1] ?? "",
+    text: fallbackLines[fallbackLines.length - 1] ?? "",
     reportedError: exitCode !== 0 && exitCode !== undefined && exitCode !== null,
   };
 }

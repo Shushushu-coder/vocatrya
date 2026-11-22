@@ -227,16 +227,44 @@ describe("account runtime capability matrix", () => {
         VERIFICATION_STATES.PASS,
       );
     }
-    for (const kind of IMPLEMENTED.filter((k) => k !== "DEVIN_RUNTIME")) {
+    for (const kind of IMPLEMENTED.filter(
+      (k) => k !== "DEVIN_RUNTIME" && k !== "ANTIGRAVITY_RUNTIME",
+    )) {
       expect(
         verification(kind).realLoginE2E,
         `${kind} login E2E must stay PENDING until actually run`,
       ).toBe(VERIFICATION_STATES.PENDING);
+    }
+    // Antigravity login E2E was run live on agy 1.5.14 — real Google
+    // OAuth completed and the post-login ACP probe confirmed the session.
+    expect(verification("ANTIGRAVITY_RUNTIME").realLoginE2E).toBe(
+      VERIFICATION_STATES.PASS,
+    );
+    for (const kind of IMPLEMENTED.filter(
+      (k) => k !== "DEVIN_RUNTIME" && k !== "ANTIGRAVITY_RUNTIME",
+    )) {
       expect(
         verification(kind).realInferenceE2E,
         `${kind} inference E2E`,
       ).toBe(VERIFICATION_STATES.PENDING);
     }
+    // Antigravity inference/catalog/permissions were run live on agy
+    // 1.5.14 (stream-json exec, `agy models` table, --sandbox workspace
+    // write measured) — PASS records measured truth, not a safety claim:
+    // workspace file tools still write under --sandbox.
+    expect(verification("ANTIGRAVITY_RUNTIME").realInferenceE2E).toBe(
+      VERIFICATION_STATES.PASS,
+    );
+    expect(verification("ANTIGRAVITY_RUNTIME").realModelCatalog).toBe(
+      VERIFICATION_STATES.PASS,
+    );
+    expect(verification("ANTIGRAVITY_RUNTIME").adversarialPermissions).toBe(
+      VERIFICATION_STATES.PASS,
+    );
+    expect(
+      getAccountRuntimeCapabilities("ANTIGRAVITY_RUNTIME").permission
+        .toolRestriction,
+    ).toBe("WORKSPACE_WRITES_ALLOWED");
     // Claude has no runtime model enumeration to verify.
     expect(verification("CLAUDE_RUNTIME").realModelCatalog).toBe(
       VERIFICATION_STATES.NOT_APPLICABLE,
@@ -252,14 +280,20 @@ describe("account runtime capability matrix", () => {
     expect(profile("DEVIN_RUNTIME").credentialBoundary).toEqual([
       "USERPROFILE",
     ]);
-    // Devin is the only runtime with a browser-login env override — the
-    // host APPDATA/LOCALAPPDATA roots are restored for the login process
-    // while USERPROFILE (credentials.toml) stays managed.
-    expect(profile("DEVIN_RUNTIME").browserLoginEnvPassthrough).toEqual([
-      "APPDATA",
-      "LOCALAPPDATA",
-    ]);
-    for (const kind of IMPLEMENTED.filter((k) => k !== "DEVIN_RUNTIME")) {
+    // Devin and Antigravity restore the host APPDATA/LOCALAPPDATA roots
+    // for the login process — a spawned browser resolves its user-data
+    // dir from them, so the redirect would otherwise launch a fresh
+    // unsigned profile. USERPROFILE (credentials.toml / managed home)
+    // stays managed.
+    for (const kind of ["DEVIN_RUNTIME", "ANTIGRAVITY_RUNTIME"]) {
+      expect(profile(kind).browserLoginEnvPassthrough, kind).toEqual([
+        "APPDATA",
+        "LOCALAPPDATA",
+      ]);
+    }
+    for (const kind of IMPLEMENTED.filter(
+      (k) => k !== "DEVIN_RUNTIME" && k !== "ANTIGRAVITY_RUNTIME",
+    )) {
       expect(profile(kind).browserLoginEnvPassthrough, kind).toEqual([]);
     }
     // A browser passthrough can never carry a credential-boundary key.
