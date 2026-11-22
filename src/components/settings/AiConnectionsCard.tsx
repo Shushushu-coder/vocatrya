@@ -684,6 +684,34 @@ function AiConnectionsCard() {
                 ))}
               </div>
             )}
+            {(() => {
+              // Read-only self-check status of the installed build
+              // (cache-managed runtimes only). TODO: add a "Re-verify"
+              // button wired to a clear-cache IPC; today UNVERIFIED expires
+              // after a few minutes and restarting the app retries FAIL.
+              const probe = runtime?.capabilities.capabilityProbe;
+              if (!probe || runtimeState?.state !== "READY") return null;
+              const failed =
+                probe.streaming === "FAIL" ||
+                probe.streaming === "UNVERIFIED" ||
+                probe.structured === "FAIL" ||
+                probe.structured === "UNVERIFIED";
+              const key = probe.probing
+                ? "settings.aiConnSelfCheckRunning"
+                : failed
+                  ? "settings.aiConnSelfCheckFailed"
+                  : probe.streaming === "PENDING" || probe.structured === "PENDING"
+                    ? "settings.aiConnSelfCheckPending"
+                    : "settings.aiConnSelfCheckPassed";
+              return (
+                <p
+                  className={failed ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+                  data-testid="runtime-self-check"
+                >
+                  {t(key, { version: probe.version })}
+                </p>
+              );
+            })()}
             <details className="text-sm" open={integrated ? undefined : true}>
               <summary className="cursor-pointer text-muted-foreground">{t("settings.aiServicesRuntimeDetails")}</summary>
             {/* Online update check — the UPDATE_AVAILABLE verdict comes

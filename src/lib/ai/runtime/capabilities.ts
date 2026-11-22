@@ -252,6 +252,18 @@ export interface AccountRuntimeCapabilities {
     adversarialPermissions: RuntimeVerificationState;
   };
   structuredOutput: StructuredOutputCapability;
+  /**
+   * Per-version self-check snapshot for cache-managed runtimes (Devin),
+   * for the INSTALLED build. PENDING = never judged yet (the first use
+   * triggers one probe); absent for runtimes with static gates.
+   */
+  capabilityProbe?: {
+    version: string;
+    streaming: "PASS" | "FAIL" | "UNVERIFIED" | "PENDING";
+    structured: "PASS" | "FAIL" | "UNVERIFIED" | "PENDING";
+    probing?: boolean;
+    probedAt: string | null;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------

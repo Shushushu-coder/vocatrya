@@ -7,8 +7,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import serviceModule from "./connection-service.js";
+import cacheModule from "./runtime-capability-cache.js";
 
 const { createConnectionService } = serviceModule;
+const { createCapabilityCache } = cacheModule;
 
 const FAKE_EXE = "C:\\fake\\codex.exe";
 const RP_A = "rp_11111111-1111-4111-8111-111111111111";
@@ -717,7 +719,7 @@ describe("executeText structured verification gate", () => {
   };
   const STRUCTURED = { schema: SCHEMA, schemaName: "VocatryaProbe" };
 
-  function devinService(version = "3000.10.31") {
+  function devinService(version = "3000.10.31", extraDeps = {}) {
     backend.resolveTicket.mockResolvedValue(
       resolveOk({
         backendKind: "DEVIN_RUNTIME",
@@ -742,6 +744,9 @@ describe("executeText structured verification gate", () => {
             ? { status: 0, stdout: `${FAKE_EXE}\r\n` }
             : { status: 0, stdout: `devin ${version}\n`, stderr: "" },
         runner: vi.fn(runnerImpl),
+        // Fresh in-memory cache per service: seeds only, no disk.
+        capabilityCache: createCapabilityCache({}),
+        ...extraDeps,
       },
     });
   }
@@ -817,17 +822,69 @@ describe("executeText structured verification gate", () => {
     expect(inv.cwd.startsWith(execWorkRoot)).toBe(true);
   });
 
-  it("refuses when the installed version differs from the verified one", async () => {
-    const svc = devinService("3000.10.30");
+  const PROBE_OK = '{"probe":"VOCATRYA_CAPABILITY_PROBE","ok":true}';
+  const probeCalls = () =>
+    invocations.filter((i) => i.args.includes("--prompt-file") && i.args[0] === "-p");
+
+  it("unknown version: runs one self-check probe, caches PASS, then runs the request", async () => {
+    const cache = createCapabilityCache({});
+    const svc = devinService("3000.99.1", { capabilityCache: cache });
+    let n = 0;
     runnerScript = [
-      { match: (h) => h.startsWith("-p"), respond: respond({ stdout: "{}" }) },
+      { match: (h) => h.includes("whoami"), respond: respond({ stdout: '{"org_id":"o1"}' }) },
+      {
+        match: (h) => h.startsWith("-p"),
+        respond: (inv) => {
+          n += 1;
+          // First -p call is the probe, second the real request.
+          const out = n === 1 ? PROBE_OK : '{"name":"x"}';
+          inv.onStdout?.(Buffer.from(out));
+          return Promise.resolve({ exitCode: 0, stdout: out, stderr: "" });
+        },
+      },
+    ];
+    const first = await devinExec(svc);
+    expect(first.ok).toBe(true);
+    expect(first.text).toBe('{"name":"x"}');
+    expect(n).toBe(2);
+    expect(cache.verdict("DEVIN_RUNTIME", "3000.99.1", "structured")).toBe("PASS");
+    // Second request: cache hit, no further probe.
+    const second = await devinExec(svc);
+    expect(second.ok).toBe(true);
+    expect(n).toBe(3);
+  });
+
+  it("unknown version: failed self-check refuses and is cached (no re-probe)", async () => {
+    const cache = createCapabilityCache({});
+    const svc = devinService("3000.99.2", { capabilityCache: cache });
+    let n = 0;
+    runnerScript = [
+      { match: (h) => h.includes("whoami"), respond: respond({ stdout: '{"org_id":"o1"}' }) },
+      {
+        match: (h) => h.startsWith("-p"),
+        respond: (inv) => {
+          n += 1;
+          inv.onStdout?.(Buffer.from("not json"));
+          return Promise.resolve({ exitCode: 0, stdout: "not json", stderr: "" });
+        },
+      },
     ];
     const result = await devinExec(svc);
-    expect(result).toEqual({
-      ok: false,
-      code: "STRUCTURED_OUTPUT_NOT_VERIFIED",
-    });
-    expect(invocations.find((i) => i.args[0] === "-p")).toBeUndefined();
+    expect(result).toEqual({ ok: false, code: "STRUCTURED_OUTPUT_NOT_VERIFIED" });
+    expect(cache.verdict("DEVIN_RUNTIME", "3000.99.2", "structured")).toBe("FAIL");
+    await devinExec(svc);
+    expect(n).toBe(1);
+  });
+
+  it("seeded version: cache hit runs without any probe", async () => {
+    const svc = devinService("3000.10.31");
+    runnerScript = [
+      { match: (h) => h.includes("whoami"), respond: respond({ stdout: '{"org_id":"o1"}' }) },
+      { match: (h) => h.startsWith("-p"), respond: respond({ stdout: '{"name":"x"}' }) },
+    ];
+    const result = await devinExec(svc);
+    expect(result.ok).toBe(true);
+    expect(probeCalls()).toHaveLength(1);
   });
 
   it("verificationProbe bypasses the gate (in-process harness only)", async () => {

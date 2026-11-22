@@ -40,6 +40,8 @@ const {
   getAccountRuntimeCapabilities,
   streamingRuntimeVersionMatches,
 } = require("./capabilities");
+const { getCapabilityCache } = require("./runtime-capability-cache");
+const { runDevinCapabilityProbe } = require("./devin-capability-probe");
 const { CODEX_BACKEND_KIND, codexAdapter } = require("./codex");
 const {
   createCodexPersistentRuntimeManager,
@@ -146,6 +148,11 @@ function createConnectionService({
   }
   const profileManager = new RuntimeProfileManager({ profilesRoot });
   const runner = deps.runner || runRuntimeCommand;
+  // Per-version capability snapshots (see runtime-capability-cache.js). For
+  // cache-managed runtimes (Devin) this — not a version string — decides
+  // whether streaming / structured output may run.
+  const capabilityCache =
+    deps.capabilityCache || getCapabilityCache(profilesRoot);
   const persistentCwdRoot = execWorkRoot || smokeWorkRoot;
   const codexPersistentRuntime =
     deps.persistentCodexRuntime === false
@@ -272,6 +279,68 @@ function createConnectionService({
       };
     }
     return { executable, version: version.version };
+  }
+
+
+  // Cache-driven capability gate. Returns null when the capability is
+  // verified for exactly this installed build, else the failure code.
+  // PASS -> allow (fast path, no spawn). FAIL/UNVERIFIED -> refuse
+  // ("runtime self-check failed"). Never judged -> run the one-time probe
+  // (a single minimal `devin -p` call), cache the verdict, then decide.
+  // Runtimes the cache does not manage keep their static gates.
+  async function capabilityGate({
+    adapter,
+    runtime,
+    profileDir,
+    model,
+    dimension,
+    notVerifiedCode,
+    signal,
+  }) {
+    if (!capabilityCache.manages(adapter.backendKind)) return null;
+    if (typeof adapter.buildCapabilityProbeInvocation !== "function") {
+      return notVerifiedCode;
+    }
+    const verdict = await capabilityCache.ensure(
+      adapter.backendKind,
+      runtime.version,
+      dimension,
+      async () => {
+        const probeRoot = execWorkRoot || smokeWorkRoot;
+        fs.mkdirSync(probeRoot, { recursive: true });
+        const probeDir = fs.mkdtempSync(
+          path.join(probeRoot, `${adapter.backendKind.toLowerCase()}-probe-`),
+        );
+        try {
+          const verdicts = await runDevinCapabilityProbe({
+            adapter,
+            runner,
+            executablePath: runtime.executable,
+            profileDir,
+            baseEnv: deps.env,
+            workingDirectory: probeDir,
+            model,
+            signal,
+            timeoutMs: deps.capabilityProbeTimeoutMs,
+          });
+          diag({
+            operation: "capabilityProbe",
+            backendKind: adapter.backendKind,
+            version: runtime.version,
+            streaming: verdicts?.streaming ?? "ABORTED",
+            structured: verdicts?.structured ?? "ABORTED",
+          });
+          return verdicts;
+        } finally {
+          try {
+            fs.rmSync(probeDir, { recursive: true, force: true });
+          } catch {
+            // Temp cleanup is best-effort.
+          }
+        }
+      },
+    );
+    return verdict === "PASS" ? null : notVerifiedCode;
   }
 
   async function resolveOperation(ticket, expectedOperation, connectionId) {
@@ -1001,8 +1070,15 @@ function createConnectionService({
       // The verified structured contract is bound to the probed version —
       // a different installed version is an unverified surface, never a
       // silent accept and never an automatic update.
+      // Cache-managed runtimes (Devin) are gated by the per-version
+      // capability snapshot after the profile/model are ready (below);
+      // every other runtime keeps the exact-version binding.
+      const structuredByCache =
+        Boolean(structuredOutput) &&
+        capabilityCache.manages(adapter.backendKind);
       if (
         structuredOutput &&
+        !structuredByCache &&
         verificationProbe !== true &&
         runtime.version !== structuredCaps.verifiedRuntimeVersion
       ) {
@@ -1040,6 +1116,19 @@ function createConnectionService({
           return fail(resolvedModel.error);
         }
         execModel = resolvedModel.model;
+      }
+
+      if (structuredByCache && verificationProbe !== true) {
+        const code = await capabilityGate({
+          adapter,
+          runtime,
+          profileDir,
+          model: execModel,
+          dimension: "structured",
+          notVerifiedCode: CONNECTION_OP_CODES.STRUCTURED_OUTPUT_NOT_VERIFIED,
+          signal: controller.signal,
+        });
+        if (code) return fail(code);
       }
 
       const execRoot = execWorkRoot || smokeWorkRoot;
@@ -1347,8 +1436,12 @@ function createConnectionService({
 
       const runtime = resolveRuntime(adapter, "exec");
       if (runtime.error) return runtime.error;
+      // Cache-managed runtimes (Devin) are gated by the per-version
+      // capability snapshot once the profile/model are ready (below).
+      const streamingByCache = capabilityCache.manages(adapter.backendKind);
       if (
         verificationProbe !== true &&
+        !streamingByCache &&
         !streamingRuntimeVersionMatches(
           execCaps.execution.streamingVerifiedRuntimeVersion,
           runtime.version,
@@ -1397,6 +1490,19 @@ function createConnectionService({
           return fail(resolvedModel.error);
         }
         execModel = resolvedModel.model;
+      }
+
+      if (streamingByCache && verificationProbe !== true) {
+        const code = await capabilityGate({
+          adapter,
+          runtime,
+          profileDir,
+          model: execModel,
+          dimension: "streaming",
+          notVerifiedCode: "STREAMING_NOT_VERIFIED",
+          signal: controller.signal,
+        });
+        if (code) return fail(code);
       }
 
       const execRoot = execWorkRoot || smokeWorkRoot;
@@ -1742,9 +1848,15 @@ function createConnectionService({
     if (!adapter) {
       return { ok: false, code: CONNECTION_OP_CODES.UNSUPPORTED_BACKEND };
     }
-    const capabilities =
+    const baseCapabilities =
       getAccountRuntimeCapabilities(adapter.backendKind) || null;
     const runtime = resolveRuntime(adapter, "exec");
+    // Cache-managed runtimes report the verdict for the installed build, so
+    // every downstream version comparison (backend, UI) follows the cache.
+    const capabilities = capabilityCache.overlayDescriptor(
+      baseCapabilities,
+      runtime.error ? null : runtime.version,
+    );
     if (runtime.error) {
       return {
         ok: true,
@@ -1784,6 +1896,13 @@ function createConnectionService({
     executeTextStream,
     executeNativeSession,
     runtimeState,
+    capabilityCache,
+    // Explicit re-verify: forget this runtime's cached verdicts so the next
+    // use probes again. TODO: expose as a Settings "Re-verify" button.
+    resetRuntimeCapabilities(backendKind) {
+      capabilityCache.clear(backendKind);
+      return { ok: true };
+    },
     async dispose() {
       nativeDisposed = true;
       for (const [key, controller] of activeOps) if (key.startsWith("native:")) controller.abort();

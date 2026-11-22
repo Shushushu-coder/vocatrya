@@ -540,6 +540,8 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       strategy: STRUCTURED_OUTPUT_STRATEGIES.PROMPT_AND_VALIDATE,
       mechanism: null,
       verification: STRUCTURED_OUTPUT_VERIFICATIONS.PASS,
+      // Hand-verified seed only. The structured gate consults the
+      // per-version capability cache (see CAPABILITY_CACHE_SEEDS).
       verifiedRuntimeVersion: "3000.10.31",
     }),
   }),
@@ -725,7 +727,35 @@ function listAccountRuntimeCapabilities() {
     .filter(Boolean);
 }
 
+// Factory-default seeds for the per-version capability cache
+// (runtime-capability-cache.js). The gates no longer treat version
+// membership as the verdict: the cache is, and these hand-verified builds
+// are merely pre-filled PASS so they never cost a probe. A version absent
+// here is probed once at first use (devin-capability-probe.js) and the
+// result is cached; a probe result overrides a seed. Adding a version here
+// is an optimization, never a requirement.
+const CAPABILITY_CACHE_SEEDS = Object.freeze({
+  DEVIN_RUNTIME: Object.freeze(
+    Object.fromEntries(
+      DEVIN_STREAMING_VERIFIED_VERSIONS.map((version) => [
+        version,
+        Object.freeze({
+          streaming: "PASS",
+          // Structured PASS was only ever hand-verified on 3000.10.31 (9/9
+          // managed trials). Any other build earns structured via the probe.
+          structured:
+            ACCOUNT_RUNTIME_CAPABILITY_MATRIX.DEVIN_RUNTIME.structuredOutput
+              .verifiedRuntimeVersion === version
+              ? "PASS"
+              : undefined,
+        }),
+      ]),
+    ),
+  ),
+});
+
 module.exports = {
+  CAPABILITY_CACHE_SEEDS,
   ACCOUNT_RUNTIME_CAPABILITY_MATRIX,
   AUTH_VERIFICATION,
   AUTO_UPDATE_STATES,

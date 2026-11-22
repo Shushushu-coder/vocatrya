@@ -19,8 +19,26 @@ const {
 const {
   getAccountRuntimeCapabilities,
 } = require("./capabilities");
+const { getCapabilityCache } = require("./runtime-capability-cache");
 
-function summarizeDefinition(definition) {
+// Cache-managed runtimes (Devin) report the capability verdict of the
+// INSTALLED build (runtime-capability-cache.js), so the UI sees the same
+// verified-version binding the desktop gates enforce. Others are static.
+function overlayCapabilities(backendKind, capabilityCache, detect) {
+  const base = getAccountRuntimeCapabilities(backendKind);
+  if (!base || !capabilityCache || !capabilityCache.manages(backendKind)) {
+    return base;
+  }
+  let version = null;
+  try {
+    version = detect(backendKind)?.version ?? null;
+  } catch {
+    version = null;
+  }
+  return capabilityCache.overlayDescriptor(base, version);
+}
+
+function summarizeDefinition(definition, capabilityCache, detect) {
   return {
     backendKind: definition.backendKind,
     runtimeVendor: definition.runtimeVendor,
@@ -30,7 +48,7 @@ function summarizeDefinition(definition) {
     // The consolidated capability descriptor — the UI and any future
     // execution surface read capabilities ONLY from here, never by
     // branching on backendKind.
-    capabilities: getAccountRuntimeCapabilities(definition.backendKind),
+    capabilities: overlayCapabilities(definition.backendKind, capabilityCache, detect),
   };
 }
 
@@ -42,6 +60,8 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
   // the main process's service (created once at startup).
   const updateChecker = createRuntimeUpdateChecker(deps);
   const updateApplier = createRuntimeUpdateApplier(deps);
+  const capabilityCache =
+    deps.capabilityCache || getCapabilityCache(profilesRoot);
 
   function assertKnown(backendKind) {
     if (!isRegisteredBackendKind(backendKind)) {
@@ -55,7 +75,11 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
     profileManager,
 
     listRuntimes() {
-      return listRuntimeDefinitions().map(summarizeDefinition);
+      return listRuntimeDefinitions().map((definition) =>
+        summarizeDefinition(definition, capabilityCache, (kind) =>
+          this.detectRuntime(kind),
+        ),
+      );
     },
 
     detectRuntime(backendKind) {
@@ -106,7 +130,9 @@ function createRuntimeStatusService({ profilesRoot, deps = {} } = {}) {
     // query entry for Settings and future execution surfaces.
     getRuntimeCapabilities(backendKind) {
       assertKnown(backendKind);
-      return getAccountRuntimeCapabilities(backendKind);
+      return overlayCapabilities(backendKind, capabilityCache, (kind) =>
+        this.detectRuntime(kind),
+      );
     },
 
     // Structured install/update metadata only. Phase C does not execute

@@ -16,6 +16,7 @@ const {
   STRUCTURED_OUTPUT_VERIFICATIONS,
   VERIFICATION_STATES,
   DEVIN_STREAMING_VERIFIED_VERSIONS,
+  CAPABILITY_CACHE_SEEDS,
   getAccountRuntimeCapabilities,
   listAccountRuntimeCapabilities,
   streamingRuntimeVersionMatches,
@@ -309,7 +310,15 @@ describe("account runtime capability matrix", () => {
         // Managed 9-trial probe on devin 3000.10.31: 9/9 first-pass
         // VALID under PROMPT_AND_VALIDATE.
         expect(so.verification, kind).toBe(STRUCTURED_OUTPUT_VERIFICATIONS.PASS);
+        // The pinned version is only the hand-verified SEED; the gate
+        // consults the per-version capability cache.
         expect(so.verifiedRuntimeVersion, kind).toBe("3000.10.31");
+        expect(
+          CAPABILITY_CACHE_SEEDS.DEVIN_RUNTIME["3000.10.31"].structured,
+        ).toBe("PASS");
+        expect(
+          CAPABILITY_CACHE_SEEDS.DEVIN_RUNTIME["3000.14.30821"].structured,
+        ).toBeUndefined();
         continue;
       }
       if (kind === "CODEX_RUNTIME") {

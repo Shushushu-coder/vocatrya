@@ -551,6 +551,16 @@ function parseDevinPrintResult({ stdout, stderr }) {
   };
 }
 
+// Capability self-check prompt (devin-capability-probe.js). One trivial
+// reply that doubles as the streaming probe (text must arrive on stdout and
+// reconcile) and the structured probe (the reply must be a JSON object of
+// the expected shape).
+const DEVIN_CAPABILITY_PROBE_TOKEN = "VOCATRYA_CAPABILITY_PROBE";
+const DEVIN_CAPABILITY_PROBE_PROMPT =
+  'Reply with exactly this JSON object and nothing else: {"probe":"' +
+  DEVIN_CAPABILITY_PROBE_TOKEN +
+  '","ok":true}';
+
 // Provider adapter contract consumed by connection-service.js (same shape
 // as codex/claude/opencode/grok).
 const devinAdapter = {
@@ -647,6 +657,14 @@ const devinAdapter = {
   createStreamParser: createPlainTextStreamParser,
   streamMechanism: "devin -p",
 
+  // Same locked-down `devin -p` as every other path; only the prompt differs.
+  buildCapabilityProbeInvocation(args) {
+    return buildDevinPrintInvocation({
+      ...args,
+      prompt: DEVIN_CAPABILITY_PROBE_PROMPT,
+    });
+  },
+
   extractText({ result }) {
     return parseDevinPrintResult(result);
   },
@@ -661,6 +679,8 @@ module.exports = {
   DEVIN_ACCOUNT_PROVIDER,
   DEVIN_AUTH_KINDS,
   DEVIN_BACKEND_KIND,
+  DEVIN_CAPABILITY_PROBE_PROMPT,
+  DEVIN_CAPABILITY_PROBE_TOKEN,
   DEVIN_MANAGED_CONFIG,
   DEVIN_SMOKE_EXPECTED,
   DEVIN_SMOKE_PROMPT,
