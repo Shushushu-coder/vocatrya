@@ -132,11 +132,3 @@ export function mergeAiSettingsForUpdate(
   }
   return base;
 }
-
-/** Normalize a caller-supplied interview pair; `undefined` when incomplete. */
-export function normalizeInterviewInput(
-  input: { provider?: unknown; model?: unknown } | undefined | null,
-): InterviewAiSettings | undefined {
-  if (!input || typeof input !== "object") return undefined;
-  return getInterviewConfig({ ai: { interview: input } });
-}

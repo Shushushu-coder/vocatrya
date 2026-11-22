@@ -9,7 +9,6 @@ import AiAssignmentsCard from "@/components/settings/AiAssignmentsCard";
 import ByokConnectionsCard from "@/components/settings/ByokConnectionsCard";
 import ManagedAiCard from "@/components/settings/ManagedAiCard";
 import ManagedRechargeCard from "@/components/settings/ManagedRechargeCard";
-import InterviewAiSettings from "@/components/settings/InterviewAiSettings";
 import ArchiveSettings from "@/components/settings/ArchiveSettings";
 import DataSettings from "@/components/settings/DataSettings";
 import DataMigrationGuide from "@/components/settings/DataMigrationGuide";
@@ -187,11 +186,8 @@ function Settings() {
             >
               <div className="space-y-6">
                 {/* Business assignment binds consumers to a connection/model —
-                    a different concept from connection management.
-                    InterviewAiSettings stays as the legacy compat entry on this
-                    page per the frozen scope. */}
+                    a different concept from connection management. */}
                 <AiAssignmentsCard />
-                <InterviewAiSettings />
               </div>
             </SectionShell>
           )}

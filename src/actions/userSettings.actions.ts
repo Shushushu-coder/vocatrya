@@ -7,12 +7,8 @@ import {
   defaultUserSettings,
   AiSettings,
   DisplaySettings,
-  InterviewAiSettings,
 } from "@/models/userSettings.model";
-import {
-  getInterviewConfig,
-  normalizeInterviewInput,
-} from "@/lib/interview/interviewSettings";
+import { getInterviewConfig } from "@/lib/interview/interviewSettings";
 import {
   patchUserSettings,
   SETTINGS_CONFLICT,
@@ -121,35 +117,6 @@ export const updateAiSettings = async (
   aiSettings: AiSettings,
 ): Promise<any | undefined> => {
   return updateUserSettings({ ai: aiSettings });
-};
-
-/**
- * Phase 2: set (or replace) the independent interview provider/model pair.
- * Global AI settings are preserved. Validation rejects empty provider/model
- * without writing. Clearing uses `clearInterviewAiSettings()`.
- */
-export const updateInterviewAiSettings = async (
-  interview: InterviewAiSettings,
-): Promise<any | undefined> => {
-  const normalized = normalizeInterviewInput(interview);
-  if (!normalized) {
-    return {
-      success: false,
-      message: "Interview provider and model are both required.",
-    };
-  }
-  return updateUserSettings({
-    ai: { interview: normalized } as Partial<AiSettings> & {
-      interview: InterviewAiSettings;
-    } as AiSettings,
-  });
-};
-
-/** Phase 2: clear the interview config; global AI settings are preserved. */
-export const clearInterviewAiSettings = async (): Promise<any | undefined> => {
-  return updateUserSettings({
-    ai: { interview: undefined } as unknown as AiSettings,
-  });
 };
 
 export const updateDisplaySettings = async (

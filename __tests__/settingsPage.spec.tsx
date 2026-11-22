@@ -1,7 +1,7 @@
 // Settings host shell: five nav groups with thirteen entries, `general` as
 // the default page, owner components mounted per section, honest unavailable
-// states for pages whose components have not landed, and the legacy MCP /
-// Interview compat surfaces kept reachable in their new homes. Resume
+// states for pages whose components have not landed, and the legacy MCP
+// compat surface kept reachable in its new home. Resume
 // variants moved out of settings into the primary navigation (UI-RC-RESUME-NAV).
 import * as React from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -31,9 +31,6 @@ vi.mock("@/components/settings/ByokConnectionsCard", () => ({
 }));
 vi.mock("@/components/settings/AiAssignmentsCard", () => ({
   default: () => <div data-testid="ai-assignments-card" />,
-}));
-vi.mock("@/components/settings/InterviewAiSettings", () => ({
-  default: () => <div data-testid="interview-ai-settings" />,
 }));
 vi.mock("@/components/settings/DataSettings", () => ({
   default: () => <div data-testid="data-settings" />,
@@ -150,15 +147,9 @@ describe("Settings page — V1 navigation shell", () => {
     expect(
       screen.queryByTestId("ai-assignments-card"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("interview-ai-settings"),
-    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "AI Assignments" }));
     expect(screen.getByTestId("ai-assignments-card")).toBeInTheDocument();
-    // The legacy interview provider/model entry stays reachable as the compat
-    // surface inside the AI business page.
-    expect(screen.getByTestId("interview-ai-settings")).toBeInTheDocument();
     expect(
       screen.queryByTestId("ai-connections-card"),
     ).not.toBeInTheDocument();
