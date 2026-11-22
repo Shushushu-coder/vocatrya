@@ -5,8 +5,7 @@
 <h1 align="center">Vocatrya</h1>
 
 <p align="center">
-  <strong>面向中国求职市场的 local-first Windows 桌面职业与求职管理软件<br>
-  A local-first career &amp; job-search manager for Windows desktop, built for the Chinese job market</strong>
+  <strong>面向中国求职市场的 local-first Windows 桌面职业与求职管理软件</strong>
 </p>
 
 <p align="center">
@@ -15,15 +14,10 @@
 </p>
 
 <p align="center">
-  <a href="#中文">中文</a> · <a href="#english">English</a>
+  中文 · <a href="./README.en.md">English</a>
 </p>
 
 ---
-
-<a id="中文"></a>
-## 中文
-
-> **上游声明：** Vocatrya 衍生自 [JobSync](https://github.com/Gsync/jobsync)（[Gsync](https://github.com/Gsync)，MIT）。原始版权声明与许可证保留在 [LICENSE](LICENSE) 中。
 
 Vocatrya 是免费开源的职业与求职管理软件，主要交付为 **Windows Electron 桌面应用**。围绕“准备 → 行动 → 复盘”，将职业资料、简历版本、职位机会、实际投递与面试记录组织在一起。
 
@@ -36,7 +30,7 @@ Vocatrya 是免费开源的职业与求职管理软件，主要交付为 **Windo
 - **面试与复盘：** 管理面试题、面试轮次与真实面试复盘，将准备材料关联到职位。
 - **概览与下一步：** 查看职位、实际投递、面试和 Offer 等统计；下一步建议由已有业务数据按规则生成，不自动发起 AI 调用或执行任务。
 - **任务：** 管理求职待办、任务分类与截止日期。
-- **三个 AI 助手：** Voca Insight（求职分析师）、Voca Pilot（全局助手）、Voca Reflect（复盘教练）在同一侧边面板按角色切换；打开面板或点选建议不会自动发送消息。实际工具随角色、连接和运行模式变化。
+- **三个 AI 助手：** Voca Insight（求职分析师）、Voca Pilot（全局助手）、Voca Reflect（复盘教练）协助分析求职进展、处理日常问题和复盘经历；选择建议不会自动发送消息。实际工具随角色、连接和运行模式变化。
 - **归档与备份：** 长期保留并随时恢复已归档的职位和 AI 对话；在设置中导出、导入业务备份。备份不包含连接凭据，恢复后需重新连接服务。
 
 还可设置界面语言、外观、显示时区及桌面托盘行为。职业资料中的证件、证明人等敏感信息受独立保护，不默认发送给 AI。
@@ -45,12 +39,7 @@ Vocatrya 是免费开源的职业与求职管理软件，主要交付为 **Windo
 
 ### AI 连接与模型
 
-AI 服务设置采用两个 Tab：
-
-| 设置入口 | 内容 |
-| --- | --- |
-| **Agent 账号登录** | 通过受支持的官方账号运行时连接。可用模型与能力取决于连接状态、运行时版本及账号权限。 |
-| **Vocatrya 托管 AI** | 包含“自行接入的模型 API”（BYOK）和“Vocatrya 托管 API”两种来源。自接 API 的凭据和费用属于用户与对应服务商；Vocatrya 托管 API 尚为“敬请期待”。 |
+可以通过受支持的官方账号运行时连接 AI，也可以自行接入模型 API（BYOK）。可用模型与能力取决于连接状态、运行时版本及账号权限；自接 API 的凭据和费用由用户与对应服务商管理。Vocatrya 托管 API 尚未推出。
 
 添加连接后，按需要分配默认模型或具体业务用途；模型选择以连接实际提供的目录为准。流式、结构化输出与工具调用要求因用途而异，不以品牌或固定模型名单承诺全部能力。
 
@@ -67,7 +56,7 @@ AI 服务设置采用两个 Tab：
 
 ### 桌面使用与源码开发
 
-Windows 桌面源码构建、隔离数据目录与启动步骤见 [桌面开发与 E2E](desktop/E2E.md)。开发测试应使用独立 Worktree 和全新数据目录，不复制真实配置或用户数据库。桌面标题栏提供新建菜单与 AI 助手入口。
+Windows 桌面源码构建、隔离数据目录与启动步骤见 [桌面开发与 E2E](desktop/E2E.md)。开发测试应使用独立 Worktree 和全新数据目录，不复制真实配置或用户数据库。
 
 浏览器路径仅用于 Next.js 页面开发和兼容回归，环境配置见 [贡献指南](CONTRIBUTING.md)。`npm run dev` 不启动 Electron；`npm run test:e2e:web` 只覆盖浏览器，`npm run test:e2e:desktop` 才驱动 Windows Electron。运行前请核对桌面文档中的前提与测试范围。
 
@@ -77,61 +66,4 @@ Windows 桌面源码构建、隔离数据目录与启动步骤见 [桌面开发�
 
 感谢上游 JobSync，以及 React、Next.js、Prisma、Electron、Tailwind CSS、shadcn/ui、Tiptap、Nivo 和 Vercel AI SDK 等开源项目。
 
----
-
-<a id="english"></a>
-## English
-
-> **Upstream attribution:** Vocatrya derives from [JobSync](https://github.com/Gsync/jobsync) by [Gsync](https://github.com/Gsync), under MIT. The original copyright notice and license remain in [LICENSE](LICENSE).
-
-Vocatrya is a free, open-source career and job-search manager for the Chinese job market, delivered primarily as a **Windows Electron desktop app**. It connects career materials, resume versions, opportunities, applications, and interviews around a Prepare → Act → Reflect journey.
-
-Business data lives in local SQLite and file directories. External AI services and extensions receive relevant inputs; local-first does not mean offline AI. Next.js supplies the internal UI and local backend; browser access supports development and compatibility checks.
-
-### Current Desktop Features
-
-- **Career materials and resumes:** Organize career evidence, import resumes, combine materials in the library and editor with live preview, drag to reorder or hide content, create role-specific versions, and export PDF or editable DOCX files.
-- **Jobs and applications:** Track opportunities and individual applications separately, preserve the submitted resume version and historical application facts, and link companies, contacts, interview rounds, and debriefs.
-- **Interviews and reflection:** Manage questions, rounds, and real interview debriefs alongside target jobs.
-- **Overview and next steps:** See job, application, interview, and offer statistics. Rule-based next steps use existing business data without automatically calling AI or executing tasks.
-- **Tasks:** Manage tasks, categories, and due dates.
-- **Three AI assistants:** Switch between Voca Insight (job-search analyst), Voca Pilot (general assistant), and Voca Reflect (reflection coach) in one side panel. Opening the panel or choosing a suggestion does not send a message. Tools vary by role, connection, and runtime mode.
-- **Archive and backup:** Keep archived jobs and AI conversations long term and restore them at any time. Export and import business backups in Settings; connection credentials are excluded, so reconnect services after restoring.
-
-Settings also cover language, appearance, display timezone, and desktop tray behavior. Sensitive career information such as identity documents and references receives separate protection and is not sent to AI by default.
-
-The app is in RC iteration; some incremental features still require desktop acceptance. See [release notes](release-notes/) for version changes.
-
-### AI Connections and Models
-
-AI service settings use two tabs:
-
-| Settings entry | Contents |
-| --- | --- |
-| **Agent account login** | Connect through supported official account runtimes. Models and capabilities depend on connection state, runtime version, and account permissions. |
-| **Vocatrya-managed AI** | Contains both user-connected model APIs (BYOK) and the Vocatrya-managed API. BYOK credentials and charges remain between the user and provider. The Vocatrya-managed API remains Coming Soon. |
-
-After adding a connection, assign default or purpose-specific models from its actual catalog. Streaming, structured output, and tool requirements vary by purpose; a brand or fixed model list does not establish support for every capability.
-
-Vocatrya orchestrates business tools for ordinary chat. Codex native sessions are a separate, explicitly selected mode with compatibility and capability gates. Account login does not automatically inherit search, tools, MCP, or Skills from an official client.
-
-Write approval depends on the tool, permission mode, and operation; check application records and execution receipts for results. Switching roles does not automatically send messages or execute suggestions.
-
-### Extensions and Current Boundaries
-
-- **Notion:** Connection and controlled read/write implementations exist; some error and credential boundaries still require acceptance. Operations depend on connection authorization, assistant role, and approval rules.
-- **Companion application-form tools:** Browser extension and profile pairing/sync implementations are partial, with further work currently paused. Filling a form is not a submitted application; users perform the final submission.
-- **Web interview practice:** The standalone entry moves to a web tool whose destination service is not yet connected. This does not remove job-linked interview rounds, questions, or real interview debriefs.
-- **Webpage reading:** Limited to URLs explicitly supplied in the conversation; it is not autonomous search or browser control.
-
-### Desktop Use and Source Development
-
-See [Desktop Development & E2E](desktop/E2E.md) for source builds, isolated data directories, and launch instructions. Use a separate worktree and fresh data for development tests without copying real configuration or user databases. The desktop title bar contains the create menu and AI assistant entry.
-
-Browser access is for Next.js page development and compatibility checks; see [CONTRIBUTING.md](CONTRIBUTING.md) for configuration. `npm run dev` does not start Electron. `npm run test:e2e:web` covers browsers, while `npm run test:e2e:desktop` drives Windows Electron. Check the desktop guide for prerequisites and test scope before running.
-
-### Contributing and Support
-
-Read the [Contributing Guidelines](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md). Issues and improvements are welcome, as are stars on [GitHub](https://github.com/Shushushu-coder/vocatrya).
-
-Thanks to upstream JobSync and open-source projects including React, Next.js, Prisma, Electron, Tailwind CSS, shadcn/ui, Tiptap, Nivo, and the Vercel AI SDK.
+> **上游声明：** Vocatrya 衍生自 [JobSync](https://github.com/Gsync/jobsync)（[Gsync](https://github.com/Gsync)，MIT）。原始版权声明与许可证保留在 [LICENSE](LICENSE) 中。
