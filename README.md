@@ -26,7 +26,7 @@
 > **上游声明：**
 > Vocatrya 是基于 [JobSync](https://github.com/Gsync/jobsync)（由 [Gsync](https://github.com/Gsync) 以 MIT 许可证创建）衍生的开源项目。原始版权声明与许可证保留在 [LICENSE](./LICENSE) 中。
 
-Vocatrya 是一款免费、开源的求职管理助手：跟踪职位申请、管理与导出简历，内置 AI 助手可以评阅简历、匹配职位、撰写求职信，或从你粘贴的招聘启事中直接录入职位——所有数据自托管在你自己的机器上，完全由你掌控。AI 功能可以完全通过 Ollama 在本地运行，也可以使用你选择的云服务提供商；内置的 MCP 服务器让 Claude Desktop 等 AI Agent 可以直接在对话中帮你录入职位和面试题。
+Vocatrya 是一款免费、开源的求职管理助手：跟踪职位申请、管理与导出简历，内置 AI 助手可以评阅简历、匹配职位、撰写求职信，或从你粘贴的招聘启事中直接录入职位——所有数据自托管在你自己的机器上，完全由你掌控。AI 功能可以使用你选择的云服务提供商；内置的 MCP 服务器让 Claude Desktop 等 AI Agent 可以直接在对话中帮你录入职位和面试题。
 
 Vocatrya 当前主要交付形态是 **Windows Electron 桌面应用**，Next.js 提供内部界面和本地后端。浏览器路径保留用于 Web 开发和兼容验证，不代表当前桌面产品的完整体验。
 
@@ -90,7 +90,7 @@ Vocatrya 的所有 AI 功能集中在一个地方：一个停靠在应用侧边�
 
 助手能看到的范围被刻意收窄：它只读你的简历和你当前正在看的这一个职位，不能列出或搜索你的职位，也看不到任务和活动。粘贴的招聘启事按不可信文本处理，启事里夹带的指令无法让助手操作你的数据。
 
-使用面板前先在 **设置 > AI 设置** 选择一个模型——需要支持工具调用（tool calling）的模型；没配置时它会告诉你而不是硬猜。已实测可用的模型见[支持的 AI 服务商](#支持的-ai-服务商)，其中包括完全本地的选项。
+使用面板前先在 **设置 > AI 设置** 选择一个模型——需要支持工具调用（tool calling）的模型；没配置时它会告诉你而不是硬猜。已实测可用的模型见[支持的 AI 服务商](#支持的-ai-服务商)。
 
 #### PDF 简历导出
 
@@ -203,28 +203,14 @@ Agent 会按名称解析或创建公司、职位、地点和标签，并报告�
 - <a href="https://github.com/plouc/nivo">Nivo</a>
 - <a href="https://github.com/sqlite/sqlite">Sqlite</a>
 - <a href="https://github.com/vercel/ai">Vercel AI-SDK</a>
-- <a href="https://github.com/ollama/ollama">Ollama</a>
 
 #### 支持的 AI 服务商
 
-所有云服务商的 API Key 在登录后于 **设置 > AI 设置** 中配置。Ollama 为默认服务商。
+所有云服务商的 API Key 在登录后于 **设置 > AI 设置** 中配置。
 
 > **注意：** 所选模型必须支持**结构化输出**与**工具调用**才能正常使用 AI 功能——AI 助手面板通过调用工具工作，不支持工具的模型只会回复文字而不会执行任何操作。
 
-**已实测可用模型：** AI 助手已端到端测试过 Ollama 的 `qwen3.5:9b`（完全本地）、`deepseek-v4-flash` 和 OpenAI `gpt-4.1`。其他支持工具调用的模型应该也能用，但以上是跑过全部助手功能的。
-
-<details>
-<summary><strong>Ollama（本地）</strong></summary>
-
-配合 [Ollama](https://ollama.com) 在你自己的机器上运行 AI 模型。
-
-- 确保 Ollama 已安装并在同一系统运行
-- AI 设置页会基于你已下载的模型列出可选模型
-- **建议：** 将 Ollama 上下文长度从默认 4k 提高到 16k——可避免自动职位匹配截断较长的简历/职位描述提示词。AI 助手、简历评阅、职位匹配和求职信功能不受影响：它们每次调用都会向 Ollama 请求所需上下文大小，提高默认值不会改变它们；也不要调得太高——过大的默认值只会明显拖慢响应而没有收益
-- 无需 API Key——完全在你的硬件上运行
-- 如果 Vocatrya 部署在家庭服务器上，可在本机 Ollama 设置中对外开放访问，并确保设置页 API Key 区域的 Ollama Base URL 指向本机 IP
-
-</details>
+**已实测可用模型：** AI 助手已端到端测试过 `deepseek-v4-flash` 和 OpenAI `gpt-4.1`。其他支持工具调用的模型应该也能用，但以上是跑过全部助手功能的。
 
 <details>
 <summary><strong>OpenAI</strong></summary>
@@ -283,7 +269,7 @@ Agent 会按名称解析或创建公司、职位、地点和标签，并报告�
 > **Upstream Attribution:**
 > Vocatrya is an open-source project derived from [JobSync](https://github.com/Gsync/jobsync) (created by [Gsync](https://github.com/Gsync) under the MIT License). The original copyright notice and license are preserved in [LICENSE](./LICENSE).
 
-Vocatrya is a free, open-source companion for your job search: track applications, manage and export resumes, and ask a built-in AI assistant to review a resume, match it against a job, write a cover letter, or add a job from a posting you paste in — all self-hosted on your own machine, so your data stays under your control. AI features can run entirely locally via Ollama or through your choice of cloud provider, and Vocatrya's built-in MCP server lets AI agents like Claude Desktop add jobs and interview questions straight from your chat.
+Vocatrya is a free, open-source companion for your job search: track applications, manage and export resumes, and ask a built-in AI assistant to review a resume, match it against a job, write a cover letter, or add a job from a posting you paste in — all self-hosted on your own machine, so your data stays under your control. AI features run through your choice of cloud provider, and Vocatrya's built-in MCP server lets AI agents like Claude Desktop add jobs and interview questions straight from your chat.
 
 The primary shipping form today is a **Windows Electron desktop app**; Next.js provides the internal UI and local backend. The browser path is kept for web development and compatibility checks — it is not the full desktop product experience.
 
@@ -363,7 +349,7 @@ The reviews, matches and letters are the same analyses the dedicated panels used
 
 The assistant is deliberately narrow about what it can see: it reads your resumes and the single job you're looking at, and nothing else. It can't list or search your jobs, and it can't see tasks or activities. Pasted postings are also treated as untrusted text, so instructions hidden inside a posting can't make the assistant act on your data.
 
-Pick a model under **Settings > AI Settings** before using the panel — it needs one that supports tool calling, and it will tell you rather than guessing if none is set. See [known-good models](#supported-ai-model-providers) for the ones that have been tested, including a fully local option.
+Pick a model under **Settings > AI Settings** before using the panel — it needs one that supports tool calling, and it will tell you rather than guessing if none is set. See [known-good models](#supported-ai-model-providers) for the ones that have been tested.
 
 #### PDF Resume Export
 
@@ -478,28 +464,14 @@ We welcome contributions! Please read our [Contributing Guidelines](./CONTRIBUTI
 - <a href="https://github.com/plouc/nivo">Nivo</a>
 - <a href="https://github.com/sqlite/sqlite">Sqlite</a>
 - <a href="https://github.com/vercel/ai">Vercel AI-SDK</a>
-- <a href="https://github.com/ollama/ollama">Ollama</a>
 
 #### Supported AI Model Providers
 
-API keys for all cloud providers can be configured in **Settings > AI Settings** after signing in. Ollama is selected as the default provider.
+API keys for all cloud providers can be configured in **Settings > AI Settings** after signing in.
 
 > **Note:** Selected models must support **structured output** and **tool calling** for AI features to work correctly — the AI Assistant panel works by calling tools, so a model without tool support will reply with text instead of doing anything.
 
-**Known-good models.** The AI Assistant has been tested end to end with `qwen3.5:9b` on Ollama (fully local), `deepseek-v4-flash`, and OpenAI `gpt-4.1`. Other tool-calling models should work, but these are the ones exercised against the full set of assistant features.
-
-<details>
-<summary><strong>Ollama (Local)</strong></summary>
-
-Works with [Ollama](https://ollama.com) to run AI models locally on your machine.
-
-- Make sure Ollama is installed and running on the same system
-- AI settings will show a list of available models based on what you have downloaded in Ollama
-- **Recommended:** Increase the Ollama context length from the default 4k to 16k — this helps automated job matching avoid truncating longer resume/job description prompts. The AI Assistant, resume review, job match and cover letter features aren't affected: they ask Ollama for the context size they need on every call, so raising this setting won't change them. Don't raise it much further either — a very large default costs you noticeably slower responses for no benefit
-- No API key required — runs entirely on your hardware
-- If you are running Vocatrya on a homelab server, you can expose ollama to network from Ollama settings on your local machine. Also make sure your ollama base url is pointed to your local system IP under API keys section of settings.
-
-</details>
+**Known-good models.** The AI Assistant has been tested end to end with `deepseek-v4-flash` and OpenAI `gpt-4.1`. Other tool-calling models should work, but these are the ones exercised against the full set of assistant features.
 
 <details>
 <summary><strong>OpenAI</strong></summary>
