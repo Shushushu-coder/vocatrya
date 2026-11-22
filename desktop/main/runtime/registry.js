@@ -447,13 +447,13 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       },
     },
     versionProbe: { args: ["version"] },
-    // Verified against grok 1.0.34/1.0.41: there is NO `login status` /
-    // `auth status` / `whoami` command. Auth state is probed over ACP —
-    // `grok agent --no-leader stdio` advertises a `cached_token` auth method
-    // only when a session exists in the profile's auth.json, and
-    // authenticate(cached_token) returns account metadata (email,
-    // auth_mode, subscription_tier). Handled by the grok adapter's ACP
-    // probe, not by a one-shot command.
+    // Verified against grok 1.0.34/1.0.41, re-verified on 1.0.92: there is
+    // NO `login status` / `auth status` / `whoami` command. Auth state is
+    // probed over ACP — `grok agent --no-leader stdio` advertises a
+    // `cached_token` auth method only when a session exists in the
+    // profile's auth.json, and authenticate(cached_token) returns account
+    // metadata (email, auth_mode "Oidc", subscription_tier). Handled by
+    // the grok adapter's ACP probe, not by a one-shot command.
     authProbe: {
       kind: "ACP_STDIO",
       args: ["agent", "--no-leader", "stdio"],
@@ -463,12 +463,15 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         "never authenticates; cached_token is advertised only when the " +
         "managed profile already holds a session.",
     },
-    // Verified against grok 1.0.34/1.0.41 (grok <cmd> --help). All commands
-    // run with GROK_HOME pointed at the managed profile directory.
+    // Verified against grok 1.0.34/1.0.41, re-verified on 1.0.92 (grok
+    // <cmd> --help). All commands run with GROK_HOME pointed at the
+    // managed profile directory.
     commands: {
       // Browser OAuth via auth.x.ai. Long-running: binds a 127.0.0.1
-      // callback listener, prints the authorize URL on stderr, and exits
-      // when the flow completes. Cancelled via AbortSignal.
+      // callback listener, prints the authorize URL on stderr ("Open this
+      // URL to sign in:"), and exits when the flow completes. Cancelled
+      // via AbortSignal. On 1.0.92 --oauth still forces this loopback
+      // flow (plain `grok login` now defaults to device-code).
       login: ["login", "--oauth"],
       logout: ["logout"],
       // `grok models` prints the account-visible catalog ("Available
@@ -1087,10 +1090,11 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       },
     ],
     profile: {
-      // agy 1.5.12 writes ~\\.gemini when USERPROFILE is redirected. The
-      // Google token is documented as an OS keyring entry, which this
-      // redirect does not cover. multiAccountIsolation stays false until
-      // that split is verified.
+      // Verified on agy 1.5.14: USERPROFILE redirection moves ~\\.gemini
+      // (state, logs, cache) into the managed home, but the OAuth token is
+      // a Windows Credential Manager entry (`gemini:antigravity`) — the
+      // keyring is per Windows user and no env redirect can cover it, so
+      // multiAccountIsolation stays false.
       strategy: PROFILE_STRATEGIES.ISOLATED_ROOTS,
       env: {
         USERPROFILE: "$PROFILE_DIR\\home",
@@ -1103,6 +1107,14 @@ const RUNTIME_DEFINITIONS = Object.freeze([
         XDG_STATE_HOME: "$PROFILE_DIR\\xdg-state",
       },
       credentialBoundary: ["USERPROFILE", "HOME"],
+      // Browser-facing login only: `acp --login` may hand its OAuth URL to
+      // the system browser, and Chrome/Edge resolve the user-data dir from
+      // %LOCALAPPDATA%/%APPDATA% — redirected roots would launch a fresh
+      // unsigned browser profile. Restoring those roots for the login
+      // process keeps the browser on the user's signed-in profile. The
+      // credential lands in the OS keyring regardless of env, so nothing
+      // credential-bearing is exposed; USERPROFILE/HOME stay managed.
+      browserLoginEnvPassthrough: ["APPDATA", "LOCALAPPDATA"],
       stripEnv: [
         "GEMINI_API_KEY",
         "GOOGLE_API_KEY",
@@ -1144,23 +1156,34 @@ const RUNTIME_DEFINITIONS = Object.freeze([
       ],
     },
     versionProbe: { args: ["--version"] },
+    // Verified on agy 1.5.14: `agy acp` is an ACP stdio server. initialize
+    // advertises fixed authMethods (oauth-personal/oauth-business/
+    // gemini-api-key/agent-platform); authenticate(oauth-personal) returns
+    // the account tier immediately when the keyring holds a personal
+    // Google credential, and launches an interactive OAuth loopback
+    // browser that blocks when it does not — handled by the adapter's ACP
+    // probe, which bounds the exchange and fails closed.
     authProbe: {
-      // Not an auth-method probe. `agy models` on 1.5.12 prints a model
-      // table with no Google session. The adapter parser refuses to treat
-      // that table as ACCOUNT_LOGIN.
-      args: ["models"],
+      kind: "ACP_STDIO",
+      args: ["acp"],
       mode: "READ_ONLY",
       notes:
-        "Provisional. agy 1.5.12 has no auth status subcommand. Output is " +
-        "not a Google-account classification.",
+        "Post-login only: ACP initialize + authenticate(oauth-personal). " +
+        "Passive queries return UNKNOWN because authenticate may launch OAuth.",
     },
     commands: {
+      // Prints the accounts.google.com OAuth URL on stdout and reads the
+      // pasted authorization code (or full landing URL) from stdin; exits
+      // 1 on EOF ("login cancelled"). Long-running interactive console.
       login: ["acp", "--login"],
       // No headless logout exists. See antigravity.js.
       logout: ["--version"],
-      status: ["models"],
+      // `agy models` prints the model table regardless of sign-in — the
+      // adapter never treats it as a catalog or an auth signal.
       models: ["models"],
-      print: ["--print"],
+      // --print is a VALUE flag on 1.5.14; the stdin prompt channel is
+      // `--print=` + stream-json in/out (see antigravity.js).
+      print: ["--print="],
     },
     capabilities: {
       accountLogin: true,

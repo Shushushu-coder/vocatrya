@@ -351,6 +351,21 @@ describe("adapter contract — smoke invariants", () => {
   // onStdinReady writer) or a --prompt-file inside the fresh workDir.
   // This drives the declared transport and returns what the CLI would
   // actually receive.
+  //
+  // An adapter may wrap the prompt in the runtime's required wire framing
+  // (antigravity: one stream-json user-event line on stdin). Unwrap the
+  // logical prompt — the byte-exact user text the CLI consumes.
+  function unwrapFramedPrompt(payload) {
+    try {
+      const msg = JSON.parse(payload.trim());
+      const text = msg?.message?.content?.[0]?.text;
+      if (msg?.event === "user" && typeof text === "string") return text;
+    } catch {
+      // not a framed payload
+    }
+    return payload;
+  }
+
   function collectPromptTransport(inv) {
     if (typeof inv.onStdinReady === "function") {
       expect(inv.stdinPipe, "stdin transport must pipe stdin").toBe(true);
@@ -368,7 +383,7 @@ describe("adapter contract — smoke invariants", () => {
       };
       inv.onStdinReady(fakeStdin);
       expect(fakeStdin.ended, "stdin must reach EOF").toBe(true);
-      return { kind: "stdin", prompt: chunks.join("") };
+      return { kind: "stdin", prompt: unwrapFramedPrompt(chunks.join("")) };
     }
     const fileFlag = inv.args.indexOf("--prompt-file");
     expect(

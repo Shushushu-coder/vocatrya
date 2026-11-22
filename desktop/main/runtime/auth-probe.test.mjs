@@ -37,6 +37,34 @@ function fakeGrokAgent() {
   return child;
 }
 
+// Fake `agy acp` child — answers initialize and authenticate(oauth-personal)
+// with a successful result carrying the tier metadata.
+function fakeAgyAcp() {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.pid = 4343;
+  child.stdin = {
+    write(data) {
+      const msg = JSON.parse(data.trim());
+      const result =
+        msg.method === "initialize"
+          ? { protocolVersion: 1, authMethods: [{ id: "oauth-personal" }] }
+          : { _meta: { antigravity: { tier: { id: "free-tier" } } } };
+      setImmediate(() => {
+        child.stdout.emit(
+          "data",
+          `${JSON.stringify({ jsonrpc: "2.0", id: msg.id, result })}\n`,
+        );
+      });
+      return true;
+    },
+    end() {},
+  };
+  child.kill = () => {};
+  return child;
+}
+
 describe("runtime auth probe", () => {
   it("classifies authenticated / unauthenticated / reauth / unknown output", () => {
     expect(
@@ -171,6 +199,35 @@ describe("runtime auth probe", () => {
       expect(spawned[0].args).toEqual(["agent", "--no-leader", "stdio"]);
       expect(spawned[0].env.GROK_HOME).toBe(profileDir);
       expect(terminated).toHaveLength(1);
+    } finally {
+      fs.rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps passive Antigravity status unknown without spawning OAuth", async () => {
+    const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "agy-acp-"));
+    const spawned = [];
+    const terminated = [];
+    try {
+      const result = await probeRuntimeAuthState({
+        backendKind: "ANTIGRAVITY_RUNTIME",
+        executablePath: "C:\\Tools\\agy.exe",
+        profileDir,
+        baseEnv: { PATH: "C:\\Windows" },
+        runner: async () => {
+          throw new Error("runner must not be used for ACP_STDIO probes");
+        },
+        spawnImpl: (cmd, args, opts) => {
+          spawned.push({ cmd, args, env: opts.env });
+          return fakeAgyAcp();
+        },
+        terminateImpl: async (child) => {
+          terminated.push(child);
+        },
+      });
+      expect(result.authState).toBe("UNKNOWN");
+      expect(spawned).toHaveLength(0);
+      expect(terminated).toHaveLength(0);
     } finally {
       fs.rmSync(profileDir, { recursive: true, force: true });
     }

@@ -386,7 +386,9 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
     verification: Object.freeze({
       realLoginE2E: VERIFICATION_STATES.PENDING,
       // The ACP initialize/authenticate exchange was verified against
-      // real grok builds — a real OAuth login E2E has not been run.
+      // real grok builds (1.0.34/1.0.41, re-verified on 1.0.92:
+      // auth_mode "Oidc", cached_token absent when signed out) — a real
+      // OAuth login E2E has not been run.
       authProbe: VERIFICATION_STATES.PASS,
       realModelCatalog: VERIFICATION_STATES.PASS,
       realInferenceE2E: VERIFICATION_STATES.PENDING,
@@ -549,13 +551,18 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
   ANTIGRAVITY_RUNTIME: Object.freeze({
     implemented: true,
     login: Object.freeze({
-      // `agy acp --login` is interactive on 1.5.12. The console launch is
-      // unverified against a completed Google sign-in.
+      // `agy acp --login` is interactive on 1.5.14: it prints the Google
+      // OAuth URL on stdout and reads the pasted authorization code (or
+      // full landing URL) from stdin inside the console. Verified end to
+      // end on 1.5.14 — real Google sign-in completed and the follow-up
+      // ACP probe on the same managed profile reported AUTHENTICATED.
       interaction: LOGIN_INTERACTIONS.VISIBLE_CONSOLE,
       surfacesAuthorizationUrl: false,
     }),
     auth: Object.freeze({
-      verification: AUTH_VERIFICATION.PROVISIONAL,
+      // `agy acp` ACP handshake — initialize + authenticate(oauth-personal).
+      verification: AUTH_VERIFICATION.ACP_STDIO,
+      // authenticate() reports the account tier, never an identity.
       accountIdentity: false,
       requiredMethod: "GOOGLE_ACCOUNT",
     }),
@@ -571,28 +578,57 @@ const ACCOUNT_RUNTIME_CAPABILITY_MATRIX = Object.freeze({
       acp: false,
       streaming: false,
       streamingVerification: VERIFICATION_STATES.PENDING,
-      streamingMechanism: "agy --print --output-format stream-json",
+      // Verified on 1.5.14: the only stdin prompt channel — stream-json
+      // NDJSON in, NDJSON event stream out (init/step_update/result).
+      streamingMechanism:
+        "agy --print= --input-format stream-json --output-format stream-json",
       streamingVerifiedRuntimeVersion: null,
     }),
     permission: Object.freeze({
       level: PERMISSION_LEVELS.BEST_EFFORT_RUNTIME_PERMISSIONS,
       osSandbox: "UNVERIFIED",
-      toolRestriction: "UNVERIFIED",
+      // Measured on 1.5.14: under --sandbox a one-shot print turn still
+      // invoked the built-in write_to_file tool and created a file in the
+      // working directory — --sandbox restricts the terminal, not
+      // workspace file tools. --mode plan is a no-op while
+      // --disable-slash-commands is set.
+      toolRestriction: "WORKSPACE_WRITES_ALLOWED",
       summary:
-        "agy --print is invoked with --sandbox and --mode plan. Neither " +
-        "flag has a managed permission trial on Windows.",
+        "agy --print runs with --sandbox + --disable-slash-commands. " +
+        "Verified on 1.5.14: --sandbox restricts terminal use only; " +
+        "built-in workspace file tools still write into cwd under the " +
+        "default request-review permission mode.",
     }),
     update: Object.freeze({
       autoUpdate: AUTO_UPDATE_STATES.UNKNOWN,
     }),
     verification: Object.freeze({
-      realLoginE2E: VERIFICATION_STATES.PENDING,
-      authProbe: VERIFICATION_STATES.PENDING,
-      realModelCatalog: VERIFICATION_STATES.PENDING,
-      realInferenceE2E: VERIFICATION_STATES.PENDING,
-      adversarialPermissions: VERIFICATION_STATES.PENDING,
+      // Verified on 1.5.14: the real `acp --login` invocation ran under
+      // the managed env with browserLogin passthrough, the user completed
+      // Google OAuth in their signed-in browser, the code was fed via
+      // stdin, and the post-login ACP probe on the same managed profile
+      // returned AUTHENTICATED/GOOGLE_ACCOUNT with the account tier.
+      realLoginE2E: VERIFICATION_STATES.PASS,
+      // The ACP initialize + authenticate(oauth-personal) exchange was
+      // exercised against a real agy 1.5.14 build — cached-credential
+      // success ({_meta.antigravity.tier}) and the interactive-block
+      // negative shape were both observed, plus a full login round-trip.
+      authProbe: VERIFICATION_STATES.PASS,
+      // `agy models` observed on 1.5.14 with the live credential —
+      // gemini-3.8-flash ×3, claude-sonnet-4-6, claude-opus-4-6-thinking,
+      // gpt-oss-120b-medium. The table is identical signed-out, so it is
+      // a static catalog, not account-scoped.
+      realModelCatalog: VERIFICATION_STATES.PASS,
+      // `agy --print=` + stream-json stdin/out verified live on 1.5.14
+      // under the managed profile + --sandbox: one-shot turn returned
+      // the exact smoke marker in a {"event":"result"} frame.
+      realInferenceE2E: VERIFICATION_STATES.PASS,
+      // Verified on 1.5.14: --sandbox does NOT block workspace file
+      // writes by built-in tools — the permission surface is narrower
+      // than the flag name implies. PASS = measured, see toolRestriction.
+      adversarialPermissions: VERIFICATION_STATES.PASS,
     }),
-    // `--json-schema` is on `agy --help` for 1.5.12. No managed trial.
+    // `--json-schema` is on `agy --help` for 1.5.12/1.5.14. No managed trial.
     structuredOutput: Object.freeze({
       strategy: STRUCTURED_OUTPUT_STRATEGIES.NATIVE_JSON_SCHEMA,
       mechanism: "--json-schema",

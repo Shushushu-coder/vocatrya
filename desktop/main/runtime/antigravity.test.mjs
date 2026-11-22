@@ -1,17 +1,91 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
+import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import adapter from "./antigravity.js";
 
 const {
   antigravityAdapter,
-  parseAntigravityAuthStatus,
   buildAntigravityLoginInvocation,
   buildAntigravityLogoutInvocation,
   buildAntigravityPrintInvocation,
+  classifyAntigravityAuthError,
+  parseAntigravityPrintResult,
   resolveAntigravityExecutable,
+  runAntigravityAcpAuthProbe,
 } = adapter;
+
+// A fake `agy acp` child: emits a JSON response for each inbound request
+// the responder returns, and stays alive until killed like the real
+// long-lived ACP server.
+function fakeAgyAcpSpawn({ spawnImpl, child }) {
+  const sink = new Writable({
+    write(chunk, _enc, done) {
+      const line = String(chunk).trim();
+      if (line) {
+        let msg;
+        try {
+          msg = JSON.parse(line);
+        } catch {
+          done();
+          return;
+        }
+        const response = child.responder(msg);
+        if (response) {
+          setImmediate(() => {
+            child.stdout.emit(
+              "data",
+              Buffer.from(`${JSON.stringify(response)}\n`),
+            );
+          });
+        }
+      }
+      done();
+    },
+  });
+  child.stdin = sink;
+  sink.end = () => {};
+  const terminateCalls = [];
+  const terminateImpl = () => {
+    terminateCalls.push(child);
+    return Promise.resolve();
+  };
+  const spawn = (...args) => {
+    spawnImpl.calls.push(args);
+    return child;
+  };
+  return { spawn, terminateImpl, terminateCalls };
+}
+
+function makeAgyChild(responder) {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.responder = responder;
+  child.stdin = null;
+  return child;
+}
+
+function probeWith(child, extra = {}) {
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "agy-profile-"));
+  const spawnState = { calls: [] };
+  const { spawn, terminateImpl, terminateCalls } = fakeAgyAcpSpawn({
+    spawnImpl: spawnState,
+    child,
+  });
+  const result = runAntigravityAcpAuthProbe({
+    executablePath: "C:\\agy\\agy.exe",
+    profileDir,
+    baseEnv: { PATH: "C:\\Windows" },
+    spawnImpl: spawn,
+    terminateImpl,
+    allowInteractiveAuth: true,
+    ...extra,
+  });
+  return { profileDir, result, spawnState, terminateCalls };
+}
 
 describe("antigravity adapter", () => {
   it("resolves only an existing agy.exe", () => {
@@ -26,31 +100,37 @@ describe("antigravity adapter", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("does not treat a model table as a Google account session", () => {
-    const table = "gemini-3.8-flash-high\tGemini 3.8 Flash (High)\n";
-    expect(parseAntigravityAuthStatus({ stdout: table, stderr: "" })).toEqual(
-      expect.objectContaining({ authState: "UNKNOWN", authKind: null }),
-    );
-    expect(
-      parseAntigravityAuthStatus({
-        stdout: "",
-        stderr: "You are currently not signed in.",
-      }).authState,
-    ).toBe("NOT_AUTHENTICATED");
-  });
-
   it("launches interactive login and does not log out via a fake subcommand", () => {
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "agy-profile-"));
     const login = buildAntigravityLoginInvocation({
       executablePath: "C:\\agy\\agy.exe",
       profileDir,
-      baseEnv: { PATH: "C:\\Windows", GEMINI_API_KEY: "secret" },
+      baseEnv: {
+        PATH: "C:\\Windows",
+        GEMINI_API_KEY: "secret",
+        APPDATA: "C:\\Host\\AppData\\Roaming",
+        LOCALAPPDATA: "C:\\Host\\AppData\\Local",
+      },
     });
     expect(login.executable).toBe("cmd.exe");
     expect(login.args).toContain("acp");
     expect(login.args).toContain("--login");
+    // --app-data-dir must stay a relative directory name (an absolute
+    // value crashes agy's lazily-started language server on 1.5.14).
+    const appDataIdx = login.args.indexOf("--app-data-dir");
+    expect(appDataIdx).toBeGreaterThan(-1);
+    expect(login.args[appDataIdx + 1]).toBe("antigravity-cli");
+    expect(path.isAbsolute(login.args[appDataIdx + 1])).toBe(false);
+    // --gemini-dir stays absolute, under the managed home.
+    const geminiIdx = login.args.indexOf("--gemini-dir");
+    expect(path.isAbsolute(login.args[geminiIdx + 1])).toBe(true);
     expect(login.env.GEMINI_API_KEY).toBeUndefined();
+    // Credential boundary stays managed; browser-facing roots are restored
+    // so a spawned browser keeps the user's signed-in profile.
     expect(login.env.USERPROFILE).toBe(path.join(profileDir, "home"));
+    expect(login.env.HOME).toBe(path.join(profileDir, "home"));
+    expect(login.env.APPDATA).toBe("C:\\Host\\AppData\\Roaming");
+    expect(login.env.LOCALAPPDATA).toBe("C:\\Host\\AppData\\Local");
 
     const logout = buildAntigravityLogoutInvocation({
       executablePath: "C:\\agy\\agy.exe",
@@ -61,7 +141,7 @@ describe("antigravity adapter", () => {
     fs.rmSync(profileDir, { recursive: true, force: true });
   });
 
-  it("keeps the print prompt off argv", () => {
+  it("keeps the print prompt off argv and pipes it as stream-json", () => {
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "agy-profile-"));
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "agy-work-"));
     const prompt = "VOCATRYA_ANTIGRAVITY_OK";
@@ -74,8 +154,14 @@ describe("antigravity adapter", () => {
       prompt,
     });
     expect(invocation.args).not.toContain(prompt);
+    // --print is a value flag on 1.5.14: the stdin channel needs the
+    // empty attached form plus stream-json in/out.
+    expect(invocation.args).toContain("--print=");
+    expect(invocation.args).toContain("--input-format");
+    expect(invocation.args).toContain("stream-json");
     expect(invocation.args).toContain("--sandbox");
-    expect(invocation.args).toContain("--mode");
+    // --mode plan is a documented no-op with slash commands disabled.
+    expect(invocation.args).not.toContain("--mode");
     expect(invocation.args).not.toContain("--dangerously-skip-permissions");
     expect(invocation.env.GOOGLE_API_KEY).toBeUndefined();
     expect(invocation.cwd).toBe(work);
@@ -86,12 +172,198 @@ describe("antigravity adapter", () => {
         chunks.push(String(value));
       },
     });
-    expect(chunks.join("")).toBe(prompt);
-    expect(antigravityAdapter.loginFailureCode({
-      authState: "AUTHENTICATED",
-      authKind: "API_KEY",
-    })).toBe("UNSUPPORTED_AUTH_METHOD");
+    expect(JSON.parse(chunks.join(""))).toEqual({
+      event: "user",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: prompt }],
+      },
+    });
+    expect(
+      antigravityAdapter.loginFailureCode({
+        authState: "AUTHENTICATED",
+        authKind: "API_KEY",
+      }),
+    ).toBe("UNSUPPORTED_AUTH_METHOD");
     fs.rmSync(profileDir, { recursive: true, force: true });
     fs.rmSync(work, { recursive: true, force: true });
+  });
+});
+
+describe("parseAntigravityPrintResult", () => {
+  it("extracts the terminal result response from the stream-json transcript", () => {
+    const stdout = [
+      JSON.stringify({ event: "init", init: { cwd: "C:\\work" } }),
+      JSON.stringify({
+        event: "step_update",
+        step_update: { step_index: 1, state: "DONE", text_delta: "ignored" },
+      }),
+      JSON.stringify({
+        event: "result",
+        result: { status: "SUCCESS", response: "VOCATRYA_ANTIGRAVITY_OK\n" },
+      }),
+    ].join("\n");
+    expect(parseAntigravityPrintResult({ stdout, stderr: "", exitCode: 0 }))
+      .toEqual({
+        text: "VOCATRYA_ANTIGRAVITY_OK\n",
+        reportedError: false,
+      });
+  });
+
+  it("marks a non-SUCCESS result and falls back on garbage", () => {
+    const failed = JSON.stringify({
+      event: "result",
+      result: { status: "ERROR", response: "turn failed" },
+    });
+    expect(
+      parseAntigravityPrintResult({ stdout: failed, stderr: "", exitCode: 1 }),
+    ).toEqual({ text: "turn failed", reportedError: true });
+    expect(
+      parseAntigravityPrintResult({
+        stdout: "not json at all",
+        stderr: "",
+        exitCode: 2,
+      }).reportedError,
+    ).toBe(true);
+  });
+});
+
+describe("runAntigravityAcpAuthProbe", () => {
+  it("does not spawn or authenticate during a passive status query", async () => {
+    const child = makeAgyChild(() => { throw new Error("must not authenticate"); });
+    const { profileDir, result, spawnState } = probeWith(child, { allowInteractiveAuth: false });
+    expect((await result).authState).toBe("UNKNOWN");
+    expect(spawnState.calls).toHaveLength(0);
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  it("keeps an unexpected process exit UNKNOWN", async () => {
+    const child = makeAgyChild(() => null);
+    const { profileDir, result } = probeWith(child);
+    setImmediate(() => child.emit("close", 1));
+    expect((await result).authState).toBe("UNKNOWN");
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  const initializeOk = {
+    protocolVersion: 1,
+    authMethods: [
+      { id: "oauth-personal", name: "Log in with Google" },
+      { id: "oauth-business" },
+      { id: "gemini-api-key" },
+    ],
+  };
+
+  it("classifies a successful authenticate(oauth-personal) as GOOGLE_ACCOUNT", async () => {
+    const child = makeAgyChild((msg) =>
+      msg.method === "initialize"
+        ? { jsonrpc: "2.0", id: msg.id, result: initializeOk }
+        : msg.method === "authenticate"
+          ? {
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: {
+                _meta: {
+                  antigravity: {
+                    tier: { id: "free-tier", name: "Antigravity Free" },
+                  },
+                },
+              },
+            }
+          : null,
+    );
+    const { profileDir, result, spawnState, terminateCalls } =
+      probeWith(child);
+    const status = await result;
+    expect(status).toEqual({
+      authState: "AUTHENTICATED",
+      authKind: "GOOGLE_ACCOUNT",
+      authMethod: "oauth",
+      accountIdentity: null,
+      providerMetadata: {
+        authMethodId: "oauth-personal",
+        tierId: "free-tier",
+        tierName: "Antigravity Free",
+      },
+    });
+    const [exe, args] = spawnState.calls[0];
+    expect(exe).toBe("C:\\agy\\agy.exe");
+    expect(args[0]).toBe("acp");
+    expect(args).toContain("--gemini-dir");
+    const idx = args.indexOf("--app-data-dir");
+    expect(args[idx + 1]).toBe("antigravity-cli");
+    expect(terminateCalls).toHaveLength(1);
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  it("fails closed as NOT_AUTHENTICATED when authenticate() errors auth", async () => {
+    const child = makeAgyChild((msg) =>
+      msg.method === "initialize"
+        ? { jsonrpc: "2.0", id: msg.id, result: initializeOk }
+        : {
+            jsonrpc: "2.0",
+            id: msg.id,
+            error: { code: -32000, message: "not authenticated" },
+          },
+    );
+    const { profileDir, result } = probeWith(child);
+    expect((await result).authState).toBe("NOT_AUTHENTICATED");
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  it("keeps a held authenticate() UNKNOWN instead of assuming signed out", async () => {
+    const child = makeAgyChild((msg) =>
+      msg.method === "initialize"
+        ? { jsonrpc: "2.0", id: msg.id, result: initializeOk }
+        : null, // authenticate never answers — the loopback took over
+    );
+    const { profileDir, result, terminateCalls } = probeWith(child, {
+      timeoutMs: 60,
+    });
+    const status = await result;
+    expect(status.authState).toBe("UNKNOWN");
+    // The process tree (including a launched browser) is torn down.
+    expect(terminateCalls).toHaveLength(1);
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  it("fails closed as UNKNOWN when initialize fails", async () => {
+    const child = makeAgyChild(() => ({
+      jsonrpc: "2.0",
+      id: 1,
+      error: { code: -32600, message: "invalid request" },
+    }));
+    const { profileDir, result } = probeWith(child);
+    expect((await result).authState).toBe("UNKNOWN");
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  it("fails closed as UNKNOWN when the stream is not ACP JSON", async () => {
+    const child = makeAgyChild(() => null);
+    const { profileDir, result } = probeWith(child, { timeoutMs: 5_000 });
+    const promise = result;
+    setImmediate(() => {
+      child.stdout.emit("data", Buffer.from("Loading Antigravity...\n"));
+    });
+    expect((await promise).authState).toBe("UNKNOWN");
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  });
+});
+
+describe("classifyAntigravityAuthError", () => {
+  it("distinguishes reauth, no-credential, and unknown failures", () => {
+    expect(
+      classifyAntigravityAuthError({
+        code: -32000,
+        message: "token expired",
+      }),
+    ).toBe("REAUTH_REQUIRED");
+    expect(
+      classifyAntigravityAuthError({
+        code: -32000,
+        message: "no cached credential",
+      }),
+    ).toBe("NOT_AUTHENTICATED");
+    expect(classifyAntigravityAuthError({ code: -32601 })).toBe("UNKNOWN");
   });
 });

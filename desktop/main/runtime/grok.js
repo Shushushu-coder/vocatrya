@@ -1,6 +1,8 @@
 // Phase G Grok adapter for the GROK_RUNTIME backend (xAI account login).
 //
-// Boundaries (verified against grok 1.0.34/1.0.41 on Windows):
+// Boundaries (verified against grok 1.0.34/1.0.41, re-verified on 1.0.92 —
+// login --oauth still prints the auth.x.ai URL on stderr and
+// authenticate(cached_token) still reports _meta.auth_mode "Oidc"):
 // - Credential isolation is GROK_HOME plus a redirected HOME/USERPROFILE —
 //   the compat scanners (Claude/Cursor skills/hooks/MCP config) and the
 //   folder-trust store resolve through ~, not GROK_HOME, so both must point

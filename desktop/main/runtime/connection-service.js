@@ -402,7 +402,7 @@ function createConnectionService({
     return { resolved, connection, adapter };
   }
 
-  async function probeAccountStatus(adapter, executable, profileDir, signal) {
+  async function probeAccountStatus(adapter, executable, profileDir, signal, allowInteractiveAuth = false) {
     // Adapters whose runtime has no one-shot status command (Grok: auth is
     // only observable through the ACP stdio handshake) expose probeAuth,
     // which drives the exchange itself under the same managed env.
@@ -413,6 +413,7 @@ function createConnectionService({
         baseEnv: deps.env,
         timeoutMs: statusTimeoutMs,
         signal,
+        allowInteractiveAuth,
         spawnImpl: deps.spawnImpl,
         terminateImpl: deps.terminateImpl,
       });
@@ -541,6 +542,7 @@ function createConnectionService({
         runtime.executable,
         pendingProfile.profileDir,
         controller.signal,
+        true,
       );
       const failure = classifyLoginOutcome(
         adapter,
@@ -647,6 +649,7 @@ function createConnectionService({
           runtime.executable,
           profileDir,
           controller.signal,
+          true,
         );
         const failure = classifyLoginOutcome(
           adapter,
