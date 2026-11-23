@@ -40,24 +40,6 @@ vi.mock("@/utils/delay", () => ({
   delay: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("next-auth", () => {
-  class MockAuthError extends Error {
-    type: string;
-
-    constructor(message: string) {
-      super(message);
-      this.name = "AuthError";
-      this.type = message;
-    }
-  }
-
-  return {
-    AuthError: MockAuthError,
-  };
-});
-
-
-
 describe("Auth Actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -1,6 +1,3 @@
-// Mock server-only so the module can be imported in the jest (jsdom) environment
-vi.mock("server-only", () => ({}));
-
 // Mock AI SDK packages to avoid loading provider implementations in tests
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: vi.fn() }));
 vi.mock("@ai-sdk/deepseek", () => ({ createDeepSeek: vi.fn() }));

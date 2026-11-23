@@ -8,8 +8,6 @@ import { extractReadable } from "@/lib/agent/webpage/extract";
 import { fetchReadablePage, nodeTransport, type Transport } from "@/lib/agent/webpage/fetchPage";
 import { buildReadWebpageTool, frameWebpageText } from "@/lib/agent/tools/readWebpage";
 
-vi.mock("server-only", () => ({}));
-
 const user = (parts: unknown[]): UIMessage => ({ id: "u", role: "user", parts: parts as never });
 const assistant = (text: string): UIMessage => ({ id: "a", role: "assistant", parts: [{ type: "text", text }] });
 

@@ -7,36 +7,6 @@ import {
 } from "@/actions/task.actions";
 import { useRouter, useSearchParams } from "next/navigation";
 
-vi.mock("next-auth", () => {
-  const mockAuth = vi.fn();
-  const mockSignIn = vi.fn();
-  const mockSignOut = vi.fn();
-  const mockHandlers = { GET: vi.fn(), POST: vi.fn() };
-
-  return {
-    __esModule: true,
-    default: vi.fn(() => ({
-      auth: mockAuth,
-      handlers: mockHandlers,
-      signIn: mockSignIn,
-      signOut: mockSignOut,
-    })),
-    auth: mockAuth,
-    signIn: mockSignIn,
-    signOut: mockSignOut,
-    handlers: mockHandlers,
-  };
-});
-
-vi.mock("next-auth/providers/credentials", () => ({
-  __esModule: true,
-  default: vi.fn(() => ({
-    id: "credentials",
-    name: "Credentials",
-    type: "credentials",
-  })),
-}));
-
 vi.mock("@/actions/task.actions", () => ({
   getTasksList: vi.fn(),
   getActivityTypesWithTaskCounts: vi.fn(),

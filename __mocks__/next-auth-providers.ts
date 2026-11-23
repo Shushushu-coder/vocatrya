@@ -1,6 +1,11 @@
 import { vi } from "vitest";
 
-const Credentials = vi.fn((config: any) => ({
+type CredentialsConfig = {
+  credentials?: Record<string, unknown>;
+  authorize?: (...args: unknown[]) => unknown;
+};
+
+const Credentials = vi.fn((config?: CredentialsConfig) => ({
   id: "credentials",
   name: "Credentials",
   type: "credentials",

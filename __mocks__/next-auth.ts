@@ -12,6 +12,17 @@ const NextAuth = vi.fn(() => ({
   signOut: mockSignOut,
 }));
 
+/** Test stand-in. The message is the `type` that `authenticate` switches on. */
+export class AuthError extends Error {
+  type: string;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthError";
+    this.type = message;
+  }
+}
+
 export default NextAuth;
 export const auth = mockAuth;
 export const signIn = mockSignIn;
