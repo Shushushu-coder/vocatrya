@@ -486,7 +486,7 @@ function parseAntigravityPrintResult({ stdout, stderr, exitCode }) {
       response = msg.result.response;
       if (msg.result.status && msg.result.status !== "SUCCESS") {
         return {
-          text: response,
+          text: response.trim(),
           reportedError: true,
         };
       }
@@ -494,7 +494,7 @@ function parseAntigravityPrintResult({ stdout, stderr, exitCode }) {
   }
   if (response !== undefined) {
     return {
-      text: response,
+      text: response.trim(),
       reportedError:
         exitCode !== 0 && exitCode !== undefined && exitCode !== null,
     };

@@ -5,7 +5,7 @@
  * readiness (never silent-install), and per-connection operations mint a
  * ticket then call the unified IPC surface.
  */
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AiServicesLayout from "@/components/settings/AiServicesLayout";
 import AiConnectionsCard from "@/components/settings/AiConnectionsCard";
@@ -196,6 +196,25 @@ beforeEach(() => {
 });
 
 describe("AiConnectionsCard", () => {
+  it("shows the authorization link during reconnect and clears it when login ends", async () => {
+    installBridges({ connections: [{ id: "reconnect-test", backendKind: "CODEX_RUNTIME", displayName: "Reconnect account", status: "REAUTH_REQUIRED" }] });
+    let emitUrl!: (url: string) => void;
+    window.vocatryaAi!.onOAuthUrl = vi.fn((handler) => {
+      emitUrl = handler;
+      return () => {};
+    });
+    let finish!: (value: { ok: false; code: string }) => void;
+    window.vocatryaAi!.reconnect = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    render(<AiConnectionsCard />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Reconnect" }));
+    await waitFor(() => expect(window.vocatryaAi!.reconnect).toHaveBeenCalled());
+    act(() => emitUrl("https://auth.openai.com/authorize?test=reconnect"));
+    expect(await screen.findByRole("button", { name: "Open authorization page" })).toBeInTheDocument();
+    await act(async () => finish({ ok: false, code: "AUTH_CANCELLED" }));
+    expect(screen.queryByRole("button", { name: "Open authorization page" })).not.toBeInTheDocument();
+  });
+
   it("reports a failed manual recheck after a successful automatic check", async () => {
     installBridges();
     window.vocatryaRuntime!.checkUpdate = vi.fn(async (_backendKind, options) => {

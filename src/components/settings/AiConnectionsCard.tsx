@@ -541,6 +541,7 @@ function AiConnectionsCard() {
         }
       } finally {
         setBusy(null);
+        if (operation === "reconnect") setOauthUrl(null);
       }
     },
     [mintTicket, refresh, errorMessage, t],
@@ -615,6 +616,14 @@ function AiConnectionsCard() {
         );
         const runtimeName = runtime?.displayName ?? backend.backendKind;
         const isConnecting = busy === `connect:${backend.backendKind}`;
+        // A reconnect runs the same login process and can surface the same
+        // authorize URL / console hint — the oauthUrl block and the
+        // VISIBLE_CONSOLE hint must not hide just because busy is
+        // `reconnect:<id>` rather than `connect:<kind>`.
+        const isReconnecting = backendConnections.some(
+          (c) => busy === `reconnect:${c.id}`,
+        );
+        const loginInFlight = isConnecting || isReconnecting;
         const update = updateChecks[backend.backendKind];
         const updateChecking = updateBusy[backend.backendKind] === true;
         const updateFailed = updateIpcFailed[backend.backendKind] === true;
@@ -1032,7 +1041,7 @@ function AiConnectionsCard() {
 
             {/* Capability-driven login hint: runtimes whose login runs in a
                 visible console window tell the user where to look. */}
-            {isConnecting &&
+            {loginInFlight &&
               runtime?.capabilities.login.interaction ===
                 "VISIBLE_CONSOLE" && (
                 <p className="text-sm text-muted-foreground">
@@ -1040,7 +1049,7 @@ function AiConnectionsCard() {
                 </p>
               )}
 
-            {isConnecting && oauthUrl && (
+            {loginInFlight && oauthUrl && (
               <div className="rounded-md border p-2 text-sm space-y-1">
                 <p className="text-muted-foreground">
                   {t("settings.aiConnOAuthHint")}

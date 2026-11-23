@@ -205,7 +205,7 @@ describe("parseAntigravityPrintResult", () => {
     ].join("\n");
     expect(parseAntigravityPrintResult({ stdout, stderr: "", exitCode: 0 }))
       .toEqual({
-        text: "VOCATRYA_ANTIGRAVITY_OK\n",
+        text: "VOCATRYA_ANTIGRAVITY_OK",
         reportedError: false,
       });
   });
