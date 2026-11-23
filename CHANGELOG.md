@@ -1,5 +1,486 @@
 # Changelog
 
+## [1.2.3](https://github.com/Shushushu-coder/vocatrya/compare/v1.2.0-beta.1...v1.2.3) (2026-11-23)
+
+
+### Features
+
+* replace Devin version-string gates with per-version capability cache
+* make the dictation service Gemini-only (N-2)
+* remove the legacy interview AI settings panel (N-1)
+* show startup splash while backend initializes
+* save resume evidence drafts to career profile
+* merge condition-type error notices in a top-left host
+* D4 card E task card and job entry
+* D4 card C cold start, grounding and task session
+* D4 card B handoff notes and context budget row
+* read_webpage tool for user-supplied URLs (read-only)
+* D4 card A task ledger (AgentTask/Handoff/Event)
+* three-tab extensions page with built-in skills and coming-soon import
+* discover all Codex installs and select per purpose
+* host resume evidence skill in Pilot (draft-only)
+* verify Codex CLI 0.170.0 for native sessions
+* gate Codex native sessions on a verified-version list
+* NOTION_OBJECT_NOT_FOUND and Retry-After for rate limits
+* resume evidence skill v1 (draft-only, not yet hosted)
+* route prep-continue to extensions entry in desktop shell
+* show curated bilingual release notes above About
+* move Codex native entry into the model chip and dedupe connect buttons
+* add unverified Antigravity account login
+* whole-window zoom with rebindable zoom shortcuts
+* edit page text directly and confirm page deletes once
+* report native session failures and apply Codex CLI updates
+* single roster source for role guidance and refusal prompts
+* add persistent Codex native text conversations
+* split AI services into account and managed tabs
+* add agent preferences and chat history maintenance
+* graphite dark mode palette
+* compact service list for unconnected AI services
+* reorderable business grid in AI assignments
+* add move-to-new-computer migration guide to Data & Privacy
+* sync build facts to About and converge version residues (UI-RC-ABOUT D5)
+* mount dictation button in unified composer toolbar
+* AWU slice C — API dictation (AWU-DICTATION)
+* force-disconnect escape hatch for unreachable app origin
+* AWU slice B — local files into the conversation
+* AWU slice A — unified composer with toolbar model/context controls
+* resolve About version from the running app version
+* pair autofill plugin with local career profiles
+* persist custom ordering and pinned jobs
+* move task and question filters into content
+* refine career journey overview
+* move resume navigation and show nickname avatars
+* integrate extension tools, autofill export and Notion connection
+* multi-agent roles for the agent panel (Insight/Pilot/Reflect)
+* wire R6 next-action and M9 insight to awaiting-reflection read model
+* integrate job-connections i18n keys and feature status
+* archived-job read-only reflection entry + delete cascade warning
+* integrate interview-debrief i18n keys and feature status
+* wire P-A reflection completion, source links, read model and UI
+* job connections aggregation view (JOB-CONNECTIONS)
+* checkpoint schema and DTO groundwork for P-A
+* integrate overview/insights i18n and account-zone applied7d
+* implement journey overview and next-actions rules
+* implement career insights metrics contract (M1-M8, G1/G6)
+* add offline Chinese font fallback
+* unify brand marks and company logo fallbacks
+* restore jobs and conversations with AI isolation
+* complete isolated managed execution and entitlement checks
+* add modular resume builder and editable DOCX export
+* finalize resume import selection and P1 closure
+* retire activity tracking and preserve task categories
+* regenerate completed answers with durable write guards
+* add independent copy actions for agent fenced code blocks
+* integrate input preferences, answer copying and runtime update checks
+* persist user time zone with safe preference saves
+* autosave career material fields and retain tab drafts
+* add process event table and quick scheduling actions
+* add profile group and selected application summary copying
+* integrate career tabs, user-facing messages and inline data creation
+* add additive schema columns and backup v4
+* add DateTime v1 foundation
+* complete desktop lifecycle v1
+* persist general language preference
+* add locale persistence action
+* add atomic user settings patch
+* integrate wave 1 batch A
+* adaptive overview for provably empty accounts (Dashboard V2.1)
+* move global actions into the desktop titlebar
+* split home into overview and analytics board (Dashboard V2)
+* share one write-before-guard database isolation contract
+* explicit ApplicationAttempt picker for new process steps
+* Windows desktop lifecycle — tray, close-to-tray, login items, minimized launch
+* add salary column to jobs CSV export
+* bind process steps to an explicit ApplicationAttempt
+* unify list states and family-aware tag counts
+* refine workspace shell and navigation
+* show Coming Soon and make no Hosted request while Managed AI is not launched
+* integrate streaming usage settlement
+* add operator console and audited controls
+* add three-route AI settings with OS-backed credential store
+* wire managed business execution with durable invocation identity
+* add managed usage authority
+* add managed hosted runtime
+* add managed AI core contracts
+* add canonical resume import
+* add canonical job creation tool
+* clean up fresh-native full surfaces
+* enable fresh-native runtime defaults
+* auto-activate fresh-native databases
+* export immutable variants to stored PDFs
+* reuse Codex app-server runtime
+* add async career dialogue memory
+* bound career dialogue context
+* add fast path for simple career dialogue
+* integrate A1.5 identity and agent presence
+* redesign career assistant workspace
+* add multi-conversation chat persistence
+* enable verified Codex streaming
+* productize AI interview flow
+
+### Bug Fixes
+
+* apply resume migration fixtures on a dedicated SQLite connection
+* prevent Prisma SQLite worker starvation during release tests
+* allow bounded SQLite lock waits in concurrent handoff verification
+* verify Windows releases on the target operating system
+* make release verification portable across CI hosts
+* allow release typecheck an 8 GiB Node heap
+* wire OAuth recovery URLs through connection service dependencies
+* show a light logo on the light startup screen
+* wait for replacement navigation to finish during startup
+* restore resume evidence draft generation and repair feedback
+* verify source revision when building isolated snapshots
+* retain authorization recovery during account reconnect
+* expire abandoned authorization flows without clearing newer logins
+* rename logo asset to bust image cache
+* use approved app icon as logo
+* wait for complete Codex authorization URL
+* surface Codex authorization URL as login recovery entry
+* specify evidence draft fields and return validation feedback
+* retain canonical match approval in every permission mode
+* keep passive Antigravity auth checks noninteractive
+* repair agy 1.5.14 exec surface and verify real login E2E
+* correct Codex binary verification, task selection persistence, and Notion receipt display
+* verify Antigravity/Grok logins via ACP probe on drifted versions
+* add Antigravity icon for AI connection card
+* keep the full Codex model catalog
+* batch Notion page deletes and accept Devin 3000.14.30821 streaming
+* verify checkout revision before snapshotting
+* regenerate stopped turns from persisted user tail
+* include release-notes in the source snapshot
+* allow regenerate right after a stopped turn
+* resolve ?tab= outside the client module
+* re-arm OAuth callback expiry when a restarted flow reuses the listener
+* scope choice options to the field's own popup
+* repo audit — timeline draft remount, lint scope, stale tests
+* restore typecheck after update/delete page tools
+* carry attachments and context on suggest_role transfer
+* align Pilot limitations and capability counts with handoff contract
+* keep turns running on panel close, auto-replay CAS conflicts, add suggest_role handoff
+* stop AI assignment settings from waiting on runtime probes
+* prevent duplicate interview feedback generation
+* acceptance defects for agent preferences
+* scope new repeat blocks and record verified extension paths
+* correct ATS repeat matching and restore sync controls
+* verify ATS control commits and prevent submit actions
+* stabilize desktop audio transcription
+* tighten migration-guide copy after review
+* harden AI assignments, split services columns, isolate Notion OAuth result, atomic panel expand
+* bind autofill repeat blocks to nth profile item
+* dedupe autofill field ids and count real filled elements
+* remove reminder click navigation and close revised acceptance
+* separate managed credential and Hosted deadlines and harden acceptance evidence
+* preserve hosted credentials and await desktop process-tree cleanup
+* clarify managed AI errors and preserve sessions on broker failures
+* keep explicit context clears across desktop restarts
+* isolate hosted sessions under development data roots
+* preserve unresolved draft context across role snapshots
+* distinguish malformed and rejected access keys
+* isolate role transitions and preserve active drafts
+* prevent narrow company table headers from wrapping
+* improve title leading and table readability
+* reject archived interview reflection sources before dispatch
+* Fix strict match screening schema and record account acceptance
+* Fix resume builder editing, lifecycle and durable preview preferences
+* Fix restored conversation references and preserve archive isolation
+* accept empty runtime streams for DOCX export
+* isolate BYOK credentials and classify execution deadlines
+* move help and feedback above navigation
+* remove global upload entry and import deep links
+* simplify editing controls and use copy icons
+* persist input preferences across backend port changes
+* hydrate input preferences safely and restore evidence field navigation
+* improve desktop entry points and AI chat configuration
+* Fix material test narrowing and reuse task date boundaries per query
+* retain emergency contact drafts on rejected saves
+* preserve creation drafts on failure
+* clean replaced backup rows and preserve sensitive rollback data
+* localize career job access errors and cover acceptance paths
+* preserve emergency contact values during editing
+* include read-only records in tab copy and record integration status
+* gate titlebar action portals on the real Electron shell
+* grant the linked-worktree exemption only on two-way git registration
+* protect primary checkout prisma in process db isolation
+* harden process database isolation
+* clean owned job opportunities before library rows
+* make draft attempt step creation atomic
+* release main-window IPC when the window closes before first load
+* make draft applied switch reversible, plain salary input, localized sources
+* stabilize AddJob and AddEducation suites
+* close R4 integration verification gaps
+* invalidate stale job-list responses by committed query generation
+* align migration tests with Node 24
+* degrade blocked jobs reads explicitly
+* adapt settings layout to narrow containers
+* unify applied facts across R1 R2 modules
+* align dictionary statistics with AB read family
+* align application facts and first submission dates
+* stop persisting TBD placeholder for empty answers
+* align company statistics with AB read family
+* unify dialog overlays and reflection layout
+* fail safely instead of hanging silent installs on old-uninstaller errors
+* preserve the secret store when Windows rename returns EXDEV
+* revise beta2 hosted endpoint
+* preserve resume invocation identity on ambiguous failure
+* support OpenRouter interview model input
+* restore codex persistent pool consumption
+* harden conversation concurrency
+* harden resume and application history
+* stabilize codex structured execution
+* support Chinese text validation
+* settle nested generation streams
+* preserve explicit docker runtime overrides
+* align career reads with canonical runtime data
+* close legacy write guard gaps
+* preserve dialog after list refresh
+* classify derived conversation summary cache
+* align Codex runtime network environment
+* certify Codex 0.160.0 runtime capabilities
+* support A+B job context in assistant
+* refresh my jobs after add
+* polish add job modal and locale labels
+* integrate missing product acceptance fixes
+* restore deterministic test user setup
+* restore assistant panel fixed positioning
+* keep assistant chat transport off the server module graph
+* rollback failed assistant conversation creation
+* stabilize my jobs state and ui
+
+### Other Changes
+
+* prepare bilingual release notes for 1.2.3
+* improve README readability and align AI naming with product
+* fix Pilot role bold formatting in Chinese README
+* rewrite README journey and add desktop screenshots
+* share the next-auth and server-only mocks
+* type the pending reconnect response
+* separate and refine bilingual readmes
+* align README with current desktop product
+* drop Ollama provider references
+* point header logo at renamed icon asset
+* bilingual rewrite with logo header
+* unpublish internal agent docs and legacy screenshots
+* record core acceptance evidence and remaining blockers
+* ignore root-level scratch exports
+* record RC task integration and pending desktop acceptance
+* cover batch proposals cancellation and uncertain receipts
+* align microphone comments with Gemini-only service
+* drop the interview AI settings panel spec (N-1)
+* require asking user which AI account to use before real model calls in acceptance
+* record 2026-11-20 desktop acceptance results and Feishu MCP proposal
+* record stopped-turn fix integration and pending acceptance
+* freeze 1.2.3-rc and record pre-acceptance results
+* mark 1.2.3-rc additions integrated and scope F2/F3 checks
+* record D4 integration and extend 1.2.3-rc acceptance scope
+* restore AWU ledger formatting, keep only cleared dictation questions
+* record task UI, interaction and resume-evidence save decisions
+* add merged extensions tabs and read_webpage to 1.2.3-rc checklist
+* add consolidated 1.2.3-rc desktop acceptance checklist
+* record user Notion acceptance on 1.2.2-rc (a43a25b0)
+* record 2026-11-19 extension decisions and refresh stale status
+* record per-purpose Codex install selection
+* resume evidence hosted by Pilot, auto-apply evidence lost, Codex 0.170.0 verified
+* tracked backup-excludes-binding scenario for Codex native backup
+* record D3 autoroute and D4 long-task decisions, S1-S4 outcomes
+* assert backup export excludes native binding and executionPath
+* exclude .claude/ agent worktrees from vitest and eslint
+* mark native-session and resume-evidence contracts approved in index
+* replace hand-picked waves with cutoff-based migration replay
+* retire upstream Docker/web-deploy chain and stale artifacts
+* bump version to 1.2.3-rc (in progress, not released)
+* draft 1.2.3-rc notes (not released yet)
+* drop dead interruptedTurn field
+* constrain RC acceptance evidence, record carry-on-transfer and 1.2.3-rc revalidation
+* record suggest_role handoff landing, auto-route upgrade, chat regression fixes
+* extend codegraph rule with worktree index sync
+* add release runbook and point agents at it
+* mark stale-test fixes as landed in a8c358db
+* refresh stale assertions for resume bridge and audio page
+* record interview feedback fix integration and verification
+* clarify acceptance evidence and remaining verification gaps
+* record current-version managed desktop reverify and native evidence check
+* set managed assignment inside lifecycle case setup
+* adapt desktop driver to tabbed AI services and authoritative denial code
+* honest no-fallback evidence and exit code for desktop reverify
+* propose scoped native session adapter contract
+* define resume evidence draft contract
+* record ATS fixes and bounded browser verification
+* record integrated AI service tabs and verification
+* record agent harness and extension UI decisions
+* record SET-DESKTOP real Windows auto-start acceptance
+* Record harness integration and qualified acceptance evidence
+* Keep preparation sessions accessible in desktop and fix snapshot inputs
+* Persist Notion approvals and recover detached write execution
+* Add interview prep goals with session binding, handoff and backup support
+* Add recoverable deep-match tasks and job matching UI
+* add multi-agent onboarding proposal with frozen decisions
+* prepare 1.2.1-rc
+* record EXT-NOTION acceptance plan and environment pre-checks
+* record Xiaohongshu Chinese ATS autofill field test
+* record S13 force-disconnect integration
+* record AWU B/C integration, autofill polish and slice A acceptance
+* record AWU slice A integration and autofill acceptances
+* repoint wiki evidence paths to retained worktree closure dirs
+* close P2 acceptance and record About version integration
+* extend p2 closure driver with continuation and restore coverage
+* record RC acceptance and autofill connection integration
+* prepare workspace upgrade decisions
+* record 1.2.0-rc UI adjustment decisions
+* record agent workspace upgrade proposal
+* record partial task C acceptance and remaining coverage
+* define reusable desktop validation and targeted retry rules
+* record extension tools decisions and update wiki index
+* correct desktop acceptance drivers and record Main failures
+* record acceptance preparation and remaining coverage
+* add managed AI loopback and desktop acceptance tools
+* add reproducible P2 desktop acceptance preparation
+* record P2/REM-V1 acceptance results, flip three P2 features to passes
+* test+docs: align fresh-full specs with shipped surfaces, record P2/D acceptance
+* isolate desktop visual launch builds
+* record R6/M9 awaiting-reflection wiring in feature ledger
+* record insights and overview-actions integration
+* record brand batch1 acceptance
+* reconcile frozen-contract status markers across wiki
+* freeze four P2 contract proposals after owner decision
+* preserve acceptance evidence references after worktree cleanup
+* preserve superseded p2-overview-contract worktree snapshot
+* preserve superseded p2-job-interview-contract worktree snapshot
+* preserve superseded p2-multi-agent-contract worktree snapshot
+* preserve superseded resume-preview-persistence-fix worktree snapshot
+* preserve superseded mvp-integrate-124 worktree snapshot
+* preserve superseded account-match-schema-fix worktree snapshot
+* propose career insights metrics contract
+* reconcile journey, debrief and agent contract proposals
+* Record acceptance evidence and troubleshooting rules in AGENTS.md
+* Remove the About & Help support surface from the main shell
+* Add managed subscription recharge page and loopback operator channel
+* Record canonical match_job Electron acceptance for AGENT-CAPABILITIES
+* Record P1 match_job implementation and P2 contract proposals
+* Implement canonical match_job with durable tool execution
+* Revise P2 overview and next-actions contract proposal
+* Add P2 job-interview joint contract proposal
+* Record approved match job decisions without enabling implementation
+* Commit pending runtime update check work
+* Add P2 overview actions contract proposal
+* Commit pending archive contract proposal changes
+* Commit pending resume import selection work
+* Commit pending desktop E2E harness docs
+* Commit pending W7 resume acceptance test
+* Commit pending input preferences work
+* Commit pending desktop E2E harness docs
+* Commit pending agent answer copy work
+* Commit pending emergency edit tab persistence test
+* Commit pending desktop E2E workflow and docs
+* close P1 BYOK acceptance
+* Update P1 integration and acceptance status
+* Document canonical match_job contract
+* Harden BYOK provider verification
+* Record AI closure integration and remaining acceptance boundaries
+* Keep managed session status accurate during failures and concurrent redemption
+* Preserve BYOK reauthentication state and actionable credential errors
+* Transport account AI prompts outside Windows command lines
+* Document P2 career journey product baseline and feature ledger
+* Add hosted session redemption and reliable managed AI disconnect
+* close integration checks and synchronize feature status
+* freeze archive policy and resume builder scope
+* clarify validation window ownership
+* record P1 integration and pending acceptance
+* define resume workbench contract and approved product choices
+* separate MVP status and updated P1 delivery contracts
+* record targeted Electron acceptance and remaining manual checks
+* split task dispatch guide into on-demand AGENTS_PROMPTS.md
+* Enable MATCH_ANALYSIS assignment on fresh-native and mark REM-V1/RM-MATCH implemented
+* Add settings About page with version, environment and diagnostics copy
+* Add fresh-native fast screening match entry, execution and history
+* Add AI reflection draft generation and CAREER_REFLECTION assignment
+* Add audio input settings with mic selection, level meter and record test
+* Add rebindable window shortcuts and global show/hide hotkey
+* Add persistent reminders with Windows notification delivery and preferences
+* Drop titlebar brand and group navigation controls on the left
+* Regroup dictionary and resume variants under Career Management settings
+* Move Library dictionary management into settings under Bulk Edit
+* Remove Ollama, OpenAI and Gemini BYOK options from settings
+* Clarify desktop validation rules and add wiki navigation
+* Constrain chat bubbles and preserve plain JD line breaks in job editors
+* Certify Codex 0.164.0 streaming and structured execution after live probes
+* Dismiss AI preflight errors and distinguish unavailable resume import
+* Collapse question answers behind an accessible toggle
+* Align job mutation surfaces with runtime policy and record compatibility acceptance
+* Record serial desktop acceptance results and remaining release checks
+* Show saved salary in job lists and stabilize desktop acceptance navigation
+* Integrate resume service lifecycle regression and record acceptance limits
+* Add isolated desktop test tooling and require explicit E2E authorization
+* Preserve desktop loopback origin for dashboard sign-in redirects
+* Record approved skill link contract and main integration evidence
+* Verify tag deletion races and live skill copy names
+* Link career skills to owned tags and preserve references in backup v6
+* Record integrated job dictionary and AI settings delivery
+* Refresh job edit defaults when deadline context changes
+* Add dictionary maintenance and protect canonical references on rename
+* Carry job deadline precision through forms exports and agent paths
+* Add localized job deadline export heading
+* Show unavailable AI assignment purposes honestly
+* Record MVP decisions and integrated process task and career work
+* Extend career records and protect sensitive attachments with backup v5
+* Carry process time precision and account timezone through upcoming reminders
+* Preserve task due precision and sort mixed due values before pagination
+* Complete career profile field and privacy translations
+* ignore Playwright CLI artifacts
+* record job and backup integration verification
+* propose career schema contracts and implementation ownership
+* mark resume attempt binding acceptance passed
+* propose datetime consumer contracts and ownership
+* record material autosave and emergency editing integration
+* track agent guidance and ignore temporary files
+* Add independent application rounds and paged transfer selection
+* Connect desktop lifecycle preferences to general settings
+* Add per-field autosave for career profile personal information
+* sync MVP implementation status and preserve validation guidance
+* retire wiki publishing and record MVP implementation scope
+* wait for durable archive writes and select the real status filter
+* isolate stability checks and honor AB runtime contracts
+* accept data-family edit and archive contracts
+* Isolate desktop test migration runtimes and signature fixture
+* give the git-registration regressions explicit timeouts
+* cover the shared database isolation contract end to end
+* make the cleanup rejection fixture route-agnostic
+* use stable cleanup rejection fixture
+* replace DATABASE_URL substring guard with isolation contract
+* propagate cleanup teardown failures to test results
+* stabilize shared login, combobox, and save completion fixtures
+* cover application attempt selection e2e
+* await saved jobs URL before filter history checks
+* isolate my jobs acceptance fixtures
+* align jobs csv e2e with salary export
+* isolate R3 authentication and database fixtures
+* ignore local .private credentials directory
+* refine dashboard jobs and basic data pages
+* establish shared visual and interaction foundation
+* derive packaged migration counts from names and pin the beta.1 baseline
+* add beta2 managed endpoint revision report
+* prepare 1.2.0-beta.2
+* restore managed runtime regressions
+* fix Prisma migration fixture bootstrap
+* stabilize parallel Prisma fixtures
+* align create job mock contract
+* simplify compatibility facades
+* isolate local and desktop Vitest discovery
+* remove unused Radix progress dependency
+* remove proven-dead source
+* reduce packaged Prisma runtime
+* align beta acceptance expectations
+* harden t2 acceptance harness
+* add manual migration verification
+* align acceptance checks with current UI
+* align activity delete confirmation assertion
+* refine A1.5 app icon container
+* align Add Job locale acceptance with A+B capabilities
+* align My Jobs acceptance fixture with read family
+* type the seeded transcript assertion
+* cover restoring a prior assistant conversation
+
+
 > 1.2 起的版本（含 RC）以 [`release-notes/`](release-notes/) 双语摘要为准；本文件仅由正式版 release.yml 自动追加，以下 1.1.x 及更早条目继承自上游 JobSync。
 
 ## [1.1.20](https://github.com/Gsync/jobsync/compare/v1.1.19...v1.1.20) (2026-09-14)
