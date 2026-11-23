@@ -27,12 +27,7 @@ const ctx = await vi.hoisted(async () => {
   return { url, dir };
 });
 
-// Keep five real concurrent callers and CAS assertions, while allowing the
-// SQLite writer lock to wait on slower CI disks instead of failing at 5s.
-const prisma = new PrismaClient({
-  datasources: { db: { url: `${ctx.url}?socket_timeout=30` } },
-  transactionOptions: { maxWait: 30_000, timeout: 30_000 },
-});
+const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
 let sprint: Sprint;
 
 afterAll(async () => {
@@ -127,7 +122,7 @@ describe("commitHandoff", () => {
     expect(results.filter((r) => r.status === "revision_conflict")).toHaveLength(4);
     expect(await prisma.agentTaskHandoff.count({ where: { taskId: sprint.task.id } })).toBe(1);
     expect((await getAgentTask(prisma, base()))?.revision).toBe(1);
-  }, 60_000);
+  });
 
   it("rejects a pointer id that no longer exists and writes nothing", async () => {
     const state = handoffStateFor(sprint);

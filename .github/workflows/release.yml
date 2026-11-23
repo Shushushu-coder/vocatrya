@@ -89,6 +89,10 @@ jobs:
   verify:
     needs: prepare
     runs-on: ubuntu-latest
+    env:
+      # SQLite BEGIN IMMEDIATE waits occupy Tokio workers. Five concurrent
+      # writers need spare workers to let the lock holder finish on 2-core CI.
+      TOKIO_WORKER_THREADS: "8"
     steps:
       - uses: actions/checkout@v4
 
