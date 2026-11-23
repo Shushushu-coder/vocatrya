@@ -391,10 +391,21 @@ export function ResumeEvidenceInvalidDraft({ errors }: { errors: string[] }) {
 }
 
 /** Assistant text that carries one or more draft blocks. */
-export function ResumeEvidenceAssistantText({ text }: { text: string }) {
+export function ResumeEvidenceAssistantText({
+  text,
+  sessionScoped = false,
+}: {
+  text: string;
+  /**
+   * True only for assistant text inside an active skill session: an
+   * envelope-less but draft-shaped block still renders as an invalid
+   * attempt (visible + fed back) instead of an opaque code block.
+   */
+  sessionScoped?: boolean;
+}) {
   return (
     <>
-      {splitResumeEvidenceDraftText(text).map((seg, i) => {
+      {splitResumeEvidenceDraftText(text, { sessionScoped }).map((seg, i) => {
         if (seg.kind === "draft")
           return <ResumeEvidenceDraftCard key={i} draft={seg.draft} />;
         if (seg.kind === "invalid")

@@ -6,6 +6,7 @@ import {
   runCareerDialogueTurn,
 } from "@/lib/agent/careerDialogueTurn";
 import { routeCareerDialogueTurn } from "@/lib/agent/careerDialogueRoute";
+import { buildResumeEvidencePromptAddendum } from "@/lib/agent/skills/resumeEvidence/session";
 import type { ToolSet, UIMessage } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
@@ -529,5 +530,31 @@ describe("Career Dialogue fast path", () => {
     expect(second.invocationKey).not.toBe(first.invocationKey);
     expect((executeAIConnectionTextStream as any).mock.calls[0][0].invocationKey)
       .toBe("op-conv-1:answer:0");
+  });
+
+  // CORE-2: the model cited the answer tail's "natural language only … no
+  // code fences" as the reason it could not emit the required draft block.
+  // Inside an active run the tail must carry the single-block exception.
+  it("permits the skill's draft block in the answer prompt while a run is active", async () => {
+    const packMsg = userMsg(
+      "【本次授权包：仅限这一段经历】\npurpose: career_record\n\nexperienceText:\nLed the payments migration at Acme.",
+    );
+    const addendum = buildResumeEvidencePromptAddendum({
+      messages: [packMsg],
+      agentRole: "pilot",
+    });
+    expect(addendum).not.toBe("");
+    const { writer } = captureWriter();
+    await runCareerDialogueTurn({
+      ...baseInput,
+      systemPrompt: baseInput.systemPrompt + addendum,
+      messages: [packMsg, userMsg("总结一下")],
+      writer,
+      signal: new AbortController().signal,
+      decision: { route: "AGENT", reason: "RESUME_DATA_INTENT" },
+    });
+    const prompt = (executeAIConnectionTextStream as any).mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("complete resume-evidence draft");
+    expect(prompt).not.toContain("natural language only");
   });
 });
