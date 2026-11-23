@@ -204,7 +204,7 @@ describe("AiConnectionsCard", () => {
       return () => {};
     });
     let finish!: (value: { ok: false; code: string }) => void;
-    window.vocatryaAi!.reconnect = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    window.vocatryaAi!.reconnect = vi.fn(() => new Promise<{ ok: false; code: string }>((resolve) => { finish = resolve; }));
     render(<AiConnectionsCard />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Reconnect" }));
