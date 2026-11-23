@@ -42,6 +42,7 @@ const { registerResumePreviewPreferencesIpc } = require("./resume-preview-prefer
 const { registerAgentRoleSlotsIpc, AGENT_ROLE_SLOTS_FILE_NAME } = require("./agent-role-slots");
 const { createDesktopLifecycle, shouldQuitWhenAllWindowsClosed } = require("./lifecycle");
 const { resolveColdStartEntry } = require("./cold-start");
+const { isNavigationAbortError, waitForAllowedNavigation } = require("./navigation-settle");
 const { createQuitCoordinator, flushDefaultSession, runRegisteredReleaseHooks } = require("./shutdown");
 
 // Windows desktop local-data foundation. This resolves BEFORE the
@@ -493,7 +494,21 @@ if (!singleInstance) {
       assetsRoot: app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "assets"),
       titleBarOverlay: (theme) => zoomController.overlayOptions(theme),
     });
-    await createdWindow.loadURL(resolveColdStartEntry(origin));
+    try {
+      await createdWindow.loadURL(resolveColdStartEntry(origin));
+    } catch (error) {
+      if (createdWindow.isDestroyed()) return;
+      // ERR_ABORTED is a cancelled navigation, not a backend failure: a
+      // superseding main-frame navigation (a driver/tooling goto, a
+      // renderer-side push while the entry load was still in flight)
+      // aborted ours. Startup only fails when the window never settles on
+      // an allowed backend page — real load and backend errors still
+      // reach the startup-failure path unchanged.
+      const settled = isNavigationAbortError(error) && (await waitForAllowedNavigation(createdWindow, {
+        isAllowed: (url) => isAllowedNavigation(url, origin),
+      }));
+      if (!settled) throw error;
+    }
     if (createdWindow.isDestroyed()) return;
     const history = createdWindow.webContents.navigationHistory;
     if (history.getEntryAtIndex(0)?.url.startsWith("data:text/html")) {
@@ -638,6 +653,10 @@ if (!singleInstance) {
       if (!shuttingDown) {
         showStartupFailure(error);
       }
+      // The termination below is deliberate, not a crash — keep the exit
+      // handler from reporting a "backend exited unexpectedly" that we
+      // caused ourselves.
+      backendExpectedExit = true;
       await terminateChildTree(backend);
       setTimeout(() => app.quit(), 100);
     }
