@@ -14,7 +14,8 @@ function startupPageUrl(logo) {
   :root { color-scheme: light dark; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: light-dark(#fff, #09090b); }
   header { position: fixed; inset: 0 0 auto; height: 36px; -webkit-app-region: drag; }
-  img { width: 96px; height: 96px; object-fit: contain; }
+  img { width: 96px; height: 96px; object-fit: contain; filter: invert(1) brightness(2); }
+  @media (prefers-color-scheme: dark) { img { filter: none; } }
 </style></head><body><header></header><img src="${logo}" alt="Vocatrya"></body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
