@@ -11,13 +11,19 @@ import {
   freeSpace,
   requireFreeSpace,
 } from "./guards.mjs";
+import {
+  hasOwnGitMetadata,
+  readVerifiedSourceRevision,
+  revisionPath,
+  sourceRevisionDocument,
+} from "./sourceRevision.mjs";
 
 export const BUILD_DISK_CHECK_INTERVAL_MS = 2000;
 export const BUILD_RECLAIM_TIMEOUT_MS = 20_000;
 
 // Low-frequency disk monitor for a long-running async stage. The interval
 // callback only runs while the launcher awaits the child, so it cannot observe
-// the synchronous backend assembly at all â€” that residual window is documented
+// the synchronous backend assembly at all ¡ª that residual window is documented
 // in desktop/E2E.md. The monitor is single-shot: the first breach (or a probe
 // failure, which must fail closed rather than read as free space) disarms it
 // before reporting, so no timer or callback outlives the guarded stage.
@@ -101,12 +107,24 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
   const state = { buildChild: null, instance: null, interrupted: false };
   const result = { runId, runRoot, ok: false, primaryError: null, cleanupError: null, diskGuarded: false, buildTerminatedOnCleanup: false };
 
-  function sourceFiles(gitOptions) {
+  // A checkout uses its own .git. A snapshot reuses the file list recorded
+  // with the commit, and does not ask Git (no metadata, and a parent
+  // repository would answer for a different tree).
+  function verifiedSnapshot() {
+    if (hasOwnGitMetadata(root, d.fs)) return null;
+    return readVerifiedSourceRevision(root, d.fs);
+  }
+
+  let gitOptions;
+
+  function sourceFiles() {
+    const recorded = verifiedSnapshot();
+    if (recorded) return recorded.files;
     return d.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src", "public", "extensions", "prisma/schema.prisma", "prisma/migrations", "desktop/main", "desktop/assets", "scripts/build-fresh-native-bootstrap.mjs", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "package.json", "package-lock.json", "tsconfig.json", "postcss.config.mjs", "release-notes"], gitOptions).toString().split("\0").filter(Boolean);
   }
 
-  function sourceDigest(gitOptions) {
-    const files = sourceFiles(gitOptions);
+  function sourceDigest() {
+    const files = sourceFiles();
     const hash = createHash("sha256");
     for (const file of [...new Set(files)].sort()) {
       hash.update(file);
@@ -136,8 +154,8 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
     // While the async build runs, a low-frequency monitor watches the volume
     // actually hosting the run directory. A breach (or a probe failure, which
     // fails closed) records the guard error and terminates only this run's
-    // build tree; the exit wait then resolves and the recorded error â€” not the
-    // resulting child exit status â€” becomes the primary failure.
+    // build tree; the exit wait then resolves and the recorded error ¡ª not the
+    // resulting child exit status ¡ª becomes the primary failure.
     let guardError = null;
     const RECLAIMED = Symbol("build-reclaim-timeout");
     let reclaimTimer = null;
@@ -205,16 +223,18 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
       throw error;
     }
     let commit;
-    const gitOptions = { cwd: root, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] };
+    let recorded;
+    gitOptions = { cwd: root, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] };
     try {
-      if (!d.fs.existsSync(path.join(root, ".git"))) {
-        throw new Error("Run the driver from a Git checkout or worktree");
+      recorded = verifiedSnapshot();
+      if (recorded) {
+        commit = recorded.commit;
+      } else {
+        // Ignore inherited repository overrides from hooks in another checkout.
+        const localVars = new Set(d.execFileSync("git", ["rev-parse", "--local-env-vars"], gitOptions).trim().split(/\s+/));
+        gitOptions.env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !localVars.has(name.toUpperCase())));
+        commit = d.execFileSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], gitOptions).trim();
       }
-      // Git hooks can export repository-local overrides for a different checkout.
-      // Both HEAD and the source file list must come from this worktree.
-      const localVars = new Set(d.execFileSync("git", ["rev-parse", "--local-env-vars"], gitOptions).trim().split(/\s+/));
-      gitOptions.env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !localVars.has(name.toUpperCase())));
-      commit = d.execFileSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], gitOptions).trim();
     } catch (error) {
       const detail = String(error.stderr ?? "").trim() || error.message;
       result.primaryError = new Error(`Could not resolve desktop E2E source HEAD (cwd=${root}): ${detail}`, { cause: error });
@@ -223,14 +243,15 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
     }
     d.fs.mkdirSync(appRoot, { recursive: true });
     try {
-      const digest = sourceDigest(gitOptions);
+      const digest = sourceDigest();
+      if (recorded && digest !== recorded.sourceDigest) throw new Error(`Isolated source snapshot does not match the revision verified when it was created (cwd=${root})`);
       d.onLog(`Desktop E2E: commit=${commit} source=${digest} host=Electron mode=fresh-native proxy=${direct ? "DIRECT DIAGNOSTIC" : "SYSTEM (unchanged)"}`);
       d.onLog(`Isolated run: ${runRoot}`);
       // Build from explicit source inputs only. Next otherwise loads the
       // user's checkout .env files even when the child environment is
       // allowlisted. The snapshot also prevents contention with a developer's
       // .next server.
-      for (const file of [...new Set(sourceFiles(gitOptions))]) {
+      for (const file of [...new Set(sourceFiles())]) {
         const source = path.join(root, file);
         if (!d.fs.existsSync(source)) continue;
         const destination = path.join(appRoot, file);
@@ -238,7 +259,8 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
         d.fs.copyFileSync(source, destination);
       }
       d.fs.symlinkSync(path.join(root, "node_modules"), path.join(appRoot, "node_modules"), "junction");
-      if (sourceDigest(gitOptions) !== digest) throw new Error("Source changed while snapshotting; rerun against a stable checkout");
+      if (sourceDigest() !== digest) throw new Error("Source changed while snapshotting; rerun against a stable checkout");
+      d.fs.writeFileSync(revisionPath(appRoot), sourceRevisionDocument({ commit, sourceDigest: digest, files: [...new Set(sourceFiles())] }));
       // Stage-boundary disk checks: each verification sits after one heavy
       // stage and before the next, so a drained volume aborts instead of
       // failing midway. The async build is additionally watched by the
@@ -249,7 +271,7 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
       d.requireFreeSpace({ runId, stage: "next-build", target: runRoot, minimumBytes: MIN_STAGE_FREE_BYTES });
       // The unmodified desktop main resolves its backend relative to this copy.
       d.assemble({ repoRoot: appRoot, outputRoot: path.join(appRoot, ".codex-tmp", "desktop-poc") });
-      if (sourceDigest(gitOptions) !== digest) throw new Error("Source changed during assembly; rerun against a stable checkout");
+      if (sourceDigest() !== digest) throw new Error("Source changed during assembly; rerun against a stable checkout");
       d.requireFreeSpace({ runId, stage: "backend-assembly", target: runRoot, minimumBytes: MIN_STAGE_FREE_BYTES });
       d.onLog("PASS current-source build/assembly identity");
       await d.runScenario({ runId, appRoot, dataRoot, runRoot, direct, state });
