@@ -88,7 +88,8 @@ jobs:
 
   verify:
     needs: prepare
-    runs-on: ubuntu-latest
+    # Validate the Windows desktop release on its target operating system.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
