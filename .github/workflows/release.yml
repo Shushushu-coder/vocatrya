@@ -101,7 +101,10 @@ jobs:
 
       - run: npx prisma generate
 
-      - run: npx tsc --noEmit
+      - name: Typecheck
+        run: npx tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
 
       - run: npm run lint
 
