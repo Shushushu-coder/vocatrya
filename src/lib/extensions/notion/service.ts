@@ -113,7 +113,8 @@ export async function getNotionExtensionState(
   userId: string,
   deps: Deps = {},
 ): Promise<NotionExtensionState> {
-  const row = await getNotionConnection(userId, deps.db ?? prisma);
+  const db = deps.db ?? prisma;
+  let row = await getNotionConnection(userId, db);
   if (!row) {
     return toExtensionState({
       status: NOTION_STATUS.DISCONNECTED,
@@ -126,6 +127,27 @@ export async function getNotionExtensionState(
       lastVerifiedAt: null,
       lastError: null,
     });
+  }
+  // Lazily heal an abandoned OAuth flow: the pending record is TTL-bound and
+  // the callback listener is long gone, but the sealed column would keep the
+  // UI in CONNECTING forever with no way to restart the consent.
+  if (row.status !== NOTION_STATUS.CONNECTED && row.pendingCipher) {
+    const pending = await loadPendingFlow(row);
+    if (!pending || pending.expiresAt < Date.now()) {
+      // A newer login may have replaced this flow while it was unsealed.
+      await db.notionConnection.updateMany({
+        where: {
+          userId,
+          status: row.status,
+          pendingCipher: row.pendingCipher,
+          pendingStateHash: row.pendingStateHash,
+        },
+        data: { pendingCipher: null, pendingIv: null, pendingStateHash: null },
+      });
+      row = (await getNotionConnection(userId, db)) ?? {
+        ...row, pendingCipher: null, pendingIv: null, pendingStateHash: null,
+      };
+    }
   }
   return toExtensionState(row);
 }
