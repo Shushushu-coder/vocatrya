@@ -112,9 +112,9 @@ jobs:
 
       - run: npm run lint
 
-      # Fail fast on the transaction regression found during release verification.
-      - name: Verify concurrent handoff commits
-        run: npx vitest run __tests__/agentTaskHandoffStore.spec.ts --reporter=verbose
+      # Fail fast on the database regressions found during release verification.
+      - name: Verify database regressions
+        run: npx vitest run __tests__/agentTaskHandoffStore.spec.ts __tests__/resumeBuilder.spec.ts --reporter=verbose
 
       - run: npm test
 

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { diffResumeVersions } from "@/lib/career/resumeVersionDiff";
 import { projectResumeVariantText } from "@/lib/career/resumeVariantText";
 import { ResumeArtifactService } from "@/lib/career/resumeArtifactService";
@@ -192,12 +193,25 @@ describe("resume builder persistence and boundaries", () => {
   });
   it("keeps pre-feature rows readable after applying the additive migration", async () => {
     const { service, versionId } = await seedGraph();
-    for (const model of ["ResumeVariantSection", "ResumeVariantSectionItem", "ResumeExpression"]) {
-      await prisma.$executeRawUnsafe(`ALTER TABLE "${model}" DROP COLUMN "hiddenAt"`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "${model}" DROP COLUMN "originRefId"`);
-    }
     const sql = fs.readFileSync(path.join(process.cwd(), "prisma/migrations/20261029020000_resume_builder_visibility/migration.sql"), "utf8");
-    for (const statement of sql.split(";").filter((s) => s.trim())) await prisma.$executeRawUnsafe(statement);
+    // DDL must use one connection, outside Prisma's pooled prepared statements.
+    // Roll back the fixture transition on failure so later tests retain the schema.
+    await prisma.$disconnect();
+    const migrationDb = new DatabaseSync(ctx.url.slice("file:".length));
+    try {
+      migrationDb.exec("BEGIN");
+      for (const model of ["ResumeVariantSection", "ResumeVariantSectionItem", "ResumeExpression"]) {
+        migrationDb.exec(`ALTER TABLE "${model}" DROP COLUMN "hiddenAt"`);
+        migrationDb.exec(`ALTER TABLE "${model}" DROP COLUMN "originRefId"`);
+      }
+      migrationDb.exec(sql);
+      migrationDb.exec("COMMIT");
+    } catch (error) {
+      migrationDb.exec("ROLLBACK");
+      throw error;
+    } finally {
+      migrationDb.close();
+    }
     const graph = await service.getVersion(versionId);
     expect(graph.sections[0].hiddenAt).toBeNull();
     expect(projectResumeVariantText(graph)).toContain("Shipped compilers");
