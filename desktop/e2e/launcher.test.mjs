@@ -1,8 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
+import path from "node:path";
 import { runDesktopE2E, startDiskMonitor, BUILD_DISK_CHECK_INTERVAL_MS } from "./launcher.mjs";
 import { InsufficientDiskSpaceError, MIN_PREFLIGHT_FREE_BYTES, MIN_STAGE_FREE_BYTES } from "./guards.mjs";
+import { SOURCE_REVISION_FILE, sourceRevisionDocument } from "./sourceRevision.mjs";
+
+const GIT_COMMIT = "a".repeat(40);
+function isGitMetadata(file) { return path.basename(String(file)) === ".git"; }
+function sourceDigestOf(files, read) {
+  const hash = createHash("sha256");
+  for (const file of [...new Set(files)].sort()) {
+    hash.update(file);
+    hash.update(read(file));
+  }
+  return hash.digest("hex");
+}
 
 const GiB = 1024 ** 3;
 const RUN_ID = "0acc3444-93b7-4024-9405-2c02e8404ec6";
@@ -56,10 +70,15 @@ function makeDeps(overrides = {}) {
       mkdirSync: (target) => record("mkdir", target),
       copyFileSync: (source, target) => record("copy", target),
       symlinkSync: () => record("symlink"),
-      existsSync: () => false,
+      existsSync: (file) => isGitMetadata(file),
       readFileSync: () => Buffer.from("x"),
+      writeFileSync: (target, content) => record("writeSourceRevision", { target, content }),
     },
-    execFileSync: () => "deadbeef\n",
+    execFileSync: (command, args) => {
+      if (command === "git" && args?.[0] === "rev-parse") return `${GIT_COMMIT}\n`;
+      if (command === "git" && args?.[0] === "ls-files") return Buffer.from("src/app/page.tsx\0");
+      return "";
+    },
     spawnImpl: () => { const child = fakeChild(9000 + children.length); children.push(child); record("spawn", child.pid); return child; },
     killProcessTree: (pid) => { record("killTree", pid); for (const child of children) if (child.pid === pid) child.terminate(1); },
     diskProbe: () => ({ bytes: 64 * GiB, volume: "E:\\", probe: "E:\\" }),
@@ -130,10 +149,10 @@ test("snapshot copies and hashes extension source inputs", async () => {
         assert.ok(args.includes("extensions"), "extension inputs must be selected by git");
         return Buffer.from("extensions/notion/manifest.json\0src/app/page.tsx\0");
       }
-      return "deadbeef\n";
+      return `${GIT_COMMIT}\n`;
     },
   });
-  harness.deps.fs.existsSync = (file) => file.endsWith("manifest.json") || file.endsWith("page.tsx");
+  harness.deps.fs.existsSync = (file) => isGitMetadata(file) || file.endsWith("manifest.json") || file.endsWith("page.tsx");
   harness.deps.fs.readFileSync = (file) => { reads.push(file); return Buffer.from("input"); };
   succeedingBuild(harness);
   const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
@@ -143,6 +162,40 @@ test("snapshot copies and hashes extension source inputs", async () => {
 });
 
 function pathSuffix(relative) { return relative.replaceAll("/", process.platform === "win32" ? "\\" : "/"); }
+
+test("a git checkout records the verified commit into the isolated snapshot", async () => {
+  const harness = makeDeps();
+  const logs = [];
+  harness.deps.onLog = (line) => logs.push(line);
+  succeedingBuild(harness);
+  const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
+  assert.equal(result.ok, true);
+  assert.ok(logs.some((line) => line.includes(`commit=${GIT_COMMIT}`)));
+  const written = details(harness.calls, "writeSourceRevision");
+  assert.equal(written.length, 1);
+  assert.equal(path.basename(written[0].target), SOURCE_REVISION_FILE);
+  assert.equal(JSON.parse(written[0].content).commit, GIT_COMMIT);
+});
+
+test("a snapshot without Git metadata reuses the verified revision and does not call git", async () => {
+  const files = ["src/app/page.tsx"];
+  const bytes = Buffer.from("snapshot-source");
+  const sourceDigest = sourceDigestOf(files, () => bytes);
+  const verified = "b".repeat(40);
+  const document = sourceRevisionDocument({ commit: verified, sourceDigest, files });
+  const harness = makeDeps({
+    execFileSync: () => { throw new Error("Command failed: git rev-parse HEAD"); },
+  });
+  harness.deps.fs.existsSync = (file) => !isGitMetadata(file) && (file.endsWith(SOURCE_REVISION_FILE) || file.endsWith("page.tsx"));
+  harness.deps.fs.readFileSync = (file) => file.endsWith(SOURCE_REVISION_FILE) ? document : bytes;
+  const logs = [];
+  harness.deps.onLog = (line) => logs.push(line);
+  succeedingBuild(harness);
+  const result = await runDesktopE2E({ runId: RUN_ID, root: ROOT, deps: harness.deps });
+  assert.equal(result.ok, true);
+  assert.ok(logs.some((line) => line.includes(`commit=${verified}`)));
+  assert.equal(JSON.parse(details(harness.calls, "writeSourceRevision")[0].content).commit, verified);
+});
 
 test("the run-dir limit aborts before mkdir, spawn or assembly", async () => {
   const harness = makeDeps();

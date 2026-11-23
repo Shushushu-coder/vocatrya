@@ -11,6 +11,13 @@ import {
   freeSpace,
   requireFreeSpace,
 } from "./guards.mjs";
+import {
+  hasOwnGitMetadata,
+  readGitCommit,
+  readVerifiedSourceRevision,
+  revisionPath,
+  sourceRevisionDocument,
+} from "./sourceRevision.mjs";
 
 export const BUILD_DISK_CHECK_INTERVAL_MS = 2000;
 export const BUILD_RECLAIM_TIMEOUT_MS = 20_000;
@@ -101,7 +108,17 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
   const state = { buildChild: null, instance: null, interrupted: false };
   const result = { runId, runRoot, ok: false, primaryError: null, cleanupError: null, diskGuarded: false, buildTerminatedOnCleanup: false };
 
+  // A checkout uses its own .git. A snapshot reuses the file list recorded
+  // with the commit, and does not ask Git (no metadata, and a parent
+  // repository would answer for a different tree).
+  function verifiedSnapshot() {
+    if (hasOwnGitMetadata(root, d.fs)) return null;
+    return readVerifiedSourceRevision(root, d.fs);
+  }
+
   function sourceFiles() {
+    const recorded = verifiedSnapshot();
+    if (recorded) return recorded.files;
     return d.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src", "public", "extensions", "prisma/schema.prisma", "prisma/migrations", "desktop/main", "desktop/assets", "scripts/build-fresh-native-bootstrap.mjs", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "package.json", "package-lock.json", "tsconfig.json", "postcss.config.mjs", "release-notes"], { cwd: root }).toString().split("\0").filter(Boolean);
   }
 
@@ -206,8 +223,10 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
     }
     d.fs.mkdirSync(appRoot, { recursive: true });
     try {
-      const commit = d.execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+      const recorded = verifiedSnapshot();
+      const commit = recorded ? recorded.commit : readGitCommit(root, d.execFileSync);
       const digest = sourceDigest();
+      if (recorded && digest !== recorded.sourceDigest) throw new Error(`Isolated source snapshot does not match the revision verified when it was created (cwd=${root})`);
       d.onLog(`Desktop E2E: commit=${commit} source=${digest} host=Electron mode=fresh-native proxy=${direct ? "DIRECT DIAGNOSTIC" : "SYSTEM (unchanged)"}`);
       d.onLog(`Isolated run: ${runRoot}`);
       // Build from explicit source inputs only. Next otherwise loads the
@@ -223,6 +242,7 @@ export async function runDesktopE2E({ runId, root, direct = false, runBase = pat
       }
       d.fs.symlinkSync(path.join(root, "node_modules"), path.join(appRoot, "node_modules"), "junction");
       if (sourceDigest() !== digest) throw new Error("Source changed while snapshotting; rerun against a stable checkout");
+      d.fs.writeFileSync(revisionPath(appRoot), sourceRevisionDocument({ commit, sourceDigest: digest, files: [...new Set(sourceFiles())] }));
       // Stage-boundary disk checks: each verification sits after one heavy
       // stage and before the next, so a drained volume aborts instead of
       // failing midway. The async build is additionally watched by the
