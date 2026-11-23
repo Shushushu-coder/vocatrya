@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { sealApiKeySecret } from "@/lib/ai/credential-store";
 import { hashPendingState, setNotionOAuthFetch } from "@/lib/extensions/notion/oauth";
-import { disconnectNotion, handleNotionOAuthCallback, resolveNotionAccessToken } from "@/lib/extensions/notion/service";
+import { disconnectNotion, getNotionExtensionState, handleNotionOAuthCallback, resolveNotionAccessToken } from "@/lib/extensions/notion/service";
 
 process.env.ENCRYPTION_KEY = "isolated-notion-lifecycle-test";
 
@@ -35,6 +35,36 @@ function tokenExchangeGate() {
 }
 
 describe("Notion OAuth lifecycle races", () => {
+  it("clears an expired flow so a disconnected account can reconnect", async () => {
+    const { row, db } = await fixture();
+    const sealed = await sealApiKeySecret(JSON.stringify({ v: 1, expiresAt: Date.now() - 1000 }));
+    Object.assign(row, { pendingCipher: sealed.encryptedKey, pendingIv: sealed.iv });
+    expect((await getNotionExtensionState("oauth-test", { db: db as never })).status).toBe("DISCONNECTED");
+    expect(row.pendingCipher).toBeNull();
+    expect(row.pendingStateHash).toBeNull();
+  });
+
+  it("keeps an active flow waiting for authorization", async () => {
+    const { row, db } = await fixture();
+    expect((await getNotionExtensionState("oauth-test", { db: db as never })).status).toBe("CONNECTING");
+    expect(row.pendingCipher).not.toBeNull();
+    expect(db.notionConnection.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not clear a newer flow while cleaning an abandoned flow", async () => {
+    const { row, db } = await fixture();
+    row.pendingCipher = "unreadable-old-flow";
+    const update = db.notionConnection.updateMany.getMockImplementation()!;
+    db.notionConnection.updateMany.mockImplementationOnce(async (args) => {
+      row.pendingCipher = "new-flow";
+      row.pendingStateHash = "new-state";
+      return update(args);
+    });
+    expect((await getNotionExtensionState("oauth-test", { db: db as never })).status).toBe("CONNECTING");
+    expect(row.pendingCipher).toBe("new-flow");
+    expect(row.pendingStateHash).toBe("new-state");
+  });
+
   it("does not restore credentials when disconnect occurs during code exchange", async () => {
     const { row, db } = await fixture();
     const gate = tokenExchangeGate();
