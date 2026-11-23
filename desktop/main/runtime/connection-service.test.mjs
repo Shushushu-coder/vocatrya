@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import serviceModule from "./connection-service.js";
 
@@ -159,6 +160,56 @@ function loginScript(behavior) {
     },
   ];
 }
+
+describe("desktop entry OAuth recovery wiring", () => {
+  it.each(["login", "reconnect"])("forwards the real entry factory's %s URL to the window", async (operation) => {
+    const source = fs.readFileSync(new URL("../main.js", import.meta.url), "utf8");
+    const factorySource = source.match(/  function createConnectionOpsService\(\) \{[\s\S]*?\n  \}/)?.[0];
+    expect(factorySource).toBeTruthy();
+    const runtimeDeps = makeDeps();
+    // Deliberately omit the test helper's notifier: it previously masked
+    // the production entry's misplaced top-level callback.
+    delete runtimeDeps.notifyOAuthUrl;
+    const send = vi.fn();
+    let destroyed = false;
+    const factory = vm.runInNewContext(`(${factorySource})`, {
+      createConnectionService: (options) => createConnectionService({
+        ...options, deps: { ...runtimeDeps, ...options.deps },
+      }),
+      runtimeProfilesRoot: () => profilesRoot,
+      smokeWorkRoot: () => smokeWorkRoot,
+      execWorkRoot: () => path.join(smokeWorkRoot, "exec"),
+      createBackendClient: () => backend,
+      credentialBrokerUrl: () => "http://127.0.0.1:9",
+      backendPort: 3737,
+      internalToken: "synthetic-test-token",
+      mainWindow: { isDestroyed: () => destroyed, webContents: { send } },
+      console: { log: vi.fn() },
+    });
+    const entryService = factory();
+    if (operation === "reconnect") {
+      fs.mkdirSync(path.join(profilesRoot, RP_A), { recursive: true });
+      backend.resolveTicket.mockResolvedValue({
+        ok: true, operationId: "op_rec", operation, backendKind: "CODEX_RUNTIME",
+        connection: connectionRow(),
+      });
+    }
+    const url = "https://auth.openai.com/oauth/authorize?response_type=code&client_id=test&state=test";
+    loginScript((inv) => {
+      inv.onStderr?.(`${url}\n`);
+      inv.onStderr?.(`${url}\n`);
+      return respond({})(inv);
+    });
+    const run = () => operation === "login"
+      ? entryService.startLogin({ backendKind: "CODEX_RUNTIME", ticket: "t1" })
+      : entryService.reconnect({ connectionId: "conn-1", ticket: "t1" });
+    expect((await run()).ok).toBe(true);
+    expect(send).toHaveBeenCalledExactlyOnceWith("aiConnection:oauthUrl", url);
+    destroyed = true;
+    expect((await run()).ok).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("startLogin", () => {
   it("creates a pending profile, runs login + status inside it, then persists", async () => {
