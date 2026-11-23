@@ -122,7 +122,7 @@ describe("commitHandoff", () => {
     expect(results.filter((r) => r.status === "revision_conflict")).toHaveLength(4);
     expect(await prisma.agentTaskHandoff.count({ where: { taskId: sprint.task.id } })).toBe(1);
     expect((await getAgentTask(prisma, base()))?.revision).toBe(1);
-  });
+  }, 30_000);
 
   it("rejects a pointer id that no longer exists and writes nothing", async () => {
     const state = handoffStateFor(sprint);

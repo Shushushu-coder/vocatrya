@@ -174,8 +174,8 @@ describe("capability descriptor parity", () => {
     const antigravity = getAccountRuntimeCapabilities("ANTIGRAVITY_RUNTIME");
     expect(antigravity.implemented).toBe(true);
     expect(antigravity.capabilities.multiAccountIsolation).toBe(false);
-    expect(antigravity.verification.realLoginE2E).toBe("PENDING");
-    expect(antigravity.verification.realInferenceE2E).toBe("PENDING");
+    expect(antigravity.verification.realLoginE2E).toBe("PASS");
+    expect(antigravity.verification.realInferenceE2E).toBe("PASS");
     expect(antigravity.execution.streaming).toBe(false);
     expect(antigravity.execution.streamingVerification).toBe("PENDING");
     expect(antigravity.structuredOutput.verification).toBe("PENDING");

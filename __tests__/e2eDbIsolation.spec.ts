@@ -19,6 +19,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -55,7 +56,7 @@ const junctions = new Set<string>();
 function removeJunctions() {
   for (const link of junctions) {
     try {
-      execFileSync("cmd", ["/c", "rmdir", link], { stdio: "pipe" });
+      unlinkSync(link);
     } catch {
       try {
         rmSync(link, { force: true });
@@ -175,9 +176,7 @@ function installHarness(checkout: string) {
   );
   const link = path.join(checkout, "node_modules");
   if (!existsSync(link)) {
-    execFileSync("cmd", ["/c", "mklink", "/J", link, path.join(WORKTREE, "node_modules")], {
-      stdio: "pipe",
-    });
+    symlinkSync(path.join(WORKTREE, "node_modules"), link, "junction");
     junctions.add(link);
   }
 }
@@ -588,7 +587,7 @@ describe("shared E2E database isolation contract", () => {
 
     it("rejects a junctioned directory chain escaping into a protected checkout", () => {
       const junction = path.join(linked, "prisma", "junc-escape");
-      execFileSync("cmd", ["/c", "mklink", "/J", junction, primary], { stdio: "pipe" });
+      symlinkSync(primary, junction, "junction");
       junctions.add(junction);
       const target = path.join(junction, "prisma", "dev.db");
       const before = snapshotDatabase(path.join(primary, "prisma", "dev.db"));
@@ -958,9 +957,7 @@ describe("shared E2E database isolation contract", () => {
       const evidence = path.join(root, "evidence-junc");
       mkdirSync(evidence, { recursive: true });
       const junction = path.join(evidence, "redirect");
-      execFileSync("cmd", ["/c", "mklink", "/J", junction, path.join(primary, "prisma")], {
-        stdio: "pipe",
-      });
+      symlinkSync(path.join(primary, "prisma"), junction, "junction");
       junctions.add(junction);
       const context = ctx(linked, { R3_EVIDENCE_DIR: evidence });
       const target = path.join(junction, "dev.db");
