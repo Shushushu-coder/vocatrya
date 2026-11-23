@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { FileTextIcon, XIcon } from "lucide-react";
 import { getToolName, isStaticToolUIPart, type UIMessage } from "ai";
 import {
@@ -16,7 +16,10 @@ import { AgentMatchContent } from "@/components/agent/AgentMatchContent";
 import { AgentResultCard } from "@/components/agent/AgentResultCard";
 import { AgentReviewContent } from "@/components/agent/AgentReviewContent";
 import { ResumeEvidenceAssistantText } from "@/components/agent/ResumeEvidenceDraftCard";
-import { hasResumeEvidenceDraftBlock } from "@/lib/agent/skills/resumeEvidence";
+import {
+  deriveResumeEvidenceSession,
+  hasResumeEvidenceDraftBlock,
+} from "@/lib/agent/skills/resumeEvidence";
 import { AgentStatusRow } from "@/components/agent/AgentStatusRow";
 import { AgentToolRunningCard } from "@/components/agent/AgentToolRunningCard";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
@@ -105,6 +108,12 @@ export function AgentChatMessages() {
   const showContinue =
     !nativeSession && !dismissed && endsAwaitingReply(messages, status);
   const thinking = showThinking(messages, status);
+  // Derived once per render: while a run is active, draft-shaped blocks that
+  // dropped the envelope still surface as invalid drafts instead of raw code.
+  const evidenceSession = useMemo(
+    () => deriveResumeEvidenceSession(messages),
+    [messages],
+  );
 
   const dismiss = () => setDismissed(true);
 
@@ -130,7 +139,7 @@ export function AgentChatMessages() {
             })}
           </p>
         ) : null}
-        {messages.map((message) => {
+        {messages.map((message, messageIndex) => {
           // Copy answers only ever covers the message's own visible prose —
           // hidden reasoning, raw tool args and card output stay out of it.
           // Empty answers and pure-tool turns get no action row at all.
@@ -161,9 +170,24 @@ export function AgentChatMessages() {
                     );
                   }
                   // Resume Evidence drafts render as a read-only card; every
-                  // other assistant text is untouched.
-                  if (hasResumeEvidenceDraftBlock(part.text))
-                    return <ResumeEvidenceAssistantText key={i} text={part.text} />;
+                  // other assistant text is untouched. Inside an active run a
+                  // draft-shaped block without the envelope still surfaces
+                  // as an invalid attempt instead of an opaque code block.
+                  const evidenceScoped =
+                    evidenceSession.active &&
+                    messageIndex > evidenceSession.packIndex;
+                  if (
+                    hasResumeEvidenceDraftBlock(part.text, {
+                      sessionScoped: evidenceScoped,
+                    })
+                  )
+                    return (
+                      <ResumeEvidenceAssistantText
+                        key={i}
+                        text={part.text}
+                        sessionScoped={evidenceScoped}
+                      />
+                    );
                   return <AgentMarkdown key={i} text={part.text} />;
                 }
                 if (isAgentPastePart(part))

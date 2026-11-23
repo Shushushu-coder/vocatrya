@@ -37,6 +37,7 @@ import {
   buildPasteContextMessage,
 } from "./prompt";
 import { truncateForModel } from "./paste.server";
+import { RESUME_EVIDENCE_SKILL_ID } from "./skills/resumeEvidence/contract";
 import { buildAgentTools } from "./tools";
 import { createAccountRuntimeLanguageModel } from "./accountLanguageModel";
 import {
@@ -236,6 +237,16 @@ function buildDecisionPrompt({
 const DIRECT_CHAT_CONSTRAINT =
   "This reply has no Vocatrya tools available. Do not claim that a job was saved, a resume was read or reviewed, a match was scored, or a cover letter was generated.";
 
+// The answer tail normally forbids code fences entirely. During an active
+// resume-evidence run (addendum carries the skill id) the contract REQUIRES
+// one fenced ```json draft block per reply — the model cited this very tail
+// as the reason it could not emit the draft (CORE-2 evidence), so the skill
+// session gets an explicit single-block exception.
+const ANSWER_TAIL =
+  "Write your reply to the user now — natural language only, in the conversation's language. Do not emit JSON, tool markup, or code fences.";
+const ANSWER_TAIL_RESUME_EVIDENCE =
+  "Write your reply to the user now — natural language, in the conversation's language, ending with exactly one fenced ```json block holding this round's complete resume-evidence draft as the skill contract requires. That draft block is the only JSON or code you may emit.";
+
 export function buildAnswerPrompt({
   systemPrompt,
   transcript,
@@ -250,7 +261,9 @@ export function buildAnswerPrompt({
     systemPrompt,
     ...(directChat ? [DIRECT_CHAT_CONSTRAINT] : []),
     `Conversation:\n${transcript}`,
-    "Write your reply to the user now — natural language only, in the conversation's language. Do not emit JSON, tool markup, or code fences.",
+    systemPrompt.includes(RESUME_EVIDENCE_SKILL_ID)
+      ? ANSWER_TAIL_RESUME_EVIDENCE
+      : ANSWER_TAIL,
   ].join("\n\n");
 }
 

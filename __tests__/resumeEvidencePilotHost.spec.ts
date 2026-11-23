@@ -200,6 +200,123 @@ describe("Resume Evidence session derivation and prompt injection", () => {
     expect(deriveResumeEvidenceSession(messages).active).toBe(false);
     expect(buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" })).toBe("");
   });
+
+  // CORE-2: the real model emitted contract-shaped json but dropped all five
+  // envelope fields; the strict skill-id gate made the block invisible — no
+  // draft, no errors, no feedback, "这是第一轮" forever.
+  const envelopeLessDraft = () => {
+    const d = { ...baseDraft() } as Record<string, unknown>;
+    for (const k of [
+      "contractVersion",
+      "skillId",
+      "skillVersion",
+      "artifactKind",
+      "exampleKind",
+    ])
+      delete d[k];
+    return d;
+  };
+
+  it("surfaces an envelope-less draft-shaped block as an invalid attempt (CORE-2)", () => {
+    const messages = [u(pack), a("下面是草稿\n" + fenced(envelopeLessDraft()))];
+    const session = deriveResumeEvidenceSession(messages);
+    expect(session.active).toBe(true);
+    expect(session.lastDraft).toBeNull();
+    expect(session.lastAttemptErrors!.length).toBeGreaterThan(0);
+    expect(
+      session.lastAttemptErrors!.some((e) => e.startsWith("skillId")),
+    ).toBe(true);
+    // The failed block's raw text travels back so the model repairs its own
+    // output instead of asking the user to re-paste (the logged complaint).
+    expect(session.lastAttemptRaw).toContain('"session"');
+    const text = buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" });
+    expect(text).toContain("未通过合同校验");
+    expect(text).toContain("skillId");
+  });
+
+  it("recognizes only draft-shaped blocks in a session; ordinary json stays text", () => {
+    const text = "看这里\n" + fenced(envelopeLessDraft());
+    // Outside a session the strict gate is untouched: no skill id, no attempt.
+    expect(splitResumeEvidenceDraftText(text).map((s) => s.kind)).toEqual(["text"]);
+    expect(hasResumeEvidenceDraftBlock(text)).toBe(false);
+    // Inside a session the same block is a failed draft attempt.
+    expect(
+      splitResumeEvidenceDraftText(text, { sessionScoped: true }).map((s) => s.kind),
+    ).toEqual(["text", "invalid"]);
+    expect(hasResumeEvidenceDraftBlock(text, { sessionScoped: true })).toBe(true);
+    // Unrelated json never becomes a draft attempt, even in-session.
+    expect(
+      splitResumeEvidenceDraftText('```json\n{"a":1}\n```', { sessionScoped: true }).map(
+        (s) => s.kind,
+      ),
+    ).toEqual(["text"]);
+    expect(
+      splitResumeEvidenceDraftText('```json\n{"session":{}}\n```', {
+        sessionScoped: true,
+      }).map((s) => s.kind),
+    ).toEqual(["text"]);
+    // Malformed json still carrying the draft signature → invalid attempt.
+    const broken = '```json\n{"session":{"stage":"intake", oops\n```';
+    expect(
+      splitResumeEvidenceDraftText(broken, { sessionScoped: true }).map((s) => s.kind),
+    ).toEqual(["invalid"]);
+    expect(splitResumeEvidenceDraftText(broken).map((s) => s.kind)).toEqual(["text"]);
+  });
+
+  it("re-injects the authorization pack and the latest valid draft verbatim", () => {
+    const draft = baseDraft();
+    draft.session.stage = "clarifying";
+    const messages = [u(pack), a(fenced(draft)), u("继续")];
+    const text = buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" });
+    // The runtime may trim older turns; the state block carries the
+    // authoritative material so the model can rebuild from it.
+    expect(text).toContain("【本次授权包原文");
+    expect(text).toContain("Payments rewrite");
+    expect(text).toContain("【上一份已校验草稿的完整内容");
+    expect(text).toContain(JSON.stringify(draft));
+    const firstRound = buildResumeEvidencePromptAddendum({
+      messages: [u(pack)],
+      agentRole: "pilot",
+    });
+    expect(firstRound).toContain("Payments rewrite");
+    expect(firstRound).not.toContain("已校验草稿");
+  });
+
+  it("keeps the valid state while reporting a newer envelope-less attempt", () => {
+    const draft = baseDraft();
+    draft.session.stage = "clarifying";
+    const messages = [
+      u(pack),
+      a(fenced(draft)),
+      u("修改一下"),
+      a(fenced(envelopeLessDraft())),
+    ];
+    const session = deriveResumeEvidenceSession(messages);
+    expect(session.lastDraft?.session.stage).toBe("clarifying");
+    expect(session.lastAttemptErrors!.length).toBeGreaterThan(0);
+    const text = buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" });
+    expect(text).toContain("stage=clarifying");
+    expect(text).toContain("未通过合同校验");
+  });
+
+  it("clears an envelope-less failure once a newer complete draft validates", () => {
+    const draft = baseDraft();
+    draft.session.stage = "clarifying";
+    draft.session.roundIndex = 1;
+    const messages = [
+      u(pack),
+      a(fenced(envelopeLessDraft())),
+      u("我自己做的切换"),
+      a(fenced(draft)),
+    ];
+    const session = deriveResumeEvidenceSession(messages);
+    expect(session.lastDraft?.session.roundIndex).toBe(1);
+    expect(session.lastAttemptErrors).toBeNull();
+    expect(session.lastAttemptRaw).toBeNull();
+    expect(
+      buildResumeEvidencePromptAddendum({ messages, agentRole: "pilot" }),
+    ).not.toContain("未通过合同校验");
+  });
 });
 
 describe("Resume Evidence host boundaries", () => {

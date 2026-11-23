@@ -1,6 +1,5 @@
 import {
   FACT_SLOTS,
-  RESUME_EVIDENCE_SKILL_ID,
   type ResumeEvidenceDraft,
 } from "./contract";
 import { splitResumeEvidenceDraftText } from "./draftText";
@@ -38,6 +37,12 @@ export interface ResumeEvidenceSession {
   active: boolean;
   /** Index of the user message that carries the authorization pack, or -1. */
   packIndex: number;
+  /**
+   * Verbatim text of the authorization-pack user message ("" when none).
+   * The runtime may trim older turns, so the state block re-injects it —
+   * the pack is the session's authoritative source material.
+   */
+  packText: string;
   /** Latest draft that passed validation after the pack, if any. */
   lastDraft: ResumeEvidenceDraft | null;
   /** roundIndex of the latest summarizing draft (0 when none). */
@@ -48,6 +53,8 @@ export interface ResumeEvidenceSession {
    * sees the UI's invalid card, so the state block feeds these back to it.
    */
   lastAttemptErrors: string[] | null;
+  /** Raw text of that failed draft block, so the model can fix its own output. */
+  lastAttemptRaw: string | null;
 }
 
 export function deriveResumeEvidenceSession(
@@ -66,34 +73,52 @@ export function deriveResumeEvidenceSession(
     return {
       active: false,
       packIndex,
+      packText: "",
       lastDraft: null,
       lastSummaryRound: 0,
       lastAttemptErrors: null,
+      lastAttemptRaw: null,
     };
   }
   let lastDraft: ResumeEvidenceDraft | null = null;
   let lastSummaryRound = 0;
   let lastAttemptErrors: string[] | null = null;
+  let lastAttemptRaw: string | null = null;
   for (let i = packIndex + 1; i < messages.length; i++) {
     const m = messages[i];
     if (m.role !== "assistant") continue;
     const text = textOf(m);
-    if (!text.includes(RESUME_EVIDENCE_SKILL_ID)) continue;
-    for (const seg of splitResumeEvidenceDraftText(text)) {
+    // Inside an active run the assistant's fenced json output can only be a
+    // draft attempt — draft shape is enough; a missing envelope must surface
+    // as feedback instead of being silently skipped (CORE-2).
+    if (!text.includes("```")) continue;
+    for (const seg of splitResumeEvidenceDraftText(text, {
+      sessionScoped: true,
+    })) {
       if (seg.kind === "draft") {
         lastDraft = seg.draft;
         lastAttemptErrors = null;
+        lastAttemptRaw = null;
         if (seg.draft.session.stage === "summarizing") {
           lastSummaryRound = seg.draft.session.roundIndex;
         }
       } else if (seg.kind === "invalid") {
         lastAttemptErrors = seg.errors;
+        lastAttemptRaw = seg.raw;
       }
     }
   }
   // A stopped run hands the conversation back to normal Pilot.
   const active = lastDraft?.session.stage !== "stopped";
-  return { active, packIndex, lastDraft, lastSummaryRound, lastAttemptErrors };
+  return {
+    active,
+    packIndex,
+    packText: textOf(messages[packIndex]),
+    lastDraft,
+    lastSummaryRound,
+    lastAttemptErrors,
+    lastAttemptRaw,
+  };
 }
 
 /** Slot statuses implied by a draft: confirmed facts / skips / pending-open. */
@@ -139,17 +164,39 @@ export function flowStateFromDraft(
 }
 
 function stateBlock(session: ResumeEvidenceSession): string {
+  // The runtime may trim older turns, so the authoritative material travels
+  // with the state block: the model can always rebuild from it instead of
+  // asking the user to re-paste (CORE-2 deadlock evidence).
+  const attachments = [
+    "【本次授权包原文：早期轮次即使被省略，以下内容仍是本会话的唯一授权材料】",
+    session.packText,
+  ];
+  const draft = session.lastDraft;
+  if (draft) {
+    attachments.push(
+      "【上一份已校验草稿的完整内容：以此为权威草稿续写，不要从头编造】",
+      "```json",
+      JSON.stringify(draft),
+      "```",
+    );
+  }
   const feedback = session.lastAttemptErrors?.length
     ? [
         `上一份草稿块未通过合同校验（共 ${session.lastAttemptErrors.length} 处）：`,
         ...session.lastAttemptErrors.slice(0, 5),
+        ...(session.lastAttemptRaw
+          ? [
+              "上一份未通过的草稿块原文（修正后重新输出完整草稿块）：",
+              session.lastAttemptRaw,
+            ]
+          : []),
         "按字段清单修正后重新输出完整草稿块；不要放弃使用本会话已有的授权材料。",
       ]
     : [];
-  const draft = session.lastDraft;
   if (!draft) {
     return [
       "【技能运行状态】尚无已校验的草稿：这是第一轮。按 stage=intake 处理，不要假设任何点已确认或已跳过。",
+      ...attachments,
       ...feedback,
     ].join("\n");
   }
@@ -162,6 +209,7 @@ function stateBlock(session: ResumeEvidenceSession): string {
     `个人贡献=${state.personalContribution}；行动=${state.action}；结果=${state.result}；时间=${state.timeRange}。`,
     `停止条件${sufficiency.met ? "已满足" : `未满足，缺：${sufficiency.missingSlots.join("、")}`}；按顺序下一个重点：${focus ?? "无"}。`,
     "沿用上一份草稿里已确认、已跳过和冲突的内容，每次输出完整的最新草稿；不要重问已确认或已跳过的点。",
+    ...attachments,
     ...feedback,
   ].join("\n");
 }
