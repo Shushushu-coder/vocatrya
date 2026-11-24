@@ -1,101 +1,101 @@
 {
   "prompts": {
-    "null|fresh=false|notion=none|zh-CN": "d11546b0fe51a8cbde15ce3a57f3b5dd41ae304d848fab1750f184ba2d9c9e32",
-    "null|fresh=false|notion=none|en": "32b40a1192b720175a22f16049fc5a8c1ce1c493d0eb4ea911e5645d27181697",
-    "null|fresh=false|notion=0|zh-CN": "d11546b0fe51a8cbde15ce3a57f3b5dd41ae304d848fab1750f184ba2d9c9e32",
-    "null|fresh=false|notion=0|en": "32b40a1192b720175a22f16049fc5a8c1ce1c493d0eb4ea911e5645d27181697",
-    "null|fresh=false|notion=7|zh-CN": "50ec6f74e3aaad3b1a2ad4f4d2fa4a098cfce1d8f9028cc0f3eae270b16c3be3",
-    "null|fresh=false|notion=7|en": "1a3c3d045941c93cbb02a0e598ab37092bf4284f919e2e7bda07c73328e6eb57",
-    "null|fresh=false|notion=1|zh-CN": "5904dd45fa937bd5becce3a017abf027d72b9978f3bd6512167c09260c194819",
-    "null|fresh=false|notion=1|en": "6fd007496ac2eb0da85750748da8771aa8d0de9840ef5bceb43c446f23942ee8",
-    "null|fresh=true|notion=none|zh-CN": "ebac8a5e2b084f5b67e3035897c88e575b46f995506144aa5484f896b9384525",
-    "null|fresh=true|notion=none|en": "fc17ae7f89bb32649318896b776ddc5427740ed05c9d18c2dcf4fa7854fdef75",
-    "null|fresh=true|notion=0|zh-CN": "ebac8a5e2b084f5b67e3035897c88e575b46f995506144aa5484f896b9384525",
-    "null|fresh=true|notion=0|en": "fc17ae7f89bb32649318896b776ddc5427740ed05c9d18c2dcf4fa7854fdef75",
-    "null|fresh=true|notion=7|zh-CN": "761bcbba7261e0c5b8ed7a2ecfbf482b90ef25157ae5bb3d3179933c48862ffa",
-    "null|fresh=true|notion=7|en": "0f1d5967b82e7b21647853e08b87b482e1f1fa5769d4cfe84fbd122c4b3b0bd9",
-    "null|fresh=true|notion=1|zh-CN": "d6af650e96eca0abefeee687008dfb174dc81cc2bed6c43b48cc9b7be1fcccf5",
-    "null|fresh=true|notion=1|en": "9fe0b9cfcb9b3a840dc67efbd6e34ca889c8b45e2f497045c4555550a75a4d9c",
-    "undefined|fresh=false|notion=none|zh-CN": "d11546b0fe51a8cbde15ce3a57f3b5dd41ae304d848fab1750f184ba2d9c9e32",
-    "undefined|fresh=false|notion=none|en": "32b40a1192b720175a22f16049fc5a8c1ce1c493d0eb4ea911e5645d27181697",
-    "undefined|fresh=false|notion=0|zh-CN": "d11546b0fe51a8cbde15ce3a57f3b5dd41ae304d848fab1750f184ba2d9c9e32",
-    "undefined|fresh=false|notion=0|en": "32b40a1192b720175a22f16049fc5a8c1ce1c493d0eb4ea911e5645d27181697",
-    "undefined|fresh=false|notion=7|zh-CN": "50ec6f74e3aaad3b1a2ad4f4d2fa4a098cfce1d8f9028cc0f3eae270b16c3be3",
-    "undefined|fresh=false|notion=7|en": "1a3c3d045941c93cbb02a0e598ab37092bf4284f919e2e7bda07c73328e6eb57",
-    "undefined|fresh=false|notion=1|zh-CN": "5904dd45fa937bd5becce3a017abf027d72b9978f3bd6512167c09260c194819",
-    "undefined|fresh=false|notion=1|en": "6fd007496ac2eb0da85750748da8771aa8d0de9840ef5bceb43c446f23942ee8",
-    "undefined|fresh=true|notion=none|zh-CN": "ebac8a5e2b084f5b67e3035897c88e575b46f995506144aa5484f896b9384525",
-    "undefined|fresh=true|notion=none|en": "fc17ae7f89bb32649318896b776ddc5427740ed05c9d18c2dcf4fa7854fdef75",
-    "undefined|fresh=true|notion=0|zh-CN": "ebac8a5e2b084f5b67e3035897c88e575b46f995506144aa5484f896b9384525",
-    "undefined|fresh=true|notion=0|en": "fc17ae7f89bb32649318896b776ddc5427740ed05c9d18c2dcf4fa7854fdef75",
-    "undefined|fresh=true|notion=7|zh-CN": "761bcbba7261e0c5b8ed7a2ecfbf482b90ef25157ae5bb3d3179933c48862ffa",
-    "undefined|fresh=true|notion=7|en": "0f1d5967b82e7b21647853e08b87b482e1f1fa5769d4cfe84fbd122c4b3b0bd9",
-    "undefined|fresh=true|notion=1|zh-CN": "d6af650e96eca0abefeee687008dfb174dc81cc2bed6c43b48cc9b7be1fcccf5",
-    "undefined|fresh=true|notion=1|en": "9fe0b9cfcb9b3a840dc67efbd6e34ca889c8b45e2f497045c4555550a75a4d9c",
-    "insight|fresh=false|notion=none|zh-CN": "1b1b7607d22c19efe9fbfdebc9232bb2908998f598cc02a13df414f57bae5e2f",
-    "insight|fresh=false|notion=none|en": "2ecef0c4ebb83d2b74f488ff1371176325c94237fcf5b8d7a7673bde81b909e2",
-    "insight|fresh=false|notion=0|zh-CN": "1b1b7607d22c19efe9fbfdebc9232bb2908998f598cc02a13df414f57bae5e2f",
-    "insight|fresh=false|notion=0|en": "2ecef0c4ebb83d2b74f488ff1371176325c94237fcf5b8d7a7673bde81b909e2",
-    "insight|fresh=false|notion=7|zh-CN": "7b3dd7b1bdf6af82c243031d27d65fdfdcfaaae7cb2e8695b0f65164c97c91ad",
-    "insight|fresh=false|notion=7|en": "287fd228400924d2a34d3251bbf7c33c0c9f66fb433e8523798c813e039157b4",
-    "insight|fresh=false|notion=1|zh-CN": "bde7aeedcb1a76b981c67b027b124e131acf47d3bb841e78669f98bc89f15e0f",
-    "insight|fresh=false|notion=1|en": "108065f35aea4af19a01ad49014e3604a29f7da804abb50a5069e57e683c2d12",
-    "insight|fresh=true|notion=none|zh-CN": "7f867342e9a612170a9b91b2705f0d3205d82bf6f4428ba8a9c34a73516e376a",
-    "insight|fresh=true|notion=none|en": "b90222f1eb7d4ab28611f2d925d46c7e8c6dcf3df6c7868b5e8b895839ee73d5",
-    "insight|fresh=true|notion=0|zh-CN": "7f867342e9a612170a9b91b2705f0d3205d82bf6f4428ba8a9c34a73516e376a",
-    "insight|fresh=true|notion=0|en": "b90222f1eb7d4ab28611f2d925d46c7e8c6dcf3df6c7868b5e8b895839ee73d5",
-    "insight|fresh=true|notion=7|zh-CN": "779b5eacff0310aaee158d38fa94f6e36fe4c6262c380cf1c4d4f172e62a7dbb",
-    "insight|fresh=true|notion=7|en": "fb3ffddfb0b19c834f2fb2cb387c77f2473aebf96ac5a8994e90d61fe1ec6da0",
-    "insight|fresh=true|notion=1|zh-CN": "a60a596751c5af5c85f3c5d7d67de1d8d18bf410263f8c77ccd8630dce50b3e9",
-    "insight|fresh=true|notion=1|en": "2d3f03aa82e3a986aef91817deb6bc46ed51ca3ca3ae373625f8df2d5fc15d64",
-    "pilot|fresh=false|notion=none|zh-CN": "3df1b1e3ced21d8f75682d804d5ae28d4ee172f367ac13cf15484121c208de43",
-    "pilot|fresh=false|notion=none|en": "948ab9b53f0863f4a53581917b6f2399c52198271b50ddfde6d08355cdc87af9",
-    "pilot|fresh=false|notion=0|zh-CN": "3df1b1e3ced21d8f75682d804d5ae28d4ee172f367ac13cf15484121c208de43",
-    "pilot|fresh=false|notion=0|en": "948ab9b53f0863f4a53581917b6f2399c52198271b50ddfde6d08355cdc87af9",
-    "pilot|fresh=false|notion=7|zh-CN": "698b1c3b275b632813ac309eafec453a66f7c105640aa316ce31c919f19557ee",
-    "pilot|fresh=false|notion=7|en": "14012f483dcd1b9adeaf23fbce575984539a9b7b3528a53706725be306315412",
-    "pilot|fresh=false|notion=1|zh-CN": "6d72e8e78709a8a3fbc291aea5e86a3935a2ba4ee7ed3a477d521266d71892ae",
-    "pilot|fresh=false|notion=1|en": "8aa9606db05f9381688526061e1c85fa941a9f472c50500364fc3929f1cf9b40",
-    "pilot|fresh=true|notion=none|zh-CN": "c03898f0bc15b838671dbf8c34bef5f33d99ad44dc8adf454aaa6741dd9e5272",
-    "pilot|fresh=true|notion=none|en": "4022d7061b86622b7f46967b597bc76a2f13bd0030cb01fdd97626aab9b5494f",
-    "pilot|fresh=true|notion=0|zh-CN": "c03898f0bc15b838671dbf8c34bef5f33d99ad44dc8adf454aaa6741dd9e5272",
-    "pilot|fresh=true|notion=0|en": "4022d7061b86622b7f46967b597bc76a2f13bd0030cb01fdd97626aab9b5494f",
-    "pilot|fresh=true|notion=7|zh-CN": "11099a737c9368fc54cbc22b383a66e8d56a2a692ac57263561e39c71c90af07",
-    "pilot|fresh=true|notion=7|en": "3343e5ec8ab3e375e3002c361b95244c0d6dbbf3bd8d096905aedee6d3ebb8a6",
-    "pilot|fresh=true|notion=1|zh-CN": "79849e9766cbfec48076b53000f966f3f42a7c6d18b5dbd9f08bb0ab8ff59633",
-    "pilot|fresh=true|notion=1|en": "c87f74a595235c640933ad2d51d41afdefe4e65da45d19115f261a7a8faf2c19",
-    "reflect|fresh=false|notion=none|zh-CN": "f15b85b0b6608446f3c34c1001d28236eb896df48f6fdd59c34af84809a81deb",
-    "reflect|fresh=false|notion=none|en": "d219d24a7eceea21496dde7890233dff54769869c5fc8a548d743ef279f70690",
-    "reflect|fresh=false|notion=0|zh-CN": "f15b85b0b6608446f3c34c1001d28236eb896df48f6fdd59c34af84809a81deb",
-    "reflect|fresh=false|notion=0|en": "d219d24a7eceea21496dde7890233dff54769869c5fc8a548d743ef279f70690",
-    "reflect|fresh=false|notion=7|zh-CN": "46cde3a65dbde9d2c6ab338fc9a6a82b0dcbdbd4c37064b88c49c76751eb2ec5",
-    "reflect|fresh=false|notion=7|en": "44a916d514ddc936827b9b73921a67b2380eb414f2c715c7ecb1e3c6f2ef6c87",
-    "reflect|fresh=false|notion=1|zh-CN": "50bd3f19e18c2913df1d1c284b0cf79de533683f7c57a19accdf809768282316",
-    "reflect|fresh=false|notion=1|en": "493d654f7269414d917d46dc05a6df7b813cdc0a1fdf002fd0c95a2cba2efcf2",
-    "reflect|fresh=true|notion=none|zh-CN": "f15b85b0b6608446f3c34c1001d28236eb896df48f6fdd59c34af84809a81deb",
-    "reflect|fresh=true|notion=none|en": "d219d24a7eceea21496dde7890233dff54769869c5fc8a548d743ef279f70690",
-    "reflect|fresh=true|notion=0|zh-CN": "f15b85b0b6608446f3c34c1001d28236eb896df48f6fdd59c34af84809a81deb",
-    "reflect|fresh=true|notion=0|en": "d219d24a7eceea21496dde7890233dff54769869c5fc8a548d743ef279f70690",
-    "reflect|fresh=true|notion=7|zh-CN": "46cde3a65dbde9d2c6ab338fc9a6a82b0dcbdbd4c37064b88c49c76751eb2ec5",
-    "reflect|fresh=true|notion=7|en": "44a916d514ddc936827b9b73921a67b2380eb414f2c715c7ecb1e3c6f2ef6c87",
-    "reflect|fresh=true|notion=1|zh-CN": "50bd3f19e18c2913df1d1c284b0cf79de533683f7c57a19accdf809768282316",
-    "reflect|fresh=true|notion=1|en": "493d654f7269414d917d46dc05a6df7b813cdc0a1fdf002fd0c95a2cba2efcf2",
-    "bogus|fresh=false|notion=none|zh-CN": "d11546b0fe51a8cbde15ce3a57f3b5dd41ae304d848fab1750f184ba2d9c9e32",
-    "bogus|fresh=false|notion=none|en": "32b40a1192b720175a22f16049fc5a8c1ce1c493d0eb4ea911e5645d27181697",
-    "bogus|fresh=false|notion=0|zh-CN": "d11546b0fe51a8cbde15ce3a57f3b5dd41ae304d848fab1750f184ba2d9c9e32",
-    "bogus|fresh=false|notion=0|en": "32b40a1192b720175a22f16049fc5a8c1ce1c493d0eb4ea911e5645d27181697",
-    "bogus|fresh=false|notion=7|zh-CN": "50ec6f74e3aaad3b1a2ad4f4d2fa4a098cfce1d8f9028cc0f3eae270b16c3be3",
-    "bogus|fresh=false|notion=7|en": "1a3c3d045941c93cbb02a0e598ab37092bf4284f919e2e7bda07c73328e6eb57",
-    "bogus|fresh=false|notion=1|zh-CN": "5904dd45fa937bd5becce3a017abf027d72b9978f3bd6512167c09260c194819",
-    "bogus|fresh=false|notion=1|en": "6fd007496ac2eb0da85750748da8771aa8d0de9840ef5bceb43c446f23942ee8",
-    "bogus|fresh=true|notion=none|zh-CN": "ebac8a5e2b084f5b67e3035897c88e575b46f995506144aa5484f896b9384525",
-    "bogus|fresh=true|notion=none|en": "fc17ae7f89bb32649318896b776ddc5427740ed05c9d18c2dcf4fa7854fdef75",
-    "bogus|fresh=true|notion=0|zh-CN": "ebac8a5e2b084f5b67e3035897c88e575b46f995506144aa5484f896b9384525",
-    "bogus|fresh=true|notion=0|en": "fc17ae7f89bb32649318896b776ddc5427740ed05c9d18c2dcf4fa7854fdef75",
-    "bogus|fresh=true|notion=7|zh-CN": "761bcbba7261e0c5b8ed7a2ecfbf482b90ef25157ae5bb3d3179933c48862ffa",
-    "bogus|fresh=true|notion=7|en": "0f1d5967b82e7b21647853e08b87b482e1f1fa5769d4cfe84fbd122c4b3b0bd9",
-    "bogus|fresh=true|notion=1|zh-CN": "d6af650e96eca0abefeee687008dfb174dc81cc2bed6c43b48cc9b7be1fcccf5",
-    "bogus|fresh=true|notion=1|en": "9fe0b9cfcb9b3a840dc67efbd6e34ca889c8b45e2f497045c4555550a75a4d9c"
+    "null|fresh=false|notion=none|zh-CN": "7ebe0f31509b5eb1b40851f0aa4198c2adad388dbbc22901287f17c3d10f652b",
+    "null|fresh=false|notion=none|en": "84dcc2f9008e62bcff074114252c7c072f2bb021500d08c24353328d4f5a2aa5",
+    "null|fresh=false|notion=0|zh-CN": "7ebe0f31509b5eb1b40851f0aa4198c2adad388dbbc22901287f17c3d10f652b",
+    "null|fresh=false|notion=0|en": "84dcc2f9008e62bcff074114252c7c072f2bb021500d08c24353328d4f5a2aa5",
+    "null|fresh=false|notion=7|zh-CN": "f9258cade5f34040156fc51abb0195836df6d5d51747b78ed20ca4bfdc87fc33",
+    "null|fresh=false|notion=7|en": "3592c6651c9f54faec1dc8c9b9694fcbbea0a8526cc06e5b5d29cce7c52be2be",
+    "null|fresh=false|notion=1|zh-CN": "ed1d84d7316c42feab9fc58f14bcfd5d31ce3af8f9a64f33744e90ff964e7737",
+    "null|fresh=false|notion=1|en": "5256fc7fd3e010ea8fd2509a9bda47bd259977c8c5b3d05229e5d1fad93fe946",
+    "null|fresh=true|notion=none|zh-CN": "dd6de123de916aea533b67d8f23cec2fd85fb381d7906148a8d0401125ffe8f9",
+    "null|fresh=true|notion=none|en": "b77923ac93ec540c5b1083d81660316666bf824c8140c2f0b779620d88e8f1a7",
+    "null|fresh=true|notion=0|zh-CN": "dd6de123de916aea533b67d8f23cec2fd85fb381d7906148a8d0401125ffe8f9",
+    "null|fresh=true|notion=0|en": "b77923ac93ec540c5b1083d81660316666bf824c8140c2f0b779620d88e8f1a7",
+    "null|fresh=true|notion=7|zh-CN": "9a64b2ad764229399b9527fc77a5fe2e76ca20a25d03b97d5441674e5af613a4",
+    "null|fresh=true|notion=7|en": "a72029c02a3c6773f04800659a77ec41e9ad48c6c67b093e42c7c57b46ade680",
+    "null|fresh=true|notion=1|zh-CN": "177c94d341ff85c28db4ce7ec9f535679e809fd9449dd748c3331a96b8081f7c",
+    "null|fresh=true|notion=1|en": "06538d1c1dc8e3eaf768baee908492ade067b1a16c5d90ff5c4c7ec2df9402f9",
+    "undefined|fresh=false|notion=none|zh-CN": "7ebe0f31509b5eb1b40851f0aa4198c2adad388dbbc22901287f17c3d10f652b",
+    "undefined|fresh=false|notion=none|en": "84dcc2f9008e62bcff074114252c7c072f2bb021500d08c24353328d4f5a2aa5",
+    "undefined|fresh=false|notion=0|zh-CN": "7ebe0f31509b5eb1b40851f0aa4198c2adad388dbbc22901287f17c3d10f652b",
+    "undefined|fresh=false|notion=0|en": "84dcc2f9008e62bcff074114252c7c072f2bb021500d08c24353328d4f5a2aa5",
+    "undefined|fresh=false|notion=7|zh-CN": "f9258cade5f34040156fc51abb0195836df6d5d51747b78ed20ca4bfdc87fc33",
+    "undefined|fresh=false|notion=7|en": "3592c6651c9f54faec1dc8c9b9694fcbbea0a8526cc06e5b5d29cce7c52be2be",
+    "undefined|fresh=false|notion=1|zh-CN": "ed1d84d7316c42feab9fc58f14bcfd5d31ce3af8f9a64f33744e90ff964e7737",
+    "undefined|fresh=false|notion=1|en": "5256fc7fd3e010ea8fd2509a9bda47bd259977c8c5b3d05229e5d1fad93fe946",
+    "undefined|fresh=true|notion=none|zh-CN": "dd6de123de916aea533b67d8f23cec2fd85fb381d7906148a8d0401125ffe8f9",
+    "undefined|fresh=true|notion=none|en": "b77923ac93ec540c5b1083d81660316666bf824c8140c2f0b779620d88e8f1a7",
+    "undefined|fresh=true|notion=0|zh-CN": "dd6de123de916aea533b67d8f23cec2fd85fb381d7906148a8d0401125ffe8f9",
+    "undefined|fresh=true|notion=0|en": "b77923ac93ec540c5b1083d81660316666bf824c8140c2f0b779620d88e8f1a7",
+    "undefined|fresh=true|notion=7|zh-CN": "9a64b2ad764229399b9527fc77a5fe2e76ca20a25d03b97d5441674e5af613a4",
+    "undefined|fresh=true|notion=7|en": "a72029c02a3c6773f04800659a77ec41e9ad48c6c67b093e42c7c57b46ade680",
+    "undefined|fresh=true|notion=1|zh-CN": "177c94d341ff85c28db4ce7ec9f535679e809fd9449dd748c3331a96b8081f7c",
+    "undefined|fresh=true|notion=1|en": "06538d1c1dc8e3eaf768baee908492ade067b1a16c5d90ff5c4c7ec2df9402f9",
+    "insight|fresh=false|notion=none|zh-CN": "f0b9dc21f2f97970bcbdbe2fdac8e9604af5a55d9a0d4b66e665c6edc6e940b8",
+    "insight|fresh=false|notion=none|en": "7058f0f303f1e1dbd23f1ad38f153f0fb9cacd97ff374d507dbdb6a082880bdd",
+    "insight|fresh=false|notion=0|zh-CN": "f0b9dc21f2f97970bcbdbe2fdac8e9604af5a55d9a0d4b66e665c6edc6e940b8",
+    "insight|fresh=false|notion=0|en": "7058f0f303f1e1dbd23f1ad38f153f0fb9cacd97ff374d507dbdb6a082880bdd",
+    "insight|fresh=false|notion=7|zh-CN": "cacec62cb8357d2fb4e139a723b9d80c187933f621bf8f6cf9fe83bc1decae2e",
+    "insight|fresh=false|notion=7|en": "f190a4aeabe147b4e4635249d9d32ff0e4416502028f786bdacc55b78993b847",
+    "insight|fresh=false|notion=1|zh-CN": "7e9dafd4308fe6a40139f6fd2079b953ec7092b227f9b4668b837cbd2aa8748c",
+    "insight|fresh=false|notion=1|en": "5acc4d88a5b37d30ac9184d517cbcff8b8ca78e15ef04ff8ddf93b1759a524f5",
+    "insight|fresh=true|notion=none|zh-CN": "59eba3f1cec45b88da1cf6ae767399e8e9b9d686767f5d1ce9d0d2442bebfda2",
+    "insight|fresh=true|notion=none|en": "26fb086b3364cc7efe05cbc31488f47758acebddaae72ada1187d9a73df0fc57",
+    "insight|fresh=true|notion=0|zh-CN": "59eba3f1cec45b88da1cf6ae767399e8e9b9d686767f5d1ce9d0d2442bebfda2",
+    "insight|fresh=true|notion=0|en": "26fb086b3364cc7efe05cbc31488f47758acebddaae72ada1187d9a73df0fc57",
+    "insight|fresh=true|notion=7|zh-CN": "758dfc4081af31de546dbb5e75dec70938ed39e158575ff70719c536291d64a2",
+    "insight|fresh=true|notion=7|en": "f2f9fb9667ce80f285eea07d466de51b134c05821dc5c1598f45d8c30878cb0e",
+    "insight|fresh=true|notion=1|zh-CN": "688c722d2c42c31c04c7aaff91c81c0d2a0a1df7725764f5e7ff1ba91b884967",
+    "insight|fresh=true|notion=1|en": "d13c880f980520405c730b811bce12474e56163557827bd9ac8a57c957a755a4",
+    "pilot|fresh=false|notion=none|zh-CN": "7cca5ff70d932a11ca3828a83fe24d56c4c6407c83983daf0e2e9e60f3a48af7",
+    "pilot|fresh=false|notion=none|en": "190a7c9d87e37adfd79d78f0ee20e69373e30af6d7a4e5aae6be3ef6d1c27f81",
+    "pilot|fresh=false|notion=0|zh-CN": "7cca5ff70d932a11ca3828a83fe24d56c4c6407c83983daf0e2e9e60f3a48af7",
+    "pilot|fresh=false|notion=0|en": "190a7c9d87e37adfd79d78f0ee20e69373e30af6d7a4e5aae6be3ef6d1c27f81",
+    "pilot|fresh=false|notion=7|zh-CN": "cb2b3f86e0f177e267ffc0530e9b93d0ca195a7b57511b4ccfdc7be800b75970",
+    "pilot|fresh=false|notion=7|en": "6151baec00c5b85d09a948f006c4bfd09555ca95b963e12c61a085e47c6fc050",
+    "pilot|fresh=false|notion=1|zh-CN": "54f9ff115b59f763e54e62de60dfeb7111e3fbc39664c0ef7c9ff49fe4c68f48",
+    "pilot|fresh=false|notion=1|en": "3fabfbd284aeadaf6a15d9831df1d13b23c190cfecd128b759cd8c37eacb1660",
+    "pilot|fresh=true|notion=none|zh-CN": "fdbdeaf79cce42899b0344bf46a82852e74a5624619a8d8c1b510c70dcaa2d34",
+    "pilot|fresh=true|notion=none|en": "5fac6dffab01a61c5b2f329b594907ee8115b273bf1f1acd39f62de7784d76e1",
+    "pilot|fresh=true|notion=0|zh-CN": "fdbdeaf79cce42899b0344bf46a82852e74a5624619a8d8c1b510c70dcaa2d34",
+    "pilot|fresh=true|notion=0|en": "5fac6dffab01a61c5b2f329b594907ee8115b273bf1f1acd39f62de7784d76e1",
+    "pilot|fresh=true|notion=7|zh-CN": "1e3b0581d85762a97ec5afedcf95849b3d8f6b11686c68661cbf690efb45ce32",
+    "pilot|fresh=true|notion=7|en": "421dcc5b3378e9573aa1d64a61530e21a48df7764299d43a66efca68b46ccc99",
+    "pilot|fresh=true|notion=1|zh-CN": "2194df77742c2903decddf71fb4e29c18096a9fdd4710328758aac02da9477a9",
+    "pilot|fresh=true|notion=1|en": "f6ea78a4e07bb306f27a6e796963f06128d09b6a601edd0d49c1543917dcc575",
+    "reflect|fresh=false|notion=none|zh-CN": "a4ad4c7ec45e24b426eaf32bce0a31ec79fc90dad4b394d5e8f1baee34f0040f",
+    "reflect|fresh=false|notion=none|en": "57465541b521fcc913d22be80e7037022be20b74fb3e0da16a3a8565411d0e2b",
+    "reflect|fresh=false|notion=0|zh-CN": "a4ad4c7ec45e24b426eaf32bce0a31ec79fc90dad4b394d5e8f1baee34f0040f",
+    "reflect|fresh=false|notion=0|en": "57465541b521fcc913d22be80e7037022be20b74fb3e0da16a3a8565411d0e2b",
+    "reflect|fresh=false|notion=7|zh-CN": "1def8c2aa5518a4d202c179bcf2eb7b2261661280d6cbe298d2272bf45f15471",
+    "reflect|fresh=false|notion=7|en": "a30f4a50417d58d5cf3e5141b5da49220ddfed3a36bb20786a32d90a22b9f022",
+    "reflect|fresh=false|notion=1|zh-CN": "5d2b8e277e202006ca2509fb8b06f342a89c385dbcb853ae4da0d8a816bdc5e0",
+    "reflect|fresh=false|notion=1|en": "d7097d2059d16bb1fae9c3a5e0cd646110e7a5bf77be4a1076d9957b4ae7334e",
+    "reflect|fresh=true|notion=none|zh-CN": "a4ad4c7ec45e24b426eaf32bce0a31ec79fc90dad4b394d5e8f1baee34f0040f",
+    "reflect|fresh=true|notion=none|en": "57465541b521fcc913d22be80e7037022be20b74fb3e0da16a3a8565411d0e2b",
+    "reflect|fresh=true|notion=0|zh-CN": "a4ad4c7ec45e24b426eaf32bce0a31ec79fc90dad4b394d5e8f1baee34f0040f",
+    "reflect|fresh=true|notion=0|en": "57465541b521fcc913d22be80e7037022be20b74fb3e0da16a3a8565411d0e2b",
+    "reflect|fresh=true|notion=7|zh-CN": "1def8c2aa5518a4d202c179bcf2eb7b2261661280d6cbe298d2272bf45f15471",
+    "reflect|fresh=true|notion=7|en": "a30f4a50417d58d5cf3e5141b5da49220ddfed3a36bb20786a32d90a22b9f022",
+    "reflect|fresh=true|notion=1|zh-CN": "5d2b8e277e202006ca2509fb8b06f342a89c385dbcb853ae4da0d8a816bdc5e0",
+    "reflect|fresh=true|notion=1|en": "d7097d2059d16bb1fae9c3a5e0cd646110e7a5bf77be4a1076d9957b4ae7334e",
+    "bogus|fresh=false|notion=none|zh-CN": "7ebe0f31509b5eb1b40851f0aa4198c2adad388dbbc22901287f17c3d10f652b",
+    "bogus|fresh=false|notion=none|en": "84dcc2f9008e62bcff074114252c7c072f2bb021500d08c24353328d4f5a2aa5",
+    "bogus|fresh=false|notion=0|zh-CN": "7ebe0f31509b5eb1b40851f0aa4198c2adad388dbbc22901287f17c3d10f652b",
+    "bogus|fresh=false|notion=0|en": "84dcc2f9008e62bcff074114252c7c072f2bb021500d08c24353328d4f5a2aa5",
+    "bogus|fresh=false|notion=7|zh-CN": "f9258cade5f34040156fc51abb0195836df6d5d51747b78ed20ca4bfdc87fc33",
+    "bogus|fresh=false|notion=7|en": "3592c6651c9f54faec1dc8c9b9694fcbbea0a8526cc06e5b5d29cce7c52be2be",
+    "bogus|fresh=false|notion=1|zh-CN": "ed1d84d7316c42feab9fc58f14bcfd5d31ce3af8f9a64f33744e90ff964e7737",
+    "bogus|fresh=false|notion=1|en": "5256fc7fd3e010ea8fd2509a9bda47bd259977c8c5b3d05229e5d1fad93fe946",
+    "bogus|fresh=true|notion=none|zh-CN": "dd6de123de916aea533b67d8f23cec2fd85fb381d7906148a8d0401125ffe8f9",
+    "bogus|fresh=true|notion=none|en": "b77923ac93ec540c5b1083d81660316666bf824c8140c2f0b779620d88e8f1a7",
+    "bogus|fresh=true|notion=0|zh-CN": "dd6de123de916aea533b67d8f23cec2fd85fb381d7906148a8d0401125ffe8f9",
+    "bogus|fresh=true|notion=0|en": "b77923ac93ec540c5b1083d81660316666bf824c8140c2f0b779620d88e8f1a7",
+    "bogus|fresh=true|notion=7|zh-CN": "9a64b2ad764229399b9527fc77a5fe2e76ca20a25d03b97d5441674e5af613a4",
+    "bogus|fresh=true|notion=7|en": "a72029c02a3c6773f04800659a77ec41e9ad48c6c67b093e42c7c57b46ade680",
+    "bogus|fresh=true|notion=1|zh-CN": "177c94d341ff85c28db4ce7ec9f535679e809fd9449dd748c3331a96b8081f7c",
+    "bogus|fresh=true|notion=1|en": "06538d1c1dc8e3eaf768baee908492ade067b1a16c5d90ff5c4c7ec2df9402f9"
   },
   "tools": {
     "null|fresh=false|notion=none": [
@@ -106,6 +106,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter"
     ],
     "null|fresh=false|notion=0": [
@@ -116,6 +118,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter"
     ],
     "null|fresh=false|notion=7": [
@@ -126,6 +130,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter",
       "notion_search",
       "notion_read",
@@ -143,6 +149,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter",
       "notion_read"
     ],
@@ -153,7 +161,9 @@
       "read_webpage",
       "get_resume",
       "review_resume",
-      "match_job"
+      "match_job",
+      "today_plan_read",
+      "today_plan"
     ],
     "null|fresh=true|notion=0": [
       "add_job",
@@ -162,7 +172,9 @@
       "read_webpage",
       "get_resume",
       "review_resume",
-      "match_job"
+      "match_job",
+      "today_plan_read",
+      "today_plan"
     ],
     "null|fresh=true|notion=7": [
       "add_job",
@@ -172,6 +184,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "notion_search",
       "notion_read",
       "notion_create_page",
@@ -188,6 +202,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "notion_read"
     ],
     "undefined|fresh=false|notion=none": [
@@ -198,6 +214,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter"
     ],
     "undefined|fresh=false|notion=0": [
@@ -208,6 +226,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter"
     ],
     "undefined|fresh=false|notion=7": [
@@ -218,6 +238,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter",
       "notion_search",
       "notion_read",
@@ -235,6 +257,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter",
       "notion_read"
     ],
@@ -245,7 +269,9 @@
       "read_webpage",
       "get_resume",
       "review_resume",
-      "match_job"
+      "match_job",
+      "today_plan_read",
+      "today_plan"
     ],
     "undefined|fresh=true|notion=0": [
       "add_job",
@@ -254,7 +280,9 @@
       "read_webpage",
       "get_resume",
       "review_resume",
-      "match_job"
+      "match_job",
+      "today_plan_read",
+      "today_plan"
     ],
     "undefined|fresh=true|notion=7": [
       "add_job",
@@ -264,6 +292,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "notion_search",
       "notion_read",
       "notion_create_page",
@@ -280,6 +310,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "notion_read"
     ],
     "insight|fresh=false|notion=none": [
@@ -289,6 +321,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "suggest_role"
     ],
     "insight|fresh=false|notion=0": [
@@ -298,6 +331,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "suggest_role"
     ],
     "insight|fresh=false|notion=7": [
@@ -307,6 +341,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "notion_search",
       "notion_read",
       "suggest_role"
@@ -318,6 +353,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "notion_read",
       "suggest_role"
     ],
@@ -328,6 +364,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "suggest_role"
     ],
     "insight|fresh=true|notion=0": [
@@ -337,6 +374,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "suggest_role"
     ],
     "insight|fresh=true|notion=7": [
@@ -346,6 +384,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "notion_search",
       "notion_read",
       "suggest_role"
@@ -357,6 +396,7 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
       "notion_read",
       "suggest_role"
     ],
@@ -365,6 +405,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "suggest_role"
     ],
     "pilot|fresh=false|notion=0": [
@@ -372,6 +414,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "suggest_role"
     ],
     "pilot|fresh=false|notion=7": [
@@ -379,6 +423,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "notion_search",
       "notion_read",
       "notion_create_page",
@@ -393,6 +439,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "notion_read",
       "suggest_role"
     ],
@@ -401,6 +449,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "suggest_role"
     ],
     "pilot|fresh=true|notion=0": [
@@ -408,6 +458,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "suggest_role"
     ],
     "pilot|fresh=true|notion=7": [
@@ -415,6 +467,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "notion_search",
       "notion_read",
       "notion_create_page",
@@ -429,6 +483,8 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
+      "today_plan",
       "notion_read",
       "suggest_role"
     ],
@@ -436,18 +492,21 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "suggest_role"
     ],
     "reflect|fresh=false|notion=0": [
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "suggest_role"
     ],
     "reflect|fresh=false|notion=7": [
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "notion_search",
       "notion_read",
       "suggest_role"
@@ -456,6 +515,7 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "notion_read",
       "suggest_role"
     ],
@@ -463,18 +523,21 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "suggest_role"
     ],
     "reflect|fresh=true|notion=0": [
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "suggest_role"
     ],
     "reflect|fresh=true|notion=7": [
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "notion_search",
       "notion_read",
       "suggest_role"
@@ -483,6 +546,7 @@
       "list_jobs",
       "get_job",
       "read_webpage",
+      "today_plan_read",
       "notion_read",
       "suggest_role"
     ],
@@ -494,6 +558,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter"
     ],
     "bogus|fresh=false|notion=0": [
@@ -504,6 +570,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter"
     ],
     "bogus|fresh=false|notion=7": [
@@ -514,6 +582,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter",
       "notion_search",
       "notion_read",
@@ -531,6 +601,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "generate_cover_letter",
       "notion_read"
     ],
@@ -541,7 +613,9 @@
       "read_webpage",
       "get_resume",
       "review_resume",
-      "match_job"
+      "match_job",
+      "today_plan_read",
+      "today_plan"
     ],
     "bogus|fresh=true|notion=0": [
       "add_job",
@@ -550,7 +624,9 @@
       "read_webpage",
       "get_resume",
       "review_resume",
-      "match_job"
+      "match_job",
+      "today_plan_read",
+      "today_plan"
     ],
     "bogus|fresh=true|notion=7": [
       "add_job",
@@ -560,6 +636,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "notion_search",
       "notion_read",
       "notion_create_page",
@@ -576,6 +654,8 @@
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
       "notion_read"
     ]
   },
@@ -663,6 +743,18 @@
     "notion_delete_pages|false|full": "always",
     "notion_delete_pages|true|ask": "always",
     "notion_delete_pages|true|rules": "always",
-    "notion_delete_pages|true|full": "always"
+    "notion_delete_pages|true|full": "always",
+    "today_plan|false|ask": "conditional",
+    "today_plan|false|rules": "conditional",
+    "today_plan|false|full": "conditional",
+    "today_plan|true|ask": "conditional",
+    "today_plan|true|rules": "conditional",
+    "today_plan|true|full": "conditional",
+    "today_plan_read|false|ask": "none",
+    "today_plan_read|false|rules": "none",
+    "today_plan_read|false|full": "none",
+    "today_plan_read|true|ask": "none",
+    "today_plan_read|true|rules": "none",
+    "today_plan_read|true|full": "none"
   }
 }

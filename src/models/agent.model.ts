@@ -1,5 +1,10 @@
 import type { DescriptionCompleteness } from "@/models/job.model";
 import type { JobMatchScores, ResumeScores } from "@/models/ai.schemas";
+import type {
+  TodayPlanBuckets as AgentTodayPlanBuckets,
+  TodayPlanUndoResult as AgentTodayPlanUndoResult,
+  TodayPlanWriteResult as AgentTodayPlanWriteResult,
+} from "@/lib/todayPlan/types";
 
 // Dependency-free by design: client components import these types, so nothing
 // here may pull in Prisma or server-only code. Type-only imports are erased.
@@ -297,6 +302,9 @@ export function isNestedTool(name: string): boolean {
 // and blow the turn timeout, discarding both.
 export const AGENT_CHAT_TERMINAL_TOOLS = [
   "add_job",
+  // Every today_plan outcome is a settled card (saved / ambiguous / not
+  // found / failed) — a follow-up answer would only re-narrate the card.
+  "today_plan",
   ...AGENT_NESTED_TOOLS,
 ] as const;
 
@@ -405,3 +413,39 @@ export type AgentNotionWriteResult =
       taskId?: string;
       taskStatus?: string;
     };
+
+// ─── TODAY-PLAN ───────────────────────────────────────────────────────────
+// Shapes live in src/lib/todayPlan/types.ts — client-safe, shared with the
+// popover and server actions. Aliased here so card code reads the same
+// naming convention as every other tool output.
+
+export type {
+  AgentTodayPlanBuckets,
+  AgentTodayPlanUndoResult,
+  AgentTodayPlanWriteResult,
+};
+
+export type AgentTodayPlanSuggestion = {
+  openTasks: { taskId: string; title: string }[];
+  upcoming: {
+    kind: string;
+    label: string;
+    date: string | null;
+    roleTitle: string | null;
+    companyName: string | null;
+  }[];
+  awaitingReflection: { count: number; items: { label: string }[] };
+  /** Sources the snapshot could not read — the model reports the gap plainly. */
+  degraded: string[];
+};
+
+export type AgentTodayPlanReadResult =
+  | {
+      status: "ok";
+      timeZone: string;
+      today: string;
+      tomorrow: string;
+      buckets: AgentTodayPlanBuckets;
+      suggestions: AgentTodayPlanSuggestion;
+    }
+  | { status: "unavailable"; reason: "no_conversation" | "read_failed" };

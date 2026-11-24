@@ -89,6 +89,41 @@ function AddJobBody({
   );
 }
 
+// TODAY-PLAN: the suggest draft is the only approval-gated action — what
+// the card lists is verbatim what gets saved on Confirm, since the gated
+// toolCall replays this same input.
+function TodayPlanBody({ input }: { input: Record<string, unknown> }) {
+  const { t } = useI18n();
+  const items = Array.isArray(input.items)
+    ? input.items.filter((i): i is string => typeof i === "string")
+    : [];
+  const target = text(input.target);
+  return (
+    <div className="mt-1">
+      <Row
+        label={t("todayPlan.cardTarget")}
+        value={
+          target === "tomorrow"
+            ? t("todayPlan.tomorrow")
+            : t("todayPlan.today")
+        }
+      />
+      {items.length > 0 && (
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm">
+          {items.map((item, i) => (
+            <li key={i} className="break-words">
+              {item}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t("todayPlan.adoptHint")}
+      </p>
+    </div>
+  );
+}
+
 function MatchJobBody({ input }: { input: Record<string, unknown> }) {
   const { t } = useI18n();
   const resumeTitle = text(input.resumeTitle);
@@ -245,6 +280,8 @@ export function AgentApprovalCard({
         return <AddJobBody input={input} pastedText={pastedText} />;
       case "match_job":
         return <MatchJobBody input={input} />;
+      case "today_plan":
+        return <TodayPlanBody input={input} />;
       default:
         if (isNotionAgentToolName(toolName)) {
           return <NotionWriteBody toolName={toolName} input={input} />;

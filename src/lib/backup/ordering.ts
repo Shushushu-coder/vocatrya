@@ -79,6 +79,8 @@ export type BackupModel =
   | "AIConnection"
   | "AIBusinessAssignment"
   | "ChatConversation"
+  | "TodayPlanItem"
+  | "TodayPlanOperation"
   | "AgentOperationProposal"
   | "AutomationRun"
   | "UserSettings"
@@ -416,6 +418,23 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     delegate: "chatConversation",
     owner: "userId",
     fks: { resolvedConnectionId: "AIConnection" },
+    scope: byUser,
+  },
+  // TODAY-PLAN: user state bound to the conversation + task it joins. Both
+  // FKs stay required/fail-closed — a plan row without either endpoint is
+  // unrecoverable context, not evidence worth preserving on its own.
+  TodayPlanItem: {
+    delegate: "todayPlanItem",
+    owner: "userId",
+    fks: { conversationId: "ChatConversation", taskId: "Task" },
+    scope: byUser,
+  },
+  // The write ledger behind idempotent saves and conditional undo — user
+  // state for the same reason the plan rows are.
+  TodayPlanOperation: {
+    delegate: "todayPlanOperation",
+    owner: "userId",
+    fks: { conversationId: "ChatConversation" },
     scope: byUser,
   },
   // Durable operation proposals are user state: the row carries the
@@ -928,6 +947,10 @@ export const INSERT_ORDER: BackupModel[] = [
   "AIConnection",
   "AIBusinessAssignment",
   "ChatConversation",
+  // Plan rows need Task (earlier) and ChatConversation; the ledger only
+  // needs the conversation. Both wipe before their parents in reverse order.
+  "TodayPlanItem",
+  "TodayPlanOperation",
   "AgentOperationProposal",
   "AutomationRun",
   "UserSettings",

@@ -12,6 +12,8 @@ import { buildAgentChatSystemPrompt } from "@/lib/agent/prompt";
 import { agentToolApproval, effectiveAgentToolNames } from "@/lib/agent/toolPermissions";
 import { renderCareerDialoguePrompt } from "@/lib/agent/accountTurn";
 import golden from "./fixtures/agentPromptToolsNonTaskGolden.json";
+import { AGENT_CHAT_TERMINAL_TOOLS } from "@/models/agent.model";
+import { buildTodayPlanTool } from "@/lib/agent/tools/todayPlan";
 import { NON_TASK_INVARIANCE_CASES } from "./helpers/contextBudgetInvarianceInputs";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -33,7 +35,7 @@ describe("system prompt without a task binding", () => {
       for (const notion of NOTION_SETS) {
         for (const locale of ["zh-CN", "en"]) {
           const label = `${String(role)}|fresh=${fresh}|notion=${notion ? notion.length : "none"}|${locale}`;
-          it(`matches the pre-harness prompt: ${label}`, () => {
+          it(`matches the current non-task prompt: ${label}`, () => {
             const opts = { freshNativeFull: fresh, agentRole: role, notionTools: notion };
             const expected = (golden.prompts as Record<string, string>)[label];
             expect(sha(buildAgentChatSystemPrompt(locale, opts))).toBe(expected);
@@ -113,4 +115,30 @@ describe("career-dialogue prompt without a task binding", () => {
       expect(task.prompt).toContain("Active task state");
     });
   }
+});
+
+
+describe("To-do tool behavior on ordinary conversations", () => {
+  it("keeps read nonterminal so a grounded suggestion can follow", () => {
+    expect([...AGENT_CHAT_TERMINAL_TOOLS]).not.toContain("today_plan_read");
+    expect([...AGENT_CHAT_TERMINAL_TOOLS]).toContain("today_plan");
+  });
+  it("keeps suggestions gated and explicit adds ungated in every permission mode", async () => {
+    for (const mode of ["ask", "rules", "full"] as const) {
+      expect(agentToolApproval("today_plan", true, mode)).toBe("conditional");
+      const gate = buildTodayPlanTool("test-user").needsApproval as (input: { action: string }) => boolean;
+      expect(gate({ action: "suggest" })).toBe(true);
+      expect(gate({ action: "add" })).toBe(false);
+    }
+  });
+  it("grants writes only to Pilot among named roles and preserves the grounding prompt", () => {
+    for (const role of ["pilot", "insight", "reflect"] as const) {
+      const tools = effectiveAgentToolNames({ agentRole: role });
+      expect(tools).toContain("today_plan_read");
+      expect(tools.includes("today_plan")).toBe(role === "pilot");
+      const prompt = buildAgentChatSystemPrompt("en", { agentRole: role });
+      expect(prompt).toContain("today_plan_read");
+      if (role === "pilot") { expect(prompt).toContain("suggest"); expect(prompt).toContain("today_plan"); }
+    }
+  });
 });

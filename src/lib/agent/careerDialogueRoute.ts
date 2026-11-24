@@ -130,6 +130,8 @@ const RESUME_PATTERNS: RegExp[] = [
 ];
 
 const JOB_OR_TOOL_PATTERNS: Array<{ pattern: RegExp; reason: CareerDialogueRouteReason }> = [
+  { pattern: /今天(该|要|应该)?做什么|今日(计划|清单|待办)|今天.*(清单|待办)|把.+(移到明天|移入今天)/, reason: "EXPLICIT_TOOL_INTENT" },
+  { pattern: /\b(what should i do today|how should i plan today|today.s (plan|checklist)|to[ -]?do list)\b/, reason: "EXPLICIT_TOOL_INTENT" },
   { pattern: /查看我保存的(职位|岗位)/, reason: "JOB_DATA_INTENT" },
   { pattern: /我保存的(职位|岗位)/, reason: "JOB_DATA_INTENT" },
   { pattern: /\b(show|list|open)\s+my\s+saved\s+jobs?\b/, reason: "JOB_DATA_INTENT" },

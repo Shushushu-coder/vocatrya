@@ -59,6 +59,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "match_job",
     "notion_search",
     "notion_read",
+    "today_plan_read",
     "suggest_role",
   ],
   pilot: [
@@ -73,6 +74,8 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "notion_update_record",
     "notion_update_content",
     "notion_delete_pages",
+    "today_plan_read",
+    "today_plan",
     "suggest_role",
   ],
   reflect: [
@@ -81,6 +84,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "read_webpage",
     "notion_search",
     "notion_read",
+    "today_plan_read",
     "suggest_role",
   ],
 };

@@ -37,6 +37,9 @@ describe("routeCareerDialogueTurn", () => {
   });
 
   it.each([
+    ["今天做什么？", "EXPLICIT_TOOL_INTENT"],
+    ["how should I plan today", "EXPLICIT_TOOL_INTENT"],
+    ["把准备面试移到明天", "EXPLICIT_TOOL_INTENT"],
     ["帮我添加这个职位", "WRITE_ACTION_INTENT"],
     ["保存这个岗位", "WRITE_ACTION_INTENT"],
     ["add this job", "WRITE_ACTION_INTENT"],

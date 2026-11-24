@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import { SIDEBAR_LINKS } from "@/lib/constants";
 import { AgentChatTrigger } from "./AgentChatTrigger";
+import { TodayPlanEntry } from "./todayPlan/TodayPlanEntry";
 import { CreateMenu } from "./GlobalActions";
 import { useI18n } from "@/i18n";
 import { useCareerSurfaces } from "@/context/CareerSurfacesContext";
@@ -104,6 +105,7 @@ function Header() {
       <div className="header-global-actions flex flex-1 items-center gap-2">
         <CreateMenu />
         <div className="relative ml-auto flex items-center gap-2">
+          <TodayPlanEntry variant="outline" />
           <AgentChatTrigger />
         </div>
       </div>

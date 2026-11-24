@@ -6,6 +6,8 @@ export const AGENT_TOOL_LABEL_KEYS = {
   review_resume: "agent.tools.reviewResume",
   match_job: "agent.tools.matchJob",
   generate_cover_letter: "agent.tools.coverLetter",
+  today_plan_read: "agent.tools.todayPlanRead",
+  today_plan: "agent.tools.todayPlan",
 } as const;
 
 export type AgentToolLabelKey =
