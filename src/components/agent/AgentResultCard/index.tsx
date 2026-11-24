@@ -12,6 +12,11 @@ import {
   NotionSearchResultCard,
   NotionWriteResultCard,
 } from "./NotionResult";
+import {
+  FeishuReadResultCard,
+  FeishuSearchResultCard,
+  FeishuWriteResultCard,
+} from "./FeishuResult";
 import { SuggestRoleResult } from "./SuggestRoleResult";
 import { WebpageResult } from "./WebpageResult";
 import type {
@@ -25,6 +30,9 @@ import type {
   AgentNotionReadResult,
   AgentNotionSearchResult,
   AgentNotionWriteResult,
+  AgentFeishuReadDocResult,
+  AgentFeishuSearchDocsResult,
+  AgentFeishuWriteResult,
   AgentReadWebpageResult,
   AgentReviewResumeResult,
   AgentSuggestRoleResult as AgentSuggestRoleResultType,
@@ -118,6 +126,22 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       toolName === "notion_delete_pages" ? (
       isQueuedWriteStub(part.output) ? null : (
         <NotionWriteResultCard output={part.output as AgentNotionWriteResult} />
+      )
+    ) : toolName === "feishu_search_docs" ? (
+      <FeishuSearchResultCard
+        output={part.output as AgentFeishuSearchDocsResult}
+      />
+    ) : toolName === "feishu_read_doc" ? (
+      <FeishuReadResultCard
+        output={part.output as AgentFeishuReadDocResult}
+      />
+    ) : toolName === "feishu_create_doc" ||
+      toolName === "feishu_append_content" ||
+      toolName === "feishu_update_content" ? (
+      isQueuedWriteStub(part.output) ? null : (
+        <FeishuWriteResultCard
+          output={part.output as AgentFeishuWriteResult}
+        />
       )
     ) : toolName === "suggest_role" ? (
       <SuggestRoleResult

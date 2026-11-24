@@ -6,8 +6,14 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { isToolUIPart, type UIMessage } from "ai";
 import prisma from "@/lib/db";
 import { hashCanonical } from "@/lib/career/hash";
-import { getNotionConnection } from "@/lib/extensions/notion/store";
-import { isNotionToolAllowed } from "@/lib/extensions/notion/capabilities";
+import {
+  DETACHED_WRITE_SPECS,
+  detachedConnectionMaterial,
+  detachedProviderOf,
+  detachedWriteInputHash,
+  isDetachedToolAllowed,
+  isDetachedWriteTool,
+} from "./detachedWrite";
 import {
   HARNESS_TASK_EVENT,
   HARNESS_TASK_KIND,
@@ -24,11 +30,6 @@ import {
   type AgentProposalDerived,
   type AgentProposalStatus,
 } from "./operationProposalContract";
-import {
-  NOTION_WRITE_SPECS,
-  isDetachedWriteTool,
-  notionWriteInputHash,
-} from "./notionWriteSpec";
 import { effectiveAgentToolNames } from "./toolPermissions";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -99,18 +100,20 @@ export async function createProposalsForResponseMessage(
       isDetachedWriteTool(toolNameOfPart(part) ?? ""),
   );
   if (parts.length === 0) return 0;
-  const connection = await getNotionConnection(input.userId, tx);
-  const workspaceId =
-    connection && typeof connection.workspaceId === "string"
-      ? connection.workspaceId
-      : null;
   let created = 0;
   for (const part of parts) {
     if (!isToolUIPart(part)) continue;
     const toolName = toolNameOfPart(part)!;
-    const spec = NOTION_WRITE_SPECS[toolName];
+    const spec = DETACHED_WRITE_SPECS[toolName];
     const parsed = spec?.schema.safeParse(part.input);
     if (!parsed?.success) continue;
+    // The proposal binds the connection it was created under — a later
+    // dispatch under a different workspace/app refuses WORKSPACE_CHANGED.
+    const material = await detachedConnectionMaterial(
+      input.userId,
+      toolName,
+      tx,
+    );
     try {
       await tx.agentOperationProposal.create({
         data: {
@@ -122,8 +125,8 @@ export async function createProposalsForResponseMessage(
           turnKey: input.turnKey,
           toolName,
           inputJson: JSON.stringify(parsed.data),
-          inputHash: notionWriteInputHash(parsed.data),
-          materialJson: JSON.stringify({ workspaceId }),
+          inputHash: detachedWriteInputHash(parsed.data),
+          materialJson: JSON.stringify(material),
           status: AGENT_PROPOSAL_STATUS.PROPOSED,
           expiresAt: new Date(Date.now() + AGENT_PROPOSAL_DECISION_TTL_MS),
         },
@@ -343,13 +346,15 @@ export async function decideOperationProposalInTx(
     if (conversation.archivedAt) return fail("PROPOSAL_SOURCE_ARCHIVED");
     // The decision binds the tool surface the source conversation actually
     // exposes — a NULL legacy role keeps the general registry, never widens.
+    const provider = detachedProviderOf(row.toolName);
     const effective = effectiveAgentToolNames({
       agentRole: conversation.agentRole,
-      notionTools: [row.toolName],
+      ...(provider === "feishu"
+        ? { feishuTools: [row.toolName] }
+        : { notionTools: [row.toolName] }),
     });
     if (!effective.includes(row.toolName)) return fail("PROPOSAL_TOOL_FORBIDDEN");
-    const connection = await getNotionConnection(input.userId, tx);
-    if (!isNotionToolAllowed(connection, row.toolName)) {
+    if (!(await isDetachedToolAllowed(input.userId, row.toolName, tx))) {
       return fail("PROPOSAL_CONNECTION_UNAVAILABLE");
     }
   }
@@ -810,7 +815,7 @@ export async function toProposalDTO(
   } catch {
     outcome = null;
   }
-  const summary = NOTION_WRITE_SPECS[row.toolName]?.summaryOf(parsedInput) ?? {};
+  const summary = DETACHED_WRITE_SPECS[row.toolName]?.summaryOf(parsedInput) ?? {};
   return {
     id: row.id,
     toolName: row.toolName,

@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type {
-  AgentNotionWriteResult,
+  AgentFeishuWriteVerify,
   AgentNotionWriteVerify,
 } from "@/models/agent.model";
 import { NOTION_DELETE_PAGES_REMOTE_BATCH } from "@/models/agent.schema";
@@ -22,10 +22,24 @@ import { NOTION_TOOL } from "@/lib/extensions/notion/constants";
 import { pickRemoteArgs } from "@/lib/extensions/notion/remoteArgs";
 import { resolveNotionRemoteMeta } from "@/lib/agent/tools/notion";
 import {
-  NOTION_WRITE_SPECS,
-  notionWriteInputHash,
-  type NotionWriteSpec,
-} from "@/lib/agent/notionWriteSpec";
+  FEISHU_ERROR,
+  FeishuError,
+  isFeishuError,
+} from "@/lib/extensions/feishu/errors";
+import { mapFeishuRemoteError } from "@/lib/extensions/feishu/api";
+import {
+  resolveFeishuAccessToken,
+  resolveFeishuRemoteMeta,
+} from "@/lib/extensions/feishu/service";
+import { executeFeishuWrite } from "@/lib/extensions/feishu/writeRemote";
+import {
+  DETACHED_WRITE_SPECS,
+  detachedProviderOf,
+  detachedWriteInputHash,
+  type DetachedWriteResult,
+  type DetachedWriteSpec,
+  type DetachedWriteVerify,
+} from "@/lib/agent/detachedWrite";
 import { effectiveAgentToolNames } from "@/lib/agent/toolPermissions";
 import {
   AGENT_PROPOSAL_OUTCOME,
@@ -60,7 +74,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
 
 type SettleInput = {
   outcomeStatus: string;
-  outcome: AgentNotionWriteResult | { status: string; code: string };
+  outcome: DetachedWriteResult | { status: string; code: string };
   taskStatus: string;
   failureCode?: string | null;
   failureDetail?: string | null;
@@ -152,10 +166,20 @@ async function settleWrite(
 function settleOutcome(
   toolName: string,
   error: unknown,
-  verify: AgentNotionWriteVerify,
-): { outcome: AgentNotionWriteResult; outcomeStatus: string; code: string } {
-  const mapped = isNotionError(error) ? error : mapNotionRemoteError(error);
-  if (mapped.code === NOTION_ERROR.REAUTH_REQUIRED) {
+  verify: DetachedWriteVerify,
+): { outcome: DetachedWriteResult; outcomeStatus: string; code: string } {
+  const provider = detachedProviderOf(toolName) ?? "notion";
+  const providerLabel = provider === "feishu" ? "Feishu" : "Notion";
+  const codes = provider === "feishu" ? FEISHU_ERROR : NOTION_ERROR;
+  const mapped =
+    provider === "feishu"
+      ? isFeishuError(error)
+        ? error
+        : mapFeishuRemoteError(error)
+      : isNotionError(error)
+        ? error
+        : mapNotionRemoteError(error);
+  if (mapped.code === codes.REAUTH_REQUIRED) {
     return {
       outcome: {
         saved: false,
@@ -168,34 +192,56 @@ function settleOutcome(
     };
   }
   if (
-    mapped.code === NOTION_ERROR.OUTCOME_UNKNOWN ||
-    mapped.code === NOTION_ERROR.NETWORK
+    mapped.code === codes.OUTCOME_UNKNOWN ||
+    mapped.code === codes.NETWORK
   ) {
     return {
-      outcome: {
-        saved: false,
-        tool: toolName,
-        status: "unknown",
-        code: NOTION_ERROR.OUTCOME_UNKNOWN,
-        verify,
-        detail:
-          "The request may or may not have reached Notion. Inspect with the named read tool and reconcile manually; automatic retry is blocked.",
-      },
+      outcome:
+        provider === "feishu"
+          ? {
+              saved: false,
+              tool: toolName,
+              status: "unknown",
+              code: codes.OUTCOME_UNKNOWN,
+              verify: verify as AgentFeishuWriteVerify,
+              detail:
+                `The request may or may not have reached ${providerLabel}. Inspect with the named read tool and reconcile manually; automatic retry is blocked.`,
+            }
+          : {
+              saved: false,
+              tool: toolName,
+              status: "unknown",
+              code: codes.OUTCOME_UNKNOWN,
+              verify: verify as AgentNotionWriteVerify,
+              detail:
+                `The request may or may not have reached ${providerLabel}. Inspect with the named read tool and reconcile manually; automatic retry is blocked.`,
+            },
       outcomeStatus: AGENT_PROPOSAL_OUTCOME.UNCERTAIN,
-      code: NOTION_ERROR.OUTCOME_UNKNOWN,
+      code: codes.OUTCOME_UNKNOWN,
     };
   }
-  if (mapped.code === NOTION_ERROR.VERIFICATION_REQUIRED) {
+  if (mapped.code === codes.VERIFICATION_REQUIRED) {
     return {
-      outcome: {
-        saved: false,
-        tool: toolName,
-        status: "verification_required",
-        code: mapped.code,
-        verify,
-        detail:
-          "An earlier write of this input may already have reached Notion. Reconcile manually before re-proposing.",
-      },
+      outcome:
+        provider === "feishu"
+          ? {
+              saved: false,
+              tool: toolName,
+              status: "verification_required",
+              code: mapped.code,
+              verify: verify as AgentFeishuWriteVerify,
+              detail:
+                `An earlier write of this input may already have reached ${providerLabel}. Reconcile manually before re-proposing.`,
+            }
+          : {
+              saved: false,
+              tool: toolName,
+              status: "verification_required",
+              code: mapped.code,
+              verify: verify as AgentNotionWriteVerify,
+              detail:
+                `An earlier write of this input may already have reached ${providerLabel}. Reconcile manually before re-proposing.`,
+            },
       outcomeStatus: AGENT_PROPOSAL_OUTCOME.UNCERTAIN,
       code: mapped.code,
     };
@@ -256,9 +302,9 @@ function chunkIds(ids: string[], size: number): string[][] {
 
 function receiptFromCall(
   callResult: { isError?: boolean; content: Array<{ type: string; text?: string }> },
-  spec: NotionWriteSpec,
+  spec: DetachedWriteSpec,
   input: Record<string, unknown>,
-): AgentNotionWriteResult {
+): DetachedWriteResult {
   return callResult.isError
     ? {
         saved: false,
@@ -274,15 +320,15 @@ function receiptFromCall(
 function partialDeleteReceipt(
   toolName: string,
   deleted: string[],
-  verify: AgentNotionWriteVerify,
-): AgentNotionWriteResult {
+  verify: DetachedWriteVerify,
+): DetachedWriteResult {
   const detail = `Moved ${deleted.length} pages to Trash (${deleted.join(", ")}). The remaining pages were not sent. Reconcile in Notion; automatic retry is blocked.`;
   return {
     saved: false,
     tool: toolName,
     status: "unknown",
     code: NOTION_ERROR.OUTCOME_UNKNOWN,
-    verify,
+    verify: verify as AgentNotionWriteVerify,
     detail: detail.slice(0, 500),
   };
 }
@@ -296,11 +342,11 @@ async function callDeletePages(
   accessToken: string,
   remoteName: string,
   args: Record<string, unknown>,
-  spec: NotionWriteSpec,
+  spec: DetachedWriteSpec,
   input: Record<string, unknown>,
-  verify: AgentNotionWriteVerify,
+  verify: DetachedWriteVerify,
   signal?: AbortSignal,
-): Promise<AgentNotionWriteResult> {
+): Promise<DetachedWriteResult> {
   const listed = deletePageIdField(args);
   const batches =
     listed && listed.ids.length > NOTION_DELETE_PAGES_REMOTE_BATCH
@@ -339,7 +385,7 @@ async function callDeletePages(
       if (deleted.length === 0) return batchResult;
       return partialDeleteReceipt(spec.toolName, deleted, verify);
     }
-    deleted.push(...(batchResult.pageIds ?? batch));
+    deleted.push(...("pageIds" in batchResult ? batchResult.pageIds! : batch));
   }
   return {
     saved: true,
@@ -364,7 +410,7 @@ export async function executeAgentWriteTask(
     parsedInput = {};
   }
   const spec = parsedInput.toolName
-    ? NOTION_WRITE_SPECS[parsedInput.toolName]
+    ? DETACHED_WRITE_SPECS[parsedInput.toolName]
     : undefined;
   const proposal = parsedInput.proposalId
     ? await db.agentOperationProposal.findUnique({
@@ -419,14 +465,14 @@ export async function executeAgentWriteTask(
     // Already settled — mirror the persisted outcome onto the task row.
     const mirror = (() => {
       try {
-        return JSON.parse(proposal.outcomeJson!) as AgentNotionWriteResult;
+        return JSON.parse(proposal.outcomeJson!) as DetachedWriteResult;
       } catch {
         return {
           saved: false,
           tool: spec.toolName,
           status: "failed",
           code: "OUTCOME_CORRUPT",
-        } as AgentNotionWriteResult;
+        } as DetachedWriteResult;
       }
     })();
     await settle({
@@ -457,7 +503,7 @@ export async function executeAgentWriteTask(
         code: "DISPATCH_OUTCOME_UNKNOWN",
         verify: verifyHint,
         detail:
-          "The operation was dispatched before a restart; whether it reached Notion is unknown. Reconcile manually.",
+          "The operation was dispatched before a restart; whether it reached the remote service is unknown. Reconcile manually.",
       },
       taskStatus: HARNESS_TASK_STATUS.FAILED,
       failureCode: "DISPATCH_OUTCOME_UNKNOWN",
@@ -489,7 +535,7 @@ export async function executeAgentWriteTask(
   const validated = spec.schema.safeParse(immutableInput);
   if (
     !validated.success ||
-    notionWriteInputHash(validated.data) !== proposal.inputHash
+    detachedWriteInputHash(validated.data) !== proposal.inputHash
   ) {
     await settle({
       outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
@@ -547,7 +593,9 @@ export async function executeAgentWriteTask(
   }
   const effective = effectiveAgentToolNames({
     agentRole: conversation.agentRole,
-    notionTools: [spec.toolName],
+    ...(spec.provider === "feishu"
+      ? { feishuTools: [spec.toolName] }
+      : { notionTools: [spec.toolName] }),
   });
   if (!effective.includes(spec.toolName)) {
     await settle({
@@ -623,6 +671,8 @@ export async function executeAgentWriteTask(
               in: [
                 NOTION_ERROR.OUTCOME_UNKNOWN,
                 NOTION_ERROR.VERIFICATION_REQUIRED,
+                FEISHU_ERROR.OUTCOME_UNKNOWN,
+                FEISHU_ERROR.VERIFICATION_REQUIRED,
               ],
             },
           },
@@ -633,7 +683,9 @@ export async function executeAgentWriteTask(
   if (unresolvedProposal || unresolvedExecution) {
     const settled = settleOutcome(
       spec.toolName,
-      new NotionError(NOTION_ERROR.VERIFICATION_REQUIRED),
+      spec.provider === "feishu"
+        ? new FeishuError(FEISHU_ERROR.VERIFICATION_REQUIRED)
+        : new NotionError(NOTION_ERROR.VERIFICATION_REQUIRED),
       verify,
     );
     await settle({
@@ -645,10 +697,9 @@ export async function executeAgentWriteTask(
     return;
   }
 
-  const meta = await resolveNotionRemoteMeta(
-    task.userId,
-    spec.remoteRequirementsTool,
-    db,
+  const meta = await (spec.provider === "feishu"
+    ? resolveFeishuRemoteMeta(task.userId, spec.remoteRequirementsTool, db)
+    : resolveNotionRemoteMeta(task.userId, spec.remoteRequirementsTool, db)
   ).catch((error) => ({ error }));
   if ("error" in meta) {
     const settled = settleOutcome(spec.toolName, meta.error, verify);
@@ -664,16 +715,24 @@ export async function executeAgentWriteTask(
     try {
       return JSON.parse(proposal.materialJson ?? "{}") as {
         workspaceId?: string | null;
+        appId?: string | null;
       };
     } catch {
       return {};
     }
   })();
-  if (
-    material.workspaceId &&
-    meta.workspaceId &&
-    material.workspaceId !== meta.workspaceId
-  ) {
+  const metaAppId = "appId" in meta ? meta.appId : undefined;
+  const metaWorkspaceId =
+    "workspaceId" in meta ? meta.workspaceId : undefined;
+  const connectionChanged =
+    spec.provider === "feishu"
+      ? material.appId &&
+        metaAppId &&
+        material.appId !== metaAppId
+      : material.workspaceId &&
+        metaWorkspaceId &&
+        material.workspaceId !== metaWorkspaceId;
+  if (connectionChanged) {
     await settle({
       outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
       outcome: {
@@ -682,14 +741,23 @@ export async function executeAgentWriteTask(
         status: "failed",
         code: "WORKSPACE_CHANGED",
         detail:
-          "The Notion connection now points at a different workspace; re-propose against the current connection.",
+          spec.provider === "feishu"
+            ? "The Feishu connection now points at a different app; re-propose against the current connection."
+            : "The Notion connection now points at a different workspace; re-propose against the current connection.",
       },
       taskStatus: HARNESS_TASK_STATUS.FAILED,
       failureCode: "WORKSPACE_CHANGED",
     });
     return;
   }
-  const args = pickRemoteArgs(meta.inputSchema, spec.candidates(input));
+  // Feishu calls are built by the provider dispatch itself — there is no
+  // remote tool schema to match; the validated input is the argument set.
+  const metaInputSchema =
+    "inputSchema" in meta ? meta.inputSchema : undefined;
+  const args =
+    spec.provider === "feishu"
+      ? (spec.candidates(input)[0] ?? null)
+      : pickRemoteArgs(metaInputSchema, spec.candidates(input));
   if (!args) {
     await settle({
       outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
@@ -802,9 +870,14 @@ export async function executeAgentWriteTask(
     return;
   }
 
-  let accessToken: string;
+  // Credential resolution is provider-specific; a revoked or disconnected
+  // connection fails here, before any remote call goes out.
+  let accessToken = "";
   try {
-    accessToken = await resolveNotionAccessToken(task.userId, { db });
+    accessToken =
+      spec.provider === "feishu"
+        ? await resolveFeishuAccessToken(task.userId, { db, expectedAppId: metaAppId })
+        : await resolveNotionAccessToken(task.userId, { db });
   } catch (error) {
     const settled = settleOutcome(spec.toolName, error, verify);
     await settle({
@@ -819,26 +892,36 @@ export async function executeAgentWriteTask(
   // ---------------------------------------------------------------- SETTLE
   // Delete batches larger than the remote cap are several calls. The dispatch
   // marker already covers every slice: a crash mid-loop never resends.
-  let result: AgentNotionWriteResult;
+  let result: DetachedWriteResult;
   try {
     result =
-      spec.toolName === NOTION_TOOL.deletePages
-        ? await callDeletePages(
-            accessToken,
-            meta.remoteName,
-            args,
-            spec,
-            input,
-            verify,
-            opts.signal,
-          )
-        : receiptFromCall(
-            await callNotionRemoteTool(accessToken, meta.remoteName, args, {
+      spec.provider === "feishu"
+        ? receiptFromCall(
+            await executeFeishuWrite(task.userId, spec.toolName, input, {
+              db,
+              expectedAppId: metaAppId,
               signal: opts.signal,
             }),
             spec,
             input,
-          );
+          )
+        : spec.toolName === NOTION_TOOL.deletePages
+          ? await callDeletePages(
+              accessToken,
+              meta.remoteName,
+              args,
+              spec,
+              input,
+              verify,
+              opts.signal,
+            )
+          : receiptFromCall(
+              await callNotionRemoteTool(accessToken, meta.remoteName, args, {
+                signal: opts.signal,
+              }),
+              spec,
+              input,
+            );
   } catch (error) {
     const settled = settleOutcome(spec.toolName, error, verify);
     await settle({
@@ -849,7 +932,9 @@ export async function executeAgentWriteTask(
     });
     return;
   }
-  if (!result.saved && result.status === "unknown") result.verify = verify;
+  if (!result.saved && result.status === "unknown") {
+    (result as { verify?: DetachedWriteVerify }).verify = verify;
+  }
   await settle({
     outcomeStatus: result.saved
       ? AGENT_PROPOSAL_OUTCOME.SUCCEEDED

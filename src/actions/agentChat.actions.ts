@@ -4,6 +4,7 @@ import { nativeReadiness, resolveNativeChatEntry, restartNativeContext } from "@
 import { effectiveAgentToolNames, agentToolApproval } from "@/lib/agent/toolPermissions";
 import { resolveTaskSessionTools } from "@/lib/agent/task/agentTaskTools";
 import { resolveNotionAgentToolNames } from "@/lib/extensions/notion/service";
+import { resolveFeishuAgentToolNames } from "@/lib/extensions/feishu/service";
 import { resolveCareerRuntimeMode } from "@/lib/career/runtimeMode";
 import { isFreshNativeFullSurface } from "@/lib/career/freshSurfacePolicy";
 import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
@@ -799,6 +800,7 @@ export async function getAgentToolPermissions(input: { conversationId?: string |
     const runtime = await resolveCareerRuntimeMode(prisma);
     const freshNativeFull = isFreshNativeFullSurface(runtime);
     const notionTools = await resolveNotionAgentToolNames(user.id).catch(() => []);
+    const feishuTools = await resolveFeishuAgentToolNames(user.id).catch(() => []);
     // Same resolution the route uses for the live tool registry (task sessions only).
     const taskExtraTools = row?.agentTaskId
       ? await resolveTaskSessionTools(prisma, { userId: user.id, agentTaskId: row.agentTaskId, agentRole: row.agentRole }).catch(() => null)
@@ -809,7 +811,7 @@ export async function getAgentToolPermissions(input: { conversationId?: string |
     return { success: true as const, data: {
       role,
       permissionMode,
-      tools: (row?.executionPath === "NATIVE_CODEX_V1" ? [] : effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools, taskExtraTools })).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull, permissionMode) })),
+      tools: (row?.executionPath === "NATIVE_CODEX_V1" ? [] : effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools, feishuTools, taskExtraTools })).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull, permissionMode) })),
     } };
   } catch (error) {
     return fail(error, "Could not load tool permissions");

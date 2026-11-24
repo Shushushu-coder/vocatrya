@@ -236,3 +236,57 @@ export type AgentNotionDeletePagesInput = z.infer<typeof AgentNotionDeletePagesS
 export type AgentNotionUpdateRecordInput = z.infer<
   typeof AgentNotionUpdateRecordSchema
 >;
+
+// ─── EXT-FEISHU ───────────────────────────────────────────────────────────
+// Application-identity Feishu docs tools. Unknown/interrupted writes require
+// manual reconciliation in Feishu; verifiedNoDuplicate is accepted but never
+// enables retry (same contract as the Notion write tools).
+
+export const AgentFeishuSearchDocsSchema = z.object({
+  query: z.string().max(200).optional().describe("Optional name filter — matches document/folder titles the connected app can list. This is NOT full-text search: it lists resources the app owns or was granted (its space, folders and wiki spaces), then filters by name."),
+  folderToken: z.string().max(200).optional().describe("Optional Feishu folder token to list inside — from the user or an earlier result."),
+  wikiSpaceId: z.string().max(200).optional().describe("Optional wiki space id to list top-level nodes of — from the user or an earlier result."),
+});
+
+export type AgentFeishuSearchDocsInput = z.infer<typeof AgentFeishuSearchDocsSchema>;
+
+export const AgentFeishuReadDocSchema = z.object({
+  target: z.string().min(1).max(2000).describe("A Feishu document URL (docx or wiki) or a document token returned by feishu_search_docs earlier in this conversation. Never invent a token."),
+  withBlocks: z.boolean().optional().describe("Also return the top-level block list (block ids + text preview) so a later feishu_update_content can name exact block ids."),
+});
+
+export type AgentFeishuReadDocInput = z.infer<typeof AgentFeishuReadDocSchema>;
+
+const feishuWriteCommon = {
+  verifiedNoDuplicate: z.boolean().optional().describe("Legacy compatibility flag; ignored for retry authorization. Unknown/interrupted writes remain blocked and require manual reconciliation in Feishu."),
+};
+
+export const AgentFeishuCreateDocSchema = z.object({
+  title: z.string().min(1).max(300).describe("The document title shown to the user on the approval card."),
+  content: z.string().max(8000).optional().describe("Optional Markdown body for the new document. The approval card shows it verbatim — the user reviews exactly this text before it is sent."),
+  folderToken: z.string().max(200).optional().describe("Optional Feishu folder token to create inside — only one the user named or an earlier tool returned. Omit to create in the app's root space."),
+  ...feishuWriteCommon,
+});
+
+export type AgentFeishuCreateDocInput = z.infer<typeof AgentFeishuCreateDocSchema>;
+
+export const AgentFeishuAppendContentSchema = z.object({
+  target: z.string().min(1).max(2000).describe("The Feishu docx document URL/token (or wiki node URL resolving to docx) to append to — from an earlier feishu_search_docs/feishu_read_doc result or one the user named."),
+  content: z.string().min(1).max(8000).describe("Markdown to append at the end of the document. The approval card shows it verbatim."),
+  ...feishuWriteCommon,
+});
+
+export type AgentFeishuAppendContentInput = z.infer<typeof AgentFeishuAppendContentSchema>;
+
+const feishuBlockEdit = z.object({
+  blockId: z.string().min(1).max(200).describe("A block_id returned by feishu_read_doc with withBlocks:true for this document. Never guess one."),
+  newText: z.string().max(8000).describe("Replacement plain text for that block. An empty string clears the block's text."),
+});
+
+export const AgentFeishuUpdateContentSchema = z.object({
+  target: z.string().min(1).max(2000).describe("The Feishu docx document URL/token (or wiki node URL resolving to docx) to edit — from an earlier result or one the user named."),
+  edits: z.array(feishuBlockEdit).min(1).max(20).describe("In-place text replacements for explicitly named blocks. Read the document with withBlocks:true first; never guess a block id."),
+  ...feishuWriteCommon,
+});
+
+export type AgentFeishuUpdateContentInput = z.infer<typeof AgentFeishuUpdateContentSchema>;

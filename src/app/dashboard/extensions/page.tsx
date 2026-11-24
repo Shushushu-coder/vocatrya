@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, ExternalLink, Mic, Notebook } from "lucide-react";
+import { BookOpen, ClipboardList, ExternalLink, Mic, Notebook } from "lucide-react";
 import { getServerI18n } from "@/i18n/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,14 @@ import { getCurrentUser } from "@/utils/user.utils";
 import prisma from "@/lib/db";
 import { getAutoApplyExtensionStatus } from "@/lib/extensions/autoApply/status";
 import { getNotionExtensionState } from "@/lib/extensions/notion/service";
+import { getFeishuExtensionState } from "@/lib/extensions/feishu/service";
 import ExtensionsTabs from "./ExtensionsTabs";
 import { resolveExtensionsTab } from "./extensionsTab";
 import SkillsPanel from "./SkillsPanel";
 import { notionT } from "@/lib/extensions/notion/copy";
+import { feishuT } from "@/lib/extensions/feishu/copy";
 import { NotionStatusNotice } from "@/components/extensions/NotionStatusNotice";
+import { FeishuStatusNotice } from "@/components/extensions/FeishuStatusNotice";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -33,10 +36,11 @@ export default async function ExtensionsPage({
   const { t, locale } = await getServerI18n();
   const interviewPracticeUrl = getInterviewPracticeUrl();
   const user = await getCurrentUser();
-  const [autoApply, notion] = user
+  const [autoApply, notion, feishu] = user
     ? await Promise.allSettled([
         getAutoApplyExtensionStatus(prisma, user.id),
         getNotionExtensionState(user.id),
+        getFeishuExtensionState(user.id),
       ])
     : [];
   const autoApplyStatus =
@@ -60,6 +64,16 @@ export default async function ExtensionsPage({
           | "status.reauth_required",
       )
     : t("extensions.notion.statusError");
+  const feishuState = feishu?.status === "fulfilled" ? feishu.value : null;
+  const feishuStatus = feishuState
+    ? feishuT(
+        locale,
+        `status.${feishuState.status.toLowerCase()}` as
+          | "status.connected"
+          | "status.disconnected"
+          | "status.reauth_required",
+      )
+    : t("extensions.feishu.statusError");
 
   const connectionsPanel = (
     <div
@@ -67,6 +81,7 @@ export default async function ExtensionsPage({
       className="grid grid-cols-1 gap-4 @md/main:grid-cols-2 @3xl/main:grid-cols-3"
     >
       <NotionStatusNotice status={notionState?.status ?? null} />
+      <FeishuStatusNotice status={feishuState?.status ?? null} />
       <Card data-testid="extensions-card-notion" className="h-full">
         <CardContent className="flex h-full flex-col gap-3 px-4 py-4">
           <div className="flex items-center gap-2">
@@ -95,6 +110,41 @@ export default async function ExtensionsPage({
                   notionState?.status === "CONNECTED"
                     ? "extensions.notion.manageCta"
                     : "extensions.notion.cta",
+                )}
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="extensions-card-feishu" className="h-full">
+        <CardContent className="flex h-full flex-col gap-3 px-4 py-4">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">
+              {t("extensions.feishu.name")}
+            </h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("extensions.feishu.description")}
+          </p>
+          <Badge
+            variant="secondary"
+            className="w-fit"
+            data-testid="extensions-feishu-status"
+          >
+            {feishuStatus}
+          </Badge>
+          <div className="mt-auto">
+            <Button asChild>
+              <Link
+                href="/dashboard/extensions/feishu"
+                data-testid="extensions-feishu-cta"
+              >
+                {t(
+                  feishuState?.status === "CONNECTED"
+                    ? "extensions.feishu.manageCta"
+                    : "extensions.feishu.cta",
                 )}
               </Link>
             </Button>

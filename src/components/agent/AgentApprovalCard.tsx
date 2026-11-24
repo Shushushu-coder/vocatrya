@@ -18,6 +18,11 @@ import {
   NOTION_TOOL,
 } from "@/lib/extensions/notion/constants";
 import { notionCopy, type NotionCopyKey } from "@/lib/extensions/notion/copy";
+import {
+  isFeishuAgentToolName,
+  FEISHU_TOOL,
+} from "@/lib/extensions/feishu/constants";
+import { feishuCopy, type FeishuCopyKey } from "@/lib/extensions/feishu/copy";
 import { AgentProposalStatus } from "@/components/agent/AgentProposalStatus";
 
 type Respond = (r: { id: string; approved: boolean; reason?: string }) => void;
@@ -174,6 +179,68 @@ function NotionWriteBody({
   );
 }
 
+// EXT-FEISHU: same display contract as the Notion write body — the exact
+// target and the verbatim content/edits that will be sent, nothing else.
+function FeishuWriteBody({
+  toolName,
+  input,
+}: {
+  toolName: string;
+  input: Record<string, unknown>;
+}) {
+  const { locale } = useI18n();
+  const ft = feishuCopy(locale);
+  const target = text(input.target);
+  const title = text(input.title);
+  const content = text(input.content);
+  const folder = text(input.folderToken);
+  const edits =
+    toolName === FEISHU_TOOL.updateContent && Array.isArray(input.edits)
+      ? (input.edits as Array<{ blockId?: unknown; newText?: unknown }>).filter(
+          (edit) => edit && typeof edit === "object",
+        )
+      : [];
+  return (
+    <div className="mt-1">
+      <Row
+        label={
+          toolName === FEISHU_TOOL.createDoc
+            ? ft["approval.destination"]
+            : ft["approval.target"]
+        }
+        value={toolName === FEISHU_TOOL.createDoc ? folder ?? target : target}
+      />
+      {title && <Row label={ft["approval.title"]} value={title} />}
+      {content && (
+        <div className="mt-2 rounded-sm border bg-muted/20 p-2">
+          <p className="text-xs text-muted-foreground">
+            {ft["approval.content"]}
+          </p>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs">
+            {content}
+          </pre>
+        </div>
+      )}
+      {edits.length > 0 && (
+        <div className="mt-2 rounded-sm border bg-muted/20 p-2">
+          <p className="text-xs text-muted-foreground">{ft["approval.edits"]}</p>
+          <ul className="mt-1 max-h-40 space-y-1 overflow-auto text-xs">
+            {edits.map((edit, index) => (
+              <li key={index} className="break-words">
+                <span className="break-all text-muted-foreground">
+                  {text(edit.blockId) ?? "—"}
+                </span>
+                <span className="mx-1">→</span>
+                <span>{text(edit.newText) ?? ""}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AgentApprovalCard({
   part,
   pastedText,
@@ -249,6 +316,9 @@ export function AgentApprovalCard({
         if (isNotionAgentToolName(toolName)) {
           return <NotionWriteBody toolName={toolName} input={input} />;
         }
+        if (isFeishuAgentToolName(toolName)) {
+          return <FeishuWriteBody toolName={toolName} input={input} />;
+        }
         return null;
     }
   })();
@@ -281,7 +351,9 @@ export function AgentApprovalCard({
             ? t(agentToolLabelKey(toolName)!)
             : isNotionAgentToolName(toolName)
               ? notionCopy(locale)[`tool.${toolName}` as NotionCopyKey]
-              : t("agent.tools.generic")}
+              : isFeishuAgentToolName(toolName)
+                ? feishuCopy(locale)[`tool.${toolName}` as FeishuCopyKey]
+                : t("agent.tools.generic")}
         </span>
       </div>
 
@@ -312,12 +384,11 @@ export function AgentApprovalCard({
         <p className="text-xs text-muted-foreground">{t("agent.waiting")}</p>
       )}
 
-      {/* Detached Notion writes: the transcript part is only the display;
+      {/* Detached extension writes: the transcript part is only the display;
           the durable proposal is the authority. Hydrate its real state so
           queued ≠ succeeded stays honest across refresh/restart. */}
-      {isNotionAgentToolName(toolName) && approvalId && (
-        <AgentProposalStatus approvalId={approvalId} />
-      )}
+      {(isNotionAgentToolName(toolName) || isFeishuAgentToolName(toolName)) &&
+        approvalId && <AgentProposalStatus approvalId={approvalId} />}
 
       <ConfirmationRequest>
         {declining && (

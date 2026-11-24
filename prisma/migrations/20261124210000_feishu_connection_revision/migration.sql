@@ -1,0 +1,1 @@
+ALTER TABLE "FeishuConnection" ADD COLUMN "revision" INTEGER NOT NULL DEFAULT 0;

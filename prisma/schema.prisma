@@ -83,6 +83,9 @@ model User {
   // EXT-NOTION dedicated Notion extension connection (additive backrelation only).
   notionConnection      NotionConnection?
 
+  // EXT-FEISHU dedicated Feishu app connection (additive backrelation only).
+  feishuConnection      FeishuConnection?
+
   // EXT-AUTO-APPLY browser-extension pairing/connection rows (additive only).
   autoApplyExtensionPairings    AutoApplyExtensionPairing[]
   autoApplyExtensionConnections AutoApplyExtensionConnection[]
@@ -2078,6 +2081,34 @@ model NotionConnection {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([pendingStateHash])
+}
+
+/// EXT-FEISHU Feishu self-built app connection. Application identity only
+/// (tenant_access_token) — no user OAuth, no pending flow. The App Secret
+/// lives inside the sealed credential bundle; appId is an identifier, kept
+/// readable so proposals can bind the connection they were approved against.
+model FeishuConnection {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  revision             Int      @default(0)
+  status               String   @default("DISCONNECTED")
+  appId                String?
+  // Capability keys probed against the live API at connect/verify time
+  // (JSON array, e.g. ["drive.list","wiki.read","docx.read","docx.write"]).
+  // These are scopes the app has been granted, not proof every document is
+  // reachable — resource access stays per-document.
+  availableCapabilities String?
+  // Sealed credential bundle: {v, appId, appSecret, tenantAccessToken?}.
+  encryptedCredential  String?
+  credentialIv         String?
+  lastVerifiedAt       DateTime?
+  lastUsedAt           DateTime?
+  connectedAt          DateTime?
+  lastError            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 /// One-shot browser-extension pairing grant for EXT-AUTO-APPLY. The user

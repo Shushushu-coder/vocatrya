@@ -52,6 +52,10 @@ export const INTENTIONALLY_EXCLUDED_PRISMA_MODELS = [
   // can travel. A restored install starts DISCONNECTED and the user
   // re-authorizes the workspace in place.
   "NotionConnection",
+  // EXT-FEISHU connection state carries a sealed App Secret bundle bound to
+  // this install's credential store — it cannot travel. A restored install
+  // starts DISCONNECTED and the user re-enters the app credentials.
+  "FeishuConnection",
   // Auto-apply extension pairing codes and connection tokens are hashed
   // secrets issued to one browser extension for this install. A restored
   // install starts unpaired and the user pairs the extension again.

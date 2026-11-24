@@ -15,6 +15,9 @@ const writeTools = new Set([
   "notion_update_record",
   "notion_update_content",
   "notion_delete_pages",
+  "feishu_create_doc",
+  "feishu_append_content",
+  "feishu_update_content",
 ]);
 
 export function hasWriteReceipt(message: UIMessage) {

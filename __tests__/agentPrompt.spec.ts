@@ -145,6 +145,11 @@ describe("agent chat system prompt", () => {
       "notion_update_record",
       "notion_update_content",
       "notion_delete_pages",
+      "feishu_search_docs",
+      "feishu_read_doc",
+      "feishu_create_doc",
+      "feishu_append_content",
+      "feishu_update_content",
       "suggest_role",
     ]);
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("list_jobs");

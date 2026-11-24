@@ -405,3 +405,76 @@ export type AgentNotionWriteResult =
       taskId?: string;
       taskStatus?: string;
     };
+
+// ─── EXT-FEISHU ───────────────────────────────────────────────────────────
+
+export type AgentFeishuDocItem = {
+  id: string;
+  title: string;
+  objectType?: string;
+  url?: string;
+  /** Where the item was listed from — app space, a folder, or a wiki space. */
+  container?: string;
+  editedAt?: string;
+};
+
+export type AgentFeishuSearchDocsResult =
+  | {
+      found: true;
+      results: AgentFeishuDocItem[];
+      truncated?: boolean;
+    }
+  | { found: false; code?: string; rawPreview?: string };
+
+export type AgentFeishuBlockSummary = {
+  blockId: string;
+  type: string;
+  text: string;
+};
+
+export type AgentFeishuReadDocResult =
+  | {
+      found: true;
+      target: string;
+      documentId: string;
+      title?: string;
+      url?: string;
+      content: string;
+      truncated?: boolean;
+      blocks?: AgentFeishuBlockSummary[];
+      blocksTruncated?: boolean;
+    }
+  | { found: false; code: string };
+
+export type AgentFeishuWriteVerify = {
+  tool: "feishu_search_docs" | "feishu_read_doc";
+  query?: string;
+  target?: string;
+};
+
+export type AgentFeishuWriteResult =
+  | {
+      saved: true;
+      tool: string;
+      documentId?: string;
+      url?: string;
+      title?: string;
+      warnings?: string[];
+    }
+  | {
+      saved: false;
+      tool: string;
+      status:
+        | "failed"
+        | "unknown"
+        | "verification_required"
+        | "reauth_required"
+        | "denied"
+        | "queued";
+      code: string;
+      detail?: string;
+      verify?: AgentFeishuWriteVerify;
+      proposalId?: string;
+      taskId?: string;
+      taskStatus?: string;
+    };

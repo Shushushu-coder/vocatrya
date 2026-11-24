@@ -6,6 +6,7 @@ import { hasArchivedJobReference } from "@/lib/agent/archiveVisibility";
 import { generateId } from "ai";
 import { admitConversationRequest, cancelConversationRequest, finishConversationRequest, ConversationRequestError, type ConversationRequest } from "@/lib/agent/conversationRequest";
 import { resolveNotionAgentToolNames } from "@/lib/extensions/notion/service";
+import { resolveFeishuAgentToolNames } from "@/lib/extensions/feishu/service";
 import { conversationCommitStream } from "@/lib/agent/conversationStream";
 import "server-only";
 
@@ -174,6 +175,7 @@ async function accountChatResponse({
   request,
   agentRole,
   notionTools,
+  feishuTools,
   taskSession,
   managed,
 }: {
@@ -201,6 +203,8 @@ async function accountChatResponse({
    * the route's admission step. Empty/omitted registers nothing.
    */
   notionTools?: readonly string[];
+  /** EXT-FEISHU: same contract as notionTools, resolved beside it. */
+  feishuTools?: readonly string[];
   /**
    * Agent long-task session context (Pilot conversation bound to an ACTIVE
    * task), resolved by the route. Null/omitted for ordinary conversations,
@@ -267,6 +271,7 @@ async function accountChatResponse({
     freshNativeFull,
     agentRole,
     notionTools,
+    feishuTools,
     taskExtraTools: taskSession?.extraTools,
   }) + personalInstructionsBlock(personalInstructions) + permissionInstructions(permissionMode)
     + buildResumeEvidencePromptAddendum({ messages, agentRole });
@@ -379,6 +384,7 @@ async function accountChatResponse({
           request,
           agentRole,
           notionTools,
+          feishuTools,
           permissionMode,
           agentTaskId: taskSession?.taskId,
           handoffLine: taskSession?.handoffLine,
@@ -593,10 +599,13 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     careerRuntime.rolloutScope,
   );
 
-  // EXT-NOTION: one indexed row read per turn. Connection state is
-  // re-asserted inside each tool at execution time, so a mid-turn
+  // EXT-NOTION / EXT-FEISHU: one indexed row read per turn. Connection state
+  // is re-asserted inside each tool at execution time, so a mid-turn
   // disconnect still cannot run a remote call.
   const notionTools = await resolveNotionAgentToolNames(userId).catch(
+    () => [],
+  );
+  const feishuTools = await resolveFeishuAgentToolNames(userId).catch(
     () => [],
   );
 
@@ -617,6 +626,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       request,
       agentRole: conversation.agentRole,
       notionTools,
+      feishuTools,
       taskSession,
       managed: managedTurn,
     });
@@ -794,6 +804,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     freshNativeFull,
     agentRole: conversation.agentRole,
     notionTools,
+    feishuTools,
     taskExtraTools: taskSession?.extraTools,
   }) + personalInstructionsBlock(preferences.personalInstructions) + permissionInstructions(permissionMode)
     + buildResumeEvidencePromptAddendum({ messages, agentRole: conversation.agentRole });
@@ -846,6 +857,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
           request,
           agentRole: conversation.agentRole,
           notionTools,
+          feishuTools,
           permissionMode,
           taskExtraTools: taskSession?.extraTools,
         });

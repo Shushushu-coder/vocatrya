@@ -14,6 +14,7 @@ import { buildCanonicalMatchJobTool } from "./canonicalMatchJob";
 import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
 import { buildSuggestRoleTool } from "./suggestRole";
 import { buildNotionAgentTools } from "./notion";
+import { buildFeishuAgentTools } from "./feishu";
 import type { PermissionMode } from "../preferences";
 
 // The three nested tools deliberately break the "a tool touches neither the
@@ -60,6 +61,12 @@ export function buildAgentTools(ctx: {
    * Absent or empty registers nothing — the extension is strictly opt-in.
    */
   notionTools?: readonly string[];
+  /**
+   * EXT-FEISHU: the agent-tool names the connected Feishu app can serve
+   * (probed capabilities ∩ app allowlist, resolved by the route before
+   * build). Absent or empty registers nothing — strictly opt-in.
+   */
+  feishuTools?: readonly string[];
   /**
    * Task-session extension (resolveTaskSessionTools): extra tools for a Pilot
    * conversation bound to an ACTIVE task. Absent/null leaves the role
@@ -133,6 +140,18 @@ export function buildAgentTools(ctx: {
     for (const name of ctx.notionTools) {
       const notionTool = notionToolset[name];
       if (notionTool) tools[name] = notionTool;
+    }
+  }
+  // EXT-FEISHU: same gate — only the pre-resolved effective set registers,
+  // and execution re-checks the live connection row per call.
+  if (ctx.feishuTools && ctx.feishuTools.length > 0) {
+    const feishuToolset = buildFeishuAgentTools({
+      userId: ctx.userId,
+      request: ctx.request,
+    });
+    for (const name of ctx.feishuTools) {
+      const feishuTool = feishuToolset[name];
+      if (feishuTool) tools[name] = feishuTool;
     }
   }
 

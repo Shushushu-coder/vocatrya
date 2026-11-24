@@ -59,6 +59,8 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "match_job",
     "notion_search",
     "notion_read",
+    "feishu_search_docs",
+    "feishu_read_doc",
     "suggest_role",
   ],
   pilot: [
@@ -73,6 +75,11 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "notion_update_record",
     "notion_update_content",
     "notion_delete_pages",
+    "feishu_search_docs",
+    "feishu_read_doc",
+    "feishu_create_doc",
+    "feishu_append_content",
+    "feishu_update_content",
     "suggest_role",
   ],
   reflect: [
@@ -81,6 +88,8 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "read_webpage",
     "notion_search",
     "notion_read",
+    "feishu_search_docs",
+    "feishu_read_doc",
     "suggest_role",
   ],
 };

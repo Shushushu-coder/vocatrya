@@ -465,6 +465,11 @@ export type AccountAgentTurnInput = {
    */
   notionTools?: readonly string[];
   /**
+   * EXT-FEISHU: agent-tool names the connected Feishu app can serve
+   * (resolved by the route). Same registration order and gates as Notion.
+   */
+  feishuTools?: readonly string[];
+  /**
    * Task session (agent long-task harness). All three come from the route's
    * resolveTaskSessionContext and are absent for ordinary conversations,
    * which therefore run byte-identically to before.
@@ -560,6 +565,7 @@ export async function runAccountAgentTurn(
     request: input.request,
     agentRole: input.agentRole,
     notionTools: input.notionTools,
+    feishuTools: input.feishuTools,
     taskExtraTools: input.taskExtraTools,
     permissionMode: input.permissionMode,
   });
