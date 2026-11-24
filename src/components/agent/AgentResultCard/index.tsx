@@ -18,6 +18,7 @@ import {
   FeishuWriteResultCard,
 } from "./FeishuResult";
 import { SuggestRoleResult } from "./SuggestRoleResult";
+import { TodayPlanReadResult, TodayPlanWriteResult } from "./TodayPlanResult";
 import { WebpageResult } from "./WebpageResult";
 import type {
   AgentAddJobResult,
@@ -36,6 +37,8 @@ import type {
   AgentReadWebpageResult,
   AgentReviewResumeResult,
   AgentSuggestRoleResult as AgentSuggestRoleResultType,
+  AgentTodayPlanReadResult,
+  AgentTodayPlanWriteResult,
 } from "@/models/agent.model";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
@@ -143,6 +146,14 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
           output={part.output as AgentFeishuWriteResult}
         />
       )
+    ) : toolName === "today_plan_read" ? (
+      <TodayPlanReadResult
+        output={part.output as AgentTodayPlanReadResult}
+      />
+    ) : toolName === "today_plan" ? (
+      <TodayPlanWriteResult
+        output={part.output as AgentTodayPlanWriteResult}
+      />
     ) : toolName === "suggest_role" ? (
       <SuggestRoleResult
         output={part.output as AgentSuggestRoleResultType}

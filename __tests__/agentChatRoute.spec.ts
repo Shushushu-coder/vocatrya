@@ -410,6 +410,9 @@ describe("POST /api/ai/chat", () => {
       "review_resume",
       "match_job",
       "generate_cover_letter",
+      "today_plan_read",
+      "today_plan",
+
     ]);
   });
 
@@ -575,6 +578,9 @@ describe("POST /api/ai/chat", () => {
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
+
     ]);
     expect(streamArgs().system).toContain("add_job");
     expect(streamArgs().system).toContain("match_job");

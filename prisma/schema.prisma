@@ -89,6 +89,10 @@ model User {
   // EXT-AUTO-APPLY browser-extension pairing/connection rows (additive only).
   autoApplyExtensionPairings    AutoApplyExtensionPairing[]
   autoApplyExtensionConnections AutoApplyExtensionConnection[]
+
+  // TODAY-PLAN per-conversation checklist (additive backrelations only).
+  todayPlanItems      TodayPlanItem[]
+  todayPlanOperations TodayPlanOperation[]
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -535,6 +539,11 @@ model Task {
   activityTypeId String?
   activityType   ActivityType? @relation(fields: [activityTypeId], references: [id])
 
+  // TODAY-PLAN checklist associations (additive backrelation only). Deleting
+  // the Task removes its checklist rows; removing a checklist row never
+  // deletes the Task.
+  todayPlanItems   TodayPlanItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -754,6 +763,11 @@ model ChatConversation {
   agentTaskId            String?
   agentTask              AgentTask?           @relation(fields: [agentTaskId], references: [id], onDelete: SetNull)
   agentTaskHandoffs      AgentTaskHandoff[]
+  // TODAY-PLAN checklist rows + write ledger. Cascade follows the
+  // conversation — checklist entries without their transcript are
+  // unrecoverable context, and the operation rows only describe them.
+  todayPlanItems         TodayPlanItem[]
+  todayPlanOperations    TodayPlanOperation[]
 
   @@index([userId, updatedAt])
   @@index([userId, archivedAt])
@@ -2802,4 +2816,59 @@ model AgentTaskEvent {
   task AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// TODAY-PLAN per-conversation checklist (additive models only).
+
+/// A plan row binds one Task to one conversation on one plannedOn date
+/// ("YYYY-MM-DD" in the account timezone). The Task stays the single source
+/// of truth for title and completion: toggling a checklist row updates the
+/// shared Task, removing a row only detaches the association. plannedOn is
+/// independent of Task.dueOn/dueDate — moving a row changes which date the
+/// list shows it under, never the business deadline. No automatic rollover:
+/// historical rows keep their date until the user or Agent moves them.
+model TodayPlanItem {
+  id             String   @id @default(uuid())
+  userId         String
+  conversationId String
+  taskId         String
+  plannedOn      String
+  position       Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  task         Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // One task appears at most once per conversation — moving re-dates the
+  // same row instead of duplicating it.
+  @@unique([conversationId, taskId])
+  @@index([userId, conversationId, plannedOn])
+  @@index([userId, taskId])
+}
+
+/// Durable dedupe + undo ledger for TODAY-PLAN writes. One row per
+/// operationKey (client- or tool-generated): inside the write transaction a
+/// retry finds the recorded result and returns it without re-applying, so
+/// repeat saves/retry/clicks cannot double-insert. undoJson is the
+/// before-image consumed by conditional undo — undo only reverts rows still
+/// at the recorded version and never overwrites later edits.
+model TodayPlanOperation {
+  id             String    @id @default(uuid())
+  userId         String
+  conversationId String
+  operationKey   String    @unique
+  // add | set | rename | toggle | reorder | move | carry_over | remove
+  kind           String
+  undoJson       String?
+  resultJson     String?
+  undoneAt       DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, conversationId])
 }

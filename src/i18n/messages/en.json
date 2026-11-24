@@ -3805,5 +3805,58 @@
       "MISSING_FACTS": "Missing information from you",
       "EXTERNAL_REPLY": "Waiting for an external reply"
     }
+  },
+  "todayPlan": {
+    "triggerLabel": "Checklist",
+    "triggerTooltip": "Today's checklist",
+    "title": "Checklist",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "overdue": "Incomplete before",
+    "history": "Earlier done",
+    "carryOver": "Move into today",
+    "addPlaceholder": "Add an item…",
+    "add": "Add",
+    "undo": "Undo",
+    "undone": "Undone",
+    "saved": "Saved",
+    "openTask": "Open in Tasks",
+    "empty": "No saved conversation selected. Adding an item creates the current chat without calling AI.",
+    "cardUnavailable": "Checklist unavailable",
+    "cardTarget": "Save to",
+    "adoptHint": "Confirm saves this plan to the checklist.",
+    "draftTitle": "Draft from real data",
+    "noSuggestions": "No data to suggest from yet.",
+    "overdueCount": "{count} earlier item(s) still incomplete",
+    "ambiguous": "“{title}” matches more than one item — be more specific.",
+    "action": {
+      "add": "added",
+      "suggest": "adopted",
+      "rename": "renamed",
+      "toggle": "toggled",
+      "reorder": "reordered",
+      "move": "moved",
+      "carry_over": "carried over",
+      "remove": "removed"
+    },
+    "status": {
+      "not_found": "Item not found: {title}",
+      "empty": "Nothing to do there",
+      "already_planned": "Already on the checklist: {title}",
+      "failed": "Checklist update failed"
+    },
+    "edit": "Edit",
+    "remove": "Remove from checklist (keep task)",
+    "save": "Save",
+    "moveToday": "Move into today",
+    "moveTomorrow": "Move to tomorrow",
+    "later": "Later",
+    "untitled": "Current conversation",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "loadFailed": "Checklist could not be loaded.",
+    "createFailed": "Could not create a conversation.",
+    "createAndAdd": "Create chat and add",
+    "undoSkipped": "Some items changed later and were kept."
   }
 }

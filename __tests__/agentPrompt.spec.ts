@@ -151,6 +151,8 @@ describe("agent chat system prompt", () => {
       "feishu_append_content",
       "feishu_update_content",
       "suggest_role",
+      "today_plan_read",
+      "today_plan",
     ]);
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("list_jobs");
     expect(AGENT_CHAT_PROMPT_SECTIONS.capabilities).toContain("get_job");

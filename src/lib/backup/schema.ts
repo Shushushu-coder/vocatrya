@@ -1,3 +1,4 @@
+import { parseDateOnly } from "@/lib/datetime";
 import { assertManagedConnectionMetadataSafe } from "@/lib/ai/connections";
 import { managedAiProvenanceStringSchema as managedAiProvenance } from "@/lib/ai/managed-provenance";
 import { z } from "zod";
@@ -11,8 +12,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 11;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+export const BACKUP_FORMAT_VERSION = 12;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -31,6 +32,7 @@ export const ManifestSchema = z.object({
     z.literal(9),
     z.literal(10),
     z.literal(11),
+    z.literal(12),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -1417,6 +1419,30 @@ const Reminder = z.object({
   updatedAt: dt,
 });
 
+// TODAY-PLAN per-conversation checklist. userId travels stripped like every
+// owned model — the importer injects it from the session. Both models are
+// absent from pre-feature backups; the group default keeps those files valid.
+const TodayPlanItem = z.object({
+  id,
+  conversationId: id,
+  taskId: id,
+  plannedOn: str.refine(value => parseDateOnly(value) !== null, "Invalid plan date"),
+  position: int,
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const TodayPlanOperation = z.object({
+  id,
+  conversationId: id,
+  operationKey: str,
+  kind: str,
+  undoJson: optStr,
+  resultJson: optStr,
+  undoneAt: optDt,
+  createdAt: dt,
+});
+
 const group = <T extends z.ZodTypeAny>(schema: T) =>
   z.array(schema).default([]);
 
@@ -1451,6 +1477,8 @@ export const BackupDataSchema = z.object({
   AIConnection: group(AIConnection),
   AIBusinessAssignment: group(AIBusinessAssignment),
   ChatConversation: group(ChatConversation),
+  TodayPlanItem: group(TodayPlanItem),
+  TodayPlanOperation: group(TodayPlanOperation),
   AgentOperationProposal: group(AgentOperationProposal),
   AutomationRun: group(AutomationRun),
   UserSettings: group(UserSettings),

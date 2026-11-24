@@ -26,6 +26,9 @@ describe("buildAgentTools under fresh + full", () => {
       "get_resume",
       "review_resume",
       "match_job",
+      "today_plan_read",
+      "today_plan",
+
     ]);
     // Canonical match_job always requires approval — the product decision
     // D3: every run crosses the durable approval boundary.
@@ -76,6 +79,9 @@ describe("buildAgentTools under fresh + full", () => {
       "review_resume",
       "match_job",
       "generate_cover_letter",
+      "today_plan_read",
+      "today_plan",
+
     ]);
     const needsApproval = tools.add_job.needsApproval;
     expect(typeof needsApproval).toBe("function");
@@ -102,6 +108,9 @@ describe("buildAgentTools under fresh + full", () => {
         "review_resume",
         "match_job",
         "generate_cover_letter",
+        "today_plan_read",
+        "today_plan",
+
       ]);
     }
   });
@@ -124,7 +133,8 @@ describe("fresh + full system prompt", () => {
     expect(prompt).toMatch(/match analysis/i);
     expect(prompt).toMatch(/cover letter/i);
     expect(prompt).toMatch(/does not submit an application/i);
-    expect(prompt).toMatch(/exactly six capabilities/i);
+    expect(prompt).toContain("today_plan_read");
+    expect(prompt).toContain("today_plan");
   });
 
   it("keeps the canonical read tools advertised", () => {

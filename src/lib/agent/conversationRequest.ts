@@ -69,6 +69,8 @@ const fail = (code: ConversationErrorCode): never => { throw new ConversationReq
 const APPROVAL_BOUND_TOOL_RECEIPTS = new Set([
   "add_job",
   "match_job",
+  // The adopt-plan approval must settle under its own admitted toolCall.
+  "today_plan",
   // EXT-NOTION writes execute only inside their own admitted approval.
   "notion_create_page",
   "notion_append_content",

@@ -1128,6 +1128,18 @@ function useAgentChatValue(
   );
 
   // Enter a draft (unpersisted) state inside the active slot. Called by
+  const ensureTodayPlanConversation = useCallback(async () => {
+    if (conversationIdRef.current) return conversationIdRef.current;
+    if (creatingRef.current || roleSelectionPendingRef.current) return null;
+    creatingRef.current = true;
+    try {
+      return await createPersisted(null, []);
+    } finally {
+      creatingRef.current = false;
+    }
+  }, [createPersisted]);
+
+  // Enter a draft (unpersisted) state inside the active slot. Called by
   // startNewConversation with an empty slot, and by switchRole with the
   // target role's stored draft state. draft/paste seed the composer state
   // resetTransient just cleared, so a carried or restored draft survives
@@ -1836,6 +1848,7 @@ function useAgentChatValue(
     archiveConversation,
     historyVersion,
     conversationId,
+    ensureTodayPlanConversation,
     context,
     explicit,
     setDraftModel,

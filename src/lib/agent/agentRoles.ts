@@ -61,6 +61,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "notion_read",
     "feishu_search_docs",
     "feishu_read_doc",
+    "today_plan_read",
     "suggest_role",
   ],
   pilot: [
@@ -80,6 +81,8 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "feishu_create_doc",
     "feishu_append_content",
     "feishu_update_content",
+    "today_plan_read",
+    "today_plan",
     "suggest_role",
   ],
   reflect: [
@@ -90,6 +93,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "notion_read",
     "feishu_search_docs",
     "feishu_read_doc",
+    "today_plan_read",
     "suggest_role",
   ],
 };

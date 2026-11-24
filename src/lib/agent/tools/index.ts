@@ -15,6 +15,7 @@ import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
 import { buildSuggestRoleTool } from "./suggestRole";
 import { buildNotionAgentTools } from "./notion";
 import { buildFeishuAgentTools } from "./feishu";
+import { buildTodayPlanReadTool, buildTodayPlanTool } from "./todayPlan";
 import type { PermissionMode } from "../preferences";
 
 // The three nested tools deliberately break the "a tool touches neither the
@@ -118,6 +119,11 @@ export function buildAgentTools(ctx: {
     // every other tool: named roles keep it (their allowlists name it),
     // the NULL general assistant drops it — it has no siblings to hand to.
     suggest_role: buildSuggestRoleTool(),
+    // TODAY-PLAN: the checklist is per-conversation — both tools resolve it
+    // from the admitted request, never from model input. The read stays on
+    // every role's surface; the write filters down to Pilot.
+    today_plan_read: buildTodayPlanReadTool(ctx.userId, ctx.request),
+    today_plan: buildTodayPlanTool(ctx.userId, ctx.request),
   };
 
   if (ctx.freshNativeFull) {

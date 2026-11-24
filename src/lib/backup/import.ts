@@ -1,3 +1,4 @@
+import { restoreTodayPlanLedger } from "@/lib/todayPlan/backup";
 import fs from "fs/promises";
 import path from "path";
 import type JSZip from "jszip";
@@ -975,6 +976,14 @@ export async function importBackup(
               const restored = restoredConversations.get(row.id as string)!;
               payload.context = restored.context;
               payload.messages = restored.messages;
+            }
+            if (model === "TodayPlanOperation") {
+              Object.assign(payload, restoreTodayPlanLedger(row, {
+                operationId: String(payload.id),
+                mapId: id => idMap.get(id),
+                taskIds: new Set(data.Task.map(task => task.id)),
+                items: new Map(data.TodayPlanItem.map(item => [item.id, item])),
+              }));
             }
             if (model === "AgentOperationProposal") {
               // Runtime links are never restored: HarnessTask does not

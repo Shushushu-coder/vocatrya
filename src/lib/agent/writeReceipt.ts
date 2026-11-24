@@ -10,6 +10,7 @@ const writeTools = new Set([
   "add_job",
   "match_job",
   "generate_cover_letter",
+  "today_plan",
   "notion_create_page",
   "notion_append_content",
   "notion_update_record",

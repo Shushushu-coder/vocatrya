@@ -3805,5 +3805,58 @@
       "MISSING_FACTS": "缺少你需提供的信息",
       "EXTERNAL_REPLY": "等待外部回复"
     }
+  },
+  "todayPlan": {
+    "triggerLabel": "清单",
+    "triggerTooltip": "今日清单",
+    "title": "今日清单",
+    "today": "今天",
+    "tomorrow": "明天",
+    "overdue": "此前未完成",
+    "history": "更早已完成",
+    "carryOver": "移入今天",
+    "addPlaceholder": "添加事项…",
+    "add": "添加",
+    "undo": "撤销",
+    "undone": "已撤销",
+    "saved": "已保存",
+    "openTask": "在任务中打开",
+    "empty": "未选中持久会话。添加事项时将创建当前普通会话，不调用 AI。",
+    "cardUnavailable": "清单暂不可用",
+    "cardTarget": "保存到",
+    "adoptHint": "确认将把这份计划保存到今日清单。",
+    "draftTitle": "基于现有数据的建议",
+    "noSuggestions": "暂无足够数据生成建议。",
+    "overdueCount": "{count} 条此前事项仍未完成",
+    "ambiguous": "“{title}”匹配到多条事项，请更具体。",
+    "action": {
+      "add": "已添加",
+      "suggest": "已采用",
+      "rename": "已改名",
+      "toggle": "已切换",
+      "reorder": "已排序",
+      "move": "已移动",
+      "carry_over": "已移入",
+      "remove": "已移除"
+    },
+    "status": {
+      "not_found": "未找到事项：{title}",
+      "empty": "无可操作项",
+      "already_planned": "已在清单中：{title}",
+      "failed": "清单更新失败"
+    },
+    "edit": "编辑",
+    "remove": "移出清单（保留任务）",
+    "save": "保存",
+    "moveToday": "移入今天",
+    "moveTomorrow": "移到明天",
+    "later": "以后",
+    "untitled": "当前会话",
+    "loading": "加载中…",
+    "retry": "重试",
+    "loadFailed": "清单加载失败。",
+    "createFailed": "无法创建会话。",
+    "createAndAdd": "创建会话并添加",
+    "undoSkipped": "部分事项已有后续修改，已保留。"
   }
 }

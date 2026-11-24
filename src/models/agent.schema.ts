@@ -290,3 +290,61 @@ export const AgentFeishuUpdateContentSchema = z.object({
 });
 
 export type AgentFeishuUpdateContentInput = z.infer<typeof AgentFeishuUpdateContentSchema>;
+// ─── TODAY-PLAN ───────────────────────────────────────────────────────────
+// The checklist is per-conversation — the tool resolves the conversation
+// from the admitted request, never from model input. Items are matched by
+// the title the user said; multiple matches come back as `ambiguous` for the
+// model to clarify instead of guessing.
+
+export const AgentTodayPlanReadSchema = z.object({});
+
+export type AgentTodayPlanReadInput = z.infer<typeof AgentTodayPlanReadSchema>;
+
+const planItemTitle = z
+  .string()
+  .min(1)
+  .max(200)
+  .describe("One checklist item title, exactly as the user said it.");
+
+export const AgentTodayPlanSchema = z.object({
+  action: z
+    .enum([
+      "add",
+      "suggest",
+      "rename",
+      "complete",
+      "uncomplete",
+      "toggle",
+      "move",
+      "remove",
+      "reorder",
+      "carry_over",
+    ])
+    .describe(
+      "add/suggest put new items on the list (suggest shows them on the adopt card first — use it for a proposed plan, add for items the user explicitly named). rename/complete/uncomplete/toggle/move/remove target ONE item by title. reorder sets the full order of a date. carry_over moves every overdue unfinished item into today.",
+    ),
+  target: z
+    .enum(["today", "tomorrow"])
+    .optional()
+    .describe("The date to write to. Required for add/suggest/move/reorder; today is the default."),
+  items: z
+    .array(planItemTitle)
+    .min(1)
+    .max(20)
+    .optional()
+    .describe("For add/suggest: every new item title, in the order they should appear."),
+  title: planItemTitle
+    .optional()
+    .describe("The one existing item this call operates on — for rename/complete/uncomplete/toggle/move/remove."),
+  newTitle: planItemTitle
+    .optional()
+    .describe("For rename: the replacement title."),
+  titles: z
+    .array(planItemTitle)
+    .min(1)
+    .max(50)
+    .optional()
+    .describe("For reorder: every item on the target date, in the new order — all of them, exactly once."),
+});
+
+export type AgentTodayPlanInput = z.infer<typeof AgentTodayPlanSchema>;

@@ -18,6 +18,7 @@ export function effectiveAgentToolNames(input: { agentRole?: string | null; fres
   const notion = new Set<string>(NOTION_ALL_TOOL_NAMES);
   const feishu = new Set<string>(FEISHU_ALL_TOOL_NAMES);
   const names = ["add_job", "list_jobs", "get_job", "read_webpage", "get_resume", "review_resume", "match_job",
+    "today_plan_read", "today_plan",
     ...(input.freshNativeFull ? [] : ["generate_cover_letter"]),
     ...(input.notionTools ?? []).filter(name => notion.has(name)),
     ...(input.feishuTools ?? []).filter(name => feishu.has(name)),
@@ -38,5 +39,7 @@ export function agentToolApproval(name: string, freshNativeFull: boolean, mode: 
   if (mode === "full" && ["add_job", "match_job", "notion_create_page", "notion_append_content", "notion_update_record"].includes(name)) return "none";
   if (mode === "rules" && ["add_job", "match_job"].includes(name)) return "none";
   if (NOTION_CONFIRM_WRITES.includes(name) || FEISHU_CONFIRM_WRITES.includes(name)) return "always";
-  return name === "add_job" ? "conditional" : "none";
+  // today_plan is input-conditional like add_job: only the "suggest" action
+  // raises the adopt-plan card, and it keeps that gate in every mode.
+  return name === "add_job" || name === "today_plan" ? "conditional" : "none";
 }

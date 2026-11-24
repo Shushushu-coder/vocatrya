@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { CreateMenu } from "@/components/GlobalActions";
 import { AgentChatTrigger } from "@/components/AgentChatTrigger";
+import { TodayPlanEntry } from "@/components/todayPlan/TodayPlanEntry";
 import { isDesktopShell } from "@/components/desktop/desktopShell";
 
 // The desktop titlebar is mounted by the root layout, above the dashboard
@@ -32,10 +33,13 @@ export function TitleBarActions() {
       {leftSlot && createPortal(<CreateMenu compact />, leftSlot)}
       {rightSlot &&
         createPortal(
-          <AgentChatTrigger
-            variant="ghost"
-            className="h-7 gap-1.5 px-2 text-xs"
-          />,
+          <>
+            <TodayPlanEntry variant="ghost" className="h-7 w-7" />
+            <AgentChatTrigger
+              variant="ghost"
+              className="h-7 gap-1.5 px-2 text-xs"
+            />
+          </>,
           rightSlot
         )}
     </>
