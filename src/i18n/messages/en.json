@@ -2449,7 +2449,7 @@
       "insight": {
         "duty": "what the job wants, how to fix your resume",
         "selfLead": "I read jobs and resumes and tell you how well they fit — match checks, resume reviews.",
-        "selfHandoff": "I look but never touch; logging and writes are Pilot's job."
+        "selfHandoff": "I can manage this conversation's to-do list; job and extension writes are Pilot's job."
       },
       "pilot": {
         "duty": "log jobs, track applications, always confirms first",
@@ -2459,7 +2459,7 @@
       "reflect": {
         "duty": "talk through interviews and next steps",
         "selfLead": "I help you think it through — how the interview went, which offer to pick, what next.",
-        "selfHandoff": "I never change your data; doing is Pilot's, analysis is Insight's."
+        "selfHandoff": "I can manage this conversation's to-do list; job writes are Pilot's, analysis is Insight's."
       }
     },
     "suggest": {

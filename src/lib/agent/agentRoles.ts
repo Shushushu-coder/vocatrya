@@ -62,6 +62,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "feishu_search_docs",
     "feishu_read_doc",
     "today_plan_read",
+    "today_plan",
     "suggest_role",
   ],
   pilot: [
@@ -94,6 +95,7 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "feishu_search_docs",
     "feishu_read_doc",
     "today_plan_read",
+    "today_plan",
     "suggest_role",
   ],
 };

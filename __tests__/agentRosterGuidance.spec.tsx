@@ -125,13 +125,14 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(prompt).not.toContain("match_job scores");
   });
 
-  it("sends Reflect writes to Pilot and analysis to Insight", () => {
+  it("keeps Reflect To-do writes local and sends other writes to Pilot and analysis to Insight", () => {
     const prompt = buildAgentChatSystemPrompt("en", {
       agentRole: "reflect",
       notionTools: ["notion_search", "notion_read"],
     });
     expect(prompt).toContain(READ_ONLY);
-    expect(prompt).toContain("belongs to Voca Pilot");
+    expect(prompt).toContain("Job writes and connected-extension writes belong to Voca Pilot");
+    expect(prompt).toContain("today_plan changes it");
     expect(prompt).toContain("belong to Voca Insight");
     expect(prompt).toContain("compass icon");
     expect(prompt).toContain("telescope icon");
@@ -174,7 +175,7 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(section).toContain("Do not say Notion is disconnected");
   });
 
-  it("leaves the role allowlists unchanged", () => {
+  it("shares To-do writes while keeping other role write boundaries", () => {
     for (const name of writes) {
       expect(AGENT_ROLE_TOOL_ALLOWLIST.insight).not.toContain(name);
       expect(AGENT_ROLE_TOOL_ALLOWLIST.reflect).not.toContain(name);
@@ -192,6 +193,13 @@ describe("refusal prompts follow the registered tool set", () => {
       "notion_update_record",
       "notion_update_content",
       "notion_delete_pages",
+      "feishu_search_docs",
+      "feishu_read_doc",
+      "feishu_create_doc",
+      "feishu_append_content",
+      "feishu_update_content",
+      "today_plan_read",
+      "today_plan",
       "suggest_role",
     ]);
     expect(AGENT_ROLE_TOOL_ALLOWLIST.reflect).toEqual([
@@ -200,6 +208,10 @@ describe("refusal prompts follow the registered tool set", () => {
       "read_webpage",
       "notion_search",
       "notion_read",
+      "feishu_search_docs",
+      "feishu_read_doc",
+      "today_plan_read",
+      "today_plan",
       "suggest_role",
     ]);
   });

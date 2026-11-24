@@ -14,6 +14,7 @@ import { renderCareerDialoguePrompt } from "@/lib/agent/accountTurn";
 import golden from "./fixtures/agentPromptToolsNonTaskGolden.json";
 import { AGENT_CHAT_TERMINAL_TOOLS } from "@/models/agent.model";
 import { buildTodayPlanTool } from "@/lib/agent/tools/todayPlan";
+import { buildAgentTools } from "@/lib/agent/tools";
 import { NON_TASK_INVARIANCE_CASES } from "./helpers/contextBudgetInvarianceInputs";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -119,6 +120,29 @@ describe("career-dialogue prompt without a task binding", () => {
 
 
 describe("To-do tool behavior on ordinary conversations", () => {
+  it.each(["insight", "pilot", "reflect"] as const)("registers working To-do gates for %s without granting other roles' writes", (agentRole) => {
+    for (const freshNativeFull of [false, true]) {
+      for (const permissionMode of ["ask", "rules", "full"] as const) {
+        const tools = buildAgentTools({
+          userId: "test-user", agentRole, freshNativeFull, permissionMode,
+          model: {} as never, provider: "ollama", modelName: "fixture",
+          writer: { write: () => {}, merge: () => {} } as never,
+          notionTools: ["notion_create_page"],
+          feishuTools: ["feishu_create_doc"],
+        });
+        expect(tools.today_plan_read).toBeDefined();
+        expect(tools.today_plan).toBeDefined();
+        const gate = tools.today_plan.needsApproval as (input: { action: string }) => boolean;
+        expect(gate({ action: "suggest" })).toBe(true);
+        for (const action of ["add", "rename", "complete", "uncomplete", "move", "remove"]) {
+          expect(gate({ action })).toBe(false);
+        }
+        if (agentRole !== "pilot") {
+          for (const name of ["add_job", "notion_create_page", "feishu_create_doc"]) expect(tools[name]).toBeUndefined();
+        }
+      }
+    }
+  });
   it("keeps read nonterminal so a grounded suggestion can follow", () => {
     expect([...AGENT_CHAT_TERMINAL_TOOLS]).not.toContain("today_plan_read");
     expect([...AGENT_CHAT_TERMINAL_TOOLS]).toContain("today_plan");
@@ -131,14 +155,17 @@ describe("To-do tool behavior on ordinary conversations", () => {
       expect(gate({ action: "add" })).toBe(false);
     }
   });
-  it("grants writes only to Pilot among named roles and preserves the grounding prompt", () => {
+  it("grants conversation-scoped writes to every named role and preserves the grounding prompt", () => {
     for (const role of ["pilot", "insight", "reflect"] as const) {
       const tools = effectiveAgentToolNames({ agentRole: role });
       expect(tools).toContain("today_plan_read");
-      expect(tools.includes("today_plan")).toBe(role === "pilot");
+      expect(tools).toContain("today_plan");
       const prompt = buildAgentChatSystemPrompt("en", { agentRole: role });
       expect(prompt).toContain("today_plan_read");
-      if (role === "pilot") { expect(prompt).toContain("suggest"); expect(prompt).toContain("today_plan"); }
+      expect(prompt).toContain("suggest");
+      expect(prompt).toContain("today_plan changes it");
+      expect(prompt).not.toContain("checklist changes belong to Voca Pilot");
+      expect(prompt).not.toContain("you cannot change it");
     }
   });
 });

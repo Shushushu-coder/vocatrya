@@ -71,8 +71,8 @@ export const AGENT_ROLE_FALLBACKS: Record<string, { "zh-CN": string; en: string 
     en: "I read jobs and resumes and tell you how well they fit — match checks, resume reviews.",
   },
   "agent.roster.insight.selfHandoff": {
-    "zh-CN": "我只看不动手——记职位、写入类的活儿找 Pilot。",
-    en: "I look but never touch; logging and writes are Pilot's job.",
+    "zh-CN": "我也能管理本次对话的待办；记职位、操作扩展找 Pilot。",
+    en: "I can manage this conversation's to-do list; job and extension writes are Pilot's job.",
   },
   "agent.roster.pilot.duty": {
     "zh-CN": "帮你记职位、盯投递，动手前先给你确认",
@@ -95,8 +95,8 @@ export const AGENT_ROLE_FALLBACKS: Record<string, { "zh-CN": string; en: string 
     en: "I help you think it through — how the interview went, which offer to pick, what next.",
   },
   "agent.roster.reflect.selfHandoff": {
-    "zh-CN": "我不动你的数据——干活找 Pilot，分析找 Insight。",
-    en: "I never change your data; doing is Pilot's, analysis is Insight's.",
+    "zh-CN": "我也能管理本次对话的待办；记职位找 Pilot，分析找 Insight。",
+    en: "I can manage this conversation's to-do list; job writes are Pilot's, analysis is Insight's.",
   },
 };
 
@@ -235,10 +235,10 @@ export function roleHandoffHint(role: AgentRole): string {
   const never =
     "Do not describe the request as impossible, broken, unconnected, or unavailable in this app.";
   if (role === "insight") {
-    return `Every write or edit, including a write through a connected extension, belongs to ${name("pilot")} because of the role boundary. Answer what you can from what you can read; when the write itself is what the user wants, call suggest_role with role "pilot" and their request copied verbatim — the card carries it to ${name("pilot")} — and you can also point to the ${icon("pilot")} icon at the top of this panel. ${never}`;
+    return `You can directly manage your own conversation's to-do list. Job writes and writes through a connected extension belong to ${name("pilot")} because of the role boundary. Answer what you can from what you can read; when such a job or extension write is what the user wants, call suggest_role with role "pilot" and their request copied verbatim — the card carries it to ${name("pilot")} — and you can also point to the ${icon("pilot")} icon at the top of this panel. ${never}`;
   }
   if (role === "pilot") {
     return `Resume reviews and match analysis belong to ${name("insight")} because of the role boundary. Answer what you can from the job data you can read; when the analysis itself is what they want, call suggest_role with role "insight" and their request copied verbatim — the card carries it to ${name("insight")} — and you can also point to the ${icon("insight")} icon at the top of this panel. ${never}`;
   }
-  return `Writing or changing data belongs to ${name("pilot")}: when the user clearly wants it, call suggest_role with role "pilot" and their request copied verbatim — the card carries it to ${name("pilot")} (the ${icon("pilot")} icon). Resume reviews and match analysis belong to ${name("insight")}: same handoff with role "insight" for ${name("insight")} (the ${icon("insight")} icon). Otherwise keep the conversation going and answer honestly. ${never}`;
+  return `You can directly manage your own conversation's to-do list. Job writes and connected-extension writes belong to ${name("pilot")}: when the user clearly wants such a write, call suggest_role with role "pilot" and their request copied verbatim — the card carries it to ${name("pilot")} (the ${icon("pilot")} icon). Resume reviews and match analysis belong to ${name("insight")}: same handoff with role "insight" for ${name("insight")} (the ${icon("insight")} icon). Otherwise keep the conversation going and answer honestly. ${never}`;
 }

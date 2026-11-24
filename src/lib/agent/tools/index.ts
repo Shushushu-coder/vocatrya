@@ -121,7 +121,7 @@ export function buildAgentTools(ctx: {
     suggest_role: buildSuggestRoleTool(),
     // TODAY-PLAN: the checklist is per-conversation — both tools resolve it
     // from the admitted request, never from model input. The read stays on
-    // every role's surface; the write filters down to Pilot.
+    // every role's surface; every named role can manage its own checklist.
     today_plan_read: buildTodayPlanReadTool(ctx.userId, ctx.request),
     today_plan: buildTodayPlanTool(ctx.userId, ctx.request),
   };
