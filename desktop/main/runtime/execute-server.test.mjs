@@ -50,10 +50,17 @@ it("keeps native permissions separate and rejects caller runtime paths", async (
     return { ok: true, text: "native" };
   });
   const base = await start({ executeNativeSession });
-  const body = { ...VALID_BODY, permissionScope: "NATIVE_SESSION_V1", instructions: "career", nativeSession: { conversationId: "conv", threadId: null } };
+  const nativeBusinessMcp = { url: "http://127.0.0.1:3737/api/internal/native-business-mcp", bearerTokenEnvVar: "VOCATRYA_NATIVE_BUSINESS_MCP_TOKEN", token: "nbt_x", allowedTools: ["list_jobs"] };
+  const body = { ...VALID_BODY, permissionScope: "NATIVE_SESSION_V1", instructions: "career", nativeSession: { conversationId: "conv", threadId: null }, nativeBusinessMcp };
   const path = "/internal/ai-connections/native-session-stream";
   expect((await post(base, path, { ...body, permissionScope: "TEXT_ONLY" })).status).toBe(400);
   expect((await post(base, path, { ...body, nativeSession: { ...body.nativeSession, cwd: "C:/outside" } })).status).toBe(400);
+  // Missing or malformed bridge descriptors are rejected before any spawn.
+  const noMcp = { ...body }; delete noMcp.nativeBusinessMcp;
+  expect((await post(base, path, noMcp)).status).toBe(400);
+  expect((await post(base, path, { ...body, nativeBusinessMcp: { ...nativeBusinessMcp, bearerTokenEnvVar: "OTHER_VAR" } })).status).toBe(400);
+  expect((await post(base, path, { ...body, nativeBusinessMcp: { ...nativeBusinessMcp, extra: true } })).status).toBe(400);
+  expect((await post(base, path, { ...body, nativeBusinessMcp: { ...nativeBusinessMcp, allowedTools: ["add_job".repeat(20)] } })).status).toBe(400);
   expect(executeNativeSession).not.toHaveBeenCalled();
   const res = await post(base, path, body);
   expect((await res.text()).trim().split("\n").map(line => JSON.parse(line))).toEqual([{ type: "native-session", threadId: "saved" }, { type: "completed", text: "native" }]);

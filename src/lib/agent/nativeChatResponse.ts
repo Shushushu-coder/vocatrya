@@ -3,8 +3,10 @@ import type { UIMessage } from "ai";
 import { AIBusinessError } from "@/lib/ai/connections";
 import {
   AGENT_NATIVE_SEARCH_PART_TYPE,
+  AGENT_NATIVE_TOOL_PART_TYPE,
   type AgentNativeSearchPartData,
   type AgentNativeSearchSource,
+  type AgentNativeToolPartData,
 } from "@/models/agent.model";
 import { cancelConversationRequest, finishConversationRequest, type ConversationRequest } from "./conversationRequest";
 import { conversationCommitStream } from "./conversationStream";
@@ -15,15 +17,16 @@ function mergeNativeSearchPart(
   previous: AgentNativeSearchPartData | undefined,
   event: NativeSessionNeutralEvent,
 ): AgentNativeSearchPartData {
+  const payload = event.payload as Extract<NativeSessionNeutralEvent["payload"], { actionType?: unknown }>;
   const seenQueries = new Set<string>();
   const queries: string[] = [];
-  for (const q of [...(previous?.queries ?? []), ...event.payload.queries]) {
+  for (const q of [...(previous?.queries ?? []), ...(payload as { queries?: string[] }).queries ?? []]) {
     if (!q || seenQueries.has(q) || queries.length >= 12) continue;
     seenQueries.add(q);
     queries.push(q);
   }
   const byUrl = new Map<string, AgentNativeSearchSource>();
-  for (const source of [...(previous?.sources ?? []), ...event.payload.sources]) {
+  for (const source of [...(previous?.sources ?? []), ...((payload as { sources?: AgentNativeSearchSource[] }).sources ?? [])]) {
     const existing = byUrl.get(source.url);
     if (existing) {
       if (!existing.title && source.title) existing.title = source.title;
@@ -34,28 +37,50 @@ function mergeNativeSearchPart(
     byUrl.set(source.url, { ...source });
   }
   const actionType =
-    event.payload.actionType !== "other" || !previous
-      ? event.payload.actionType
+    payload.actionType !== "other" || !previous
+      ? (payload.actionType as AgentNativeSearchPartData["actionType"])
       : previous.actionType;
   return {
     version: 1,
     kind: "search",
     itemId: event.itemId,
-    status: event.payload.status,
+    status: (payload as { status: AgentNativeSearchPartData["status"] }).status,
     actionType,
-    query: event.payload.query || previous?.query || "",
+    query: (payload as { query?: string }).query || previous?.query || "",
     queries,
-    ...(event.payload.pattern ?? previous?.pattern
-      ? { pattern: event.payload.pattern ?? previous?.pattern }
+    ...((payload as { pattern?: string }).pattern ?? previous?.pattern
+      ? { pattern: (payload as { pattern?: string }).pattern ?? previous?.pattern }
       : {}),
     sources: [...byUrl.values()],
     occurredAt: event.occurredAt || previous?.occurredAt,
   };
 }
 
+function mergeNativeToolPart(
+  previous: AgentNativeToolPartData | undefined,
+  event: NativeSessionNeutralEvent,
+): AgentNativeToolPartData {
+  const payload = event.payload as { tool: string; status: AgentNativeToolPartData["status"]; argumentsSummary?: string; resultSummary?: string };
+  return {
+    version: 1,
+    kind: "tool",
+    itemId: event.itemId,
+    tool: payload.tool || previous?.tool || "",
+    // A tool_result carries the terminal state; a tool_call is "running".
+    status: payload.status,
+    ...(payload.argumentsSummary ?? previous?.argumentsSummary
+      ? { argumentsSummary: payload.argumentsSummary ?? previous?.argumentsSummary }
+      : {}),
+    ...(payload.resultSummary ?? previous?.resultSummary
+      ? { resultSummary: payload.resultSummary ?? previous?.resultSummary }
+      : {}),
+    occurredAt: event.occurredAt || previous?.occurredAt,
+  };
+}
+
 // No application router, transcript budgeting, summary or tool loop enters this
 // path. Only the current user text is sent; the runtime owns its saved history.
-export function nativeChatResponse(input: { request: ConversationRequest; signal: AbortSignal; connectionId: string; model: string; instructions: string }) {
+export function nativeChatResponse(input: { request: ConversationRequest; signal: AbortSignal; connectionId: string; model: string; instructions: string; origin?: string; allowedBusinessTools?: readonly string[] }) {
   const { request, connectionId, model, instructions } = input;
   const current = request.messages.at(-1);
   if (current?.role !== "user" || current.parts.some(part => part.type !== "text")) throw new AIBusinessError("NATIVE_TEXT_ONLY", "Native sessions currently accept plain text only");
@@ -69,6 +94,7 @@ export function nativeChatResponse(input: { request: ConversationRequest; signal
     execute: async ({ writer }) => {
       const id = request.responseMessageId!;
       const searchParts = new Map<string, AgentNativeSearchPartData>();
+      const toolParts = new Map<string, AgentNativeToolPartData>();
       let textPartIndex = 0;
       let activeTextId: string | null = null;
       const closeText = () => {
@@ -77,7 +103,7 @@ export function nativeChatResponse(input: { request: ConversationRequest; signal
         activeTextId = null;
       };
       writer.write({ type: "start", messageId: id });
-      for await (const event of executeNativeTurn({ request, connectionId, model, prompt, instructions, signal })) {
+      for await (const event of executeNativeTurn({ request, connectionId, model, prompt, instructions, signal, origin: input.origin, allowedBusinessTools: input.allowedBusinessTools })) {
         if (signal.aborted) throw new DOMException("Stopped", "AbortError");
         if (event.type === "native-session") {
           writer.write({ type: "data-native-session", transient: true, data: { conversationId: request.conversationId, requestId: request.requestId, resumed: event.resumed } });
@@ -90,6 +116,15 @@ export function nativeChatResponse(input: { request: ConversationRequest; signal
             id: `native-search-${event.itemId}`,
             data: merged,
           });
+        } else if (event.type === "native-event" && (event.kind === "tool_call" || event.kind === "tool_result")) {
+          closeText();
+          const merged = mergeNativeToolPart(toolParts.get(event.itemId), event);
+          toolParts.set(event.itemId, merged);
+          writer.write({
+            type: AGENT_NATIVE_TOOL_PART_TYPE,
+            id: `native-tool-${event.itemId}`,
+            data: merged,
+          });
         } else if (event.type === "text-delta") {
           if (!activeTextId) {
             activeTextId = textPartIndex === 0 ? id : `${id}-text-${textPartIndex}`;
@@ -99,7 +134,8 @@ export function nativeChatResponse(input: { request: ConversationRequest; signal
           writer.write({ type: "text-delta", id: activeTextId, delta: event.delta });
         }
         // Native ids remain on the server; persisted parts carry only normalized
-        // search queries and verified sources (no credentials or raw reasoning).
+        // search queries, verified sources and bounded tool summaries (no
+        // credentials, thread ids or raw reasoning).
       }
       closeText();
       writer.write({ type: "finish" });

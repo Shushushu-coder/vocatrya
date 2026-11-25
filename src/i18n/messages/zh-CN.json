@@ -1,7 +1,7 @@
 {
   "nativeSession": {
     "new": "新建 Codex 原生文本对话",
-    "status": "Codex 原生会话：已启用原生网页搜索（按需自动触发）；业务工具与技能未加载。",
+    "status": "Codex 原生会话：已启用原生网页搜索与只读业务工具；写工具与技能未加载。",
     "waiting": "发送消息时才恢复原生上文。",
     "resumed": "已继续同一原生会话。",
     "created": "已创建新的原生会话。",
@@ -17,7 +17,7 @@
     "updateFailed": "更新未完成（{code}）。可在 AI 设置的“版本与更新详情”中重试或手动更新。",
     "usePlain": "改用普通新对话",
     "unknownVersion": "未知版本",
-    "textOnly": "支持纯文本对话与原生网页搜索（按需自动触发）；不支持资料上下文、附件、重新生成、业务工具或技能。",
+    "textOnly": "支持纯文本对话、原生网页搜索（按需自动触发）与只读业务工具（职位、简历、今日计划及已连接启用的 Notion/飞书读取）；不支持资料上下文、附件、重新生成、写工具或技能。",
     "entry": "Codex 原生对话",
     "badge": "Codex 原生",
     "leave": "返回普通对话",
@@ -34,6 +34,20 @@
       "foundInPage": "已在页面内查找",
       "sources": "来源链接",
       "pattern": "查找关键词：{pattern}"
+    },
+    "tool": {
+      "running": "调用中…",
+      "completed": "已完成",
+      "failed": "失败",
+      "arguments": "参数：{arguments}",
+      "listJobs": "读取职位列表",
+      "getJob": "读取职位详情",
+      "getResume": "读取简历",
+      "todayPlanRead": "读取今日计划",
+      "notionSearch": "搜索 Notion",
+      "notionRead": "读取 Notion 页面",
+      "feishuSearchDocs": "搜索飞书文档",
+      "feishuReadDoc": "读取飞书文档"
     }
   },
   "canonicalImport": {

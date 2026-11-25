@@ -2,10 +2,11 @@ import {it as test} from 'vitest';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import nativeModule from './native-session.js';
-const {createNativeSessionParser,nativeSessionReady,NATIVE_CONFIG,NATIVE_CATALOG,NATIVE_VERIFIED_VERSIONS,NATIVE_VERSION,reportedCodexVersion}=nativeModule;
+const {createNativeSessionParser,nativeSessionReady,NATIVE_CONFIG,NATIVE_CATALOG,NATIVE_VERIFIED_VERSIONS,NATIVE_VERSION,NATIVE_MCP_SERVER_KEY,NATIVE_MCP_TOKEN_ENV,reportedCodexVersion}=nativeModule;
 const HS={id:1,result:{userAgent:'vocatrya-native/0.169.0 (Windows 10.0; x86_64) unknown (vocatrya-native; 1)'}};
-function safeConfig(){return {web_search:'live',project_doc_max_bytes:0,include_environment_context:false,features:Object.fromEntries(Object.entries(NATIVE_CONFIG).filter(([k])=>k.startsWith('features.')).map(([k,v])=>[k.slice(9),v]))};}
-function h(threadId,expectedVersion){const writes=[];const stdin=new EventEmitter();stdin.write=s=>writes.push(JSON.parse(s));stdin.end=()=>{};const parser=createNativeSessionParser({model:'gpt-6.1-sol',prompt:'user input',instructions:'career only',threadId,cwd:'C:\\managed\\work',profileDir:'C:\\managed\\profile',expectedVersion});parser.attach(stdin);return {parser,writes,stdin,push:m=>{const events=parser.push(Buffer.from(JSON.stringify(m)+'\n'));if(m.id===1){events.push(...parser.push(Buffer.from(JSON.stringify({id:5,result:{config:safeConfig()}})+'\n')));writes.splice(2,1);}return events;}};}
+const MCP={url:'http://127.0.0.1:43110/mcp',envVar:NATIVE_MCP_TOKEN_ENV,token:'nbt_test',allowedTools:['list_jobs','get_job','get_resume','today_plan_read']};
+function safeConfig(mcpServers){return {web_search:'live',project_doc_max_bytes:0,include_environment_context:false,mcp_servers:mcpServers===undefined?{[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV}}:mcpServers,features:Object.fromEntries(Object.entries(NATIVE_CONFIG).filter(([k])=>k.startsWith('features.')).map(([k,v])=>[k.slice(9),v]))};}
+function h(threadId,expectedVersion,nativeMcp=MCP){const writes=[];const stdin=new EventEmitter();stdin.write=s=>writes.push(JSON.parse(s));stdin.end=()=>{};const parser=createNativeSessionParser({model:'gpt-6.1-sol',prompt:'user input',instructions:'career only',threadId,cwd:'C:\\managed\\work',profileDir:'C:\\managed\\profile',expectedVersion,nativeMcp});parser.attach(stdin);return {parser,writes,stdin,push:m=>{const events=parser.push(Buffer.from(JSON.stringify(m)+'\n'));if(m.id===1){events.push(...parser.push(Buffer.from(JSON.stringify({id:5,result:{config:safeConfig(m.__configMcpServers)}})+'\n')));writes.splice(2,1);}return events;}};}
 function opened(threadId){const x=h(threadId);x.push(HS);x.push({id:2,result:{thread:{id:threadId||'thread-A'},model:'gpt-6.1-sol'}});return x;}
 function active(){const x=opened();x.push({id:3,result:{turn:{id:'turn-A'}}});return x;}
 const note=(method,extra={})=>({method,params:{threadId:'thread-A',turnId:'turn-A',...extra}});
@@ -94,3 +95,61 @@ test('inherited MCP config fails before opening thread',()=>{const x=h();x.parse
 test('minimum baseline version gates readiness; the newest verified entry remains the install target',()=>{assert.equal(NATIVE_VERSION,NATIVE_VERIFIED_VERSIONS.at(-1));assert(NATIVE_VERIFIED_VERSIONS.length>0&&new Set(NATIVE_VERIFIED_VERSIONS).size===NATIVE_VERIFIED_VERSIONS.length);for(const v of [...NATIVE_VERIFIED_VERSIONS,'0.165.0','0.171.0','1.0.0'])assert.equal(nativeSessionReady(v,'gpt-6.1-sol'),true);for(const v of ['0.0.1','0.164.9','0.169.00','',null,undefined,'0.169.0-beta'])assert.equal(nativeSessionReady(v,'gpt-6.1-sol'),false);});
 test('handshake self-check reads the version the binary reports',()=>{assert.equal(reportedCodexVersion('vocatrya-native/0.169.0 (Windows)'),'0.169.0');assert.equal(reportedCodexVersion('other/0.169.0'),null);assert.equal(reportedCodexVersion(undefined),null);});
 test('below-baseline, missing or mismatched handshake version refuses before config or thread work',()=>{for(const [result,expected] of [[{userAgent:'vocatrya-native/0.164.0 (x)'},undefined],[{},undefined],[{userAgent:'garbage'},undefined],[HS.result,'0.169.1']]){const x=h(undefined,expected);x.parser.push(Buffer.from(JSON.stringify({id:1,result})+'\n'));assert.equal(x.parser.result().code,'NATIVE_BOUNDARY_NOT_READY');assert.equal(x.writes.some(w=>w.method==='config/read'||w.method==='thread/start'),false);}const ok=h(undefined,'0.169.0');ok.parser.push(Buffer.from(JSON.stringify(HS)+'\n'));assert.equal(ok.writes.some(w=>w.method==='config/read'),true);const newer=h(undefined,'0.171.0');newer.parser.push(Buffer.from(JSON.stringify({id:1,result:{userAgent:'vocatrya-native/0.171.0 (Windows)'}})+'\n'));assert.equal(newer.writes.some(w=>w.method==='config/read'),true);});
+
+test('allowlisted vocatrya_business mcpToolCall normalizes to tool events',()=>{
+  const x=active();
+  const started=x.push(note('item/started',{item:{id:'call_1',type:'mcpToolCall',server:'vocatrya_business',tool:'list_jobs',status:'inProgress',arguments:{},result:null,error:null,durationMs:null}}));
+  assert.equal(started.length,1);
+  assert.equal(started[0].kind,'tool_call');
+  assert.equal(started[0].nativeSessionId,'thread-A');
+  assert.equal(started[0].nativeTurnId,'turn-A');
+  assert.equal(started[0].itemId,'call_1');
+  assert.equal(started[0].payload.tool,'list_jobs');
+  assert.equal(started[0].payload.status,'running');
+  const completed=x.push(note('item/completed',{item:{id:'call_1',type:'mcpToolCall',server:'vocatrya_business',tool:'list_jobs',status:'completed',arguments:{},result:{content:[{type:'text',text:'{"status":"ok","jobs":[]}'}],structuredContent:null,_meta:null},error:null,durationMs:42}}));
+  assert.equal(completed.length,1);
+  assert.equal(completed[0].kind,'tool_result');
+  assert.equal(completed[0].payload.status,'completed');
+  assert.equal(completed[0].payload.resultSummary,'{"status":"ok","jobs":[]}');
+  answer(x);
+  assert.equal(x.parser.result().ok,true);
+});
+
+test('failed vocatrya_business mcpToolCall surfaces failed status and bounded error text',()=>{
+  const x=active();
+  x.push(note('item/started',{item:{id:'call_2',type:'mcpToolCall',server:'vocatrya_business',tool:'get_job',status:'inProgress',arguments:{jobId:'j1'},result:null,error:null,durationMs:null}}));
+  const failed=x.push(note('item/completed',{item:{id:'call_2',type:'mcpToolCall',server:'vocatrya_business',tool:'get_job',status:'failed',arguments:{jobId:'j1'},result:{content:[{type:'text',text:'tool not allowed for this turn'}]},error:null,durationMs:7}}));
+  assert.equal(failed[0].kind,'tool_result');
+  assert.equal(failed[0].payload.status,'failed');
+  assert.equal(failed[0].payload.resultSummary,'tool not allowed for this turn');
+  assert.equal(failed[0].payload.argumentsSummary,'{"jobId":"j1"}');
+  assert.equal(x.parser.result().ok,false);
+});
+
+test('non-bridge server or non-allowlisted tool mcpToolCall fails closed',()=>{
+  const x=active();
+  x.push(note('item/started',{item:{id:'call_3',type:'mcpToolCall',server:'codex',tool:'list_mcp_resources',status:'inProgress',arguments:{}}}));
+  assert.equal(x.parser.result().code,'NATIVE_UNEXPECTED_TOOL');
+  const y=active();
+  y.push(note('item/started',{item:{id:'call_4',type:'mcpToolCall',server:'vocatrya_business',tool:'add_job',status:'inProgress',arguments:{}}}));
+  assert.equal(y.parser.result().code,'NATIVE_UNEXPECTED_TOOL');
+  const z=active();
+  z.push(note('item/started',{item:{id:'call_5',type:'mcpToolCall',server:'other_server',tool:'list_jobs',status:'inProgress',arguments:{}}}));
+  assert.equal(z.parser.result().code,'NATIVE_UNEXPECTED_TOOL');
+});
+
+test('tampered or extra mcp_servers keys fail the config self-check',()=>{
+  for (const servers of [
+    {},
+    {[NATIVE_MCP_SERVER_KEY]:{url:'http://127.0.0.1:9/other',bearer_token_env_var:NATIVE_MCP_TOKEN_ENV}},
+    {[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:'OTHER_VAR'}},
+    {[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV},inherited:{command:'x'}},
+    {other:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV}},
+  ]) {
+    const x=h();
+    x.parser.push(Buffer.from(JSON.stringify(HS)+'\n'));
+    x.push({id:5,result:{config:safeConfig(servers)}});
+    assert.equal(x.parser.result().code,'NATIVE_BOUNDARY_NOT_READY');
+    assert.equal(x.writes.some(w=>w.method==='thread/start'),false);
+  }
+});

@@ -15,6 +15,12 @@ import type {
   NativeChatEntry,
   NativeUnavailableDetails,
 } from "./chatTypes";
+import {
+  mintNativeBusinessTicket,
+  revokeNativeBusinessTicket,
+  NATIVE_BUSINESS_MCP_TOKEN_ENV,
+  NATIVE_BUSINESS_READ_TOOLS_MAX,
+} from "./nativeBusinessMcp.server";
 
 export const NATIVE_PATH = "NATIVE_CODEX_V1";
 export const APP_PATH = "APP_ORCHESTRATED";
@@ -185,16 +191,22 @@ export type NativeSessionSearchPayload = {
   pattern?: string;
   sources: AgentNativeSearchSource[];
 };
+export type NativeSessionToolPayload = {
+  tool: string;
+  status: "running" | "completed" | "failed";
+  argumentsSummary?: string;
+  resultSummary?: string;
+};
 export type NativeSessionNeutralEvent = {
   type: "native-event";
   version: 1;
-  kind: "search";
+  kind: "search" | "tool_call" | "tool_result";
   conversationId: string;
   nativeSessionId: string;
   nativeTurnId: string | null;
   itemId: string;
   occurredAt: string;
-  payload: NativeSessionSearchPayload;
+  payload: NativeSessionSearchPayload | NativeSessionToolPayload;
 };
 
 const VALID_SEARCH_ACTIONS = new Set<AgentNativeSearchActionType>(["search", "open_page", "find_in_page", "other"]);
@@ -293,6 +305,50 @@ export function normalizeNativeSearchEvent(
   };
 }
 
+export function normalizeNativeToolEvent(
+  raw: unknown,
+  expected: { conversationId: string; nativeSessionId: string; allowedTools: readonly string[] },
+): NativeSessionNeutralEvent | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const event = raw as Record<string, unknown>;
+  if (event.type !== "native-event" || event.version !== 1 || (event.kind !== "tool_call" && event.kind !== "tool_result")) return null;
+  if (event.nativeSessionId !== expected.nativeSessionId) return null;
+  const nativeTurnId =
+    event.nativeTurnId === null || event.nativeTurnId === undefined
+      ? null
+      : typeof event.nativeTurnId === "string" && event.nativeTurnId.length <= 256
+        ? event.nativeTurnId
+        : undefined;
+  if (nativeTurnId === undefined) return null;
+  const itemId = boundedString(event.itemId, 256);
+  if (!itemId) return null;
+  const occurredAt = boundedString(event.occurredAt, 64) ?? new Date().toISOString();
+  const rawPayload = event.payload;
+  if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) return null;
+  const p = rawPayload as Record<string, unknown>;
+  const tool = boundedString(p.tool, 64);
+  if (!tool || !expected.allowedTools.includes(tool)) return null;
+  if (p.status !== "running" && p.status !== "completed" && p.status !== "failed") return null;
+  const argumentsSummary = boundedString(p.argumentsSummary, 2100) ?? undefined;
+  const resultSummary = boundedString(p.resultSummary, 2100) ?? undefined;
+  return {
+    type: "native-event",
+    version: 1,
+    kind: event.kind,
+    conversationId: expected.conversationId,
+    nativeSessionId: expected.nativeSessionId,
+    nativeTurnId,
+    itemId,
+    occurredAt,
+    payload: {
+      tool,
+      status: p.status,
+      ...(argumentsSummary ? { argumentsSummary } : {}),
+      ...(resultSummary ? { resultSummary } : {}),
+    },
+  };
+}
+
 export async function saveNativeBinding(request: ConversationRequest, event: SessionEvent, input: { connectionId: string; model: string; promptHash: string }, db: PrismaClient = prisma) {
   await db.$transaction(async tx => {
     const row = await tx.chatConversation.findFirst({ where: lease(request) });
@@ -321,7 +377,22 @@ type NativeTextEvent =
   | { type: "completed"; text: string }
   | SessionEvent
   | NativeSessionNeutralEvent;
-export async function* executeNativeTurn(input: { request: ConversationRequest; connectionId: string; model: string; prompt: string; instructions: string; signal: AbortSignal }): AsyncGenerator<NativeTextEvent> {
+// Loopback check on the backend's own origin before a bearer ticket is ever
+// attached to an MCP endpoint URL. Codex connects over streamable_http from
+// the same host; anything else would carry the ticket off-box.
+function loopbackOrigin(value: string | undefined): string | null {
+  if (typeof value !== "string" || value.length > 256) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:") return null;
+    if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(parsed.hostname)) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+export async function* executeNativeTurn(input: { request: ConversationRequest; connectionId: string; model: string; prompt: string; instructions: string; signal: AbortSignal; origin?: string; allowedBusinessTools?: readonly string[] }): AsyncGenerator<NativeTextEvent> {
   const { request, connectionId, model, prompt, instructions, signal } = input;
   const readiness = await nativeReadiness(request.userId, connectionId, model);
   const base = process.env.VOCATRYA_DESKTOP_EXEC_URL;
@@ -334,14 +405,40 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
   // developer instructions. Require explicit replacement instead of lying
   // about immediate preference updates or silently dropping native history.
   if (binding && binding.promptHash !== promptHash) throw lost();
-  const ticket = mintConnectionTicket({ userId: request.userId, operation: "executeText", backendKind: "CODEX_RUNTIME", connectionId });
-  const response = await fetch(`${base}/internal/ai-connections/native-session-stream`, { method: "POST", signal,
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ ticket: ticket.ticket, connectionId, model, prompt, instructions, permissionScope: "NATIVE_SESSION_V1",
-      nativeSession: { conversationId: request.conversationId, threadId: binding?.threadId ?? null,
-        ...(binding ? { runtimeVersion: binding.runtimeVersion, runtimeProfileRef: binding.runtimeProfileRef, configHash: binding.configHash } : {}) } }),
+  // Per-turn business bridge: the ticket binds this exact request and is
+  // revoked in the finally below — end, error and cancel all invalidate it.
+  const allowedTools = [...(input.allowedBusinessTools ?? [])].slice(0, NATIVE_BUSINESS_READ_TOOLS_MAX);
+  const origin = loopbackOrigin(input.origin);
+  if (!origin || allowedTools.length === 0) throw unavailable();
+  const businessTicket = mintNativeBusinessTicket({
+    userId: request.userId,
+    conversationId: request.conversationId,
+    requestId: request.requestId,
+    allowedTools,
   });
-  if (!response.ok || !response.body) throw unavailable();
+  const ticket = mintConnectionTicket({ userId: request.userId, operation: "executeText", backendKind: "CODEX_RUNTIME", connectionId });
+  let response: Response;
+  try {
+    response = await fetch(`${base}/internal/ai-connections/native-session-stream`, { method: "POST", signal,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ ticket: ticket.ticket, connectionId, model, prompt, instructions, permissionScope: "NATIVE_SESSION_V1",
+        nativeSession: { conversationId: request.conversationId, threadId: binding?.threadId ?? null,
+          ...(binding ? { runtimeVersion: binding.runtimeVersion, runtimeProfileRef: binding.runtimeProfileRef, configHash: binding.configHash } : {}) },
+        nativeBusinessMcp: {
+          url: `${origin}/api/internal/native-business-mcp`,
+          bearerTokenEnvVar: NATIVE_BUSINESS_MCP_TOKEN_ENV,
+          token: businessTicket.token,
+          allowedTools: businessTicket.allowedTools,
+        } }),
+    });
+  } catch (error) {
+    revokeNativeBusinessTicket(businessTicket.token);
+    throw error;
+  }
+  if (!response.ok || !response.body) {
+    revokeNativeBusinessTicket(businessTicket.token);
+    throw unavailable();
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = "";
@@ -371,10 +468,16 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
           sawSession = true;
           yield event;
         } else if (event.type === "native-event" && sawSession && currentThreadId) {
-          const normalized = normalizeNativeSearchEvent(event, {
-            conversationId: request.conversationId,
-            nativeSessionId: currentThreadId,
-          });
+          const normalized = event.kind === "search"
+            ? normalizeNativeSearchEvent(event, {
+                conversationId: request.conversationId,
+                nativeSessionId: currentThreadId,
+              })
+            : normalizeNativeToolEvent(event, {
+                conversationId: request.conversationId,
+                nativeSessionId: currentThreadId,
+                allowedTools: businessTicket.allowedTools,
+              });
           if (!normalized) throw lost();
           yield normalized;
         } else if (event.type === "text-delta" && sawSession && typeof event.delta === "string") yield event;
@@ -384,5 +487,9 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
     }
     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
     throw lost();
-  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  } finally {
+    revokeNativeBusinessTicket(businessTicket.token);
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }

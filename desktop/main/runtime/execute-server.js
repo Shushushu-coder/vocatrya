@@ -160,7 +160,17 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
           typeof session.conversationId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(session.conversationId) &&
           (session.threadId === null || (typeof session.threadId === "string" && /^[a-zA-Z0-9_-]{1,256}$/.test(session.threadId))) &&
           ["runtimeVersion", "runtimeProfileRef", "configHash"].every(key => session[key] === undefined || (typeof session[key] === "string" && session[key].length <= 256));
-        if (payload.permissionScope !== "NATIVE_SESSION_V1" || !valid || payload.structuredOutput !== undefined ||
+        // Slice-1 business bridge descriptor: shape-checked here; the runtime
+        // re-validates loopback URL, fixed env var and the tool allowlist.
+        const mcp = payload.nativeBusinessMcp;
+        const mcpKeys = mcp && typeof mcp === "object" && !Array.isArray(mcp) ? Object.keys(mcp) : [];
+        const mcpValid = mcp && mcpKeys.length === 4 && ["url", "bearerTokenEnvVar", "token", "allowedTools"].every(key => mcpKeys.includes(key)) &&
+          typeof mcp.url === "string" && mcp.url.length <= 2048 &&
+          mcp.bearerTokenEnvVar === "VOCATRYA_NATIVE_BUSINESS_MCP_TOKEN" &&
+          typeof mcp.token === "string" && mcp.token.length <= 512 &&
+          Array.isArray(mcp.allowedTools) && mcp.allowedTools.length <= 16 &&
+          mcp.allowedTools.every(name => typeof name === "string" && name.length <= 64);
+        if (payload.permissionScope !== "NATIVE_SESSION_V1" || !valid || !mcpValid || payload.structuredOutput !== undefined ||
             typeof payload.instructions !== "string" || payload.instructions.length > 16000 || typeof service.executeNativeSession !== "function") {
           sendJson(res, 400, { ok: false, code: "INVALID_PAYLOAD" }); return;
         }
@@ -169,7 +179,7 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
         res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" });
         const write = event => { if (!res.destroyed) res.write(JSON.stringify(event) + "\n"); };
         const result = await service.executeNativeSession({ ticket, connectionId, model, prompt, instructions: payload.instructions,
-          nativeSession: session, timeoutMs, signal: controller.signal, onEvent: event => { if (event.type !== "error") write(event); },
+          nativeSession: session, nativeBusinessMcp: mcp, timeoutMs, signal: controller.signal, onEvent: event => { if (event.type !== "error") write(event); },
         });
         write(result.ok ? { type: "completed", text: result.text } : { type: "error", code: result.code });
         if (!res.destroyed) res.end();

@@ -575,3 +575,47 @@ export function isAgentNativeSearchPart(
     Array.isArray(data.sources)
   );
 }
+
+// ─── NATIVE-TOOL ──────────────────────────────────────────────────────────
+// Non-transient custom part written only when the native runtime reports a
+// real `mcpToolCall` on the controlled vocatrya_business bridge. Summaries
+// are already bounded/redacted upstream — no raw arguments or credentials.
+export const AGENT_NATIVE_TOOL_PART_TYPE = "data-native-tool";
+
+export type AgentNativeToolCallStatus = "running" | "completed" | "failed";
+
+export type AgentNativeToolPartData = {
+  version: 1;
+  kind: "tool";
+  itemId: string;
+  tool: string;
+  status: AgentNativeToolCallStatus;
+  argumentsSummary?: string;
+  resultSummary?: string;
+  occurredAt?: string;
+};
+
+export type AgentNativeToolPart = {
+  type: typeof AGENT_NATIVE_TOOL_PART_TYPE;
+  id?: string;
+  data: AgentNativeToolPartData;
+};
+
+export function isAgentNativeToolPart(
+  part: unknown,
+): part is AgentNativeToolPart {
+  const candidate = part as AgentNativeToolPart | undefined;
+  const data = candidate?.data;
+  return (
+    !!candidate &&
+    candidate.type === AGENT_NATIVE_TOOL_PART_TYPE &&
+    !!data &&
+    data.version === 1 &&
+    data.kind === "tool" &&
+    typeof data.itemId === "string" &&
+    data.itemId.length > 0 &&
+    typeof data.tool === "string" &&
+    data.tool.length > 0 &&
+    (data.status === "running" || data.status === "completed" || data.status === "failed")
+  );
+}

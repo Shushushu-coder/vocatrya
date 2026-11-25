@@ -100,11 +100,78 @@ const NATIVE_CATALOG = { models: NATIVE_MODELS.map(slug => ({
 const NATIVE_CONFIG_HASH = createHash("sha256").update(JSON.stringify([NATIVE_CONFIG, NATIVE_CATALOG])).digest("hex");
 
 const MAX_SEARCH_EVENTS_PER_TURN = 64;
+const MAX_TOOL_EVENTS_PER_TURN = 32;
+const MAX_TOOL_ARG_CHARS = 2000;
+const MAX_TOOL_RESULT_CHARS = 2000;
 const MAX_SEARCH_SOURCES = 20;
 const MAX_SEARCH_QUERIES = 12;
 const MAX_SEARCH_URL_CHARS = 2048;
 const MAX_SEARCH_TEXT_CHARS = 300;
 const MAX_SEARCH_TITLE_CHARS = 200;
+
+// Slice-1 controlled business bridge: the ONLY MCP server a native session
+// may ever see. The backend mints a per-turn bearer ticket, hands us the
+// loopback URL + env-var name, and Codex connects over streamable_http.
+// Any other server key — inherited from the profile's ~/.codex or injected —
+// still fails the config/read self-check.
+const NATIVE_MCP_SERVER_KEY = "vocatrya_business";
+const NATIVE_MCP_TOKEN_ENV = "VOCATRYA_NATIVE_BUSINESS_MCP_TOKEN";
+const NATIVE_MCP_MAX_TOOLS = 16;
+
+// Validates the backend's per-turn bridge descriptor before it can reach the
+// spawn or the config. Returns {url, envVar, token, allowedTools} or null —
+// fail closed on anything but a loopback http URL carrying the fixed env var.
+function sanitizeNativeMcpConfig(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const url = typeof value.url === "string" && value.url.length <= 2048 ? value.url : null;
+  const envVar = value.bearerTokenEnvVar;
+  const token = typeof value.token === "string" && value.token.length <= 512 ? value.token : null;
+  const rawTools = value.allowedTools;
+  if (!url || envVar !== NATIVE_MCP_TOKEN_ENV || !token || !Array.isArray(rawTools) || rawTools.length > NATIVE_MCP_MAX_TOOLS) return null;
+  const allowedTools = [];
+  for (const name of rawTools) {
+    if (typeof name !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(name) || allowedTools.includes(name)) return null;
+    allowedTools.push(name);
+  }
+  let parsed;
+  try { parsed = new URL(url); } catch { return null; }
+  if (parsed.protocol !== "http:" || !["127.0.0.1", "localhost", "::1", "[::1]"].includes(parsed.hostname)) return null;
+  if (parsed.username || parsed.password) return null;
+  return { url, envVar, token, allowedTools };
+}
+
+// TOML inline table for the -c flag: mcp_servers={vocatrya_business={url="…",bearer_token_env_var="…"}}.
+// Both values are pre-validated (loopback URL, fixed env name) before reaching here.
+function mcpServersToml(mcp) {
+  return `mcp_servers={${NATIVE_MCP_SERVER_KEY}={url=${JSON.stringify(mcp.url)},bearer_token_env_var=${JSON.stringify(mcp.envVar)}}}`;
+}
+
+// Bounded JSON summary of mcpToolCall.arguments — never persisted raw, never
+// the ticket (arguments only ever contain business args, but bound anyway).
+function boundedArgumentsSummary(args) {
+  if (args === null || args === undefined) return undefined;
+  let text;
+  try { text = typeof args === "string" ? args : JSON.stringify(args); } catch { return undefined; }
+  if (typeof text !== "string" || !text) return undefined;
+  return text.length > MAX_TOOL_ARG_CHARS ? `${text.slice(0, MAX_TOOL_ARG_CHARS)}…` : text;
+}
+
+// Extracts bounded text from a CallToolResult ({content:[{type:"text",text}]})
+// or an error string. Failed calls carry the reason inside content too.
+function toolResultSummary(item) {
+  const parts = [];
+  const content = item?.result?.content;
+  if (Array.isArray(content)) {
+    for (const entry of content) {
+      if (entry?.type === "text" && typeof entry.text === "string" && entry.text.trim()) parts.push(entry.text.trim());
+      if (parts.join("\n").length > MAX_TOOL_RESULT_CHARS) break;
+    }
+  }
+  if (typeof item?.error === "string" && item.error.trim()) parts.push(item.error.trim());
+  if (!parts.length) return undefined;
+  const text = parts.join("\n");
+  return text.length > MAX_TOOL_RESULT_CHARS ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}…` : text;
+}
 
 function clipBoundedString(value, maxChars) {
   if (typeof value !== "string") return null;
@@ -226,7 +293,7 @@ function nativeSessionReady(version, model) {
   return isNativeVersionSupported(version) && NATIVE_MODELS.includes(model);
 }
 
-function createNativeSessionParser({ model, prompt, instructions, threadId, cwd, profileDir, catalogFile, expectedVersion, allowedVersions }) {
+function createNativeSessionParser({ model, prompt, instructions, threadId, cwd, profileDir, catalogFile, expectedVersion, allowedVersions, nativeMcp }) {
   let stdin;
   let buffer = "";
   let sessionId = threadId || null;
@@ -235,6 +302,7 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
   let cancelled = false;
   let chars = 0;
   let searchEventCount = 0;
+  let toolEventCount = 0;
   let phase = "initialize";
   const pending = new Set();
   const decoder = new StringDecoder("utf8");
@@ -289,10 +357,18 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       const featureNames = ["shell_tool", "view_image", "multi_agent", "multi_agent_v2", "apps", "code_mode", "code_mode_host", "browser_use", "computer_use", "image_generation", "skill_search", "goals", "memories", "remote_plugin", "tool_suggest", "mentions_v2"];
       // Empty table overrides can merge with inherited system configuration.
       // Inspect the effective configuration before opening any native thread.
+      // Exact single-key mcp_servers check: precisely vocatrya_business bound
+      // to this turn's loopback URL + fixed bearer env var. Inherited keys,
+      // extra keys, or a tampered endpoint all fail the startup boundary.
+      const servers = config?.mcp_servers;
+      const serverKeys = servers && typeof servers === "object" && !Array.isArray(servers) ? Object.keys(servers) : [];
+      const bridge = nativeMcp && serverKeys.length === 1 && serverKeys[0] === NATIVE_MCP_SERVER_KEY ? servers[NATIVE_MCP_SERVER_KEY] : null;
+      const mcpOk = Boolean(nativeMcp && bridge && typeof bridge === "object" &&
+        bridge.url === nativeMcp.url && bridge.bearer_token_env_var === nativeMcp.envVar);
       if (!config || featureNames.some(name => config.features?.[name] !== false) ||
           config.web_search !== "live" || config.project_doc_max_bytes !== 0 || config.include_environment_context !== false ||
-          config.model_catalog_json !== catalogFile ||
-          [config.mcp_servers, config.plugins, config.hooks, config.skills, config.notify].some(value => value && Object.keys(value).length > 0) ||
+          config.model_catalog_json !== catalogFile || !mcpOk ||
+          [config.plugins, config.hooks, config.skills, config.notify].some(value => value && Object.keys(value).length > 0) ||
           config.model_instructions_file || config.instructions || config.developer_instructions) {
         fail("NATIVE_BOUNDARY_NOT_READY"); return;
       }
@@ -301,7 +377,7 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       request(2, threadId ? "thread/resume" : "thread/start", {
         ...(threadId ? { threadId } : { ephemeral: false }),
         cwd, model, approvalPolicy: "never", sandbox: "read-only",
-        developerInstructions: instructions, config: { ...NATIVE_CONFIG, ...(catalogFile ? { model_catalog_json: catalogFile } : {}) },
+        developerInstructions: instructions, config: { ...NATIVE_CONFIG, mcp_servers: { [NATIVE_MCP_SERVER_KEY]: { url: nativeMcp.url, bearer_token_env_var: nativeMcp.envVar } }, ...(catalogFile ? { model_catalog_json: catalogFile } : {}) },
       });
     } else if (m.id === 2) {
       const id = m.result?.thread?.id;
@@ -334,7 +410,37 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       events.push({ type: "text-delta", delta });
     } else if (m.method === "item/started" || m.method === "item/completed") {
       const item = m.params?.item;
-      if (item && !["userMessage", "agentMessage", "reasoning", "webSearch"].includes(item.type)) { fail("NATIVE_UNEXPECTED_TOOL"); return; }
+      if (item && !["userMessage", "agentMessage", "reasoning", "webSearch", "mcpToolCall"].includes(item.type)) { fail("NATIVE_UNEXPECTED_TOOL"); return; }
+      if (item?.type === "mcpToolCall") {
+        if (cancelled) return;
+        // Only the configured bridge server may produce tool items, and only
+        // tool names the backend allowlisted for THIS turn. Codex's builtin
+        // MCP tools arrive as server "codex" — rejected by the same check.
+        const toolName = typeof item.tool === "string" ? item.tool : "";
+        if (item.server !== NATIVE_MCP_SERVER_KEY || !nativeMcp || !nativeMcp.allowedTools.includes(toolName)) { fail("NATIVE_UNEXPECTED_TOOL"); return; }
+        const itemId = clipBoundedString(item.id, 256);
+        if (!itemId) { fail("NATIVE_PROTOCOL_ERROR"); return; }
+        toolEventCount += 1;
+        if (toolEventCount > MAX_TOOL_EVENTS_PER_TURN) { fail("NATIVE_PROTOCOL_ERROR"); return; }
+        const payload = m.method === "item/started"
+          ? { tool: toolName, status: "running", ...(boundedArgumentsSummary(item.arguments) ? { argumentsSummary: boundedArgumentsSummary(item.arguments) } : {}) }
+          : {
+              tool: toolName,
+              status: item.status === "completed" ? "completed" : "failed",
+              ...(boundedArgumentsSummary(item.arguments) ? { argumentsSummary: boundedArgumentsSummary(item.arguments) } : {}),
+              ...(toolResultSummary(item) ? { resultSummary: toolResultSummary(item) } : {}),
+            };
+        events.push({
+          type: "native-event",
+          version: 1,
+          kind: m.method === "item/started" ? "tool_call" : "tool_result",
+          nativeSessionId: sessionId,
+          nativeTurnId: turnId,
+          itemId,
+          occurredAt: new Date().toISOString(),
+          payload,
+        });
+      }
       if (item?.type === "webSearch") {
         if (cancelled) return;
         const normalized = normalizeWebSearchItem(item, m.method === "item/completed" ? "completed" : "started");
@@ -380,10 +486,14 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
   };
 }
 
-async function runNativeSession({ allowedVersions, expectedVersion, invocation, model, prompt, instructions, threadId, profileDir, signal, timeoutMs, onEvent, runner = runRuntimeCommand }) {
+async function runNativeSession({ allowedVersions, expectedVersion, invocation, model, prompt, instructions, threadId, profileDir, signal, timeoutMs, onEvent, nativeMcp: rawNativeMcp, runner = runRuntimeCommand }) {
+  const nativeMcp = sanitizeNativeMcpConfig(rawNativeMcp);
+  // The bridge is mandatory for native sessions — a missing or malformed
+  // descriptor must fail the boundary, never silently degrade to no tools.
+  if (!nativeMcp) return { ok: false, code: "NATIVE_BOUNDARY_NOT_READY" };
   const catalogFile = path.join(invocation.cwd, "native-model-catalog.json");
   fs.writeFileSync(catalogFile, JSON.stringify(NATIVE_CATALOG));
-  const parser = createNativeSessionParser({ model, prompt, instructions, threadId, cwd: invocation.cwd, profileDir, catalogFile, expectedVersion, allowedVersions });
+  const parser = createNativeSessionParser({ model, prompt, instructions, threadId, cwd: invocation.cwd, profileDir, catalogFile, expectedVersion, allowedVersions, nativeMcp });
   const controller = new AbortController();
   let grace;
   const abort = () => { parser.interrupt(); grace = setTimeout(() => controller.abort(), 1500); };
@@ -391,8 +501,13 @@ async function runNativeSession({ allowedVersions, expectedVersion, invocation, 
   signal?.addEventListener("abort", abort, { once: true });
   try {
     const args = [...invocation.args, "-c", `model_catalog_json=${JSON.stringify(catalogFile)}`];
-    for (const [key, value] of Object.entries(NATIVE_CONFIG)) args.push("-c", `${key}=${typeof value === "object" ? "{}" : JSON.stringify(value)}`);
-    const result = await runner({ ...invocation, args, timeoutMs, signal: controller.signal, stdinPipe: true, binaryStdout: true,
+    for (const [key, value] of Object.entries(NATIVE_CONFIG)) {
+      if (key === "mcp_servers") continue;
+      args.push("-c", `${key}=${typeof value === "object" ? "{}" : JSON.stringify(value)}`);
+    }
+    args.push("-c", mcpServersToml(nativeMcp));
+    const env = { ...invocation.env, [nativeMcp.envVar]: nativeMcp.token };
+    const result = await runner({ ...invocation, args, env, timeoutMs, signal: controller.signal, stdinPipe: true, binaryStdout: true,
       onStdinReady: (stream) => parser.attach(stream),
       onStdout: (chunk) => { for (const event of parser.push(chunk)) { if (!signal?.aborted) onEvent?.(event); } },
     });
@@ -403,4 +518,4 @@ async function runNativeSession({ allowedVersions, expectedVersion, invocation, 
   } finally { clearTimeout(grace); signal?.removeEventListener("abort", abort); }
 }
 
-module.exports = { NATIVE_MIN_VERSION, NATIVE_VERIFIED_VERSIONS, parseSemver, compareSemver, isNativeVersionVerified, isNativeVersionSupported, reportedCodexVersion, NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, nativeSessionReady, sanitizeWebSearchUrl, normalizeWebSearchItem, createNativeSessionParser, runNativeSession };
+module.exports = { NATIVE_MIN_VERSION, NATIVE_VERIFIED_VERSIONS, parseSemver, compareSemver, isNativeVersionVerified, isNativeVersionSupported, reportedCodexVersion, NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, NATIVE_MCP_SERVER_KEY, NATIVE_MCP_TOKEN_ENV, nativeSessionReady, sanitizeWebSearchUrl, sanitizeNativeMcpConfig, normalizeWebSearchItem, createNativeSessionParser, runNativeSession };

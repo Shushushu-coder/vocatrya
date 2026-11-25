@@ -1,4 +1,5 @@
 import { nativeChatResponse } from "@/lib/agent/nativeChatResponse";
+import { nativeBusinessAllowedTools } from "@/lib/agent/nativeBusinessMcp.server";
 import { loadAgentPreferences } from "@/lib/agent/preferences.server";
 import { personalInstructionsBlock, permissionInstructions, permissionModeOfContext } from "@/lib/agent/preferences";
 import { assertManagedHistoricalExecution } from "@/lib/ai/managed-provenance";
@@ -650,8 +651,23 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     // a mid-thread memory update never invalidates the prompt-hash binding.
     const nativeMemory = await nativeMemoryBlockForConversation(userId, conversationId);
     scheduleNativeMemoryExtractionAfterRelease(request, { userId, conversationId });
+    // Slice-1 read-only business bridge: the same connected-state resolvers
+    // the in-app path uses, intersected with the read-only allowlist inside
+    // nativeBusinessAllowedTools. Resolution failures degrade to core reads,
+    // never to a wider surface.
+    const [nativeNotionTools, nativeFeishuTools] = await Promise.all([
+      resolveNotionAgentToolNames(userId).catch(() => []),
+      resolveFeishuAgentToolNames(userId).catch(() => []),
+    ]);
+    const allowedBusinessTools = nativeBusinessAllowedTools({
+      agentRole: conversation.agentRole,
+      notionTools: nativeNotionTools,
+      feishuTools: nativeFeishuTools,
+    });
     return nativeChatResponse({ request, signal: req.signal, connectionId: lock.connectionId, model: lock.model,
-      instructions: "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Business tools and skills are not loaded in this session. Never claim to have searched the web unless you actually used web search, and never claim to have saved or modified user data.\n" + preferences.personalInstructions + nativeMemory,
+      origin: req.nextUrl.origin,
+      allowedBusinessTools,
+      instructions: "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Read-only business tools for the user's Vocatrya data (jobs, resumes, today's plan, and any connected Notion or Feishu reads) are available through the vocatrya_business MCP server — use tool_search to discover and call them when the user asks about their own data. Write tools and skills are not loaded in this session. Never claim to have searched the web unless you actually used web search, never claim to have saved or modified user data, and never claim a business lookup succeeded unless the tool actually returned data.\n" + preferences.personalInstructions + nativeMemory,
     });
   }
   const conversationContext = contextOfRow(conversation);

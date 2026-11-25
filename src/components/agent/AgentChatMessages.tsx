@@ -22,6 +22,7 @@ import {
 } from "@/lib/agent/skills/resumeEvidence";
 import { AgentStatusRow } from "@/components/agent/AgentStatusRow";
 import { AgentNativeSearchCard } from "@/components/agent/AgentNativeSearchCard";
+import { AgentNativeToolCard } from "@/components/agent/AgentNativeToolCard";
 import { AgentToolRunningCard } from "@/components/agent/AgentToolRunningCard";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { assistantAnswerCopyText } from "@/lib/agent/answerCopyText";
@@ -34,6 +35,7 @@ import { cn } from "@/lib/utils";
 import {
   isAgentFilePart,
   isAgentNativeSearchPart,
+  isAgentNativeToolPart,
   isAgentPastePart,
   isNestedTool,
   type AgentPastePartData,
@@ -78,6 +80,7 @@ function showThinking(messages: UIMessage[], status: string): boolean {
   if (!tail) return true;
   if (tail.type === "text") return tail.text.trim().length === 0;
   if (isAgentNativeSearchPart(tail)) return tail.data.status !== "started";
+  if (isAgentNativeToolPart(tail)) return tail.data.status !== "running";
   if (!isStaticToolUIPart(tail)) return true;
   switch (tail.state) {
     // The running card spins for these two.
@@ -201,6 +204,8 @@ export function AgentChatMessages() {
                   return <AgentFilePartCard key={i} data={part.data} />;
                 if (isAgentNativeSearchPart(part))
                   return <AgentNativeSearchCard key={i} data={part.data} />;
+                if (isAgentNativeToolPart(part))
+                  return <AgentNativeToolCard key={i} data={part.data} />;
                 // Static, not dynamic: every tool this surface exposes is
                 // declared in buildAgentTools, so a dynamic part is not ours.
                 if (!isStaticToolUIPart(part)) return null;

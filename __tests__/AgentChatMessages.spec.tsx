@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AGENT_NATIVE_SEARCH_PART_TYPE, AGENT_PASTE_PART_TYPE } from "@/models/agent.model";
+import { AGENT_NATIVE_SEARCH_PART_TYPE, AGENT_NATIVE_TOOL_PART_TYPE, AGENT_PASTE_PART_TYPE } from "@/models/agent.model";
 
 const chat = {
   messages: [] as any[],
@@ -482,5 +482,92 @@ describe("AgentChatMessages", () => {
     render(<AgentChatMessages />);
     expect(screen.queryByTestId("agent-native-search-card")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("renders a running native business tool card without duplicating the thinking indicator", () => {
+    chat.status = "streaming";
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_TOOL_PART_TYPE,
+          id: "native-tool-t1",
+          data: {
+            version: 1,
+            kind: "tool",
+            itemId: "t1",
+            tool: "list_jobs",
+            status: "running",
+          },
+        },
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    const card = screen.getByTestId("agent-native-tool-card");
+    expect(card).toHaveAttribute("data-status", "running");
+    expect(card).toHaveAttribute("data-tool", "list_jobs");
+    expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+  });
+
+  it("renders a completed native business tool card with its bounded summaries", () => {
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_TOOL_PART_TYPE,
+          id: "native-tool-t2",
+          data: {
+            version: 1,
+            kind: "tool",
+            itemId: "t2",
+            tool: "get_job",
+            status: "completed",
+            argumentsSummary: '{"jobId":"j1"}',
+            resultSummary: "Platform Engineer at Acme",
+          },
+        },
+        { type: "text", text: "Done." },
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    const card = screen.getByTestId("agent-native-tool-card");
+    expect(card).toHaveAttribute("data-status", "completed");
+    expect(card).toHaveTextContent("Platform Engineer at Acme");
+    expect(screen.getByText("Done.")).toBeInTheDocument();
+  });
+
+  it("renders a failed native business tool card", () => {
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_TOOL_PART_TYPE,
+          id: "native-tool-t3",
+          data: {
+            version: 1,
+            kind: "tool",
+            itemId: "t3",
+            tool: "today_plan_read",
+            status: "failed",
+            resultSummary: "denied",
+          },
+        },
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    const card = screen.getByTestId("agent-native-tool-card");
+    expect(card).toHaveAttribute("data-status", "failed");
+    expect(card).toHaveTextContent("denied");
+  });
+
+  it("does not fabricate tool cards for unknown native part shapes", () => {
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_TOOL_PART_TYPE,
+          id: "native-tool-bad",
+          data: { version: 1, kind: "tool", itemId: "x", tool: "add_job", status: "writing" },
+        },
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    expect(screen.queryByTestId("agent-native-tool-card")).not.toBeInTheDocument();
   });
 });

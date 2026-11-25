@@ -1798,7 +1798,7 @@ function createConnectionService({
   // connection state crosses this boundary — the internal bearer is the
   // same one guarding the execution endpoint, and the result is exactly
   // what the local gates would consult anyway.
-  async function executeNativeSession({ ticket, connectionId, model, prompt, instructions, nativeSession, onEvent, timeoutMs, signal } = {}) {
+  async function executeNativeSession({ ticket, connectionId, model, prompt, instructions, nativeSession, nativeBusinessMcp, onEvent, timeoutMs, signal } = {}) {
     if (nativeDisposed || !nativeSession || typeof nativeSession.conversationId !== "string") return fail("NATIVE_BOUNDARY_NOT_READY");
     const keys = [`ticket:${ticket}`, `native:${connectionId}:${nativeSession.conversationId}`];
     const controller = acquire(keys);
@@ -1831,7 +1831,7 @@ function createConnectionService({
       if (activeOps.has(`conn:${connection.id}`)) return fail("NATIVE_BUSY");
       execAcquire(connection.id); registered = true;
       const invocation = adapter.buildStreamingInvocation({ executablePath: runtime.executable, profileDir, baseEnv: deps.env, workingDirectory: cwd });
-      const execution = runNativeSession({ expectedVersion: runtime.version, invocation, model, prompt, instructions, threadId: nativeSession.threadId, profileDir,
+      const execution = runNativeSession({ expectedVersion: runtime.version, invocation, model, prompt, instructions, threadId: nativeSession.threadId, profileDir, nativeMcp: nativeBusinessMcp,
         signal: controller.signal, timeoutMs: Math.min(timeoutMs || execTimeoutMs, EXEC_MAX_TIMEOUT_MS), runner,
         onEvent: event => { if (!controller.signal.aborted) onEvent?.(event.type === "native-session" ? { ...event, ...identity } : event); },
       });

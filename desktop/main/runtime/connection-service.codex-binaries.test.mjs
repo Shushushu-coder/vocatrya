@@ -54,7 +54,7 @@ describe("per-purpose Codex binary", () => {
   });
 
   it("executeNativeSession spawns the verified npm 0.170.0 binary", async () => {
-    await makeService().executeNativeSession({ ticket: "t", connectionId: "conn-1", model: "gpt-5.4", prompt: "hi", nativeSession: { conversationId: "c1" } });
+    await makeService().executeNativeSession({ ticket: "t", connectionId: "conn-1", model: "gpt-5.4", prompt: "hi", nativeSession: { conversationId: "c1" }, nativeBusinessMcp: { url: "http://127.0.0.1:3737/mcp", bearerTokenEnvVar: "VOCATRYA_NATIVE_BUSINESS_MCP_TOKEN", token: "nbt_t", allowedTools: ["list_jobs"] } });
     expect(invocations.map((i) => i.executable)).toEqual([NPM_VENDOR]);
     expect(invocations[0].args).toContain("app-server");
   });
