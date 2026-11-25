@@ -27,6 +27,12 @@ function buildServer(record: NativeBusinessTicketRecord): McpServer {
       {
         description: definition.description,
         ...(definition.inputSchema ? { inputSchema: definition.inputSchema } : {}),
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       },
       async (args: unknown) => {
         const result = await executeNativeBusinessToolCall({ record, name, args });

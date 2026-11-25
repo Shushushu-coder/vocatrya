@@ -114,5 +114,13 @@ describe('internal MCP route',()=>{
     const listRes=await POST(rpc(ticket.token,{jsonrpc:'2.0',id:2,method:'tools/list',params:{}}));
     const list=await listRes.json();
     expect(list.result.tools.map((t:{name:string})=>t.name).sort()).toEqual(['get_job','list_jobs']);
+    for (const tool of list.result.tools) {
+      expect(tool.annotations).toMatchObject({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
   });
 });

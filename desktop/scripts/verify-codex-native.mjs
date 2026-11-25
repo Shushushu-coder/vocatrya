@@ -209,6 +209,8 @@ async function main() {
       const b = check(tag("effective-config-tools-off"), config && config.web_search === "live" && FEATURES_OFF.every((n) => config.features?.[n] === false) &&
         mcpServerKeys.length === 1 && mcpServerKeys[0] === NATIVE_MCP_SERVER_KEY &&
         mcpEntry && mcpEntry.url === `http://127.0.0.1:${fakeMcp.port}/mcp` && mcpEntry.bearer_token_env_var === NATIVE_MCP_TOKEN_ENV &&
+        mcpEntry.default_tools_approval_mode === "approve" && Array.isArray(mcpEntry.enabled_tools) &&
+        mcpEntry.enabled_tools.length === 1 && mcpEntry.enabled_tools[0] === "list_jobs" &&
         [config.plugins, config.hooks, config.skills].every((v) => !v || Object.keys(v).length === 0) && config.model_catalog_json, entry.effectiveConfig);
       const mcpAuthOk = mcpRequests.length >= 2 && mcpRequests.every((r) => r.authorization === `Bearer ${FAKE_MCP_TOKEN}`) && mcpRequests.some((r) => r.method === "initialize") && mcpRequests.some((r) => r.method === "tools/list");
       const c = check(tag("turn-round-trips"), result.ok === true && result.text === FAKE_TEXT, { ok: result.ok, code: result.code });

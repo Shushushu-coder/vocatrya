@@ -317,6 +317,34 @@ export async function finishConversationRequest(request: ConversationRequest, in
 }
 
 export async function cancelConversationRequest(userId: string, conversationId: string, requestId: string, db: PrismaClient = prisma) {
-  const saved = await db.chatConversation.updateMany({ where: { id: conversationId, userId, activeRequestId: requestId }, data: { revision: { increment: 1 }, activeRequestId: null, activeRequestExpiresAt: null } });
-  return saved.count === 1;
+  return db.$transaction(async tx => {
+    const row = await tx.chatConversation.findFirst({
+      where: { id: conversationId, userId, activeRequestId: requestId },
+      select: { id: true, executionPath: true, nativeInitializationState: true },
+    });
+    if (!row) return false;
+    // If a native conversation already has a persisted thread binding, a
+    // failed/aborted subsequent turn must return the row to READY so the next
+    // user message can resume that thread. An unbound first turn stays
+    // IN_FLIGHT (fail-closed) so unknown thread/start outcomes never silently
+    // create a duplicate thread.
+    let resetNativeReady = false;
+    if (row.executionPath === "NATIVE_CODEX_V1" && row.nativeInitializationState === "IN_FLIGHT") {
+      const binding = await tx.nativeConversationBinding.findUnique({
+        where: { conversationId },
+        select: { conversationId: true },
+      });
+      resetNativeReady = Boolean(binding);
+    }
+    const saved = await tx.chatConversation.updateMany({
+      where: { id: conversationId, userId, activeRequestId: requestId },
+      data: {
+        revision: { increment: 1 },
+        activeRequestId: null,
+        activeRequestExpiresAt: null,
+        ...(resetNativeReady ? { nativeInitializationState: "READY" } : {}),
+      },
+    });
+    return saved.count === 1;
+  });
 }

@@ -140,10 +140,12 @@ function sanitizeNativeMcpConfig(value) {
   return { url, envVar, token, allowedTools };
 }
 
-// TOML inline table for the -c flag: mcp_servers={vocatrya_business={url="…",bearer_token_env_var="…"}}.
-// Both values are pre-validated (loopback URL, fixed env name) before reaching here.
+// TOML inline table for the -c flag: binds vocatrya_business to this turn's
+// loopback endpoint, fixed bearer env var, per-turn read-only enabled_tools,
+// and server-scoped auto-approval (keeping global approvalPolicy="never" so
+// shell, file edits, and any foreign MCP remain blocked).
 function mcpServersToml(mcp) {
-  return `mcp_servers={${NATIVE_MCP_SERVER_KEY}={url=${JSON.stringify(mcp.url)},bearer_token_env_var=${JSON.stringify(mcp.envVar)}}}`;
+  return `mcp_servers={${NATIVE_MCP_SERVER_KEY}={url=${JSON.stringify(mcp.url)},bearer_token_env_var=${JSON.stringify(mcp.envVar)},default_tools_approval_mode="approve",enabled_tools=${JSON.stringify(mcp.allowedTools)}}}`;
 }
 
 // Bounded JSON summary of mcpToolCall.arguments — never persisted raw, never
@@ -363,8 +365,15 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       const servers = config?.mcp_servers;
       const serverKeys = servers && typeof servers === "object" && !Array.isArray(servers) ? Object.keys(servers) : [];
       const bridge = nativeMcp && serverKeys.length === 1 && serverKeys[0] === NATIVE_MCP_SERVER_KEY ? servers[NATIVE_MCP_SERVER_KEY] : null;
+      const enabledToolsOk = Boolean(
+        nativeMcp &&
+        Array.isArray(bridge?.enabled_tools) &&
+        bridge.enabled_tools.length === nativeMcp.allowedTools.length &&
+        bridge.enabled_tools.every((name, idx) => name === nativeMcp.allowedTools[idx]),
+      );
       const mcpOk = Boolean(nativeMcp && bridge && typeof bridge === "object" &&
-        bridge.url === nativeMcp.url && bridge.bearer_token_env_var === nativeMcp.envVar);
+        bridge.url === nativeMcp.url && bridge.bearer_token_env_var === nativeMcp.envVar &&
+        bridge.default_tools_approval_mode === "approve" && enabledToolsOk);
       if (!config || featureNames.some(name => config.features?.[name] !== false) ||
           config.web_search !== "live" || config.project_doc_max_bytes !== 0 || config.include_environment_context !== false ||
           config.model_catalog_json !== catalogFile || !mcpOk ||
@@ -377,7 +386,18 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       request(2, threadId ? "thread/resume" : "thread/start", {
         ...(threadId ? { threadId } : { ephemeral: false }),
         cwd, model, approvalPolicy: "never", sandbox: "read-only",
-        developerInstructions: instructions, config: { ...NATIVE_CONFIG, mcp_servers: { [NATIVE_MCP_SERVER_KEY]: { url: nativeMcp.url, bearer_token_env_var: nativeMcp.envVar } }, ...(catalogFile ? { model_catalog_json: catalogFile } : {}) },
+        developerInstructions: instructions, config: {
+          ...NATIVE_CONFIG,
+          mcp_servers: {
+            [NATIVE_MCP_SERVER_KEY]: {
+              url: nativeMcp.url,
+              bearer_token_env_var: nativeMcp.envVar,
+              default_tools_approval_mode: "approve",
+              enabled_tools: [...nativeMcp.allowedTools],
+            },
+          },
+          ...(catalogFile ? { model_catalog_json: catalogFile } : {}),
+        },
       });
     } else if (m.id === 2) {
       const id = m.result?.thread?.id;

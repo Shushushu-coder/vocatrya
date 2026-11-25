@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { seedAccount } from './helpers/backupTestDb';
 import { beginNativeTurn, saveNativeBinding, restartNativeContext, nativeReadiness, resolveNativeChatEntry, normalizeNativeSearchEvent } from '@/lib/agent/nativeSession.server';
 import { AGENT_NATIVE_SEARCH_PART_TYPE } from '@/models/agent.model';
-import type { ConversationRequest } from '@/lib/agent/conversationRequest';
+import { cancelConversationRequest, type ConversationRequest } from '@/lib/agent/conversationRequest';
 import db from '@/lib/db';
 import { buildBackupZip } from '@/lib/backup/export';
 import { importBackup } from '@/lib/backup/import';
@@ -28,6 +28,28 @@ it('backup round-trip preserves messages but clears native execution and binding
 
 it('backup export excludes the native binding and does not carry executionPath (designed contract)',async()=>{const row=await conversation();const req=request(row);await beginNativeTurn(req);await saveNativeBinding(req,session,{connectionId,model:'gpt-6.1-sol',promptHash:'p'});await db.chatConversation.updateMany({where:{userId},data:{activeRequestId:null,activeRequestExpiresAt:null}});expect(await db.nativeConversationBinding.count({where:{conversationId:row.id}})).toBe(1);const {collectBackupData}=await import('@/lib/backup/export');const data=await collectBackupData(userId) as unknown as Record<string,unknown>;expect(Object.keys(data)).not.toContain('NativeConversationBinding');const exported=(data.ChatConversation as Record<string,unknown>[]).find(x=>x.id===row.id);expect(exported).toBeDefined();expect(exported).not.toHaveProperty('executionPath');expect(exported).not.toHaveProperty('nativeInitializationState');const {buffer}=await buildBackupZip(userId,'native-test@vocatrya.test');const JSZip=(await import('jszip')).default;const json=await (await JSZip.loadAsync(buffer)).file('data.json')!.async('string');expect(json).not.toContain('thread-saved');expect(json).not.toContain('NATIVE_CODEX_V1');});
 it('uncertain turns with saved native history require explicit restart',async()=>{const row=await conversation();const req=request(row);await beginNativeTurn(req);await saveNativeBinding(req,session,{connectionId,model:'gpt-6.1-sol',promptHash:'p'});await expect(beginNativeTurn(req)).rejects.toMatchObject({code:'NATIVE_CONTEXT_LOST'});});
+it('cancelConversationRequest restores READY for already-bound native conversations but keeps unbound first turns IN_FLIGHT',async()=>{
+  // Bound conversation aborted mid-turn: cancel restores READY so next turn can resume.
+  const boundRow=await conversation();
+  const req1=request(boundRow);
+  await beginNativeTurn(req1);
+  await saveNativeBinding(req1,session,{connectionId,model:'gpt-6.1-sol',promptHash:'p'});
+  expect(await cancelConversationRequest(userId,boundRow.id,req1.requestId,db)).toBe(true);
+  const afterBoundCancel=await db.chatConversation.findUniqueOrThrow({where:{id:boundRow.id}});
+  expect(afterBoundCancel.nativeInitializationState).toBe('READY');
+  expect(afterBoundCancel.activeRequestId).toBeNull();
+  const nextReqId=randomUUID();
+  await db.chatConversation.update({where:{id:boundRow.id},data:{activeRequestId:nextReqId,activeRequestExpiresAt:new Date(Date.now()+60000)}});
+  expect((await beginNativeTurn({...req1,requestId:nextReqId},db))?.threadId).toBe('thread-saved');
+
+  // Unbound first turn aborted before binding: stays IN_FLIGHT (fail-closed, never silently starts a second thread).
+  const unboundRow=await conversation();
+  const req2=request(unboundRow);
+  expect(await beginNativeTurn(req2,db)).toBeNull();
+  expect(await cancelConversationRequest(userId,unboundRow.id,req2.requestId,db)).toBe(true);
+  const afterUnboundCancel=await db.chatConversation.findUniqueOrThrow({where:{id:unboundRow.id}});
+  expect(afterUnboundCancel.nativeInitializationState).toBe('IN_FLIGHT');
+});
 
 // The native entry resolves its own Codex pair instead of the generic chat
 // lock: a non-Codex default must not make the entry CONNECTION_INELIGIBLE.

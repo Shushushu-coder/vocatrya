@@ -5,7 +5,7 @@ import nativeModule from './native-session.js';
 const {createNativeSessionParser,nativeSessionReady,NATIVE_CONFIG,NATIVE_CATALOG,NATIVE_VERIFIED_VERSIONS,NATIVE_VERSION,NATIVE_MCP_SERVER_KEY,NATIVE_MCP_TOKEN_ENV,reportedCodexVersion}=nativeModule;
 const HS={id:1,result:{userAgent:'vocatrya-native/0.169.0 (Windows 10.0; x86_64) unknown (vocatrya-native; 1)'}};
 const MCP={url:'http://127.0.0.1:43110/mcp',envVar:NATIVE_MCP_TOKEN_ENV,token:'nbt_test',allowedTools:['list_jobs','get_job','get_resume','today_plan_read']};
-function safeConfig(mcpServers){return {web_search:'live',project_doc_max_bytes:0,include_environment_context:false,mcp_servers:mcpServers===undefined?{[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV}}:mcpServers,features:Object.fromEntries(Object.entries(NATIVE_CONFIG).filter(([k])=>k.startsWith('features.')).map(([k,v])=>[k.slice(9),v]))};}
+function safeConfig(mcpServers){return {web_search:'live',project_doc_max_bytes:0,include_environment_context:false,mcp_servers:mcpServers===undefined?{[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV,default_tools_approval_mode:'approve',enabled_tools:[...MCP.allowedTools]}}:mcpServers,features:Object.fromEntries(Object.entries(NATIVE_CONFIG).filter(([k])=>k.startsWith('features.')).map(([k,v])=>[k.slice(9),v]))};}
 function h(threadId,expectedVersion,nativeMcp=MCP){const writes=[];const stdin=new EventEmitter();stdin.write=s=>writes.push(JSON.parse(s));stdin.end=()=>{};const parser=createNativeSessionParser({model:'gpt-6.1-sol',prompt:'user input',instructions:'career only',threadId,cwd:'C:\\managed\\work',profileDir:'C:\\managed\\profile',expectedVersion,nativeMcp});parser.attach(stdin);return {parser,writes,stdin,push:m=>{const events=parser.push(Buffer.from(JSON.stringify(m)+'\n'));if(m.id===1){events.push(...parser.push(Buffer.from(JSON.stringify({id:5,result:{config:safeConfig(m.__configMcpServers)}})+'\n')));writes.splice(2,1);}return events;}};}
 function opened(threadId){const x=h(threadId);x.push(HS);x.push({id:2,result:{thread:{id:threadId||'thread-A'},model:'gpt-6.1-sol'}});return x;}
 function active(){const x=opened();x.push({id:3,result:{turn:{id:'turn-A'}}});return x;}
@@ -139,12 +139,15 @@ test('non-bridge server or non-allowlisted tool mcpToolCall fails closed',()=>{
 });
 
 test('tampered or extra mcp_servers keys fail the config self-check',()=>{
+  const validBridge={url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV,default_tools_approval_mode:'approve',enabled_tools:[...MCP.allowedTools]};
   for (const servers of [
     {},
-    {[NATIVE_MCP_SERVER_KEY]:{url:'http://127.0.0.1:9/other',bearer_token_env_var:NATIVE_MCP_TOKEN_ENV}},
-    {[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:'OTHER_VAR'}},
-    {[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV},inherited:{command:'x'}},
-    {other:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV}},
+    {[NATIVE_MCP_SERVER_KEY]:{...validBridge,url:'http://127.0.0.1:9/other'}},
+    {[NATIVE_MCP_SERVER_KEY]:{...validBridge,bearer_token_env_var:'OTHER_VAR'}},
+    {[NATIVE_MCP_SERVER_KEY]:{...validBridge,default_tools_approval_mode:'prompt'}},
+    {[NATIVE_MCP_SERVER_KEY]:{...validBridge,enabled_tools:['list_jobs','add_job']}},
+    {[NATIVE_MCP_SERVER_KEY]:validBridge,inherited:{command:'x'}},
+    {other:validBridge},
   ]) {
     const x=h();
     x.parser.push(Buffer.from(JSON.stringify(HS)+'\n'));
