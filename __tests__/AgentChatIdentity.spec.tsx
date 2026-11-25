@@ -111,7 +111,8 @@ it("shows the native mode badge and a leave action", async () => {
   expect(screen.getByTestId("agent-identity")).toHaveTextContent("Codex native");
   await userEvent.click(screen.getByTestId("agent-identity"));
   expect(await screen.findByText(/automatic native web search/i)).toBeInTheDocument();
-  expect(screen.getByText(/business tools and skills are not loaded/i)).toBeInTheDocument();
+  expect(screen.getByText(/read-only business tools/i)).toBeInTheDocument();
+  expect(screen.getByText(/write tools and skills are not loaded/i)).toBeInTheDocument();
   await userEvent.click(await screen.findByRole("button", { name: /back to regular chat/i }));
   expect(state.startNewConversation).toHaveBeenCalledWith({ carry: true });
 });
