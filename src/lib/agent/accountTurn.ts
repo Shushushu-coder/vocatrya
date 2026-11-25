@@ -288,6 +288,8 @@ export function renderCareerDialoguePrompt(input: {
   handoffLine?: string;
   /** L3 post-compaction SQLite-verified business anchors. */
   businessAnchorLine?: string;
+  /** M2 cross-session long-term memory block (untrusted preferences). */
+  longTermMemoryLine?: string;
   /** Dynamic per-model budgets and proactive auto-compact trigger. */
   budgets?: Partial<CareerDialogueContextBudgets>;
   autoCompactTriggerTokens?: number;
@@ -334,6 +336,7 @@ export function renderCareerDialoguePrompt(input: {
     agentTaskId: input.agentTaskId,
     handoffLine: input.handoffLine,
     businessAnchorLine: input.businessAnchorLine,
+    longTermMemoryLine: input.longTermMemoryLine,
   });
   if (!budget.ok) {
     throw new AIBusinessError(
@@ -488,6 +491,8 @@ export type AccountAgentTurnInput = {
   taskExtraTools?: readonly string[] | null;
   /** L3 post-compaction SQLite-verified business anchors. */
   businessAnchorLine?: string;
+  /** M2 cross-session long-term memory block (untrusted preferences). */
+  longTermMemoryLine?: string;
   /** Dynamic per-model budgets and proactive auto-compact trigger. */
   budgets?: Partial<CareerDialogueContextBudgets>;
   autoCompactTriggerTokens?: number;
@@ -611,6 +616,7 @@ export async function runAccountAgentTurn(
       agentTaskId: input.agentTaskId,
       handoffLine: input.handoffLine,
       businessAnchorLine: input.businessAnchorLine,
+      longTermMemoryLine: input.longTermMemoryLine,
       budgets: input.budgets,
       autoCompactTriggerTokens: input.autoCompactTriggerTokens,
     });

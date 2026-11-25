@@ -223,6 +223,7 @@ describe("emptiness models", () => {
       "Resume",
       "ResumeVariant",
       "Task",
+      "UserMemoryEntry",
     ]);
   });
 

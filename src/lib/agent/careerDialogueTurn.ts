@@ -187,6 +187,7 @@ export async function runCareerDialogueTurn(
     agentTaskId: input.agentTaskId,
     handoffLine: input.handoffLine,
     businessAnchorLine: input.businessAnchorLine,
+    longTermMemoryLine: input.longTermMemoryLine,
     budgets: input.budgets,
     autoCompactTriggerTokens: input.autoCompactTriggerTokens,
   });

@@ -33,6 +33,7 @@ export type AgentContextUsage = {
     dynamic: number;
     businessAnchor?: number;
     handoff?: number;
+    longTermMemory?: number;
   };
   budgets: {
     assembledInputTokens: number;
@@ -44,6 +45,7 @@ export type AgentContextUsage = {
     summaryTokens: number;
     maxRecentTurns?: number;
     businessAnchorTokens?: number;
+    longTermMemoryTokens?: number;
   };
 };
 

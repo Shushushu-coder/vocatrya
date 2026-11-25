@@ -105,6 +105,14 @@ import {
   type TaskSessionContext,
 } from "@/lib/agent/task/agentTaskBootstrap";
 import { scheduleTaskHandoff } from "@/lib/agent/task/agentTaskHandoffTrigger";
+import {
+  loadLongTermMemoryLine,
+  nativeMemoryBlockForConversation,
+} from "@/lib/agent/longTermMemory.server";
+import {
+  scheduleLongTermMemoryExtraction,
+  scheduleNativeMemoryExtractionAfterRelease,
+} from "@/lib/agent/longTermMemoryExtractor.server";
 
 // The one terminal tool whose stop condition is not "was it called" — see
 // addJobSettled.
@@ -393,6 +401,11 @@ async function accountChatResponse({
             // Best-effort grounding; never fail a live turn.
           }
         }
+        // M2: untrusted cross-session memory. Own budget section, not a
+        // business anchor; skipped entirely when the switch is off or the
+        // store is empty. Best-effort like the anchor — never fails a turn.
+        const longTermMemoryLine =
+          (await loadLongTermMemoryLine(userId).catch(() => "")) || undefined;
         const result = await runCareerDialogueTurn({
           userId,
           connectionId: connection.id,
@@ -409,6 +422,7 @@ async function accountChatResponse({
           budgets: resolvedBudgets.budgets,
           autoCompactTriggerTokens: resolvedBudgets.autoCompactTriggerTokens,
           businessAnchorLine,
+          longTermMemoryLine,
           writer,
           signal: turnSignal,
           decision: prepared.decision,
@@ -457,6 +471,9 @@ async function accountChatResponse({
                 : {}),
               ...(contextSize.handoffTokens > 0
                 ? { handoff: contextSize.handoffTokens }
+                : {}),
+              ...(contextSize.longTermMemoryTokens > 0
+                ? { longTermMemory: contextSize.longTermMemoryTokens }
                 : {}),
             },
             budgets: { ...resolvedBudgets.budgets },
@@ -526,6 +543,9 @@ async function accountChatResponse({
         resolvedUpstreamModelId: managed?.provenance.upstreamModelId,
         messages: request.messages,
       });
+      // M2: detached background memory extraction — prefilter-gated,
+      // circuit-broken, never awaited. A failure only delays learning.
+      scheduleLongTermMemoryExtraction({ userId, conversationId });
       // Task sessions only. Fire-and-forget and self-containing: a handoff
       // failure is logged and backed off, never surfaced to this turn.
       if (taskSession) {
@@ -625,8 +645,13 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   }
   if (conversation.executionPath === "NATIVE_CODEX_V1") {
     if (lock.kind !== "account" || !lock.model || contextOfRow(conversation).items.length) throw new AIBusinessError("NATIVE_TEXT_ONLY", "Start a plain-text native conversation without page context");
+    // M2: the memory block a native thread was created with is frozen on
+    // the conversation row — every later turn of that thread re-uses it so
+    // a mid-thread memory update never invalidates the prompt-hash binding.
+    const nativeMemory = await nativeMemoryBlockForConversation(userId, conversationId);
+    scheduleNativeMemoryExtractionAfterRelease(request, { userId, conversationId });
     return nativeChatResponse({ request, signal: req.signal, connectionId: lock.connectionId, model: lock.model,
-      instructions: "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Business tools and skills are not loaded in this session. Never claim to have searched the web unless you actually used web search, and never claim to have saved or modified user data.\n" + preferences.personalInstructions,
+      instructions: "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Business tools and skills are not loaded in this session. Never claim to have searched the web unless you actually used web search, and never claim to have saved or modified user data.\n" + preferences.personalInstructions + nativeMemory,
     });
   }
   const conversationContext = contextOfRow(conversation);
@@ -1030,6 +1055,9 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
         resolvedModel: null,
         messages: request.messages,
       });
+      // M2: the extractor self-gates — a null-lock legacy row never reaches
+      // the model; a managed/account one learns memory in the background.
+      scheduleLongTermMemoryExtraction({ userId, conversationId });
       if (taskSession) {
         triggerTaskHandoff({
           userId,

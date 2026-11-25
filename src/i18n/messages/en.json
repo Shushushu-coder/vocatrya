@@ -2510,6 +2510,40 @@
         "job": "Is this job worth pursuing?",
         "chat": "Help me review this week's progress"
       }
+    },
+    "longTermMemory": {
+      "title": "Long-term memory",
+      "description": "Remembers your stable job-search preferences across conversations (target cities, salary floor, deal-breakers, resume and interview coaching style, collaboration habits). Memory is injected into new conversations as personal preference notes; it never overrides system instructions, tool permissions, or authoritative business records.",
+      "enabled": "Enable long-term memory",
+      "entries": "{count}/{max} entries",
+      "empty": "No memory yet. Stable preferences you state in chats are learned in the background; you can also add entries manually.",
+      "addEntry": "Add entry",
+      "editEntry": "Edit",
+      "deleteEntry": "Delete",
+      "saveEntry": "Save",
+      "cancelEdit": "Cancel",
+      "categoryLabel": "Category",
+      "keyLabel": "Key",
+      "keyHint": "Lowercase letters, digits, hyphens or underscores, e.g. target_cities",
+      "contentLabel": "Content",
+      "contentCount": "{count}/{max}",
+      "clearAll": "Clear all memory",
+      "clearAllConfirm": "Click again to confirm clearing all memory. This cannot be undone.",
+      "saved": "Saved",
+      "saveFailed": "Save failed. Please retry.",
+      "deleted": "Deleted",
+      "cleared": "Cleared",
+      "loadFailed": "Unable to load memory. Reopen settings to retry.",
+      "conflict": "An entry with this key already exists in the category.",
+      "notFound": "Entry no longer exists. Refresh and retry.",
+      "disabledHint": "Off: memory is neither injected into context nor learned in the background. Existing entries are kept.",
+      "updatedAt": "Updated {date}",
+      "categories": {
+        "career_goal": "Career goals",
+        "industry_preference": "Industry preference",
+        "resume_interview_style": "Resume & interview style",
+        "collaboration_habit": "Collaboration habits"
+      }
     }
   },
   "errors": {

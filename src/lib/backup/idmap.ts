@@ -79,6 +79,10 @@ const OPTIONAL_FKS = new Set<string>([
   "AgentTask.jobOpportunityId",
   "AgentTask.interviewPrepGoalId",
   "AgentTaskHandoff.sessionId",
+  // Memory provenance: a memory whose source conversation is absent from
+  // the backup keeps its content with a null source — the entry survives,
+  // the pointer never impersonates a conversation it did not come from.
+  "UserMemoryEntry.sourceConversationId",
 ]);
 
 // Lock/provenance pointers that must SURVIVE dangling, not degrade: a

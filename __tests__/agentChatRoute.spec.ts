@@ -204,7 +204,7 @@ describe("POST /api/ai/chat", () => {
   });
 
   it("injects current personal instructions once in the user-visible conversation system prompt", async () => {
-    vi.mocked(loadAgentPreferences).mockResolvedValueOnce({ personalInstructions: "请按岗位要求逐项引用证据", defaultPermission: "rules", autoArchiveDays: 0, compressHistory: false });
+    vi.mocked(loadAgentPreferences).mockResolvedValueOnce({ personalInstructions: "请按岗位要求逐项引用证据", defaultPermission: "rules", autoArchiveDays: 0, compressHistory: false, longTermMemoryEnabled: true });
     await POST(req({ messages: [pasteMessage("posting")] }));
     expect(streamArgs().system).toContain("请按岗位要求逐项引用证据");
     expect(streamArgs().system.split("请按岗位要求逐项引用证据")).toHaveLength(2);

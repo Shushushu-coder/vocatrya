@@ -82,6 +82,7 @@ export type BackupModel =
   | "TodayPlanItem"
   | "TodayPlanOperation"
   | "AgentOperationProposal"
+  | "UserMemoryEntry"
   | "AutomationRun"
   | "UserSettings"
   | "AbMigrationState"
@@ -448,6 +449,15 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     fks: {
       conversationId: "ChatConversation",
     },
+    scope: byUser,
+  },
+  // M2 cross-session memory. sourceConversationId is provenance only — a
+  // declared OPTIONAL_FK whose dangling value degrades to null rather than
+  // aborting the restore (the memory itself is the state worth keeping).
+  UserMemoryEntry: {
+    delegate: "userMemoryEntry",
+    owner: "userId",
+    fks: { sourceConversationId: "ChatConversation" },
     scope: byUser,
   },
   AutomationRun: {
@@ -952,6 +962,8 @@ export const INSERT_ORDER: BackupModel[] = [
   "TodayPlanItem",
   "TodayPlanOperation",
   "AgentOperationProposal",
+  // After ChatConversation: sourceConversationId remaps through its id map.
+  "UserMemoryEntry",
   "AutomationRun",
   "UserSettings",
   "AbMigrationState",
@@ -1166,4 +1178,5 @@ export const EMPTINESS_MODELS: BackupModel[] = [
   "AIBusinessAssignment",
   "CandidateReferee",
   "CandidateAttachment",
+  "UserMemoryEntry",
 ];

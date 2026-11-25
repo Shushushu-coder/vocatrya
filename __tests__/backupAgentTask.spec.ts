@@ -50,7 +50,7 @@ it("classifies every new model as BACKED_UP and bumps the format version", () =>
   for (const model of ["AgentTask", "AgentTaskHandoff", "AgentTaskEvent"]) {
     expect(backupCoverageStatus(model)).toBe("BACKED_UP");
   }
-  expect(BACKUP_FORMAT_VERSION).toBe(11);
+  expect(BACKUP_FORMAT_VERSION).toBe(13);
 });
 
 it("round-trips tasks, handoffs and events with remapped FKs and a cleared claim", async () => {

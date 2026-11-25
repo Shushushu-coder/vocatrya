@@ -45,6 +45,7 @@ import {
 import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
 import DesktopPreferencesSettings from "@/components/settings/DesktopPreferencesSettings";
 import AgentPreferencesSettings from "./AgentPreferencesSettings";
+import LongTermMemorySettings from "./LongTermMemorySettings";
 
 // Application-level preferences. Selecting a language applies instantly
 // through I18nContext (state + cookie + localStorage + refresh) and, for
@@ -445,6 +446,7 @@ function GeneralSettingsPanel() {
           its own availability state outside the desktop shell. */}
       <DesktopPreferencesSettings />
       <AgentPreferencesSettings />
+      <LongTermMemorySettings />
     </div>
   );
 }

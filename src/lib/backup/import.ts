@@ -970,6 +970,9 @@ export async function importBackup(
               // Restored history starts inactive. A backup cannot grant execution authority.
               payload.executionPath = "APP_ORCHESTRATED";
               payload.nativeInitializationState = "NEVER_ATTEMPTED";
+              // The frozen native memory block belongs to a native binding
+              // that never travels — a restored row re-freezes on first use.
+              payload.nativeMemoryBlock = null;
               payload.revision = 0;
               payload.activeRequestId = null;
               payload.activeRequestExpiresAt = null;

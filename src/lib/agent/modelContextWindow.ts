@@ -14,6 +14,8 @@ export const CAREER_DIALOGUE_MIN_CONTEXT_WINDOW = 8_192;
 export const CAREER_DIALOGUE_ASSEMBLED_CAP_TOKENS = 80_000;
 export const CAREER_DIALOGUE_AUTO_COMPACT_RATIO = 0.78;
 export const CAREER_DIALOGUE_BUSINESS_ANCHOR_TOKENS = 800;
+/** M2: independent budget for the cross-session memory block. */
+export const CAREER_DIALOGUE_LONG_TERM_MEMORY_TOKENS = 700;
 
 export type CareerDialogueContextBudgets = {
   dynamicTokens: number;
@@ -23,6 +25,7 @@ export type CareerDialogueContextBudgets = {
   summaryTokens: number;
   handoffTokens: number;
   businessAnchorTokens: number;
+  longTermMemoryTokens: number;
   historicalToolTokens: number;
   currentUserTokens: number;
   assembledInputTokens: number;
@@ -220,6 +223,7 @@ export function resolveCareerDialogueBudgets(
     summaryTokens,
     handoffTokens: APP_CONSTANTS.AGENT_TASK_HANDOFF_TOKENS,
     businessAnchorTokens: CAREER_DIALOGUE_BUSINESS_ANCHOR_TOKENS,
+    longTermMemoryTokens: CAREER_DIALOGUE_LONG_TERM_MEMORY_TOKENS,
     historicalToolTokens,
     currentUserTokens,
     assembledInputTokens,

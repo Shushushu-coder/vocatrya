@@ -91,6 +91,10 @@ export type CareerDialogueContextSize = {
   handoffTokens: number;
   /** True when a supplied handoff line exceeded `handoffTokens`. */
   handoffDropped: boolean;
+  /** M2 cross-session memory block as included (0 when absent or dropped). */
+  longTermMemoryChars: number;
+  longTermMemoryTokens: number;
+  longTermMemoryDropped: boolean;
   /** Count of historical tool results folded by L1 micro-compaction. */
   microCompactedToolCount: number;
   /** Count of older history turns covered & folded by an active summary. */
@@ -162,6 +166,12 @@ export type CareerDialogueContextInput = {
    * version, today_plan). Protected from `dropLowest` like `handoffLine`.
    */
   businessAnchorLine?: string;
+  /**
+   * M2 cross-session long-term memory block (untrusted user preference
+   * notes). A separate budget section from the L3 business anchor —
+   * rendered only when the caller supplies it; protected from `dropLowest`.
+   */
+  longTermMemoryLine?: string;
   /** Auto-compact trigger threshold (assembled tokens) for `needsRecompaction`. */
   autoCompactTriggerTokens?: number;
   /** Optional L1 micro-compact overrides for tests. */
@@ -767,6 +777,18 @@ export function buildCareerDialogueContext(
   );
   const handoffLine = handoffDropped ? undefined : handoffCandidate;
 
+  // M2 memory block: caller-rendered, separately budgeted, protected like
+  // the anchor/handoff. It never displaces history — its own 700-token cap
+  // is enforced at render time upstream.
+  const longTermMemoryCandidate = input.longTermMemoryLine?.trim() || undefined;
+  const longTermMemoryDropped = Boolean(
+    longTermMemoryCandidate &&
+      estimateContextTokens(longTermMemoryCandidate) > budgets.longTermMemoryTokens,
+  );
+  const longTermMemoryLine = longTermMemoryDropped
+    ? undefined
+    : longTermMemoryCandidate;
+
   const historyDialogue = () =>
     history.flatMap((rendered) =>
       rendered.lines.filter((line) => line.kind === "dialogue").map((line) => line.text),
@@ -779,6 +801,7 @@ export function buildCareerDialogueContext(
     if (summaryLine) lines.push(summaryLine);
     if (businessAnchorLine) lines.push(businessAnchorLine);
     if (handoffLine) lines.push(handoffLine);
+    if (longTermMemoryLine) lines.push(longTermMemoryLine);
     for (const rendered of history) lines.push(...dialogueText(rendered, droppedTools));
     if (includeCurrent && currentRendered && !history.includes(currentRendered)) {
       lines.push(...dialogueText(currentRendered, droppedTools));
@@ -977,6 +1000,11 @@ export function buildCareerDialogueContext(
     handoffChars: handoffLine?.length ?? 0,
     handoffTokens: handoffLine ? estimateContextTokens(handoffLine) : 0,
     handoffDropped,
+    longTermMemoryChars: longTermMemoryLine?.length ?? 0,
+    longTermMemoryTokens: longTermMemoryLine
+      ? estimateContextTokens(longTermMemoryLine)
+      : 0,
+    longTermMemoryDropped,
     microCompactedToolCount,
     compactedTurnCount,
     summaryDroppedForOverflow,
@@ -1033,6 +1061,12 @@ export function careerDialogueContextLogFields(
     // log lines keep their exact pre-handoff shape.
     ...(size.handoffTokens > 0 || size.handoffDropped
       ? { handoffUnits: size.handoffTokens, handoffDropped: size.handoffDropped ? 1 : 0 }
+      : {}),
+    ...(size.longTermMemoryTokens > 0 || size.longTermMemoryDropped
+      ? {
+          longTermMemoryUnits: size.longTermMemoryTokens,
+          longTermMemoryDropped: size.longTermMemoryDropped ? 1 : 0,
+        }
       : {}),
   };
 }

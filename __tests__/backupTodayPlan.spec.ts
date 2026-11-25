@@ -104,12 +104,12 @@ it("round-trips plan rows and the operation ledger with remapped FKs", async () 
 });
 
 
-it("gates new user state with v12 and rejects invalid plan dates", () => {
-  expect(BACKUP_FORMAT_VERSION).toBe(12);
+it("gates new user state with v13 and rejects invalid plan dates", () => {
+  expect(BACKUP_FORMAT_VERSION).toBe(13);
   const base = { appVersion: "1", exportedAt: new Date().toISOString(), sourceEmail: "x", counts: {} };
-  expect(ManifestSchema.safeParse({ ...base, formatVersion: 11 }).success).toBe(true);
   expect(ManifestSchema.safeParse({ ...base, formatVersion: 12 }).success).toBe(true);
-  expect(ManifestSchema.safeParse({ ...base, formatVersion: 13 }).success).toBe(false);
+  expect(ManifestSchema.safeParse({ ...base, formatVersion: 13 }).success).toBe(true);
+  expect(ManifestSchema.safeParse({ ...base, formatVersion: 14 }).success).toBe(false);
   for (const plannedOn of ["not-a-date", "2026-02-30", "2026-13-01"]) {
     expect(BackupDataSchema.safeParse({ TodayPlanItem: [{ id: "i", conversationId: "c", taskId: "t", plannedOn, position: 0, createdAt: new Date(), updatedAt: new Date() }] }).success).toBe(false);
   }

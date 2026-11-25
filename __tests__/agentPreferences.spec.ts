@@ -40,4 +40,25 @@ describe("Agent preferences and creation-time permission contract", () => {
     expect(personalInstructionsBlock("请简洁回答")).toContain("请简洁回答");
     expect(personalInstructionsBlock("请简洁回答")).toContain("within application permissions");
   });
+  it("long-term memory defaults on, reads back, and validates", () => {
+    // Documents predating M2 read as enabled — the feature default.
+    expect(readAgentPreferences(null).longTermMemoryEnabled).toBe(true);
+    expect(
+      readAgentPreferences({ settings: { general: { agent: { longTermMemoryEnabled: false } } } })
+        .longTermMemoryEnabled,
+    ).toBe(false);
+    // A full document round-trips; a missing key stays valid (older writers).
+    expect(validateAgentPreferences(DEFAULT_AGENT_PREFERENCES)).toBe(true);
+    expect(
+      validateAgentPreferences({
+        personalInstructions: "",
+        defaultPermission: "rules",
+        autoArchiveDays: 0,
+        compressHistory: false,
+      }),
+    ).toBe(true);
+    expect(
+      validateAgentPreferences({ ...DEFAULT_AGENT_PREFERENCES, longTermMemoryEnabled: "no" }),
+    ).toBe(false);
+  });
 });

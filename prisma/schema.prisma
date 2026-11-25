@@ -93,6 +93,9 @@ model User {
   // TODAY-PLAN per-conversation checklist (additive backrelations only).
   todayPlanItems      TodayPlanItem[]
   todayPlanOperations TodayPlanOperation[]
+
+  // M2 cross-session long-term memory (additive backrelation only).
+  userMemoryEntries   UserMemoryEntry[]
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -743,6 +746,12 @@ model ChatConversation {
   // Reversible archive: hides the row from History and every AI read path
   // while keeping messages/context/summary intact for the Archive Center.
   archivedAt             DateTime?
+  // M2: the long-term-memory block frozen into this native thread's
+  // developer instructions at creation time. NULL = thread predates M2,
+  // memory was empty, or the master switch was off. Read back verbatim on
+  // every later turn so a mid-thread memory update never invalidates the
+  // bound native prompt hash (the fail-closed binding contract).
+  nativeMemoryBlock      String?
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
   user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -794,6 +803,31 @@ model ConversationSummary {
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// M2 cross-session long-term memory (L4). Stable user job-search
+/// preferences learned across conversations — plaintext, user-visible and
+/// user-managed. Never a business-fact store: SQLite business tables stay
+/// authoritative and a memory row can never stand in for them.
+/// `category` is one of the four fixed memory categories,
+/// `key` is the dedupe slot inside the category, and
+/// `sourceConversationId` is provenance only — deliberately NOT a declared
+/// relation: the source conversation may be deleted while the memory
+/// survives, and a restore remaps the pointer with null degradation
+/// (OPTIONAL_FKS) instead of a hard FK.
+model UserMemoryEntry {
+  id                   String   @id @default(uuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category             String
+  key                  String
+  content              String
+  sourceConversationId String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([userId, category, key])
+  @@index([userId, updatedAt])
 }
 
 // ---------------------------------------------------------------------------

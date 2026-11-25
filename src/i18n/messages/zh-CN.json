@@ -2510,6 +2510,40 @@
         "job": "这个职位值得继续跟吗？",
         "chat": "理一理这周求职的进展"
       }
+    },
+    "longTermMemory": {
+      "title": "长期记忆",
+      "description": "跨会话记住你的稳定求职偏好（目标城市、薪资底线、避坑条件、改简历与面试风格、沟通习惯）。记忆会作为个人偏好注入新对话，但不能覆盖系统指令、工具权限或权威业务数据。",
+      "enabled": "启用长期记忆",
+      "entries": "{count}/{max} 条",
+      "empty": "暂无记忆条目。对话中表达出的稳定偏好会在后台自动沉淀，也可以手动添加。",
+      "addEntry": "新增条目",
+      "editEntry": "编辑",
+      "deleteEntry": "删除",
+      "saveEntry": "保存",
+      "cancelEdit": "取消",
+      "categoryLabel": "类别",
+      "keyLabel": "标识",
+      "keyHint": "小写字母、数字、连字符或下划线，例如 target_cities",
+      "contentLabel": "内容",
+      "contentCount": "{count}/{max}",
+      "clearAll": "清空全部记忆",
+      "clearAllConfirm": "再次点击确认清空全部记忆，此操作不可撤销。",
+      "saved": "已保存",
+      "saveFailed": "保存失败，请重试。",
+      "deleted": "已删除",
+      "cleared": "已清空",
+      "loadFailed": "记忆加载失败，请重新打开设置重试。",
+      "conflict": "该类别下已存在同名标识。",
+      "notFound": "条目不存在，请刷新后重试。",
+      "disabledHint": "已关闭：记忆既不注入上下文，也不会在后台学习。已有记忆保留。",
+      "updatedAt": "更新于 {date}",
+      "categories": {
+        "career_goal": "求职目标",
+        "industry_preference": "行业偏好",
+        "resume_interview_style": "简历与面试风格",
+        "collaboration_habit": "协作习惯"
+      }
     }
   },
   "errors": {
