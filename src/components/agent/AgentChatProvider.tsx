@@ -128,6 +128,13 @@ export type AgentChatInitialConversation = {
   agentTaskId?: string | null;
 };
 
+export type AgentCompactionFeedback = {
+  kind: "success" | "skipped" | "busy" | "error";
+  code?: string;
+  beforeTokens?: number | null;
+  afterTokens?: number | null;
+};
+
 type QueuedMessage = { parts: UIMessage["parts"] };
 
 type AgentChatValue = ReturnType<typeof useAgentChatValue>;
@@ -605,6 +612,14 @@ function useAgentChatValue(
   // toolbar estimate. Absent on Legacy, which cannot report a real size —
   // the UI shows nothing rather than a fabricated number.
   const [contextUsage, setContextUsage] = useState<AgentContextUsage | null>(null);
+  const [compacting, setCompacting] = useState(false);
+  const [compactionFeedback, setCompactionFeedback] =
+    useState<AgentCompactionFeedback | null>(null);
+  const compactingRef = useRef(false);
+  const clearCompactionFeedback = useCallback(
+    () => setCompactionFeedback(null),
+    [],
+  );
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
   contextRef.current = context;
@@ -1027,6 +1042,9 @@ function useAgentChatValue(
     setPasteChip(undefined);
     setFileChips([]);
     setContextUsage(null);
+    setCompacting(false);
+    compactingRef.current = false;
+    setCompactionFeedback(null);
     setToolStreams({});
     setQueued(undefined);
   }, [chat, updateComposerSeed, setPasteChip, setFileChips]);
@@ -1779,6 +1797,151 @@ function useAgentChatValue(
 
   const busy = streamingRef.current || approvalPending;
 
+  useEffect(() => {
+    if (
+      !conversationId ||
+      nativeSession ||
+      (identity.kind !== "account" && identity.kind !== "managed") ||
+      chat.status === "submitted" ||
+      chat.status === "streaming" ||
+      chat.messages.length === 0 ||
+      contextUsage?.conversationId === conversationId ||
+      typeof fetch !== "function"
+    ) {
+      return;
+    }
+    const epoch = selectionEpochRef.current;
+    const targetId = conversationId;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/ai/chat/compact?conversationId=${encodeURIComponent(targetId)}`,
+          { signal: controller.signal },
+        );
+        if (!res || !res.ok) return;
+        const body = (await res.json().catch(() => null)) as
+          | { usage?: AgentContextUsage | null }
+          | null;
+        if (
+          controller.signal.aborted ||
+          selectionEpochRef.current !== epoch ||
+          conversationIdRef.current !== targetId ||
+          !body?.usage
+        ) {
+          return;
+        }
+        setContextUsage((prev) =>
+          prev?.conversationId === targetId ? prev : body.usage ?? null,
+        );
+      } catch {
+        // Snapshot usage fetch is progressive enhancement; never block UI.
+      }
+    })();
+    return () => controller.abort();
+  }, [
+    conversationId,
+    nativeSession,
+    identity.kind,
+    chat.status,
+    chat.messages.length,
+    contextUsage?.conversationId,
+  ]);
+
+  const compactContext = useCallback(
+    async (focusNote?: string) => {
+      const id = conversationIdRef.current;
+      if (
+        !id ||
+        nativeSession ||
+        streamingRef.current ||
+        approvalPending ||
+        compactingRef.current ||
+        identity.kind === "legacy" ||
+        typeof fetch !== "function"
+      ) {
+        return;
+      }
+      const epoch = selectionEpochRef.current;
+      compactingRef.current = true;
+      setCompacting(true);
+      setCompactionFeedback(null);
+      try {
+        const trimmedFocus = focusNote?.trim();
+        const res = await fetch("/api/ai/chat/compact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId: id,
+            ...(trimmedFocus ? { focusNote: trimmedFocus } : {}),
+          }),
+        });
+        if (
+          selectionEpochRef.current !== epoch ||
+          conversationIdRef.current !== id
+        ) {
+          return;
+        }
+        if (!res) {
+          setCompactionFeedback({ kind: "error" });
+          return;
+        }
+        const body = (await res.json().catch(() => null)) as
+          | {
+              status?: string;
+              reason?: string;
+              code?: string;
+              usage?: AgentContextUsage | null;
+              beforeTokens?: number | null;
+              afterTokens?: number | null;
+            }
+          | null;
+        if (
+          selectionEpochRef.current !== epoch ||
+          conversationIdRef.current !== id
+        ) {
+          return;
+        }
+        if (body?.usage) {
+          setContextUsage(body.usage);
+        }
+        if (
+          res.status === 409 &&
+          (body?.code === "COMPACTION_IN_PROGRESS" ||
+            body?.code === "CONVERSATION_TURN_CONFLICT" ||
+            body?.code === "CONVERSATION_STALE_WRITE")
+        ) {
+          setCompactionFeedback({ kind: "busy", code: body.code });
+          return;
+        }
+        if (res.ok && body?.status === "committed") {
+          setCompactionFeedback({
+            kind: "success",
+            beforeTokens: body.beforeTokens ?? null,
+            afterTokens: body.afterTokens ?? null,
+          });
+          return;
+        }
+        if (res.ok && body?.status === "skipped") {
+          setCompactionFeedback({ kind: "skipped", code: body.reason });
+          return;
+        }
+        setCompactionFeedback({ kind: "error", code: body?.code });
+      } catch {
+        if (
+          selectionEpochRef.current === epoch &&
+          conversationIdRef.current === id
+        ) {
+          setCompactionFeedback({ kind: "error" });
+        }
+      } finally {
+        compactingRef.current = false;
+        setCompacting(false);
+      }
+    },
+    [approvalPending, identity.kind, nativeSession],
+  );
+
   const preflight = {
     checked: identity.checked,
     ok: identity.ok,
@@ -1822,6 +1985,10 @@ function useAgentChatValue(
     removeFileChip,
     clearFileChips,
     contextUsage,
+    compacting,
+    compactionFeedback,
+    compactContext,
+    clearCompactionFeedback,
     activeRole,
     switchRole,
     transferToRole,

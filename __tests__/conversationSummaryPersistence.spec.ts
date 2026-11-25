@@ -41,7 +41,7 @@ it("does not cover or mutate an unresolved approval before the recent window", a
   expect(await db.conversationSummary.findUnique({ where: { conversationId: row.id } })).toBeNull();
 });
 
-it.each([16, 52, 60, 120])("commits and refreshes absolute summary coverage for %i persisted messages", async size => {
+it.each([24, 52, 60, 120])("commits and refreshes absolute summary coverage for %i persisted messages", async size => {
   const messages = dialogue(size / 2);
   messages[0].parts = [{ type: "text", text: "UNIQUE_CONSTRAINT_ALPHA EARLY_FACT_001" }];
   messages[1].parts.push({ type: "tool-add_job", toolCallId: "receipt", state: "output-available", input: { company: "Acme" }, output: { created: true, jobId: "durable-receipt" }, approval: { id: "approved", approved: true } });
@@ -55,7 +55,7 @@ it.each([16, 52, 60, 120])("commits and refreshes absolute summary coverage for 
   const input = { userId, conversationId: row.id };
   const result = await condenseCareerDialogueSummary(input, deps);
   expect(result.status).toBe("committed");
-  const firstCount = Math.min(size - 10, 50);
+  const firstCount = Math.min(size - 18, 50);
   const first = await repository.load(userId, row.id);
   expect(first?.messages).toEqual(messages);
   expect(first?.summary).toMatchObject({ throughMessageId: `m${firstCount - 1}`, coveredCount: firstCount, revision: 1, failureCount: 0 });
@@ -80,7 +80,7 @@ it.each([16, 52, 60, 120])("commits and refreshes absolute summary coverage for 
   expect(scheduleCareerDialogueSummary({ ...input, resolvedConnectionId: "locked", resolvedModel: "model", messages: appended!.messages }, deps).opened).toBe(true);
   await conversationSummaryInFlight(row.id);
   let refreshed = await repository.load(userId, row.id);
-  const secondCount = size === 120 ? 80 : size - 4;
+  const secondCount = size === 120 ? 80 : size - 12;
   expect(refreshed?.summary).toMatchObject({ throughMessageId: `m${secondCount - 1}`, coveredCount: secondCount, revision: 2 });
   const refreshPrompt = executeText.mock.calls[1][0].prompt;
   expect(refreshPrompt).toContain('"previous_summary":"UNIQUE_CONSTRAINT_ALPHA EARLY_FACT_001');
@@ -88,11 +88,11 @@ it.each([16, 52, 60, 120])("commits and refreshes absolute summary coverage for 
   expect(refreshDelta).toContain(`User: Career goal ${firstCount}`);
   expect(refreshDelta).not.toContain("EARLY_FACT_001");
   if (size === 120) {
-    expect(await condenseCareerDialogueSummary(input, deps)).toMatchObject({ status: "committed", coveredCount: 116 });
+    expect(await condenseCareerDialogueSummary(input, deps)).toMatchObject({ status: "committed", coveredCount: 108 });
     refreshed = await repository.load(userId, row.id);
   }
   const finalRevision = size === 120 ? 3 : 2;
-  expect(refreshed?.summary).toMatchObject({ throughMessageId: `m${size - 5}`, coveredCount: size - 4, revision: finalRevision, failureCount: 0 });
+  expect(refreshed?.summary).toMatchObject({ throughMessageId: `m${size - 13}`, coveredCount: size - 12, revision: finalRevision, failureCount: 0 });
   expect(validateConversationSummaryCoverage(refreshed?.summary, refreshed!.messages).status).toBe("FRESH");
   expect(await condenseCareerDialogueSummary(input, deps)).toMatchObject({ status: "skipped", reason: "trigger" });
   expect(executeText).toHaveBeenCalledTimes(finalRevision);

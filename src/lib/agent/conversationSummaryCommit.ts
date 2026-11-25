@@ -53,6 +53,7 @@ export type SummarySnapshot = {
 export function evaluateSummaryCommit(
   current: SummarySnapshot,
   attempt: SummaryAttempt,
+  options?: { maxSummaryTokens?: number },
 ): SummaryCommitDecision {
   const index = current.messages.findIndex(
     (message) => message.id === attempt.throughMessageId,
@@ -61,7 +62,9 @@ export function evaluateSummaryCommit(
   if (hashSummaryCoverage(current.messages.slice(0, index + 1)) !== attempt.coverageHash) {
     return { action: "discard" };
   }
-  if (isFreshLater(current.summary, current.messages, index)) return { action: "discard" };
+  if (isFreshLater(current.summary, current.messages, index, options?.maxSummaryTokens)) {
+    return { action: "discard" };
+  }
 
   const record = successRecord(attempt, 0);
   if (!current.summary) {
@@ -84,17 +87,22 @@ export async function persistSummaryAttempt(args: {
   create: (record: ConversationSummaryRecord) => Promise<"created" | "conflict">;
   update: (expectedRevision: number, record: ConversationSummaryRecord) => Promise<number>;
   attempt: SummaryAttempt;
+  maxSummaryTokens?: number;
 }): Promise<"committed" | "discarded"> {
   const loaded = await args.reload();
   if (!loaded) return "discarded";
-  const decision = evaluateSummaryCommit(loaded, args.attempt);
+  const decision = evaluateSummaryCommit(loaded, args.attempt, {
+    maxSummaryTokens: args.maxSummaryTokens,
+  });
   if (decision.action === "discard") return "discarded";
   if (decision.action === "create") {
     const created = await args.create(decision.record);
     if (created === "created") return "committed";
     const again = await args.reload();
     if (!again) return "discarded";
-    const retry = evaluateSummaryCommit(again, args.attempt);
+    const retry = evaluateSummaryCommit(again, args.attempt, {
+      maxSummaryTokens: args.maxSummaryTokens,
+    });
     if (retry.action !== "update") return "discarded";
     const count = await args.update(retry.expectedRevision, retry.record);
     return count === 1 ? "committed" : "discarded";
@@ -107,9 +115,12 @@ function isFreshLater(
   summary: ConversationSummaryRecord | null,
   messages: UIMessage[],
   ourIndex: number,
+  maxSummaryTokens?: number,
 ): boolean {
   if (!summary) return false;
-  const verdict = validateConversationSummaryCoverage(summary, messages);
+  const verdict = validateConversationSummaryCoverage(summary, messages, {
+    maxSummaryTokens,
+  });
   return verdict.status === "FRESH" && verdict.throughIndex > ourIndex;
 }
 

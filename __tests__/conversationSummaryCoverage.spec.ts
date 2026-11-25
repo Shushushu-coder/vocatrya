@@ -70,7 +70,7 @@ function resolvedToolMessage(): UIMessage {
 
 describe("conversation summary coverage", () => {
   it("keeps the summary prompt version in one module", () => {
-    expect(CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION).toBe("career-dialogue-summary-v2");
+    expect(CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION).toBe("career-dialogue-summary-v3");
     const root = path.resolve("src");
     const hits: string[] = [];
     const walk = (dir: string) => {
@@ -81,7 +81,7 @@ describe("conversation summary coverage", () => {
           continue;
         }
         if (!/\.(ts|tsx)$/.test(entry)) continue;
-        if (readFileSync(full, "utf8").includes("career-dialogue-summary-v2")) hits.push(full);
+        if (readFileSync(full, "utf8").includes("career-dialogue-summary-v3")) hits.push(full);
       }
     };
     walk(root);
@@ -176,7 +176,7 @@ describe("conversation summary coverage", () => {
   });
 
   it("covers dropped turns plus the oldest retained turn and stops before a pending tool", () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const budget = buildCareerDialogueContext({ profile: "FAST_CHAT", messages });
     if (!budget.ok) throw new Error(budget.code);
     const target = selectConversationSummaryCoverage(messages);
@@ -186,7 +186,7 @@ describe("conversation summary coverage", () => {
     expect(ids).toContain(budget.historyBoundary.droppedTurns[0]?.[0]);
     expect(ids).not.toContain(budget.historyBoundary.retainedHistoryTurns[1]?.[0]);
 
-    const pending = dialogue(8);
+    const pending = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     pending[3] = {
       id: "a1",
       role: "assistant",

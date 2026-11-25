@@ -17,7 +17,10 @@ import {
   type ConversationSummaryRecord,
   type SummaryAttempt,
 } from "./conversationSummaryCommit";
-import { validateConversationSummaryCoverage } from "./conversationSummaryCoverage";
+import {
+  isConversationSummaryCircuitOpen,
+  validateConversationSummaryCoverage,
+} from "./conversationSummaryCoverage";
 
 type SummaryDb = PrismaClient | Prisma.TransactionClient;
 
@@ -29,6 +32,14 @@ export type SummaryRepository = {
     messages: UIMessage[];
     resolvedConnectionId: string | null;
     resolvedModel: string | null;
+    provider?: string | null;
+    backendKind?: string | null;
+    executionPath?: string | null;
+    activeRequestId?: string | null;
+    activeRequestExpiresAt?: Date | null;
+    context?: string | null;
+    agentRole?: string | null;
+    agentTaskId?: string | null;
     managedAiProvenance?: string | null;
     /**
      * Decoded Managed binding for a Managed-locked conversation —
@@ -47,6 +58,7 @@ export type SummaryRepository = {
     userId: string,
     conversationId: string,
     attempt: SummaryAttempt,
+    options?: { maxSummaryTokens?: number },
   ) => Promise<"committed" | "discarded">;
   recordFailure: (userId: string, conversationId: string, at: Date) => Promise<number>;
 };
@@ -54,18 +66,26 @@ export type SummaryRepository = {
 export function createPrismaSummaryRepository(client: SummaryDb = prisma): SummaryRepository {
   return {
     load: (userId, conversationId) => loadSummarySnapshot(client, userId, conversationId),
-    commit: (userId, conversationId, attempt) =>
-      commitSummarySnapshot(client, userId, conversationId, attempt),
+    commit: (userId, conversationId, attempt, options) =>
+      commitSummarySnapshot(client, userId, conversationId, attempt, options),
     recordFailure: (userId, conversationId, at) =>
       recordSummaryFailure(client, userId, conversationId, at),
   };
 }
 
-export async function loadFreshConversationSummary(input: {
+export type ConversationSummaryStatus = {
+  freshSummary?: { text: string; throughMessageId: string };
+  failureCount: number;
+  circuitBreakerOpen: boolean;
+  coveredCount: number | null;
+};
+
+export async function loadConversationSummaryStatus(input: {
   userId: string;
   conversationId: string;
   messages: UIMessage[];
-}): Promise<{ text: string; throughMessageId: string } | undefined> {
+  maxSummaryTokens?: number;
+}): Promise<ConversationSummaryStatus> {
   try {
     const row = await prisma.conversationSummary.findFirst({
       where: {
@@ -75,21 +95,73 @@ export async function loadFreshConversationSummary(input: {
         conversation: { archivedAt: null },
       },
     });
-    if (!row) return undefined;
+    if (!row) {
+      return {
+        failureCount: 0,
+        circuitBreakerOpen: false,
+        coveredCount: null,
+      };
+    }
     const conversation = await prisma.chatConversation.findFirst({
       where: { id: input.conversationId, userId: input.userId },
       select: { messages: true, context: true },
     });
-    if (!conversation || await hasArchivedJobReference(
-      prisma, input.userId, conversation.messages, conversation.context, input.messages, row,
-    )) return undefined;
-    const verdict = validateConversationSummaryCoverage(toRecord(row), input.messages);
-    if (verdict.status !== "FRESH") return undefined;
-    return { text: verdict.text, throughMessageId: input.messages[verdict.throughIndex].id };
+    if (
+      !conversation ||
+      (await hasArchivedJobReference(
+        prisma,
+        input.userId,
+        conversation.messages,
+        conversation.context,
+        input.messages,
+        row,
+      ))
+    ) {
+      return {
+        failureCount: 0,
+        circuitBreakerOpen: false,
+        coveredCount: null,
+      };
+    }
+    const failureCount = row.failureCount ?? 0;
+    const circuitBreakerOpen = isConversationSummaryCircuitOpen(failureCount);
+    const verdict = validateConversationSummaryCoverage(toRecord(row), input.messages, {
+      maxSummaryTokens: input.maxSummaryTokens,
+    });
+    if (verdict.status !== "FRESH") {
+      return {
+        failureCount,
+        circuitBreakerOpen,
+        coveredCount: row.coveredCount ?? null,
+      };
+    }
+    return {
+      freshSummary: {
+        text: verdict.text,
+        throughMessageId: input.messages[verdict.throughIndex].id,
+      },
+      failureCount,
+      circuitBreakerOpen,
+      coveredCount: row.coveredCount ?? null,
+    };
   } catch {
     log.info("[agent-chat] summary", { summaryStatus: "read_failed" });
-    return undefined;
+    return {
+      failureCount: 0,
+      circuitBreakerOpen: false,
+      coveredCount: null,
+    };
   }
+}
+
+export async function loadFreshConversationSummary(input: {
+  userId: string;
+  conversationId: string;
+  messages: UIMessage[];
+  maxSummaryTokens?: number;
+}): Promise<{ text: string; throughMessageId: string } | undefined> {
+  const status = await loadConversationSummaryStatus(input);
+  return status.freshSummary;
 }
 
 async function loadSummarySnapshot(
@@ -99,29 +171,74 @@ async function loadSummarySnapshot(
 ) {
   const conversation = await client.chatConversation.findFirst({
     where: { id: conversationId, userId },
-    select: { messages: true, context: true, resolvedConnectionId: true, resolvedModel: true, managedAiProvenance: true, archivedAt: true },
+    select: {
+      messages: true,
+      context: true,
+      resolvedConnectionId: true,
+      resolvedModel: true,
+      managedAiProvenance: true,
+      archivedAt: true,
+      executionPath: true,
+      activeRequestId: true,
+      activeRequestExpiresAt: true,
+      agentRole: true,
+      agentTaskId: true,
+    },
   });
   if (!conversation) return null;
-  if (conversation.archivedAt || await hasArchivedJobReference(client, userId, conversation.messages, conversation.context)) {
+  if (
+    conversation.archivedAt ||
+    (await hasArchivedJobReference(
+      client,
+      userId,
+      conversation.messages,
+      conversation.context,
+    ))
+  ) {
     // Archived: no messages, no lock, no summary — the scheduler skips.
     return {
       messages: [],
       resolvedConnectionId: null,
       resolvedModel: null,
       archived: true,
+      executionPath: conversation.executionPath,
+      summary: null,
+    };
+  }
+  if (conversation.executionPath === "NATIVE_CODEX_V1") {
+    return {
+      messages: [],
+      resolvedConnectionId: null,
+      resolvedModel: null,
+      executionPath: conversation.executionPath,
+      activeRequestId: conversation.activeRequestId,
+      activeRequestExpiresAt: conversation.activeRequestExpiresAt,
+      context: conversation.context,
+      agentRole: conversation.agentRole,
+      agentTaskId: conversation.agentTaskId,
       summary: null,
     };
   }
   const managed = managedLockFromRow(conversation);
-  let managedLock: { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 } | undefined;
+  let managedLock:
+    | { connectionId: string; model: string; provenance: ManagedAiProvenanceV1 }
+    | undefined;
   let lockInvalid: string | undefined;
+  let provider: string | null = null;
+  let backendKind: string | null = null;
+  const connection = conversation.resolvedConnectionId
+    ? await client.aIConnection.findFirst({
+        where: { id: conversation.resolvedConnectionId, userId },
+      })
+    : null;
+  if (connection) {
+    provider = connection.provider;
+    backendKind = connection.backendKind;
+  }
   if (managed) {
     // M4: summaries for Managed conversations are executable — validate
     // the binding is intact here so the scheduler fails explicitly rather
     // than re-resolving or silently degrading.
-    const connection = managed.connectionId ? await client.aIConnection.findFirst({
-      where: { id: managed.connectionId, userId },
-    }) : null;
     try {
       assertManagedHistoricalExecution(managed, connection, userId);
       managedLock = {
@@ -130,17 +247,15 @@ async function loadSummarySnapshot(
         provenance: managed.provenance,
       };
     } catch (error) {
-      lockInvalid = error instanceof Error && "code" in error
-        ? String((error as { code?: unknown }).code)
-        : "MANAGED_BINDING_UNAVAILABLE";
+      lockInvalid =
+        error instanceof Error && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : "MANAGED_BINDING_UNAVAILABLE";
     }
   } else if (conversation.resolvedConnectionId) {
     // Half-state (M4 §114): an account-shaped lock pointing at a Managed
     // connection has no usable provenance — mark it invalid instead of
     // letting the summary auto-bind at run time.
-    const connection = await client.aIConnection.findFirst({
-      where: { id: conversation.resolvedConnectionId, userId },
-    });
     if (connection && classifyAIConnection(connection) === "MANAGED") {
       lockInvalid = "MANAGED_PROVENANCE_INVALID";
     }
@@ -152,6 +267,14 @@ async function loadSummarySnapshot(
     messages: parseMessages(conversation.messages),
     resolvedConnectionId: conversation.resolvedConnectionId,
     resolvedModel: conversation.resolvedModel,
+    provider,
+    backendKind,
+    executionPath: conversation.executionPath,
+    activeRequestId: conversation.activeRequestId,
+    activeRequestExpiresAt: conversation.activeRequestExpiresAt,
+    context: conversation.context,
+    agentRole: conversation.agentRole,
+    agentTaskId: conversation.agentTaskId,
     managedAiProvenance: conversation.managedAiProvenance,
     managed: managedLock,
     lockInvalid,
@@ -164,11 +287,14 @@ async function commitSummarySnapshot(
   userId: string,
   conversationId: string,
   attempt: SummaryAttempt,
+  options?: { maxSummaryTokens?: number },
 ): Promise<"committed" | "discarded"> {
   if ("$transaction" in client && typeof client.$transaction === "function") {
-    return client.$transaction((tx) => commitOnClient(tx, userId, conversationId, attempt));
+    return client.$transaction((tx) =>
+      commitOnClient(tx, userId, conversationId, attempt, options),
+    );
   }
-  return commitOnClient(client, userId, conversationId, attempt);
+  return commitOnClient(client, userId, conversationId, attempt, options);
 }
 
 async function commitOnClient(
@@ -176,6 +302,7 @@ async function commitOnClient(
   userId: string,
   conversationId: string,
   attempt: SummaryAttempt,
+  options?: { maxSummaryTokens?: number },
 ): Promise<"committed" | "discarded"> {
   return persistSummaryAttempt({
     reload: async () => {
@@ -227,6 +354,7 @@ async function commitOnClient(
       return updated.count;
     },
     attempt,
+    maxSummaryTokens: options?.maxSummaryTokens,
   });
 }
 

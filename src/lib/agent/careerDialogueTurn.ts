@@ -186,6 +186,9 @@ export async function runCareerDialogueTurn(
     agentRole: input.agentRole,
     agentTaskId: input.agentTaskId,
     handoffLine: input.handoffLine,
+    businessAnchorLine: input.businessAnchorLine,
+    budgets: input.budgets,
+    autoCompactTriggerTokens: input.autoCompactTriggerTokens,
   });
   const answerChars = await streamFinalAnswer({
     userId: input.userId,

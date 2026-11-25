@@ -47,9 +47,9 @@ import {
   resolveFileTexts,
 } from "@/lib/agent/agentFiles";
 import {
-  CAREER_DIALOGUE_CONTEXT_BUDGETS,
   careerDialogueContextLogFields,
   currentUserExceedsContextBudget,
+  resolveCareerDialogueBudgets,
   selectCareerDialogueMessages,
   type CareerDialogueContextSize,
 } from "@/lib/agent/contextBudget";
@@ -66,7 +66,10 @@ import {
   formatAgentStreamError,
 } from "@/lib/agent/errors";
 import { getUserSettings } from "@/actions/userSettings.actions";
-import { pageContextFromConversation } from "@/lib/agent/conversationContext";
+import {
+  pageContextFromConversation,
+  type AgentConversationContextV1,
+} from "@/lib/agent/conversationContext";
 import { AiProvider } from "@/models/ai.model";
 import {
   genAiRequestAttrs,
@@ -93,8 +96,10 @@ import {
   runCareerDialogueTurn,
 } from "@/lib/agent/careerDialogueTurn";
 import { AIBusinessError, classifyAIConnection } from "@/lib/ai/connections";
-import { loadFreshConversationSummary } from "@/lib/agent/conversationSummaryStore";
+import { loadConversationSummaryStatus } from "@/lib/agent/conversationSummaryStore";
 import { scheduleCareerDialogueSummary } from "@/lib/agent/conversationSummaryScheduler";
+import { resolveVerifiedBusinessAnchors } from "@/lib/agent/businessAnchors.server";
+import { getUserTimeZone } from "@/lib/userSettings/timeZone.server";
 import {
   resolveTaskSessionContext,
   type TaskSessionContext,
@@ -169,6 +174,7 @@ async function accountChatResponse({
   pastedText,
   fileTexts,
   pageContext,
+  conversationContext,
   lock,
   freshNativeFull,
   canonicalJobs,
@@ -188,6 +194,7 @@ async function accountChatResponse({
   pastedText: string | undefined;
   fileTexts: { name: string; text: string }[];
   pageContext: Parameters<typeof buildPageContextMessage>[0];
+  conversationContext?: AgentConversationContextV1;
   lock: { connectionId: string; model: string | null };
   freshNativeFull: boolean;
   canonicalJobs: boolean;
@@ -276,9 +283,16 @@ async function accountChatResponse({
   }) + personalInstructionsBlock(personalInstructions) + permissionInstructions(permissionMode)
     + buildResumeEvidencePromptAddendum({ messages, agentRole });
 
+  const resolvedBudgets = resolveCareerDialogueBudgets({
+    model: lock.model,
+    upstreamModelId: managed?.provenance.upstreamModelId,
+    provider: connection.provider,
+    backendKind: connection.backendKind,
+  });
+
   // Route on the full request. Budgeting happens inside the turn, after
   // the local router has seen the current utterance.
-  if (currentUserExceedsContextBudget(messages)) {
+  if (currentUserExceedsContextBudget(messages, resolvedBudgets.budgets)) {
     return deny(
       new AIBusinessError(
         "AI_REQUEST_TOO_LARGE",
@@ -357,11 +371,28 @@ async function accountChatResponse({
     execute: async ({ writer }) => {
       request.onCheckpoint = () => writer.write({ type: "data-conversation", transient: true, data: { conversationId, requestId: request.requestId, revision: request.revision, durable: true, released: false, wrote: request.wrote } });
       await runInSpan(turnSpan, async () => {
-        const summary = await loadFreshConversationSummary({
+        const summaryStatus = await loadConversationSummaryStatus({
           userId,
           conversationId,
           messages,
+          maxSummaryTokens: resolvedBudgets.budgets.summaryTokens,
         });
+        let businessAnchorLine: string | undefined;
+        if (summaryStatus.freshSummary) {
+          try {
+            const timeZone = await getUserTimeZone(userId).catch(() => "UTC");
+            const anchors = await resolveVerifiedBusinessAnchors(prisma, {
+              userId,
+              conversationId,
+              context: conversationContext,
+              locale,
+              timeZone,
+            });
+            if (anchors.renderedBlock) businessAnchorLine = anchors.renderedBlock;
+          } catch {
+            // Best-effort grounding; never fail a live turn.
+          }
+        }
         const result = await runCareerDialogueTurn({
           userId,
           connectionId: connection.id,
@@ -374,7 +405,10 @@ async function accountChatResponse({
           pastedText,
           fileTexts,
           pageContext,
-          summary,
+          summary: summaryStatus.freshSummary,
+          budgets: resolvedBudgets.budgets,
+          autoCompactTriggerTokens: resolvedBudgets.autoCompactTriggerTokens,
+          businessAnchorLine,
           writer,
           signal: turnSignal,
           decision: prepared.decision,
@@ -402,6 +436,14 @@ async function accountChatResponse({
             estimatedInputTokens: contextSize.estimatedInputTokens,
             recentTurnCount: contextSize.recentTurnCount,
             droppedTurnCount: contextSize.droppedTurnCount,
+            modelContextWindowTokens: resolvedBudgets.contextWindowTokens,
+            modelContextWindowSource: resolvedBudgets.contextWindowSource,
+            autoCompactTriggerTokens: resolvedBudgets.autoCompactTriggerTokens,
+            microCompactedToolCount: contextSize.microCompactedToolCount,
+            compactedTurnCount: contextSize.compactedTurnCount,
+            hasSummary: Boolean(summaryStatus.freshSummary),
+            circuitBreakerOpen: summaryStatus.circuitBreakerOpen,
+            failureCount: summaryStatus.failureCount,
             tokens: {
               system: contextSize.systemTokens,
               currentUser: contextSize.currentUserTokens,
@@ -410,8 +452,14 @@ async function accountChatResponse({
               toolResult: contextSize.toolResultTokens,
               summary: contextSize.summaryTokens,
               dynamic: contextSize.dynamicTokens,
+              ...(contextSize.businessAnchorTokens > 0
+                ? { businessAnchor: contextSize.businessAnchorTokens }
+                : {}),
+              ...(contextSize.handoffTokens > 0
+                ? { handoff: contextSize.handoffTokens }
+                : {}),
             },
-            budgets: { ...CAREER_DIALOGUE_CONTEXT_BUDGETS },
+            budgets: { ...resolvedBudgets.budgets },
           };
           writer.write({
             type: AGENT_CONTEXT_USAGE_PART_TYPE,
@@ -473,6 +521,9 @@ async function accountChatResponse({
         conversationId,
         resolvedConnectionId: lock.connectionId,
         resolvedModel: lock.model,
+        resolvedProvider: connection.provider,
+        resolvedBackendKind: connection.backendKind,
+        resolvedUpstreamModelId: managed?.provenance.upstreamModelId,
         messages: request.messages,
       });
       // Task sessions only. Fire-and-forget and self-containing: a handoff
@@ -578,7 +629,8 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       instructions: "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Business tools and skills are not loaded in this session. Never claim to have searched the web unless you actually used web search, and never claim to have saved or modified user data.\n" + preferences.personalInstructions,
     });
   }
-  const pageContext = pageContextFromConversation(contextOfRow(conversation));
+  const conversationContext = contextOfRow(conversation);
+  const pageContext = pageContextFromConversation(conversationContext);
 
   // Agent long-task harness: null (no DB access) unless the conversation is
   // bound to a task, so ordinary chats are untouched.
@@ -620,6 +672,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
       pastedText,
       fileTexts,
       pageContext,
+      conversationContext,
       lock: lock as { connectionId: string; model: string | null },
       freshNativeFull,
       canonicalJobs,
@@ -666,7 +719,11 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   // Async in ai@6 (correction #5), and the messages array is client-supplied
   // — a shape z.array(z.any()) let through can reject the conversion, and
   // that is a bad request, not a server crash.
-  if (currentUserExceedsContextBudget(messages)) {
+  const legacyBudgets = resolveCareerDialogueBudgets({
+    model: modelName,
+    provider,
+  }).budgets;
+  if (currentUserExceedsContextBudget(messages, legacyBudgets)) {
     return NextResponse.json(
       agentErrorEnvelope(
         new AIBusinessError(
@@ -687,7 +744,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   const convertible = messages.every(
     (message) => message.role === "user" || message.role === "assistant",
   );
-  const retained = convertible ? selectCareerDialogueMessages(messages) : messages;
+  const retained = convertible ? selectCareerDialogueMessages(messages, legacyBudgets) : messages;
   let modelMessages;
   try {
     // An approved request that was cancelled before its tool checkpoint must

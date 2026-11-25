@@ -112,7 +112,7 @@ describe("task session handoff line", () => {
       profile: "AGENT_RESPONSE",
       messages,
       summary: "SUMMARY_TEXT",
-      budgets: { dynamicTokens: 250 },
+      budgets: { dynamicTokens: 35 },
       agentTaskId: "task-1",
       handoffLine: HANDOFF,
     });

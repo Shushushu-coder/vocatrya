@@ -7,10 +7,30 @@ import {
 } from "@/models/agent.model";
 import { agentFilePlaceholder } from "./agentFiles";
 import {
+  CAREER_DIALOGUE_ASSEMBLED_CAP_TOKENS,
+  resolveCareerDialogueBudgets,
+  resolveModelContextWindow,
+  type CareerDialogueContextBudgets,
+} from "./modelContextWindow";
+import {
   buildFileContextMessage,
   buildPageContextMessage,
   buildPasteContextMessage,
 } from "./prompt";
+import {
+  MICRO_COMPACT_KEEP_RECENT_TOOLS,
+  MICRO_COMPACT_MIN_TOKENS,
+  microCompactToolOutputLine,
+  microCompactToolOutputValue,
+  shouldMicroCompactToolOutput,
+} from "./toolMicroCompact";
+
+export {
+  CAREER_DIALOGUE_ASSEMBLED_CAP_TOKENS,
+  resolveCareerDialogueBudgets,
+  resolveModelContextWindow,
+  type CareerDialogueContextBudgets,
+};
 
 /**
  * Provider-neutral Career Dialogue context budget.
@@ -22,39 +42,26 @@ import {
  * as one unit so the default locale is not under-budgeted. No tokenizer
  * package is added. This module never calls a model.
  *
- * Drop order when over the dynamic or assembled budget:
- *   summary → oldest historical tool line → oldest complete turn →
- *   page-context line.
+ * L1 micro-compact folds older bulky tool outputs (keeping recent 1–2 tool
+ * calls verbatim) in the prompt view without mutating stored messages.
+ *
+ * Drop order when over the dynamic or assembled budget (L2 fixed priority):
+ *   1. micro-compact non-protected historical tool
+ *   2. oldest non-protected historical tool line
+ *   3. oldest complete history turn
+ *   4. page-context line
+ *   5. extreme overflow: micro-compact/drop newest historical tool & remaining turns
+ *   6. last resort only: valid summary
+ *
  * Never dropped and never sliced: fixed instructions, the current user
  * message, approval state, the current paste head, the current tool
- * result, and (task sessions only) the system-maintained task handoff line.
+ * result, verified L3 business anchors (unless over `businessAnchorTokens`),
+ * and (task sessions only) the system-maintained task handoff line.
  * A current user message over `currentUserTokens` is rejected.
- *
- * Task handoff: included only when the caller passes BOTH `agentTaskId` and a
- * non-empty `handoffLine`; otherwise every code path below is identical to
- * the pre-handoff behavior. A line over `handoffTokens` is dropped whole and
- * reported as `handoffDropped` (the write side caps size, so this is a guard
- * against stale or hand-edited data, not a drop-order step).
  */
 
-export const CAREER_DIALOGUE_CONTEXT_BUDGETS = {
-  dynamicTokens: 6_000,
-  explicitContextTokens: 2_000,
-  historyTokens: 3_000,
-  maxRecentTurns: 6,
-  summaryTokens: 1_000,
-  /** Task handoff line (task sessions only). Never in the drop order. */
-  handoffTokens: APP_CONSTANTS.AGENT_TASK_HANDOFF_TOKENS,
-  /** Older tool bodies. The current session tool result is not charged here. */
-  historicalToolTokens: 2_000,
-  currentUserTokens: 6_000,
-  /** Fixed instructions + everything still retained. */
-  assembledInputTokens: 16_000,
-} as const;
-
-export type CareerDialogueContextBudgets = {
-  [K in keyof typeof CAREER_DIALOGUE_CONTEXT_BUDGETS]: number;
-};
+export const CAREER_DIALOGUE_CONTEXT_BUDGETS: CareerDialogueContextBudgets =
+  resolveCareerDialogueBudgets().budgets;
 
 export type CareerDialogueContextProfile =
   | "FAST_CHAT"
@@ -75,11 +82,23 @@ export type CareerDialogueContextSize = {
   toolResultTokens: number;
   summaryChars: number;
   summaryTokens: number;
+  /** Verified L3 business anchor block as included (0 when absent or dropped). */
+  businessAnchorChars: number;
+  businessAnchorTokens: number;
+  businessAnchorDropped: boolean;
   /** Task handoff line as included (0 when absent or dropped). */
   handoffChars: number;
   handoffTokens: number;
   /** True when a supplied handoff line exceeded `handoffTokens`. */
   handoffDropped: boolean;
+  /** Count of historical tool results folded by L1 micro-compaction. */
+  microCompactedToolCount: number;
+  /** Count of older history turns covered & folded by an active summary. */
+  compactedTurnCount: number;
+  /** True when extreme overflow forced dropping the summary last-resort. */
+  summaryDroppedForOverflow: boolean;
+  /** True when assembled size hits auto-compact threshold or overflowed summary. */
+  needsRecompaction: boolean;
   dynamicChars: number;
   dynamicTokens: number;
   estimatedInputTokens: number;
@@ -138,6 +157,18 @@ export type CareerDialogueContextInput = {
    * Never dropped by the budgeter; see the file header.
    */
   handoffLine?: string;
+  /**
+   * L3 post-compaction SQLite-verified business anchors (bound job/JD, resume
+   * version, today_plan). Protected from `dropLowest` like `handoffLine`.
+   */
+  businessAnchorLine?: string;
+  /** Auto-compact trigger threshold (assembled tokens) for `needsRecompaction`. */
+  autoCompactTriggerTokens?: number;
+  /** Optional L1 micro-compact overrides for tests. */
+  microCompact?: {
+    keepRecentTools?: number;
+    minTokens?: number;
+  };
 };
 
 export type CareerDialogueContextSuccess = {
@@ -178,10 +209,22 @@ type DialogueTurn = {
   index: number;
 };
 
-type TaggedLine = {
-  kind: "dialogue" | "tool";
+type DialogueTaggedLine = {
+  kind: "dialogue";
   text: string;
 };
+
+type ToolTaggedLine = {
+  kind: "tool";
+  text: string;
+  rawText: string;
+  toolName: string;
+  projectedOutput: unknown;
+  microCompacted: boolean;
+  partRef: unknown;
+};
+
+type TaggedLine = DialogueTaggedLine | ToolTaggedLine;
 
 type RenderedTurn = {
   turn: DialogueTurn;
@@ -325,18 +368,10 @@ function userText(message: UIMessage | null | undefined): string {
     .join("\n");
 }
 
-function isApprovalState(state: string | undefined): boolean {
-  return (
-    state === "approval-requested" ||
-    state === "approval-responded" ||
-    state === "output-denied"
-  );
-}
-
 function toolLine(
   part: { type: string; [k: string]: unknown },
   profile: CareerDialogueContextProfile,
-): { kind: "dialogue" | "tool"; text: string } {
+): TaggedLine {
   const name = getToolName(part as never);
   const state = part.state as string;
   if (state === "approval-requested") {
@@ -363,9 +398,16 @@ function toolLine(
     return { kind: "dialogue", text: `Tool ${name} failed.` };
   }
   if (state === "output-available") {
+    const projectedOutput = projectToolOutput(part.output ?? null, profile, name);
+    const text = `Tool ${name} returned: ${JSON.stringify(projectedOutput)}`;
     return {
       kind: "tool",
-      text: `Tool ${name} returned: ${JSON.stringify(projectToolOutput(part.output ?? null, profile, name))}`,
+      text,
+      rawText: text,
+      toolName: name,
+      projectedOutput,
+      microCompacted: false,
+      partRef: part,
     };
   }
   return {
@@ -455,14 +497,6 @@ export function latestCompleteTurnMessageCount(messages: UIMessage[]): number {
   return 0;
 }
 
-function turnHasApproval(turn: DialogueTurn): boolean {
-  return turn.assistants.some((message) =>
-    (message.parts ?? []).some(
-      (part) => isToolUIPart(part) && isApprovalState(part.state),
-    ),
-  );
-}
-
 function sessionLines(
   facts: SessionToolFact[],
   profile: CareerDialogueContextProfile,
@@ -483,14 +517,24 @@ export function currentUserExceedsContextBudget(
   return estimateContextTokens(text) > budgetsOf(budgets).currentUserTokens;
 }
 
-function projectMessageOutputs(message: UIMessage): UIMessage {
+function projectMessageOutputs(
+  message: UIMessage,
+  microCompactedParts?: ReadonlySet<unknown>,
+): UIMessage {
   return {
     ...message,
     parts: (message.parts ?? []).map((part) => {
       if (!isToolUIPart(part) || part.state !== "output-available") return part;
+      const projected = projectToolOutput(part.output ?? null, "AGENT_RESPONSE");
+      if (microCompactedParts?.has(part)) {
+        return {
+          ...part,
+          output: microCompactToolOutputValue(getToolName(part as never), projected),
+        };
+      }
       return {
         ...part,
-        output: projectToolOutput(part.output ?? null, "AGENT_RESPONSE"),
+        output: projected,
       };
     }),
   };
@@ -512,13 +556,36 @@ export function selectCareerDialogueMessages(
     budgets,
   });
   if (!result.ok) return [];
-  return result.retainedMessages.map(projectMessageOutputs);
+  return result.retainedMessages;
 }
 
 function dialogueText(rendered: RenderedTurn, droppedTools: Set<TaggedLine>): string[] {
   return rendered.lines
     .filter((line) => line.kind === "dialogue" || !droppedTools.has(line))
     .map((line) => line.text);
+}
+
+function tryMicroCompactToolLine(line: ToolTaggedLine, minTokens?: number): boolean {
+  if (line.microCompacted) return false;
+  if (
+    minTokens !== undefined &&
+    !shouldMicroCompactToolOutput(
+      line.toolName,
+      line.projectedOutput,
+      line.text,
+      estimateContextTokens,
+      minTokens,
+    )
+  ) {
+    return false;
+  }
+  const folded = microCompactToolOutputLine(line.toolName, line.projectedOutput);
+  if (estimateContextTokens(folded) >= estimateContextTokens(line.text)) {
+    return false;
+  }
+  line.text = folded;
+  line.microCompacted = true;
+  return true;
 }
 
 export function buildCareerDialogueContext(
@@ -538,7 +605,45 @@ export function buildCareerDialogueContext(
     return { ok: false, code: "INPUT_TOO_LARGE" };
   }
 
-  const renderedHistory = historyPool.map((turn) => renderTurn(turn, profile));
+  const summaryObj =
+    input.summary && typeof input.summary !== "string" ? input.summary : null;
+  const summaryText =
+    typeof input.summary === "string" ? input.summary : summaryObj?.text;
+  let summary = summaryText?.trim() || undefined;
+  if (summary && estimateContextTokens(summary) > budgets.summaryTokens) {
+    summary = undefined;
+  }
+
+  // Compaction boundary folding: turns already covered by a valid summary are
+  // represented by that summary instead of being duplicated verbatim.
+  let activeHistoryPool = historyPool;
+  let compactedTurnCount = 0;
+  if (summary && summaryObj) {
+    const throughIndex = messages.findIndex(
+      (message) => message.id === summaryObj.throughMessageId,
+    );
+    if (throughIndex < 0) {
+      summary = undefined;
+    } else {
+      const coveredIds = new Set(
+        messages.slice(0, throughIndex + 1).map((message) => message.id),
+      );
+      const uncovered: DialogueTurn[] = [];
+      let covered = 0;
+      for (const turn of historyPool) {
+        const ids = turnMessageIds(turn);
+        if (ids.length > 0 && ids.every((id) => coveredIds.has(id))) {
+          covered += 1;
+        } else {
+          uncovered.push(turn);
+        }
+      }
+      activeHistoryPool = uncovered;
+      compactedTurnCount = covered;
+    }
+  }
+
+  const renderedHistory = activeHistoryPool.map((turn) => renderTurn(turn, profile));
   const currentReservesSlot = Boolean(
     !lastIsUser && current && isComplete(current),
   );
@@ -560,17 +665,36 @@ export function buildCareerDialogueContext(
   let history = keptNewestFirst.reverse();
 
   const currentRendered = current ? renderTurn(current, profile) : null;
-  const includeCurrent = Boolean(currentRendered && (lastIsUser || current?.user || current));
+  const includeCurrent = Boolean(
+    currentRendered && (lastIsUser || current?.user || current),
+  );
 
   const session = sessionLines(input.sessionFacts ?? [], profile);
   const toolCarriers = [
     ...history,
     ...(includeCurrent && currentRendered ? [currentRendered] : []),
   ];
-  const historicalToolLines: TaggedLine[] = [];
+  const historicalToolLines: ToolTaggedLine[] = [];
   for (const rendered of toolCarriers) {
     for (const line of rendered.lines) {
       if (line.kind === "tool") historicalToolLines.push(line);
+    }
+  }
+
+  // L1 zero-cost micro-compaction: fold bulky tool outputs older than the
+  // most recent 1–2 tool calls before measuring historicalToolTokens.
+  let microCompactedToolCount = 0;
+  const keepRecentTools = Math.max(
+    0,
+    input.microCompact?.keepRecentTools ??
+      (session.length > 0 ? 1 : MICRO_COMPACT_KEEP_RECENT_TOOLS),
+  );
+  const minMicroTokens = input.microCompact?.minTokens ?? MICRO_COMPACT_MIN_TOKENS;
+  const compactCutoff = Math.max(0, historicalToolLines.length - keepRecentTools);
+  for (let i = 0; i < compactCutoff; i++) {
+    const line = historicalToolLines[i];
+    if (line && tryMicroCompactToolLine(line, minMicroTokens)) {
+      microCompactedToolCount += 1;
     }
   }
 
@@ -594,12 +718,6 @@ export function buildCareerDialogueContext(
     }
     keptToolTokens += cost;
     keptToolCount += 1;
-  }
-
-  const summaryText = typeof input.summary === "string" ? input.summary : input.summary?.text;
-  let summary = summaryText?.trim() || undefined;
-  if (summary && estimateContextTokens(summary) > budgets.summaryTokens) {
-    summary = undefined;
   }
 
   let pageLine = lastIsUser
@@ -629,6 +747,17 @@ export function buildCareerDialogueContext(
 
   let summaryLine = summary ? `Earlier conversation summary:\n${summary}` : undefined;
 
+  // L3 business anchor block: verified against SQLite post-compaction and
+  // never touched by dropLowest.
+  const businessAnchorCandidate = input.businessAnchorLine?.trim() || undefined;
+  const businessAnchorDropped = Boolean(
+    businessAnchorCandidate &&
+      estimateContextTokens(businessAnchorCandidate) > budgets.businessAnchorTokens,
+  );
+  const businessAnchorLine = businessAnchorDropped
+    ? undefined
+    : businessAnchorCandidate;
+
   // Task handoff: task sessions only. Fixed once here and never reassigned,
   // so dropLowest cannot touch it.
   const handoffCandidate =
@@ -644,30 +773,11 @@ export function buildCareerDialogueContext(
     );
   const keptHistoricalTools = () =>
     historicalToolLines.filter((line) => !droppedTools.has(line)).map((line) => line.text);
-  const currentLines = () =>
-    includeCurrent && currentRendered
-      ? currentRendered.lines
-          .filter((line) => line.kind === "dialogue" || !droppedTools.has(line))
-          .map((line) => line.text)
-      : [];
 
-  const dynamicParts = (): string[] => [
-    ...(summaryLine ? [summaryLine] : []),
-    ...history.flatMap((rendered) => dialogueText(rendered, droppedTools)),
-    ...currentLines().filter((line) => !history.some((rendered) => rendered.turn === current)),
-    ...(pageLine ? [pageLine] : []),
-    ...(pasteLine ? [pasteLine] : []),
-    ...fileLines,
-    ...session,
-  ];
-
-  // currentLines is already included via history when current is in history.
-  // Current is NOT in `history` (history is the pool before current). The
-  // filter above is defensive. Assemble once below instead of this helper
-  // double-counting. Use a single assembler.
   const assemble = (): string[] => {
     const lines: string[] = [];
     if (summaryLine) lines.push(summaryLine);
+    if (businessAnchorLine) lines.push(businessAnchorLine);
     if (handoffLine) lines.push(handoffLine);
     for (const rendered of history) lines.push(...dialogueText(rendered, droppedTools));
     if (includeCurrent && currentRendered && !history.includes(currentRendered)) {
@@ -683,27 +793,38 @@ export function buildCareerDialogueContext(
   const fixedTokens = estimateContextTokens(input.fixedOverheadText ?? "");
   const over = () => {
     const dynamic = tokensOf(assemble());
-    return dynamic > budgets.dynamicTokens || fixedTokens + dynamic > budgets.assembledInputTokens;
+    return (
+      dynamic > budgets.dynamicTokens ||
+      fixedTokens + dynamic > budgets.assembledInputTokens
+    );
   };
 
+  let summaryDroppedForOverflow = false;
+  const newestHistorical = historicalToolLines[historicalToolLines.length - 1];
+  const isProtectedTool = (line: ToolTaggedLine) =>
+    session.length === 0 && line === newestHistorical;
+
+  // Fixed L2 overflow drop order: never drop valid summary first.
   const dropLowest = (): boolean => {
-    if (summaryLine) {
-      summaryLine = undefined;
-      summary = undefined;
-      return true;
+    // 1. Micro-compact any remaining non-protected historical tool.
+    for (const line of historicalToolLines) {
+      if (droppedTools.has(line) || isProtectedTool(line)) continue;
+      if (tryMicroCompactToolLine(line)) {
+        microCompactedToolCount += 1;
+        return true;
+      }
     }
-    const newestHistorical = historicalToolLines[historicalToolLines.length - 1];
-    const oldestTool = historicalToolLines.find((line) => {
-      if (droppedTools.has(line)) return false;
-      // The newest historical tool result is what a follow-up answers from
-      // when this turn has not produced a fresher session result.
-      if (session.length === 0 && line === newestHistorical) return false;
-      return true;
-    });
+
+    // 2. Drop oldest non-protected historical tool line.
+    const oldestTool = historicalToolLines.find(
+      (line) => !droppedTools.has(line) && !isProtectedTool(line),
+    );
     if (oldestTool) {
       droppedTools.add(oldestTool);
       return true;
     }
+
+    // 3. Drop oldest complete history turn (not holding the protected tool).
     if (history.length) {
       const removable = history.findIndex((rendered) => {
         if (session.length === 0 && newestHistorical) {
@@ -711,9 +832,38 @@ export function buildCareerDialogueContext(
         }
         return true;
       });
-      if (removable < 0) return false;
-      const removed = history[removable];
-      history = history.filter((_, index) => index !== removable);
+      if (removable >= 0) {
+        const removed = history[removable];
+        history = history.filter((_, index) => index !== removable);
+        if (removed) {
+          for (const line of removed.lines) {
+            if (line.kind === "tool") droppedTools.add(line);
+          }
+        }
+        return true;
+      }
+    }
+
+    // 4. Drop page-context line.
+    if (pageLine) {
+      pageLine = undefined;
+      return true;
+    }
+
+    // 5. Extreme overflow: micro-compact, then drop the protected newest tool.
+    if (newestHistorical && !droppedTools.has(newestHistorical)) {
+      if (tryMicroCompactToolLine(newestHistorical)) {
+        microCompactedToolCount += 1;
+        return true;
+      }
+      droppedTools.add(newestHistorical);
+      return true;
+    }
+
+    // 6. Extreme overflow: drop any remaining history turn.
+    if (history.length) {
+      const removed = history[0];
+      history = history.slice(1);
       if (removed) {
         for (const line of removed.lines) {
           if (line.kind === "tool") droppedTools.add(line);
@@ -721,10 +871,16 @@ export function buildCareerDialogueContext(
       }
       return true;
     }
-    if (pageLine) {
-      pageLine = undefined;
+
+    // 7. Last resort only: drop valid summary.
+    if (summaryLine) {
+      summaryLine = undefined;
+      summary = undefined;
+      summaryDroppedForOverflow = true;
+      compactedTurnCount = 0;
       return true;
     }
+
     return false;
   };
 
@@ -734,29 +890,42 @@ export function buildCareerDialogueContext(
 
   // Check the final retained turns, including drops caused by this profile's
   // tool results and fixed overhead. A partial catch-up cache cannot fill a gap.
-  if (summary && input.summary && typeof input.summary !== "string") {
-    const throughMessageId = input.summary.throughMessageId;
-    const throughIndex = messages.findIndex(message => message.id === throughMessageId);
-    const coveredIds = new Set(messages.slice(0, throughIndex + 1).map(message => message.id));
-    const keptTurns = new Set(history.map(rendered => rendered.turn));
-    if (throughIndex < 0 || historyPool.some(turn => !keptTurns.has(turn) && turnMessageIds(turn).some(id => !coveredIds.has(id)))) {
+  let summaryDroppedForGap = false;
+  if (summary && summaryObj) {
+    const keptTurns = new Set(history.map((rendered) => rendered.turn));
+    if (activeHistoryPool.some((turn) => !keptTurns.has(turn))) {
       summaryLine = undefined;
       summary = undefined;
+      summaryDroppedForGap = true;
+      compactedTurnCount = 0;
     }
   }
 
   const transcriptLines = assemble();
-  if (transcriptLines.join("\n").length > 200_000) {
+  const maxTranscriptChars = Math.max(
+    200_000,
+    budgets.assembledInputTokens * APP_CONSTANTS.AGENT_CHAT_CHARS_PER_TOKEN + 32_000,
+  );
+  if (transcriptLines.join("\n").length > maxTranscriptChars) {
     return { ok: false, code: "INPUT_TOO_LARGE" };
   }
 
   const historyText = historyDialogue();
-  const explicitKept = [pageLine, pasteLine, ...fileLines].filter((line): line is string => Boolean(line));
+  const explicitKept = [pageLine, pasteLine, ...fileLines].filter(
+    (line): line is string => Boolean(line),
+  );
   const toolText = [...keptHistoricalTools(), ...session];
   const systemText = input.systemText ?? "";
   const dynamicText = transcriptLines.join("\n");
   const completeCurrent =
     includeCurrent && currentRendered && currentRendered.turn.assistants.length > 0;
+
+  const microCompactedParts = new Set<unknown>();
+  for (const line of historicalToolLines) {
+    if (line.microCompacted && !droppedTools.has(line) && line.partRef) {
+      microCompactedParts.add(line.partRef);
+    }
+  }
 
   const retainedMessages: UIMessage[] = [];
   const pushTurn = (turn: DialogueTurn) => {
@@ -769,13 +938,22 @@ export function buildCareerDialogueContext(
   }
 
   const retainedTurnSet = new Set(history.map((rendered) => rendered.turn));
+  const boundaryPool = summary && summaryObj ? activeHistoryPool : historyPool;
+  const droppedTurnsList = boundaryPool.filter((turn) => !retainedTurnSet.has(turn));
   const historyBoundary: CareerDialogueHistoryBoundary = {
-    droppedTurnCount: historyPool.length - history.length,
-    droppedTurns: historyPool
-      .filter((turn) => !retainedTurnSet.has(turn))
-      .map(turnMessageIds),
+    droppedTurnCount: droppedTurnsList.length,
+    droppedTurns: droppedTurnsList.map(turnMessageIds),
     retainedHistoryTurns: history.map((rendered) => turnMessageIds(rendered.turn)),
   };
+
+  const dynamicTokens = tokensOf(transcriptLines);
+  const estimatedInputTokens = fixedTokens + dynamicTokens;
+  const needsRecompaction = Boolean(
+    summaryDroppedForOverflow ||
+      summaryDroppedForGap ||
+      (input.autoCompactTriggerTokens !== undefined &&
+        estimatedInputTokens >= input.autoCompactTriggerTokens),
+  );
 
   const size: CareerDialogueContextSize = {
     contextProfile: profile,
@@ -791,20 +969,31 @@ export function buildCareerDialogueContext(
     toolResultTokens: tokensOf(toolText),
     summaryChars: summary?.length ?? 0,
     summaryTokens: summary ? estimateContextTokens(summary) : 0,
+    businessAnchorChars: businessAnchorLine?.length ?? 0,
+    businessAnchorTokens: businessAnchorLine
+      ? estimateContextTokens(businessAnchorLine)
+      : 0,
+    businessAnchorDropped,
     handoffChars: handoffLine?.length ?? 0,
     handoffTokens: handoffLine ? estimateContextTokens(handoffLine) : 0,
     handoffDropped,
+    microCompactedToolCount,
+    compactedTurnCount,
+    summaryDroppedForOverflow,
+    needsRecompaction,
     dynamicChars: dynamicText.length,
-    dynamicTokens: tokensOf(transcriptLines),
-    estimatedInputTokens: fixedTokens + tokensOf(transcriptLines),
+    dynamicTokens,
+    estimatedInputTokens,
     recentTurnCount: history.length + (currentReservesSlot && completeCurrent ? 1 : 0),
-    droppedTurnCount: historyPool.length - history.length,
+    droppedTurnCount: historyBoundary.droppedTurnCount,
   };
 
   return {
     ok: true,
     transcript: dynamicText,
-    retainedMessages: retainedMessages.map(projectMessageOutputs),
+    retainedMessages: retainedMessages.map((message) =>
+      projectMessageOutputs(message, microCompactedParts),
+    ),
     explicitLines: explicitKept,
     ...(summary ? { summary } : {}),
     size,
@@ -828,6 +1017,18 @@ export function careerDialogueContextLogFields(
     currentUserTokens: size.currentUserTokens,
     historyTokens: size.historyTokens,
     dynamicTokens: size.dynamicTokens,
+    ...(size.microCompactedToolCount > 0
+      ? { microCompactedTools: size.microCompactedToolCount }
+      : {}),
+    ...(size.compactedTurnCount > 0
+      ? { compactedTurns: size.compactedTurnCount }
+      : {}),
+    ...(size.businessAnchorTokens > 0 || size.businessAnchorDropped
+      ? {
+          businessAnchorUnits: size.businessAnchorTokens,
+          businessAnchorDropped: size.businessAnchorDropped ? 1 : 0,
+        }
+      : {}),
     // Only task sessions that carry a handoff add these fields, so non-task
     // log lines keep their exact pre-handoff shape.
     ...(size.handoffTokens > 0 || size.handoffDropped

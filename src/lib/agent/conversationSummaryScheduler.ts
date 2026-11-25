@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { ManagedAiProvenanceV1 } from "@/lib/ai/managed-provenance";
 
 import type { UIMessage } from "ai";
@@ -6,16 +7,17 @@ import { AIBusinessError } from "@/lib/ai/connections";
 import { AI_EXECUTION_DEFAULT_TIMEOUT_MS, executeAIConnectionText } from "@/lib/ai/execution";
 import { log } from "@/lib/telemetry";
 import {
-  CAREER_DIALOGUE_CONTEXT_BUDGETS,
   buildCareerDialogueContext,
   careerDialogueTurnIndexSpans,
   estimateContextTokens,
+  resolveCareerDialogueBudgets,
 } from "./contextBudget";
 import type { SummaryAttempt } from "./conversationSummaryCommit";
 import {
   additionalDroppedTurnsBeyondCoverage,
   conversationSummaryBackoffElapsed,
   hashSummaryCoverage,
+  isConversationSummaryCircuitOpen,
   selectConversationSummaryCoverage,
   shouldOpenConversationSummaryTask,
   storedSummaryMessages,
@@ -29,6 +31,7 @@ import {
   buildCareerDialogueSummaryPrompt,
   CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION,
   projectConversationSummaryInput,
+  sanitizeSummaryFocusNote,
 } from "./conversationSummaryPrompt";
 import {
   createPrismaSummaryRepository,
@@ -44,6 +47,7 @@ export type SummaryTaskResult = {
   droppedTurnCount?: number;
   recentTurnCount?: number;
   failureCount?: number;
+  circuitBreakerOpen?: boolean;
   syncMs?: number;
 };
 
@@ -74,6 +78,34 @@ export function conversationSummaryInFlight(
   return inFlight.get(conversationId);
 }
 
+export function isConversationCompactionInFlight(conversationId: string): boolean {
+  return inFlight.has(conversationId);
+}
+
+/**
+ * Shared single-flight lock per conversation across auto and manual compaction.
+ * Returns `null` immediately when another compaction is already running.
+ */
+export function acquireConversationCompactionSlot<T>(
+  conversationId: string,
+  run: () => Promise<T>,
+): Promise<T> | null {
+  if (inFlight.has(conversationId)) return null;
+  const promise = Promise.resolve().then(run);
+  const settled = promise
+    .then(
+      () => undefined,
+      () => undefined,
+    )
+    .finally(() => {
+      if (inFlight.get(conversationId) === settled) {
+        inFlight.delete(conversationId);
+      }
+    });
+  inFlight.set(conversationId, settled);
+  return promise;
+}
+
 export function resetConversationSummaryInFlightForTests(): void {
   inFlight.clear();
 }
@@ -84,6 +116,9 @@ export function scheduleCareerDialogueSummary(
     conversationId: string;
     resolvedConnectionId: string | null;
     resolvedModel: string | null;
+    resolvedProvider?: string | null;
+    resolvedBackendKind?: string | null;
+    resolvedUpstreamModelId?: string | null;
     messages: UIMessage[];
   },
   deps: SummarySchedulerDeps = defaultSummarySchedulerDeps(),
@@ -92,38 +127,42 @@ export function scheduleCareerDialogueSummary(
   const open = shouldOpenConversationSummaryTask({
     resolvedConnectionId: input.resolvedConnectionId,
     resolvedModel: input.resolvedModel,
+    resolvedProvider: input.resolvedProvider,
+    resolvedBackendKind: input.resolvedBackendKind,
+    resolvedUpstreamModelId: input.resolvedUpstreamModelId,
     messages: input.messages,
   });
   if (!open || inFlight.has(input.conversationId)) {
     return { opened: false, syncMs: performance.now() - started };
   }
-  const task = Promise.resolve()
-    .then(() =>
-      condenseCareerDialogueSummary(
-        { userId: input.userId, conversationId: input.conversationId },
-        deps,
-      ),
-    )
-    .then(() => undefined)
-    .catch(() => {
+  const slot = acquireConversationCompactionSlot(input.conversationId, () =>
+    condenseCareerDialogueSummary(
+      { userId: input.userId, conversationId: input.conversationId },
+      deps,
+    ).catch(() => {
       log.info("[agent-chat] summary", {
         summaryStatus: "failed",
         summaryPromptVersion: CAREER_DIALOGUE_SUMMARY_PROMPT_VERSION,
       });
-    })
-    .finally(() => {
-      if (inFlight.get(input.conversationId) === task) {
-        inFlight.delete(input.conversationId);
-      }
-    });
-  inFlight.set(input.conversationId, task);
+    }),
+  );
+  if (!slot) {
+    return { opened: false, syncMs: performance.now() - started };
+  }
   return { opened: true, syncMs: performance.now() - started };
 }
 
 export async function condenseCareerDialogueSummary(
-  input: { userId: string; conversationId: string },
+  input: {
+    userId: string;
+    conversationId: string;
+    mode?: "auto" | "manual";
+    focusNote?: string | null;
+  },
   deps: SummarySchedulerDeps = defaultSummarySchedulerDeps(),
 ): Promise<SummaryTaskResult> {
+  const mode = input.mode ?? "auto";
+  const focusNote = mode === "manual" ? sanitizeSummaryFocusNote(input.focusNote) : undefined;
   const finish = (result: SummaryTaskResult) => {
     deps.onResult?.(result);
     return result;
@@ -133,6 +172,9 @@ export async function condenseCareerDialogueSummary(
     if (snapshot?.archived) {
       return finish({ status: "skipped", reason: "archived" });
     }
+    if (snapshot?.executionPath === "NATIVE_CODEX_V1") {
+      return finish({ status: "skipped", reason: "native_session" });
+    }
     if (snapshot?.lockInvalid) {
       // Managed binding drift or a provenance-less managed half-state —
       // surface the stable code, never re-resolve or auto-heal.
@@ -141,22 +183,70 @@ export async function condenseCareerDialogueSummary(
     if (!snapshot?.resolvedConnectionId || !snapshot.resolvedModel) {
       return finish({ status: "skipped", reason: "legacy" });
     }
+
+    const resolvedBudgets = resolveCareerDialogueBudgets({
+      model: snapshot.resolvedModel,
+      upstreamModelId: snapshot.managed?.provenance.upstreamModelId,
+      provider: snapshot.provider,
+      backendKind: snapshot.backendKind,
+    });
+    const budgets = resolvedBudgets.budgets;
+
     const messages = storedSummaryMessages(snapshot.messages);
     const windowStartIndex = snapshot.messages.length - messages.length;
     const failureCount = snapshot.summary?.failureCount ?? 0;
-    if (
-      !conversationSummaryBackoffElapsed(
-        failureCount,
-        snapshot.summary?.lastFailureAt ?? null,
-        deps.now(),
-      )
-    ) {
-      return finish({ status: "skipped", reason: "backoff", failureCount });
+
+    if (mode === "auto") {
+      if (isConversationSummaryCircuitOpen(failureCount)) {
+        return finish({
+          status: "skipped",
+          reason: "circuit_open",
+          failureCount,
+          circuitBreakerOpen: true,
+        });
+      }
+      if (
+        !conversationSummaryBackoffElapsed(
+          failureCount,
+          snapshot.summary?.lastFailureAt ?? null,
+          deps.now(),
+        )
+      ) {
+        return finish({ status: "skipped", reason: "backoff", failureCount });
+      }
     }
 
-    const verdict = validateConversationSummaryCoverage(snapshot.summary, snapshot.messages);
-    const budget = buildCareerDialogueContext({ profile: "FAST_CHAT", messages });
+    const verdict = validateConversationSummaryCoverage(snapshot.summary, snapshot.messages, {
+      maxSummaryTokens: budgets.summaryTokens,
+    });
+    const budget = buildCareerDialogueContext({
+      profile: "FAST_CHAT",
+      messages,
+      budgets,
+      autoCompactTriggerTokens: resolvedBudgets.autoCompactTriggerTokens,
+    });
     if (!budget.ok) return finish({ status: "skipped", reason: "budget" });
+
+    const liveBudget =
+      verdict.status === "FRESH" && snapshot.summary?.throughMessageId
+        ? buildCareerDialogueContext({
+            profile: "FAST_CHAT",
+            messages,
+            budgets,
+            summary: {
+              text: verdict.text,
+              throughMessageId: snapshot.summary.throughMessageId,
+            },
+            autoCompactTriggerTokens: resolvedBudgets.autoCompactTriggerTokens,
+          })
+        : null;
+    const needsThresholdCompaction =
+      verdict.status === "FRESH"
+        ? liveBudget?.ok
+          ? liveBudget.size.needsRecompaction
+          : false
+        : budget.size.needsRecompaction;
+
     const pressure =
       verdict.status === "FRESH" &&
       snapshot.summary?.throughMessageId != null &&
@@ -164,14 +254,29 @@ export async function condenseCareerDialogueSummary(
         summaryBoundaryUnderStoragePressure(messages, snapshot.summary.throughMessageId));
     const additional =
       verdict.status === "FRESH"
-        ? additionalDroppedTurnsBeyondCoverage(messages, verdict.throughIndex - windowStartIndex)
+        ? additionalDroppedTurnsBeyondCoverage(
+            messages,
+            verdict.throughIndex - windowStartIndex,
+            budgets,
+          )
         : 0;
-    let trigger: "pressure" | "missing" | "refresh" | null = null;
-    if (pressure) trigger = "pressure";
-    else if (verdict.status !== "FRESH" && budget.size.droppedTurnCount >= 1) trigger = "missing";
-    else if (verdict.status === "FRESH" && additional >= SUMMARY_REFRESH_DROPPED_TURNS) {
+
+    let trigger: "pressure" | "missing" | "threshold" | "refresh" | "manual" | null = null;
+    if (mode === "manual") {
+      trigger = "manual";
+    } else if (pressure) {
+      trigger = "pressure";
+    } else if (
+      verdict.status !== "FRESH" &&
+      (budget.size.droppedTurnCount >= 1 || needsThresholdCompaction)
+    ) {
+      trigger = "missing";
+    } else if (verdict.status === "FRESH" && needsThresholdCompaction) {
+      trigger = "threshold";
+    } else if (verdict.status === "FRESH" && additional >= SUMMARY_REFRESH_DROPPED_TURNS) {
       trigger = "refresh";
     }
+
     if (!trigger) {
       return finish({
         status: "skipped",
@@ -181,25 +286,102 @@ export async function condenseCareerDialogueSummary(
       });
     }
 
-    const desired = selectConversationSummaryCoverage(snapshot.messages, { extendForStorageCap: trigger === "pressure" });
+    const desired = selectConversationSummaryCoverage(snapshot.messages, {
+      extendForStorageCap: trigger === "pressure",
+      forceThreshold: trigger === "threshold",
+      mode,
+      budgets,
+      autoCompactTriggerTokens: resolvedBudgets.autoCompactTriggerTokens,
+    });
     if (!desired) return finish({ status: "skipped", reason: "no_boundary" });
-    const startIndex = verdict.status === "FRESH" ? verdict.throughIndex + 1 : 0;
+
+    if (
+      mode === "manual" &&
+      verdict.status === "FRESH" &&
+      desired.throughIndex <= verdict.throughIndex &&
+      !focusNote
+    ) {
+      return finish({
+        status: "skipped",
+        reason: "already_compacted",
+        coveredCount: snapshot.summary?.coveredCount ?? undefined,
+        droppedTurnCount: budget.size.droppedTurnCount,
+        recentTurnCount: budget.size.recentTurnCount,
+      });
+    }
+
+    const sameBoundaryWithFocus =
+      mode === "manual" &&
+      Boolean(focusNote) &&
+      verdict.status === "FRESH" &&
+      desired.throughIndex <= verdict.throughIndex;
+
+    let startIndex =
+      !sameBoundaryWithFocus && verdict.status === "FRESH" ? verdict.throughIndex + 1 : 0;
     const previousSummary = verdict.status === "FRESH" ? verdict.text : undefined;
     let coveredCount = startIndex;
-    // Bound the next contiguous delta, never an arbitrary recent window.
-    // A turn that cannot fit is left uncovered rather than sliced or skipped.
-    for (const span of careerDialogueTurnIndexSpans(snapshot.messages)) {
-      if (span.lastIndex < startIndex) continue;
-      if (span.firstIndex < startIndex || !span.complete || span.lastIndex > desired.throughIndex) break;
-      const delta = snapshot.messages.slice(startIndex, span.lastIndex + 1);
-      if (delta.length > SUMMARY_GENERATION_MAX_MESSAGES || !turnEligible(delta, delta.map(message => message.id))) break;
-      const prompt = buildCareerDialogueSummaryPrompt(projectConversationSummaryInput(delta), previousSummary);
-      if (estimateContextTokens(prompt) > CAREER_DIALOGUE_CONTEXT_BUDGETS.dynamicTokens) break;
-      coveredCount = span.lastIndex + 1;
+
+    if (sameBoundaryWithFocus) {
+      // Re-compact the already-covered boundary with the user's focus hint.
+      // Bound the re-projected tail if the prefix exceeds prompt limits while
+      // still carrying `previousSummary` cumulatively.
+      const maxIndex = desired.throughIndex;
+      const minStart = Math.max(0, maxIndex + 1 - SUMMARY_GENERATION_MAX_MESSAGES);
+      const spans = careerDialogueTurnIndexSpans(snapshot.messages).filter(
+        (span) => span.complete && span.lastIndex <= maxIndex && span.firstIndex >= minStart,
+      );
+      let chosenFirst = minStart;
+      for (let i = 0; i < spans.length; i++) {
+        const candidateStart = spans[i]!.firstIndex;
+        const delta = snapshot.messages.slice(candidateStart, maxIndex + 1);
+        if (!turnEligible(delta, delta.map((message) => message.id))) continue;
+        const candidatePrompt = buildCareerDialogueSummaryPrompt(
+          projectConversationSummaryInput(delta),
+          previousSummary,
+          { focusNote, targetMaxTokens: budgets.summaryTokens },
+        );
+        if (estimateContextTokens(candidatePrompt) <= budgets.dynamicTokens) {
+          chosenFirst = candidateStart;
+          break;
+        }
+        chosenFirst = candidateStart;
+      }
+      startIndex = chosenFirst;
+      coveredCount = maxIndex + 1;
+    } else {
+      // Bound the next contiguous delta, never an arbitrary recent window.
+      // A turn that cannot fit is left uncovered rather than sliced or skipped.
+      for (const span of careerDialogueTurnIndexSpans(snapshot.messages)) {
+        if (span.lastIndex < startIndex) continue;
+        if (
+          span.firstIndex < startIndex ||
+          !span.complete ||
+          span.lastIndex > desired.throughIndex
+        ) {
+          break;
+        }
+        const delta = snapshot.messages.slice(startIndex, span.lastIndex + 1);
+        if (
+          delta.length > SUMMARY_GENERATION_MAX_MESSAGES ||
+          !turnEligible(delta, delta.map((message) => message.id))
+        ) {
+          break;
+        }
+        const prompt = buildCareerDialogueSummaryPrompt(
+          projectConversationSummaryInput(delta),
+          previousSummary,
+          { focusNote, targetMaxTokens: budgets.summaryTokens },
+        );
+        if (estimateContextTokens(prompt) > budgets.dynamicTokens) break;
+        coveredCount = span.lastIndex + 1;
+      }
     }
-    if (coveredCount === startIndex) return finish({ status: "skipped", reason: "no_boundary" });
+
+    if (coveredCount <= startIndex && !sameBoundaryWithFocus) {
+      return finish({ status: "skipped", reason: "no_boundary" });
+    }
     const authoritativePrefix = snapshot.messages.slice(0, coveredCount);
-    if (!turnEligible(authoritativePrefix, authoritativePrefix.map(message => message.id))) {
+    if (!turnEligible(authoritativePrefix, authoritativePrefix.map((message) => message.id))) {
       return finish({ status: "skipped", reason: "no_boundary" });
     }
     const target = {
@@ -212,6 +394,7 @@ export async function condenseCareerDialogueSummary(
     if (
       verdict.status === "FRESH" &&
       trigger !== "pressure" &&
+      !sameBoundaryWithFocus &&
       target.throughIndex <= verdict.throughIndex
     ) {
       return finish({ status: "skipped", reason: "not_newer" });
@@ -222,19 +405,26 @@ export async function condenseCareerDialogueSummary(
     deps.onGenerationStart?.();
     const started = deps.now();
     let raw = "";
+    const manualFocusHash = focusNote
+      ? createHash("sha256").update(focusNote).digest("hex").slice(0, 8)
+      : "plain";
+    const operationId =
+      mode === "manual"
+        ? `dialogue:${input.conversationId}:manual-compact:${target.coverageHash.slice(0, 16)}:r${snapshot.summary?.revision ?? 0}:${manualFocusHash}`
+        : `dialogue:${input.conversationId}:summary:${target.coverageHash.slice(0, 16)}`;
+
     try {
       const executed = await deps.executeText({
         userId: input.userId,
         connectionId: snapshot.resolvedConnectionId,
         model: snapshot.resolvedModel,
-        prompt: buildCareerDialogueSummaryPrompt(projection, previousSummary),
+        prompt: buildCareerDialogueSummaryPrompt(projection, previousSummary, {
+          focusNote,
+          targetMaxTokens: budgets.summaryTokens,
+        }),
         // M4: the summary is a business operation of the conversation's
         // binding — identity is deterministic per coverage delta, so a
-        // retried summary of the same coverage replays. Scheduler
-        // failureCount is backoff state only and must NOT mint invocation
-        // identity: transport retries (UNKNOWN, network, 503) re-enter
-        // with the same operationId + attemptIndex and hit the same
-        // invocationKey instead of becoming new billable invocations.
+        // retried summary of the same coverage replays.
         ...(snapshot.managed
           ? {
               managedAiProvenance: snapshot.managed.provenance,
@@ -242,7 +432,7 @@ export async function condenseCareerDialogueSummary(
                 business: "CAREER_DIALOGUE",
                 resourceKey: `conversation:${input.conversationId}`,
               },
-              operationId: `dialogue:${input.conversationId}:summary:${target.coverageHash.slice(0, 16)}`,
+              operationId,
               attemptIndex: 0,
             }
           : {}),
@@ -264,6 +454,7 @@ export async function condenseCareerDialogueSummary(
         // into "provider" — they are diagnosable in logs and callers.
         reason: error instanceof AIBusinessError ? error.code : "provider",
         failureCount: nextFailureCount,
+        circuitBreakerOpen: isConversationSummaryCircuitOpen(nextFailureCount),
         coveredCount: target.coveredCount,
         droppedTurnCount: budget.size.droppedTurnCount,
         recentTurnCount: budget.size.recentTurnCount,
@@ -273,7 +464,7 @@ export async function condenseCareerDialogueSummary(
     const text = raw.trim();
     const units = estimateContextTokens(text);
     const generationMs = Math.max(0, Math.round(deps.now() - started));
-    if (!text || units > CAREER_DIALOGUE_CONTEXT_BUDGETS.summaryTokens) {
+    if (!text || units > budgets.summaryTokens) {
       const nextFailureCount = await recordFailure(deps, input);
       logSummary({
         summaryStatus: "failed",
@@ -289,6 +480,7 @@ export async function condenseCareerDialogueSummary(
         generationMs,
         summaryUnits: units,
         failureCount: nextFailureCount,
+        circuitBreakerOpen: isConversationSummaryCircuitOpen(nextFailureCount),
         coveredCount: target.coveredCount,
         droppedTurnCount: budget.size.droppedTurnCount,
         recentTurnCount: budget.size.recentTurnCount,
@@ -308,7 +500,9 @@ export async function condenseCareerDialogueSummary(
       generationMs,
       generatedAt: new Date(deps.now()),
     };
-    const outcome = await deps.repository.commit(input.userId, input.conversationId, attempt);
+    const outcome = await deps.repository.commit(input.userId, input.conversationId, attempt, {
+      maxSummaryTokens: budgets.summaryTokens,
+    });
     logSummary({
       summaryStatus: outcome,
       summaryCoverage: target.coveredCount,
@@ -326,6 +520,8 @@ export async function condenseCareerDialogueSummary(
       droppedTurnCount: budget.size.droppedTurnCount,
       recentTurnCount: budget.size.recentTurnCount,
       failureCount: outcome === "committed" ? 0 : failureCount,
+      circuitBreakerOpen:
+        outcome === "committed" ? false : isConversationSummaryCircuitOpen(failureCount),
     });
   } catch (error) {
     if (error instanceof AIBusinessError) return finish({ status: "failed", reason: error.code });

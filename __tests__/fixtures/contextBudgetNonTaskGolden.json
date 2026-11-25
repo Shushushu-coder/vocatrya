@@ -111,6 +111,13 @@
    "toolResultTokens": 0,
    "summaryChars": 0,
    "summaryTokens": 0,
+   "businessAnchorChars": 0,
+   "businessAnchorTokens": 0,
+   "businessAnchorDropped": false,
+   "microCompactedToolCount": 0,
+   "compactedTurnCount": 0,
+   "summaryDroppedForOverflow": false,
+   "needsRecompaction": false,
    "dynamicChars": 463,
    "dynamicTokens": 116,
    "estimatedInputTokens": 121,
@@ -206,6 +213,13 @@
    "toolResultTokens": 22,
    "summaryChars": 0,
    "summaryTokens": 0,
+   "businessAnchorChars": 0,
+   "businessAnchorTokens": 0,
+   "businessAnchorDropped": false,
+   "microCompactedToolCount": 0,
+   "compactedTurnCount": 0,
+   "summaryDroppedForOverflow": false,
+   "needsRecompaction": false,
    "dynamicChars": 386,
    "dynamicTokens": 97,
    "estimatedInputTokens": 97,
@@ -378,24 +392,22 @@
    "toolResultTokens": 0,
    "summaryChars": 14,
    "summaryTokens": 4,
+   "businessAnchorChars": 0,
+   "businessAnchorTokens": 0,
+   "businessAnchorDropped": false,
+   "microCompactedToolCount": 0,
+   "compactedTurnCount": 2,
+   "summaryDroppedForOverflow": false,
+   "needsRecompaction": false,
    "dynamicChars": 1254,
    "dynamicTokens": 314,
    "estimatedInputTokens": 314,
    "recentTurnCount": 6,
-   "droppedTurnCount": 2
+   "droppedTurnCount": 0
   },
   "historyBoundary": {
-   "droppedTurnCount": 2,
-   "droppedTurns": [
-    [
-     "u0",
-     "a0"
-    ],
-    [
-     "u1",
-     "a1"
-    ]
-   ],
+   "droppedTurnCount": 0,
+   "droppedTurns": [],
    "retainedHistoryTurns": [
     [
      "u2",
@@ -426,7 +438,7 @@
  },
  "pressuredDrops": {
   "ok": true,
-  "transcript": "User: goal 7 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nAssistant: answer 7 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nUser: goal 8 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nAssistant: answer 8 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nUser: goal 9 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nAssistant: answer 9 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nUser: continue\n<page-context>The user is not viewing a job's page.</page-context>\nTool match_job returned: {\"score\":88}",
+  "transcript": "Earlier conversation summary:\nplain summary text\nUser: goal 7 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nAssistant: answer 7 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nUser: goal 8 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nAssistant: answer 8 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nUser: goal 9 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nAssistant: answer 9 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nUser: continue\n<page-context>The user is not viewing a job's page.</page-context>\nTool match_job returned: {\"score\":88}",
   "retainedMessages": [
    {
     "id": "u7",
@@ -502,6 +514,7 @@
   "explicitLines": [
    "<page-context>The user is not viewing a job's page.</page-context>"
   ],
+  "summary": "plain summary text",
   "size": {
    "contextProfile": "AGENT_RESPONSE",
    "systemChars": 0,
@@ -514,11 +527,18 @@
    "explicitContextTokens": 17,
    "toolResultChars": 37,
    "toolResultTokens": 10,
-   "summaryChars": 0,
-   "summaryTokens": 0,
-   "dynamicChars": 824,
-   "dynamicTokens": 206,
-   "estimatedInputTokens": 206,
+   "summaryChars": 18,
+   "summaryTokens": 5,
+   "businessAnchorChars": 0,
+   "businessAnchorTokens": 0,
+   "businessAnchorDropped": false,
+   "microCompactedToolCount": 0,
+   "compactedTurnCount": 0,
+   "summaryDroppedForOverflow": false,
+   "needsRecompaction": false,
+   "dynamicChars": 873,
+   "dynamicTokens": 219,
+   "estimatedInputTokens": 219,
    "recentTurnCount": 3,
    "droppedTurnCount": 7
   },
@@ -622,6 +642,13 @@
    "toolResultTokens": 0,
    "summaryChars": 0,
    "summaryTokens": 0,
+   "businessAnchorChars": 0,
+   "businessAnchorTokens": 0,
+   "businessAnchorDropped": false,
+   "microCompactedToolCount": 0,
+   "compactedTurnCount": 0,
+   "summaryDroppedForOverflow": false,
+   "needsRecompaction": false,
    "dynamicChars": 119,
    "dynamicTokens": 49,
    "estimatedInputTokens": 49,

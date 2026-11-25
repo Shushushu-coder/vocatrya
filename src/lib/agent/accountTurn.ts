@@ -43,6 +43,7 @@ import { createAccountRuntimeLanguageModel } from "./accountLanguageModel";
 import {
   buildCareerDialogueContext,
   estimateContextTokens,
+  type CareerDialogueContextBudgets,
   type CareerDialogueContextProfile,
   type CareerDialogueContextInput,
   type CareerDialogueContextSize,
@@ -282,9 +283,14 @@ export function renderCareerDialoguePrompt(input: {
   summary?: CareerDialogueContextInput["summary"];
   freshNativeFull?: boolean;
   agentRole?: string | null;
-  /** Task session only (ChatConversation.agentTaskId) + its verified state line. */
+  /** Task session (ChatConversation.agentTaskId) + its verified state line. */
   agentTaskId?: string | null;
   handoffLine?: string;
+  /** L3 post-compaction SQLite-verified business anchors. */
+  businessAnchorLine?: string;
+  /** Dynamic per-model budgets and proactive auto-compact trigger. */
+  budgets?: Partial<CareerDialogueContextBudgets>;
+  autoCompactTriggerTokens?: number;
 }): { prompt: string; size: CareerDialogueContextSize } {
   const lastIsUser = input.messages[input.messages.length - 1]?.role === "user";
   const pasteBlock =
@@ -321,10 +327,13 @@ export function renderCareerDialoguePrompt(input: {
     summary: input.summary,
     systemText: input.systemPrompt,
     fixedOverheadText,
+    budgets: input.budgets,
+    autoCompactTriggerTokens: input.autoCompactTriggerTokens,
     freshNativeFull: input.freshNativeFull,
     agentRole: input.agentRole,
     agentTaskId: input.agentTaskId,
     handoffLine: input.handoffLine,
+    businessAnchorLine: input.businessAnchorLine,
   });
   if (!budget.ok) {
     throw new AIBusinessError(
@@ -477,6 +486,11 @@ export type AccountAgentTurnInput = {
   agentTaskId?: string | null;
   handoffLine?: string;
   taskExtraTools?: readonly string[] | null;
+  /** L3 post-compaction SQLite-verified business anchors. */
+  businessAnchorLine?: string;
+  /** Dynamic per-model budgets and proactive auto-compact trigger. */
+  budgets?: Partial<CareerDialogueContextBudgets>;
+  autoCompactTriggerTokens?: number;
   /** Injected for tests; production uses the default clients. */
   deps?: StreamExecutionDeps;
 };
@@ -596,6 +610,9 @@ export async function runAccountAgentTurn(
       agentRole: input.agentRole,
       agentTaskId: input.agentTaskId,
       handoffLine: input.handoffLine,
+      businessAnchorLine: input.businessAnchorLine,
+      budgets: input.budgets,
+      autoCompactTriggerTokens: input.autoCompactTriggerTokens,
     });
     contextSize = rendered.size;
     return rendered.prompt;

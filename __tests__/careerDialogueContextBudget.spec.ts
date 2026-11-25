@@ -114,8 +114,12 @@ describe("career dialogue context budget", () => {
       expect(first.size.recentTurnCount).toBeLessThanOrEqual(
         CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns,
       );
-      expect(first.size.recentTurnCount).toBe(6);
-      expect(first.size.droppedTurnCount).toBe(14);
+      expect(first.size.recentTurnCount).toBe(
+        CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns,
+      );
+      expect(first.size.droppedTurnCount).toBe(
+        20 - CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns,
+      );
       expect(first.size.dynamicTokens).toBeLessThanOrEqual(
         CAREER_DIALOGUE_CONTEXT_BUDGETS.dynamicTokens,
       );
@@ -381,8 +385,20 @@ describe("career dialogue context budget", () => {
       decisionChars: decision.transcript.length,
       decisionTokens: decision.size.dynamicTokens,
     };
-    expect(report.afterTurns).toBeLessThanOrEqual(6);
-    expect(report.afterChars).toBeLessThan(report.beforeChars);
+    const fullChars = messages
+      .map((m) =>
+        (m.parts ?? [])
+          .map((p) => (p.type === "text" ? p.text : ""))
+          .filter(Boolean)
+          .join("\n"),
+      )
+      .filter(Boolean)
+      .join("\n").length;
+    expect(report.afterTurns).toBeLessThanOrEqual(
+      CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns,
+    );
+    expect(report.afterChars).toBeLessThan(fullChars);
+    expect(after.size.droppedTurnCount).toBe(10);
     expect(report.decisionTokens).toBeLessThanOrEqual(
       CAREER_DIALOGUE_CONTEXT_BUDGETS.dynamicTokens,
     );
@@ -438,6 +454,9 @@ describe("career dialogue context budget", () => {
       afterToolUnits: fatAfter.size.toolResultTokens,
     };
     expect(fatReport.afterChars).toBeLessThan(fatReport.beforeChars);
-    expect(fatReport.beforeToolDumps).toBeGreaterThan(fatReport.afterTurns);
+    expect(fatAfter.size.microCompactedToolCount).toBeGreaterThan(0);
+    expect(fatReport.afterToolUnits).toBeLessThanOrEqual(
+      CAREER_DIALOGUE_CONTEXT_BUDGETS.historicalToolTokens,
+    );
   });
 });

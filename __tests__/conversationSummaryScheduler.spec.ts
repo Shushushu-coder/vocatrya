@@ -165,7 +165,7 @@ describe("career dialogue summary scheduler", () => {
       return { text: "EARLY_FACT_001 UNIQUE_CONSTRAINT_ALPHA" };
     });
     const deps = depsFor(repo, executeText);
-    for (const [pass, expectedCount] of [50, 74, 110].entries()) {
+    for (const [pass, expectedCount] of [50, 74, 102].entries()) {
       expect(await condenseCareerDialogueSummary({ userId: USER, conversationId: CONVERSATION }, deps)).toMatchObject({ status: "committed", coveredCount: expectedCount });
       expect(repo.state.summary).toMatchObject({ coveredCount: expectedCount, throughMessageId: messages[expectedCount - 1].id, revision: pass + 1 });
       expect(repo.state.summary?.coverageHash).toBe(hashSummaryCoverage(messages.slice(0, expectedCount)));
@@ -215,7 +215,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("writes a fresh summary after the foreground turn and injects it on the next turn", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const repo = memoryRepository({ messages });
     const executeText = mockExecute(async () => ({ text: "用户在准备后端面试，目标按序号保留。" }));
     const result = await condenseCareerDialogueSummary(
@@ -245,7 +245,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("returns the foreground turn before a slow summary generation finishes", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const repo = memoryRepository({ messages });
     const order: string[] = [];
     let release: (value: { text: string }) => void = () => {};
@@ -288,7 +288,7 @@ describe("career dialogue summary scheduler", () => {
   }, 10_000);
 
   it("keeps the foreground success path independent when summary generation fails", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const repo = memoryRepository({ messages });
     let now = 1_700_000_000_000;
     const executeText = mockExecute(async () => {
@@ -336,7 +336,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("rejects an oversized summary without truncating or storing it", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const repo = memoryRepository({ messages });
     const huge = "中".repeat(CAREER_DIALOGUE_CONTEXT_BUDGETS.summaryTokens + 1);
     const executeText = mockExecute(async () => ({ text: huge }));
@@ -351,7 +351,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("drops a summary when a covered message is regenerated and replaces it later", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const repo = memoryRepository({ messages });
     const executeText = mockExecute(async () => ({ text: "第一版摘要。" }));
     await condenseCareerDialogueSummary(
@@ -379,7 +379,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("keeps a fresh summary when regeneration is outside its coverage", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const repo = memoryRepository({ messages });
     const executeText = mockExecute(async () => ({ text: "覆盖范围内的摘要。" }));
     await condenseCareerDialogueSummary(
@@ -466,7 +466,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("does not summarize a legacy conversation or fall back from a disconnected lock", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const legacy = memoryRepository({
       messages,
       resolvedConnectionId: null,
@@ -514,7 +514,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("forwards the managed binding and deterministic operation identity to summary execution", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const provenance: ManagedAiProvenanceV1 = {
       schemaVersion: 1,
       managedBindingId: "binding-1",
@@ -558,7 +558,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("regenerates a summary whose prompt version is not current", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const text = "旧版本摘要";
     const target = selectConversationSummaryCoverage(messages);
     if (!target) throw new Error("expected coverage");
@@ -586,8 +586,8 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("does not let an older snapshot overwrite a newer summary", async () => {
-    const short = dialogue(8);
-    const extra = dialogue(10);
+    const short = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
+    const extra = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 4);
     const olderTarget = selectConversationSummaryCoverage(short);
     const newerTarget = selectConversationSummaryCoverage(extra);
     if (!olderTarget || !newerTarget) throw new Error("expected both targets");
@@ -693,7 +693,7 @@ describe("career dialogue summary scheduler", () => {
   });
 
   it("deduplicates in-flight condensation and omits summary text from logs", async () => {
-    const messages = dialogue(8);
+    const messages = dialogue(CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns + 2);
     const repo = memoryRepository({ messages });
     let release: (value: { text: string }) => void = () => {};
     const executeText = mockExecute(
@@ -746,11 +746,17 @@ describe("career dialogue summary scheduler", () => {
       dynamicTokens: next.size.dynamicTokens,
       historyTokens: next.size.historyTokens,
     };
-    expect(metrics.summaryUnits).toBeLessThanOrEqual(1_000);
+    expect(metrics.summaryUnits).toBeLessThanOrEqual(
+      CAREER_DIALOGUE_CONTEXT_BUDGETS.summaryTokens,
+    );
     expect(metrics.summaryUnits).toBeGreaterThan(0);
-    expect(metrics.recentTurnCount).toBeLessThanOrEqual(6);
+    expect(metrics.recentTurnCount).toBeLessThanOrEqual(
+      CAREER_DIALOGUE_CONTEXT_BUDGETS.maxRecentTurns,
+    );
     expect(metrics.droppedTurnCount).toBeGreaterThan(0);
-    expect(metrics.dynamicTokens).toBeLessThanOrEqual(6_000);
+    expect(metrics.dynamicTokens).toBeLessThanOrEqual(
+      CAREER_DIALOGUE_CONTEXT_BUDGETS.dynamicTokens,
+    );
     console.info("P3B_METRICS", JSON.stringify(metrics));
   });
 });
