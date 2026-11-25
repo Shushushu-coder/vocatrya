@@ -24,7 +24,7 @@
 const fs = require("node:fs");
 const { createHash } = require("node:crypto");
 const { resolveCodexInstalls } = require("./codex-install");
-const { NATIVE_VERSION,NATIVE_VERIFIED_VERSIONS, NATIVE_MODELS, NATIVE_CONFIG_HASH, nativeSessionReady, runNativeSession } = require("./native-session");
+const { NATIVE_MIN_VERSION, NATIVE_VERSION, NATIVE_VERIFIED_VERSIONS, NATIVE_MODELS, NATIVE_CONFIG_HASH, isNativeVersionSupported, nativeSessionReady, runNativeSession } = require("./native-session");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { getRuntimeDefinition } = require("./registry");
@@ -1881,7 +1881,7 @@ function createConnectionService({
       nativeSession: adapter.backendKind === CODEX_BACKEND_KIND ? (() => {
         const native = resolveRuntime(adapter, "native");
         const nativeVersion = native.error ? null : native.version;
-        return { version: NATIVE_VERSION, verifiedVersions: [...NATIVE_VERIFIED_VERSIONS], models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, webSearch: true, runtimeVersion: nativeVersion, runtimePath: native.error ? null : native.executable, ready: NATIVE_VERIFIED_VERSIONS.includes(nativeVersion) };
+        return { version: NATIVE_VERSION, minVersion: NATIVE_MIN_VERSION, verifiedVersions: [...NATIVE_VERIFIED_VERSIONS], models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, webSearch: true, runtimeVersion: nativeVersion, runtimePath: native.error ? null : native.executable, ready: isNativeVersionSupported(nativeVersion) };
       })() : null,
     };
   }

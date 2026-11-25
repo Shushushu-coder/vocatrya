@@ -98,15 +98,20 @@ describe("codex install discovery and selection", () => {
     expect(selectCodexInstall([a, mk("s", "0.170.0", 3, { stale: true })], undefined, "native")).toBe(a);
   });
 
-  it("fails closed: with nothing verified it keeps today's precedence (native gate then rejects)", () => {
+  it("selects the newest supported binary when nothing is in verifiedVersions, and rejects below-baseline", () => {
     const { deps } = machine({
-      files: [STANDALONE],
-      versions: { [STANDALONE]: "0.165.0" },
+      files: [STANDALONE, NPM_VENDOR],
+      versions: { [STANDALONE]: "0.165.0", [NPM_VENDOR]: "0.171.0" },
     });
     const result = resolveCodexInstalls(definition, deps);
     expect(result.selected.path).toBe(STANDALONE);
-    expect(result.selections.native.path).toBe(STANDALONE);
+    expect(result.selections.native.path).toBe(NPM_VENDOR);
     expect(result.selections.native.verified).toBe(false);
+    expect(result.installs.map((i) => i.selectedFor)).toEqual([["default", "exec"], ["native"]]);
+
+    const old = resolveCodexInstalls(definition, machine({ files: [STANDALONE], versions: { [STANDALONE]: "0.164.0" } }).deps);
+    expect(old.selections.native.path).toBe(STANDALONE);
+    expect(old.installs[0].selectedFor).toEqual(["default"]);
   });
 
   it("ignores stale-only and reports NOT_INSTALLED when nothing live exists", () => {

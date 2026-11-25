@@ -6,16 +6,17 @@ const { createHash } = require("node:crypto");
 const { StringDecoder } = require("node:string_decoder");
 const { runRuntimeCommand } = require("./runner");
 
-// SAFETY gate, not a compatibility hint: the native session relies on
-// NATIVE_CONFIG + the frozen NATIVE_CATALOG to keep shell, apply_patch,
-// mcp, plugins, skills, browser/computer use, and every other unapproved
-// tool off while enabling only native live web search, and a new CLI may
-// rename a config key and silently re-enable one. A version is listed only
-// after `node desktop/scripts/verify-codex-native.mjs` passed against that
-// exact binary (loopback synthetic Responses provider, temp CODEX_HOME, no
-// account credentials). Add an entry, oldest first, with how/when it was
-// verified; the LAST entry is the newest and is what the managed updater
-// installs.
+// Runtime boundary gate: the native session relies on NATIVE_CONFIG + the
+// frozen NATIVE_CATALOG + startup `config/read` self-check + runtime item/RPC
+// fail-closed checks to keep shell, apply_patch, mcp, plugins, skills,
+// browser/computer use, and every other unapproved tool off while enabling
+// only native live web search.
+//
+// Version gating uses a minimum baseline (`NATIVE_MIN_VERSION`) rather than a
+// rigid exact-version allowlist so Codex CLI auto-updates do not break user
+// sessions. `NATIVE_VERIFIED_VERSIONS` remains the loopback-verified reference
+// list, and its LAST entry (`NATIVE_VERSION`) is what the managed updater pins.
+const NATIVE_MIN_VERSION = "0.165.0";
 const NATIVE_VERIFIED_VERSIONS = Object.freeze([
   // 0.169.0: checked against the real binary via a loopback synthetic
   // Responses provider (no account credentials) when native sessions shipped.
@@ -26,8 +27,28 @@ const NATIVE_VERIFIED_VERSIONS = Object.freeze([
   "0.170.0",
 ]);
 const NATIVE_VERSION = NATIVE_VERIFIED_VERSIONS[NATIVE_VERIFIED_VERSIONS.length - 1];
+const STRICT_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+function parseSemver(version) {
+  if (typeof version !== "string") return null;
+  const match = STRICT_SEMVER_RE.exec(version);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+function compareSemver(a, b) {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < 3; i += 1) {
+    if (pa[i] !== pb[i]) return pa[i] - pb[i];
+  }
+  return 0;
+}
 function isNativeVersionVerified(version) {
   return typeof version === "string" && NATIVE_VERIFIED_VERSIONS.includes(version);
+}
+function isNativeVersionSupported(version) {
+  const cmp = compareSemver(version, NATIVE_MIN_VERSION);
+  return cmp !== null && cmp >= 0;
 }
 // app-server's initialize reply carries userAgent "<clientInfo.name>/<codex version> (...)".
 function reportedCodexVersion(userAgent) {
@@ -202,7 +223,7 @@ function normalizeWebSearchItem(item, status) {
 }
 
 function nativeSessionReady(version, model) {
-  return isNativeVersionVerified(version) && NATIVE_MODELS.includes(model);
+  return isNativeVersionSupported(version) && NATIVE_MODELS.includes(model);
 }
 
 function createNativeSessionParser({ model, prompt, instructions, threadId, cwd, profileDir, catalogFile, expectedVersion, allowedVersions }) {
@@ -257,7 +278,8 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       // allowedVersions is only for desktop/scripts/verify-codex-native.mjs, which
       // must run an as-yet-unlisted candidate binary to decide whether to list it.
       const reported = reportedCodexVersion(m.result?.userAgent);
-      if (!reported || !(allowedVersions || NATIVE_VERIFIED_VERSIONS).includes(reported) || (expectedVersion && reported !== expectedVersion)) { fail("NATIVE_BOUNDARY_NOT_READY"); return; }
+      const versionOk = allowedVersions ? Boolean(reported && allowedVersions.includes(reported)) : isNativeVersionSupported(reported);
+      if (!reported || !versionOk || (expectedVersion && reported !== expectedVersion)) { fail("NATIVE_BOUNDARY_NOT_READY"); return; }
       phase = "checking-config";
       send({ method: "initialized" });
       if (cancelled) { fail("NATIVE_CANCELLED"); return; }
@@ -381,4 +403,4 @@ async function runNativeSession({ allowedVersions, expectedVersion, invocation, 
   } finally { clearTimeout(grace); signal?.removeEventListener("abort", abort); }
 }
 
-module.exports = { NATIVE_VERIFIED_VERSIONS, isNativeVersionVerified, reportedCodexVersion, NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, nativeSessionReady, sanitizeWebSearchUrl, normalizeWebSearchItem, createNativeSessionParser, runNativeSession };
+module.exports = { NATIVE_MIN_VERSION, NATIVE_VERIFIED_VERSIONS, parseSemver, compareSemver, isNativeVersionVerified, isNativeVersionSupported, reportedCodexVersion, NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, nativeSessionReady, sanitizeWebSearchUrl, normalizeWebSearchItem, createNativeSessionParser, runNativeSession };

@@ -7,7 +7,7 @@
 // as the tiebreaker and as the fallback when nothing is verified.
 const fs = require("node:fs");
 const path = require("node:path");
-const { NATIVE_VERIFIED_VERSIONS } = require("./native-session");
+const { NATIVE_VERIFIED_VERSIONS, compareSemver, isNativeVersionSupported } = require("./native-session");
 
 const MAX_CANDIDATES = 8;
 const DISCOVERY_TTL_MS = 15_000;
@@ -117,8 +117,12 @@ function selectCodexInstall(installs, verifiedVersions = NATIVE_VERIFIED_VERSION
   const def = live.find((i) => i.ok) || live[0] || null;
   if (purpose === "native") {
     const rank = (i) => verifiedVersions.indexOf(i.version);
-    return live.filter((i) => i.ok && i.version && verifiedVersions.includes(i.version))
-      .sort((a, b) => rank(b) - rank(a) || a.order - b.order)[0] || def;
+    const verifiedPick = live.filter((i) => i.ok && i.version && verifiedVersions.includes(i.version))
+      .sort((a, b) => rank(b) - rank(a) || a.order - b.order)[0];
+    if (verifiedPick) return verifiedPick;
+    const supportedPick = live.filter((i) => i.ok && isNativeVersionSupported(i.version))
+      .sort((a, b) => (compareSemver(b.version, a.version) || 0) || a.order - b.order)[0];
+    return supportedPick || def;
   }
   if (purpose === "exec") return (version && live.find((i) => i.ok && i.version === version)) || def;
   return def;
@@ -152,7 +156,7 @@ function resolveCodexInstalls(definition, deps = {}) {
       // never brands a binary the gate itself would refuse.
       const selectedFor = PURPOSES.filter((p) => {
         if (selections[p] !== i) return false;
-        if (p === "native") return verifiedVersions.includes(i.version);
+        if (p === "native") return isNativeVersionSupported(i.version);
         if (p === "exec") return target !== null && i.version === target;
         return true;
       });

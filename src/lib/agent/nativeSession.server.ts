@@ -22,11 +22,26 @@ export const APP_PATH = "APP_ORCHESTRATED";
 const unavailable = (details?: NativeUnavailableDetails) => new AIBusinessError("NATIVE_SESSION_UNAVAILABLE", "Native session is not available for this connection, model or runtime version", undefined, details);
 const lost = () => new AIBusinessError("NATIVE_CONTEXT_LOST", "Native context was not restored. No message was resent. Explicitly restart native context to continue.");
 
-// The binary actually installed must be one of the desktop's verified
-// versions (capability.version is only the preferred/install target). A
-// desktop that reports no list falls back to the exact preferred version.
+// Native sessions accept any Codex CLI meeting the minimum baseline version
+// (default 0.165.0) while relying on the runtime's startup `config/read`
+// boundary check and fail-closed tool enforcement.
+const DEFAULT_NATIVE_MIN_VERSION = "0.165.0";
+const STRICT_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+function isSemverAtLeast(version: string | null | undefined, minVersion: string): boolean {
+  if (typeof version !== "string") return false;
+  const a = STRICT_SEMVER_RE.exec(version);
+  const b = STRICT_SEMVER_RE.exec(minVersion);
+  if (!a || !b) return false;
+  for (let i = 1; i <= 3; i += 1) {
+    const diff = Number(a[i]) - Number(b[i]);
+    if (diff !== 0) return diff > 0;
+  }
+  return true;
+}
+
 function runtimeVerified(state: AccountRuntimeState, capability: NonNullable<AccountRuntimeState["nativeSession"]>) {
-  return !!state.runtimeVersion && (capability.verifiedVersions ?? [capability.version]).includes(state.runtimeVersion);
+  return isSemverAtLeast(state.runtimeVersion, capability.minVersion ?? DEFAULT_NATIVE_MIN_VERSION);
 }
 
 // The native session may run a different binary than streaming/exec (each is

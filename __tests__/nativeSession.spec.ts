@@ -50,24 +50,29 @@ it('native entry prefers the draft pick when it is an allowlisted model',async()
 it('native entry reports the exact blocker instead of failing on click',async()=>{
   await expect(resolveNativeChatEntry('other')).resolves.toMatchObject({ok:false,details:{reason:'CONNECTION_INELIGIBLE'}});
   await entryConnection();
-  ctx.runtimeVersion='0.165.0';
-  await expect(resolveNativeChatEntry(userId)).resolves.toMatchObject({ok:false,details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.165.0',requiredVersion:'0.169.0'}});
+  ctx.runtimeVersion='0.164.0';
+  await expect(resolveNativeChatEntry(userId)).resolves.toMatchObject({ok:false,details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.164.0',requiredVersion:'0.169.0'}});
   ctx.runtimeVersion='0.169.0';
 });
-it('readiness accepts any desktop-verified version, binds to the installed one, and fails closed otherwise',async()=>{
+it('readiness accepts any desktop-supported version >= baseline, binds to the installed one, and fails closed otherwise',async()=>{
   const conn=await entryConnection();
   const mocked=await import('@/lib/ai/streaming-execution');
-  const state=(runtimeVersion:string,verifiedVersions?:string[])=>({runtimeReady:true,runtimeVersion,nativeSession:{ready:true,version:'0.170.0',...(verifiedVersions?{verifiedVersions}:{}),models:['gpt-6.1-sol'],configHash:'config'}}) as any;
+  const state=(runtimeVersion:string,verifiedVersions?:string[],ready=true)=>({runtimeReady:true,runtimeVersion,nativeSession:{ready,version:'0.170.0',minVersion:'0.165.0',...(verifiedVersions?{verifiedVersions}:{}),models:['gpt-6.1-sol'],configHash:'config'}}) as any;
   vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.0',['0.169.0','0.170.0']));
   await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.169.0'});
-  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.5',['0.169.0','0.170.0']));
-  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.169.5',requiredVersion:'0.170.0'}});
-  // Streaming/exec may run a different binary: readiness follows the native binary's version.
-  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce({...state('0.165.0',['0.169.0','0.170.0']),nativeSession:{...state('0.165.0',['0.169.0','0.170.0']).nativeSession,runtimeVersion:'0.170.0'}});
-  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.170.0'});
-  // An older desktop without the list still means exact-preferred-version only.
-  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.0'));
+  // Newer or baseline-compatible builds (0.165.0 / 0.171.0) are accepted when desktop reports ready.
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.171.0',['0.169.0','0.170.0']));
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.171.0'});
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.165.0',['0.169.0','0.170.0']));
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.165.0'});
+  // Below minimum baseline or desktop ready=false still fails closed.
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.164.9',['0.169.0','0.170.0']));
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH',runtimeVersion:'0.164.9',requiredVersion:'0.170.0'}});
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.171.0',['0.169.0','0.170.0'],false));
   await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH'}});
+  // Streaming/exec may run a different binary: readiness follows the native binary's version.
+  vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce({...state('0.164.0',['0.169.0','0.170.0']),nativeSession:{...state('0.164.0',['0.169.0','0.170.0']).nativeSession,runtimeVersion:'0.171.0'}});
+  await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).resolves.toMatchObject({runtimeVersion:'0.171.0'});
 });
 
 it('normalizes neutral search events and rejects mismatched thread or unsafe sources',()=>{
