@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AGENT_PASTE_PART_TYPE } from "@/models/agent.model";
+import { AGENT_NATIVE_SEARCH_PART_TYPE, AGENT_PASTE_PART_TYPE } from "@/models/agent.model";
 
 const chat = {
   messages: [] as any[],
@@ -412,5 +412,75 @@ describe("AgentChatMessages", () => {
     render(<AgentChatMessages />);
     expect(screen.getByText(/Dear Hiring Manager/i)).toBeInTheDocument();
     expect(screen.queryByText(/planning/)).not.toBeInTheDocument();
+  });
+
+  it("renders a native search part in started state without duplicating the thinking indicator", () => {
+    chat.status = "streaming";
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_SEARCH_PART_TYPE,
+          id: "native-search-ws1",
+          data: {
+            version: 1,
+            kind: "search",
+            itemId: "ws1",
+            status: "started",
+            actionType: "search",
+            query: "vocatrya careers",
+            queries: ["vocatrya careers"],
+            sources: [],
+          },
+        },
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    const card = screen.getByTestId("agent-native-search-card");
+    expect(card).toHaveAttribute("data-status", "started");
+    expect(card).toHaveTextContent("vocatrya careers");
+    expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+  });
+
+  it("renders completed native search records with clickable http/https sources only", () => {
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_SEARCH_PART_TYPE,
+          id: "native-search-ws1",
+          data: {
+            version: 1,
+            kind: "search",
+            itemId: "ws1",
+            status: "completed",
+            actionType: "search",
+            query: "platform engineer openings",
+            queries: ["platform engineer openings"],
+            sources: [
+              { url: "https://example.com/jobs/1", host: "example.com", title: "Platform Engineer" },
+              { url: "javascript:alert(1)", title: "Unsafe" },
+            ],
+          },
+        },
+        { type: "text", text: "Here are the verified results." },
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    const link = screen.getByRole("link", { name: /Platform Engineer/i });
+    expect(link).toHaveAttribute("href", "https://example.com/jobs/1");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer nofollow");
+    expect(screen.queryByRole("link", { name: /Unsafe/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Here are the verified results.")).toBeInTheDocument();
+  });
+
+  it("does not fabricate search cards or clickable links when prose alone claims to have searched", () => {
+    chat.messages = [
+      assistant([
+        { type: "text", text: "我已搜索 [虚假来源](https://fake.example/news)" },
+      ]),
+    ];
+    render(<AgentChatMessages />);
+    expect(screen.queryByTestId("agent-native-search-card")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });

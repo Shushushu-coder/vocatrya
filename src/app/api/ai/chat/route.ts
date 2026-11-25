@@ -575,7 +575,7 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   if (conversation.executionPath === "NATIVE_CODEX_V1") {
     if (lock.kind !== "account" || !lock.model || contextOfRow(conversation).items.length) throw new AIBusinessError("NATIVE_TEXT_ONLY", "Start a plain-text native conversation without page context");
     return nativeChatResponse({ request, signal: req.signal, connectionId: lock.connectionId, model: lock.model,
-      instructions: "You are Vocatrya, a career conversation assistant. This session has no search, business tools or skills. Never claim to have searched or saved data.\n" + preferences.personalInstructions,
+      instructions: "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Business tools and skills are not loaded in this session. Never claim to have searched the web unless you actually used web search, and never claim to have saved or modified user data.\n" + preferences.personalInstructions,
     });
   }
   const pageContext = pageContextFromConversation(contextOfRow(conversation));

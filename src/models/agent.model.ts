@@ -521,3 +521,57 @@ export type AgentTodayPlanReadResult =
       suggestions: AgentTodayPlanSuggestion;
     }
   | { status: "unavailable"; reason: "no_conversation" | "read_failed" };
+
+// ─── NATIVE-SEARCH ────────────────────────────────────────────────────────
+// Non-transient custom part written only when the native runtime reports real
+// `webSearch` events; model prose alone never produces this part.
+export const AGENT_NATIVE_SEARCH_PART_TYPE = "data-native-search";
+
+export type AgentNativeSearchActionType =
+  | "search"
+  | "open_page"
+  | "find_in_page"
+  | "other";
+
+export type AgentNativeSearchSource = {
+  url: string;
+  title?: string;
+  host?: string;
+};
+
+export type AgentNativeSearchPartData = {
+  version: 1;
+  kind: "search";
+  itemId: string;
+  status: "started" | "completed";
+  actionType: AgentNativeSearchActionType;
+  query: string;
+  queries: string[];
+  pattern?: string;
+  sources: AgentNativeSearchSource[];
+  occurredAt?: string;
+};
+
+export type AgentNativeSearchPart = {
+  type: typeof AGENT_NATIVE_SEARCH_PART_TYPE;
+  id?: string;
+  data: AgentNativeSearchPartData;
+};
+
+export function isAgentNativeSearchPart(
+  part: unknown,
+): part is AgentNativeSearchPart {
+  const candidate = part as AgentNativeSearchPart | undefined;
+  const data = candidate?.data;
+  return (
+    !!candidate &&
+    candidate.type === AGENT_NATIVE_SEARCH_PART_TYPE &&
+    !!data &&
+    data.version === 1 &&
+    data.kind === "search" &&
+    typeof data.itemId === "string" &&
+    data.itemId.length > 0 &&
+    (data.status === "started" || data.status === "completed") &&
+    Array.isArray(data.sources)
+  );
+}

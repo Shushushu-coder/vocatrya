@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { getAgentPreferences, saveAgentPreferences } from "@/actions/agentPreferences.actions";
-import { AUTO_ARCHIVE_DAYS, PERSONAL_INSTRUCTIONS_MAX, DEFAULT_AGENT_PREFERENCES, type AgentPreferences } from "@/lib/agent/preferences";
+import { AUTO_ARCHIVE_DAYS, PERSONAL_INSTRUCTIONS_MAX, DEFAULT_AGENT_PREFERENCES, type AgentPreferences, type PermissionMode } from "@/lib/agent/preferences";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,20 @@ export const permissionLabels = {
   "zh-CN": { ask: "请求审批", rules: "帮我审批", full: "完全访问" },
   en: { ask: "Ask for approval", rules: "Approve by rules", full: "Full access" },
 };
+
+export function permissionOptionLabel(mode: PermissionMode, english: boolean): string {
+  const label = permissionLabels[english ? "en" : "zh-CN"][mode];
+  if (mode === "rules") return english ? `${label} (recommended)` : `${label}（推荐）`;
+  if (mode === "full") return english ? `${label} (not recommended)` : `${label}（不推荐）`;
+  return label;
+}
+
+export function fullAccessRiskWarning(english: boolean): string {
+  return english
+    ? "Full access is not recommended: actions run without per-step approval prompts, and local system-level risks—including access to local files under your OS account (such as Vocatrya's database and backups) when native local tools are enabled—are assumed by you. Applies only to the current session and resets to Ask for approval after a backup restore. Approve by rules is recommended."
+    : "不推荐使用「完全访问」：该模式下操作不再逐项弹窗打断，相关执行与本机系统级风险（包括未来支持原生本机工具时同用户进程访问本地文件的风险，含 Vocatrya 数据库与备份）均由用户自担。此模式仅限当前会话，恢复备份后会自动清除并回退到「请求审批」。建议保持「帮我审批」。";
+}
+
 export function PermissionHelp({ english }: { english: boolean }) {
   const labels = permissionLabels[english ? "en" : "zh-CN"];
   const [open, setOpen] = useState(false);
@@ -23,8 +37,8 @@ export function PermissionHelp({ english }: { english: boolean }) {
   return <Popover open={open} onOpenChange={setOpen}><PopoverAnchor asChild><button type="button" onClick={show} onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} aria-label={english ? "Permission modes" : "权限模式说明"} title={english ? "Compare permission modes" : "查看三种权限的区别"} className="rounded p-1 text-muted-foreground"><CircleHelp className="size-4" /></button></PopoverAnchor>
     <PopoverContent onOpenAutoFocus={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} onMouseEnter={show} onMouseLeave={hide} onFocusCapture={show} onBlurCapture={hide} className="w-[min(34rem,calc(100vw-2rem))] text-xs" align="start"><table className="w-full text-left"><caption className="mb-2 text-left font-medium">{english ? "Business tool permissions" : "业务工具的三档权限"}</caption><tbody>
       <tr><th className="p-2 align-top">{labels.ask}</th><td className="p-2">{english ? "Ask before tools that require approval; reads and analysis remain available." : "需要批准的写入和操作先请示；已授权读取与分析不反复询问。"}</td></tr>
-      <tr><th className="p-2 align-top">{labels.rules}</th><td className="p-2">{english ? "Automatically allow local additions and versioned outputs. External writes and irreversible changes still require approval." : "本地新增和保留版本的结果自动执行；外部写入及不可逆操作仍需批准。"}</td></tr>
-      <tr><th className="p-2 align-top">{labels.full}</th><td className="p-2">{english ? "Allow supported business tools in the granted scope without per-tool prompts. Does not grant missing account or native runtime permissions." : "已授权范围内的受支持业务工具不逐项打断；不会获得缺失的账号权限或原生运行时权限。"}</td></tr>
+      <tr><th className="p-2 align-top">{permissionOptionLabel("rules", english)}</th><td className="p-2">{english ? "Recommended default. Automatically allow local additions and versioned outputs. External writes and irreversible changes still require approval." : "推荐默认档。本地新增和保留版本的结果自动执行；外部写入及不可逆操作仍需批准。"}</td></tr>
+      <tr><th className="p-2 align-top">{permissionOptionLabel("full", english)}</th><td className="p-2">{english ? "Not recommended. Allows supported tools in the granted scope without per-tool prompts; session-only and resets to Ask for approval after backup restore. Local system-level risks are assumed by you. Does not grant missing account permissions or unenabled tools." : "不推荐。已授权范围内的受支持工具不逐项打断；仅限当前会话，备份恢复后自动清除并回退到「请求审批」。本机系统级风险由用户自担；不会获得缺失的账号权限或未开放工具。"}</td></tr>
     </tbody></table></PopoverContent></Popover>;
 }
 
@@ -55,8 +69,9 @@ export default function AgentPreferencesSettings() {
       <Textarea id="personal-instructions" aria-describedby="personal-instructions-hint personal-instructions-count" value={value.personalInstructions} onChange={e => change("personalInstructions", e.target.value)} rows={5} />
       <p id="personal-instructions-count" className={count > PERSONAL_INSTRUCTIONS_MAX ? "text-sm text-destructive" : "text-xs text-muted-foreground"}>{count}/{PERSONAL_INSTRUCTIONS_MAX}{count > PERSONAL_INSTRUCTIONS_MAX ? (en ? " — shorten before saving" : "，请缩短后保存") : ""}</p>
     </div>
-    <div className="space-y-2"><div className="flex items-center gap-1"><label htmlFor="default-agent-permission" className="text-sm font-medium">{en ? "Default permissions" : "默认权限"}</label><PermissionHelp english={en} /></div><p className="text-sm text-muted-foreground">{en ? "Initial business-tool permissions for new chats. Change them in the composer before starting. Existing chats keep their original mode." : "设置新会话的初始业务工具权限；开始前仍可在输入区更改，现有会话保持原权限。"}</p>
-      <select id="default-agent-permission" value={value.defaultPermission} onChange={e => change("defaultPermission", e.target.value as AgentPreferences["defaultPermission"])} className="rounded-md border bg-background p-2 text-sm">{Object.entries(permissionLabels[en ? "en" : "zh-CN"]).map(([mode, label]) => <option key={mode} value={mode}>{label}{mode === "rules" ? (en ? " (recommended)" : "（推荐）") : ""}</option>)}</select>
+    <div className="space-y-2"><div className="flex items-center gap-1"><label htmlFor="default-agent-permission" className="text-sm font-medium">{en ? "Default permissions" : "默认权限"}</label><PermissionHelp english={en} /></div><p className="text-sm text-muted-foreground">{en ? "Initial permissions for new chats. Approve by rules is recommended; Full access is not recommended (session-only and resets after backup restore). Change them in the composer before starting; existing chats keep their original mode." : "设置新会话的初始权限。推荐使用「帮我审批」；不推荐「完全访问」（仅限当前会话，恢复备份后自动清除并回退）。开始前仍可在输入区更改，现有会话保持原权限。"}</p>
+      <select id="default-agent-permission" value={value.defaultPermission} onChange={e => change("defaultPermission", e.target.value as AgentPreferences["defaultPermission"])} className="rounded-md border bg-background p-2 text-sm">{Object.keys(permissionLabels[en ? "en" : "zh-CN"]).map(mode => <option key={mode} value={mode}>{permissionOptionLabel(mode as PermissionMode, en)}</option>)}</select>
+      {value.defaultPermission === "full" ? <p role="alert" data-testid="full-access-risk-warning" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-900 dark:text-amber-200">{fullAccessRiskWarning(en)}</p> : null}
     </div>
     <Button type="button" disabled={!loaded || saving || count > PERSONAL_INSTRUCTIONS_MAX} onClick={() => void save()}>{saving ? (en ? "Saving…" : "保存中…") : (en ? "Save preferences" : "保存偏好")}</Button>
     <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{status}</p>

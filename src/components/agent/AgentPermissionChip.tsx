@@ -9,12 +9,13 @@ import { useI18n } from "@/i18n";
 
 import type { AgentToolPermissionSnapshot } from "@/lib/agent/chatTypes";
 import { getAgentPreferences } from "@/actions/agentPreferences.actions";
-import { permissionLabels, PermissionHelp } from "@/components/settings/AgentPreferencesSettings";
-import { isPermissionMode } from "@/lib/agent/preferences";
+import { permissionLabels, permissionOptionLabel, PermissionHelp } from "@/components/settings/AgentPreferencesSettings";
+import { isPermissionMode, type PermissionMode } from "@/lib/agent/preferences";
 export function AgentPermissionChip({ compact = false }: { compact?: boolean }) {
   const { t, locale } = useI18n();
   const { activeRole, conversationId, context, approvalPending, draftPermissionMode, setDraftPermissionMode } = useAgentChat();
   const labels = permissionLabels[locale === "en" ? "en" : "zh-CN"];
+  const effectiveMode = conversationId ? (context?.permissionMode ?? "ask") : draftPermissionMode;
   useEffect(() => {
     if (conversationId || draftPermissionMode) return;
     let live = true;
@@ -49,11 +50,17 @@ export function AgentPermissionChip({ compact = false }: { compact?: boolean }) 
         <h3 className="text-sm font-medium">{t("agent.permissionsTitle")}</h3>
         <div className="flex items-center gap-2">
           <select aria-label={locale === "en" ? "Conversation permissions" : "会话权限"} disabled={!!conversationId || !draftPermissionMode} value={conversationId ? (context?.permissionMode ?? "ask") : (draftPermissionMode ?? "rules")} onChange={e => { if (!conversationId && isPermissionMode(e.target.value)) setDraftPermissionMode(e.target.value); }} className="min-w-0 rounded border bg-background p-2 text-sm">
-            {Object.entries(labels).map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+            {Object.keys(labels).map(mode => <option key={mode} value={mode}>{permissionOptionLabel(mode as PermissionMode, locale === "en")}</option>)}
           </select>
           <PermissionHelp english={locale === "en"} />
         </div>
         {conversationId && <p className="text-xs text-muted-foreground">{locale === "en" ? "Fixed for this conversation. Start a new chat to change permissions." : "此会话权限已固定；新建会话可更改。"}</p>}
+        <p className="text-xs text-muted-foreground">{t("agent.permissionRecommendedNote")}</p>
+        {effectiveMode === "full" && (
+          <p role="alert" data-testid="agent-permission-full-warning" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-900 dark:text-amber-200">
+            {t("agent.fullAccessRiskWarning")}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground">{t("agent.permissionsHint")}</p>
         {approvalPending && <p role="status" className="text-xs text-amber-600">{t("agent.waitingOnApproval")}</p>}
         {loading ? <Loader2 className="size-4 animate-spin" aria-label={t("common.loading")} /> : data ? (

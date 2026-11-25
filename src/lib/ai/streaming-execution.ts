@@ -387,7 +387,7 @@ export interface AccountRuntimeState {
   capabilities: Record<string, unknown> | null;
   runtimeVersion: string | null;
   runtimeReady: boolean;
-  nativeSession?: { version: string; verifiedVersions?: string[]; runtimeVersion?: string | null; runtimePath?: string | null; models: string[]; configHash: string; ready: boolean } | null;
+  nativeSession?: { version: string; verifiedVersions?: string[]; runtimeVersion?: string | null; runtimePath?: string | null; models: string[]; configHash: string; webSearch?: boolean; ready: boolean } | null;
 }
 
 export async function fetchAccountRuntimeState(

@@ -1881,7 +1881,7 @@ function createConnectionService({
       nativeSession: adapter.backendKind === CODEX_BACKEND_KIND ? (() => {
         const native = resolveRuntime(adapter, "native");
         const nativeVersion = native.error ? null : native.version;
-        return { version: NATIVE_VERSION, verifiedVersions: [...NATIVE_VERIFIED_VERSIONS], models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, runtimeVersion: nativeVersion, runtimePath: native.error ? null : native.executable, ready: NATIVE_VERIFIED_VERSIONS.includes(nativeVersion) };
+        return { version: NATIVE_VERSION, verifiedVersions: [...NATIVE_VERIFIED_VERSIONS], models: NATIVE_MODELS, configHash: NATIVE_CONFIG_HASH, webSearch: true, runtimeVersion: nativeVersion, runtimePath: native.error ? null : native.executable, ready: NATIVE_VERIFIED_VERSIONS.includes(nativeVersion) };
       })() : null,
     };
   }

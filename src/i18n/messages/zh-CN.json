@@ -1,7 +1,7 @@
 {
   "nativeSession": {
     "new": "新建 Codex 原生文本对话",
-    "status": "Codex 原生会话：搜索、业务工具和技能未加载。",
+    "status": "Codex 原生会话：已启用原生网页搜索（按需自动触发）；业务工具与技能未加载。",
     "waiting": "发送消息时才恢复原生上文。",
     "resumed": "已继续同一原生会话。",
     "created": "已创建新的原生会话。",
@@ -17,14 +17,24 @@
     "updateFailed": "更新未完成（{code}）。可在 AI 设置的“版本与更新详情”中重试或手动更新。",
     "usePlain": "改用普通新对话",
     "unknownVersion": "未知版本",
-    "textOnly": "首版仅支持纯文本，不接收资料上下文、附件，不提供重新生成或工具。",
+    "textOnly": "支持纯文本对话与原生网页搜索（按需自动触发）；不支持资料上下文、附件、重新生成、业务工具或技能。",
     "entry": "Codex 原生对话",
     "badge": "Codex 原生",
     "leave": "返回普通对话",
     "entryConnection": "未连接 Codex 账号",
     "entryRuntime": "Codex 运行时未就绪",
     "entryVersion": "版本 {actual} 未验证；已验证版本：{verified}",
-    "entryModel": "当前没有可用于原生会话的模型"
+    "entryModel": "当前没有可用于原生会话的模型",
+    "search": {
+      "searching": "正在网页搜索…",
+      "searched": "已搜索网页",
+      "openingPage": "正在打开网页…",
+      "openedPage": "已读取网页",
+      "findingInPage": "正在页面内查找…",
+      "foundInPage": "已在页面内查找",
+      "sources": "来源链接",
+      "pattern": "查找关键词：{pattern}"
+    }
   },
   "canonicalImport": {
     "selectionSummary": "将导入所选的 {count} 条素材，并创建草稿简历「{name}」。",
@@ -2093,6 +2103,8 @@
   "agent": {
     "permissionsTitle": "权限与可用工具",
     "permissionsLabel": "权限",
+    "permissionRecommendedNote": "推荐使用「帮我审批」；不推荐「完全访问」（仅限当前会话，恢复备份后回退）。",
+    "fullAccessRiskWarning": "不推荐使用「完全访问」：该模式下操作不再逐项弹窗打断，相关执行与本机系统级风险（包括未来支持原生本机工具时同用户进程访问本地文件的风险，含 Vocatrya 数据库与备份）均由用户自担。此模式仅限当前会话，恢复备份后会自动清除并回退到「请求审批」。建议保持「帮我审批」。",
     "permissionsHint": "以下为当前会话的工具范围。审批由各工具的实际规则决定，连接状态会在执行时重新检查。",
     "permissionsUnavailable": "暂时无法获取权限信息，请重新打开查看。",
     "permissionsBoundary": "此入口仅展示现有权限，不会自动批准操作，也不授予模型任意文件或系统访问能力。",

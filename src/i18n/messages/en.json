@@ -1,7 +1,7 @@
 {
   "nativeSession": {
     "new": "New Codex native text conversation",
-    "status": "Codex native session: search, business tools and skills are not loaded.",
+    "status": "Codex native session: native web search is enabled (automatic when needed); business tools and skills are not loaded.",
     "waiting": "Native context resumes only when you send a message.",
     "resumed": "Continued the same native session.",
     "created": "Created a new native session.",
@@ -17,14 +17,24 @@
     "updateFailed": "Update did not finish ({code}). Retry from \"Version & update details\" in AI Settings or update manually.",
     "usePlain": "Start a regular conversation",
     "unknownVersion": "unknown",
-    "textOnly": "This first version supports plain text only, without context attachments, files, regeneration or tools.",
+    "textOnly": "Supports plain text and automatic native web search; context attachments, files, regeneration, business tools and skills are not loaded.",
     "entry": "Codex native conversation",
     "badge": "Codex native",
     "leave": "Back to regular chat",
     "entryConnection": "No connected Codex account",
     "entryRuntime": "Codex runtime not ready",
     "entryVersion": "Version {actual} is not verified; verified: {verified}",
-    "entryModel": "No model available for native sessions"
+    "entryModel": "No model available for native sessions",
+    "search": {
+      "searching": "Searching the web…",
+      "searched": "Searched the web",
+      "openingPage": "Opening page…",
+      "openedPage": "Opened page",
+      "findingInPage": "Searching page…",
+      "foundInPage": "Searched page",
+      "sources": "Sources",
+      "pattern": "Matched: {pattern}"
+    }
   },
   "canonicalImport": {
     "selectionSummary": "Import {count} selected material items and create draft resume “{name}”.",
@@ -2093,6 +2103,8 @@
   "agent": {
     "permissionsTitle": "Permissions and tools",
     "permissionsLabel": "Permissions",
+    "permissionRecommendedNote": "Approve by rules is recommended; Full access is not recommended (session-only, resets after backup restore).",
+    "fullAccessRiskWarning": "Full access is not recommended: actions run without per-step approval prompts, and local system-level risks—including access to local files under your OS account (such as Vocatrya's database and backups) when native local tools are enabled—are assumed by you. Applies only to the current session and resets to Ask for approval after a backup restore. Approve by rules is recommended.",
     "permissionsHint": "These tools are available to this conversation. Each tool enforces its approval rules and rechecks connection state when executed.",
     "permissionsUnavailable": "Could not load permissions. Reopen to retry.",
     "permissionsBoundary": "This view does not grant access or automatically approve operations. It does not grant arbitrary file or system access.",

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto';
 import { seedAccount } from './helpers/backupTestDb';
-import { beginNativeTurn, saveNativeBinding, restartNativeContext, nativeReadiness, resolveNativeChatEntry } from '@/lib/agent/nativeSession.server';
+import { beginNativeTurn, saveNativeBinding, restartNativeContext, nativeReadiness, resolveNativeChatEntry, normalizeNativeSearchEvent } from '@/lib/agent/nativeSession.server';
+import { AGENT_NATIVE_SEARCH_PART_TYPE } from '@/models/agent.model';
 import type { ConversationRequest } from '@/lib/agent/conversationRequest';
 import db from '@/lib/db';
 import { buildBackupZip } from '@/lib/backup/export';
@@ -67,4 +68,46 @@ it('readiness accepts any desktop-verified version, binds to the installed one, 
   // An older desktop without the list still means exact-preferred-version only.
   vi.mocked(mocked.fetchAccountRuntimeState).mockResolvedValueOnce(state('0.169.0'));
   await expect(nativeReadiness(userId,conn,'gpt-6.1-sol')).rejects.toMatchObject({details:{reason:'RUNTIME_VERSION_MISMATCH'}});
+});
+
+it('normalizes neutral search events and rejects mismatched thread or unsafe sources',()=>{
+  const ok=normalizeNativeSearchEvent({
+    type:'native-event',version:1,kind:'search',nativeSessionId:'thread-1',nativeTurnId:'turn-1',itemId:'ws-1',occurredAt:'2026-11-25T05:00:00Z',
+    payload:{status:'completed',actionType:'search',query:'vocatrya jobs',queries:['vocatrya jobs'],sources:[{url:'https://example.com/a',title:'Role A'},{url:'javascript:alert(1)',title:'Bad'},{url:'https://u:p@example.com/b'}],rawBlob:'drop-me'},
+  },{conversationId:'conv-1',nativeSessionId:'thread-1'});
+  expect(ok).toMatchObject({
+    type:'native-event',version:1,kind:'search',conversationId:'conv-1',nativeSessionId:'thread-1',itemId:'ws-1',
+    payload:{status:'completed',actionType:'search',query:'vocatrya jobs',queries:['vocatrya jobs'],sources:[{url:'https://example.com/a',host:'example.com',title:'Role A'}]},
+  });
+  expect((ok!.payload as Record<string,unknown>).rawBlob).toBeUndefined();
+  expect(normalizeNativeSearchEvent({...ok,nativeSessionId:'other-thread'},{conversationId:'conv-1',nativeSessionId:'thread-1'})).toBeNull();
+  expect(normalizeNativeSearchEvent({...ok,kind:'tool_call'},{conversationId:'conv-1',nativeSessionId:'thread-1'})).toBeNull();
+});
+
+it('backup round-trip preserves persisted native search sources while excluding native thread bindings',async()=>{
+  const messages=[
+    {id:'u1',role:'user',parts:[{type:'text',text:'查一下招聘动态'}]},
+    {id:'a1',role:'assistant',parts:[
+      {type:AGENT_NATIVE_SEARCH_PART_TYPE,id:'native-search-ws1',data:{version:1,kind:'search',itemId:'ws1',status:'completed',actionType:'search',query:'招聘动态',queries:['招聘动态'],sources:[{url:'https://example.com/news',host:'example.com',title:'News'}]}},
+      {type:'text',text:'已为你检索最新动态。'},
+    ]},
+  ];
+  const row=await db.chatConversation.create({
+    data:{userId,messages:JSON.stringify(messages),context:'{"version":1,"items":[],"permissionMode":"rules"}',resolvedConnectionId:connectionId,resolvedModel:'gpt-6.1-sol',executionPath:'NATIVE_CODEX_V1'},
+  });
+  await saveNativeBinding({...request(row),activeRequestId:undefined} as any,{...session,threadId:'thread-secret-search'},{connectionId,model:'gpt-6.1-sol',promptHash:'p'}).catch(()=>undefined);
+  await db.nativeConversationBinding.create({data:{conversationId:row.id,userId,connectionId,model:'gpt-6.1-sol',threadId:'thread-secret-search',runtimeVersion:'0.169.0',runtimeProfileRef:'rp_fixture',configHash:'config',promptHash:'p'}});
+  const {buffer}=await buildBackupZip(userId,'native-test@vocatrya.test');
+  await importBackup(buffer,userId,'native-test@vocatrya.test',true);
+  const restored=await db.chatConversation.findMany({where:{userId}});
+  const matched=restored.find(r=>r.messages.includes('https://example.com/news'));
+  expect(matched).toBeDefined();
+  expect(matched!.executionPath).toBe('APP_ORCHESTRATED');
+  expect(JSON.parse(matched!.messages)[1].parts[0]).toMatchObject({
+    type:AGENT_NATIVE_SEARCH_PART_TYPE,
+    data:{status:'completed',query:'招聘动态',sources:[{url:'https://example.com/news',title:'News'}]},
+  });
+  const JSZip=(await import('jszip')).default;
+  const json=await (await JSZip.loadAsync(buffer)).file('data.json')!.async('string');
+  expect(json).not.toContain('thread-secret-search');
 });

@@ -5,10 +5,11 @@
 // the real service. For every NATIVE_MODELS entry it runs the production
 // runNativeSession against the binary and asserts:
 //   (a) the version the binary reports (--version and app-server handshake) agrees;
-//   (b) the effective config read back from app-server keeps web_search disabled,
-//       shell/apps/code-mode/etc. features off and no mcp/plugins/hooks/skills;
-//   (c) a turn round-trips through the fake provider, and the request the
-//       provider received exposes no tools (so no shell, web_search, apply_patch).
+//   (b) the effective config read back from app-server enables live web_search,
+//       keeps shell/apps/code-mode/etc. features off and no mcp/plugins/hooks/skills;
+//   (c) a turn round-trips through the fake provider with synthetic web_search_call
+//       items, the provider request exposes ONLY web_search (no shell/apply_patch/mcp),
+//       and normalized native-event search events + sources round-trip.
 // Usage: node desktop/scripts/verify-codex-native.mjs [--binary <path>] [--expect-version <v>] [--out <file>]
 // Prints a JSON report; exit 0 only when every check passed.
 import http from "node:http";
@@ -58,9 +59,13 @@ function startFakeProvider() {
         const send = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
         send("response.created", { response: { id: "resp_v1" } });
-        send("response.output_item.added", { output_index: 0, item: { type: "message", role: "assistant", id: "msg_v1", content: [] } });
-        send("response.output_text.delta", { item_id: "msg_v1", output_index: 0, content_index: 0, delta: FAKE_TEXT });
-        send("response.output_item.done", { output_index: 0, item: { type: "message", role: "assistant", id: "msg_v1", content: [{ type: "output_text", text: FAKE_TEXT }] } });
+        send("response.output_item.added", { output_index: 0, item: { type: "web_search_call", id: "ws_verify_1", status: "in_progress", action: { type: "search", query: "vocatrya verify query" } } });
+        send("response.output_item.done", { output_index: 0, item: { type: "web_search_call", id: "ws_verify_1", status: "completed", action: { type: "search", query: "vocatrya verify query", queries: ["vocatrya verify query"] } } });
+        send("response.output_item.added", { output_index: 1, item: { type: "web_search_call", id: "ws_verify_2", status: "in_progress", action: { type: "open_page", url: "https://example.test/vocatrya-verify" } } });
+        send("response.output_item.done", { output_index: 1, item: { type: "web_search_call", id: "ws_verify_2", status: "completed", action: { type: "open_page", url: "https://example.test/vocatrya-verify" } } });
+        send("response.output_item.added", { output_index: 2, item: { type: "message", role: "assistant", id: "msg_v1", content: [] } });
+        send("response.output_text.delta", { item_id: "msg_v1", output_index: 2, content_index: 0, delta: FAKE_TEXT });
+        send("response.output_item.done", { output_index: 2, item: { type: "message", role: "assistant", id: "msg_v1", content: [{ type: "output_text", text: FAKE_TEXT }] } });
         send("response.completed", { response: { id: "resp_v1", usage: { input_tokens: 1, input_tokens_details: null, output_tokens: 1, output_tokens_details: null, total_tokens: 2 } } });
         res.end();
       } else { res.writeHead(404, { "content-type": "application/json" }); res.end("{}"); }
@@ -106,23 +111,28 @@ async function main() {
         }
       };
       const runner = (opts) => runRuntimeCommand({ ...opts, onStdout: (chunk) => { tap(chunk); opts.onStdout?.(chunk); } });
-      const result = await runNativeSession({ expectedVersion: probe.version, allowedVersions: [probe.version], invocation, model, prompt: "Reply with the verification phrase.", instructions: "Verification run.", profileDir, timeoutMs: 60000, runner });
+      const emittedEvents = [];
+      const result = await runNativeSession({ expectedVersion: probe.version, allowedVersions: [probe.version], invocation, model, prompt: "Reply with the verification phrase.", instructions: "Verification run.", profileDir, timeoutMs: 60000, onEvent: (e) => emittedEvents.push(e), runner });
       const received = fake.requests.slice(before).filter((r) => r.method === "POST" && /\/responses$/.test(r.url));
       const body = received.at(-1)?.body;
       const tools = body?.tools;
+      const searchEvents = emittedEvents.filter((e) => e.type === "native-event" && e.kind === "search" && e.payload?.status === "completed");
       entry.reportedVersion = reportedCodexVersion(handshake?.userAgent);
       report.handshakeVersion ??= entry.reportedVersion;
       entry.requests = received.length;
       entry.toolsSent = Array.isArray(tools) ? tools.map((t) => t?.type ?? t?.name ?? "?") : tools === undefined ? [] : "non-array";
+      entry.searchEvents = searchEvents.map((e) => ({ actionType: e.payload?.actionType, query: e.payload?.query, sources: e.payload?.sources?.map((s) => s.url) }));
       entry.effectiveConfig = config ? { web_search: config.web_search, project_doc_max_bytes: config.project_doc_max_bytes, include_environment_context: config.include_environment_context, features: Object.fromEntries(FEATURES_OFF.map((n) => [n, config.features?.[n]])) } : null;
       const tag = (n) => `${model}: ${n}`;
       const a = check(tag("handshake-version-matches-cli"), entry.reportedVersion === probe.version, { cli: probe.version, handshake: entry.reportedVersion });
-      const b = check(tag("effective-config-tools-off"), config && config.web_search === "disabled" && FEATURES_OFF.every((n) => config.features?.[n] === false) &&
+      const b = check(tag("effective-config-tools-off"), config && config.web_search === "live" && FEATURES_OFF.every((n) => config.features?.[n] === false) &&
         [config.mcp_servers, config.plugins, config.hooks, config.skills].every((v) => !v || Object.keys(v).length === 0) && config.model_catalog_json, entry.effectiveConfig);
       const c = check(tag("turn-round-trips"), result.ok === true && result.text === FAKE_TEXT, { ok: result.ok, code: result.code });
       const d = check(tag("provider-request-model"), body?.model === model, body?.model);
-      const e = check(tag("provider-request-has-no-tools"), received.length >= 1 && Array.isArray(tools) ? tools.length === 0 : received.length >= 1 && tools === undefined, entry.toolsSent);
-      entry.ok = a && b && c && d && e;
+      const e = check(tag("provider-request-web-search-only"), received.length >= 1 && Array.isArray(tools) && tools.length === 1 && tools[0]?.type === "web_search" && tools[0]?.external_web_access === true, entry.toolsSent);
+      const f = check(tag("native-search-events-round-trip"), searchEvents.some((ev) => ev.payload?.actionType === "search" && ev.payload?.query === "vocatrya verify query") &&
+        searchEvents.some((ev) => ev.payload?.actionType === "open_page" && ev.payload?.sources?.some((s) => s.url === "https://example.test/vocatrya-verify")), entry.searchEvents);
+      entry.ok = a && b && c && d && e && f;
     }
     check("nativeConfig-keys-covered", Object.keys(NATIVE_CONFIG).length > 0);
   } finally {

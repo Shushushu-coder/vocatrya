@@ -7,6 +7,10 @@ import { mintConnectionTicket } from "@/lib/ai/connection-tickets";
 import { fetchAccountRuntimeState, type AccountRuntimeState } from "@/lib/ai/streaming-execution";
 import type { ConversationRequest } from "./conversationRequest";
 import type {
+  AgentNativeSearchActionType,
+  AgentNativeSearchSource,
+} from "@/models/agent.model";
+import type {
   ExplicitModelSelection,
   NativeChatEntry,
   NativeUnavailableDetails,
@@ -158,6 +162,122 @@ export async function beginNativeTurn(request: ConversationRequest, db: PrismaCl
 }
 
 type SessionEvent = { type: "native-session"; threadId: string; resumed: boolean; runtimeVersion: string; runtimeProfileRef: string; configHash: string };
+export type NativeSessionSearchPayload = {
+  status: "started" | "completed";
+  actionType: AgentNativeSearchActionType;
+  query: string;
+  queries: string[];
+  pattern?: string;
+  sources: AgentNativeSearchSource[];
+};
+export type NativeSessionNeutralEvent = {
+  type: "native-event";
+  version: 1;
+  kind: "search";
+  conversationId: string;
+  nativeSessionId: string;
+  nativeTurnId: string | null;
+  itemId: string;
+  occurredAt: string;
+  payload: NativeSessionSearchPayload;
+};
+
+const VALID_SEARCH_ACTIONS = new Set<AgentNativeSearchActionType>(["search", "open_page", "find_in_page", "other"]);
+
+function boundedString(value: unknown, maxChars: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > maxChars ? trimmed.slice(0, maxChars) : trimmed;
+}
+
+function sanitizeHttpSourceUrl(value: unknown): { url: string; host?: string } | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (parsed.username !== "" || parsed.password !== "") return null;
+    return { url: parsed.href, ...(parsed.hostname ? { host: parsed.hostname } : {}) };
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeNativeSearchEvent(
+  raw: unknown,
+  expected: { conversationId: string; nativeSessionId: string },
+): NativeSessionNeutralEvent | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const event = raw as Record<string, unknown>;
+  if (event.type !== "native-event" || event.version !== 1 || event.kind !== "search") return null;
+  if (event.nativeSessionId !== expected.nativeSessionId) return null;
+  const nativeTurnId =
+    event.nativeTurnId === null || event.nativeTurnId === undefined
+      ? null
+      : typeof event.nativeTurnId === "string" && event.nativeTurnId.length <= 256
+        ? event.nativeTurnId
+        : undefined;
+  if (nativeTurnId === undefined) return null;
+  const itemId = boundedString(event.itemId, 256);
+  if (!itemId) return null;
+  const occurredAt = boundedString(event.occurredAt, 64) ?? new Date().toISOString();
+  const rawPayload = event.payload;
+  if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) return null;
+  const p = rawPayload as Record<string, unknown>;
+  if (p.status !== "started" && p.status !== "completed") return null;
+  if (typeof p.actionType !== "string" || !VALID_SEARCH_ACTIONS.has(p.actionType as AgentNativeSearchActionType)) return null;
+  const actionType = p.actionType as AgentNativeSearchActionType;
+  const query = boundedString(p.query, 300) ?? "";
+  const queries: string[] = [];
+  const seenQueries = new Set<string>();
+  if (Array.isArray(p.queries)) {
+    for (const q of p.queries) {
+      const clipped = boundedString(q, 300);
+      if (!clipped || seenQueries.has(clipped) || queries.length >= 12) continue;
+      seenQueries.add(clipped);
+      queries.push(clipped);
+    }
+  }
+  const pattern = boundedString(p.pattern, 200) ?? undefined;
+  const sources: AgentNativeSearchSource[] = [];
+  const seenUrls = new Set<string>();
+  if (Array.isArray(p.sources)) {
+    for (const entry of p.sources) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const item = entry as Record<string, unknown>;
+      const safe = sanitizeHttpSourceUrl(item.url);
+      if (!safe || seenUrls.has(safe.url) || sources.length >= 20) continue;
+      seenUrls.add(safe.url);
+      const title = boundedString(item.title, 200) ?? undefined;
+      sources.push({
+        url: safe.url,
+        ...(safe.host ? { host: safe.host } : {}),
+        ...(title ? { title } : {}),
+      });
+    }
+  }
+  return {
+    type: "native-event",
+    version: 1,
+    kind: "search",
+    conversationId: expected.conversationId,
+    nativeSessionId: expected.nativeSessionId,
+    nativeTurnId,
+    itemId,
+    occurredAt,
+    payload: {
+      status: p.status,
+      actionType,
+      query,
+      queries,
+      ...(pattern ? { pattern } : {}),
+      sources,
+    },
+  };
+}
+
 export async function saveNativeBinding(request: ConversationRequest, event: SessionEvent, input: { connectionId: string; model: string; promptHash: string }, db: PrismaClient = prisma) {
   await db.$transaction(async tx => {
     const row = await tx.chatConversation.findFirst({ where: lease(request) });
@@ -181,7 +301,11 @@ export async function restartNativeContext(userId: string, conversationId: strin
   });
 }
 
-type NativeTextEvent = { type: "text-delta"; delta: string } | { type: "completed"; text: string } | SessionEvent;
+type NativeTextEvent =
+  | { type: "text-delta"; delta: string }
+  | { type: "completed"; text: string }
+  | SessionEvent
+  | NativeSessionNeutralEvent;
 export async function* executeNativeTurn(input: { request: ConversationRequest; connectionId: string; model: string; prompt: string; instructions: string; signal: AbortSignal }): AsyncGenerator<NativeTextEvent> {
   const { request, connectionId, model, prompt, instructions, signal } = input;
   const readiness = await nativeReadiness(request.userId, connectionId, model);
@@ -207,6 +331,7 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
   const decoder = new TextDecoder();
   let pending = "";
   let sawSession = false;
+  let currentThreadId: string | null = binding?.threadId ?? null;
   try {
     while (!signal.aborted) {
       const { done, value } = await reader.read();
@@ -227,8 +352,16 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
           if (sawSession || typeof event.threadId !== "string" || !/^[a-zA-Z0-9_-]{1,256}$/.test(event.threadId) || event.runtimeVersion !== readiness.runtimeVersion ||
             event.runtimeProfileRef !== readiness.connection.runtimeProfileRef || event.configHash !== readiness.configHash || (binding && event.threadId !== binding.threadId)) throw lost();
           await saveNativeBinding(request, event, { connectionId, model, promptHash });
+          currentThreadId = event.threadId;
           sawSession = true;
           yield event;
+        } else if (event.type === "native-event" && sawSession && currentThreadId) {
+          const normalized = normalizeNativeSearchEvent(event, {
+            conversationId: request.conversationId,
+            nativeSessionId: currentThreadId,
+          });
+          if (!normalized) throw lost();
+          yield normalized;
         } else if (event.type === "text-delta" && sawSession && typeof event.delta === "string") yield event;
         else if (event.type === "completed" && sawSession && typeof event.text === "string") { yield event; return; }
         else throw lost();

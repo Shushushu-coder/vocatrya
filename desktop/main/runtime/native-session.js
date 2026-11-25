@@ -7,13 +7,15 @@ const { StringDecoder } = require("node:string_decoder");
 const { runRuntimeCommand } = require("./runner");
 
 // SAFETY gate, not a compatibility hint: the native session relies on
-// NATIVE_CONFIG + the frozen NATIVE_CATALOG to keep web search, shell,
-// apply_patch and every other tool off, and a new CLI may rename a config
-// key and silently re-enable one. A version is listed only after
-// `node desktop/scripts/verify-codex-native.mjs` passed against that exact
-// binary (loopback synthetic Responses provider, temp CODEX_HOME, no account
-// credentials). Add an entry, oldest first, with how/when it was verified;
-// the LAST entry is the newest and is what the managed updater installs.
+// NATIVE_CONFIG + the frozen NATIVE_CATALOG to keep shell, apply_patch,
+// mcp, plugins, skills, browser/computer use, and every other unapproved
+// tool off while enabling only native live web search, and a new CLI may
+// rename a config key and silently re-enable one. A version is listed only
+// after `node desktop/scripts/verify-codex-native.mjs` passed against that
+// exact binary (loopback synthetic Responses provider, temp CODEX_HOME, no
+// account credentials). Add an entry, oldest first, with how/when it was
+// verified; the LAST entry is the newest and is what the managed updater
+// installs.
 const NATIVE_VERIFIED_VERSIONS = Object.freeze([
   // 0.169.0: checked against the real binary via a loopback synthetic
   // Responses provider (no account credentials) when native sessions shipped.
@@ -34,7 +36,7 @@ function reportedCodexVersion(userAgent) {
 }
 const NATIVE_MODELS = ["gpt-5.4", "gpt-5.3-codex", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"];
 const NATIVE_CONFIG = Object.freeze({
-  web_search: "disabled",
+  web_search: "live",
   project_doc_max_bytes: 0,
   include_environment_context: false,
   "features.shell_tool": false,
@@ -69,12 +71,135 @@ const NATIVE_CATALOG = { models: NATIVE_MODELS.map(slug => ({
   slug, display_name: slug, description: "Vocatrya native text", default_reasoning_level: null,
   supported_reasoning_levels: [], shell_type: "disabled", visibility: "hide", supported_in_api: true,
   priority: 0, availability_nux: null, upgrade: null,
-  base_instructions: "You are a career conversation assistant. No tools are available.",
+  base_instructions: "You are a career conversation assistant. Native web search is available when needed; no other tools are available.",
   support_verbosity: false, default_verbosity: null, apply_patch_tool_type: null,
   truncation_policy: { mode: "tokens", limit: 10000 }, supports_parallel_tool_calls: false,
-  experimental_supported_tools: [], supports_search_tool: false, input_modalities: ["text"],
+  experimental_supported_tools: [], supports_search_tool: true, input_modalities: ["text"],
 })) };
 const NATIVE_CONFIG_HASH = createHash("sha256").update(JSON.stringify([NATIVE_CONFIG, NATIVE_CATALOG])).digest("hex");
+
+const MAX_SEARCH_EVENTS_PER_TURN = 64;
+const MAX_SEARCH_SOURCES = 20;
+const MAX_SEARCH_QUERIES = 12;
+const MAX_SEARCH_URL_CHARS = 2048;
+const MAX_SEARCH_TEXT_CHARS = 300;
+const MAX_SEARCH_TITLE_CHARS = 200;
+
+function clipBoundedString(value, maxChars) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > maxChars ? trimmed.slice(0, maxChars) : trimmed;
+}
+
+function sanitizeWebSearchUrl(raw) {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > MAX_SEARCH_URL_CHARS) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (parsed.username !== "" || parsed.password !== "") return null;
+    return { url: parsed.href, host: parsed.hostname || undefined };
+  } catch {
+    return null;
+  }
+}
+
+function collectSourcesFromList(list, addSource, depth = 0) {
+  if (!Array.isArray(list)) return;
+  for (const entry of list) {
+    if (!entry || typeof entry !== "object") continue;
+    const rawUrl = entry.url ?? entry.href ?? entry.link ?? entry.uri;
+    const title = clipBoundedString(entry.title ?? entry.name, MAX_SEARCH_TITLE_CHARS);
+    if (typeof rawUrl === "string") addSource(rawUrl, title || undefined);
+    if (depth === 0) {
+      collectSourcesFromList(entry.sources, addSource, 1);
+      collectSourcesFromList(entry.results, addSource, 1);
+    }
+  }
+}
+
+function normalizeWebSearchItem(item, status) {
+  if (!item || typeof item !== "object" || item.type !== "webSearch") return null;
+  if (status !== "started" && status !== "completed") return null;
+  const itemId = clipBoundedString(item.id, 256);
+  if (!itemId) return null;
+
+  const action = item.action && typeof item.action === "object" ? item.action : null;
+  const rawActionType = typeof action?.type === "string" ? action.type : "";
+  let actionType = "other";
+  if (rawActionType === "search") actionType = "search";
+  else if (rawActionType === "openPage" || rawActionType === "open_page") actionType = "open_page";
+  else if (rawActionType === "findInPage" || rawActionType === "find_in_page") actionType = "find_in_page";
+
+  const seenQueries = new Set();
+  const queries = [];
+  const addQuery = (candidate) => {
+    const clipped = clipBoundedString(candidate, MAX_SEARCH_TEXT_CHARS);
+    if (!clipped || seenQueries.has(clipped) || queries.length >= MAX_SEARCH_QUERIES) return;
+    seenQueries.add(clipped);
+    queries.push(clipped);
+  };
+
+  const seenSources = new Map();
+  const addSource = (rawUrl, title) => {
+    const safe = sanitizeWebSearchUrl(rawUrl);
+    if (!safe) return;
+    const existing = seenSources.get(safe.url);
+    if (existing) {
+      if (!existing.title && title) existing.title = title;
+      return;
+    }
+    if (seenSources.size >= MAX_SEARCH_SOURCES) return;
+    seenSources.set(safe.url, {
+      url: safe.url,
+      ...(safe.host ? { host: safe.host } : {}),
+      ...(title ? { title } : {}),
+    });
+  };
+
+  let query = clipBoundedString(item.query, MAX_SEARCH_TEXT_CHARS) || "";
+  let pattern;
+
+  if (actionType === "search") {
+    const actionQuery = clipBoundedString(action?.query, MAX_SEARCH_TEXT_CHARS);
+    if (actionQuery) {
+      if (!query) query = actionQuery;
+      addQuery(actionQuery);
+    }
+    if (Array.isArray(action?.queries)) {
+      for (const q of action.queries) addQuery(q);
+    }
+    if (query) addQuery(query);
+    if (!query && queries.length > 0) query = queries[0];
+    collectSourcesFromList(action?.sources, addSource);
+  } else if (actionType === "open_page") {
+    const targetUrl = clipBoundedString(action?.url, MAX_SEARCH_URL_CHARS) || query;
+    if (targetUrl) addSource(targetUrl);
+    if (!query && targetUrl) query = clipBoundedString(targetUrl, MAX_SEARCH_TEXT_CHARS) || "";
+  } else if (actionType === "find_in_page") {
+    const targetUrl = clipBoundedString(action?.url, MAX_SEARCH_URL_CHARS);
+    if (targetUrl) addSource(targetUrl);
+    const clippedPattern = clipBoundedString(action?.pattern, MAX_SEARCH_TITLE_CHARS);
+    if (clippedPattern) pattern = clippedPattern;
+    if (!query && clippedPattern) query = clippedPattern;
+  }
+
+  collectSourcesFromList(item.results, addSource);
+
+  return {
+    itemId,
+    payload: {
+      status,
+      actionType,
+      query,
+      queries,
+      ...(pattern ? { pattern } : {}),
+      sources: [...seenSources.values()],
+    },
+  };
+}
 
 function nativeSessionReady(version, model) {
   return isNativeVersionVerified(version) && NATIVE_MODELS.includes(model);
@@ -88,6 +213,7 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
   let terminal = null;
   let cancelled = false;
   let chars = 0;
+  let searchEventCount = 0;
   let phase = "initialize";
   const pending = new Set();
   const decoder = new StringDecoder("utf8");
@@ -142,7 +268,7 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       // Empty table overrides can merge with inherited system configuration.
       // Inspect the effective configuration before opening any native thread.
       if (!config || featureNames.some(name => config.features?.[name] !== false) ||
-          config.web_search !== "disabled" || config.project_doc_max_bytes !== 0 || config.include_environment_context !== false ||
+          config.web_search !== "live" || config.project_doc_max_bytes !== 0 || config.include_environment_context !== false ||
           config.model_catalog_json !== catalogFile ||
           [config.mcp_servers, config.plugins, config.hooks, config.skills, config.notify].some(value => value && Object.keys(value).length > 0) ||
           config.model_instructions_file || config.instructions || config.developer_instructions) {
@@ -186,7 +312,24 @@ function createNativeSessionParser({ model, prompt, instructions, threadId, cwd,
       events.push({ type: "text-delta", delta });
     } else if (m.method === "item/started" || m.method === "item/completed") {
       const item = m.params?.item;
-      if (item && !["userMessage", "agentMessage", "reasoning"].includes(item.type)) { fail("NATIVE_UNEXPECTED_TOOL"); return; }
+      if (item && !["userMessage", "agentMessage", "reasoning", "webSearch"].includes(item.type)) { fail("NATIVE_UNEXPECTED_TOOL"); return; }
+      if (item?.type === "webSearch") {
+        if (cancelled) return;
+        const normalized = normalizeWebSearchItem(item, m.method === "item/completed" ? "completed" : "started");
+        if (!normalized) { fail("NATIVE_PROTOCOL_ERROR"); return; }
+        searchEventCount += 1;
+        if (searchEventCount > MAX_SEARCH_EVENTS_PER_TURN) { fail("NATIVE_PROTOCOL_ERROR"); return; }
+        events.push({
+          type: "native-event",
+          version: 1,
+          kind: "search",
+          nativeSessionId: sessionId,
+          nativeTurnId: turnId,
+          itemId: normalized.itemId,
+          occurredAt: new Date().toISOString(),
+          payload: normalized.payload,
+        });
+      }
       if (m.method === "item/completed" && item?.type === "agentMessage") final.set(item.id, item.text || "");
     } else if (m.method === "turn/completed") {
       if (cancelled || m.params?.turn?.status === "interrupted") { fail("NATIVE_CANCELLED"); return; }
@@ -238,4 +381,4 @@ async function runNativeSession({ allowedVersions, expectedVersion, invocation, 
   } finally { clearTimeout(grace); signal?.removeEventListener("abort", abort); }
 }
 
-module.exports = { NATIVE_VERIFIED_VERSIONS, isNativeVersionVerified, reportedCodexVersion, NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, nativeSessionReady, createNativeSessionParser, runNativeSession };
+module.exports = { NATIVE_VERIFIED_VERSIONS, isNativeVersionVerified, reportedCodexVersion, NATIVE_VERSION, NATIVE_MODELS, NATIVE_CONFIG, NATIVE_CONFIG_HASH, NATIVE_CATALOG, nativeSessionReady, sanitizeWebSearchUrl, normalizeWebSearchItem, createNativeSessionParser, runNativeSession };

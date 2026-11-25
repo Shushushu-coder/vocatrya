@@ -4,7 +4,7 @@ import {EventEmitter} from 'node:events';
 import nativeModule from './native-session.js';
 const {createNativeSessionParser,nativeSessionReady,NATIVE_CONFIG,NATIVE_CATALOG,NATIVE_VERIFIED_VERSIONS,NATIVE_VERSION,reportedCodexVersion}=nativeModule;
 const HS={id:1,result:{userAgent:'vocatrya-native/0.169.0 (Windows 10.0; x86_64) unknown (vocatrya-native; 1)'}};
-function safeConfig(){return {web_search:'disabled',project_doc_max_bytes:0,include_environment_context:false,features:Object.fromEntries(Object.entries(NATIVE_CONFIG).filter(([k])=>k.startsWith('features.')).map(([k,v])=>[k.slice(9),v]))};}
+function safeConfig(){return {web_search:'live',project_doc_max_bytes:0,include_environment_context:false,features:Object.fromEntries(Object.entries(NATIVE_CONFIG).filter(([k])=>k.startsWith('features.')).map(([k,v])=>[k.slice(9),v]))};}
 function h(threadId,expectedVersion){const writes=[];const stdin=new EventEmitter();stdin.write=s=>writes.push(JSON.parse(s));stdin.end=()=>{};const parser=createNativeSessionParser({model:'gpt-6.1-sol',prompt:'user input',instructions:'career only',threadId,cwd:'C:\\managed\\work',profileDir:'C:\\managed\\profile',expectedVersion});parser.attach(stdin);return {parser,writes,stdin,push:m=>{const events=parser.push(Buffer.from(JSON.stringify(m)+'\n'));if(m.id===1){events.push(...parser.push(Buffer.from(JSON.stringify({id:5,result:{config:safeConfig()}})+'\n')));writes.splice(2,1);}return events;}};}
 function opened(threadId){const x=h(threadId);x.push(HS);x.push({id:2,result:{thread:{id:threadId||'thread-A'},model:'gpt-6.1-sol'}});return x;}
 function active(){const x=opened();x.push({id:3,result:{turn:{id:'turn-A'}}});return x;}
@@ -27,7 +27,68 @@ test('cancel interrupts owned turn and ignores late text',()=>{const x=active();
 test('text reconciliation does not accept truncated deltas',()=>{const x=active();x.push(note('item/agentMessage/delta',{itemId:'m',delta:'a'}));x.push(note('item/completed',{item:{id:'m',type:'agentMessage',text:'ab'}}));x.push(note('turn/completed',{turn:{id:'turn-A',status:'completed'}}));assert.equal(x.parser.result().ok,false);});
 test('outside instruction files block dispatch',()=>{const x=h();x.push(HS);x.push({id:2,result:{thread:{id:'thread-A'},instructionSources:[{path:'C:\\Users\\someone\\AGENTS.md'}]}});assert.equal(x.parser.result().code,'NATIVE_BOUNDARY_NOT_READY');assert.equal(x.writes.some(w=>w.method==='turn/start'),false);});
 test('malformed protocol and oversized lines fail closed',()=>{const x=h();x.parser.push(Buffer.from('{bad}\n'));assert.equal(x.parser.result().ok,false);const y=h();y.parser.push(Buffer.alloc(600000,65));assert.equal(y.parser.result().ok,false);});
-test('permission config and frozen catalog do not expose tools',()=>{assert.equal(NATIVE_CONFIG.web_search,'disabled');assert.equal(NATIVE_CONFIG['features.shell_tool'],false);assert(NATIVE_CATALOG.models.every(m=>m.shell_type==='disabled'&&m.apply_patch_tool_type===null&&m.experimental_supported_tools.length===0));assert.equal(nativeSessionReady('0.169.0','gpt-6.1-sol'),true);assert.equal(nativeSessionReady('0.165.0','gpt-6.1-sol'),false);assert.equal(nativeSessionReady('0.169.0','unverified'),false);});
+test('permission config and frozen catalog expose live web_search only and keep other tools off',()=>{assert.equal(NATIVE_CONFIG.web_search,'live');assert.equal(NATIVE_CONFIG['features.shell_tool'],false);assert(NATIVE_CATALOG.models.every(m=>m.supports_search_tool===true&&m.shell_type==='disabled'&&m.apply_patch_tool_type===null&&m.experimental_supported_tools.length===0));assert.equal(nativeSessionReady('0.169.0','gpt-6.1-sol'),true);assert.equal(nativeSessionReady('0.165.0','gpt-6.1-sol'),false);assert.equal(nativeSessionReady('0.169.0','unverified'),false);});
+
+test('webSearch items emit normalized neutral search events and filter unsafe URLs',()=>{
+  const x=active();
+  const started=x.push(note('item/started',{item:{id:'ws-1',type:'webSearch',query:'engineer roles',action:{type:'search',query:'engineer roles',queries:null},results:null}}));
+  assert.equal(started.length,1);
+  assert.deepEqual(started[0],{type:'native-event',version:1,kind:'search',nativeSessionId:'thread-A',nativeTurnId:'turn-A',itemId:'ws-1',occurredAt:started[0].occurredAt,payload:{status:'started',actionType:'search',query:'engineer roles',queries:['engineer roles'],sources:[]}});
+  const completed=x.push(note('item/completed',{item:{id:'ws-1',type:'webSearch',query:'engineer roles',action:{type:'search',query:'engineer roles',queries:['engineer roles','engineer jobs'],sources:[{url:'https://example.com/jobs',title:'Example Jobs'},{url:'javascript:alert(1)',title:'XSS'},{url:'https://user:pass@evil.test/secret'}]},results:[{url:'https://example.com/jobs',title:'Example Jobs'},{url:'file:///C:/secrets.db',title:'Local'}]}}));
+  assert.equal(completed.length,1);
+  assert.equal(completed[0].payload.status,'completed');
+  assert.deepEqual(completed[0].payload.queries,['engineer roles','engineer jobs']);
+  assert.deepEqual(completed[0].payload.sources,[{url:'https://example.com/jobs',host:'example.com',title:'Example Jobs'}]);
+  const open=x.push(note('item/completed',{item:{id:'ws-2',type:'webSearch',query:'https://docs.example.org/guide',action:{type:'openPage',url:'https://docs.example.org/guide'},results:null}}));
+  assert.equal(open[0].payload.actionType,'open_page');
+  assert.deepEqual(open[0].payload.sources,[{url:'https://docs.example.org/guide',host:'docs.example.org'}]);
+  const find=x.push(note('item/completed',{item:{id:'ws-3',type:'webSearch',query:"'salary' in https://docs.example.org/guide",action:{type:'findInPage',url:'https://docs.example.org/guide',pattern:'salary'},results:null}}));
+  assert.equal(find[0].payload.actionType,'find_in_page');
+  assert.equal(find[0].payload.pattern,'salary');
+  answer(x);
+  assert.deepEqual(x.parser.result(),{ok:true,text:'answer',threadId:'thread-A'});
+});
+
+test('prose claiming search occurred without webSearch item emits no search event',()=>{
+  const x=active();
+  const events=x.push(note('item/agentMessage/delta',{itemId:'m',delta:'我已经搜索了 https://example.com'}));
+  assert.equal(events.some(e=>e.type==='native-event'),false);
+  x.push(note('item/completed',{item:{id:'m',type:'agentMessage',text:'我已经搜索了 https://example.com'}}));
+  x.push(note('turn/completed',{turn:{id:'turn-A',status:'completed'}}));
+  assert.equal(x.parser.result().ok,true);
+});
+
+test('unapproved tool items and disabled web_search config fail closed',()=>{
+  for (const type of ['fileChange','mcpToolCall','dynamicToolCall','imageView']) {
+    const x=active();
+    x.push(note('item/started',{item:{id:'bad-1',type}}));
+    assert.equal(x.parser.result().code,'NATIVE_UNEXPECTED_TOOL');
+  }
+  const y=h();
+  y.parser.push(Buffer.from(JSON.stringify(HS)+'\n'));
+  y.push({id:5,result:{config:{...safeConfig(),web_search:'disabled'}}});
+  assert.equal(y.parser.result().code,'NATIVE_BOUNDARY_NOT_READY');
+  assert.equal(y.writes.some(w=>w.method==='thread/start'),false);
+});
+
+test('resumed thread preserves thread identity across turns with webSearch',()=>{
+  const x=opened('saved-thread');
+  x.push({id:3,result:{turn:{id:'turn-2'}}});
+  const ev=x.push(note('item/completed',{threadId:'saved-thread',turnId:'turn-2',item:{id:'ws-r',type:'webSearch',query:'resume test',action:{type:'openPage',url:'https://example.org/'},results:null}}));
+  assert.equal(ev[0].nativeSessionId,'saved-thread');
+  x.push(note('item/agentMessage/delta',{threadId:'saved-thread',turnId:'turn-2',itemId:'m2',delta:'resumed'}));
+  x.push(note('item/completed',{threadId:'saved-thread',turnId:'turn-2',item:{id:'m2',type:'agentMessage',text:'resumed'}}));
+  x.push(note('turn/completed',{threadId:'saved-thread',turnId:'turn-2',turn:{id:'turn-2',status:'completed'}}));
+  assert.deepEqual(x.parser.result(),{ok:true,text:'resumed',threadId:'saved-thread'});
+});
+
+test('late webSearch items after interrupt are ignored',()=>{
+  const x=active();
+  x.parser.interrupt();
+  assert.equal(x.push(note('item/started',{item:{id:'ws-late',type:'webSearch',query:'late',action:{type:'search',query:'late',queries:null},results:null}})).length,0);
+  x.push(note('turn/completed',{turn:{id:'turn-A',status:'interrupted'}}));
+  assert.equal(x.parser.result().code,'NATIVE_CANCELLED');
+});
 
 test('inherited MCP config fails before opening thread',()=>{const x=h();x.parser.push(Buffer.from(JSON.stringify(HS)+'\n'));const config={...safeConfig(),mcp_servers:{external:{command:'unexpected'}}};x.push({id:5,result:{config}});assert.equal(x.parser.result().code,'NATIVE_BOUNDARY_NOT_READY');assert.equal(x.writes.some(w=>w.method==='thread/start'),false);});
 test('verified list gates readiness; the newest entry is the install target',()=>{assert.equal(NATIVE_VERSION,NATIVE_VERIFIED_VERSIONS.at(-1));assert(NATIVE_VERIFIED_VERSIONS.length>0&&new Set(NATIVE_VERIFIED_VERSIONS).size===NATIVE_VERIFIED_VERSIONS.length);for(const v of NATIVE_VERIFIED_VERSIONS)assert.equal(nativeSessionReady(v,'gpt-6.1-sol'),true);for(const v of ['0.0.1','0.169.00','9.9.9','',null,undefined,'0.169.0-beta'])assert.equal(nativeSessionReady(v,'gpt-6.1-sol'),false);});

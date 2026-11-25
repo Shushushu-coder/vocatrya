@@ -29,5 +29,22 @@ it("exposes the permission comparison on hover as well as keyboard focus", async
   render(<AgentPreferencesSettings />);
   await waitFor(() => expect(screen.getByRole("button", { name: "保存偏好" })).toBeEnabled());
   fireEvent.mouseEnter(screen.getByRole("button", { name: "权限模式说明" }));
-  expect(await screen.findByRole("table", { name: "业务工具的三档权限" })).toBeInTheDocument();
+  const table = await screen.findByRole("table", { name: "业务工具的三档权限" });
+  expect(table).toBeInTheDocument();
+  expect(table).toHaveTextContent("帮我审批（推荐）");
+  expect(table).toHaveTextContent("完全访问（不推荐）");
+  expect(table).toHaveTextContent("本机系统级风险由用户自担");
+});
+it("keeps approve-by-rules as recommended default and shows explicit risk warning when full access is chosen", async () => {
+  render(<AgentPreferencesSettings />);
+  const select = screen.getByLabelText("默认权限") as HTMLSelectElement;
+  await waitFor(() => expect(select).toBeEnabled());
+  expect(select.value).toBe("rules");
+  expect(screen.getByRole("option", { name: "帮我审批（推荐）" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "完全访问（不推荐）" })).toBeInTheDocument();
+  expect(screen.queryByTestId("full-access-risk-warning")).not.toBeInTheDocument();
+  fireEvent.change(select, { target: { value: "full" } });
+  const warning = screen.getByTestId("full-access-risk-warning");
+  expect(warning).toHaveTextContent("不推荐使用「完全访问」");
+  expect(warning).toHaveTextContent("由用户自担");
 });
