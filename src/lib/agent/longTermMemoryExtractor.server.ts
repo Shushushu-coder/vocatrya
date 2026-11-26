@@ -2,18 +2,21 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { ManagedAiProvenanceV1 } from "@/lib/ai/managed-provenance";
 import { decodeManagedAiProvenance } from "@/lib/ai/managed-provenance";
-import { AIBusinessError } from "@/lib/ai/connections";
+import { AIBusinessError, classifyAIConnection } from "@/lib/ai/connections";
 import { AI_EXECUTION_DEFAULT_TIMEOUT_MS, executeAIConnectionText } from "@/lib/ai/execution";
 import { log } from "@/lib/telemetry";
 import prisma from "@/lib/db";
 import { loadAgentPreferences } from "./preferences.server";
-import { upsertUserMemoryEntry } from "./longTermMemory.server";
+import { applyMemoryCurationAction } from "./longTermMemory.server";
 import {
   buildMemoryExtractionPrompt,
+  classifyMemorySignalDelta,
+  collectApprovalSignalLines,
   extractMemorySourceText,
-  longTermMemoryPrefilter,
+  formatExistingMemoryForPrompt,
   parseMemoryCandidates,
-  sanitizeMemoryCandidate,
+  sanitizeMemoryAction,
+  type MemoryCurationAction,
 } from "./longTermMemory";
 import {
   conversationSummaryBackoffElapsed,
@@ -33,6 +36,13 @@ export type MemoryExtractionConversation = {
   resolvedConnectionId: string | null;
   resolvedModel: string | null;
   managedAiProvenance: string | null;
+  /**
+   * Identity class of the conversation's resolved connection (null when
+   * the row is gone). The account-attribution gate reads this: provenance-
+   * free sessions (ACCOUNT_LOGIN / native seats / unclassified) must stay
+   * inside their own connection — no cross-account slot ever applies.
+   */
+  connectionClass: "MANAGED" | "BYOK" | "ACCOUNT_LOGIN" | "INVALID" | null;
   messages: unknown;
 };
 
@@ -41,13 +51,20 @@ export type MemoryExtractionStore = {
     userId: string,
     conversationId: string,
   ): Promise<MemoryExtractionConversation | null>;
-  upsert(input: {
+  /** Current memory rows for the state-aware curation prompt. */
+  listEntries(
+    userId: string,
+  ): Promise<Array<{ category: string; key: string; content: string; source: string }>>;
+  /**
+   * Apply one curator action. The store enforces the lock contract —
+   * USER_MANUAL rows are never touched — and reports whether the action
+   * landed (a "locked"/"missing" refusal is a valid outcome, not an error).
+   */
+  applyAction(input: {
     userId: string;
-    category: string;
-    key: string;
-    content: string;
+    action: MemoryCurationAction;
     sourceConversationId?: string | null;
-  }): Promise<unknown>;
+  }): Promise<{ applied: boolean }>;
   memoryEnabled(userId: string): Promise<boolean>;
 };
 
@@ -64,18 +81,42 @@ export type MemoryExtractionDeps = {
     operationId?: string;
     attemptIndex?: number;
   }) => Promise<{ text: string }>;
+  /** Weak-signal events accumulated before the gate fires (default 3). */
+  weakTurnThreshold?: number;
+  /** Idle debounce before pending weak signals fire (default 90s). */
+  weakDebounceMs?: number;
 };
 
 /** Single-flight + consecutive-failure state, per conversation. */
 const inFlight = new Map<string, Promise<void>>();
 const failureState = new Map<string, { failures: number; lastFailureAt: number | null }>();
 
+/**
+ * M2.1 tiered-gate state, per conversation. `throughCount` is the count of
+ * stored messages the gate already classified — the delta beyond it is
+ * what each post-turn schedule evaluates. `weakTurns` accumulates weak
+ * events until the multi-turn threshold fires; `timer` is the idle
+ * debounce that fires them when the conversation has been quiet.
+ * In-memory only — like the L2 scheduler's compaction state it is
+ * best-effort learning, not business state; a restart just relearns.
+ */
+const signalGateState = new Map<
+  string,
+  { throughCount: number; weakTurns: number; timer?: ReturnType<typeof setTimeout> }
+>();
+
 export function resetLongTermMemoryExtractionForTests(): void {
   inFlight.clear();
   failureState.clear();
+  for (const state of signalGateState.values()) {
+    if (state.timer) clearTimeout(state.timer);
+  }
+  signalGateState.clear();
 }
 
 const MAX_EXTRACTION_CANDIDATES = 8;
+export const WEAK_SIGNAL_TURN_THRESHOLD = 3;
+export const WEAK_SIGNAL_DEBOUNCE_MS = 90_000;
 
 function failureKey(userId: string, conversationId: string): string {
   return `${userId}:${conversationId}`;
@@ -90,18 +131,66 @@ function recordFailure(key: string, now: number): number {
 }
 
 /**
+ * Unified-chat Router lightweight-model seam — pending dependency.
+ *
+ * The 智能调度 lightweight slot config does not exist in this codebase
+ * yet (the unified-chat model configuration is a frozen pending
+ * surface); when it lands, return the slot's own {connectionId, model,
+ * managedAiProvenance} so billing/provenance stay honest — a BYOK slot
+ * returns provenance null. Until then managed/BYOK extraction falls back
+ * to the conversation's resolved connection/model per the existing
+ * contract.
+ */
+function resolveRouterExtractionSlot(
+  _snapshot: MemoryExtractionConversation,
+): { connectionId: string; model: string; managedAiProvenance: ManagedAiProvenanceV1 | null } | null {
+  return null;
+}
+
+/**
+ * In-account target resolution. Two tiers only:
+ * - Account-bound sessions (no managed provenance — ACCOUNT_LOGIN
+ *   connections, native Codex seats, unclassified/invalid rows) always
+ *   execute on the connection/model the conversation itself resolved.
+ *   An independent account session must never silently spend another
+ *   configured connection's quota, so no cross-connection slot exists
+ *   for them.
+ * - MANAGED and BYOK may prefer the Router lightweight slot once that
+ *   configuration exists; absent it, the conversation-bound lock is the
+ *   contract fallback.
+ */
+function resolveMemoryExtractionTarget(snapshot: MemoryExtractionConversation): {
+  connectionId: string;
+  model: string;
+  managedAiProvenance: ManagedAiProvenanceV1 | null;
+} {
+  const provenance = decodeManagedAiProvenance(snapshot.managedAiProvenance);
+  const lock = {
+    connectionId: snapshot.resolvedConnectionId!,
+    model: snapshot.resolvedModel!,
+    managedAiProvenance: provenance,
+  };
+  const accountBound = provenance === null && snapshot.connectionClass !== "BYOK";
+  if (accountBound) return lock;
+  return resolveRouterExtractionSlot(snapshot) ?? lock;
+}
+
+/**
  * Post-turn entry point — synchronous gate, detached work. Never throws,
  * never blocks the streaming response; a dropped extraction only delays
- * memory learning, never breaks a turn.
+ * memory learning, never breaks a turn. `forced` is internal: the idle-
+ * debounce timer re-enters through the same single-flight with the weak-
+ * signal classification bypassed.
  */
 export function scheduleLongTermMemoryExtraction(
   input: { userId: string; conversationId: string },
   deps: MemoryExtractionDeps = defaultMemoryExtractionDeps(),
+  options: { forced?: boolean } = {},
 ): { opened: boolean } {
   const key = failureKey(input.userId, input.conversationId);
   if (inFlight.has(key)) return { opened: false };
   const promise = Promise.resolve()
-    .then(() => runLongTermMemoryExtraction(input, deps))
+    .then(() => runLongTermMemoryExtraction(input, deps, options.forced === true))
     .then(
       () => undefined,
       () => undefined,
@@ -116,6 +205,7 @@ export function scheduleLongTermMemoryExtraction(
 async function runLongTermMemoryExtraction(
   input: { userId: string; conversationId: string },
   deps: MemoryExtractionDeps,
+  forced: boolean,
 ): Promise<MemoryExtractionResult> {
   const key = failureKey(input.userId, input.conversationId);
   const finish = (result: MemoryExtractionResult) => {
@@ -124,6 +214,26 @@ async function runLongTermMemoryExtraction(
     }
     return result;
   };
+  const gate = signalGateState.get(key) ?? { throughCount: 0, weakTurns: 0 };
+  signalGateState.set(key, gate);
+  const armIdleTimer = (): void => {
+    if (gate.timer) clearTimeout(gate.timer);
+    gate.timer = setTimeout(() => {
+      gate.timer = undefined;
+      scheduleLongTermMemoryExtraction(input, deps, { forced: true });
+    }, deps.weakDebounceMs ?? WEAK_SIGNAL_DEBOUNCE_MS);
+    gate.timer.unref?.();
+  };
+  const disarmIdleTimer = (): void => {
+    if (gate.timer) {
+      clearTimeout(gate.timer);
+      gate.timer = undefined;
+    }
+  };
+  // Assigned once the run's delta is classified; a failure that reaches
+  // the outer catch after consumption rolls it back so the next schedule
+  // re-classifies the same signals instead of silently dropping them.
+  let rollbackDelta: (() => void) | null = null;
   try {
     if (!(await deps.store.memoryEnabled(input.userId))) {
       return finish({ status: "skipped", reason: "disabled" });
@@ -135,12 +245,61 @@ async function runLongTermMemoryExtraction(
       return finish({ status: "skipped", reason: "legacy" });
     }
 
-    const messages = Array.isArray(snapshot.messages) ? snapshot.messages : [];
-    const transcript = extractMemorySourceText(
-      messages as ReadonlyArray<{ role?: string; parts?: Array<{ type?: string; text?: string }> }>,
-    );
-    // Zero-cost local prefilter: ordinary small talk never reaches a model.
-    if (!transcript || !longTermMemoryPrefilter(transcript)) {
+    const messages = Array.isArray(snapshot.messages)
+      ? (snapshot.messages as ReadonlyArray<{
+          role?: string;
+          parts?: Array<{ type?: string; text?: string; approval?: { approved?: boolean; reason?: string } | null }>;
+        }>)
+      : [];
+
+    // Delta classification — throughCount advances only when the delta is
+    // actually consumed: either deferred (weak/none waits for the idle
+    // debounce) or attempted. A backoff/circuit skip or a failed call must
+    // never strand a strong signal behind an already-advanced counter.
+    const delta = messages.slice(Math.min(gate.throughCount, messages.length));
+    const { signal, weakTurns: deltaWeakTurns } = classifyMemorySignalDelta(delta);
+    const weakAfter = signal === "weak" ? gate.weakTurns + deltaWeakTurns : gate.weakTurns;
+    let consumed = false;
+    const consumeDelta = (): void => {
+      consumed = true;
+      gate.throughCount = messages.length;
+      gate.weakTurns = weakAfter;
+    };
+    rollbackDelta = (): void => {
+      if (!consumed) return;
+      consumed = false;
+      gate.throughCount = Math.max(0, gate.throughCount - delta.length);
+      if (signal === "weak") {
+        gate.weakTurns = Math.max(0, gate.weakTurns - deltaWeakTurns);
+      }
+    };
+
+    if (
+      !forced &&
+      signal !== "strong" &&
+      weakAfter < (deps.weakTurnThreshold ?? WEAK_SIGNAL_TURN_THRESHOLD)
+    ) {
+      // Below-threshold weak evidence (or none) waits for the idle
+      // debounce — while pending events exist the timer refreshes on
+      // every quiet turn, so extraction fires once the conversation
+      // has actually been idle for weakDebounceMs.
+      consumeDelta();
+      if (gate.weakTurns > 0) armIdleTimer();
+      return finish({
+        status: "skipped",
+        reason: signal === "none" ? "no_signal" : "weak_debounce",
+      });
+    }
+    // Proceeding to extraction: the idle timer has served its purpose.
+    disarmIdleTimer();
+
+    const transcript = extractMemorySourceText(messages);
+    const approvalSignals = collectApprovalSignalLines(messages.slice(-12));
+    // A reasoned rejection can be the whole signal: even with no
+    // user→assistant text on record, the approval reasons themselves are
+    // the curation input and must not strand the turn at no_signal.
+    if (!transcript && approvalSignals.length === 0) {
+      consumeDelta();
       return finish({ status: "skipped", reason: "no_signal" });
     }
 
@@ -162,20 +321,27 @@ async function runLongTermMemoryExtraction(
     ) {
       return finish({ status: "skipped", reason: "backoff", failureCount: state.failures });
     }
+    consumeDelta();
 
     const transcriptHash = createHash("sha256").update(transcript).digest("hex").slice(0, 16);
-    const provenance = decodeManagedAiProvenance(snapshot.managedAiProvenance);
+    const target = resolveMemoryExtractionTarget(snapshot);
+    const existingMemory = formatExistingMemoryForPrompt(await deps.store.listEntries(input.userId));
+    const prompt = buildMemoryExtractionPrompt({
+      transcript: transcript || "(无对话文本 —— 仅依据下方纠偏信号抽取)",
+      existingMemory,
+      approvalSignals,
+    });
 
     let raw = "";
     try {
       const executed = await deps.executeText({
         userId: input.userId,
-        connectionId: snapshot.resolvedConnectionId,
-        model: snapshot.resolvedModel,
-        prompt: buildMemoryExtractionPrompt(transcript),
-        ...(provenance
+        connectionId: target.connectionId,
+        model: target.model,
+        prompt,
+        ...(target.managedAiProvenance
           ? {
-              managedAiProvenance: provenance,
+              managedAiProvenance: target.managedAiProvenance,
               managedResource: {
                 business: "CAREER_DIALOGUE",
                 resourceKey: `conversation:${input.conversationId}`,
@@ -189,6 +355,7 @@ async function runLongTermMemoryExtraction(
       });
       raw = executed.text ?? "";
     } catch (error) {
+      rollbackDelta?.();
       const failureCount = recordFailure(key, deps.now());
       return finish({
         status: "failed",
@@ -198,34 +365,33 @@ async function runLongTermMemoryExtraction(
       });
     }
 
-    const candidates = parseMemoryCandidates(raw).slice(0, MAX_EXTRACTION_CANDIDATES);
-    // Deterministic re-validation: extractor output is untrusted input.
-    const valid = candidates
-      .map((candidate) => sanitizeMemoryCandidate(candidate))
-      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+    const actions = parseMemoryCandidates(raw)
+      .slice(0, MAX_EXTRACTION_CANDIDATES)
+      .map(sanitizeMemoryAction)
+      .filter((action): action is MemoryCurationAction => action !== null);
 
     let written = 0;
-    for (const candidate of valid) {
+    for (const action of actions) {
       try {
-        await deps.store.upsert({
+        const outcome = await deps.store.applyAction({
           userId: input.userId,
-          category: candidate.category,
-          key: candidate.key,
-          content: candidate.content,
+          action,
           sourceConversationId: input.conversationId,
         });
-        written += 1;
+        if (outcome.applied) written += 1;
       } catch {
-        // One bad candidate must not poison the rest of the batch.
+        // One bad action must not poison the rest of the batch.
       }
     }
 
-    // Successful extraction clears the failure streak even when the model
-    // found nothing worth remembering — an empty result is a valid answer.
+    // Successful extraction clears the failure streak and the accumulated
+    // weak-signal count — an empty result is a valid answer too.
     failureState.delete(key);
+    gate.weakTurns = 0;
     log.info("[agent-chat] memory", { memoryStatus: "committed", extractedCount: written });
     return finish({ status: "committed", reason: "extracted", extractedCount: written });
   } catch (error) {
+    rollbackDelta?.();
     if (error instanceof AIBusinessError) {
       const failureCount = recordFailure(key, deps.now());
       return finish({
@@ -256,6 +422,21 @@ export function defaultMemoryExtractionDeps(): MemoryExtractionDeps {
           },
         });
         if (!row) return null;
+        let connectionClass: MemoryExtractionConversation["connectionClass"] = null;
+        if (row.resolvedConnectionId) {
+          const connection = await prisma.aIConnection.findFirst({
+            where: { id: row.resolvedConnectionId, userId },
+            select: {
+              provider: true,
+              backendKind: true,
+              authType: true,
+              credentialRef: true,
+              runtimeProfileRef: true,
+              accountIdentity: true,
+            },
+          });
+          if (connection) connectionClass = classifyAIConnection(connection);
+        }
         let messages: unknown = [];
         try {
           messages = JSON.parse(row.messages);
@@ -267,10 +448,17 @@ export function defaultMemoryExtractionDeps(): MemoryExtractionDeps {
           resolvedConnectionId: row.resolvedConnectionId,
           resolvedModel: row.resolvedModel,
           managedAiProvenance: row.managedAiProvenance,
+          connectionClass,
           messages,
         };
       },
-      upsert: (input) => upsertUserMemoryEntry(input),
+      listEntries: async (userId) =>
+        prisma.userMemoryEntry.findMany({
+          where: { userId },
+          select: { category: true, key: true, content: true, source: true },
+          orderBy: [{ category: "asc" }, { key: "asc" }],
+        }),
+      applyAction: (input) => applyMemoryCurationAction(input),
       memoryEnabled: async (userId) =>
         (await loadAgentPreferences(userId)).longTermMemoryEnabled,
     },

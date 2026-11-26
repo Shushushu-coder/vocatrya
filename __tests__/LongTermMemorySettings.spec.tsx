@@ -43,6 +43,7 @@ const entry = (over: Partial<Record<string, unknown>> = {}) => ({
   category: "career_goal",
   key: "target_cities",
   content: "上海、杭州",
+  source: "USER_MANUAL",
   sourceConversationId: null,
   createdAt: "2026-11-20T00:00:00.000Z",
   updatedAt: "2026-11-24T00:00:00.000Z",
@@ -120,6 +121,17 @@ it("requires a second click before clearing everything", async () => {
   expect(mocks.clear).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: /确认清空/ }));
   await waitFor(() => expect(mocks.clear).toHaveBeenCalledTimes(1));
+});
+
+it("shows a provenance badge — hand-written rows are locked, AI rows are not", async () => {
+  mocks.list.mockResolvedValue([
+    entry({ id: "mem-manual", source: "USER_MANUAL" }),
+    entry({ id: "mem-ai", source: "AI_EXTRACTED", key: "salary_floor", content: "30k" }),
+  ]);
+  render(<LongTermMemorySettings />);
+  await screen.findByText("上海、杭州");
+  expect(screen.getByTestId("memory-source-mem-manual")).toHaveTextContent("手写 · 已锁定");
+  expect(screen.getByTestId("memory-source-mem-ai")).toHaveTextContent("自动沉淀");
 });
 
 it("renders the English labels when the locale is en", async () => {

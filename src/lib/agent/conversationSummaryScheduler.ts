@@ -37,6 +37,7 @@ import {
   createPrismaSummaryRepository,
   type SummaryRepository,
 } from "./conversationSummaryStore";
+import { refreshManagedMemoryBlockForConversation } from "./longTermMemory.server";
 
 export type SummaryTaskResult = {
   status: "skipped" | "committed" | "discarded" | "failed";
@@ -67,6 +68,13 @@ export type SummarySchedulerDeps = {
   }) => Promise<{ text: string }>;
   onGenerationStart?: () => void;
   onResult?: (result: SummaryTaskResult) => void;
+  /**
+   * M2.1: a committed compaction rewrites the assembled prefix anyway —
+   * the session-frozen managed memory block re-reads the store so the
+   * post-compaction prefix stays honest. Optional + swallowed: a missed
+   * refresh leaves a slightly stale block, never a failed compaction.
+   */
+  refreshMemorySnapshot?: (input: { userId: string; conversationId: string }) => Promise<void>;
 };
 
 const inFlight = new Map<string, Promise<void>>();
@@ -503,6 +511,9 @@ export async function condenseCareerDialogueSummary(
     const outcome = await deps.repository.commit(input.userId, input.conversationId, attempt, {
       maxSummaryTokens: budgets.summaryTokens,
     });
+    if (outcome === "committed") {
+      await deps.refreshMemorySnapshot?.(input).catch(() => undefined);
+    }
     logSummary({
       summaryStatus: outcome,
       summaryCoverage: target.coveredCount,
@@ -554,6 +565,8 @@ export function defaultSummarySchedulerDeps(): SummarySchedulerDeps {
       });
       return { text: result.text };
     },
+    refreshMemorySnapshot: (input) =>
+      refreshManagedMemoryBlockForConversation(input.userId, input.conversationId),
   };
 }
 

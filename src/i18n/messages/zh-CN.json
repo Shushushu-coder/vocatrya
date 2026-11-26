@@ -2552,6 +2552,9 @@
       "notFound": "条目不存在，请刷新后重试。",
       "disabledHint": "已关闭：记忆既不注入上下文，也不会在后台学习。已有记忆保留。",
       "updatedAt": "更新于 {date}",
+      "sourceManual": "手写 · 已锁定",
+      "sourceAi": "自动沉淀",
+      "storeFull": "记忆库已满，请先删除部分条目。",
       "categories": {
         "career_goal": "求职目标",
         "industry_preference": "行业偏好",

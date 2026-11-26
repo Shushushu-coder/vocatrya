@@ -92,7 +92,9 @@ export default function LongTermMemorySettings() {
               ? label("conflict")
               : result.message === "not_found"
                 ? label("notFound")
-                : label("saveFailed"),
+                : result.message === "store_full"
+                  ? label("storeFull")
+                  : label("saveFailed"),
           );
         }
       } catch {
@@ -250,7 +252,15 @@ export default function LongTermMemorySettings() {
                       data-testid={`memory-entry-${entry.id}`}
                     >
                       <div className="min-w-0 space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">{entry.key}</p>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {entry.key}
+                          <span
+                            className="ml-2 rounded-sm border px-1 py-0.5 text-[10px] font-normal"
+                            data-testid={`memory-source-${entry.id}`}
+                          >
+                            {label(entry.source === "USER_MANUAL" ? "sourceManual" : "sourceAi")}
+                          </span>
+                        </p>
                         <p className="text-sm break-words">{entry.content}</p>
                         <p className="text-xs text-muted-foreground">
                           {label("updatedAt", { date: formatDateTime(entry.updatedAt) })}

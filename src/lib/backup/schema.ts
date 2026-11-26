@@ -12,8 +12,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 13;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
+export const BACKUP_FORMAT_VERSION = 14;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -34,6 +34,7 @@ export const ManifestSchema = z.object({
     z.literal(11),
     z.literal(12),
     z.literal(13),
+    z.literal(14),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -452,11 +453,16 @@ const AgentOperationProposal = z.object({
 // M2 cross-session memory: plaintext user preference state. Ownership is
 // stripped on export and re-injected from the session on restore; the
 // optional source conversation pointer remaps with null degradation.
+// `source` (format 14): the manual/AI provenance a row was written with.
+// Optional so pre-v14 backups still parse — the importer re-derives the
+// M2 discriminator (a sourceConversationId meant AI-extracted) instead of
+// trusting an absent or unrecognized value.
 const UserMemoryEntry = z.object({
   id,
   category: str,
   key: str,
   content: str,
+  source: optStr.optional(),
   sourceConversationId: optId,
   createdAt: dt,
   updatedAt: dt,

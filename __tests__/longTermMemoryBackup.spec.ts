@@ -39,6 +39,7 @@ beforeAll(async () => {
       category: "career_goal",
       key: "target_cities",
       content: "上海、杭州",
+      source: "AI_EXTRACTED",
       sourceConversationId: conversationId,
     },
   });
@@ -71,19 +72,24 @@ async function unzipJson(buffer: Buffer, name: string) {
 }
 
 describe("UserMemoryEntry backup", () => {
-  it("is classified as backed up and ships in the v13 format", async () => {
+  it("is classified as backed up and ships in the v14 format with provenance", async () => {
     expect(backupCoverageStatus("UserMemoryEntry")).toBe(BACKUP_COVERAGE_STATUS.BACKED_UP);
-    expect(BACKUP_FORMAT_VERSION).toBe(13);
+    expect(BACKUP_FORMAT_VERSION).toBe(14);
 
     const { buffer } = await buildBackupZip(sourceUserId, "memory-backup-src@example.com");
     const manifest = await unzipJson(buffer, "manifest.json");
     const data = await unzipJson(buffer, "data.json");
 
-    expect(manifest.formatVersion).toBe(13);
+    expect(manifest.formatVersion).toBe(14);
     expect(manifest.counts.UserMemoryEntry).toBe(2);
     expect(data.UserMemoryEntry).toHaveLength(2);
     // Ownership is stripped on export; restore re-injects it.
     expect(data.UserMemoryEntry.every((row: Record<string, unknown>) => !("userId" in row))).toBe(true);
+    // M2.1: provenance travels — the AI-extracted row carries its source.
+    const aiRow = data.UserMemoryEntry.find(
+      (row: Record<string, unknown>) => row.key === "target_cities",
+    );
+    expect(aiRow.source).toBe("AI_EXTRACTED");
   });
 
   it("restores entries re-owned to the importing user with remapped provenance", async () => {
@@ -114,6 +120,47 @@ describe("UserMemoryEntry backup", () => {
 
     // A pointer whose conversation never shipped degrades to null.
     expect(dangling.sourceConversationId).toBeNull();
+
+    // Provenance restores verbatim; the hand-written row keeps its
+    // manual side (it was seeded without an explicit source — the column
+    // default is the protected side).
+    expect(withSource.source).toBe("AI_EXTRACTED");
+    expect(dangling.source).toBe("USER_MANUAL");
+  }, 120_000);
+
+  it("re-derives provenance for pre-v14 rows whose source key is absent", async () => {
+    const { buffer } = await buildBackupZip(sourceUserId, "memory-backup-src@example.com");
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(buffer);
+    const data = JSON.parse(await zip.file("data.json")!.async("string"));
+    const manifest = JSON.parse(await zip.file("manifest.json")!.async("string"));
+    // A v13 backup has no `source` key at all — strip it (and forge an
+    // unknown value plus a null pointer on one row) so the importer must
+    // re-derive, never trust.
+    for (const row of data.UserMemoryEntry as Array<Record<string, unknown>>) {
+      if (row.key === "reply_style") {
+        row.source = "forged";
+        row.sourceConversationId = null;
+      } else {
+        delete row.source;
+      }
+    }
+    manifest.formatVersion = 13;
+    zip.file("data.json", JSON.stringify(data));
+    zip.file("manifest.json", JSON.stringify(manifest));
+    const legacy = await zip.generateAsync({ type: "nodebuffer" });
+
+    const targetUserId = await seedAccount(prisma, "memory-backup-v13@example.com");
+    await importBackup(legacy, targetUserId, "memory-backup-v13@example.com", true);
+    const restored = await prisma.userMemoryEntry.findMany({
+      where: { userId: targetUserId },
+    });
+    const aiRow = restored.find((row) => row.key === "target_cities")!;
+    // The M2 discriminator: a sourceConversationId meant AI-written.
+    expect(aiRow.source).toBe("AI_EXTRACTED");
+    // An unrecognized source can never unlock a row for future curation —
+    // it lands on the protected manual side.
+    expect(restored.find((row) => row.key === "reply_style")!.source).toBe("USER_MANUAL");
   }, 120_000);
 
   it("imports a pre-M2 (v12) backup cleanly — no memory group required", async () => {

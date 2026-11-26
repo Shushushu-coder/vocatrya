@@ -107,7 +107,7 @@ import {
 } from "@/lib/agent/task/agentTaskBootstrap";
 import { scheduleTaskHandoff } from "@/lib/agent/task/agentTaskHandoffTrigger";
 import {
-  loadLongTermMemoryLine,
+  managedMemoryBlockForConversation,
   nativeMemoryBlockForConversation,
 } from "@/lib/agent/longTermMemory.server";
 import {
@@ -402,11 +402,13 @@ async function accountChatResponse({
             // Best-effort grounding; never fail a live turn.
           }
         }
-        // M2: untrusted cross-session memory. Own budget section, not a
-        // business anchor; skipped entirely when the switch is off or the
-        // store is empty. Best-effort like the anchor — never fails a turn.
+        // M2.1: untrusted cross-session memory via the session-frozen
+        // block — background extraction must not mutate the next turn's
+        // prefix (prefix-cache protection). Refreshed only on new session,
+        // compaction commit, or user memory edits; best-effort like the
+        // anchor, never fails a turn.
         const longTermMemoryLine =
-          (await loadLongTermMemoryLine(userId).catch(() => "")) || undefined;
+          (await managedMemoryBlockForConversation(userId, conversationId).catch(() => "")) || undefined;
         const result = await runCareerDialogueTurn({
           userId,
           connectionId: connection.id,

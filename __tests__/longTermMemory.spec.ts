@@ -2,15 +2,23 @@
 import {
   LONG_TERM_MEMORY_BLOCK_TOKENS,
   USER_MEMORY_CONTENT_MAX_CHARS,
+  USER_MEMORY_CORE_CATEGORIES,
+  USER_MEMORY_CORE_CATEGORY_FLOOR,
+  buildMemoryExtractionPrompt,
+  classifyMemorySignalDelta,
+  classifyMemorySignalText,
+  collectApprovalSignalLines,
   extractMemorySourceText,
+  formatExistingMemoryForPrompt,
   longTermMemoryBlock,
   longTermMemoryPrefilter,
   normalizeMemoryKey,
   parseMemoryCandidates,
+  sanitizeMemoryAction,
   validateUserMemoryEntry,
 } from "@/lib/agent/longTermMemory";
 
-describe("longTermMemoryPrefilter (zero-cost gate)", () => {
+describe("tiered memory signals (M2.1 zero-cost gate)", () => {
   it("skips ordinary small talk without a model call", () => {
     expect(longTermMemoryPrefilter("好的，谢谢")).toBe(false);
     expect(longTermMemoryPrefilter("hi")).toBe(false);
@@ -18,14 +26,143 @@ describe("longTermMemoryPrefilter (zero-cost gate)", () => {
     expect(longTermMemoryPrefilter("")).toBe(false);
   });
 
-  it("fires on goal / boundary / style / correction signals (zh + en)", () => {
+  it("classifies corrections and hard boundaries as strong", () => {
+    expect(classifyMemorySignalText("我不考虑外包和 996 的岗位")).toBe("strong");
+    expect(classifyMemorySignalText("纠正一下，我说的是远程，不是异地")).toBe("strong");
+    expect(classifyMemorySignalText("以后都默认用中文回复我")).toBe("strong");
+    expect(classifyMemorySignalText("avoid startups, remember that")).toBe("strong");
+  });
+
+  it("classifies desire/domain vocabulary as weak, not strong", () => {
+    expect(classifyMemorySignalText("我希望找上海的工作，薪资不低于 25k")).toBe("weak");
+    expect(classifyMemorySignalText("改简历的时候请保持简洁一点")).toBe("weak");
+    expect(classifyMemorySignalText("I prefer remote roles with salary above 30k")).toBe("weak");
+    expect(classifyMemorySignalText("聊聊行业前景")).toBe("weak");
+  });
+
+  it("prefilter still treats either signal level as worth gating", () => {
     expect(longTermMemoryPrefilter("我希望找上海的工作，薪资不低于 25k")).toBe(true);
     expect(longTermMemoryPrefilter("我不考虑外包和 996 的岗位")).toBe(true);
-    expect(longTermMemoryPrefilter("改简历的时候请保持简洁一点")).toBe(true);
-    expect(longTermMemoryPrefilter("纠正一下，我说的是远程，不是异地")).toBe(true);
-    expect(longTermMemoryPrefilter("以后都默认用中文回复我")).toBe(true);
-    expect(longTermMemoryPrefilter("I prefer remote roles with salary above 30k")).toBe(true);
-    expect(longTermMemoryPrefilter("avoid startups, remember that")).toBe(true);
+  });
+});
+
+describe("classifyMemorySignalDelta + collectApprovalSignalLines", () => {
+  const user = (text: string) => ({ role: "user", parts: [{ type: "text", text }] });
+  const assistant = (text: string) => ({ role: "assistant", parts: [{ type: "text", text }] });
+  const denial = (reason?: string) => ({
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-add_job",
+        approval: { id: "ap1", approved: false, ...(reason ? { reason } : {}) },
+      },
+    ],
+  });
+
+  it("a reasoned proposal rejection is a strong revealed-preference signal", () => {
+    const delta = classifyMemorySignalDelta([denial("太远，不去外地")]);
+    expect(delta.signal).toBe("strong");
+    expect(delta.weakTurns).toBe(0);
+  });
+
+  it("a bare denial is weak evidence that counts toward aggregation", () => {
+    const delta = classifyMemorySignalDelta([denial()]);
+    expect(delta.signal).toBe("weak");
+    expect(delta.weakTurns).toBe(1);
+  });
+
+  it("weak user turns count; strong text wins over weak in the same delta", () => {
+    const weak = classifyMemorySignalDelta([user("我想看看行业趋势"), assistant("好的")]);
+    expect(weak.signal).toBe("weak");
+    expect(weak.weakTurns).toBe(1);
+    const mixed = classifyMemorySignalDelta([
+      user("我想看看行业趋势"),
+      assistant("介绍一下行业"),
+      user("说错了，我不考虑创业公司"),
+    ]);
+    expect(mixed.signal).toBe("strong");
+  });
+
+  it("collects rejection reasons for the curation prompt, newest last, capped", () => {
+    const lines = collectApprovalSignalLines([
+      denial("太远"),
+      { role: "assistant", parts: [{ type: "tool-x", approval: { approved: true } }] },
+      denial("薪资太低 " + "长".repeat(300)),
+    ]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("rejected add_job: 太远");
+    expect(lines[1].startsWith("rejected add_job: 薪资太低")).toBe(true);
+    expect(lines[1].length).toBeLessThan(230);
+    expect(collectApprovalSignalLines([])).toEqual([]);
+  });
+});
+
+describe("memory curation actions + prompt (M2.1)", () => {
+  it("sanitizes upsert/remove actions and drops unknown ones", () => {
+    expect(
+      sanitizeMemoryAction({
+        action: "upsert",
+        category: "career_goal",
+        key: "Target Cities",
+        content: " 上海 ",
+      }),
+    ).toEqual({ action: "upsert", category: "career_goal", key: "target_cities", content: "上海" });
+    expect(
+      sanitizeMemoryAction({ action: "remove", category: "industry_preference", key: "avoid" }),
+    ).toEqual({ action: "remove", category: "industry_preference", key: "avoid" });
+    // Legacy shape without an action field still reads as upsert.
+    expect(
+      sanitizeMemoryAction({ category: "career_goal", key: "k1", content: "x" }),
+    ).toEqual({ action: "upsert", category: "career_goal", key: "k1", content: "x" });
+    expect(
+      sanitizeMemoryAction({ action: "delete", category: "career_goal", key: "k1" }),
+    ).toBeNull();
+    expect(
+      sanitizeMemoryAction({ action: "remove", category: "nonsense", key: "k1" }),
+    ).toBeNull();
+    expect(
+      sanitizeMemoryAction({ action: "remove", category: "career_goal", key: "!!!" }),
+    ).toBeNull();
+    // An upsert still goes through full deterministic content validation.
+    expect(
+      sanitizeMemoryAction({ action: "upsert", category: "career_goal", key: "k", content: "sk-abc12345678" }),
+    ).toBeNull();
+  });
+
+  it("marks user-written entries as locked in the curation prompt listing", () => {
+    const list = formatExistingMemoryForPrompt([
+      { category: "career_goal", key: "salary_floor", content: "25k", source: "AI_EXTRACTED" },
+      { category: "career_goal", key: "target_cities", content: "上海", source: "USER_MANUAL" },
+      { category: "industry_preference", key: "avoid", content: "外包", source: "AI_EXTRACTED" },
+    ]);
+    expect(list).toContain("[career_goal] target_cities: 上海  (locked)");
+    expect(list).toContain("[career_goal] salary_floor: 25k");
+    expect(list).not.toContain("salary_floor: 25k  (locked)");
+    expect(formatExistingMemoryForPrompt([])).toBe("(empty)");
+  });
+
+  it("the prompt carries existing memory, rejection signals and the locked rule", () => {
+    const prompt = buildMemoryExtractionPrompt({
+      transcript: "U: 我不考虑外包",
+      existingMemory: "- [career_goal] target_cities: 上海  (locked)",
+      approvalSignals: ["rejected add_job: 太远"],
+    });
+    expect(prompt).toContain("action");
+    expect(prompt).toContain("upsert");
+    expect(prompt).toContain("remove");
+    expect(prompt).toContain("(locked)");
+    expect(prompt).toContain("target_cities: 上海");
+    expect(prompt).toContain("rejected add_job: 太远");
+    expect(prompt).toContain("U: 我不考虑外包");
+    // Rejection section renders (none) when there is nothing to show.
+    expect(
+      buildMemoryExtractionPrompt({ transcript: "x" }).includes("(none)"),
+    ).toBe(true);
+  });
+
+  it("core-floor constants pin career_goal as the protected core category", () => {
+    expect(USER_MEMORY_CORE_CATEGORIES).toContain("career_goal");
+    expect(USER_MEMORY_CORE_CATEGORY_FLOOR).toBeGreaterThan(0);
   });
 });
 

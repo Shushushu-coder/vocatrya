@@ -752,6 +752,13 @@ model ChatConversation {
   // every later turn so a mid-thread memory update never invalidates the
   // bound native prompt hash (the fail-closed binding contract).
   nativeMemoryBlock      String?
+  // M2.1: the managed-path long-term-memory block frozen for this
+  // session. NULL = never frozen yet; the first managed turn computes and
+  // persists it. Refreshed only on L2 auto/manual compaction, user
+  // memory edits in settings, and the master-switch toggle — background
+  // extraction never mutates it, so the assembled prompt prefix stays
+  // byte-stable for the provider's prefix cache.
+  managedMemoryBlock     String?
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
   user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -815,6 +822,10 @@ model ConversationSummary {
 /// relation: the source conversation may be deleted while the memory
 /// survives, and a restore remaps the pointer with null degradation
 /// (OPTIONAL_FKS) instead of a hard FK.
+/// `source` (M2.1): USER_MANUAL rows are hand-written or hand-edited in
+/// settings and locked — background curation may only upsert, merge or
+/// remove AI_EXTRACTED rows, and capacity eviction never selects a
+/// USER_MANUAL row. The default errs toward the protected side.
 model UserMemoryEntry {
   id                   String   @id @default(uuid())
   userId               String
@@ -822,6 +833,7 @@ model UserMemoryEntry {
   category             String
   key                  String
   content              String
+  source               String   @default("USER_MANUAL")
   sourceConversationId String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt

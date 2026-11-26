@@ -2552,6 +2552,9 @@
       "notFound": "Entry no longer exists. Refresh and retry.",
       "disabledHint": "Off: memory is neither injected into context nor learned in the background. Existing entries are kept.",
       "updatedAt": "Updated {date}",
+      "sourceManual": "Manual · locked",
+      "sourceAi": "AI extracted",
+      "storeFull": "Memory is full. Delete some entries first.",
       "categories": {
         "career_goal": "Career goals",
         "industry_preference": "Industry preference",

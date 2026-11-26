@@ -973,6 +973,10 @@ export async function importBackup(
               // The frozen native memory block belongs to a native binding
               // that never travels — a restored row re-freezes on first use.
               payload.nativeMemoryBlock = null;
+              // Same for the managed-path snapshot: it is pinned to the
+              // exporting session's memory state and re-freezes on first
+              // turn of the restored conversation.
+              payload.managedMemoryBlock = null;
               payload.revision = 0;
               payload.activeRequestId = null;
               payload.activeRequestExpiresAt = null;
@@ -1050,6 +1054,28 @@ export async function importBackup(
             // ACCOUNT_LOGIN row must come back demanding re-auth.
             if (model === "AIConnection") {
               payload = normalizeAIConnection(payload as never);
+            }
+            // M2.1 provenance: an absent (pre-v14) or unrecognized value
+            // is re-derived, never trusted — the same discriminator the
+            // migration backfill uses: a sourceConversationId on the raw
+            // backup row marks it AI-written; anything else lands on the
+            // protected manual side so a crafted source value can never
+            // unlock a hand-written row for future AI curation.
+            if (model === "UserMemoryEntry") {
+              const provenance = row as {
+                source?: string | null;
+                sourceConversationId?: string | null;
+              };
+              payload = {
+                ...payload,
+                source:
+                  provenance.source === "AI_EXTRACTED" ||
+                  provenance.source === "USER_MANUAL"
+                    ? provenance.source
+                    : provenance.sourceConversationId
+                      ? "AI_EXTRACTED"
+                      : "USER_MANUAL",
+              };
             }
             if (model === "ResumeArtifact") {
               const { bytesMissing: _marker, storageKey: _ignored, ...rest } = payload;

@@ -12,6 +12,9 @@ import { seedAccount } from "./helpers/backupTestDb";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const MIGRATION_SUFFIX = "user_memory_entry";
+// The follow-on curation migration ALTERs this table — it must stay out of
+// the "pre-M2" fixture too, or deploy fails before the table exists.
+const LATER_SUFFIX = "user_memory_curation";
 const MIGRATION_DIR = path.join(
   REPO_ROOT,
   "prisma",
@@ -39,7 +42,7 @@ describe("UserMemoryEntry migration", () => {
   it("existing databases migrate without data loss", async () => {
     const ctx = makeAbTestDbUrl();
     const schemaPath = preparePrismaProject(ctx.dir, {
-      excludeSuffix: [MIGRATION_SUFFIX],
+      excludeSuffix: [MIGRATION_SUFFIX, LATER_SUFFIX],
     });
     const prisma = new PrismaClient({ datasources: { db: { url: ctx.url } } });
     try {
