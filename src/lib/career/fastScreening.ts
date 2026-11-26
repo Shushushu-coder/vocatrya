@@ -23,7 +23,7 @@ import {
   MATCH_STALE_REASON,
 } from "./identities";
 import { CareerMaterialService } from "./careerMaterialService";
-import { JobSearchPreferenceService } from "./jobSearchPreferenceService";
+import { loadJobPreferenceContext } from "./jobPreferenceContext.server";
 import { ResumeVariantService } from "./resumeVariantService";
 import { MatchAnalysisService } from "./matchAnalysisService";
 import { buildMaterialItemText } from "./applicationCopy";
@@ -204,27 +204,18 @@ async function loadPreferenceSnapshot(
   text: string | null;
   present: boolean;
 }> {
-  const preferences = new JobSearchPreferenceService(db, userId, env);
-  const row = await preferences.getJobSearchPreference();
-  const fields = {
-    targetRoles: row?.targetRoles ?? null,
-    preferredCities: row?.preferredCities ?? null,
-    preferredIndustries: row?.preferredIndustries ?? null,
-    recruitmentTypes: row?.recruitmentTypes ?? null,
-    availability: row?.availability ?? null,
-    hardConstraints: row?.hardConstraints ?? null,
-    softPreferences: row?.softPreferences ?? null,
-  };
-  const entries = Object.entries(fields).filter(
-    ([, value]) => typeof value === "string" && value.trim() !== "",
-  );
-  if (entries.length === 0) {
-    return { snapshot: {}, text: null, present: false };
-  }
+  // M2.2 dual-track: the authoritative business fields plus, when the
+  // long-term memory switch is on, the labeled 对话沉淀偏好 supplement.
+  // The snapshot is the persisted input — a memory change superseding an
+  // analysis lands as PREFERENCE_CHANGED like any other preference diff.
+  const context = await loadJobPreferenceContext(db, userId, env);
   return {
-    snapshot: fields,
-    text: entries.map(([key, value]) => `${key}: ${value}`).join("\n"),
-    present: true,
+    snapshot: context.snapshot,
+    text: context.text,
+    // "present" keeps its business-table meaning: memory notes alone do not
+    // count as material for the INSUFFICIENT_MATERIAL gate or the preflight
+    // "preference saved" indicator.
+    present: context.hasBusinessFields,
   };
 }
 

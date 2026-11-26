@@ -15,7 +15,7 @@ import {
   type StructuredOutputStrategy,
 } from "@/lib/ai/structured-output";
 import { CareerRuntimeError } from "@/lib/career/errors";
-import { hashCanonical, sha256Utf8 } from "@/lib/career/hash";
+import { canonicalize, hashCanonical, sha256Utf8 } from "@/lib/career/hash";
 import {
   MATCH_ANALYSIS_TYPE,
   MATCH_STALE_REASON,
@@ -26,6 +26,7 @@ import {
   ensureRawTextParse,
   jobDescriptionText,
 } from "@/lib/career/fastScreening";
+import { loadJobPreferenceContext } from "@/lib/career/jobPreferenceContext.server";
 import { FAST_SCREENING_ERROR_CODES } from "@/lib/career/fastScreeningContract";
 import { MatchAnalysisService } from "@/lib/career/matchAnalysisService";
 import { log } from "@/lib/telemetry";
@@ -60,7 +61,10 @@ import {
  */
 
 const DEEP_MATCH_SCHEMA_NAME = "vocatrya_deep_match_v1";
-const DEEP_MATCH_PROMPT_VERSION = "deep-match-v1";
+// v2 adds the pinned dual-track preference context (M2.2). Checkpoints
+// written before it carry no preference fields and still parse — they
+// replay the v1 prompt shape exactly.
+const DEEP_MATCH_PROMPT_VERSION = "deep-match-v2";
 const MANAGED_BUSINESS = "MATCH_ANALYSIS";
 
 const SUBMITTABLE_VERSION_STATUSES: readonly string[] = [
@@ -102,11 +106,12 @@ const DEEP_MATCH_RESULT_SCHEMA: StructuredOutputSchema = {
   },
 };
 
-const DEEP_MATCH_SYSTEM_PROMPT = `You are an expert recruiter performing a deep match analysis of a candidate against a job description. You receive the job description and the candidate's resume version text.
+const DEEP_MATCH_SYSTEM_PROMPT = `You are an expert recruiter performing a deep match analysis of a candidate against a job description. You receive the job description, the candidate's resume version text, and the candidate's job-search preferences when provided.
 
 ## RULES
 - Judge only what the job description explicitly requires; credit transferable evidence from different technologies or industries.
 - Never inflate: be honest about gaps and about what the resume cannot fix.
+- Job-search preferences (when provided): the structured fields are authoritative business records; notes labeled 对话沉淀偏好 are advisory supplements and never override them.
 - overallSummary: 3-6 sentences covering the decisive fit factors.
 - overallScore: integer 0-100, or null when the material is too thin to score honestly.
 - hardRequirements: coverage of mandatory requirements, or null when none are stated.
@@ -122,14 +127,19 @@ const DEEP_MATCH_SYSTEM_PROMPT = `You are an expert recruiter performing a deep 
 function buildDeepMatchPrompt(input: {
   jobText: string;
   resumeText: string;
+  preferenceText?: string | null;
 }): string {
-  return `Deep-match this candidate's resume version against the job description.
+  const base = `Deep-match this candidate's resume version against the job description.
 
 JOB DESCRIPTION:
 ${input.jobText}
 
 CANDIDATE RESUME:
 ${input.resumeText}`;
+  const preference = input.preferenceText?.trim();
+  return preference
+    ? `${base}\n\nCANDIDATE JOB-SEARCH PREFERENCES:\n${preference}`
+    : base;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +167,14 @@ type PinnedExecution = {
     jdText: string;
     resumeText: string;
     resumeTextHash: string;
+    /**
+     * M2.2: the dual-track preference context pinned with the material —
+     * the authoritative business snapshot plus the labeled 对话沉淀偏好
+     * notes. Absent on checkpoints written before preference pinning
+     * existed; recovery replays exactly what the task saw.
+     */
+    preferenceText?: string | null;
+    preferenceSnapshot?: Record<string, unknown>;
   };
   resolution: {
     connectionId: string;
@@ -290,7 +308,12 @@ function parsePinned(
     isText(material.jdText) &&
     isText(material.resumeText) &&
     isText(material.resumeTextHash) &&
-    material.resumeTextHash === sha256Utf8(material.resumeText as string);
+    material.resumeTextHash === sha256Utf8(material.resumeText as string) &&
+    (material.preferenceText === undefined ||
+      material.preferenceText === null ||
+      isText(material.preferenceText)) &&
+    (material.preferenceSnapshot === undefined ||
+      isRecord(material.preferenceSnapshot));
   const resolutionOk =
     isText(resolution.connectionId) &&
     isText(resolution.model) &&
@@ -493,9 +516,14 @@ async function runPinInputs(
     );
   }
 
+  // M2.2: pin the dual-track preference context with the material so the
+  // prompt, the checkpoint and any recovery replay see exactly the same
+  // business fields + 对话沉淀偏好 notes — memory never re-resolves later.
+  const preference = await loadJobPreferenceContext(db, task.userId, env);
   const prompt = buildDeepMatchPrompt({
     jobText: jdText,
     resumeText: material.text,
+    preferenceText: preference.text,
   });
   const pinned: PinnedExecution = {
     v: DEEP_MATCH_TASK_PINNED_VERSION,
@@ -513,6 +541,8 @@ async function runPinInputs(
       jdText,
       resumeText: material.text,
       resumeTextHash: sha256Utf8(material.text),
+      preferenceText: preference.text,
+      preferenceSnapshot: preference.snapshot,
     },
     resolution: {
       connectionId: resolution.connectionId,
@@ -567,9 +597,12 @@ async function runAnalysis(
   }
 
   const operationId = `deep-match-task:${task.id}:attempt:${task.attemptCount}`;
+  // The prompt is rebuilt from the PINNED material — the preference text
+  // included is whatever was pinned at PIN_INPUTS, never re-resolved.
   const prompt = buildDeepMatchPrompt({
     jobText: pinned.material.jdText,
     resumeText: pinned.material.resumeText,
+    preferenceText: pinned.material.preferenceText ?? null,
   });
   let managedAiProvenance: string | null = null;
 
@@ -796,6 +829,26 @@ async function runCommit(
 }
 
 /**
+ * Lenient preference-snapshot extraction from a bound task checkpoint.
+ * Anything unreadable or absent reads as the empty snapshot — it only feeds
+ * the staleness diff, never the analysis itself.
+ */
+function preferenceSnapshotOfPinned(
+  pinnedJson: string | null | undefined,
+): Record<string, unknown> {
+  if (!pinnedJson) return {};
+  try {
+    const parsed = JSON.parse(pinnedJson) as {
+      material?: { preferenceSnapshot?: unknown };
+    } | null;
+    const snapshot = parsed?.material?.preferenceSnapshot;
+    return isRecord(snapshot) ? snapshot : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Marks other non-stale DEEP_MATCH analyses of this job stale when the
  * pinned inputs they ran against no longer match — same contract as the
  * fast-screening supersede sweep, best-effort after the commit. The
@@ -834,6 +887,23 @@ async function markSupersededDeepMatchStale(
       parse.jobDescriptionVersion.contentHash !== pinned.inputs.jdContentHash
     ) {
       reasonCodes.push(MATCH_STALE_REASON.JD_CHANGED);
+    }
+    // M2.2: the preference context is a pinned material input — when it
+    // changed since this superseded analysis ran, it is PREFERENCE_CHANGED.
+    // The bound task's pinnedJson is the only durable copy of what that
+    // analysis saw; absent (pre-M2.2 tasks) reads as the empty snapshot.
+    const boundTask = await db.harnessTask.findFirst({
+      where: { resultAnalysisId: analysis.id },
+      select: { pinnedJson: true },
+    });
+    const previousPreference = preferenceSnapshotOfPinned(
+      boundTask?.pinnedJson,
+    );
+    if (
+      canonicalize(previousPreference) !==
+      canonicalize(pinned.material.preferenceSnapshot ?? {})
+    ) {
+      reasonCodes.push(MATCH_STALE_REASON.PREFERENCE_CHANGED);
     }
     if (reasonCodes.length > 0) {
       await match.markStale(analysis.id, reasonCodes);
