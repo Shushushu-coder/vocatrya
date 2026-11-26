@@ -168,7 +168,7 @@ function createExecutionServer({ token, service, maxBodyBytes } = {}) {
           typeof mcp.url === "string" && mcp.url.length <= 2048 &&
           mcp.bearerTokenEnvVar === "VOCATRYA_NATIVE_BUSINESS_MCP_TOKEN" &&
           typeof mcp.token === "string" && mcp.token.length <= 512 &&
-          Array.isArray(mcp.allowedTools) && mcp.allowedTools.length <= 16 &&
+          Array.isArray(mcp.allowedTools) && mcp.allowedTools.length <= 24 &&
           mcp.allowedTools.every(name => typeof name === "string" && name.length <= 64);
         if (payload.permissionScope !== "NATIVE_SESSION_V1" || !valid || !mcpValid || payload.structuredOutput !== undefined ||
             typeof payload.instructions !== "string" || payload.instructions.length > 16000 || typeof service.executeNativeSession !== "function") {

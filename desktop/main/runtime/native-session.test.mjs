@@ -2,7 +2,7 @@ import {it as test} from 'vitest';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import nativeModule from './native-session.js';
-const {createNativeSessionParser,nativeSessionReady,NATIVE_CONFIG,NATIVE_CATALOG,NATIVE_VERIFIED_VERSIONS,NATIVE_VERSION,NATIVE_MCP_SERVER_KEY,NATIVE_MCP_TOKEN_ENV,reportedCodexVersion}=nativeModule;
+const {createNativeSessionParser,nativeSessionReady,sanitizeNativeMcpConfig,NATIVE_CONFIG,NATIVE_CATALOG,NATIVE_VERIFIED_VERSIONS,NATIVE_VERSION,NATIVE_MCP_SERVER_KEY,NATIVE_MCP_TOKEN_ENV,reportedCodexVersion}=nativeModule;
 const HS={id:1,result:{userAgent:'vocatrya-native/0.169.0 (Windows 10.0; x86_64) unknown (vocatrya-native; 1)'}};
 const MCP={url:'http://127.0.0.1:43110/mcp',envVar:NATIVE_MCP_TOKEN_ENV,token:'nbt_test',allowedTools:['list_jobs','get_job','get_resume','today_plan_read']};
 function safeConfig(mcpServers){return {web_search:'live',project_doc_max_bytes:0,include_environment_context:false,mcp_servers:mcpServers===undefined?{[NATIVE_MCP_SERVER_KEY]:{url:MCP.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV,default_tools_approval_mode:'approve',enabled_tools:[...MCP.allowedTools]}}:mcpServers,features:Object.fromEntries(Object.entries(NATIVE_CONFIG).filter(([k])=>k.startsWith('features.')).map(([k,v])=>[k.slice(9),v]))};}
@@ -155,4 +155,27 @@ test('tampered or extra mcp_servers keys fail the config self-check',()=>{
     assert.equal(x.parser.result().code,'NATIVE_BOUNDARY_NOT_READY');
     assert.equal(x.writes.some(w=>w.method==='thread/start'),false);
   }
+});
+
+test('Slice-2 allowlist supports up to 24 tools including write tools while still rejecting >24 or non-allowlisted tools',()=>{
+  const twentyTools=['list_jobs','get_job','get_resume','today_plan_read','add_job','today_plan','review_resume','match_job','notion_search','notion_read','notion_create_page','notion_append_content','notion_update_record','notion_update_content','notion_delete_pages','feishu_search_docs','feishu_read_doc','feishu_create_doc','feishu_append_content','feishu_update_content'];
+  const sanitized=sanitizeNativeMcpConfig({url:MCP.url,bearerTokenEnvVar:NATIVE_MCP_TOKEN_ENV,token:'nbt_slice2',allowedTools:twentyTools});
+  assert.ok(sanitized);
+  assert.equal(sanitized.allowedTools.length,20);
+  const twentyFive=Array.from({length:25},(_,i)=>`tool_${i}`);
+  assert.equal(sanitizeNativeMcpConfig({url:MCP.url,bearerTokenEnvVar:NATIVE_MCP_TOKEN_ENV,token:'nbt_over',allowedTools:twentyFive}),null);
+
+  const writeMcp={url:MCP.url,envVar:NATIVE_MCP_TOKEN_ENV,token:'nbt_w',allowedTools:['list_jobs','add_job','today_plan']};
+  const x=h(undefined,undefined,writeMcp);
+  x.push({...HS,__configMcpServers:{[NATIVE_MCP_SERVER_KEY]:{url:writeMcp.url,bearer_token_env_var:NATIVE_MCP_TOKEN_ENV,default_tools_approval_mode:'approve',enabled_tools:[...writeMcp.allowedTools]}}});
+  x.push({id:2,result:{thread:{id:'thread-A'},model:'gpt-6.1-sol'}});
+  x.push({id:3,result:{turn:{id:'turn-A'}}});
+  const res=x.push(note('item/completed',{item:{id:'call_w1',type:'mcpToolCall',server:'vocatrya_business',tool:'add_job',status:'completed',arguments:{company:'Acme'},result:{content:[{type:'text',text:'{"saved":false,"status":"approval_required","tool":"add_job","proposalId":"p1"}'}]}}}));
+  assert.equal(res[0].kind,'tool_result');
+  assert.equal(res[0].payload.tool,'add_job');
+  assert.equal(res[0].payload.status,'completed');
+  assert.match(res[0].payload.resultSummary,/approval_required/);
+  // Unlisted write tool (match_job not in writeMcp.allowedTools) still fails closed.
+  x.push(note('item/started',{item:{id:'call_w2',type:'mcpToolCall',server:'vocatrya_business',tool:'match_job',status:'inProgress',arguments:{}}}));
+  assert.equal(x.parser.result().code,'NATIVE_UNEXPECTED_TOOL');
 });

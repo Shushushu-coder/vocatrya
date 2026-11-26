@@ -2,6 +2,7 @@
 import { nativeReadiness, resolveNativeChatEntry, restartNativeContext } from "@/lib/agent/nativeSession.server";
 
 import { effectiveAgentToolNames, agentToolApproval } from "@/lib/agent/toolPermissions";
+import { nativeBusinessAllowedTools } from "@/lib/agent/nativeBusinessMcp.server";
 import { resolveTaskSessionTools } from "@/lib/agent/task/agentTaskTools";
 import { resolveNotionAgentToolNames } from "@/lib/extensions/notion/service";
 import { resolveFeishuAgentToolNames } from "@/lib/extensions/feishu/service";
@@ -811,7 +812,10 @@ export async function getAgentToolPermissions(input: { conversationId?: string |
     return { success: true as const, data: {
       role,
       permissionMode,
-      tools: (row?.executionPath === "NATIVE_CODEX_V1" ? [] : effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools, feishuTools, taskExtraTools })).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull, permissionMode) })),
+      tools: (row?.executionPath === "NATIVE_CODEX_V1"
+        ? nativeBusinessAllowedTools({ agentRole: role, freshNativeFull, notionTools, feishuTools, taskExtraTools })
+        : effectiveAgentToolNames({ agentRole: role, freshNativeFull, notionTools, feishuTools, taskExtraTools })
+      ).map(name => ({ name, approval: agentToolApproval(name, freshNativeFull, permissionMode) })),
     } };
   } catch (error) {
     return fail(error, "Could not load tool permissions");

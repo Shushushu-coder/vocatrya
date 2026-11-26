@@ -653,23 +653,53 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
     // a mid-thread memory update never invalidates the prompt-hash binding.
     const nativeMemory = await nativeMemoryBlockForConversation(userId, conversationId);
     scheduleNativeMemoryExtractionAfterRelease(request, { userId, conversationId });
-    // Slice-1 read-only business bridge: the same connected-state resolvers
-    // the in-app path uses, intersected with the read-only allowlist inside
-    // nativeBusinessAllowedTools. Resolution failures degrade to core reads,
-    // never to a wider surface.
-    const [nativeNotionTools, nativeFeishuTools] = await Promise.all([
+    // Slice-2 business bridge: reuse the exact runtime mode, role, task, and
+    // integration capability resolvers the in-app path uses — never hardcode
+    // static role write lists.
+    const [careerRuntime, nativeNotionTools, nativeFeishuTools, nativeTaskSession] = await Promise.all([
+      resolveCareerRuntimeMode(prisma),
       resolveNotionAgentToolNames(userId).catch(() => []),
       resolveFeishuAgentToolNames(userId).catch(() => []),
+      resolveTaskSessionContext(prisma, {
+        userId,
+        agentTaskId: conversation.agentTaskId,
+        agentRole: conversation.agentRole,
+        locale: normalizeLocale(req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value),
+      }).catch(() => null),
     ]);
+    const nativeFreshNativeFull = isFreshNativeFullSurface(careerRuntime);
+    const nativeCanonicalJobs = isFullAbCapabilityEnabled(
+      careerRuntime.mode,
+      careerRuntime.rolloutScope,
+    );
     const allowedBusinessTools = nativeBusinessAllowedTools({
       agentRole: conversation.agentRole,
+      freshNativeFull: nativeFreshNativeFull,
       notionTools: nativeNotionTools,
       feishuTools: nativeFeishuTools,
+      taskExtraTools: nativeTaskSession?.extraTools,
     });
-    return nativeChatResponse({ request, signal: req.signal, connectionId: lock.connectionId, model: lock.model,
+    const turnKey =
+      [...request.messages].reverse().find((m) => m.role === "user")?.id ??
+      request.requestId;
+    return nativeChatResponse({
+      request,
+      signal: req.signal,
+      connectionId: lock.connectionId,
+      model: lock.model,
       origin: req.nextUrl.origin,
       allowedBusinessTools,
-      instructions: "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Read-only business tools for the user's Vocatrya data (jobs, resumes, today's plan, and any connected Notion or Feishu reads) are available through the vocatrya_business MCP server — use tool_search to discover and call them when the user asks about their own data. Write tools and skills are not loaded in this session. Never claim to have searched the web unless you actually used web search, never claim to have saved or modified user data, and never claim a business lookup succeeded unless the tool actually returned data.\n" + preferences.personalInstructions + nativeMemory,
+      permissionMode,
+      agentRole: conversation.agentRole,
+      turnKey,
+      freshNativeFull: nativeFreshNativeFull,
+      canonicalJobs: nativeCanonicalJobs,
+      taskExtraTools: nativeTaskSession?.extraTools,
+      instructions:
+        "You are Vocatrya, a career conversation assistant. Native web search is enabled and you may use it when current or external web information is needed. Controlled business tools for the user's Vocatrya data (jobs, resumes, today's plan, and any connected Notion or Feishu tools permitted for this session) are available through the vocatrya_business MCP server — use tool_search to discover and call them when needed. Skills are not loaded in this session. Never claim to have searched the web unless you actually used web search. When a write tool returns status \"approval_required\" with a proposalId, explain clearly that a confirmation card has been created and is awaiting user approval — never claim the write was saved or completed. When a write tool returns status \"queued\", explain that it is queued for background execution — never claim it is already written. Never claim a business read or write succeeded unless the tool returned a verified result." +
+        permissionInstructions(permissionMode) +
+        personalInstructionsBlock(preferences.personalInstructions) +
+        nativeMemory,
     });
   }
   const conversationContext = contextOfRow(conversation);

@@ -596,7 +596,12 @@ export function isAgentNativeSearchPart(
 // are already bounded/redacted upstream — no raw arguments or credentials.
 export const AGENT_NATIVE_TOOL_PART_TYPE = "data-native-tool";
 
-export type AgentNativeToolCallStatus = "running" | "completed" | "failed";
+export type AgentNativeToolCallStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "approval_required"
+  | "queued";
 
 export type AgentNativeToolPartData = {
   version: 1;
@@ -606,6 +611,11 @@ export type AgentNativeToolPartData = {
   status: AgentNativeToolCallStatus;
   argumentsSummary?: string;
   resultSummary?: string;
+  /** Durable proposal identity when status is approval_required or queued. */
+  proposalId?: string;
+  approvalId?: string;
+  taskId?: string;
+  expiresAt?: string;
   occurredAt?: string;
 };
 
@@ -630,6 +640,10 @@ export function isAgentNativeToolPart(
     data.itemId.length > 0 &&
     typeof data.tool === "string" &&
     data.tool.length > 0 &&
-    (data.status === "running" || data.status === "completed" || data.status === "failed")
+    (data.status === "running" ||
+      data.status === "completed" ||
+      data.status === "failed" ||
+      data.status === "approval_required" ||
+      data.status === "queued")
   );
 }

@@ -10,7 +10,8 @@ import {
 } from "@/models/agent.model";
 import { cancelConversationRequest, finishConversationRequest, type ConversationRequest } from "./conversationRequest";
 import { conversationCommitStream } from "./conversationStream";
-import { executeNativeTurn, type NativeSessionNeutralEvent } from "./nativeSession.server";
+import { executeNativeTurn, type NativeSessionNeutralEvent, type NativeSessionToolPayload } from "./nativeSession.server";
+import type { PermissionMode } from "./preferences";
 import { formatAgentStreamError } from "./errors";
 
 function mergeNativeSearchPart(
@@ -60,13 +61,13 @@ function mergeNativeToolPart(
   previous: AgentNativeToolPartData | undefined,
   event: NativeSessionNeutralEvent,
 ): AgentNativeToolPartData {
-  const payload = event.payload as { tool: string; status: AgentNativeToolPartData["status"]; argumentsSummary?: string; resultSummary?: string };
+  const payload = event.payload as NativeSessionToolPayload;
   return {
     version: 1,
     kind: "tool",
     itemId: event.itemId,
     tool: payload.tool || previous?.tool || "",
-    // A tool_result carries the terminal state; a tool_call is "running".
+    // A tool_result carries the terminal or proposal state; a tool_call is "running".
     status: payload.status,
     ...(payload.argumentsSummary ?? previous?.argumentsSummary
       ? { argumentsSummary: payload.argumentsSummary ?? previous?.argumentsSummary }
@@ -74,13 +75,41 @@ function mergeNativeToolPart(
     ...(payload.resultSummary ?? previous?.resultSummary
       ? { resultSummary: payload.resultSummary ?? previous?.resultSummary }
       : {}),
+    ...(payload.proposalId ?? previous?.proposalId
+      ? { proposalId: payload.proposalId ?? previous?.proposalId }
+      : {}),
+    ...(payload.approvalId ?? previous?.approvalId
+      ? { approvalId: payload.approvalId ?? previous?.approvalId }
+      : {}),
+    ...(payload.taskId ?? previous?.taskId
+      ? { taskId: payload.taskId ?? previous?.taskId }
+      : {}),
+    ...(payload.expiresAt ?? previous?.expiresAt
+      ? { expiresAt: payload.expiresAt ?? previous?.expiresAt }
+      : {}),
     occurredAt: event.occurredAt || previous?.occurredAt,
   };
 }
 
 // No application router, transcript budgeting, summary or tool loop enters this
 // path. Only the current user text is sent; the runtime owns its saved history.
-export function nativeChatResponse(input: { request: ConversationRequest; signal: AbortSignal; connectionId: string; model: string; instructions: string; origin?: string; allowedBusinessTools?: readonly string[] }) {
+export function nativeChatResponse(input: {
+  request: ConversationRequest;
+  signal: AbortSignal;
+  connectionId: string;
+  model: string;
+  instructions: string;
+  origin?: string;
+  allowedBusinessTools?: readonly string[];
+  permissionMode?: PermissionMode;
+  agentRole?: string | null;
+  turnKey?: string;
+  freshNativeFull?: boolean;
+  canonicalJobs?: boolean;
+  pageJobId?: string | null;
+  pageResumeId?: string | null;
+  taskExtraTools?: readonly string[] | null;
+}) {
   const { request, connectionId, model, instructions } = input;
   const current = request.messages.at(-1);
   if (current?.role !== "user" || current.parts.some(part => part.type !== "text")) throw new AIBusinessError("NATIVE_TEXT_ONLY", "Native sessions currently accept plain text only");
@@ -103,7 +132,24 @@ export function nativeChatResponse(input: { request: ConversationRequest; signal
         activeTextId = null;
       };
       writer.write({ type: "start", messageId: id });
-      for await (const event of executeNativeTurn({ request, connectionId, model, prompt, instructions, signal, origin: input.origin, allowedBusinessTools: input.allowedBusinessTools })) {
+      for await (const event of executeNativeTurn({
+        request,
+        connectionId,
+        model,
+        prompt,
+        instructions,
+        signal,
+        origin: input.origin,
+        allowedBusinessTools: input.allowedBusinessTools,
+        permissionMode: input.permissionMode,
+        agentRole: input.agentRole,
+        turnKey: input.turnKey,
+        freshNativeFull: input.freshNativeFull,
+        canonicalJobs: input.canonicalJobs,
+        pageJobId: input.pageJobId,
+        pageResumeId: input.pageResumeId,
+        taskExtraTools: input.taskExtraTools,
+      })) {
         if (signal.aborted) throw new DOMException("Stopped", "AbortError");
         if (event.type === "native-session") {
           writer.write({ type: "data-native-session", transient: true, data: { conversationId: request.conversationId, requestId: request.requestId, resumed: event.resumed } });

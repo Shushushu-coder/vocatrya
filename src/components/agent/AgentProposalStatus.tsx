@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n";
+import { isNotionAgentToolName } from "@/lib/extensions/notion/constants";
 import type { AgentOperationProposalDTO } from "@/lib/agent/operationProposalContract";
 import {
   decideOperationProposalAction,
@@ -16,13 +17,14 @@ import {
 } from "@/actions/operationProposal.actions";
 
 type Key =
-  | "approve" | "pending" | "expires" | "queued" | "running" | "cancelling"
-  | "succeeded" | "failed" | "uncertain" | "cancelled" | "expired"
-  | "rejected" | "withdrawn" | "superseded" | "unverified"
+  | "approve" | "pending" | "expires" | "queued" | "running" | "runningGeneric"
+  | "cancelling" | "succeeded" | "succeededGeneric" | "failed" | "uncertain"
+  | "cancelled" | "expired" | "rejected" | "withdrawn" | "superseded" | "unverified"
   | "sourceArchived" | "sourceDeleted" | "restoreSource" | "withdraw"
   | "repropose" | "verifyHappened" | "verifyNotHappened"
   | "verifyStillUncertain" | "manualResolvedBy" | "pendingEntry"
-  | "verifyEntry" | "viewAll" | "dispatched" | "approved" | "loadFailed";
+  | "verifyEntry" | "viewAll" | "dispatched" | "dispatchedGeneric"
+  | "approved" | "loadFailed";
 
 // States that can still change on the server side — keep polling until the
 // derived state leaves this set. Terminal states never schedule another tick.
@@ -66,9 +68,11 @@ function asDto(value: unknown): AgentOperationProposalDTO | null {
 export function AgentProposalStatus({
   approvalId,
   proposalId,
+  renderInput,
 }: {
   approvalId?: string;
   proposalId?: string;
+  renderInput?: (dto: AgentOperationProposalDTO) => ReactNode;
 }) {
   const t = useT();
   const [dto, setDto] = useState<AgentOperationProposalDTO | null>(null);
@@ -149,8 +153,50 @@ export function AgentProposalStatus({
     ((dto.derived === "uncertain" || dto.derived === "unverified") &&
       !!dto.manualResolution);
 
+  const isNotion = isNotionAgentToolName(dto.toolName);
+  const statusKey: Key =
+    dto.derived === "running" && !isNotion
+      ? "runningGeneric"
+      : dto.derived === "succeeded" && !isNotion
+        ? "succeededGeneric"
+        : (dto.derived as Key);
+  const dispatchedKey: Key = isNotion ? "dispatched" : "dispatchedGeneric";
+  const outcomeObj =
+    dto.outcome && typeof dto.outcome === "object"
+      ? (dto.outcome as Record<string, unknown>)
+      : null;
+  const outcomeDetail =
+    typeof outcomeObj?.detail === "string" && outcomeObj.detail.trim()
+      ? outcomeObj.detail.trim()
+      : typeof outcomeObj?.validationError === "string" && outcomeObj.validationError.trim()
+        ? outcomeObj.validationError.trim()
+        : typeof outcomeObj?.message === "string" && outcomeObj.message.trim()
+          ? outcomeObj.message.trim()
+          : null;
+  const outcomeReceiptLine =
+    dto.derived === "succeeded" && outcomeObj
+      ? [
+          typeof outcomeObj.company === "string" ? outcomeObj.company : null,
+          typeof outcomeObj.title === "string"
+            ? outcomeObj.title
+            : typeof outcomeObj.jobTitle === "string"
+              ? outcomeObj.jobTitle
+              : null,
+          typeof outcomeObj.verdict === "string" ? outcomeObj.verdict : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || null
+      : null;
+  const settled = !WATCH.has(dto.derived);
+  const renderedInput = renderInput ? renderInput(dto) : null;
+
   return (
-    <div className="mt-2 rounded-sm border bg-muted/20 p-2 text-xs">
+    <div
+      data-testid="agent-proposal-status"
+      data-proposal-id={dto.id}
+      data-derived={dto.derived}
+      className="mt-2 rounded-sm border bg-muted/20 p-2 text-xs"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Badge
           variant={
@@ -161,11 +207,40 @@ export function AgentProposalStatus({
               : "secondary"
           }
         >
-          {t(dto.derived as Key)}
+          {t(statusKey)}
         </Badge>
         {dto.derived === "pending" && <span>{t("expires", { date: expires })}</span>}
-        {dto.derived === "queued" && dto.dispatched && <span>{t("dispatched")}</span>}
+        {dto.derived === "queued" && dto.dispatched && <span>{t(dispatchedKey)}</span>}
       </div>
+
+      {renderedInput ? (
+        settled ? (
+          <details className="mt-1.5 text-xs">
+            <summary className="cursor-pointer select-none text-muted-foreground">
+              {dto.target ?? dto.toolName}
+            </summary>
+            <div className="mt-1">{renderedInput}</div>
+          </details>
+        ) : (
+          <div className="mt-1.5">{renderedInput}</div>
+        )
+      ) : null}
+
+      {outcomeReceiptLine ? (
+        <p className="mt-1 text-foreground">{outcomeReceiptLine}</p>
+      ) : null}
+
+      {outcomeDetail && dto.derived !== "pending" && dto.derived !== "queued" ? (
+        <p
+          className={
+            dto.derived === "failed" || dto.derived === "uncertain"
+              ? "mt-1 text-destructive"
+              : "mt-1 text-muted-foreground"
+          }
+        >
+          {outcomeDetail}
+        </p>
+      ) : null}
 
       {actionError && (
         <p className="mt-1 text-destructive">{actionError}</p>

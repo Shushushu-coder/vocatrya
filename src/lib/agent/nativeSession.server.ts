@@ -16,11 +16,13 @@ import type {
   NativeUnavailableDetails,
 } from "./chatTypes";
 import {
+  isNativeBusinessWriteTool,
   mintNativeBusinessTicket,
   revokeNativeBusinessTicket,
   NATIVE_BUSINESS_MCP_TOKEN_ENV,
-  NATIVE_BUSINESS_READ_TOOLS_MAX,
+  NATIVE_BUSINESS_TOOLS_MAX,
 } from "./nativeBusinessMcp.server";
+import type { PermissionMode } from "./preferences";
 
 export const NATIVE_PATH = "NATIVE_CODEX_V1";
 export const APP_PATH = "APP_ORCHESTRATED";
@@ -193,9 +195,13 @@ export type NativeSessionSearchPayload = {
 };
 export type NativeSessionToolPayload = {
   tool: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "approval_required" | "queued";
   argumentsSummary?: string;
   resultSummary?: string;
+  proposalId?: string;
+  approvalId?: string;
+  taskId?: string;
+  expiresAt?: string;
 };
 export type NativeSessionNeutralEvent = {
   type: "native-event";
@@ -307,7 +313,13 @@ export function normalizeNativeSearchEvent(
 
 export function normalizeNativeToolEvent(
   raw: unknown,
-  expected: { conversationId: string; nativeSessionId: string; allowedTools: readonly string[] },
+  expected: {
+    conversationId: string;
+    nativeSessionId: string;
+    allowedTools: readonly string[];
+    /** Proposal IDs genuinely minted during this turn — prevents untrusted tool text from spoofing approval cards. */
+    mintedProposalIds?: ReadonlySet<string>;
+  },
 ): NativeSessionNeutralEvent | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const event = raw as Record<string, unknown>;
@@ -331,6 +343,43 @@ export function normalizeNativeToolEvent(
   if (p.status !== "running" && p.status !== "completed" && p.status !== "failed") return null;
   const argumentsSummary = boundedString(p.argumentsSummary, 2100) ?? undefined;
   const resultSummary = boundedString(p.resultSummary, 2100) ?? undefined;
+
+  let status: NativeSessionToolPayload["status"] = p.status;
+  let proposalId: string | undefined;
+  let approvalId: string | undefined;
+  let taskId: string | undefined;
+  let expiresAt: string | undefined;
+
+  if (
+    event.kind === "tool_result" &&
+    p.status === "completed" &&
+    resultSummary &&
+    isNativeBusinessWriteTool(tool)
+  ) {
+    try {
+      const parsed = JSON.parse(resultSummary) as Record<string, unknown>;
+      const candidateProposalId = boundedString(parsed?.proposalId, 128);
+      const mintedOk =
+        candidateProposalId !== null &&
+        (expected.mintedProposalIds === undefined ||
+          expected.mintedProposalIds.has(candidateProposalId));
+      if (
+        mintedOk &&
+        parsed?.saved === false &&
+        parsed?.tool === tool &&
+        (parsed?.status === "approval_required" || parsed?.status === "queued")
+      ) {
+        status = parsed.status;
+        proposalId = candidateProposalId;
+        approvalId = boundedString(parsed.approvalId, 128) ?? undefined;
+        taskId = boundedString(parsed.taskId, 128) ?? undefined;
+        expiresAt = boundedString(parsed.expiresAt, 64) ?? undefined;
+      }
+    } catch {
+      // Plain text or truncated output — stays as regular tool_result.
+    }
+  }
+
   return {
     type: "native-event",
     version: 1,
@@ -342,9 +391,13 @@ export function normalizeNativeToolEvent(
     occurredAt,
     payload: {
       tool,
-      status: p.status,
+      status,
       ...(argumentsSummary ? { argumentsSummary } : {}),
       ...(resultSummary ? { resultSummary } : {}),
+      ...(proposalId ? { proposalId } : {}),
+      ...(approvalId ? { approvalId } : {}),
+      ...(taskId ? { taskId } : {}),
+      ...(expiresAt ? { expiresAt } : {}),
     },
   };
 }
@@ -392,7 +445,24 @@ function loopbackOrigin(value: string | undefined): string | null {
   }
 }
 
-export async function* executeNativeTurn(input: { request: ConversationRequest; connectionId: string; model: string; prompt: string; instructions: string; signal: AbortSignal; origin?: string; allowedBusinessTools?: readonly string[] }): AsyncGenerator<NativeTextEvent> {
+export async function* executeNativeTurn(input: {
+  request: ConversationRequest;
+  connectionId: string;
+  model: string;
+  prompt: string;
+  instructions: string;
+  signal: AbortSignal;
+  origin?: string;
+  allowedBusinessTools?: readonly string[];
+  permissionMode?: PermissionMode;
+  agentRole?: string | null;
+  turnKey?: string;
+  freshNativeFull?: boolean;
+  canonicalJobs?: boolean;
+  pageJobId?: string | null;
+  pageResumeId?: string | null;
+  taskExtraTools?: readonly string[] | null;
+}): AsyncGenerator<NativeTextEvent> {
   const { request, connectionId, model, prompt, instructions, signal } = input;
   const readiness = await nativeReadiness(request.userId, connectionId, model);
   const base = process.env.VOCATRYA_DESKTOP_EXEC_URL;
@@ -407,7 +477,7 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
   if (binding && binding.promptHash !== promptHash) throw lost();
   // Per-turn business bridge: the ticket binds this exact request and is
   // revoked in the finally below — end, error and cancel all invalidate it.
-  const allowedTools = [...(input.allowedBusinessTools ?? [])].slice(0, NATIVE_BUSINESS_READ_TOOLS_MAX);
+  const allowedTools = [...(input.allowedBusinessTools ?? [])].slice(0, NATIVE_BUSINESS_TOOLS_MAX);
   const origin = loopbackOrigin(input.origin);
   if (!origin || allowedTools.length === 0) throw unavailable();
   const businessTicket = mintNativeBusinessTicket({
@@ -415,6 +485,17 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
     conversationId: request.conversationId,
     requestId: request.requestId,
     allowedTools,
+    permissionMode: input.permissionMode,
+    agentRole: input.agentRole,
+    turnKey: input.turnKey,
+    freshNativeFull: input.freshNativeFull,
+    canonicalJobs: input.canonicalJobs,
+    connectionId,
+    model,
+    provider: readiness.connection.provider,
+    pageJobId: input.pageJobId,
+    pageResumeId: input.pageResumeId,
+    taskExtraTools: input.taskExtraTools,
   });
   const ticket = mintConnectionTicket({ userId: request.userId, operation: "executeText", backendKind: "CODEX_RUNTIME", connectionId });
   let response: Response;
@@ -477,6 +558,7 @@ export async function* executeNativeTurn(input: { request: ConversationRequest; 
                 conversationId: request.conversationId,
                 nativeSessionId: currentThreadId,
                 allowedTools: businessTicket.allowedTools,
+                mintedProposalIds: businessTicket.mintedProposalIds,
               });
           if (!normalized) throw lost();
           yield normalized;

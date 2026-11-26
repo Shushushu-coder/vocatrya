@@ -31,6 +31,10 @@ import {
   type AgentProposalStatus,
 } from "./operationProposalContract";
 import { effectiveAgentToolNames } from "./toolPermissions";
+import {
+  isLocalProposalWriteTool,
+  localProposalSummaryOf,
+} from "./localProposalWrite";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -144,6 +148,136 @@ export async function createProposalsForResponseMessage(
     }
   }
   return created;
+}
+
+/**
+ * Create a durable PROPOSED row directly from the native business MCP bridge
+ * without waiting for a chat finish pass. `messageId` is intentionally null so
+ * `reconcileConversationProposals` never prematurely supersedes it while the
+ * native turn finishes; it remains decidable across turns, reloads & restarts
+ * and still obeys delete/archive/expiry/role-surface gates.
+ *
+ * Idempotent within the same turn: if an active PROPOSED row with identical
+ * (userId, conversationId, turnKey, toolName, inputHash) already exists, it is
+ * returned instead of creating a duplicate card.
+ */
+export async function createNativeOperationProposal(
+  db: PrismaClient,
+  input: {
+    userId: string;
+    conversationId: string;
+    turnKey: string;
+    toolName: string;
+    validatedInput: Record<string, unknown>;
+    inputHash: string;
+    material: Record<string, unknown>;
+    now?: Date;
+  },
+): Promise<{
+  id: string;
+  approvalId: string;
+  toolCallId: string;
+  expiresAt: Date;
+  reused: boolean;
+}> {
+  const now = input.now ?? new Date();
+  const existing = await db.agentOperationProposal.findFirst({
+    where: {
+      userId: input.userId,
+      conversationId: input.conversationId,
+      turnKey: input.turnKey,
+      toolName: input.toolName,
+      inputHash: input.inputHash,
+      status: AGENT_PROPOSAL_STATUS.PROPOSED,
+      expiresAt: { gt: now },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, approvalId: true, toolCallId: true, expiresAt: true },
+  });
+  if (existing) {
+    return { ...existing, reused: true };
+  }
+  const toolCallId = `native-mcp-${randomUUID()}`;
+  const approvalId = randomUUID();
+  const expiresAt = new Date(now.getTime() + AGENT_PROPOSAL_DECISION_TTL_MS);
+  const created = await db.agentOperationProposal.create({
+    data: {
+      userId: input.userId,
+      conversationId: input.conversationId,
+      messageId: null,
+      toolCallId,
+      approvalId,
+      turnKey: input.turnKey,
+      toolName: input.toolName,
+      inputJson: JSON.stringify(input.validatedInput),
+      inputHash: input.inputHash,
+      materialJson: JSON.stringify(input.material),
+      status: AGENT_PROPOSAL_STATUS.PROPOSED,
+      expiresAt,
+    },
+    select: { id: true, approvalId: true, toolCallId: true, expiresAt: true },
+  });
+  return { ...created, reused: false };
+}
+
+/**
+ * Full-access detached external write: atomically persist the proposal row and
+ * pre-authorize it into a queued AGENT_TOOL_WRITE harness task. Never claims
+ * saved:true — the caller returns an honest queued receipt.
+ */
+export async function createAndApproveFullAccessProposal(
+  db: PrismaClient,
+  input: {
+    userId: string;
+    conversationId: string;
+    turnKey: string;
+    toolName: string;
+    validatedInput: Record<string, unknown>;
+    inputHash: string;
+    material: Record<string, unknown>;
+  },
+): Promise<{
+  proposalId: string;
+  approvalId: string;
+  taskId: string;
+}> {
+  return db.$transaction(async (tx) => {
+    const toolCallId = `native-mcp-${randomUUID()}`;
+    const approvalId = randomUUID();
+    const expiresAt = new Date(Date.now() + AGENT_PROPOSAL_DECISION_TTL_MS);
+    const created = await tx.agentOperationProposal.create({
+      data: {
+        userId: input.userId,
+        conversationId: input.conversationId,
+        messageId: null,
+        toolCallId,
+        approvalId,
+        turnKey: input.turnKey,
+        toolName: input.toolName,
+        inputJson: JSON.stringify(input.validatedInput),
+        inputHash: input.inputHash,
+        materialJson: JSON.stringify(input.material),
+        status: AGENT_PROPOSAL_STATUS.PROPOSED,
+        expiresAt,
+      },
+      select: { id: true, approvalId: true },
+    });
+    const decided = await decideOperationProposalInTx(tx, {
+      userId: input.userId,
+      proposalId: created.id,
+      decision: "approve",
+      reason: "FULL_ACCESS_PREAUTHORIZED",
+      mirrorPart: false,
+    });
+    if (decided.state !== "approved") {
+      return fail("PROPOSAL_APPROVAL_FAILED");
+    }
+    return {
+      proposalId: created.id,
+      approvalId: created.approvalId,
+      taskId: decided.taskId,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -346,15 +480,18 @@ export async function decideOperationProposalInTx(
     if (conversation.archivedAt) return fail("PROPOSAL_SOURCE_ARCHIVED");
     // The decision binds the tool surface the source conversation actually
     // exposes — a NULL legacy role keeps the general registry, never widens.
-    const provider = detachedProviderOf(row.toolName);
+    const isLocal = isLocalProposalWriteTool(row.toolName);
+    const provider = isLocal ? null : detachedProviderOf(row.toolName);
     const effective = effectiveAgentToolNames({
       agentRole: conversation.agentRole,
       ...(provider === "feishu"
         ? { feishuTools: [row.toolName] }
-        : { notionTools: [row.toolName] }),
+        : provider === "notion"
+          ? { notionTools: [row.toolName] }
+          : {}),
     });
     if (!effective.includes(row.toolName)) return fail("PROPOSAL_TOOL_FORBIDDEN");
-    if (!(await isDetachedToolAllowed(input.userId, row.toolName, tx))) {
+    if (!isLocal && !(await isDetachedToolAllowed(input.userId, row.toolName, tx))) {
       return fail("PROPOSAL_CONNECTION_UNAVAILABLE");
     }
   }
@@ -815,7 +952,11 @@ export async function toProposalDTO(
   } catch {
     outcome = null;
   }
-  const summary = DETACHED_WRITE_SPECS[row.toolName]?.summaryOf(parsedInput) ?? {};
+  const summary =
+    DETACHED_WRITE_SPECS[row.toolName]?.summaryOf(parsedInput) ??
+    (isLocalProposalWriteTool(row.toolName)
+      ? localProposalSummaryOf(row.toolName, parsedInput)
+      : {});
   return {
     id: row.id,
     toolName: row.toolName,

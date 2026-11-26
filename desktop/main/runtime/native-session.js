@@ -109,14 +109,14 @@ const MAX_SEARCH_URL_CHARS = 2048;
 const MAX_SEARCH_TEXT_CHARS = 300;
 const MAX_SEARCH_TITLE_CHARS = 200;
 
-// Slice-1 controlled business bridge: the ONLY MCP server a native session
-// may ever see. The backend mints a per-turn bearer ticket, hands us the
-// loopback URL + env-var name, and Codex connects over streamable_http.
-// Any other server key — inherited from the profile's ~/.codex or injected —
-// still fails the config/read self-check.
+// Controlled business bridge: the ONLY MCP server a native session may ever
+// see. The backend mints a per-turn bearer ticket, hands us the loopback URL
+// + env-var name + role/capability-filtered allowlist, and Codex connects over
+// streamable_http. Any other server key — inherited from the profile's
+// ~/.codex or injected — still fails the config/read self-check.
 const NATIVE_MCP_SERVER_KEY = "vocatrya_business";
 const NATIVE_MCP_TOKEN_ENV = "VOCATRYA_NATIVE_BUSINESS_MCP_TOKEN";
-const NATIVE_MCP_MAX_TOOLS = 16;
+const NATIVE_MCP_MAX_TOOLS = 24;
 
 // Validates the backend's per-turn bridge descriptor before it can reach the
 // spawn or the config. Returns {url, envVar, token, allowedTools} or null —
@@ -141,9 +141,11 @@ function sanitizeNativeMcpConfig(value) {
 }
 
 // TOML inline table for the -c flag: binds vocatrya_business to this turn's
-// loopback endpoint, fixed bearer env var, per-turn read-only enabled_tools,
-// and server-scoped auto-approval (keeping global approvalPolicy="never" so
-// shell, file edits, and any foreign MCP remain blocked).
+// loopback endpoint, fixed bearer env var, per-turn enabled_tools, and
+// server-scoped auto-approval so Codex CLI >= 0.165.0 forwards allowlisted
+// vocatrya_business calls straight to Vocatrya's server-side approval/proposal
+// gate (keeping global approvalPolicy="never" so shell, file edits, and any
+// foreign MCP remain blocked).
 function mcpServersToml(mcp) {
   return `mcp_servers={${NATIVE_MCP_SERVER_KEY}={url=${JSON.stringify(mcp.url)},bearer_token_env_var=${JSON.stringify(mcp.envVar)},default_tools_approval_mode="approve",enabled_tools=${JSON.stringify(mcp.allowedTools)}}}`;
 }

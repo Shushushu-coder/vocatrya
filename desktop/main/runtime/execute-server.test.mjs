@@ -61,6 +61,7 @@ it("keeps native permissions separate and rejects caller runtime paths", async (
   expect((await post(base, path, { ...body, nativeBusinessMcp: { ...nativeBusinessMcp, bearerTokenEnvVar: "OTHER_VAR" } })).status).toBe(400);
   expect((await post(base, path, { ...body, nativeBusinessMcp: { ...nativeBusinessMcp, extra: true } })).status).toBe(400);
   expect((await post(base, path, { ...body, nativeBusinessMcp: { ...nativeBusinessMcp, allowedTools: ["add_job".repeat(20)] } })).status).toBe(400);
+  expect((await post(base, path, { ...body, nativeBusinessMcp: { ...nativeBusinessMcp, allowedTools: Array.from({ length: 25 }, (_, i) => `tool_${i}`) } })).status).toBe(400);
   expect(executeNativeSession).not.toHaveBeenCalled();
   const res = await post(base, path, body);
   expect((await res.text()).trim().split("\n").map(line => JSON.parse(line))).toEqual([{ type: "native-session", threadId: "saved" }, { type: "completed", text: "native" }]);

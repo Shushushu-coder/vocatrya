@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { LanguageModel } from "ai";
+import type { ExecuteAIConnectionTextDeps } from "@/lib/ai/execution";
 import type {
   AgentFeishuWriteVerify,
   AgentNotionWriteVerify,
@@ -40,6 +42,17 @@ import {
   type DetachedWriteSpec,
   type DetachedWriteVerify,
 } from "@/lib/agent/detachedWrite";
+import {
+  executeAddJobWrite,
+  executeCanonicalMatchJobWrite,
+  executeLegacyMatchJobWrite,
+  executeTodayPlanWrite,
+  isLocalProposalWriteTool,
+  localProposalInputHash,
+  validateLocalProposalInput,
+  type LocalProposalMaterial,
+  type LocalProposalWriteToolName,
+} from "@/lib/agent/localProposalWrite";
 import { effectiveAgentToolNames } from "@/lib/agent/toolPermissions";
 import {
   AGENT_PROPOSAL_OUTCOME,
@@ -74,7 +87,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
 
 type SettleInput = {
   outcomeStatus: string;
-  outcome: DetachedWriteResult | { status: string; code: string };
+  outcome: DetachedWriteResult | Record<string, unknown>;
   taskStatus: string;
   failureCode?: string | null;
   failureDetail?: string | null;
@@ -395,10 +408,456 @@ async function callDeletePages(
   };
 }
 
+export type ExecuteAgentWriteOptions = {
+  signal?: AbortSignal;
+  execDeps?: ExecuteAIConnectionTextDeps;
+  matchModel?: LanguageModel;
+};
+
+/**
+ * Durable VERIFY → DISPATCH → SETTLE executor for local business write
+ * proposals (add_job, today_plan, match_job) created by the native MCP bridge.
+ * Preserves identical non-resend / expiry / role-surface / unknown-outcome
+ * semantics as remote detached writes.
+ */
+async function executeLocalAgentWriteTask(
+  db: PrismaClient,
+  claim: HarnessClaim,
+  task: { id: string; userId: string },
+  toolName: LocalProposalWriteToolName,
+  proposal: Prisma.AgentOperationProposalGetPayload<object>,
+  opts: ExecuteAgentWriteOptions,
+): Promise<void> {
+  const settle = (input: SettleInput) => settleWrite(db, claim, proposal.id, input);
+
+  // ---------------------------------------------------------------- VERIFY
+  if (proposal.status !== AGENT_PROPOSAL_STATUS.APPROVED) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.CANCELLED,
+      outcome: { status: "cancelled", code: proposal.status },
+      taskStatus: HARNESS_TASK_STATUS.CANCELLED,
+      failureCode: "PROPOSAL_NOT_EXECUTABLE",
+    });
+    return;
+  }
+  if (proposal.outcomeStatus !== null) {
+    let mirror: Record<string, unknown>;
+    try {
+      mirror = JSON.parse(proposal.outcomeJson!) as Record<string, unknown>;
+    } catch {
+      mirror = { saved: false, tool: toolName, status: "failed", code: "OUTCOME_CORRUPT" };
+    }
+    await settle({
+      outcomeStatus: proposal.outcomeStatus,
+      outcome: mirror,
+      taskStatus:
+        proposal.outcomeStatus === AGENT_PROPOSAL_OUTCOME.SUCCEEDED
+          ? HARNESS_TASK_STATUS.SUCCEEDED
+          : proposal.outcomeStatus === AGENT_PROPOSAL_OUTCOME.CANCELLED
+            ? HARNESS_TASK_STATUS.CANCELLED
+            : HARNESS_TASK_STATUS.FAILED,
+      failureCode:
+        proposal.outcomeStatus === AGENT_PROPOSAL_OUTCOME.SUCCEEDED
+          ? null
+          : typeof mirror.code === "string"
+            ? mirror.code
+            : "OUTCOME_RECORDED",
+    });
+    return;
+  }
+  if (proposal.dispatchedAt !== null) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.UNCERTAIN,
+      outcome: {
+        saved: false,
+        tool: toolName,
+        status: "unknown",
+        code: "DISPATCH_OUTCOME_UNKNOWN",
+        detail:
+          "The operation was dispatched before a restart; whether it completed is unknown. Reconcile manually before re-proposing.",
+      },
+      taskStatus: HARNESS_TASK_STATUS.FAILED,
+      failureCode: "DISPATCH_OUTCOME_UNKNOWN",
+    });
+    return;
+  }
+  const now = new Date();
+  if (proposal.expiresAt <= now) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.CANCELLED,
+      outcome: {
+        status: "cancelled",
+        code: AGENT_PROPOSAL_REASON.AUTHORIZATION_EXPIRED,
+      },
+      taskStatus: HARNESS_TASK_STATUS.CANCELLED,
+      failureCode: AGENT_PROPOSAL_REASON.AUTHORIZATION_EXPIRED,
+    });
+    return;
+  }
+
+  const material = (() => {
+    try {
+      return JSON.parse(proposal.materialJson ?? "{}") as LocalProposalMaterial;
+    } catch {
+      return {};
+    }
+  })();
+
+  let immutableInput: Record<string, unknown>;
+  try {
+    immutableInput = JSON.parse(proposal.inputJson) as Record<string, unknown>;
+  } catch {
+    immutableInput = {};
+  }
+  const validated = validateLocalProposalInput(toolName, immutableInput, material);
+  if (!validated.ok || localProposalInputHash(validated.data) !== proposal.inputHash) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
+      outcome: {
+        saved: false,
+        tool: toolName,
+        status: "failed",
+        code: "PROPOSAL_INPUT_CONFLICT",
+      },
+      taskStatus: HARNESS_TASK_STATUS.FAILED,
+      failureCode: "PROPOSAL_INPUT_CONFLICT",
+    });
+    return;
+  }
+
+  if (!proposal.conversationId) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.CANCELLED,
+      outcome: { status: "cancelled", code: "PROPOSAL_SOURCE_DELETED" },
+      taskStatus: HARNESS_TASK_STATUS.CANCELLED,
+      failureCode: "PROPOSAL_SOURCE_DELETED",
+    });
+    return;
+  }
+  const conversation = await db.chatConversation.findUnique({
+    where: { id: proposal.conversationId },
+    select: { archivedAt: true, agentRole: true },
+  });
+  if (!conversation) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.CANCELLED,
+      outcome: { status: "cancelled", code: "PROPOSAL_SOURCE_DELETED" },
+      taskStatus: HARNESS_TASK_STATUS.CANCELLED,
+      failureCode: "PROPOSAL_SOURCE_DELETED",
+    });
+    return;
+  }
+  if (conversation.archivedAt) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
+      outcome: {
+        saved: false,
+        tool: toolName,
+        status: "failed",
+        code: "PROPOSAL_SOURCE_ARCHIVED",
+      },
+      taskStatus: HARNESS_TASK_STATUS.FAILED,
+      failureCode: "PROPOSAL_SOURCE_ARCHIVED",
+    });
+    return;
+  }
+  const effective = effectiveAgentToolNames({ agentRole: conversation.agentRole });
+  if (!effective.includes(toolName)) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
+      outcome: {
+        saved: false,
+        tool: toolName,
+        status: "failed",
+        code: "PROPOSAL_TOOL_FORBIDDEN",
+      },
+      taskStatus: HARNESS_TASK_STATUS.FAILED,
+      failureCode: "PROPOSAL_TOOL_FORBIDDEN",
+    });
+    return;
+  }
+
+  // Block automatic re-send while an earlier approved same-input proposal has
+  // an unresolved or uncertain outcome without manual NOT_HAPPENED attestation.
+  const unresolvedProposal = await db.agentOperationProposal.findFirst({
+    where: {
+      userId: task.userId,
+      toolName,
+      inputHash: proposal.inputHash,
+      id: { not: proposal.id },
+      status: AGENT_PROPOSAL_STATUS.APPROVED,
+      OR: [
+        { outcomeStatus: null },
+        { outcomeStatus: AGENT_PROPOSAL_OUTCOME.UNCERTAIN },
+      ],
+      AND: [
+        {
+          OR: [
+            { manualResolution: null },
+            { manualResolution: { in: ["HAPPENED", "STILL_UNCERTAIN"] } },
+          ],
+        },
+      ],
+    },
+  });
+  if (unresolvedProposal) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.UNCERTAIN,
+      outcome: {
+        saved: false,
+        tool: toolName,
+        status: "verification_required",
+        code: "VERIFICATION_REQUIRED",
+        detail:
+          "An earlier approved operation with the same input has an unresolved outcome. Reconcile manually before re-proposing.",
+      },
+      taskStatus: HARNESS_TASK_STATUS.FAILED,
+      failureCode: "VERIFICATION_REQUIRED",
+    });
+    return;
+  }
+
+  try {
+    await writeStepCheckpoint(db, claim, {
+      step: AGENT_WRITE_TASK_STEP.DISPATCH,
+      pinnedJson: JSON.stringify({ toolName, proposalId: proposal.id }),
+      payload: { toolName },
+    });
+  } catch (error) {
+    if (error instanceof HarnessOwnershipLost) return;
+    throw error;
+  }
+
+  // --------------------------------------------------------------- DISPATCH
+  const dispatchKey = `agent-write:${proposal.id}`;
+  let dispatchClaimed = false;
+  try {
+    await db.$transaction(async (tx) => {
+      await guardedTaskUpdate(tx, claim, {
+        currentStep: AGENT_WRITE_TASK_STEP.SETTLE,
+      });
+      const claimed = await tx.agentOperationProposal.updateMany({
+        where: {
+          id: proposal.id,
+          status: AGENT_PROPOSAL_STATUS.APPROVED,
+          dispatchedAt: null,
+          outcomeStatus: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: {
+          dispatchKey,
+          dispatchedAt: new Date(),
+          revision: { increment: 1 },
+        },
+      });
+      if (claimed.count !== 1) throw new HarnessOwnershipLost();
+      await appendTaskEvent(tx, {
+        taskId: claim.taskId,
+        epoch: claim.epoch,
+        type: HARNESS_TASK_EVENT.STEP_CHECKPOINT,
+        payload: {
+          step: AGENT_WRITE_TASK_STEP.DISPATCH,
+          proposalId: proposal.id,
+          dispatchKey,
+          toolName,
+        },
+      });
+      dispatchClaimed = true;
+    });
+  } catch (error) {
+    if (error instanceof HarnessOwnershipLost) {
+      const fresh = await db.agentOperationProposal.findUnique({
+        where: { id: proposal.id },
+      });
+      if (
+        fresh &&
+        fresh.status === AGENT_PROPOSAL_STATUS.APPROVED &&
+        fresh.expiresAt <= new Date() &&
+        fresh.dispatchedAt === null
+      ) {
+        await settle({
+          outcomeStatus: AGENT_PROPOSAL_OUTCOME.CANCELLED,
+          outcome: {
+            status: "cancelled",
+            code: AGENT_PROPOSAL_REASON.AUTHORIZATION_EXPIRED,
+          },
+          taskStatus: HARNESS_TASK_STATUS.CANCELLED,
+          failureCode: AGENT_PROPOSAL_REASON.AUTHORIZATION_EXPIRED,
+        });
+      }
+      return;
+    }
+    throw error;
+  }
+  if (!dispatchClaimed) return;
+
+  const live = await db.harnessTask.findUnique({
+    where: { id: claim.taskId },
+    select: { status: true },
+  });
+  if (!live || live.status !== HARNESS_TASK_STATUS.RUNNING || opts.signal?.aborted) {
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.CANCELLED,
+      outcome: { status: "cancelled", code: "CANCELLED" },
+      taskStatus: HARNESS_TASK_STATUS.CANCELLED,
+    });
+    return;
+  }
+
+  // ---------------------------------------------------------------- SETTLE
+  try {
+    if (toolName === "add_job") {
+      const result = await executeAddJobWrite({
+        userId: task.userId,
+        rawInput: validated.data,
+        canonicalJobs: material.canonicalJobs === true,
+        toolCallId: proposal.id,
+        db,
+      });
+      if (result.created) {
+        await settle({
+          outcomeStatus: AGENT_PROPOSAL_OUTCOME.SUCCEEDED,
+          outcome: { ...result, saved: true, tool: "add_job" },
+          taskStatus: HARNESS_TASK_STATUS.SUCCEEDED,
+          failureCode: null,
+        });
+      } else {
+        const code = result.duplicateOf ? "DUPLICATE_JOB" : "VALIDATION_FAILED";
+        await settle({
+          outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
+          outcome: {
+            ...result,
+            saved: false,
+            tool: "add_job",
+            status: "failed",
+            code,
+          },
+          taskStatus: HARNESS_TASK_STATUS.FAILED,
+          failureCode: code,
+        });
+      }
+      return;
+    }
+
+    if (toolName === "today_plan") {
+      const result = await executeTodayPlanWrite({
+        userId: task.userId,
+        conversationId: proposal.conversationId,
+        rawInput: validated.data,
+        operationKey: proposal.id,
+        db,
+      });
+      if (result.status === "ok" && result.saved) {
+        await settle({
+          outcomeStatus: AGENT_PROPOSAL_OUTCOME.SUCCEEDED,
+          outcome: { ...result, saved: true, tool: "today_plan" },
+          taskStatus: HARNESS_TASK_STATUS.SUCCEEDED,
+          failureCode: null,
+        });
+      } else {
+        const code = result.status.toUpperCase();
+        await settle({
+          outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
+          outcome: { ...result, saved: false, tool: "today_plan", code },
+          taskStatus: HARNESS_TASK_STATUS.FAILED,
+          failureCode: code,
+        });
+      }
+      return;
+    }
+
+    // match_job
+    if (material.freshNativeFull === true) {
+      const result = await executeCanonicalMatchJobWrite({
+        userId: task.userId,
+        pageJobId: material.pageJobId ?? null,
+        resumeTitle:
+          typeof validated.data.resumeTitle === "string"
+            ? validated.data.resumeTitle
+            : undefined,
+        operationKey: proposal.id,
+        db,
+        execDeps: opts.execDeps,
+        signal: opts.signal,
+      });
+      if (result.status === "ok") {
+        await settle({
+          outcomeStatus: AGENT_PROPOSAL_OUTCOME.SUCCEEDED,
+          outcome: { ...result, tool: "match_job" },
+          taskStatus: HARNESS_TASK_STATUS.SUCCEEDED,
+          failureCode: null,
+        });
+      } else {
+        const code =
+          "code" in result && typeof result.code === "string"
+            ? result.code
+            : result.status.toUpperCase();
+        await settle({
+          outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
+          outcome: { ...result, saved: false, tool: "match_job", code },
+          taskStatus: HARNESS_TASK_STATUS.FAILED,
+          failureCode: code,
+        });
+      }
+      return;
+    }
+
+    const result = await executeLegacyMatchJobWrite({
+      userId: task.userId,
+      pageJobId: material.pageJobId ?? null,
+      rawInput: validated.data,
+      connectionId: material.connectionId ?? null,
+      modelName: material.model ?? null,
+      provider: material.provider ?? null,
+      model: opts.matchModel,
+      toolCallId: proposal.id,
+      abortSignal: opts.signal,
+      db,
+    });
+    if (result.status === "ok" && result.saved) {
+      await settle({
+        outcomeStatus: AGENT_PROPOSAL_OUTCOME.SUCCEEDED,
+        outcome: { ...result, tool: "match_job" },
+        taskStatus: HARNESS_TASK_STATUS.SUCCEEDED,
+        failureCode: null,
+      });
+    } else {
+      const code = result.status.toUpperCase();
+      await settle({
+        outcomeStatus: AGENT_PROPOSAL_OUTCOME.FAILED,
+        outcome: { ...result, saved: false, tool: "match_job", code },
+        taskStatus: HARNESS_TASK_STATUS.FAILED,
+        failureCode: code,
+      });
+    }
+  } catch (error) {
+    // Dispatched already crossed — any unexpected error/abort after dispatch
+    // settles UNCERTAIN rather than auto-retrying.
+    log.error("[harness:agent-write] local write error after dispatch", {
+      proposalId: proposal.id,
+      toolName,
+      error: String(error),
+    });
+    await settle({
+      outcomeStatus: AGENT_PROPOSAL_OUTCOME.UNCERTAIN,
+      outcome: {
+        saved: false,
+        tool: toolName,
+        status: "unknown",
+        code: "OUTCOME_UNKNOWN",
+        detail:
+          "The write encountered an unexpected error after dispatch; reconcile manually before re-proposing.",
+      },
+      taskStatus: HARNESS_TASK_STATUS.FAILED,
+      failureCode: "OUTCOME_UNKNOWN",
+    });
+  }
+}
+
 export async function executeAgentWriteTask(
   db: PrismaClient,
   claim: HarnessClaim,
-  opts: { signal?: AbortSignal } = {},
+  opts: ExecuteAgentWriteOptions = {},
 ): Promise<void> {
   const task = await db.harnessTask.findUnique({ where: { id: claim.taskId } });
   if (!task || task.status !== HARNESS_TASK_STATUS.RUNNING) return;
@@ -409,14 +868,32 @@ export async function executeAgentWriteTask(
   } catch {
     parsedInput = {};
   }
-  const spec = parsedInput.toolName
-    ? DETACHED_WRITE_SPECS[parsedInput.toolName]
-    : undefined;
   const proposal = parsedInput.proposalId
     ? await db.agentOperationProposal.findUnique({
         where: { id: parsedInput.proposalId },
       })
     : null;
+
+  if (
+    proposal &&
+    proposal.userId === task.userId &&
+    parsedInput.toolName &&
+    isLocalProposalWriteTool(parsedInput.toolName)
+  ) {
+    await executeLocalAgentWriteTask(
+      db,
+      claim,
+      task,
+      parsedInput.toolName,
+      proposal,
+      opts,
+    );
+    return;
+  }
+
+  const spec = parsedInput.toolName
+    ? DETACHED_WRITE_SPECS[parsedInput.toolName]
+    : undefined;
 
   const verifyHint = spec?.verifyOf(
     (() => {

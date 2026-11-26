@@ -33,6 +33,12 @@ type MatchJobContext = {
   modelName: string;
   writer: UIMessageStreamWriter;
   guard: NestedGenerationGuard;
+  /** Optional server-side saver (used when no NextAuth cookie exists, e.g. loopback MCP). */
+  saveMatch?: (
+    jobId: string,
+    matchScore: number,
+    matchData: string,
+  ) => Promise<{ success?: boolean; message?: string } | undefined>;
 };
 
 /**
@@ -159,7 +165,7 @@ export function buildMatchJobTool(ctx: MatchJobContext) {
           return { status: "ok" as const, jobId: job.id!, jobTitle, company, resumeId: resume.id!, resumeTitle: resume.title, scores, body, saved: true };
         });
       }
-      const saveResult = await saveJobMatchResult(
+      const saveResult = await (ctx.saveMatch ?? saveJobMatchResult)(
         job.id!,
         scores.matchScore,
         JSON.stringify(matchData),

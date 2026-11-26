@@ -28,6 +28,11 @@ type ReviewResumeContext = {
   modelName: string;
   writer: UIMessageStreamWriter;
   guard: NestedGenerationGuard;
+  /** Optional server-side saver (used when no NextAuth cookie exists, e.g. loopback MCP). */
+  saveReview?: (
+    resumeId: string,
+    reviewData: string,
+  ) => Promise<{ success?: boolean; message?: string } | undefined>;
 };
 
 /**
@@ -131,7 +136,7 @@ export function buildReviewResumeTool(ctx: ReviewResumeContext) {
       // and do not mutate the variant version.
       const saveResult = lookup.family === "ab"
         ? { success: false, message: "Resume variant reviews are not saved in this version." }
-        : await saveResumeReviewResult(resumeId, JSON.stringify(reviewData));
+        : await (ctx.saveReview ?? saveResumeReviewResult)(resumeId, JSON.stringify(reviewData));
       const saved = saveResult?.success === true;
 
       return {

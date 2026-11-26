@@ -16,6 +16,16 @@ const chat = {
 vi.mock("@/components/agent/AgentChatProvider", () => ({
   useAgentChat: () => chat,
 }));
+const proposalMocks = vi.hoisted(() => ({
+  getOperationProposalAction: vi.fn(),
+  decideOperationProposalAction: vi.fn(),
+  listOperationProposalsAction: vi.fn(),
+  reproposeOperationAction: vi.fn(),
+  resolveUncertainProposalAction: vi.fn(),
+  restoreProposalSourceAction: vi.fn(),
+  withdrawOperationProposalAction: vi.fn(),
+}));
+vi.mock("@/actions/operationProposal.actions", () => proposalMocks);
 vi.mock("@/components/TipTapContentViewer", () => ({
   TipTapContentViewer: ({ content }: { content: string }) => (
     <div data-testid="tiptap-content" dangerouslySetInnerHTML={{ __html: content }} />
@@ -569,5 +579,145 @@ describe("AgentChatMessages", () => {
     ];
     render(<AgentChatMessages />);
     expect(screen.queryByTestId("agent-native-tool-card")).not.toBeInTheDocument();
+  });
+
+  it("renders a native approval_required part as an approval card (never Completed) and updates on approve", async () => {
+    const pendingDto = {
+      id: "prop-add-1",
+      toolName: "add_job",
+      status: "PROPOSED",
+      derived: "pending",
+      input: {
+        company: "Acme Corp",
+        jobTitle: "Platform Engineer",
+        location: "Shanghai",
+      },
+      target: "Acme Corp · Platform Engineer",
+      conversationId: "conv-1",
+      sourceArchived: false,
+      approvalId: "ap-add-1",
+      toolCallId: "native-mcp-1",
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      decidedAt: null,
+      decisionReason: null,
+      dispatched: false,
+      taskId: null,
+      taskStatus: null,
+      outcomeStatus: null,
+      outcome: null,
+      manualResolution: null,
+      supersedesId: null,
+    };
+    const succeededDto = {
+      ...pendingDto,
+      status: "APPROVED",
+      derived: "succeeded",
+      taskId: "task-1",
+      taskStatus: "SUCCEEDED",
+      outcomeStatus: "SUCCEEDED",
+      outcome: {
+        saved: true,
+        created: true,
+        company: "Acme Corp",
+        title: "Platform Engineer",
+      },
+    };
+    proposalMocks.getOperationProposalAction
+      .mockResolvedValueOnce({ success: true, data: pendingDto })
+      .mockResolvedValue({ success: true, data: succeededDto });
+    proposalMocks.decideOperationProposalAction.mockResolvedValueOnce({
+      success: true,
+      data: { state: "approved", proposal: { ...pendingDto, status: "APPROVED", derived: "queued", taskId: "task-1" } },
+    });
+
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_TOOL_PART_TYPE,
+          id: "native-tool-add1",
+          data: {
+            version: 1,
+            kind: "tool",
+            itemId: "add1",
+            tool: "add_job",
+            status: "approval_required",
+            proposalId: "prop-add-1",
+            approvalId: "ap-add-1",
+          },
+        },
+      ]),
+    ];
+
+    render(<AgentChatMessages />);
+    const card = screen.getByTestId("agent-native-tool-card");
+    expect(card).toHaveAttribute("data-status", "approval_required");
+    expect(card).toHaveAttribute("data-proposal-id", "prop-add-1");
+    expect(screen.getByText("Needs approval")).toBeInTheDocument();
+    expect(screen.queryByText("Completed")).not.toBeInTheDocument();
+    expect(await screen.findByText("Awaiting your decision")).toBeInTheDocument();
+    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+    expect(screen.getByText("Platform Engineer")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(proposalMocks.decideOperationProposalAction).toHaveBeenCalledWith({
+      proposalId: "prop-add-1",
+      decision: "approve",
+    });
+    expect(await screen.findByText("Completed")).toBeInTheDocument();
+  });
+
+  it("renders a native queued write part honestly as Queued (never Completed or Written)", async () => {
+    proposalMocks.getOperationProposalAction.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: "prop-q-1",
+        toolName: "notion_create_page",
+        status: "APPROVED",
+        derived: "queued",
+        input: { title: "Offer Tracker", content: "Offer details" },
+        conversationId: "conv-1",
+        sourceArchived: false,
+        approvalId: "ap-q-1",
+        toolCallId: "native-mcp-q1",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        decidedAt: new Date().toISOString(),
+        decisionReason: "FULL_ACCESS_PREAUTHORIZED",
+        dispatched: false,
+        taskId: "task-q-1",
+        taskStatus: "QUEUED",
+        outcomeStatus: null,
+        outcome: null,
+        manualResolution: null,
+        supersedesId: null,
+      },
+    });
+    chat.messages = [
+      assistant([
+        {
+          type: AGENT_NATIVE_TOOL_PART_TYPE,
+          id: "native-tool-q1",
+          data: {
+            version: 1,
+            kind: "tool",
+            itemId: "q1",
+            tool: "notion_create_page",
+            status: "queued",
+            proposalId: "prop-q-1",
+            approvalId: "ap-q-1",
+            taskId: "task-q-1",
+          },
+        },
+      ]),
+    ];
+
+    render(<AgentChatMessages />);
+    const card = screen.getByTestId("agent-native-tool-card");
+    expect(card).toHaveAttribute("data-status", "queued");
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(await screen.findByText("Queued for background execution")).toBeInTheDocument();
+    expect(screen.queryByText("Written to Notion")).not.toBeInTheDocument();
+    expect(screen.queryByText("Completed")).not.toBeInTheDocument();
   });
 });

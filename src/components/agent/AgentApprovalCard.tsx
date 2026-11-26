@@ -276,6 +276,33 @@ function FeishuWriteBody({
   );
 }
 
+export function AgentProposalInputBody({
+  toolName,
+  input,
+  pastedText,
+}: {
+  toolName: string;
+  input: Record<string, unknown>;
+  pastedText?: string;
+}) {
+  switch (toolName) {
+    case "add_job":
+      return <AddJobBody input={input} pastedText={pastedText} />;
+    case "match_job":
+      return <MatchJobBody input={input} />;
+    case "today_plan":
+      return <TodayPlanBody input={input} />;
+    default:
+      if (isNotionAgentToolName(toolName)) {
+        return <NotionWriteBody toolName={toolName} input={input} />;
+      }
+      if (isFeishuAgentToolName(toolName)) {
+        return <FeishuWriteBody toolName={toolName} input={input} />;
+      }
+      return null;
+  }
+}
+
 export function AgentApprovalCard({
   part,
   pastedText,
@@ -341,24 +368,13 @@ export function AgentApprovalCard({
     part.state === "output-error" ||
     (part.state === "approval-responded" && approved === false);
 
-  const body = (() => {
-    switch (toolName) {
-      case "add_job":
-        return <AddJobBody input={input} pastedText={pastedText} />;
-      case "match_job":
-        return <MatchJobBody input={input} />;
-      case "today_plan":
-        return <TodayPlanBody input={input} />;
-      default:
-        if (isNotionAgentToolName(toolName)) {
-          return <NotionWriteBody toolName={toolName} input={input} />;
-        }
-        if (isFeishuAgentToolName(toolName)) {
-          return <FeishuWriteBody toolName={toolName} input={input} />;
-        }
-        return null;
-    }
-  })();
+  const body = (
+    <AgentProposalInputBody
+      toolName={toolName}
+      input={input}
+      pastedText={pastedText}
+    />
+  );
 
   const declineReason =
     (part.state === "output-denied" ||

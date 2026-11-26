@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import type { UIMessage } from "ai";
-import { AGENT_NATIVE_SEARCH_PART_TYPE } from "@/models/agent.model";
+import { AGENT_NATIVE_SEARCH_PART_TYPE, AGENT_NATIVE_TOOL_PART_TYPE } from "@/models/agent.model";
 import type { ConversationRequest } from "@/lib/agent/conversationRequest";
 
 const mocks = vi.hoisted(() => ({
@@ -194,5 +194,85 @@ describe("nativeChatResponse", () => {
     await consumeResponse(res);
     expect(mocks.finishConversationRequest).not.toHaveBeenCalled();
     expect(mocks.cancelConversationRequest).toHaveBeenCalledWith("user-1", "conv-1", "req-1");
+  });
+
+  it("streams and persists native approval_required and queued tool parts with proposal identity", async () => {
+    mocks.executeNativeTurn.mockImplementation(async function* () {
+      yield {
+        type: "native-session",
+        threadId: "thread-secret-2",
+        resumed: false,
+        runtimeVersion: "0.170.0",
+        runtimeProfileRef: "rp_1",
+        configHash: "cfg_1",
+      };
+      yield {
+        type: "native-event",
+        version: 1,
+        kind: "tool_call",
+        conversationId: "conv-1",
+        nativeSessionId: "thread-secret-2",
+        nativeTurnId: "turn-2",
+        itemId: "call-add-1",
+        occurredAt: "2026-11-26T05:00:00.000Z",
+        payload: {
+          tool: "add_job",
+          status: "running",
+          argumentsSummary: '{"company":"Acme","jobTitle":"Engineer"}',
+        },
+      };
+      yield {
+        type: "native-event",
+        version: 1,
+        kind: "tool_result",
+        conversationId: "conv-1",
+        nativeSessionId: "thread-secret-2",
+        nativeTurnId: "turn-2",
+        itemId: "call-add-1",
+        occurredAt: "2026-11-26T05:00:01.000Z",
+        payload: {
+          tool: "add_job",
+          status: "approval_required",
+          proposalId: "prop-1",
+          approvalId: "ap-1",
+          expiresAt: "2026-12-03T05:00:01.000Z",
+          resultSummary: '{"saved":false,"status":"approval_required","tool":"add_job","proposalId":"prop-1"}',
+        },
+      };
+      yield { type: "text-delta", delta: "Created an approval card for you." };
+      yield { type: "completed", text: "Created an approval card for you." };
+    });
+
+    const res = nativeChatResponse({
+      request: makeRequest("Add Acme Engineer"),
+      signal: new AbortController().signal,
+      connectionId: "conn-1",
+      model: "gpt-5.4",
+      instructions: "career assistant",
+      permissionMode: "ask",
+      agentRole: "pilot",
+    });
+
+    const wire = await consumeResponse(res);
+    expect(wire).toContain("data-native-tool");
+    expect(wire).toContain("approval_required");
+    expect(wire).not.toContain("thread-secret-2");
+
+    const savedMessages = (mocks.finishConversationRequest.mock.calls[0] as unknown as [unknown, UIMessage[]])[1];
+    const assistant = savedMessages.at(-1)!;
+    const toolPart = assistant.parts.find((p) => p.type === AGENT_NATIVE_TOOL_PART_TYPE) as any;
+    expect(toolPart).toMatchObject({
+      type: AGENT_NATIVE_TOOL_PART_TYPE,
+      id: "native-tool-call-add-1",
+      data: {
+        version: 1,
+        kind: "tool",
+        itemId: "call-add-1",
+        tool: "add_job",
+        status: "approval_required",
+        proposalId: "prop-1",
+        approvalId: "ap-1",
+      },
+    });
   });
 });

@@ -43,7 +43,7 @@ function serviceAction(action: AgentTodayPlanInput["action"]) {
   }
 }
 
-function mapAgentInput(
+export function mapAgentInput(
   input: AgentTodayPlanInput,
 ): { input: TodayPlanWriteInput } | { error: string } {
   switch (input.action) {

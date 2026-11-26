@@ -78,7 +78,7 @@ async function runClaimed(
     // One claim/lease/heartbeat for every kind — the executor is the only
     // kind-specific part.
     if (claim.kind === HARNESS_TASK_KIND.AGENT_TOOL_WRITE) {
-      await executeAgentWriteTask(db, claim, { signal: abort.signal });
+      await executeAgentWriteTask(db, claim, { signal: abort.signal, execDeps: deps });
     } else {
       await executeDeepMatchTask(db, claim, {
         deps,
