@@ -507,6 +507,20 @@ export type AgentTodayPlanSuggestion = {
     companyName: string | null;
   }[];
   awaitingReflection: { count: number; items: { label: string }[] };
+  /**
+   * M2.2 dual-track job-search preferences: `structured` is the
+   * authoritative business-table snapshot; `conversationMemory` carries the
+   * labeled 对话沉淀偏好 notes — advisory only, never overriding the
+   * structured fields. Absent when nothing exists or the read degraded.
+   */
+  jobPreferences?: {
+    structured: Record<string, string>;
+    conversationMemory: {
+      category: string;
+      key: string;
+      content: string;
+    }[];
+  };
   /** Sources the snapshot could not read — the model reports the gap plainly. */
   degraded: string[];
 };

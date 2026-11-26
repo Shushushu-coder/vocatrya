@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import {
   applyTodayPlanWrite,
+  listTodayPlanSuggestions,
   readTodayPlan,
   undoTodayPlanOperation,
 } from "@/lib/todayPlan/service";
@@ -327,4 +328,76 @@ it("rolls back business writes if recording the ledger fails with P2002", async 
   await expect(applyTodayPlanWrite(ctxA(), { operationKey: "rollback", input: { action: "add", titles: ["应回滚"], target: "today" } }, db as unknown as PrismaClient)).rejects.toThrow();
   expect(await prisma.task.count({ where: { userId } })).toBe(0);
   expect(await prisma.todayPlanItem.count({ where: { userId } })).toBe(0);
+});
+
+describe("suggestion snapshot — dual-track job preferences (M2.2)", () => {
+  async function putMemory(
+    category: string,
+    key: string,
+    content: string,
+    owner = userId,
+  ) {
+    return prisma.userMemoryEntry.create({
+      data: { userId: owner, category, key, content },
+    });
+  }
+
+  it("exposes authoritative structured fields plus labeled 对话沉淀偏好 notes", async () => {
+    await prisma.jobSearchPreference.create({
+      data: { userId, preferredCities: "上海", targetRoles: "后端工程师" },
+    });
+    await putMemory("career_goal", "cities", "杭州");
+    await putMemory("industry_preference", "avoid", "外包");
+    // Out-of-scope categories never join the supplement.
+    await putMemory("collaboration_habit", "style", "不属于求职偏好");
+
+    const suggestions = await listTodayPlanSuggestions(ctxA());
+    expect(suggestions.degraded).toEqual([]);
+    expect(suggestions.jobPreferences?.structured).toEqual({
+      preferredCities: "上海",
+      targetRoles: "后端工程师",
+    });
+    const memory = suggestions.jobPreferences?.conversationMemory ?? [];
+    expect(memory.map((note) => note.category).sort()).toEqual([
+      "career_goal",
+      "industry_preference",
+    ]);
+    expect(memory.some((note) => note.content === "杭州")).toBe(true);
+    expect(memory.every((note) => note.content !== "不属于求职偏好")).toBe(
+      true,
+    );
+  });
+
+  it("master switch off → structured fields only", async () => {
+    await prisma.jobSearchPreference.create({
+      data: { userId, preferredCities: "上海" },
+    });
+    await putMemory("career_goal", "cities", "杭州");
+    const settings = JSON.stringify({
+      settings: { general: { agent: { longTermMemoryEnabled: false } } },
+    });
+    await prisma.userSettings.create({ data: { userId, settings } });
+
+    const suggestions = await listTodayPlanSuggestions(ctxA());
+    expect(suggestions.jobPreferences?.structured).toEqual({
+      preferredCities: "上海",
+    });
+    expect(suggestions.jobPreferences?.conversationMemory).toEqual([]);
+  });
+
+  it("omits the block entirely when neither track has data", async () => {
+    const suggestions = await listTodayPlanSuggestions(ctxA());
+    expect(suggestions.jobPreferences).toBeUndefined();
+  });
+
+  it("keeps another user's preferences and memory strictly invisible", async () => {
+    const other = await seedAccount(prisma, `tp-pref-${randomUUID()}@x.com`);
+    await prisma.jobSearchPreference.create({
+      data: { userId: other, preferredCities: "北京" },
+    });
+    await putMemory("career_goal", "cities", "深圳", other);
+
+    const suggestions = await listTodayPlanSuggestions(ctxA());
+    expect(suggestions.jobPreferences).toBeUndefined();
+  });
 });

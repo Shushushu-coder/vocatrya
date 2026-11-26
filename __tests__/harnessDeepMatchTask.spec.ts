@@ -866,6 +866,249 @@ describe("executeDeepMatchTask", () => {
     );
     expect(await countDeepMatchAnalyses()).toBe(1);
   });
+
+  it("pins the dual-track preference context with the material — read-only, replayed verbatim", async () => {
+    const versionId = await createResumeVersion();
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "deep-model-1");
+    await prisma.jobSearchPreference.create({
+      data: { userId, preferredCities: "上海" },
+    });
+    await prisma.userMemoryEntry.create({
+      data: {
+        userId,
+        category: "career_goal",
+        key: "cities",
+        content: "杭州",
+      },
+    });
+    await prisma.userMemoryEntry.create({
+      data: {
+        userId,
+        category: "collaboration_habit",
+        key: "style",
+        content: "不属于求职偏好",
+      },
+    });
+    const { task } = await createTask(versionId);
+
+    const preferencesBefore =
+      await prisma.jobSearchPreference.findUniqueOrThrow({
+        where: { userId },
+      });
+    const bodies: Record<string, unknown>[] = [];
+    const holder = await claim(task.id);
+    await executeDeepMatchTask(prisma, holder, {
+      deps: depsForFetch(async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return okResponse(DEEP_RESULT);
+      }),
+      env: FEATURE_ON,
+    });
+
+    const row = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+    expect(row.status).toBe("SUCCEEDED");
+    expect(bodies).toHaveLength(1);
+    const prompt = String(bodies[0].prompt);
+    expect(prompt).toContain("CANDIDATE JOB-SEARCH PREFERENCES");
+    expect(prompt).toContain("上海");
+    expect(prompt).toContain("杭州");
+    expect(prompt).toContain("对话沉淀偏好");
+    expect(prompt).not.toContain("不属于求职偏好");
+
+    // The preference context lives inside the pinned material — recovery
+    // replays exactly this snapshot and never re-resolves the tables.
+    const pinned = JSON.parse(row.pinnedJson!) as {
+      promptVersion?: string;
+      material: {
+        preferenceText?: string | null;
+        preferenceSnapshot?: Record<string, unknown>;
+      };
+    };
+    expect(pinned.promptVersion).toBe("deep-match-v2");
+    expect(pinned.material.preferenceText).toContain("杭州");
+    expect(pinned.material.preferenceSnapshot).toMatchObject({
+      preferredCities: "上海",
+    });
+    const analysis = await prisma.matchAnalysis.findUniqueOrThrow({
+      where: { id: row.resultAnalysisId! },
+    });
+    expect(analysis.promptVersion).toBe("deep-match-v2");
+
+    // The business table was read, never written.
+    const preferencesAfter =
+      await prisma.jobSearchPreference.findUniqueOrThrow({
+        where: { userId },
+      });
+    expect(preferencesAfter).toEqual(preferencesBefore);
+  });
+
+  it("master switch off → the prompt carries structured fields but never memory notes", async () => {
+    const versionId = await createResumeVersion();
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "deep-model-1");
+    await prisma.jobSearchPreference.create({
+      data: { userId, preferredCities: "上海" },
+    });
+    await prisma.userMemoryEntry.create({
+      data: {
+        userId,
+        category: "career_goal",
+        key: "cities",
+        content: "杭州",
+      },
+    });
+    const settings = JSON.stringify({
+      settings: { general: { agent: { longTermMemoryEnabled: false } } },
+    });
+    await prisma.userSettings.create({
+      data: { userId, settings },
+    });
+    const { task } = await createTask(versionId);
+
+    const bodies: Record<string, unknown>[] = [];
+    const holder = await claim(task.id);
+    await executeDeepMatchTask(prisma, holder, {
+      deps: depsForFetch(async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return okResponse(DEEP_RESULT);
+      }),
+      env: FEATURE_ON,
+    });
+
+    expect(bodies).toHaveLength(1);
+    const prompt = String(bodies[0].prompt);
+    expect(prompt).toContain("上海");
+    expect(prompt).not.toContain("杭州");
+    expect(prompt).not.toContain("对话沉淀偏好");
+  });
+
+  it("replays a pre-M2.2 checkpoint carrying no preference fields", async () => {
+    const versionId = await createResumeVersion();
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "deep-model-1");
+    // Preference + memory exist now — a checkpoint written before M2.2
+    // never saw them and must replay the v1 prompt shape verbatim.
+    await prisma.jobSearchPreference.create({
+      data: { userId, preferredCities: "上海" },
+    });
+    await prisma.userMemoryEntry.create({
+      data: {
+        userId,
+        category: "career_goal",
+        key: "cities",
+        content: "杭州",
+      },
+    });
+    const { task } = await createTask(versionId);
+
+    const first = await claim(task.id);
+    await executeDeepMatchTask(prisma, first, {
+      deps: depsForFetch(async () => {
+        throw new Error("channel gone");
+      }),
+      env: FEATURE_ON,
+    });
+    let row = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+    expect(row.status).toBe("FAILED");
+    expect(row.currentStep).toBe("RUN_ANALYSIS");
+
+    // Rewrite the checkpoint into the pre-M2.2 shape: no preference fields.
+    const pinned = JSON.parse(row.pinnedJson!) as {
+      promptVersion?: string;
+      material: Record<string, unknown>;
+    };
+    delete pinned.material.preferenceText;
+    delete pinned.material.preferenceSnapshot;
+    pinned.promptVersion = "deep-match-v1";
+    await prisma.harnessTask.update({
+      where: { id: task.id },
+      data: { pinnedJson: JSON.stringify(pinned) },
+    });
+
+    await requestTaskRetry(prisma, userId, task.id);
+    const bodies: Record<string, unknown>[] = [];
+    const second = await claim(task.id);
+    await executeDeepMatchTask(prisma, second, {
+      deps: depsForFetch(async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return okResponse(DEEP_RESULT);
+      }),
+      env: FEATURE_ON,
+    });
+
+    row = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+    expect(row.status).toBe("SUCCEEDED");
+    expect(bodies).toHaveLength(1);
+    // The recovered run replayed the checkpoint's own material — the newly
+    // saved preference rows were NOT re-resolved into the prompt.
+    expect(String(bodies[0].prompt)).not.toContain("杭州");
+    expect(String(bodies[0].prompt)).not.toContain("对话沉淀偏好");
+    expect(await countDeepMatchAnalyses()).toBe(1);
+  });
+
+  it("marks the superseded deep analysis PREFERENCE_CHANGED when the pinned preference context changed", async () => {
+    const versionId = await createResumeVersion();
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "deep-model-1");
+    await prisma.userMemoryEntry.create({
+      data: {
+        userId,
+        category: "career_goal",
+        key: "cities",
+        content: "杭州",
+      },
+    });
+    const { task, opportunity } = await createTask(versionId);
+    const fetchImpl: typeof fetch = async () => okResponse(DEEP_RESULT);
+
+    const first = await claim(task.id);
+    await executeDeepMatchTask(prisma, first, {
+      deps: depsForFetch(fetchImpl),
+      env: FEATURE_ON,
+    });
+    const firstRow = await prisma.harnessTask.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+    expect(firstRow.status).toBe("SUCCEEDED");
+
+    // The memory note changes — same JD, same resume version.
+    await prisma.userMemoryEntry.updateMany({
+      where: { userId, category: "career_goal", key: "cities" },
+      data: { content: "深圳" },
+    });
+
+    const { task: secondTask } = await createDeepMatchTask(
+      prisma,
+      userId,
+      {
+        jobOpportunityId: opportunity.id,
+        resumeVariantVersionId: versionId,
+        requestKey: `req-${randomUUID()}`,
+      },
+      FEATURE_ON,
+    );
+    const secondClaim = await claim(secondTask.id);
+    await executeDeepMatchTask(prisma, secondClaim, {
+      deps: depsForFetch(fetchImpl),
+      env: FEATURE_ON,
+    });
+
+    const stale = await prisma.matchAnalysis.findUniqueOrThrow({
+      where: { id: firstRow.resultAnalysisId! },
+    });
+    expect(stale.isStale).toBe(true);
+    expect(JSON.parse(stale.staleReasonCodes ?? "[]")).toEqual([
+      MATCH_STALE_REASON.PREFERENCE_CHANGED,
+    ]);
+    expect(await countDeepMatchAnalyses()).toBe(2);
+  });
 });
 
 describe("harnessRunnerTick — heartbeat and cancel linkage", () => {

@@ -12,6 +12,7 @@ import {
   listUpcomingApplicationEvents,
   UPCOMING_EVENT_KIND,
 } from "@/lib/career/upcomingReadModel";
+import { loadJobPreferenceContext } from "@/lib/career/jobPreferenceContext.server";
 import type {
   TodayPlanAmbiguousCandidate,
   TodayPlanBuckets,
@@ -173,6 +174,23 @@ export type TodayPlanSuggestionSnapshot = {
   }[];
   /** Completed interviews still awaiting a reflection. */
   awaitingReflection: { count: number; items: { label: string }[] };
+  /**
+   * M2.2 dual-track job-search preference context: the authoritative
+   * business-table fields plus, only when long-term memory is enabled, the
+   * labeled 对话沉淀偏好 supplement. Structured fields always win on
+   * conflict; memory notes are advisory and never written back. Absent
+   * when nothing exists or the read degraded (see `degraded`).
+   */
+  jobPreferences?: {
+    /** Non-empty fields from the authoritative JobSearchPreference table. */
+    structured: Record<string, string>;
+    /** 对话沉淀偏好 — conversation-distilled advisory memory notes. */
+    conversationMemory: {
+      category: string;
+      key: string;
+      content: string;
+    }[];
+  };
   /** Sources that failed — the model must say honestly what it could not read. */
   degraded: string[];
 };
@@ -182,7 +200,7 @@ export async function listTodayPlanSuggestions(
   db: Db = prisma,
 ): Promise<TodayPlanSuggestionSnapshot> {
   const degraded: string[] = [];
-  const [openTasks, upcoming, awaiting] = await Promise.all([
+  const [openTasks, upcoming, awaiting, preferenceContext] = await Promise.all([
     db.task
       .findMany({
         where: {
@@ -214,7 +232,19 @@ export async function listTodayPlanSuggestions(
         return { items: [], totalCount: 0, overdueUnclosedCount: 0 };
       },
     ),
+    // M2.2: the dual-track preference context, read through the caller's
+    // db like the task leg — a failed or empty read degrades independently
+    // and never breaks the suggestion snapshot.
+    loadJobPreferenceContext(db, ctx.userId).catch(() => {
+      degraded.push("jobPreferences");
+      return null;
+    }),
   ]);
+  if (preferenceContext?.memoryDegraded) {
+    // Structured fields survived but the memory attach failed — the
+    // snapshot must not silently pose as "no conversation preferences".
+    degraded.push("jobPreferencesMemory");
+  }
 
   return {
     openTasks: openTasks.map((task) => ({ taskId: task.id, title: task.title })),
@@ -234,6 +264,25 @@ export async function listTodayPlanSuggestions(
         label: `${item.jobTitle} 面试复盘`,
       })),
     },
+    ...(preferenceContext &&
+    (preferenceContext.hasBusinessFields ||
+      preferenceContext.memoryNotes.length > 0)
+      ? {
+          jobPreferences: {
+            structured: Object.fromEntries(
+              Object.entries(preferenceContext.fields).filter(
+                (entry): entry is [string, string] =>
+                  typeof entry[1] === "string" && entry[1].trim() !== "",
+              ),
+            ),
+            conversationMemory: preferenceContext.memoryNotes.map((note) => ({
+              category: note.category,
+              key: note.key,
+              content: note.content,
+            })),
+          },
+        }
+      : {}),
     degraded,
   };
 }

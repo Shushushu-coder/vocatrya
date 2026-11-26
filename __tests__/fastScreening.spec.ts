@@ -707,3 +707,194 @@ describe("match history + preflight", () => {
     expect(empty.assignment).toEqual({ status: "NOT_CONFIGURED" });
   });
 });
+
+describe("M2.2 dual-track job-search preferences", () => {
+  async function putMemory(
+    category: string,
+    key: string,
+    content: string,
+    owner = userId,
+  ) {
+    return prisma.userMemoryEntry.create({
+      data: { userId: owner, category, key, content },
+    });
+  }
+
+  async function setMemoryEnabled(owner: string, enabled: boolean) {
+    const settings = JSON.stringify({
+      settings: { general: { agent: { longTermMemoryEnabled: enabled } } },
+    });
+    await prisma.userSettings.upsert({
+      where: { userId: owner },
+      create: { userId: owner, settings },
+      update: { settings },
+    });
+  }
+
+  it("attaches labeled 对话沉淀偏好 notes to the prompt and the persisted input snapshot — read-only", async () => {
+    const opportunity = await createOpportunity();
+    await setJd(opportunity.id, "JD text");
+    await createSkillMaterial();
+    await services().preferences.upsertJobSearchPreference(userId, {
+      preferredCities: "上海",
+    });
+    await putMemory("career_goal", "target_cities", "杭州");
+    await putMemory("industry_preference", "avoid", "外包");
+    await putMemory("collaboration_habit", "style", "不属于求职偏好");
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "m");
+
+    const preferencesBefore =
+      await prisma.jobSearchPreference.findUniqueOrThrow({
+        where: { userId },
+      });
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return okResponse(VERDICT);
+    };
+
+    const result = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl,
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+
+    // The wire prompt carries the authoritative fields plus the labeled
+    // supplement — only the two job-preference categories.
+    const prompt = String(bodies[0].prompt);
+    expect(prompt).toContain("上海");
+    expect(prompt).toContain("对话沉淀偏好");
+    expect(prompt).toContain("杭州");
+    expect(prompt).toContain("外包");
+    expect(prompt).not.toContain("不属于求职偏好");
+
+    // The dual-track input lands inside the persisted preference snapshot —
+    // a memory diff supersedes exactly like a business-field diff.
+    const persisted = await prisma.matchAnalysis.findUniqueOrThrow({
+      where: { id: result.analysis.id },
+      include: { fastScreeningDetail: true },
+    });
+    const inputSnapshot = JSON.parse(
+      persisted.fastScreeningDetail!.inputSnapshot!,
+    ) as { preferenceSnapshot: Record<string, unknown> };
+    expect(inputSnapshot.preferenceSnapshot).toMatchObject({
+      preferredCities: "上海",
+    });
+    const notes = inputSnapshot.preferenceSnapshot.memoryNotes as {
+      category: string;
+      key: string;
+    }[];
+    expect(notes).toHaveLength(2);
+
+    // Zero writes to the business table.
+    const preferencesAfter =
+      await prisma.jobSearchPreference.findUniqueOrThrow({
+        where: { userId },
+      });
+    expect(preferencesAfter).toEqual(preferencesBefore);
+  });
+
+  it("master switch off → business fields still reach the prompt, memory never does", async () => {
+    const opportunity = await createOpportunity();
+    await setJd(opportunity.id, "JD text");
+    await createSkillMaterial();
+    await services().preferences.upsertJobSearchPreference(userId, {
+      preferredCities: "上海",
+    });
+    await putMemory("career_goal", "cities", "杭州");
+    await setMemoryEnabled(userId, false);
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "m");
+
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return okResponse(VERDICT);
+    };
+    const result = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl,
+    );
+    expect(result.kind).toBe("ok");
+
+    const prompt = String(bodies[0].prompt);
+    expect(prompt).toContain("上海");
+    expect(prompt).not.toContain("杭州");
+    expect(prompt).not.toContain("对话沉淀偏好");
+
+    const persisted = await prisma.matchAnalysis.findFirstOrThrow({
+      where: { jobOpportunityId: opportunity.id },
+      include: { fastScreeningDetail: true },
+    });
+    const inputSnapshot = JSON.parse(
+      persisted.fastScreeningDetail!.inputSnapshot!,
+    ) as { preferenceSnapshot: Record<string, unknown> };
+    expect(inputSnapshot.preferenceSnapshot).not.toHaveProperty("memoryNotes");
+  });
+
+  it("conversation notes alone never satisfy the material gate", async () => {
+    const opportunity = await createOpportunity();
+    await setJd(opportunity.id, "JD exists");
+    await putMemory("career_goal", "cities", "杭州");
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "m");
+    const fetchImpl = vi.fn(async () => okResponse(VERDICT));
+
+    const result = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    // Memory notes are advisory context, not material — the honest
+    // INSUFFICIENT_MATERIAL gate behaves exactly as before.
+    expect(result).toEqual({
+      kind: "failed",
+      code: FAST_SCREENING_ERROR_CODES.INSUFFICIENT_MATERIAL,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(await prisma.matchAnalysis.count()).toBe(0);
+  });
+
+  it("a memory diff supersedes the earlier analysis as PREFERENCE_CHANGED", async () => {
+    const opportunity = await createOpportunity();
+    await setJd(opportunity.id, "JD v1");
+    await createSkillMaterial();
+    await putMemory("career_goal", "cities", "杭州");
+    const connection = await makeConnection();
+    await assignMatch(connection.id, "m");
+    const fetchImpl: typeof fetch = async () => okResponse(VERDICT);
+
+    const first = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl,
+    );
+    expect(first.kind).toBe("ok");
+
+    // The memory note changes — a PREFERENCE change, not a material one.
+    await prisma.userMemoryEntry.updateMany({
+      where: { userId, category: "career_goal", key: "cities" },
+      data: { content: "深圳" },
+    });
+    const second = await run(
+      { kind: "career-profile" },
+      opportunity.id,
+      fetchImpl,
+    );
+    expect(second.kind).toBe("ok");
+    if (first.kind !== "ok") return;
+
+    const stale = await prisma.matchAnalysis.findUniqueOrThrow({
+      where: { id: first.analysis.id },
+    });
+    expect(stale.isStale).toBe(true);
+    expect(JSON.parse(stale.staleReasonCodes ?? "[]")).toEqual([
+      MATCH_STALE_REASON.PREFERENCE_CHANGED,
+    ]);
+  });
+});
