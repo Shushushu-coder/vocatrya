@@ -41,9 +41,10 @@ import {
 import {
   clearBusinessAiAssignment,
   listBusinessAiAssignments,
-  resolveBusinessAiConfig,
   setBusinessAiAssignment,
 } from "@/actions/aiAssignment.actions";
+import { AgentRoleAvatar } from "@/components/agent/AgentRoleAvatar";
+import type { AgentRole } from "@/lib/agent/agentRoles";
 import {
   assignManagedBusinessAiSource,
   getManagedAiOverview,
@@ -64,34 +65,59 @@ import {
 } from "@/lib/ai/connections";
 import { PROVIDER_REGISTRY, SETTINGS_BYOK_PROVIDERS } from "@/lib/ai/provider-registry";
 
-// GLOBAL_DEFAULT is the resolution fallback, not a business purpose — it
-// renders as its own full-width row above the business grid. The business
-// rows render in registry order by default; the grid order is a per-device
-// display preference the user can change by dragging (it has no effect on
-// assignment resolution). INTERVIEW and CAREER_REFLECTION both execute
-// through the account runtime's TEXT_ONLY one-shot seam (interview sessions
-// locked at creation, reflection drafts resolved at generation); a legacy
-// `settings.ai.interview` config still outranks GLOBAL_DEFAULT for users
-// who have not saved an INTERVIEW assignment. Every registry purpose now
-// has a real production consumer on every surface — MATCH_ANALYSIS
-// included, since the fresh-native fast-screening flow resolves it — so
-// all rows render editable.
+// Model Configuration groups (D01/D04/D07/D08):
+// 1) Base configuration: GLOBAL_DEFAULT (默认模型) + AGENT_ROUTER (智能调度)
+// 2) AI Roles: AGENT_PILOT / AGENT_INSIGHT / AGENT_REFLECT (replaces CAREER_DIALOGUE)
+// 3) Specialized features: RESUME / MATCH_ANALYSIS / CAREER_REFLECTION
+// Legacy INTERVIEW card and its redundant preview loader are removed here
+// (AUC-INTERVIEW-ENTRY) while backend consumers keep their existing compat.
 const GLOBAL_DEFAULT_PURPOSE = "GLOBAL_DEFAULT";
+const ROUTER_PURPOSE = "AGENT_ROUTER";
+const ROLE_PURPOSES = [
+  "AGENT_PILOT",
+  "AGENT_INSIGHT",
+  "AGENT_REFLECT",
+] as const;
 const BUSINESS_PURPOSE_ROWS = [
   "RESUME",
   "MATCH_ANALYSIS",
   "CAREER_REFLECTION",
-  "CAREER_DIALOGUE",
-  "INTERVIEW",
 ] as const;
+
+const ROLE_CARD_META: Record<
+  string,
+  { role: AgentRole; badge: string; descKey: string; tipKey: string }
+> = {
+  AGENT_PILOT: {
+    role: "pilot",
+    badge: "Pilot",
+    descKey: "settings.aiAssignRolePilotDesc",
+    tipKey: "settings.aiAssignRolePilotTip",
+  },
+  AGENT_INSIGHT: {
+    role: "insight",
+    badge: "Insight",
+    descKey: "settings.aiAssignRoleInsightDesc",
+    tipKey: "settings.aiAssignRoleInsightTip",
+  },
+  AGENT_REFLECT: {
+    role: "reflect",
+    badge: "Reflect",
+    descKey: "settings.aiAssignRoleReflectDesc",
+    tipKey: "settings.aiAssignRoleReflectTip",
+  },
+};
 
 const PURPOSE_LABEL_KEY: Record<string, string> = {
   GLOBAL_DEFAULT: "settings.aiAssignPurposeGlobalDefault",
+  AGENT_ROUTER: "settings.aiAssignPurposeAgentRouter",
+  AGENT_PILOT: "settings.aiAssignPurposeAgentPilot",
+  AGENT_INSIGHT: "settings.aiAssignPurposeAgentInsight",
+  AGENT_REFLECT: "settings.aiAssignPurposeAgentReflect",
   RESUME: "settings.aiAssignPurposeResume",
   MATCH_ANALYSIS: "settings.aiAssignPurposeMatchAnalysis",
   CAREER_REFLECTION: "settings.aiAssignPurposeCareerReflection",
   CAREER_DIALOGUE: "settings.aiAssignPurposeCareerDialogue",
-  INTERVIEW: "settings.aiAssignPurposeInterview",
 };
 
 const ERROR_KEY: Record<string, string> = {
@@ -113,10 +139,10 @@ const ERROR_KEY: Record<string, string> = {
 const STRUCTURED_PURPOSES = new Set<string>(["RESUME"]);
 
 // Purposes whose execution path is a TEXT_ONLY one-shot on the account
-// runtime (interview sessions, reflection drafts). Connections on
+// runtime (reflection drafts, lightweight router classifier). Connections on
 // runtimes without local one-shot execution are marked (and rejected on
 // save) for these purposes.
-const TEXT_ONLY_PURPOSES = new Set<string>(["INTERVIEW", "CAREER_REFLECTION"]);
+const TEXT_ONLY_PURPOSES = new Set<string>(["CAREER_REFLECTION", "AGENT_ROUTER"]);
 
 // Purposes whose execution path streams assistant output to the user
 // (Career Dialogue renders tokens as they arrive — a buffered one-shot
@@ -148,15 +174,6 @@ type ModelEntry = {
   availability: string;
 };
 
-type InterviewResolution = {
-  status: string;
-  source?: string;
-  code?: string;
-  provider?: string;
-  model?: string;
-  connectionId?: string;
-};
-
 // Shown while a desktop version probe is still running. Distinct from a
 // finished fail-closed verdict so the picker does not say "not verified"
 // before the binary has been checked.
@@ -166,7 +183,6 @@ type AssignmentSessionSnapshot = {
   connections: ConnectionSummary[];
   assignments: Record<string, BusinessAssignmentSummary>;
   managed: ManagedAiOverview | null;
-  interview: InterviewResolution | null;
   runtimeCaps: Record<string, AccountRuntimeCapabilities>;
 };
 
@@ -316,9 +332,6 @@ function AiAssignmentsCard() {
   const [catalogs, setCatalogs] = useState<Record<string, ModelEntry[]>>({});
   const [catalogBusy, setCatalogBusy] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [interview, setInterview] = useState<InterviewResolution | null>(
-    sessionSnapshot?.interview ?? null,
-  );
   // backendKind → structured-output readiness. Empty map = bridge absent
   // (plain web/dev) — marking is skipped for advisory gates; streaming
   // purposes treat absence as unverifiable instead.
@@ -418,10 +431,9 @@ function AiAssignmentsCard() {
       setLoadFailed(false);
     }
     try {
-      const [connResult, assignResult, interviewResult, managedResult] = await Promise.all([
+      const [connResult, assignResult, managedResult] = await Promise.all([
         listAssignableAiConnections(),
         listBusinessAiAssignments(),
-        resolveBusinessAiConfig({ purpose: "INTERVIEW" }).catch(() => ({ success: false, data: undefined })),
         getManagedAiOverview().catch(() => ({ success: false, data: undefined })),
       ]);
       let nextManaged = sessionSnapshot?.managed ?? null;
@@ -471,16 +483,10 @@ function AiAssignmentsCard() {
         : preserveDrafts
           ? previous
           : nextDrafts);
-      let nextInterview = sessionSnapshot?.interview ?? null;
-      if (interviewResult.success && interviewResult.data) {
-        nextInterview = interviewResult.data;
-        setInterview(nextInterview);
-      }
       rememberSnapshot({
         connections: nextConnections,
         assignments: nextAssignments,
         managed: nextManaged,
-        interview: nextInterview,
         runtimeCaps: nextCaps,
       });
       const pending = runtime
@@ -680,13 +686,6 @@ function AiAssignmentsCard() {
     return null;
   };
 
-  const refreshInterviewPreview = (purpose: string) => {
-    if (purpose !== "INTERVIEW" && purpose !== "GLOBAL_DEFAULT") return;
-    void resolveBusinessAiConfig({ purpose: "INTERVIEW" }).then((result) => {
-      if (result.success && result.data) setInterview(result.data);
-    }).catch(() => undefined);
-  };
-
   const applySaved = (assignment: BusinessAssignmentSummary) => {
     setAssignments((previous) => ({ ...previous, [assignment.purpose]: assignment }));
     setDrafts((previous) => ({ ...previous, [assignment.purpose]: assignmentDraft(assignment) }));
@@ -696,7 +695,6 @@ function AiAssignmentsCard() {
         assignments: { ...sessionSnapshot.assignments, [assignment.purpose]: assignment },
       });
     }
-    refreshInterviewPreview(assignment.purpose);
     window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
     toastSuccess(t("settings.aiAssignSaved"));
   };
@@ -781,7 +779,6 @@ function AiAssignmentsCard() {
     try {
       const result = await clearBusinessAiAssignment({ purpose });
       if (result.success) {
-        refreshInterviewPreview(purpose);
         toastSuccess(t("settings.aiAssignCleared"));
         window.dispatchEvent(new Event(AI_CONFIGURATION_CHANGED_EVENT));
         setAssignments((previous) => {
@@ -853,6 +850,23 @@ function AiAssignmentsCard() {
     const isStructuredPurpose = STRUCTURED_PURPOSES.has(purpose);
     const isTextOnlyPurpose = TEXT_ONLY_PURPOSES.has(purpose);
     const isStreamingPurpose = STREAMING_PURPOSES.has(purpose);
+    const roleMeta = ROLE_CARD_META[purpose];
+    const isUnifiedInheritTarget =
+      purpose === ROUTER_PURPOSE || Boolean(roleMeta);
+    const defaultBinding = assignments[GLOBAL_DEFAULT_PURPOSE];
+    const legacyDialogueBinding = assignments.CAREER_DIALOGUE;
+    const inheritedLabel =
+      !saved && isUnifiedInheritTarget
+        ? defaultBinding
+          ? t("settings.aiAssignInheritsDefault", {
+              target: `${defaultBinding.connection?.displayName ?? defaultBinding.connectionId} · ${defaultBinding.model}`,
+            })
+          : legacyDialogueBinding
+            ? t("settings.aiAssignInheritsLegacyDialogue", {
+                target: `${legacyDialogueBinding.connection?.displayName ?? legacyDialogueBinding.connectionId} · ${legacyDialogueBinding.model}`,
+              })
+            : t("settings.aiAssignInheritsDefaultUnset")
+        : null;
 
     return (
       <section
@@ -860,39 +874,76 @@ function AiAssignmentsCard() {
         className="h-full rounded-md border p-3 space-y-3"
         data-testid={`ai-assign-row-${purpose}`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <h4 className="font-medium">{t(PURPOSE_LABEL_KEY[purpose])}</h4>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2.5 min-w-0">
+            {roleMeta ? (
+              <AgentRoleAvatar
+                role={roleMeta.role}
+                size={30}
+                label={t(PURPOSE_LABEL_KEY[purpose])}
+              />
+            ) : null}
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <h4 className="font-medium leading-tight">
+                  {t(PURPOSE_LABEL_KEY[purpose])}
+                </h4>
+                {roleMeta ? (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {roleMeta.badge}
+                  </span>
+                ) : purpose === ROUTER_PURPOSE ? (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    Router
+                  </span>
+                ) : null}
+              </div>
+              {purpose === GLOBAL_DEFAULT_PURPOSE ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.aiAssignDefaultDesc")}
+                </p>
+              ) : purpose === ROUTER_PURPOSE ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.aiAssignRouterDesc")}
+                </p>
+              ) : roleMeta ? (
+                <p className="text-xs text-muted-foreground">
+                  {t(roleMeta.descKey)}
+                </p>
+              ) : null}
+            </div>
+          </div>
           {dragHandle}
         </div>
+        {purpose === GLOBAL_DEFAULT_PURPOSE ? (
+          <p className="text-xs text-muted-foreground">
+            {t("settings.aiAssignDefaultTip")}
+          </p>
+        ) : purpose === ROUTER_PURPOSE ? (
+          <p className="text-xs text-muted-foreground">
+            {t("settings.aiAssignRouterTip")}
+          </p>
+        ) : roleMeta ? (
+          <p className="text-xs text-muted-foreground">
+            {t(roleMeta.tipKey)}
+          </p>
+        ) : null}
+        {inheritedLabel ? (
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid={`ai-assign-inherit-${purpose}`}
+          >
+            {inheritedLabel}
+          </p>
+        ) : null}
         {isStructuredPurpose && (
           <p className="text-xs text-muted-foreground">
             {t("settings.aiAssignStructuredHint")}
           </p>
         )}
-        {isStreamingPurpose && (
+        {isStreamingPurpose && !roleMeta && (
           <p className="text-xs text-muted-foreground">
             {t("settings.aiAssignStreamingHint")}
-          </p>
-        )}
-        {/* INTERVIEW coexistence note: what a new session would resolve to
-            today, and the locked-session guarantee for existing ones. */}
-        {purpose === "INTERVIEW" && (
-          <p className="text-xs text-muted-foreground">
-            {interview?.status === "LEGACY_INTERVIEW_CONFIG"
-              ? t("settings.aiAssignInterviewLegacy", {
-                  provider: interview.provider ?? "",
-                  model: interview.model ?? "",
-                })
-              : interview?.status === "RESOLVED" &&
-                  interview.source === "GLOBAL_DEFAULT"
-                ? t("settings.aiAssignInterviewGlobalDefault")
-                : interview?.status === "RESOLVED"
-                  ? t("settings.aiAssignInterviewConfigured")
-                  : interview?.status === "INVALID_ASSIGNMENT"
-                  ? t("settings.aiAssignInterviewInvalid", {
-                      code: interview.code ?? "",
-                    })
-                  : t("settings.aiAssignInterviewDeferred")}
           </p>
         )}
         <div className="flex flex-wrap items-end gap-3">
@@ -1078,12 +1129,48 @@ function AiAssignmentsCard() {
       )}
 
       {(!loadFailed || Object.keys(assignments).length > 0) && (
-        <div className="space-y-5">
-          {renderPurposeRow(GLOBAL_DEFAULT_PURPOSE)}
-          <div className="space-y-2">
+        <div className="space-y-6">
+          {/* Group 1: Base configuration (Default model + optional Smart Router) */}
+          <div className="space-y-2.5" data-testid="ai-assign-group-base">
+            <h4 className="text-sm font-medium">
+              {t("settings.aiAssignGroupBase")}
+            </h4>
+            <div className="grid min-w-0 gap-3 @3xl/main:grid-cols-2">
+              {renderPurposeRow(GLOBAL_DEFAULT_PURPOSE)}
+              {renderPurposeRow(ROUTER_PURPOSE)}
+            </div>
+          </div>
+
+          {/* Group 2: AI Roles (Pilot / Insight / Reflect) */}
+          <div className="space-y-2.5" data-testid="ai-assign-group-roles">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3">
               <h4 className="text-sm font-medium">
-                {t("settings.aiAssignBusinessPurposes")}
+                {t("settings.aiAssignGroupRoles")}
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.aiAssignGroupRolesHint")}
+              </p>
+            </div>
+            {assignments.CAREER_DIALOGUE && !assignments[GLOBAL_DEFAULT_PURPOSE] ? (
+              <p
+                className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+                data-testid="ai-assign-legacy-dialogue-notice"
+              >
+                {t("settings.aiAssignLegacyDialogueNotice", {
+                  target: `${assignments.CAREER_DIALOGUE.connection?.displayName ?? assignments.CAREER_DIALOGUE.connectionId} · ${assignments.CAREER_DIALOGUE.model}`,
+                })}
+              </p>
+            ) : null}
+            <div className="grid min-w-0 gap-3 @3xl/main:grid-cols-3">
+              {ROLE_PURPOSES.map((purpose) => renderPurposeRow(purpose))}
+            </div>
+          </div>
+
+          {/* Group 3: Specialized features (Resume / Match Analysis / Career Reflection) */}
+          <div className="space-y-2.5" data-testid="ai-assign-group-specialized">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <h4 className="text-sm font-medium">
+                {t("settings.aiAssignGroupSpecialized")}
               </h4>
               <p className="text-xs text-muted-foreground">
                 {t("settings.aiAssignOrderHint")}

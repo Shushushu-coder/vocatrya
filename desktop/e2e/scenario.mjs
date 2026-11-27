@@ -52,12 +52,12 @@ export async function checkNavigation(page, origin) {
   const expectedRoutes = [
     "/dashboard",
     "/dashboard/analytics",
+    "/dashboard/profile/resumes",
     "/dashboard/myjobs",
     "/dashboard/tasks",
     "/dashboard/questions",
     "/dashboard/extensions",
     "/dashboard/profile",
-    "/dashboard/admin",
     "/dashboard/settings",
   ];
   await expect(sidebar.getByRole("link")).toHaveCount(expectedRoutes.length);

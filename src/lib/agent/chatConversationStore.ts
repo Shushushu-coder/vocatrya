@@ -38,6 +38,8 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
   select: {
     executionPath: true;
     nativeInitializationState: true;
+    chatMode: true;
+    activeRole: true;
     revision: true;
     id: true;
     userId: true;
@@ -58,6 +60,8 @@ export type ChatConversationRow = Prisma.ChatConversationGetPayload<{
 const CHAT_ROW_SELECT = {
   executionPath: true,
   nativeInitializationState: true,
+  chatMode: true,
+  activeRole: true,
   revision: true,
   id: true,
   userId: true,
@@ -79,6 +83,8 @@ const SUMMARY_SELECT = {
   title: true,
   messages: true,
   agentRole: true,
+  chatMode: true,
+  activeRole: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -122,6 +128,8 @@ export async function listOwnedChatConversations(
     title: string | null;
     titleFallback: string | null;
     agentRole: string | null;
+    chatMode: string;
+    activeRole: string | null;
     createdAt: Date;
     updatedAt: Date;
   }>
@@ -137,6 +145,8 @@ export async function listOwnedChatConversations(
     title: row.title,
     titleFallback: row.title ? null : titleFallbackFromMessages(decodeHistory(row.messages)),
     agentRole: row.agentRole,
+    chatMode: row.chatMode,
+    activeRole: row.activeRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }));
@@ -155,6 +165,7 @@ export async function getNewestOwnedChatConversation(
 
 export async function createChatConversationRecord(input: {
   executionPath?: "APP_ORCHESTRATED" | "NATIVE_CODEX_V1";
+  chatMode?: "UNIFIED" | "LEGACY_ROLE_BOUND";
   userId: string;
   messages: UIMessage[];
   context: AgentConversationContextV1;
@@ -162,6 +173,8 @@ export async function createChatConversationRecord(input: {
   firstUserText?: string | null;
   /** Role fixed at creation — immutable for the row's lifetime. */
   agentRole?: AgentRole | null;
+  /** Initial sticky activeRole for unified sessions. */
+  activeRole?: AgentRole | null;
   /**
    * Binds the new row to an owned agent task (resumeAgentTask only; the
    * caller has already verified ownership). Requires a Pilot role.
@@ -174,10 +187,16 @@ export async function createChatConversationRecord(input: {
   // first-binds `conversation:<id>` through the Hosted authority and the
   // row persists that binding in the same create.
   const conversationId = randomUUID();
-  const lock = await resolveChatCreationLock(input.userId, input.explicit, {
-    resourceKey: `conversation:${conversationId}`,
-    managedClient: input.managedClient,
-  });
+  const chatMode = input.chatMode ?? "LEGACY_ROLE_BOUND";
+  // Unified conversations resolve & lock per-step models at Turn entry (D07)
+  // unless an explicit model/native lock was specifically requested.
+  const lock =
+    chatMode === "UNIFIED" && !input.explicit && input.executionPath !== NATIVE_PATH
+      ? { resolvedConnectionId: null, resolvedModel: null, managedAiProvenance: null }
+      : await resolveChatCreationLock(input.userId, input.explicit, {
+          resourceKey: `conversation:${conversationId}`,
+          managedClient: input.managedClient,
+        });
   if (input.executionPath !== undefined && ![APP_PATH, NATIVE_PATH].includes(input.executionPath)) throw new Error("Invalid execution path");
   if (input.executionPath === NATIVE_PATH) {
     if (!lock.resolvedConnectionId || !lock.resolvedModel || input.messages.length || input.context.items.length) throw new Error("Native sessions start with an empty plain-text conversation");
@@ -193,6 +212,8 @@ export async function createChatConversationRecord(input: {
     data: {
       id: conversationId,
       executionPath: input.executionPath ?? APP_PATH,
+      chatMode,
+      activeRole: input.activeRole ?? input.agentRole ?? (chatMode === "UNIFIED" ? "pilot" : null),
       userId: input.userId,
       title,
       context: serializeConversationContext(input.context),
@@ -200,7 +221,7 @@ export async function createChatConversationRecord(input: {
       resolvedConnectionId: lock.resolvedConnectionId,
       resolvedModel: lock.resolvedModel,
       managedAiProvenance: lock.managedAiProvenance ?? null,
-      agentRole: input.agentRole ?? null,
+      agentRole: chatMode === "UNIFIED" ? null : (input.agentRole ?? null),
       ...(input.agentTaskId ? { agentTaskId: input.agentTaskId } : {}),
     },
     select: CHAT_ROW_SELECT,

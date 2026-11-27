@@ -99,10 +99,11 @@ export function AgentChatHistory({ onClose }: { onClose: () => void }) {
                         >
                           <span className="flex items-center gap-1.5">
                             <span className="block min-w-0 truncate text-sm">{title}</span>
-                            {/* D3 badge — NULL rows read as 通用. */}
-                            <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-[10px] leading-4 text-muted-foreground">
-                              {copy(roleNameKey(normalizeAgentRole(row.agentRole)))}
-                            </span>
+                            {row.chatMode !== "UNIFIED" ? (
+                              <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-[10px] leading-4 text-muted-foreground">
+                                {copy(roleNameKey(normalizeAgentRole(row.agentRole)))}
+                              </span>
+                            ) : null}
                           </span>
                           <span className="text-[11px] text-muted-foreground">
                             {when.toLocaleString(locale, {

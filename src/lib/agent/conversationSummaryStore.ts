@@ -179,6 +179,8 @@ async function loadSummarySnapshot(
       managedAiProvenance: true,
       archivedAt: true,
       executionPath: true,
+      chatMode: true,
+      activeRole: true,
       activeRequestId: true,
       activeRequestExpiresAt: true,
       agentRole: true,
@@ -186,6 +188,32 @@ async function loadSummarySnapshot(
     },
   });
   if (!conversation) return null;
+  // Unified conversations lock connection/model per ChatTurnStep rather than
+  // on ChatConversation: resolve the latest completed managed/BYOK step so
+  // session-level M1 compaction & summary remain available (D04/D08).
+  let effectiveResolvedConnectionId = conversation.resolvedConnectionId;
+  let effectiveResolvedModel = conversation.resolvedModel;
+  if (
+    conversation.chatMode === "UNIFIED" &&
+    (!effectiveResolvedConnectionId || !effectiveResolvedModel)
+  ) {
+    const latestStep = await client.chatTurnStep.findFirst({
+      where: {
+        userId,
+        conversationId,
+        status: "COMPLETED",
+        executionPath: { not: "NATIVE_CODEX_V1" },
+        resolvedConnectionId: { not: null },
+        resolvedModel: { not: null },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { resolvedConnectionId: true, resolvedModel: true },
+    });
+    if (latestStep) {
+      effectiveResolvedConnectionId = latestStep.resolvedConnectionId;
+      effectiveResolvedModel = latestStep.resolvedModel;
+    }
+  }
   if (
     conversation.archivedAt ||
     (await hasArchivedJobReference(
@@ -226,9 +254,9 @@ async function loadSummarySnapshot(
   let lockInvalid: string | undefined;
   let provider: string | null = null;
   let backendKind: string | null = null;
-  const connection = conversation.resolvedConnectionId
+  const connection = effectiveResolvedConnectionId
     ? await client.aIConnection.findFirst({
-        where: { id: conversation.resolvedConnectionId, userId },
+        where: { id: effectiveResolvedConnectionId, userId },
       })
     : null;
   if (connection) {
@@ -252,7 +280,7 @@ async function loadSummarySnapshot(
           ? String((error as { code?: unknown }).code)
           : "MANAGED_BINDING_UNAVAILABLE";
     }
-  } else if (conversation.resolvedConnectionId) {
+  } else if (effectiveResolvedConnectionId) {
     // Half-state (M4 §114): an account-shaped lock pointing at a Managed
     // connection has no usable provenance — mark it invalid instead of
     // letting the summary auto-bind at run time.
@@ -265,15 +293,15 @@ async function loadSummarySnapshot(
   });
   return {
     messages: parseMessages(conversation.messages),
-    resolvedConnectionId: conversation.resolvedConnectionId,
-    resolvedModel: conversation.resolvedModel,
+    resolvedConnectionId: effectiveResolvedConnectionId,
+    resolvedModel: effectiveResolvedModel,
     provider,
     backendKind,
     executionPath: conversation.executionPath,
     activeRequestId: conversation.activeRequestId,
     activeRequestExpiresAt: conversation.activeRequestExpiresAt,
     context: conversation.context,
-    agentRole: conversation.agentRole,
+    agentRole: conversation.activeRole ?? conversation.agentRole,
     agentTaskId: conversation.agentTaskId,
     managedAiProvenance: conversation.managedAiProvenance,
     managed: managedLock,

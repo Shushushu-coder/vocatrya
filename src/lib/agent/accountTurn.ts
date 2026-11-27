@@ -49,6 +49,11 @@ import {
   type CareerDialogueContextSize,
   type SessionToolFact,
 } from "./contextBudget";
+import {
+  readMessageAgentRole,
+  roleAttributionTag,
+  type UnifiedMessageMetadata,
+} from "./unifiedChatTypes";
 
 /**
  * Provider-neutral agent orchestration for ACCOUNT_LOGIN-locked
@@ -162,9 +167,11 @@ export function serializeChatTranscript(messages: UIMessage[]): string[] {
       continue;
     }
     if (message.role === "assistant") {
+      const tag = roleAttributionTag(readMessageAgentRole(message));
+      const prefix = tag ? `Assistant ${tag}` : "Assistant";
       for (const part of parts) {
         if (part.type === "text") {
-          if (part.text) lines.push(`Assistant: ${part.text}`);
+          if (part.text) lines.push(`${prefix}: ${part.text}`);
         } else if (isToolUIPart(part)) {
           lines.push(toolResultLine(part));
         }
@@ -496,6 +503,10 @@ export type AccountAgentTurnInput = {
   /** Dynamic per-model budgets and proactive auto-compact trigger. */
   budgets?: Partial<CareerDialogueContextBudgets>;
   autoCompactTriggerTokens?: number;
+  /** Unified multi-agent chat options (D02/D05/D06/D08). */
+  unified?: boolean;
+  forceTodayPlanSuggestOnly?: boolean;
+  messageMetadata?: UnifiedMessageMetadata;
   /** Injected for tests; production uses the default clients. */
   deps?: StreamExecutionDeps;
 };
@@ -587,6 +598,8 @@ export async function runAccountAgentTurn(
     feishuTools: input.feishuTools,
     taskExtraTools: input.taskExtraTools,
     permissionMode: input.permissionMode,
+    unified: input.unified,
+    forceTodayPlanSuggestOnly: input.forceTodayPlanSuggestOnly,
   });
   const toolsBlock = describeToolsForPrompt(tools);
 
@@ -637,7 +650,11 @@ export async function runAccountAgentTurn(
   // same convention as toUIMessageStream's responseMessageId.
   const messageId =
     input.request?.responseMessageId ?? (lastMessage?.role === "assistant" ? lastMessage.id : generateId());
-  writer.write({ type: "start", messageId });
+  writer.write({
+    type: "start",
+    messageId,
+    ...(input.messageMetadata ? { messageMetadata: input.messageMetadata } : {}),
+  });
 
   let stepsUsed = 0;
   let answerChars = 0;

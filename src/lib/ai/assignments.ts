@@ -27,6 +27,7 @@ import {
   isAIAssignmentPurpose,
   isStreamingPurpose,
   isSupportedAccountProviderForBackend,
+  isUnifiedAgentPurpose,
   type AIAssignmentPurpose,
   type AIBusinessErrorCode,
 } from "@/lib/ai/connections";
@@ -59,6 +60,7 @@ export interface ResolvedBusinessAIConfig {
   status: "RESOLVED";
   purpose: AIAssignmentPurpose;
   source: BusinessAISource;
+  legacyFallbackPurpose?: "CAREER_DIALOGUE";
   assignmentId: string;
   connectionId: string;
   model: string;
@@ -74,6 +76,7 @@ export type BusinessAIResolution =
       purpose: AIAssignmentPurpose;
       code: AIBusinessErrorCode;
       source: BusinessAISource;
+      legacyFallbackPurpose?: "CAREER_DIALOGUE";
       assignmentId: string;
       connectionId: string;
       /** The model the broken assignment pinned — may be empty. */
@@ -220,10 +223,14 @@ export async function resolveBusinessAIConfig(
       purpose: purpose as AIAssignmentPurpose,
     };
   }
+  const unified = isUnifiedAgentPurpose(purpose);
+  const purposesToQuery = unified
+    ? [purpose, "GLOBAL_DEFAULT", "CAREER_DIALOGUE"]
+    : [purpose, "GLOBAL_DEFAULT"];
   const rows = (await dbClient.aIBusinessAssignment.findMany({
     where: {
       userId,
-      purpose: { in: [purpose, "GLOBAL_DEFAULT"] },
+      purpose: { in: purposesToQuery },
     },
     select: {
       id: true,
@@ -275,6 +282,28 @@ export async function resolveBusinessAIConfig(
   const globalDefault = rows.find((row) => row.purpose === "GLOBAL_DEFAULT");
   if (globalDefault) {
     return classifyAssignment(globalDefault, userId, purpose, "GLOBAL_DEFAULT");
+  }
+  // D08-Q3 read-only compatibility fallback: if an existing user configured
+  // legacy CAREER_DIALOGUE before unified chat and has neither an explicit
+  // role/router row nor GLOBAL_DEFAULT, honor CAREER_DIALOGUE read-only
+  // without mutating the database.
+  if (unified) {
+    const legacyDialogue = rows.find((row) => row.purpose === "CAREER_DIALOGUE");
+    if (legacyDialogue) {
+      const classified = classifyAssignment(
+        legacyDialogue,
+        userId,
+        purpose,
+        "GLOBAL_DEFAULT",
+      );
+      if (
+        classified.status === "RESOLVED" ||
+        classified.status === "INVALID_ASSIGNMENT"
+      ) {
+        return { ...classified, legacyFallbackPurpose: "CAREER_DIALOGUE" };
+      }
+      return classified;
+    }
   }
   return { status: "NOT_CONFIGURED", purpose };
 }

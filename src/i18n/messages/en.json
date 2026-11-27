@@ -1773,10 +1773,32 @@
     "aiConnErrPermissionBoundary": "This runtime's permission boundary is not ready for that operation.",
     "aiConnErrInvalidTicket": "Session expired — please try again.",
     "aiConnErrBackendUnavailable": "Backend unavailable.",
-    "aiAssignTitle": "Business AI Assignments",
-    "aiAssignDescription": "Bind each business purpose to a connected account and model. Purposes without their own assignment use the Global default; with none configured, they fall back to the legacy AI provider above.",
-    "aiAssignPurposeGlobalDefault": "Global default",
-    "aiAssignPurposeResume": "Resume",
+    "aiAssignTitle": "Model Configuration",
+    "aiAssignDescription": "Bind connected accounts and models across Base Configuration, AI Roles, and Specialized Features. Unconfigured roles and Smart Router inherit the Default Model; broken explicit bindings report an explicit error instead of silently switching accounts.",
+    "aiAssignPurposeGlobalDefault": "Default Model",
+    "aiAssignPurposeAgentRouter": "Smart Router",
+    "aiAssignPurposeAgentPilot": "Execution Assistant",
+    "aiAssignPurposeAgentInsight": "Career Advisor",
+    "aiAssignPurposeAgentReflect": "Reflection Coach",
+    "aiAssignGroupBase": "Base Configuration",
+    "aiAssignGroupRoles": "AI Roles",
+    "aiAssignGroupRolesHint": "Roles may share one connection or pin distinct models; unset roles inherit the Default Model.",
+    "aiAssignGroupSpecialized": "Specialized Features",
+    "aiAssignDefaultDesc": "Used by all roles and Smart Router when not individually configured.",
+    "aiAssignDefaultTip": "Recommended: a balanced primary model.",
+    "aiAssignRouterDesc": "Routes requests behind the scenes without replying directly; also reused for lightweight M2.1 background memory curation on Managed/BYOK chats (independent login accounts never cross-call this slot).",
+    "aiAssignRouterTip": "Recommended: a fast, low-cost lightweight model; leave empty to use Default Model.",
+    "aiAssignRolePilotDesc": "Everyday help, action breakdown, to-dos, and job record actions (cold-start default).",
+    "aiAssignRolePilotTip": "Recommended: a fast model with reliable tool calling.",
+    "aiAssignRoleInsightDesc": "Job fit evaluation, resume review, and offer decision analysis.",
+    "aiAssignRoleInsightTip": "Recommended: a strong analytical and reasoning model.",
+    "aiAssignRoleReflectDesc": "Interview & application debriefs, takeaways, growth pacing, and mindset support.",
+    "aiAssignRoleReflectTip": "Recommended: a thoughtful, empathetic model.",
+    "aiAssignInheritsDefault": "Not individually set — inherits Default Model: {target}",
+    "aiAssignInheritsLegacyDialogue": "Using legacy Career Dialogue config (read-only compat): {target}",
+    "aiAssignInheritsDefaultUnset": "Not individually set — inherits Default Model (not configured yet).",
+    "aiAssignLegacyDialogueNotice": "Legacy Career Dialogue config detected ({target}). It stays active as read-only compatibility until you save a Default Model or role config — never overwritten silently.",
+    "aiAssignPurposeResume": "Resume Parsing",
     "aiAssignPurposeMatchAnalysis": "Match Analysis",
     "aiAssignPurposeCareerReflection": "Career Reflection",
     "aiAssignPurposeCareerDialogue": "Career Dialogue",
@@ -2367,6 +2389,12 @@
     "identityPair": "{model} · {connection}",
     "connecting": "Connecting…",
     "thinkingTurn": "Thinking…",
+    "unifiedRouting": "Understanding request…",
+    "unifiedStepRunning": "{role} is working on this…",
+    "unifiedStepHandoff": "{role} is continuing from the previous result…",
+    "unifiedStepBlockedNotice": "The remaining step ({role}) has not run yet. Confirm the action above to continue.",
+    "unifiedStepFailed": "{role} could not finish this step.",
+    "unifiedRetryStep": "Retry this step",
     "stopped": "Stopped",
     "regenerate": "Regenerate",
     "addedToMyJobs": "Added to My Jobs",
@@ -2448,6 +2476,8 @@
       "reviewResume": "Review resume",
       "matchJob": "Analyze job match",
       "coverLetter": "Write cover letter",
+      "todayPlanRead": "Read today's checklist",
+      "todayPlan": "Update today's checklist",
       "generic": "Action"
     },
     "errors": {
@@ -2477,19 +2507,23 @@
     "roleAssistant": "Assistant",
     "roles": {
       "insight": {
-        "name": "Voca Insight",
-        "subtitle": "Job analyst"
+        "name": "Career Advisor",
+        "badge": "Insight",
+        "subtitle": "Job & resume analysis"
       },
       "pilot": {
-        "name": "Voca Pilot",
-        "subtitle": "Workspace assistant"
+        "name": "Action Pilot",
+        "badge": "Pilot",
+        "subtitle": "Job tracking, to-dos & actions"
       },
       "reflect": {
-        "name": "Voca Reflect",
-        "subtitle": "Conversation coach"
+        "name": "Reflection Coach",
+        "badge": "Reflect",
+        "subtitle": "Interview reflection & strategy"
       },
       "general": {
         "name": "General",
+        "badge": "",
         "subtitle": "General assistant"
       }
     },
@@ -2500,21 +2534,23 @@
     "suggestRoleCta": "Take this to {name}",
     "roster": {
       "ask": "Ask {name} — {duty}",
-      "legend": "Insight analyzes · Pilot does · Reflect talks — switch anytime from the icons up top",
+      "legend": "One unified chat: Pilot acts · Insight analyzes · Reflect coaches — routed automatically",
+      "unifiedLead": "Tell me what you need — I will route your request to the right specialist automatically.",
+      "unifiedHandoff": "Multi-step analysis and actions run seamlessly in one turn, with confirmation before any write.",
       "insight": {
         "duty": "what the job wants, how to fix your resume",
         "selfLead": "I read jobs and resumes and tell you how well they fit — match checks, resume reviews.",
-        "selfHandoff": "I can manage this conversation's to-do list; job and extension writes are Pilot's job."
+        "selfHandoff": "When you need job or to-do writes, Pilot steps in automatically."
       },
       "pilot": {
-        "duty": "log jobs, track applications, always confirms first",
-        "selfLead": "I keep your job list in shape — look jobs up, log new ones, and always confirm before touching your data.",
-        "selfHandoff": "For resume analysis, ask Insight."
+        "duty": "log jobs, manage to-dos, run actions — always confirms first",
+        "selfLead": "I keep your jobs and to-dos in shape — look up, log, and always confirm before touching your data.",
+        "selfHandoff": "For match checks or resume reviews, Insight steps in automatically."
       },
       "reflect": {
         "duty": "talk through interviews and next steps",
         "selfLead": "I help you think it through — how the interview went, which offer to pick, what next.",
-        "selfHandoff": "I can manage this conversation's to-do list; job writes are Pilot's, analysis is Insight's."
+        "selfHandoff": "When you need job writes or deep analysis, the right specialist steps in within the same thread."
       }
     },
     "suggest": {
@@ -3708,7 +3744,11 @@
     "copy": "Copy answer",
     "copied": "Copied",
     "copyFailed": "Copy failed. Please try again.",
-    "regenerate": "Regenerate answer"
+    "regenerate": "Regenerate answer",
+    "reanswer": "Answer from another angle",
+    "reanswerPilot": "Organize & act (Action Pilot)",
+    "reanswerInsight": "Analyze & evaluate (Career Advisor)",
+    "reanswerReflect": "Reflect & advise (Reflection Coach)"
   },
   "runtimeUpdate": {
     "currentVersion": "Current",
@@ -3920,6 +3960,7 @@
     "cardUnavailable": "Checklist unavailable",
     "cardTarget": "Save to",
     "adoptHint": "Confirm saves this plan to the checklist.",
+    "adopt": "Adopt plan",
     "draftTitle": "Draft from real data",
     "noSuggestions": "No data to suggest from yet.",
     "overdueCount": "{count} earlier item(s) still incomplete",

@@ -26,6 +26,7 @@ import type { PermissionMode } from "./preferences";
 
 export const NATIVE_PATH = "NATIVE_CODEX_V1";
 export const APP_PATH = "APP_ORCHESTRATED";
+export const LEGACY_NATIVE_ROLE_KEY = "legacy_single";
 
 const unavailable = (details?: NativeUnavailableDetails) => new AIBusinessError("NATIVE_SESSION_UNAVAILABLE", "Native session is not available for this connection, model or runtime version", undefined, details);
 const lost = () => new AIBusinessError("NATIVE_CONTEXT_LOST", "Native context was not restored. No message was resent. Explicitly restart native context to continue.");
@@ -161,24 +162,60 @@ export async function resolveNativeChatEntry(
 
 // Ownership includes the active request lease. A late stream cannot recreate
 // a deleted/archived conversation or write after another request takes over.
-function lease(request: ConversationRequest) {
-  return { id: request.conversationId, userId: request.userId, executionPath: NATIVE_PATH,
-    archivedAt: null, activeRequestId: request.requestId, activeRequestExpiresAt: { gt: new Date() } };
+function lease(request: ConversationRequest, unified = false) {
+  return {
+    id: request.conversationId,
+    userId: request.userId,
+    ...(unified ? {} : { executionPath: NATIVE_PATH }),
+    archivedAt: null,
+    activeRequestId: request.requestId,
+    activeRequestExpiresAt: { gt: new Date() },
+  };
 }
 
-export async function beginNativeTurn(request: ConversationRequest, db: PrismaClient = prisma) {
+export async function beginNativeTurn(
+  request: ConversationRequest,
+  db: PrismaClient = prisma,
+  options?: {
+    roleKey?: string;
+    unified?: boolean;
+    connectionId?: string;
+    model?: string;
+  },
+) {
+  const roleKey = options?.roleKey ?? LEGACY_NATIVE_ROLE_KEY;
+  const unified = options?.unified === true;
   return db.$transaction(async tx => {
-    const row = await tx.chatConversation.findFirst({ where: lease(request) });
+    const row = await tx.chatConversation.findFirst({ where: lease(request, unified) });
     if (!row) throw lost();
+    const binding = await tx.nativeConversationBinding.findUnique({
+      where: { conversationId_roleKey: { conversationId: request.conversationId, roleKey } },
+    });
+    if (unified) {
+      if (binding) {
+        if (binding.initializationState === "IN_FLIGHT") throw lost();
+        const expectedConn = options?.connectionId ?? binding.connectionId;
+        const expectedModel = options?.model ?? binding.model;
+        if (binding.userId !== request.userId || binding.connectionId !== expectedConn || binding.model !== expectedModel) {
+          throw lost();
+        }
+        await tx.nativeConversationBinding.update({
+          where: { id: binding.id },
+          data: { initializationState: "IN_FLIGHT" },
+        });
+        return binding;
+      }
+      return null;
+    }
     if (row.nativeInitializationState === "IN_FLIGHT") throw lost();
-    const binding = await tx.nativeConversationBinding.findUnique({ where: { conversationId: request.conversationId } });
     if (binding) {
       if (binding.userId !== request.userId || binding.connectionId !== row.resolvedConnectionId || binding.model !== row.resolvedModel) throw lost();
-      await tx.chatConversation.updateMany({ where: lease(request), data: { nativeInitializationState: "IN_FLIGHT", updatedAt: row.updatedAt } });
+      await tx.chatConversation.updateMany({ where: lease(request, false), data: { nativeInitializationState: "IN_FLIGHT", updatedAt: row.updatedAt } });
+      await tx.nativeConversationBinding.update({ where: { id: binding.id }, data: { initializationState: "IN_FLIGHT" } });
       return binding;
     }
     if (row.nativeInitializationState !== "NEVER_ATTEMPTED") throw lost();
-    const result = await tx.chatConversation.updateMany({ where: { ...lease(request), nativeInitializationState: "NEVER_ATTEMPTED" }, data: { nativeInitializationState: "IN_FLIGHT", updatedAt: row.updatedAt } });
+    const result = await tx.chatConversation.updateMany({ where: { ...lease(request, false), nativeInitializationState: "NEVER_ATTEMPTED" }, data: { nativeInitializationState: "IN_FLIGHT", updatedAt: row.updatedAt } });
     if (result.count !== 1) throw lost();
     return null;
   });
@@ -402,26 +439,72 @@ export function normalizeNativeToolEvent(
   };
 }
 
-export async function saveNativeBinding(request: ConversationRequest, event: SessionEvent, input: { connectionId: string; model: string; promptHash: string }, db: PrismaClient = prisma) {
+export async function saveNativeBinding(
+  request: ConversationRequest,
+  event: SessionEvent,
+  input: {
+    connectionId: string;
+    model: string;
+    promptHash: string;
+    roleKey?: string;
+    unified?: boolean;
+    lastSyncedMessageId?: string | null;
+  },
+  db: PrismaClient = prisma,
+) {
+  const roleKey = input.roleKey ?? LEGACY_NATIVE_ROLE_KEY;
+  const unified = input.unified === true;
   await db.$transaction(async tx => {
-    const row = await tx.chatConversation.findFirst({ where: lease(request) });
-    if (!row || row.resolvedConnectionId !== input.connectionId || row.resolvedModel !== input.model) throw lost();
-    const data = { userId: request.userId, connectionId: input.connectionId, model: input.model, threadId: event.threadId,
-      runtimeVersion: event.runtimeVersion, runtimeProfileRef: event.runtimeProfileRef, configHash: event.configHash, promptHash: input.promptHash };
-    const previous = await tx.nativeConversationBinding.findUnique({ where: { conversationId: request.conversationId } });
+    const row = await tx.chatConversation.findFirst({ where: lease(request, unified) });
+    if (!row) throw lost();
+    if (!unified && (row.resolvedConnectionId !== input.connectionId || row.resolvedModel !== input.model)) throw lost();
+    const data = {
+      userId: request.userId,
+      connectionId: input.connectionId,
+      model: input.model,
+      threadId: event.threadId,
+      runtimeVersion: event.runtimeVersion,
+      runtimeProfileRef: event.runtimeProfileRef,
+      configHash: event.configHash,
+      promptHash: input.promptHash,
+      initializationState: "READY",
+      ...(input.lastSyncedMessageId !== undefined ? { lastSyncedMessageId: input.lastSyncedMessageId } : {}),
+    };
+    const previous = await tx.nativeConversationBinding.findUnique({
+      where: { conversationId_roleKey: { conversationId: request.conversationId, roleKey } },
+    });
     if (previous && previous.threadId !== event.threadId) throw lost();
-    await tx.nativeConversationBinding.upsert({ where: { conversationId: request.conversationId }, create: { conversationId: request.conversationId, ...data }, update: data });
+    await tx.nativeConversationBinding.upsert({
+      where: { conversationId_roleKey: { conversationId: request.conversationId, roleKey } },
+      create: { conversationId: request.conversationId, roleKey, ...data },
+      update: data,
+    });
   });
 }
 
-export async function restartNativeContext(userId: string, conversationId: string, db: PrismaClient = prisma) {
+export async function restartNativeContext(
+  userId: string,
+  conversationId: string,
+  db: PrismaClient = prisma,
+  roleKey?: string,
+) {
   await db.$transaction(async tx => {
-    const row = await tx.chatConversation.findFirst({ where: { id: conversationId, userId, archivedAt: null, executionPath: NATIVE_PATH } });
+    const row = await tx.chatConversation.findFirst({ where: { id: conversationId, userId, archivedAt: null } });
     if (!row || (row.activeRequestId && (!row.activeRequestExpiresAt || row.activeRequestExpiresAt > new Date()))) throw lost();
-    const changed = await tx.chatConversation.updateMany({ where: { id: conversationId, userId, archivedAt: null, executionPath: NATIVE_PATH, activeRequestId: row.activeRequestId, revision: row.revision },
-      data: { activeRequestId: null, activeRequestExpiresAt: null, nativeInitializationState: "NEVER_ATTEMPTED", revision: { increment: 1 } } });
+    if (!roleKey && row.executionPath !== NATIVE_PATH && row.chatMode !== "UNIFIED") throw lost();
+    const changed = await tx.chatConversation.updateMany({
+      where: { id: conversationId, userId, archivedAt: null, activeRequestId: row.activeRequestId, revision: row.revision },
+      data: {
+        activeRequestId: null,
+        activeRequestExpiresAt: null,
+        ...(row.executionPath === NATIVE_PATH ? { nativeInitializationState: "NEVER_ATTEMPTED" } : {}),
+        revision: { increment: 1 },
+      },
+    });
     if (changed.count !== 1) throw lost();
-    await tx.nativeConversationBinding.deleteMany({ where: { conversationId, userId } });
+    await tx.nativeConversationBinding.deleteMany({
+      where: { conversationId, userId, ...(roleKey ? { roleKey } : {}) },
+    });
   });
 }
 
@@ -462,13 +545,26 @@ export async function* executeNativeTurn(input: {
   pageJobId?: string | null;
   pageResumeId?: string | null;
   taskExtraTools?: readonly string[] | null;
+  /** D08 unified per-role native binding support. */
+  roleKey?: string;
+  unified?: boolean;
+  stepId?: string | null;
+  forceTodayPlanSuggestOnly?: boolean;
+  lastSyncedMessageId?: string | null;
 }): AsyncGenerator<NativeTextEvent> {
   const { request, connectionId, model, prompt, instructions, signal } = input;
+  const roleKey = input.roleKey ?? (input.unified && input.agentRole ? input.agentRole : LEGACY_NATIVE_ROLE_KEY);
+  const unified = input.unified === true;
   const readiness = await nativeReadiness(request.userId, connectionId, model);
   const base = process.env.VOCATRYA_DESKTOP_EXEC_URL;
   const token = process.env.VOCATRYA_DESKTOP_INTERNAL_TOKEN;
   if (!base || !token) throw unavailable();
-  const binding = await beginNativeTurn(request);
+  const binding = await beginNativeTurn(request, prisma, {
+    roleKey,
+    unified,
+    connectionId,
+    model,
+  });
   if (binding && (binding.runtimeVersion !== readiness.runtimeVersion || binding.configHash !== readiness.configHash || binding.runtimeProfileRef !== readiness.connection.runtimeProfileRef)) throw lost();
   const promptHash = createHash("sha256").update(instructions).digest("hex");
   // 0.169.0 accepts a resume override but the real wire retains the old
@@ -496,6 +592,9 @@ export async function* executeNativeTurn(input: {
     pageJobId: input.pageJobId,
     pageResumeId: input.pageResumeId,
     taskExtraTools: input.taskExtraTools,
+    stepId: input.stepId,
+    unified,
+    forceTodayPlanSuggestOnly: input.forceTodayPlanSuggestOnly,
   });
   const ticket = mintConnectionTicket({ userId: request.userId, operation: "executeText", backendKind: "CODEX_RUNTIME", connectionId });
   let response: Response;
@@ -544,7 +643,14 @@ export async function* executeNativeTurn(input: {
         if (event.type === "native-session") {
           if (sawSession || typeof event.threadId !== "string" || !/^[a-zA-Z0-9_-]{1,256}$/.test(event.threadId) || event.runtimeVersion !== readiness.runtimeVersion ||
             event.runtimeProfileRef !== readiness.connection.runtimeProfileRef || event.configHash !== readiness.configHash || (binding && event.threadId !== binding.threadId)) throw lost();
-          await saveNativeBinding(request, event, { connectionId, model, promptHash });
+          await saveNativeBinding(request, event, {
+            connectionId,
+            model,
+            promptHash,
+            roleKey,
+            unified,
+            lastSyncedMessageId: input.lastSyncedMessageId,
+          });
           currentThreadId = event.threadId;
           sawSession = true;
           yield event;

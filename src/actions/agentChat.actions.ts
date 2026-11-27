@@ -37,7 +37,7 @@ import { chatLockFromRow } from "@/lib/agent/chatConversationLock";
 import { CHAT_LOCK_PURPOSE } from "@/lib/agent/chatConversationLock";
 import { resolveChatCreationLock } from "@/lib/agent/chatConversationLock";
 import { resolveBusinessAIConfig } from "@/lib/ai/assignments";
-import { AIBusinessError, assertAccountExecutionIdentity, classifyAIConnection } from "@/lib/ai/connections";
+import { AIBusinessError, agentRoleAssignmentPurpose, assertAccountExecutionIdentity, classifyAIConnection } from "@/lib/ai/connections";
 import {
   checkStreamingExecutionReadiness,
   type AccountRuntimeCapabilities,
@@ -127,6 +127,8 @@ function snapshotOf(row: ChatConversationRow): ChatConversationSnapshot {
     resolvedConnectionId: row.resolvedConnectionId,
     resolvedModel: row.resolvedModel,
     agentRole: normalizeAgentRole(row.agentRole),
+    chatMode: row.chatMode,
+    activeRole: normalizeAgentRole(row.activeRole) ?? normalizeAgentRole(row.agentRole),
     archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
     ...(row.agentTaskId ? { agentTaskId: row.agentTaskId } : {}),
   };
@@ -200,6 +202,8 @@ export const listChatConversations = async (): Promise<{
         title: row.title,
         titleFallback: row.titleFallback,
         agentRole: normalizeAgentRole(row.agentRole),
+        chatMode: row.chatMode,
+        activeRole: normalizeAgentRole(row.activeRole) ?? normalizeAgentRole(row.agentRole),
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),
       })),
@@ -211,6 +215,7 @@ export const listChatConversations = async (): Promise<{
 
 export const createChatConversation = async (input?: {
   executionPath?: "APP_ORCHESTRATED" | "NATIVE_CODEX_V1";
+  chatMode?: "UNIFIED" | "LEGACY_ROLE_BOUND";
   permissionMode?: PermissionMode;
   messages?: UIMessage[];
   context?: ContextItemRequest[];
@@ -223,6 +228,7 @@ export const createChatConversation = async (input?: {
    * role from the row, never from the request).
    */
   agentRole?: AgentRole | null;
+  activeRole?: AgentRole | null;
 }): Promise<{
   success: boolean;
   data?: ChatConversationSnapshot;
@@ -240,12 +246,14 @@ export const createChatConversation = async (input?: {
     context.permissionMode = input?.permissionMode ?? (await loadAgentPreferences(user.id)).defaultPermission;
     const row = await createChatConversationRecord({
       executionPath: input?.executionPath,
+      chatMode: input?.chatMode,
       userId: user.id,
       messages: input?.messages ?? [],
       context,
       explicit: input?.explicit ?? null,
       firstUserText: input?.firstUserText ?? null,
       agentRole: normalizeAgentRole(input?.agentRole),
+      activeRole: normalizeAgentRole(input?.activeRole),
     });
     return { success: true, data: snapshotOf(row) };
   } catch (error) {
@@ -652,6 +660,81 @@ export const getAgentChatPreflight = async (input?: {
             locked: true,
           }),
         };
+      }
+      // Unified rows intentionally carry no creation-time lock (D07 per-step
+      // resolution). A reopened unified chat must preflight like a fresh
+      // draft for its active role — falling through to the null-lock legacy
+      // answer would wrongly report "not configured" and block the composer.
+      if (row.chatMode === "UNIFIED") {
+        const resolution = await resolveBusinessAIConfig({
+          userId: user.id,
+          purpose: agentRoleAssignmentPurpose(
+            row.activeRole === "insight" || row.activeRole === "reflect"
+              ? row.activeRole
+              : "pilot",
+          ),
+        });
+        if (resolution.status === "RESOLVED") {
+          const connection = await prisma.aIConnection.findFirst({
+            where: { id: resolution.connectionId, userId: user.id },
+            select: { displayName: true, status: true },
+          });
+          if (isManagedResolution(resolution)) {
+            return {
+              success: true,
+              data: {
+                kind: "managed",
+                connectionId: resolution.connectionId,
+                model: resolution.model,
+                displayName:
+                  connection?.displayName ?? "Vocatrya Managed AI",
+                locked: false,
+              },
+            };
+          }
+          const streamBlock = await accountStreamingBlockCode({
+            backendKind: resolution.backendKind,
+            provider: resolution.provider,
+            status: connection?.status ?? "CONNECTED",
+          });
+          if (streamBlock) {
+            return {
+              success: true,
+              data: {
+                kind: "blocked",
+                code: streamBlock,
+                connectionId: resolution.connectionId,
+                model: resolution.model,
+                displayName: connection?.displayName ?? resolution.provider,
+                locked: false,
+              },
+            };
+          }
+          return {
+            success: true,
+            data: {
+              kind: "account",
+              connectionId: resolution.connectionId,
+              provider: resolution.provider,
+              backendKind: resolution.backendKind,
+              model: resolution.model,
+              displayName: connection?.displayName ?? resolution.provider,
+              locked: false,
+            },
+          };
+        }
+        if (resolution.status === "INVALID_ASSIGNMENT") {
+          return {
+            success: true,
+            data: {
+              kind: "blocked",
+              code: resolution.code,
+              connectionId: resolution.connectionId,
+              model: resolution.model ?? null,
+              locked: false,
+            },
+          };
+        }
       }
       return {
         success: true,

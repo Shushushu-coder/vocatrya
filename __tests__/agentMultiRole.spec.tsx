@@ -14,6 +14,7 @@ import {
 import { suggestionsForRole } from "@/lib/agent/roleSuggestions";
 import { copyFor } from "@/lib/agent/roleCopy";
 import { NOTION_ALL_TOOL_NAMES } from "@/lib/extensions/notion/constants";
+import { FEISHU_ALL_TOOL_NAMES } from "@/lib/extensions/feishu/constants";
 
 const toolCtx = {
   userId: "user-1",
@@ -24,10 +25,10 @@ const toolCtx = {
   writer: { write: () => {}, merge: () => {}, onError: undefined } as never,
 };
 
-// A fully-connected Notion session: the route resolves these names into
-// ctx.notionTools before build, so extension tools register alongside the
-// local registry.
+// A fully-connected Notion + Feishu session: the route resolves these names into
+// ctx.notionTools / ctx.feishuTools before build.
 const NOTION_NAMES = [...NOTION_ALL_TOOL_NAMES];
+const FEISHU_NAMES = [...FEISHU_ALL_TOOL_NAMES];
 
 // The contract's effective set: role allowlist ∩ registered runtime tools.
 // Allowlists only ever shrink the registry, never grow it.
@@ -39,6 +40,7 @@ describe("per-role tool allowlists", () => {
         ...toolCtx,
         agentRole: role,
         notionTools: NOTION_NAMES,
+        feishuTools: FEISHU_NAMES,
       });
       expect(Object.keys(tools).sort()).toEqual(
         [...AGENT_ROLE_TOOL_ALLOWLIST[role]].sort(),
@@ -52,6 +54,7 @@ describe("per-role tool allowlists", () => {
       freshNativeFull: true,
       agentRole: "insight",
       notionTools: NOTION_NAMES,
+      feishuTools: FEISHU_NAMES,
     });
     expect(tools.match_job.needsApproval).toBe(true);
     expect(Object.keys(tools).sort()).toEqual(
@@ -71,13 +74,13 @@ describe("per-role tool allowlists", () => {
     for (const agentRole of [null, undefined, "future-role"]) {
       const tools = buildAgentTools({ ...toolCtx, agentRole });
       expect(Object.keys(tools)).toContain("generate_cover_letter");
-      expect(Object.keys(tools)).toHaveLength(8);
+      expect(Object.keys(tools)).toHaveLength(10);
     }
   });
 
-  it("does not give Pilot resume access", () => {
+  it("gives Pilot read-only get_resume (D02) while withholding review_resume and match_job", () => {
     const tools = buildAgentTools({ ...toolCtx, agentRole: "pilot" });
-    expect(tools.get_resume).toBeUndefined();
+    expect(tools.get_resume).toBeDefined();
     expect(tools.review_resume).toBeUndefined();
     expect(tools.match_job).toBeUndefined();
   });

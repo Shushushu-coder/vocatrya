@@ -74,6 +74,10 @@ export function buildAgentTools(ctx: {
    * allowlist untouched.
    */
   taskExtraTools?: readonly string[] | null;
+  /** Unified multi-agent chat omits suggest_role from active tools (D08). */
+  unified?: boolean;
+  /** Compound Step 2 guard (D06): coerce AI-derived today_plan add into adopt-plan draft card. */
+  forceTodayPlanSuggestOnly?: boolean;
 }): ToolSet {
   // One per request, so no two nested tools run at once but two users never
   // block each other.
@@ -123,7 +127,9 @@ export function buildAgentTools(ctx: {
     // from the admitted request, never from model input. The read stays on
     // every role's surface; every named role can manage its own checklist.
     today_plan_read: buildTodayPlanReadTool(ctx.userId, ctx.request),
-    today_plan: buildTodayPlanTool(ctx.userId, ctx.request),
+    today_plan: buildTodayPlanTool(ctx.userId, ctx.request, {
+      forceSuggestOnly: ctx.forceTodayPlanSuggestOnly,
+    }),
   };
 
   if (ctx.freshNativeFull) {

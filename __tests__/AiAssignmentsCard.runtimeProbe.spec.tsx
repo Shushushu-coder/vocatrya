@@ -62,7 +62,7 @@ vi.mock("@/actions/managedAi.actions", () => ({
   assignManagedBusinessAiSource: vi.fn(),
 }));
 
-const DIALOGUE_ROW = "ai-assign-row-CAREER_DIALOGUE";
+const DIALOGUE_ROW = "ai-assign-row-AGENT_PILOT";
 
 beforeAll(() => {
   window.HTMLElement.prototype.scrollIntoView = vi.fn();

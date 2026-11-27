@@ -125,15 +125,14 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(prompt).not.toContain("match_job scores");
   });
 
-  it("keeps Reflect To-do writes local and sends other writes to Pilot and analysis to Insight", () => {
+  it("keeps Reflect read-only and routes writes to Pilot and analysis to Insight (D02)", () => {
     const prompt = buildAgentChatSystemPrompt("en", {
       agentRole: "reflect",
       notionTools: ["notion_search", "notion_read"],
     });
     expect(prompt).toContain(READ_ONLY);
-    expect(prompt).toContain("Job writes and connected-extension writes belong to Voca Pilot");
-    expect(prompt).toContain("today_plan changes it");
-    expect(prompt).toContain("belong to Voca Insight");
+    expect(prompt).toContain("Job writes and connected-extension writes belong to Action Pilot");
+    expect(prompt).toContain("belong to Career Advisor");
     expect(prompt).toContain("compass icon");
     expect(prompt).toContain("telescope icon");
     expect(prompt).not.toContain("add_job");
@@ -175,16 +174,19 @@ describe("refusal prompts follow the registered tool set", () => {
     expect(section).toContain("Do not say Notion is disconnected");
   });
 
-  it("shares To-do writes while keeping other role write boundaries", () => {
+  it("keeps To-do writes exclusive to Pilot while sharing get_resume read access (D02)", () => {
     for (const name of writes) {
       expect(AGENT_ROLE_TOOL_ALLOWLIST.insight).not.toContain(name);
       expect(AGENT_ROLE_TOOL_ALLOWLIST.reflect).not.toContain(name);
     }
     expect(AGENT_ROLE_TOOL_ALLOWLIST.insight).not.toContain("add_job");
+    expect(AGENT_ROLE_TOOL_ALLOWLIST.insight).not.toContain("today_plan");
+    expect(AGENT_ROLE_TOOL_ALLOWLIST.reflect).not.toContain("today_plan");
     expect(AGENT_ROLE_TOOL_ALLOWLIST.pilot).toEqual([
       "list_jobs",
       "get_job",
       "read_webpage",
+      "get_resume",
       "add_job",
       "notion_search",
       "notion_read",
@@ -206,12 +208,12 @@ describe("refusal prompts follow the registered tool set", () => {
       "list_jobs",
       "get_job",
       "read_webpage",
+      "get_resume",
       "notion_search",
       "notion_read",
       "feishu_search_docs",
       "feishu_read_doc",
       "today_plan_read",
-      "today_plan",
       "suggest_role",
     ]);
   });
@@ -226,7 +228,7 @@ describe("homepage and empty state consume the roster", () => {
     render(<JourneySection jobsAbRead />);
     const prepare = screen.getByTestId("journey-agent-prepare");
     expect(prepare).toHaveTextContent(
-      `Ask Voca Insight — ${rosterDuty("insight", "en")}`,
+      `Ask Career Advisor — ${rosterDuty("insight", "en")}`,
     );
     expect(prepare.textContent).not.toMatch(/notion/i);
     await user.click(prepare);
@@ -236,14 +238,14 @@ describe("homepage and empty state consume the roster", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the empty-state self lines for the active role", () => {
+  it("renders the unified empty-state copy without naming extensions", () => {
     render(<AgentChatEmptyState />);
     const self = screen.getByTestId("agent-empty-self");
     expect(self).toHaveTextContent(
-      copyFor((key) => key, "en")(AGENT_ROSTER.insight.selfLeadKey),
+      copyFor((key) => key, "en")("agent.roster.unifiedLead"),
     );
     expect(self).toHaveTextContent(
-      copyFor((key) => key, "en")(AGENT_ROSTER.insight.selfHandoffKey),
+      copyFor((key) => key, "en")("agent.roster.unifiedHandoff"),
     );
     expect(screen.getByTestId("agent-roster-legend")).toHaveTextContent(
       "Insight analyzes",

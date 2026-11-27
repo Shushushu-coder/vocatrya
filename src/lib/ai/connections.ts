@@ -72,9 +72,14 @@ export const AI_CONNECTION_STATUSES = [
 export type AIConnectionStatus = (typeof AI_CONNECTION_STATUSES)[number];
 
 // GLOBAL_DEFAULT is the fallback purpose resolved when no business-specific
-// assignment exists.
+// assignment exists. AGENT_ROUTER + AGENT_PILOT/INSIGHT/REFLECT power the
+// unified multi-agent chat (D01/D07/D08) without requiring a schema change.
 export const AI_ASSIGNMENT_PURPOSES = [
   "GLOBAL_DEFAULT",
+  "AGENT_ROUTER",
+  "AGENT_PILOT",
+  "AGENT_INSIGHT",
+  "AGENT_REFLECT",
   "INTERVIEW",
   "RESUME",
   "MATCH_ANALYSIS",
@@ -83,17 +88,45 @@ export const AI_ASSIGNMENT_PURPOSES = [
 ] as const;
 export type AIAssignmentPurpose = (typeof AI_ASSIGNMENT_PURPOSES)[number];
 
+export const AGENT_ROLE_ASSIGNMENT_PURPOSES = [
+  "AGENT_PILOT",
+  "AGENT_INSIGHT",
+  "AGENT_REFLECT",
+] as const;
+export type AgentRoleAssignmentPurpose =
+  (typeof AGENT_ROLE_ASSIGNMENT_PURPOSES)[number];
+
+export function agentRoleAssignmentPurpose(
+  role: "pilot" | "insight" | "reflect",
+): AgentRoleAssignmentPurpose {
+  if (role === "insight") return "AGENT_INSIGHT";
+  if (role === "reflect") return "AGENT_REFLECT";
+  return "AGENT_PILOT";
+}
+
+export function isUnifiedAgentPurpose(value: string): boolean {
+  return (
+    value === "AGENT_ROUTER" ||
+    (AGENT_ROLE_ASSIGNMENT_PURPOSES as readonly string[]).includes(value)
+  );
+}
+
 /**
  * Purposes whose execution path streams assistant text token-by-token to
  * the user (Career Dialogue renders deltas as they arrive — a buffered
  * one-shot would be fake streaming). Assignments for these purposes gate
  * on verified incremental output, at save time and at turn time alike.
  * GLOBAL_DEFAULT is deliberately absent — it also serves non-streaming
- * purposes, so it stays assignable to any runtime; a CAREER_DIALOGUE
- * resolution that lands on a non-streaming GLOBAL_DEFAULT fails at
- * preflight/turn time instead.
+ * purposes, so it stays assignable to any runtime; a streaming resolution
+ * that lands on a non-streaming GLOBAL_DEFAULT fails at preflight/turn time
+ * instead. AGENT_ROUTER is a lightweight one-shot classifier, not streaming.
  */
-export const AI_STREAMING_PURPOSES = ["CAREER_DIALOGUE"] as const;
+export const AI_STREAMING_PURPOSES = [
+  "CAREER_DIALOGUE",
+  "AGENT_PILOT",
+  "AGENT_INSIGHT",
+  "AGENT_REFLECT",
+] as const;
 
 export function isStreamingPurpose(
   value: string,

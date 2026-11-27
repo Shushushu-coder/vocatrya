@@ -46,11 +46,28 @@ export type MemoryExtractionConversation = {
   messages: unknown;
 };
 
+export type RouterExtractionSlotResult =
+  | { kind: "absent" }
+  | { kind: "invalid"; reason: string }
+  | {
+      kind: "resolved";
+      connectionId: string;
+      model: string;
+      managedAiProvenance: ManagedAiProvenanceV1 | null;
+      connectionClass: "MANAGED" | "BYOK";
+    };
+
 export type MemoryExtractionStore = {
   loadConversation(
     userId: string,
     conversationId: string,
   ): Promise<MemoryExtractionConversation | null>;
+  /**
+   * Optional D07 Router lightweight-model slot lookup (`AGENT_ROUTER`).
+   * Only consulted for MANAGED / BYOK turns; independent ACCOUNT_LOGIN seats
+   * never cross-account into this slot.
+   */
+  resolveRouterSlot?(userId: string): Promise<RouterExtractionSlotResult>;
   /** Current memory rows for the state-aware curation prompt. */
   listEntries(
     userId: string,
@@ -76,6 +93,8 @@ export type MemoryExtractionDeps = {
     connectionId: string;
     model: string;
     prompt: string;
+    disableReasoning?: boolean;
+    maxOutputTokens?: number;
     managedAiProvenance?: ManagedAiProvenanceV1;
     managedResource?: { business: string; resourceKey: string };
     operationId?: string;
@@ -131,48 +150,57 @@ function recordFailure(key: string, now: number): number {
 }
 
 /**
- * Unified-chat Router lightweight-model seam — pending dependency.
- *
- * The 智能调度 lightweight slot config does not exist in this codebase
- * yet (the unified-chat model configuration is a frozen pending
- * surface); when it lands, return the slot's own {connectionId, model,
- * managedAiProvenance} so billing/provenance stay honest — a BYOK slot
- * returns provenance null. Until then managed/BYOK extraction falls back
- * to the conversation's resolved connection/model per the existing
- * contract.
+ * In-account target resolution (D07 §2.9.4 + D08):
+ * - Independent account sessions (ACCOUNT_LOGIN / native Codex seats /
+ *   unclassified rows) ALWAYS stay inside their own connection — never
+ *   cross-account into `AGENT_ROUTER`.
+ * - MANAGED and BYOK turns transparently reuse `AGENT_ROUTER` when explicitly
+ *   configured with a valid BYOK/MANAGED connection.
+ * - If `AGENT_ROUTER` is explicitly configured but currently broken/invalid,
+ *   return `{ skip: true }` so background curation circuit-skips quietly
+ *   without blocking foreground chat or spending an unintended connection.
  */
-function resolveRouterExtractionSlot(
-  _snapshot: MemoryExtractionConversation,
-): { connectionId: string; model: string; managedAiProvenance: ManagedAiProvenanceV1 | null } | null {
-  return null;
-}
-
-/**
- * In-account target resolution. Two tiers only:
- * - Account-bound sessions (no managed provenance — ACCOUNT_LOGIN
- *   connections, native Codex seats, unclassified/invalid rows) always
- *   execute on the connection/model the conversation itself resolved.
- *   An independent account session must never silently spend another
- *   configured connection's quota, so no cross-connection slot exists
- *   for them.
- * - MANAGED and BYOK may prefer the Router lightweight slot once that
- *   configuration exists; absent it, the conversation-bound lock is the
- *   contract fallback.
- */
-function resolveMemoryExtractionTarget(snapshot: MemoryExtractionConversation): {
-  connectionId: string;
-  model: string;
-  managedAiProvenance: ManagedAiProvenanceV1 | null;
-} {
+async function resolveMemoryExtractionTarget(
+  userId: string,
+  snapshot: MemoryExtractionConversation,
+  store: MemoryExtractionStore,
+): Promise<
+  | { skip: true; reason: string }
+  | {
+      skip: false;
+      connectionId: string;
+      model: string;
+      managedAiProvenance: ManagedAiProvenanceV1 | null;
+      viaRouter: boolean;
+    }
+> {
   const provenance = decodeManagedAiProvenance(snapshot.managedAiProvenance);
   const lock = {
+    skip: false as const,
     connectionId: snapshot.resolvedConnectionId!,
     model: snapshot.resolvedModel!,
     managedAiProvenance: provenance,
+    viaRouter: false,
   };
   const accountBound = provenance === null && snapshot.connectionClass !== "BYOK";
   if (accountBound) return lock;
-  return resolveRouterExtractionSlot(snapshot) ?? lock;
+  if (!store.resolveRouterSlot) return lock;
+  const routerSlot = await store.resolveRouterSlot(userId).catch(() => ({ kind: "absent" as const }));
+  if (routerSlot.kind === "invalid") {
+    return { skip: true, reason: `router_${routerSlot.reason}` };
+  }
+  if (routerSlot.kind === "resolved") {
+    // Only reuse when the Router slot itself is BYOK/MANAGED — never cross-bill
+    // an independent ACCOUNT_LOGIN connection.
+    return {
+      skip: false,
+      connectionId: routerSlot.connectionId,
+      model: routerSlot.model,
+      managedAiProvenance: routerSlot.managedAiProvenance,
+      viaRouter: true,
+    };
+  }
+  return lock;
 }
 
 /**
@@ -202,7 +230,7 @@ export function scheduleLongTermMemoryExtraction(
   return { opened: true };
 }
 
-async function runLongTermMemoryExtraction(
+export async function runLongTermMemoryExtraction(
   input: { userId: string; conversationId: string },
   deps: MemoryExtractionDeps,
   forced: boolean,
@@ -324,7 +352,10 @@ async function runLongTermMemoryExtraction(
     consumeDelta();
 
     const transcriptHash = createHash("sha256").update(transcript).digest("hex").slice(0, 16);
-    const target = resolveMemoryExtractionTarget(snapshot);
+    const target = await resolveMemoryExtractionTarget(input.userId, snapshot, deps.store);
+    if (target.skip) {
+      return finish({ status: "skipped", reason: target.reason });
+    }
     const existingMemory = formatExistingMemoryForPrompt(await deps.store.listEntries(input.userId));
     const prompt = buildMemoryExtractionPrompt({
       transcript: transcript || "(无对话文本 —— 仅依据下方纠偏信号抽取)",
@@ -339,6 +370,8 @@ async function runLongTermMemoryExtraction(
         connectionId: target.connectionId,
         model: target.model,
         prompt,
+        disableReasoning: true,
+        maxOutputTokens: 400,
         ...(target.managedAiProvenance
           ? {
               managedAiProvenance: target.managedAiProvenance,
@@ -422,10 +455,51 @@ export function defaultMemoryExtractionDeps(): MemoryExtractionDeps {
           },
         });
         if (!row) return null;
+        let effectiveConnectionId = row.resolvedConnectionId;
+        let effectiveModel = row.resolvedModel;
         let connectionClass: MemoryExtractionConversation["connectionClass"] = null;
-        if (row.resolvedConnectionId) {
+        // Unified conversations lock connection/model per ChatTurnStep rather
+        // than on ChatConversation: inspect the latest turn's completed steps
+        // so BYOK/MANAGED steps can use AGENT_ROUTER while pure ACCOUNT_LOGIN
+        // turns stay strictly inside their own seat.
+        const latestTurn = await prisma.chatTurn.findFirst({
+          where: { conversationId, userId },
+          orderBy: { createdAt: "desc" },
+          include: {
+            steps: {
+              where: { status: "COMPLETED", resolvedConnectionId: { not: null }, resolvedModel: { not: null } },
+              orderBy: { stepIndex: "desc" },
+            },
+          },
+        }).catch(() => null);
+        if (latestTurn && latestTurn.steps.length > 0) {
+          const stepConnections = await prisma.aIConnection.findMany({
+            where: {
+              userId,
+              id: { in: latestTurn.steps.map((s) => s.resolvedConnectionId!).filter(Boolean) },
+            },
+            select: {
+              id: true,
+              provider: true,
+              backendKind: true,
+              authType: true,
+              credentialRef: true,
+              runtimeProfileRef: true,
+              accountIdentity: true,
+            },
+          });
+          const byId = new Map(stepConnections.map((c) => [c.id, classifyAIConnection(c)]));
+          const managedOrByokStep = latestTurn.steps.find((s) => {
+            const cls = s.resolvedConnectionId ? byId.get(s.resolvedConnectionId) : undefined;
+            return cls === "BYOK" || cls === "MANAGED";
+          });
+          const chosen = managedOrByokStep ?? latestTurn.steps[0];
+          effectiveConnectionId = chosen.resolvedConnectionId;
+          effectiveModel = chosen.resolvedModel;
+          connectionClass = chosen.resolvedConnectionId ? (byId.get(chosen.resolvedConnectionId) ?? null) : null;
+        } else if (effectiveConnectionId) {
           const connection = await prisma.aIConnection.findFirst({
-            where: { id: row.resolvedConnectionId, userId },
+            where: { id: effectiveConnectionId, userId },
             select: {
               provider: true,
               backendKind: true,
@@ -445,11 +519,51 @@ export function defaultMemoryExtractionDeps(): MemoryExtractionDeps {
         }
         return {
           archived: row.archivedAt !== null,
-          resolvedConnectionId: row.resolvedConnectionId,
-          resolvedModel: row.resolvedModel,
+          resolvedConnectionId: effectiveConnectionId,
+          resolvedModel: effectiveModel,
           managedAiProvenance: row.managedAiProvenance,
           connectionClass,
           messages,
+        };
+      },
+      resolveRouterSlot: async (userId) => {
+        const assignment = await prisma.aIBusinessAssignment.findUnique({
+          where: { userId_purpose: { userId, purpose: "AGENT_ROUTER" } },
+          select: {
+            model: true,
+            connectionId: true,
+            connection: {
+              select: {
+                id: true,
+                userId: true,
+                status: true,
+                archivedAt: true,
+                provider: true,
+                backendKind: true,
+                authType: true,
+                credentialRef: true,
+                runtimeProfileRef: true,
+                accountIdentity: true,
+              },
+            },
+          },
+        });
+        if (!assignment) return { kind: "absent" };
+        const conn = assignment.connection;
+        if (!conn || conn.userId !== userId || conn.archivedAt !== null || conn.status !== "CONNECTED" || !assignment.model.trim()) {
+          return { kind: "invalid", reason: "unavailable" };
+        }
+        const cls = classifyAIConnection(conn);
+        if (cls !== "BYOK" && cls !== "MANAGED") {
+          // Independent ACCOUNT_LOGIN router must not be cross-billed by background memory.
+          return { kind: "absent" };
+        }
+        return {
+          kind: "resolved",
+          connectionId: conn.id,
+          model: assignment.model.trim(),
+          managedAiProvenance: null,
+          connectionClass: cls,
         };
       },
       listEntries: async (userId) =>
@@ -468,6 +582,8 @@ export function defaultMemoryExtractionDeps(): MemoryExtractionDeps {
         connectionId: input.connectionId,
         model: input.model,
         prompt: input.prompt,
+        disableReasoning: input.disableReasoning,
+        maxOutputTokens: input.maxOutputTokens,
         timeoutMs: AI_EXECUTION_DEFAULT_TIMEOUT_MS,
         managedAiProvenance: input.managedAiProvenance,
         managedResource: input.managedResource,

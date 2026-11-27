@@ -67,6 +67,10 @@ export interface ExecuteAIConnectionTextInput extends Pick<ManagedDispatchInput,
     schema: Record<string, unknown>;
     schemaName: string;
   };
+  /** Hint for lightweight calls (Layer 1 router / M2.1 memory curation) to disable or minimize deep reasoning. */
+  disableReasoning?: boolean;
+  /** Tight output token ceiling for fast classifier/curation calls. */
+  maxOutputTokens?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -244,6 +248,8 @@ export async function executeAIConnectionText(
         model,
         prompt,
         structuredOutput: structuredPayload,
+        disableReasoning: input.disableReasoning,
+        maxOutputTokens: input.maxOutputTokens,
         timeoutMs: input.timeoutMs,
         signal: input.signal,
       },

@@ -18,6 +18,10 @@ export const AgentChatRequestSchema = z.discriminatedUnion("operation", [
   z.object({ ...chatRequestBase, operation: z.literal("send"), newMessage: newUserMessage }).strict(),
   z.object({ ...chatRequestBase, operation: z.literal("regenerate"), targetMessageId: z.string().min(1) }).strict(),
   z.object({ ...chatRequestBase, operation: z.literal("approval"), approvalId: z.string().min(1), decision: z.boolean(), reason: z.string().max(2000).optional() }).strict(),
+  // D05/D08: retry one failed step in place without re-running Step 1.
+  z.object({ ...chatRequestBase, operation: z.literal("retry_step"), turnId: z.string().min(1), stepIndex: z.number().int().min(0).max(1) }).strict(),
+  // D01/D05/D08: re-answer from another role's perspective (Layer 0 explicit entry), preserving existing writes & approvals.
+  z.object({ ...chatRequestBase, operation: z.literal("reanswer"), targetMessageId: z.string().min(1), role: z.enum(["pilot", "insight", "reflect"]) }).strict(),
 ]);
 
 export type AgentChatRequest = z.infer<typeof AgentChatRequestSchema>;

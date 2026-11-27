@@ -61,76 +61,86 @@ beforeEach(() => {
   window.localStorage.removeItem(APP_CONSTANTS.AI_ASSIGNMENT_ORDER_STORAGE_KEY);
 });
 
-it("renders the global default as its own row above the registry-ordered business grid", async () => {
+it("renders Base (Default + Router), AI Roles (Pilot/Insight/Reflect), and reorderable Specialized features in order", async () => {
   render(<AiAssignmentsCard />);
   await waitFor(() =>
     expect(screen.getByTestId("ai-assign-row-RESUME")).toBeInTheDocument(),
   );
   expect(rowOrder()).toEqual([
     "ai-assign-row-GLOBAL_DEFAULT",
+    "ai-assign-row-AGENT_ROUTER",
+    "ai-assign-row-AGENT_PILOT",
+    "ai-assign-row-AGENT_INSIGHT",
+    "ai-assign-row-AGENT_REFLECT",
     "ai-assign-row-RESUME",
     "ai-assign-row-MATCH_ANALYSIS",
     "ai-assign-row-CAREER_REFLECTION",
-    "ai-assign-row-CAREER_DIALOGUE",
-    "ai-assign-row-INTERVIEW",
   ]);
+  expect(screen.queryByTestId("ai-assign-row-INTERVIEW")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("ai-assign-row-CAREER_DIALOGUE")).not.toBeInTheDocument();
 });
 
-it("applies a stored business order while the global default stays pinned first", async () => {
+it("applies a stored specialized order while Base and AI Roles stay pinned first", async () => {
   window.localStorage.setItem(
     APP_CONSTANTS.AI_ASSIGNMENT_ORDER_STORAGE_KEY,
-    JSON.stringify(["INTERVIEW", "CAREER_DIALOGUE", "RESUME", "MATCH_ANALYSIS", "CAREER_REFLECTION"]),
+    JSON.stringify(["CAREER_REFLECTION", "MATCH_ANALYSIS", "RESUME"]),
   );
   render(<AiAssignmentsCard />);
   await waitFor(() =>
-    expect(screen.getAllByTestId(/^ai-assign-row-/)).toHaveLength(6),
+    expect(screen.getAllByTestId(/^ai-assign-row-/)).toHaveLength(8),
   );
   expect(rowOrder()).toEqual([
     "ai-assign-row-GLOBAL_DEFAULT",
-    "ai-assign-row-INTERVIEW",
-    "ai-assign-row-CAREER_DIALOGUE",
-    "ai-assign-row-RESUME",
-    "ai-assign-row-MATCH_ANALYSIS",
+    "ai-assign-row-AGENT_ROUTER",
+    "ai-assign-row-AGENT_PILOT",
+    "ai-assign-row-AGENT_INSIGHT",
+    "ai-assign-row-AGENT_REFLECT",
     "ai-assign-row-CAREER_REFLECTION",
+    "ai-assign-row-MATCH_ANALYSIS",
+    "ai-assign-row-RESUME",
   ]);
 });
 
-it("drops unknown entries and appends purposes missing from a stale stored order", async () => {
+it("drops unknown entries and appends specialized purposes missing from a stale stored order", async () => {
   window.localStorage.setItem(
     APP_CONSTANTS.AI_ASSIGNMENT_ORDER_STORAGE_KEY,
-    JSON.stringify(["INTERVIEW", "REMOVED_PURPOSE", "RESUME"]),
+    JSON.stringify(["INTERVIEW", "REMOVED_PURPOSE", "CAREER_REFLECTION"]),
   );
   render(<AiAssignmentsCard />);
   await waitFor(() =>
-    expect(screen.getAllByTestId(/^ai-assign-row-/)).toHaveLength(6),
+    expect(screen.getAllByTestId(/^ai-assign-row-/)).toHaveLength(8),
   );
   expect(rowOrder()).toEqual([
     "ai-assign-row-GLOBAL_DEFAULT",
-    "ai-assign-row-INTERVIEW",
+    "ai-assign-row-AGENT_ROUTER",
+    "ai-assign-row-AGENT_PILOT",
+    "ai-assign-row-AGENT_INSIGHT",
+    "ai-assign-row-AGENT_REFLECT",
+    "ai-assign-row-CAREER_REFLECTION",
     "ai-assign-row-RESUME",
     "ai-assign-row-MATCH_ANALYSIS",
-    "ai-assign-row-CAREER_REFLECTION",
-    "ai-assign-row-CAREER_DIALOGUE",
   ]);
 });
 
-it("exposes drag handles on business rows only — the global default row is fixed", async () => {
+it("exposes drag handles on specialized rows only — Base and AI Role rows are fixed", async () => {
   render(<AiAssignmentsCard />);
   await waitFor(() =>
     expect(screen.getByTestId("ai-assign-row-RESUME")).toBeInTheDocument(),
   );
-  for (const purpose of [
-    "RESUME",
-    "MATCH_ANALYSIS",
-    "CAREER_REFLECTION",
-    "CAREER_DIALOGUE",
-    "INTERVIEW",
-  ]) {
+  for (const purpose of ["RESUME", "MATCH_ANALYSIS", "CAREER_REFLECTION"]) {
     expect(
       screen.getByTestId(`ai-assign-drag-${purpose}`),
     ).toBeInTheDocument();
   }
-  expect(
-    screen.queryByTestId("ai-assign-drag-GLOBAL_DEFAULT"),
-  ).not.toBeInTheDocument();
+  for (const fixed of [
+    "GLOBAL_DEFAULT",
+    "AGENT_ROUTER",
+    "AGENT_PILOT",
+    "AGENT_INSIGHT",
+    "AGENT_REFLECT",
+  ]) {
+    expect(
+      screen.queryByTestId(`ai-assign-drag-${fixed}`),
+    ).not.toBeInTheDocument();
+  }
 });

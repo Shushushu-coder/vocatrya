@@ -87,6 +87,10 @@ import {
   type AgentContextUsage,
 } from "@/lib/agent/contextUsage";
 import {
+  AGENT_UNIFIED_STATUS_PART_TYPE,
+  type AgentUnifiedStatusData,
+} from "@/lib/agent/unifiedChatTypes";
+import {
   dedupeContextItems,
   EMPTY_CONVERSATION_CONTEXT,
   type AgentConversationContextItem,
@@ -338,6 +342,17 @@ function useAgentChatValue(
   const [conversationId, setConversationId] = useState<string | null>(
     initial?.id ?? null,
   );
+  const [conversationTitle, setConversationTitle] = useState<string | null>(
+    initial?.title ?? initial?.titleFallback ?? null,
+  );
+  const [unifiedStatus, setUnifiedStatus] =
+    useState<AgentUnifiedStatusData | null>(null);
+  const [failedStep, setFailedStep] = useState<{
+    turnId: string;
+    stepIndex: number;
+    role: AgentRole;
+    message?: string;
+  } | null>(null);
   // Multi-agent slots (D1): the mount role comes from the loaded
   // conversation or the last-active preference; a draft slot restores its
   // stored context/model/draft. hasStoredContext tells the mount effect the
@@ -408,7 +423,7 @@ function useAgentChatValue(
     conversationId: string;
     requestId: string;
     existingWrites: Set<string>;
-    operation?: "send" | "regenerate" | "approval";
+    operation?: "send" | "regenerate" | "approval" | "reanswer" | "retry_step";
     /** The user message a rejected "send" would re-issue. */
     message?: UIMessage;
     /** The tail message a rejected "regenerate" re-targets. */
@@ -416,6 +431,12 @@ function useAgentChatValue(
     /** One automatic re-issue per user action, never more. */
     retried?: boolean;
   } | null>(null);
+  const pendingSpecialOpRef = useRef<
+    | { operation: "reanswer"; targetMessageId: string; role: AgentRole }
+    | { operation: "retry_step"; turnId: string; stepIndex: number }
+    | null
+  >(null);
+  const needsDurableSyncRef = useRef(false);
   const completedExecutionRef = useRef<string | null>(null);
   const recoveryRef = useRef<{ conversationId: string; requestId: string } | null>(null);
   const recoveryBlockedRef = useRef(false);
@@ -646,6 +667,28 @@ function useAgentChatValue(
       prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
         const requestId = generateId();
         const id = conversationIdRef.current!;
+        const specialOp = pendingSpecialOpRef.current;
+        pendingSpecialOpRef.current = null;
+        if (specialOp) {
+          activeExecutionRef.current = {
+            conversationId: id,
+            requestId,
+            existingWrites: savedWriteCallIds(messages),
+            operation: specialOp.operation,
+          };
+          recoveryRef.current = null;
+          completedExecutionRef.current = null;
+          durableApprovalRef.current = false;
+          return {
+            headers: { "x-vocatrya-unified-chat": "1" },
+            body: {
+              conversationId: id,
+              requestId,
+              expectedRevision: revisionRef.current,
+              ...specialOp,
+            },
+          };
+        }
         const last = messages.at(-1);
         const replayed = replayNextRequestRef.current;
         replayNextRequestRef.current = false;
@@ -660,14 +703,17 @@ function useAgentChatValue(
         recoveryRef.current = null;
         completedExecutionRef.current = null;
         durableApprovalRef.current = false;
-        return { body: {
-          conversationId: id, requestId, expectedRevision: revisionRef.current, operation,
-          ...(operation === "send" ? { newMessage: last } : operation === "regenerate" ? { targetMessageId: regenerateTargetRef.current ?? messageId } : {
-            approvalId: isToolUIPart(approval!) ? approval!.approval?.id : undefined,
-            decision: isToolUIPart(approval!) ? approval!.approval?.approved : undefined,
-            reason: isToolUIPart(approval!) ? approval!.approval?.reason : undefined,
-          }),
-        } };
+        return {
+          headers: { "x-vocatrya-unified-chat": "1" },
+          body: {
+            conversationId: id, requestId, expectedRevision: revisionRef.current, operation,
+            ...(operation === "send" ? { newMessage: last } : operation === "regenerate" ? { targetMessageId: regenerateTargetRef.current ?? messageId } : {
+              approvalId: isToolUIPart(approval!) ? approval!.approval?.id : undefined,
+              decision: isToolUIPart(approval!) ? approval!.approval?.approved : undefined,
+              reason: isToolUIPart(approval!) ? approval!.approval?.reason : undefined,
+            }),
+          },
+        };
       },
     }),
     sendAutomaticallyWhen: (options) => !conflictRef.current && durableApprovalRef.current && Boolean(selectedApprovalRef.current) && Boolean(options.messages.at(-1)?.parts.some(p => isToolUIPart(p) && p.state === "approval-responded" && p.approval?.id === selectedApprovalRef.current)),
@@ -769,6 +815,38 @@ function useAgentChatValue(
         setContextUsage(data);
         return;
       }
+      if (part.type === AGENT_UNIFIED_STATUS_PART_TYPE) {
+        if (!activeExecutionRef.current || activeExecutionRef.current.conversationId !== conversationIdRef.current) return;
+        const data = part.data as AgentUnifiedStatusData;
+        if (
+          (data.stepCount && data.stepCount > 1) ||
+          data.phase === "step_handoff" ||
+          data.phase === "step_blocked" ||
+          data.phase === "step_failed"
+        ) {
+          needsDurableSyncRef.current = true;
+        }
+        if (data.phase === "step_failed" && data.turnId && typeof data.stepIndex === "number" && data.role) {
+          setFailedStep({
+            turnId: data.turnId,
+            stepIndex: data.stepIndex,
+            role: data.role,
+            message: data.message,
+          });
+          setUnifiedStatus(null);
+          return;
+        }
+        if (data.phase === "done") {
+          setUnifiedStatus(null);
+          return;
+        }
+        setUnifiedStatus(data);
+        if (data.role && isAgentRole(data.role)) {
+          activeRoleRef.current = data.role;
+          setActiveRole(data.role);
+        }
+        return;
+      }
       if (!activeExecutionRef.current || activeExecutionRef.current.conversationId !== conversationIdRef.current) return;
       if (part.type !== AGENT_NESTED_STREAM_PART_TYPE || !part.id) return;
       const id = part.id;
@@ -776,6 +854,7 @@ function useAgentChatValue(
       setToolStreams((prev) => ({ ...prev, [id]: (prev[id] ?? "") + delta }));
     },
     onFinish: ({ message, isAbort, isError }) => {
+      setUnifiedStatus(null);
       const active = activeExecutionRef.current;
       if (!active || active.conversationId !== conversationIdRef.current || completedExecutionRef.current !== active.requestId || isAbort || isError) return;
       if (!hasPendingApproval(message ? [message] : [])) {
@@ -796,6 +875,25 @@ function useAgentChatValue(
       if (generated) router.refresh();
       if (scored) setJobWrites((n) => n + 1);
       setHistoryVersion((n) => n + 1);
+
+      if (needsDurableSyncRef.current) {
+        needsDurableSyncRef.current = false;
+        const targetId = active.conversationId;
+        const targetReq = active.requestId;
+        void getChatConversation(targetId).then((res) => {
+          if (
+            !res.success ||
+            !res.data ||
+            conversationIdRef.current !== targetId ||
+            activeExecutionRef.current?.requestId !== targetReq
+          ) {
+            return;
+          }
+          revisionRef.current = res.data.revision;
+          chat.setMessages(res.data.messages);
+          setConversationTitle(res.data.title ?? res.data.titleFallback ?? null);
+        });
+      }
     },
   });
 
@@ -983,14 +1081,10 @@ function useAgentChatValue(
   );
 
   const open = useCallback(
-    (options?: { role?: AgentRole }) => {
+    (_options?: { role?: AgentRole }) => {
       collapseSidebar();
       requestOpen(AGENT_CHAT_PANEL_ID);
       setIsOpen(true);
-      const role = options?.role;
-      if (role && isAgentRole(role) && role !== activeRoleRef.current) {
-        void switchRoleRef.current(role);
-      }
       void runPreflight();
     },
     [collapseSidebar, requestOpen, runPreflight],
@@ -1047,6 +1141,9 @@ function useAgentChatValue(
     setCompactionFeedback(null);
     setToolStreams({});
     setQueued(undefined);
+    setUnifiedStatus(null);
+    setFailedStep(null);
+    needsDurableSyncRef.current = false;
   }, [chat, updateComposerSeed, setPasteChip, setFileChips]);
 
   // ------------------------------------------------------------------
@@ -1094,6 +1191,8 @@ function useAgentChatValue(
       resolvedModel: string | null;
       revision: number;
       executionPath?: string;
+      title?: string | null;
+      titleFallback?: string | null;
     }) => {
       revisionRef.current = data.revision;
       durableApprovalRef.current = true;
@@ -1102,6 +1201,7 @@ function useAgentChatValue(
       slotPointerRef.current = data.id;
       lockKindRef.current = data.lockKind;
       setConversationId(data.id);
+      setConversationTitle(data.title ?? data.titleFallback ?? null);
       setNativeSession(data.executionPath === "NATIVE_CODEX_V1");
       setNativeStatus("waiting");
       setContext(data.context);
@@ -1127,8 +1227,7 @@ function useAgentChatValue(
         context: contextRequests(contextRef.current.items),
         explicit: explicitRef.current,
         firstUserText,
-        // The role is fixed on the row here; afterwards the server reads
-        // it back and the client never carries it again.
+        chatMode: "UNIFIED",
         agentRole: role,
       });
       // A role or conversation selection supersedes this first send. The
@@ -1183,6 +1282,7 @@ function useAgentChatValue(
       slotPointerRef.current = null;
       lockKindRef.current = null;
       setConversationId(null);
+      setConversationTitle(null);
       setNativeSession(false);
       explicitRef.current = slot.explicit;
       setExplicit(slot.explicit);
@@ -1313,6 +1413,7 @@ function useAgentChatValue(
       explicitRef.current = null;
       setExplicit(null);
       setConversationId(data.id);
+      setConversationTitle(data.title ?? data.titleFallback ?? null);
       setTaskBinding(data.agentTaskId ? { conversationId: data.id, taskId: data.agentTaskId } : null);
       setNativeSession(data.executionPath === "NATIVE_CODEX_V1");
       setNativeStatus("waiting");
@@ -1562,6 +1663,8 @@ function useAgentChatValue(
       if (recoveryBlockedRef.current || roleSelectionPendingRef.current) return;
       conflictRef.current = false;
       setActionError(null);
+      setFailedStep(null);
+      needsDurableSyncRef.current = false;
       if (conversationIdRef.current) return chat.sendMessage(message);
       if (creatingRef.current) {
         setQueued(message);
@@ -1653,6 +1756,54 @@ function useAgentChatValue(
   }, [chat, nativeSession]);
 
   const clearQueued = useCallback(() => setQueued(undefined), []);
+
+  const reanswer = useCallback(
+    (targetMessageId: string, role: AgentRole) => {
+      if (
+        recoveryBlockedRef.current ||
+        streamingRef.current ||
+        approvalPending ||
+        !conversationIdRef.current
+      ) {
+        return;
+      }
+      conflictRef.current = false;
+      setActionError(null);
+      setFailedStep(null);
+      needsDurableSyncRef.current = true;
+      pendingSpecialOpRef.current = {
+        operation: "reanswer",
+        targetMessageId,
+        role,
+      };
+      void chat.sendMessage();
+    },
+    [approvalPending, chat],
+  );
+
+  const retryStep = useCallback(
+    (turnId: string, stepIndex: number) => {
+      if (
+        recoveryBlockedRef.current ||
+        streamingRef.current ||
+        approvalPending ||
+        !conversationIdRef.current
+      ) {
+        return;
+      }
+      conflictRef.current = false;
+      setActionError(null);
+      setFailedStep(null);
+      needsDurableSyncRef.current = true;
+      pendingSpecialOpRef.current = {
+        operation: "retry_step",
+        turnId,
+        stepIndex,
+      };
+      void chat.sendMessage();
+    },
+    [approvalPending, chat],
+  );
 
   // suggest_role handoff (MAO-B): the card carries the request into the
   // target role's slot and switches to it. The text lands as a composer
@@ -1994,6 +2145,11 @@ function useAgentChatValue(
     transferToRole,
     stop,
     regenerate,
+    reanswer,
+    retryStep,
+    unifiedStatus,
+    failedStep,
+    conversationTitle,
     addToolApprovalResponse: (...args: Parameters<typeof chat.addToolApprovalResponse>) => {
       if (recoveryBlockedRef.current || !durableApprovalRef.current || streamingRef.current || approvalSendingRef.current) return;
       selectedApprovalRef.current = args[0].id;

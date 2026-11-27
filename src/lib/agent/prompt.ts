@@ -125,6 +125,8 @@ export function buildAgentChatSystemPrompt(
     feishuTools?: readonly string[];
     /** Set (even empty) only for a task session: the template's extra tools. */
     taskExtraTools?: readonly string[] | null;
+    /** Unified multi-agent chat (D01/D02/D08): omits legacy manual switcher & suggest_role instructions. */
+    unified?: boolean;
   },
 ): string {
   const languageInstruction =
@@ -133,6 +135,7 @@ export function buildAgentChatSystemPrompt(
       : "Reply in Simplified Chinese by default, unless the user explicitly requests another language.";
   const fresh = options?.freshNativeFull === true;
   const role = normalizeAgentRole(options?.agentRole);
+  const unified = options?.unified === true;
 
   const assemble = (sections: string[]): string => {
     const notion = buildNotionPromptSection(
@@ -159,9 +162,16 @@ export function buildAgentChatSystemPrompt(
     return assemble([
       INSIGHT_ROLE,
       languageInstruction,
-      insightCapabilities(fresh),
-      `${INSIGHT_LIMITATIONS} ${roleHandoffHint("insight")}`,
-      buildRoleAwarenessBlock("insight"),
+      unified
+        ? insightCapabilities(fresh).replace(
+            TODAY_PLAN_SECTION,
+            "today_plan_read reads this conversation's to-do list (read-only). Writing or editing the to-do list is handled by Execution Assistant (Pilot).",
+          )
+        : insightCapabilities(fresh),
+      unified
+        ? "You focus on job match evaluation, resume diagnostics, offer comparison, and career advice. You have full read-only access to saved jobs, resumes, today's to-do list, and connected read tools, plus match_job and review_resume. Do not claim to have added jobs, edited to-do items, or written to Notion/Feishu."
+        : `${INSIGHT_LIMITATIONS} ${roleHandoffHint("insight")}`,
+      ...(unified ? [] : [buildRoleAwarenessBlock("insight")]),
       AGENT_CHAT_PROMPT_SECTIONS.safety,
     ]);
   }
@@ -169,9 +179,14 @@ export function buildAgentChatSystemPrompt(
     return assemble([
       PILOT_ROLE,
       languageInstruction,
-      fresh ? PILOT_CAPABILITIES_FRESH : PILOT_CAPABILITIES,
-      `${PILOT_LIMITATIONS} ${roleHandoffHint("pilot")}`,
-      buildRoleAwarenessBlock("pilot"),
+      (fresh ? PILOT_CAPABILITIES_FRESH : PILOT_CAPABILITIES) +
+        (unified
+          ? " You can also call get_resume (read-only) when you need to inspect the user's resume text."
+          : ""),
+      unified
+        ? "You focus on execution, action breakdown, to-do list management (today_plan), logging jobs (add_job), and connected Notion/Feishu writes. You also have read-only access to jobs, resumes, and today's to-do list. Do not claim to have run match_job or review_resume unless those tools were actually called and returned a verified result."
+        : `${PILOT_LIMITATIONS} ${roleHandoffHint("pilot")}`,
+      ...(unified ? [] : [buildRoleAwarenessBlock("pilot")]),
       ...(options?.taskExtraTools
         ? [buildAgentTaskPromptSection(options.taskExtraTools)]
         : []),
@@ -185,9 +200,13 @@ export function buildAgentChatSystemPrompt(
     return assemble([
       REFLECT_ROLE,
       languageInstruction,
-      REFLECT_CAPABILITIES,
-      `${REFLECT_LIMITATIONS} ${roleHandoffHint("reflect")}`,
-      buildRoleAwarenessBlock("reflect"),
+      unified
+        ? "You have full read-only tools: list_jobs, get_job, get_resume, today_plan_read, read_webpage, and connected read-only tools. You do not directly modify jobs, to-do items, or external documents."
+        : REFLECT_CAPABILITIES,
+      unified
+        ? "You focus on interview and application debriefs, takeaways, growth pacing, and mindset support using shared read-only tools. Never claim to have saved jobs, modified to-do items, or written external documents."
+        : `${REFLECT_LIMITATIONS} ${roleHandoffHint("reflect")}`,
+      ...(unified ? [] : [buildRoleAwarenessBlock("reflect")]),
       AGENT_CHAT_PROMPT_SECTIONS.safety,
     ]);
   }

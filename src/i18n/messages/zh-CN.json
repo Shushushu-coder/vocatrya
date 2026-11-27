@@ -1773,10 +1773,32 @@
     "aiConnErrPermissionBoundary": "该运行时的权限边界尚不支持此操作。",
     "aiConnErrInvalidTicket": "会话已过期——请重试。",
     "aiConnErrBackendUnavailable": "后端不可用。",
-    "aiAssignTitle": "业务 AI 分配",
-    "aiAssignDescription": "为每个业务用途绑定一个已连接账号和模型。未单独配置的用途将使用“全局默认”；两者都未配置时回退到上方的旧版 AI 服务商设置。",
-    "aiAssignPurposeGlobalDefault": "全局默认",
-    "aiAssignPurposeResume": "简历",
+    "aiAssignTitle": "模型配置",
+    "aiAssignDescription": "按基础配置、AI 角色与专项功能绑定已连接账号与模型。未单独配置的角色和智能调度将使用「默认模型」；显式配置失效时会明确报错，不会静默切换到其他账号。",
+    "aiAssignPurposeGlobalDefault": "默认模型",
+    "aiAssignPurposeAgentRouter": "智能调度",
+    "aiAssignPurposeAgentPilot": "执行助手",
+    "aiAssignPurposeAgentInsight": "职业顾问",
+    "aiAssignPurposeAgentReflect": "复盘教练",
+    "aiAssignGroupBase": "基础配置",
+    "aiAssignGroupRoles": "AI 角色",
+    "aiAssignGroupRolesHint": "三个角色可共用同一连接或按需分别绑定模型；未单独配置时使用默认模型。",
+    "aiAssignGroupSpecialized": "专项功能",
+    "aiAssignDefaultDesc": "所有未单独配置的角色与智能调度默认使用此模型。",
+    "aiAssignDefaultTip": "推荐均衡型主力模型。",
+    "aiAssignRouterDesc": "幕后快速判断问题应由哪位角色接手，不直接参与回复；同时可用于托管 API 对话的轻量后台记忆整理（独立登录账号不跨账号调用此项）。",
+    "aiAssignRouterTip": "推荐便宜、快速的轻量模型；留空则回退默认模型。",
+    "aiAssignRolePilotDesc": "日常问答、拆解任务、管理待办与求职记录操作（冷启动默认接待）。",
+    "aiAssignRolePilotTip": "推荐响应快、工具调用稳定的模型。",
+    "aiAssignRoleInsightDesc": "岗位匹配分析、简历竞争力评估、Offer 决策支持。",
+    "aiAssignRoleInsightTip": "推荐推理与分析能力强的模型。",
+    "aiAssignRoleReflectDesc": "面试与投递复盘、梳理得失、成长节奏与心态建议。",
+    "aiAssignRoleReflectTip": "推荐深度思考与共情能力好的模型。",
+    "aiAssignInheritsDefault": "当前未单独配置，将使用默认模型：{target}",
+    "aiAssignInheritsLegacyDialogue": "当前沿用旧版「职业对话」配置（只读兼容）：{target}",
+    "aiAssignInheritsDefaultUnset": "当前未单独配置，将回退「默认模型」（尚未设置）。",
+    "aiAssignLegacyDialogueNotice": "检测到旧版「职业对话」配置（{target}）。在设置「默认模型」或各角色配置前将保持只读兼容，不会静默改写原设置。",
+    "aiAssignPurposeResume": "简历解析",
     "aiAssignPurposeMatchAnalysis": "匹配分析",
     "aiAssignPurposeCareerReflection": "职业反思",
     "aiAssignPurposeCareerDialogue": "职业对话",
@@ -2367,6 +2389,12 @@
     "identityPair": "{model} · {connection}",
     "connecting": "正在连接…",
     "thinkingTurn": "正在思考…",
+    "unifiedRouting": "正在理解意图…",
+    "unifiedStepRunning": "{role} 正在处理…",
+    "unifiedStepHandoff": "{role} 正在承接结果继续处理…",
+    "unifiedStepBlockedNotice": "剩余步骤（{role}）暂未执行，确认上方操作后可继续。",
+    "unifiedStepFailed": "{role} 这一步未能完成。",
+    "unifiedRetryStep": "重试这一步",
     "stopped": "已停止",
     "regenerate": "重新生成",
     "addedToMyJobs": "已添加到“我的职位”",
@@ -2448,6 +2476,8 @@
       "reviewResume": "审查简历",
       "matchJob": "分析岗位匹配",
       "coverLetter": "生成求职信",
+      "todayPlanRead": "读取今日清单",
+      "todayPlan": "更新今日清单",
       "generic": "操作"
     },
     "errors": {
@@ -2477,19 +2507,23 @@
     "roleAssistant": "助手",
     "roles": {
       "insight": {
-        "name": "Voca Insight",
-        "subtitle": "求职分析师"
+        "name": "职业顾问",
+        "badge": "Insight",
+        "subtitle": "职位与简历分析"
       },
       "pilot": {
-        "name": "Voca Pilot",
-        "subtitle": "工作台助手"
+        "name": "执行助手",
+        "badge": "Pilot",
+        "subtitle": "职位记录、待办与扩展操作"
       },
       "reflect": {
-        "name": "Voca Reflect",
-        "subtitle": "对话教练"
+        "name": "复盘教练",
+        "badge": "Reflect",
+        "subtitle": "面试复盘与策略陪聊"
       },
       "general": {
         "name": "通用",
+        "badge": "",
         "subtitle": "通用助手"
       }
     },
@@ -2500,21 +2534,23 @@
     "suggestRoleCta": "带这个问题去问 {name}",
     "roster": {
       "ask": "咨询 {name} —— {duty}",
-      "legend": "Insight 帮你看 · Pilot 帮你干 · Reflect 陪你聊——顶部图标随时换",
+      "legend": "一个对话自动调度：执行助手帮你做 · 职业顾问帮你看 · 复盘教练陪你聊",
+      "unifiedLead": "直接说出你想做的事，我会按你的意图自动安排最合适的助手来回应。",
+      "unifiedHandoff": "先分析再行动也能在同一次回复里接力完成；写操作与待办都会先经你确认。",
       "insight": {
         "duty": "帮你看看职位要什么人、简历怎么改",
         "selfLead": "我帮你看清楚：职位要什么人、简历怎么改、和你有多匹配。",
-        "selfHandoff": "我也能管理本次对话的待办；记职位、操作扩展找 Pilot。"
+        "selfHandoff": "需要记职位或更新待办时，执行助手会自动承接。"
       },
       "pilot": {
-        "duty": "帮你记职位、盯投递，动手前先给你确认",
-        "selfLead": "我帮你打理职位：查、记、跟进，动数据前都先给你确认。",
-        "selfHandoff": "想分析简历？找 Insight。"
+        "duty": "帮你记职位、管待办、执行操作，动手前先给你确认",
+        "selfLead": "我帮你打理职位和待办：查、记、跟进，动数据前都先给你确认。",
+        "selfHandoff": "想分析匹配度或诊断简历时，职业顾问会自动接手。"
       },
       "reflect": {
         "duty": "陪你聊聊面试、捋捋下一步",
         "selfLead": "我陪你捋：面试聊得咋样、机会怎么选、下周干啥。",
-        "selfHandoff": "我也能管理本次对话的待办；记职位找 Pilot，分析找 Insight。"
+        "selfHandoff": "需要记职位或深度分析时，对应助手会在同一对话里承接。"
       }
     },
     "suggest": {
@@ -3708,7 +3744,11 @@
     "copy": "复制回答",
     "copied": "已复制",
     "copyFailed": "复制失败，请重试。",
-    "regenerate": "重新生成回答"
+    "regenerate": "重新生成回答",
+    "reanswer": "换个角度回答",
+    "reanswerPilot": "整理与操作（执行助手）",
+    "reanswerInsight": "分析与评估（职业顾问）",
+    "reanswerReflect": "复盘与建议（复盘教练）"
   },
   "runtimeUpdate": {
     "currentVersion": "当前版本",
@@ -3920,6 +3960,7 @@
     "cardUnavailable": "清单暂不可用",
     "cardTarget": "保存到",
     "adoptHint": "确认将把这份计划保存到今日清单。",
+    "adopt": "采用计划",
     "draftTitle": "基于现有数据的建议",
     "noSuggestions": "暂无足够数据生成建议。",
     "overdueCount": "{count} 条此前事项仍未完成",

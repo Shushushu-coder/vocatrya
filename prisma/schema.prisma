@@ -96,6 +96,10 @@ model User {
 
   // M2 cross-session long-term memory (additive backrelation only).
   userMemoryEntries   UserMemoryEntry[]
+
+  // Unified multi-agent chat turns & steps (D08, additive backrelations only).
+  chatTurns           ChatTurn[]
+  chatTurnSteps       ChatTurnStep[]
 }
 
 /// Instance-level A+B readiness marker. Runtime enablement reads this row
@@ -713,7 +717,14 @@ model McpAccessToken {
 model ChatConversation {
   executionPath          String               @default("APP_ORCHESTRATED")
   nativeInitializationState String            @default("NEVER_ATTEMPTED")
-  nativeBinding          NativeConversationBinding?
+  // Unified chat mode (D08): LEGACY_ROLE_BOUND on pre-unified rows, UNIFIED on
+  // newly created unified conversations. activeRole tracks the current sticky
+  // role without mutating historical agentRole.
+  chatMode               String               @default("LEGACY_ROLE_BOUND")
+  activeRole             String?
+  nativeBindings         NativeConversationBinding[]
+  turns                  ChatTurn[]
+  turnSteps              ChatTurnStep[]
   revision               Int                  @default(0)
   activeRequestId        String?
   activeRequestExpiresAt DateTime?
@@ -2759,21 +2770,94 @@ model AIBusinessAssignment {
   @@index([connectionId])
 }
 
-// Device-local native thread pointer. Never exported or restored.
+// Device-local native thread pointer, keyed per (conversationId, roleKey) so a
+// unified conversation can maintain independent native Codex threads per role
+// without clobbering promptHash or cross-role instructions. Never exported or restored.
 model NativeConversationBinding {
-  conversationId String @id
-  userId String
-  connectionId String
-  model String
-  runtimeVersion String
-  runtimeProfileRef String
-  configHash String
-  threadId String
-  promptHash String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  conversationId      String
+  roleKey             String   @default("legacy_single")
+  userId              String
+  connectionId        String
+  model               String
+  runtimeVersion      String
+  runtimeProfileRef   String
+  configHash          String
+  threadId            String
+  promptHash          String
+  initializationState String   @default("READY")
+  lastSyncedMessageId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  @@unique([conversationId, roleKey])
   @@index([userId, connectionId])
+  @@index([conversationId])
+}
+
+/// Unified multi-agent turn provenance (D04/D07/D08). Backed up with
+/// ChatConversation so routing history and per-step model provenance survive
+/// backup/restore (read-only evidence; never re-executes on restore).
+model ChatTurn {
+  id               String   @id @default(uuid())
+  userId           String
+  conversationId   String
+  requestId        String?
+  userMessageId    String?
+  // send | regenerate | approval | retry_step | reanswer
+  operation        String   @default("send")
+  // layer0 | layer1 | legacy
+  routeLayer       String   @default("layer0")
+  routeReason      String?
+  plannedStepCount Int      @default(1)
+  // RUNNING | COMPLETED | PARTIAL | FAILED | CANCELLED | BLOCKED_APPROVAL
+  status           String   @default("RUNNING")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  steps        ChatTurnStep[]
+
+  @@index([conversationId, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// One sequential role step within a ChatTurn (D03/D07/D08: 1 or 2 steps max).
+/// Pins role, connection/model, executionPath, configSource, handoff payload,
+/// and terminal status independently so mid-turn settings edits never pollute
+/// in-flight work and a failed Step 2 can safely retry in place.
+model ChatTurnStep {
+  id                   String   @id @default(uuid())
+  userId               String
+  conversationId       String
+  turnId               String
+  stepIndex            Int
+  // insight | pilot | reflect | general
+  role                 String
+  objective            String?
+  // Provenance pointer (not a hard FK, matching ChatConversation.resolvedConnectionId).
+  resolvedConnectionId String?
+  resolvedModel        String?
+  // APP_ORCHESTRATED | NATIVE_CODEX_V1 | LEGACY
+  executionPath        String   @default("APP_ORCHESTRATED")
+  // explicit | default | legacy_dialogue | legacy_settings
+  configSource         String   @default("default")
+  // PENDING | RUNNING | COMPLETED | FAILED | CANCELLED | SKIPPED | BLOCKED_APPROVAL
+  status               String   @default("PENDING")
+  messageId            String?
+  handoffJson          String?
+  errorCode            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  turn         ChatTurn         @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@unique([turnId, stepIndex])
+  @@index([conversationId, createdAt])
+  @@index([userId, conversationId])
 }
 
 /// Agent long-task ledger (job-search sprint). One AgentTask spans many

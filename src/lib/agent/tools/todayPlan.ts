@@ -171,21 +171,35 @@ export function buildTodayPlanReadTool(
 export function buildTodayPlanTool(
   userId: string,
   request?: ConversationRequest,
+  options?: {
+    /** D06 compound Step 2 code guard: AI-derived items from Step 1 must always emit an adopt-plan draft card, never direct-write `add`. */
+    forceSuggestOnly?: boolean;
+  },
 ) {
+  const forceSuggestOnly = options?.forceSuggestOnly === true;
   return tool({
     description: AGENT_TOOL_DESCRIPTIONS.today_plan,
     inputSchema: AgentTodayPlanSchema,
-    needsApproval: (input: { action?: string }) => input?.action === "suggest",
+    needsApproval: (input: { action?: string }) =>
+      input?.action === "suggest" ||
+      (forceSuggestOnly && input?.action === "add"),
     execute: async (raw, exec): Promise<AgentTodayPlanWriteResult> => {
+      const normalizedRaw =
+        forceSuggestOnly &&
+        raw &&
+        typeof raw === "object" &&
+        (raw as { action?: string }).action === "add"
+          ? { ...(raw as Record<string, unknown>), action: "suggest" }
+          : raw;
       const action =
-        raw && typeof raw === "object" && "action" in raw
-          ? ((raw as { action?: string }).action ?? "add")
+        normalizedRaw && typeof normalizedRaw === "object" && "action" in normalizedRaw
+          ? ((normalizedRaw as { action?: string }).action ?? "add")
           : "add";
       const conversationId = request?.conversationId;
       if (!conversationId) {
         return { ...PLAN_UNAVAILABLE, action: action as never };
       }
-      const parsed = AgentTodayPlanSchema.safeParse(raw);
+      const parsed = AgentTodayPlanSchema.safeParse(normalizedRaw);
       if (!parsed.success) {
         return {
           status: "failed",

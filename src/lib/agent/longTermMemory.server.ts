@@ -414,7 +414,7 @@ export async function nativeMemoryBlockForConversation(
     select: { nativeMemoryBlock: true },
   });
   if (!row) return "";
-  const binding = await prisma.nativeConversationBinding.findUnique({
+  const binding = await prisma.nativeConversationBinding.findFirst({
     where: { conversationId },
     select: { conversationId: true },
   });

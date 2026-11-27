@@ -47,16 +47,16 @@ describe("AgentChatEmptyState", () => {
     expect(mark).toHaveAttribute("focusable", "false");
   });
 
-  it("shows the roster self-intro and legend without naming extensions", () => {
+  it("shows the unified intro and legend without naming extensions", () => {
     render(<AgentChatEmptyState />);
     expect(screen.getByTestId("agent-empty-self")).toHaveTextContent(
-      "I keep your job list in shape",
+      "Tell me what you need",
     );
     expect(screen.getByTestId("agent-empty-self")).toHaveTextContent(
-      "For resume analysis, ask Insight.",
+      "confirmation before any write",
     );
     expect(screen.getByTestId("agent-roster-legend")).toHaveTextContent(
-      "switch anytime from the icons up top",
+      "routed automatically",
     );
     expect(screen.getByTestId("agent-empty-state").textContent).not.toMatch(
       /notion/i,
@@ -92,8 +92,8 @@ describe("AgentChatEmptyState", () => {
   it("keeps suggestions clickable when preflight failed", async () => {
     preflight = { checked: true, ok: false };
     render(<AgentChatEmptyState />);
-    await userEvent.click(screen.getByText("List my saved jobs"));
-    expect(fillComposer).toHaveBeenCalledWith("List my saved jobs");
+    await userEvent.click(screen.getByText("Review my resume"));
+    expect(fillComposer).toHaveBeenCalledWith("Review my resume");
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
@@ -123,7 +123,7 @@ describe("AgentChatEmptyState", () => {
     expect(screen.getByText("AI Product Analyst")).toBeInTheDocument();
   });
 
-  it("offers the Resume Evidence entry to Pilot only", () => {
+  it("offers the Resume Evidence entry directly in the unified empty state", () => {
     const { unmount } = render(<AgentChatEmptyState />);
     expect(screen.getByTestId("resume-evidence-entry")).toHaveTextContent(
       "Dig into one experience",
@@ -131,7 +131,9 @@ describe("AgentChatEmptyState", () => {
     unmount();
     activeRole = "insight";
     render(<AgentChatEmptyState />);
-    expect(screen.queryByTestId("resume-evidence-entry")).toBeNull();
+    expect(screen.getByTestId("resume-evidence-entry")).toHaveTextContent(
+      "Dig into one experience",
+    );
   });
 
   it("starts a run by sending the single-experience pack, read-only", async () => {

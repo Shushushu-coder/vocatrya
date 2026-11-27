@@ -15,6 +15,7 @@ import { AgentMarkdown } from "@/components/agent/AgentMarkdown";
 import { AgentMatchContent } from "@/components/agent/AgentMatchContent";
 import { AgentResultCard } from "@/components/agent/AgentResultCard";
 import { AgentReviewContent } from "@/components/agent/AgentReviewContent";
+import { AgentRoleAvatar } from "@/components/agent/AgentRoleAvatar";
 import { ResumeEvidenceAssistantText } from "@/components/agent/ResumeEvidenceDraftCard";
 import {
   deriveResumeEvidenceSession,
@@ -32,6 +33,11 @@ import { parseJobMatch } from "@/lib/ai/jobMatch/parse";
 import { parseResumeReview } from "@/lib/ai/resumeReview/parse";
 import { stripThinking } from "@/lib/ai/stripThinking";
 import { cn } from "@/lib/utils";
+import { AGENT_ROLE_KEYS, copyFor } from "@/lib/agent/roleCopy";
+import {
+  readMessageAgentRole,
+  readMessageMetadata,
+} from "@/lib/agent/unifiedChatTypes";
 import {
   isAgentFilePart,
   isAgentNativeSearchPart,
@@ -102,11 +108,16 @@ export function AgentChatMessages() {
     toolStreams,
     status,
     regenerate,
+    reanswer,
+    retryStep,
     nativeSession,
     addToolApprovalResponse,
     approvalPending,
     conversationId,
     contextUsage,
+    activeRole,
+    unifiedStatus,
+    failedStep,
   } = useAgentChat();
   const [dismissed, setDismissed] = useState(false);
 
@@ -123,7 +134,8 @@ export function AgentChatMessages() {
 
   const dismiss = () => setDismissed(true);
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const copy = copyFor(t, locale);
 
   // Regenerate is admitted only for the last message, and only when it is a
   // plain assistant answer: the route rejects anything mid-turn, any pending
@@ -153,6 +165,18 @@ export function AgentChatMessages() {
             message.role === "assistant"
               ? assistantAnswerCopyText(message.parts)
               : "";
+          const msgMeta =
+            message.role === "assistant" ? readMessageMetadata(message) : null;
+          const msgRole =
+            message.role === "assistant"
+              ? readMessageAgentRole(message, activeRole)
+              : null;
+          const roleDisplayName = msgRole
+            ? copy(AGENT_ROLE_KEYS.name[msgRole])
+            : null;
+          const roleBadge = msgRole
+            ? copy(AGENT_ROLE_KEYS.badge[msgRole])
+            : null;
           return (
             <div
               key={message.id}
@@ -161,6 +185,26 @@ export function AgentChatMessages() {
                 message.role === "user" && "items-end",
               )}
             >
+              {message.role === "assistant" && msgRole && roleDisplayName ? (
+                <div
+                  data-testid="agent-message-attribution"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                >
+                  <AgentRoleAvatar
+                    role={msgRole}
+                    size={20}
+                    label={roleDisplayName}
+                  />
+                  <span className="font-medium text-foreground">
+                    {roleDisplayName}
+                  </span>
+                  {roleBadge ? (
+                    <span className="rounded bg-muted px-1 py-px text-[10px] font-medium text-muted-foreground">
+                      {roleBadge}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               {message.parts.map((part, i) => {
                 if (part.type === "text") {
                   // User text stays plain: it is their own words, and a user
@@ -280,9 +324,21 @@ export function AgentChatMessages() {
                   }
                 }
               })}
+              {msgMeta?.stepStatus === "BLOCKED_APPROVAL" &&
+              msgMeta.skippedNextRole ? (
+                <p
+                  data-testid="agent-step-blocked-notice"
+                  className="rounded-md border border-dashed bg-muted/20 px-2.5 py-1.5 text-xs text-muted-foreground"
+                >
+                  {t("agent.unifiedStepBlockedNotice", {
+                    role: copy(AGENT_ROLE_KEYS.name[msgMeta.skippedNextRole]),
+                  })}
+                </p>
+              ) : null}
               {copyText && (
                 <AgentAnswerActions
                   text={copyText}
+                  currentRole={msgRole}
                   onRegenerate={
                     !nativeSession && message.role === "assistant" &&
                     message.id === lastMessageId &&
@@ -293,11 +349,49 @@ export function AgentChatMessages() {
                       ? () => regenerate(message.id)
                       : undefined
                   }
+                  onReanswer={
+                    message.role === "assistant" &&
+                    status === "ready" &&
+                    !approvalPending &&
+                    Boolean(conversationId)
+                      ? (role) => reanswer(message.id, role)
+                      : undefined
+                  }
                 />
               )}
             </div>
           );
         })}
+
+        {failedStep && status === "ready" ? (
+          <div
+            data-testid="agent-step-failed-banner"
+            className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-foreground"
+          >
+            <AgentRoleAvatar role={failedStep.role} size={18} />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">
+                {t("agent.unifiedStepFailed", {
+                  role: copy(AGENT_ROLE_KEYS.name[failedStep.role]),
+                })}
+              </p>
+              {failedStep.message ? (
+                <p className="mt-0.5 truncate text-muted-foreground">
+                  {failedStep.message}
+                </p>
+              ) : null}
+            </div>
+            <Button
+              data-testid="agent-retry-step"
+              onClick={() => retryStep(failedStep.turnId, failedStep.stepIndex)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {t("agent.unifiedRetryStep")}
+            </Button>
+          </div>
+        ) : null}
 
         {showContinue && (
           <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
@@ -325,7 +419,24 @@ export function AgentChatMessages() {
           </div>
         )}
 
-        {thinking && (
+        {unifiedStatus?.phase === "routing" ? (
+          <AgentStatusRow label={t("agent.unifiedRouting")} />
+        ) : (unifiedStatus?.phase === "step_running" ||
+            unifiedStatus?.phase === "step_handoff") &&
+          unifiedStatus.role &&
+          thinking ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <AgentRoleAvatar role={unifiedStatus.role} size={18} />
+            <AgentStatusRow
+              label={t(
+                unifiedStatus.phase === "step_handoff"
+                  ? "agent.unifiedStepHandoff"
+                  : "agent.unifiedStepRunning",
+                { role: copy(AGENT_ROLE_KEYS.name[unifiedStatus.role]) },
+              )}
+            />
+          </div>
+        ) : thinking ? (
           <AgentStatusRow
             label={
               status === "submitted"
@@ -333,7 +444,7 @@ export function AgentChatMessages() {
                 : t("agent.thinkingTurn")
             }
           />
-        )}
+        ) : null}
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
