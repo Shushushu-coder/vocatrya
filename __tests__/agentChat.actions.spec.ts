@@ -143,7 +143,7 @@ describe("agentChat actions", () => {
     (prisma.chatConversation.findFirst as any).mockResolvedValue(ownedRow({ agentRole: "reflect" }));
     const result = await getAgentToolPermissions({ conversationId: "row-1", agentRole: "pilot" });
     expect(result.success).toBe(true);
-    expect(result.data?.tools.map(tool => tool.name)).toEqual(["list_jobs", "get_job", "read_webpage", "notion_read", "suggest_role"]);
+    expect(result.data?.tools.map(tool => tool.name)).toEqual(["list_jobs", "get_job", "read_webpage", "get_resume", "today_plan_read", "notion_read", "suggest_role"]);
     expect(prisma.chatConversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "row-1", userId: "user-1" } }));
   });
 
@@ -589,6 +589,79 @@ describe("getAgentChatPreflight", () => {
       persisted: true,
     });
     expect(result.data).not.toMatchObject({ locked: true });
+  });
+
+  it("preflights a reopened UNIFIED conversation through its active role, not the legacy lock", async () => {
+    // UNIFIED rows carry no creation lock (D07 per-step resolution) — the
+    // preflight must resolve the active role's purpose chain instead of the
+    // null-lock legacy answer, or the composer wrongly reports "not configured".
+    (prisma.chatConversation.findFirst as any).mockResolvedValue({
+      id: "row-uni",
+      userId: "user-1",
+      messages: "[]",
+      chatMode: "UNIFIED",
+      activeRole: "insight",
+      resolvedConnectionId: null,
+      resolvedModel: null,
+    });
+    // No AGENT_INSIGHT row → falls back to GLOBAL_DEFAULT → RESOLVED.
+    (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([
+      assignmentRow(),
+    ]);
+    (prisma.aIConnection.findFirst as any).mockResolvedValue(
+      lockedConnection(),
+    );
+    runtimeState.mockResolvedValue(verifiedState);
+    const result = await getAgentChatPreflight({ conversationId: "row-uni" });
+    expect(result.data).toMatchObject({
+      kind: "account",
+      connectionId: "conn-1",
+      model: "gpt-5.6-sol",
+      locked: false,
+    });
+    expect(result.data).not.toMatchObject({ kind: "legacy" });
+  });
+
+  it("blocks a reopened UNIFIED conversation on a broken active-role assignment", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue({
+      id: "row-uni",
+      userId: "user-1",
+      messages: "[]",
+      chatMode: "UNIFIED",
+      activeRole: "reflect",
+      resolvedConnectionId: null,
+      resolvedModel: null,
+    });
+    // Broken AGENT_REFLECT pin → INVALID_ASSIGNMENT → fail closed, no
+    // silent GLOBAL_DEFAULT/legacy fallback.
+    (prisma.aIBusinessAssignment.findMany as any).mockResolvedValue([
+      {
+        ...assignmentRow(),
+        purpose: "AGENT_REFLECT",
+        connectionId: "conn-gone",
+        connection: null,
+      },
+    ]);
+    const result = await getAgentChatPreflight({ conversationId: "row-uni" });
+    expect(result.data).toMatchObject({
+      kind: "blocked",
+      connectionId: "conn-gone",
+    });
+    expect(result.data).not.toMatchObject({ kind: "legacy" });
+  });
+
+  it("keeps a configured-less UNIFIED conversation on the honest legacy answer", async () => {
+    (prisma.chatConversation.findFirst as any).mockResolvedValue({
+      id: "row-uni",
+      userId: "user-1",
+      messages: "[]",
+      chatMode: "UNIFIED",
+      activeRole: "pilot",
+      resolvedConnectionId: null,
+      resolvedModel: null,
+    });
+    const result = await getAgentChatPreflight({ conversationId: "row-uni" });
+    expect(result.data).toMatchObject({ kind: "legacy", persisted: true });
   });
 
   it("does not fall back when an explicit draft selection is ineligible", async () => {

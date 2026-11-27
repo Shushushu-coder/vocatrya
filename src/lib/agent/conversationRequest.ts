@@ -5,6 +5,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { isTodayPlanSuggestApprovalPart } from "./paste";
 import { hasWriteReceipt, regenerateTailHasWriteReceipt } from "./writeReceipt";
 import {
   createProposalsForResponseMessage,
@@ -42,12 +43,15 @@ export class ConversationRequestError extends Error {
   }
 }
 export type ConversationOperation = {
-  operation: "send" | "regenerate" | "approval";
+  operation: "send" | "regenerate" | "approval" | "retry_step" | "reanswer";
   newMessage?: UIMessage;
   targetMessageId?: string;
   approvalId?: string;
   decision?: boolean;
   reason?: string;
+  turnId?: string;
+  stepIndex?: number;
+  role?: "pilot" | "insight" | "reflect";
 };
 export type ConversationRequest = {
   operation?: ConversationOperation["operation"];
@@ -58,6 +62,8 @@ export type ConversationRequest = {
   revision: number;
   messages: UIMessage[];
   responseMessageId: string;
+  /** All assistant message ids minted during this request (1 or 2 for compound turns). */
+  responseMessageIds?: string[];
   released: boolean;
   wrote: boolean;
   failure?: ConversationRequestError;
@@ -80,6 +86,12 @@ const APPROVAL_BOUND_TOOL_RECEIPTS = new Set([
 export function pendingApprovals(messages: UIMessage[]) {
   return messages.flatMap(message => message.parts.filter(isToolUIPart)
     .filter(part => part.state === "approval-requested").map(part => ({ message, part })));
+}
+/** D04/D06: pending approvals that strictly block new turns (excludes non-blocking today_plan draft cards). */
+export function blockingPendingApprovals(messages: UIMessage[]) {
+  return pendingApprovals(messages).filter(
+    ({ part }) => !isTodayPlanSuggestApprovalPart(part),
+  );
 }
 export { hasWriteReceipt };
 
@@ -111,34 +123,64 @@ export async function admitConversationRequest(input: ConversationOperation & {
       // orphan parts are marked not-continuable instead of deadlocking.
       await reconcileConversationProposals(tx, { id: row.id, userId: row.userId }, messages);
       const pending = pendingApprovals(messages);
+      const blockingTranscript = blockingPendingApprovals(messages);
+      // D04/D08 (H04 D3): also enforce conversation-level blocking for active
+      // native/detached PROPOSED rows (messageId may be null on native MCP Slice 2),
+      // while keeping today_plan suggest draft cards non-blocking.
+      const blockingProposal =
+        input.operation !== "approval"
+          ? await tx.agentOperationProposal.findFirst({
+              where: {
+                userId: input.userId,
+                conversationId: row.id,
+                status: "PROPOSED",
+                expiresAt: { gt: now },
+                toolName: { not: "today_plan" },
+              },
+              select: { id: true },
+            })
+          : null;
+      const hasBlockingPending =
+        blockingTranscript.length > 0 || Boolean(blockingProposal);
       let approvalToolCallId: string | undefined;
       let approvedWriteTask = false;
       if (input.operation === "send") {
-        if (pending.length) return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        if (hasBlockingPending) return { error: "CONVERSATION_TURN_CONFLICT" as const };
         const message = input.newMessage;
         if (!message || message.role !== "user" || !message.id || !Array.isArray(message.parts) || messages.some(m => m.id === message.id) ||
           message.parts.some(p => p.type !== "text" && p.type !== "data-paste" && p.type !== "data-file") ||
           !validFileParts(message.parts)) return { error: "CONVERSATION_TURN_CONFLICT" as const };
         messages.push(message);
+      } else if (input.operation === "retry_step") {
+        if (hasBlockingPending || !input.turnId || input.stepIndex === undefined) {
+          return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        }
+        const step = await tx.chatTurnStep.findUnique({
+          where: { turnId_stepIndex: { turnId: input.turnId, stepIndex: input.stepIndex } },
+          select: { userId: true, conversationId: true, status: true },
+        });
+        if (!step || step.userId !== input.userId || step.conversationId !== row.id || !["FAILED", "CANCELLED"].includes(step.status)) {
+          return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        }
+      } else if (input.operation === "reanswer") {
+        if (hasBlockingPending || !input.targetMessageId || !input.role) {
+          return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        }
+        const target = messages.find(m => m.id === input.targetMessageId);
+        if (!target || target.role !== "assistant") {
+          return { error: "CONVERSATION_TURN_CONFLICT" as const };
+        }
+        // D05/D06: reanswer appends a new role reply while preserving existing
+        // messages, writes and approvals (never deletes or replays the target).
       } else if (input.operation === "regenerate") {
         const index = messages.findIndex(m => m.id === input.targetMessageId);
         const tail = messages.at(-1);
-        // A stopped turn persists only the user message. The stopped banner
-        // calls regenerate() with no assistant id, so the request names that
-        // persisted user id. A partial answer the server never stored arrives
-        // as an unknown id. Either way, re-answer the unanswered tail and
-        // drop nothing. An earlier user id is not this shape.
         const stoppedTurn = tail?.role === "user" && (index < 0 || index === messages.length - 1);
         if (stoppedTurn) {
-          if (pending.length) return { error: "CONVERSATION_TURN_CONFLICT" as const };
+          if (hasBlockingPending) return { error: "CONVERSATION_TURN_CONFLICT" as const };
         } else {
-          if (pending.length || index < 0 || index !== messages.length - 1 || messages[index].role !== "assistant" || regenerateTailHasWriteReceipt(messages))
+          if (hasBlockingPending || index < 0 || index !== messages.length - 1 || messages[index].role !== "assistant" || regenerateTailHasWriteReceipt(messages))
             return { error: "CONVERSATION_TURN_CONFLICT" as const };
-          // C06: a queued stub is not a write receipt — the tail must not be
-          // regenerated while any detached-write proposal it carries is
-          // committed (approved/queued/running/dispatched/settled). The
-          // proposal row is the authority; a missing task row never disarms
-          // this guard.
           const tailToolCallIds = messages[index].parts
             .filter(part => isToolUIPart(part) && isDetachedWriteTool(getToolName(part)))
             .map(part => (isToolUIPart(part) ? part.toolCallId : ""))
@@ -157,7 +199,16 @@ export async function admitConversationRequest(input: ConversationOperation & {
         }
       } else {
         const proposal = pending.find(p => p.part.approval?.id === input.approvalId);
-        if (!proposal || proposal.message.role !== "assistant" || proposal.message.id !== messages.at(-1)?.id || typeof input.decision !== "boolean" || !proposal.part.toolCallId || !proposal.part.type.startsWith("tool-") || proposal.part.input === undefined)
+        const isDraftAdopt = proposal ? isTodayPlanSuggestApprovalPart(proposal.part) : false;
+        if (
+          !proposal ||
+          proposal.message.role !== "assistant" ||
+          (!isDraftAdopt && proposal.message.id !== messages.at(-1)?.id) ||
+          typeof input.decision !== "boolean" ||
+          !proposal.part.toolCallId ||
+          !proposal.part.type.startsWith("tool-") ||
+          proposal.part.input === undefined
+        )
           return { error: "CONVERSATION_TURN_CONFLICT" as const };
         approvalToolCallId = proposal.part.toolCallId;
         // Detached writes: the proposal row takes the decision in the same
@@ -270,35 +321,40 @@ export async function finishConversationRequest(request: ConversationRequest, in
     // finished turn produced — the proposal outlives this HTTP round. Only
     // the response message mints rows; older proposal-less parts are
     // orphans for reconcile, never re-armed.
-    const responseMessage = finalMessages.find(m => m.id === request.responseMessageId);
-    if (responseMessage) {
-      const turnKey = [...finalMessages].reverse().find(m => m.role === "user")?.id ?? "";
+    const responseIds = new Set<string>([
+      ...(request.responseMessageIds ?? []),
+      ...(request.responseMessageId ? [request.responseMessageId] : []),
+    ]);
+    const turnKey = [...finalMessages].reverse().find(m => m.role === "user")?.id ?? "";
+    for (const msgId of responseIds) {
+      const responseMessage = finalMessages.find(m => m.id === msgId);
+      if (!responseMessage) continue;
       await createProposalsForResponseMessage(tx, {
         userId: request.userId,
         conversationId: request.conversationId,
         turnKey,
         message: responseMessage,
       });
-    }
-    // Full access is a persisted creation-time user choice, never a model
-    // argument or a preference changed while this request was executing.
-    if (responseMessage && permissionModeOfContext(row.context) === "full") {
-      for (const part of responseMessage.parts) {
-        if (!isToolUIPart(part) || part.state !== "approval-requested") continue;
-        const proposal = await tx.agentOperationProposal.findFirst({ where: {
-          userId: request.userId, conversationId: row.id,
-          messageId: responseMessage.id, toolCallId: part.toolCallId, status: "PROPOSED",
-        } });
-        if (proposal) {
-          const decision = await decideOperationProposalInTx(tx, {
-            userId: request.userId, proposalId: proposal.id, decision: "approve",
-            reason: "FULL_ACCESS_PREAUTHORIZED", mirrorPart: false,
-          });
-          if (decision.state === "approved") {
-            Object.assign(part, { state: "output-available", output: {
-              saved: false, tool: proposal.toolName, status: "queued", code: "QUEUED",
-              proposalId: proposal.id, taskId: decision.taskId, taskStatus: "QUEUED",
-            } });
+      // Full access is a persisted creation-time user choice, never a model
+      // argument or a preference changed while this request was executing.
+      if (permissionModeOfContext(row.context) === "full") {
+        for (const part of responseMessage.parts) {
+          if (!isToolUIPart(part) || part.state !== "approval-requested") continue;
+          const proposal = await tx.agentOperationProposal.findFirst({ where: {
+            userId: request.userId, conversationId: row.id,
+            messageId: responseMessage.id, toolCallId: part.toolCallId, status: "PROPOSED",
+          } });
+          if (proposal) {
+            const decision = await decideOperationProposalInTx(tx, {
+              userId: request.userId, proposalId: proposal.id, decision: "approve",
+              reason: "FULL_ACCESS_PREAUTHORIZED", mirrorPart: false,
+            });
+            if (decision.state === "approved") {
+              Object.assign(part, { state: "output-available", output: {
+                saved: false, tool: proposal.toolName, status: "queued", code: "QUEUED",
+                proposalId: proposal.id, taskId: decision.taskId, taskStatus: "QUEUED",
+              } });
+            }
           }
         }
       }
@@ -330,12 +386,18 @@ export async function cancelConversationRequest(userId: string, conversationId: 
     // create a duplicate thread.
     let resetNativeReady = false;
     if (row.executionPath === "NATIVE_CODEX_V1" && row.nativeInitializationState === "IN_FLIGHT") {
-      const binding = await tx.nativeConversationBinding.findUnique({
-        where: { conversationId },
-        select: { conversationId: true },
+      const binding = await tx.nativeConversationBinding.findFirst({
+        where: { conversationId, userId },
+        select: { id: true },
       });
       resetNativeReady = Boolean(binding);
     }
+    // D08: also recover any per-role native bindings whose turn was aborted
+    // once a threadId was already persisted.
+    await tx.nativeConversationBinding.updateMany({
+      where: { conversationId, userId, initializationState: "IN_FLIGHT" },
+      data: { initializationState: "READY" },
+    });
     const saved = await tx.chatConversation.updateMany({
       where: { id: conversationId, userId, activeRequestId: requestId },
       data: {

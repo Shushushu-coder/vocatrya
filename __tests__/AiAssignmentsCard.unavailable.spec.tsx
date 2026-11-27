@@ -73,7 +73,7 @@ describe("AiAssignmentsCard — all purposes editable now that consumers exist",
     await waitFor(() =>
       expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0),
     );
-    expect(screen.getAllByRole("combobox")).toHaveLength(6);
+    expect(screen.getAllByRole("combobox")).toHaveLength(8);
     expect(
       screen.queryByTestId("ai-assign-unavailable-CAREER_REFLECTION"),
     ).not.toBeInTheDocument();
@@ -107,7 +107,7 @@ describe("AiAssignmentsCard — all purposes editable now that consumers exist",
     ).toBeInTheDocument();
     expect(within(matchRow).getByRole("combobox")).toBeInTheDocument();
     expect(within(matchRow).getByRole("textbox")).toBeInTheDocument();
-    expect(screen.getAllByRole("combobox")).toHaveLength(6);
+    expect(screen.getAllByRole("combobox")).toHaveLength(8);
     expect(screen.getByTestId(REFLECTION_ROW_TESTID)).toBeInTheDocument();
   });
 
@@ -145,7 +145,7 @@ describe("AiAssignmentsCard — all purposes editable now that consumers exist",
     ).not.toBeInTheDocument();
     expect(screen.getByTestId(MATCH_ROW_TESTID)).toBeInTheDocument();
     expect(screen.getByTestId(REFLECTION_ROW_TESTID)).toBeInTheDocument();
-    expect(screen.getAllByRole("combobox")).toHaveLength(6);
+    expect(screen.getAllByRole("combobox")).toHaveLength(8);
   });
 });
 

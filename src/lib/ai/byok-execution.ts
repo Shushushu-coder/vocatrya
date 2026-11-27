@@ -38,6 +38,8 @@ export interface ByokTextInput {
   model: string;
   prompt: string;
   structuredOutput?: { schema: Record<string, unknown>; schemaName: string };
+  disableReasoning?: boolean;
+  maxOutputTokens?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -136,10 +138,20 @@ export async function executeByokConnectionText(
   const signal = combinedSignal(input);
   const generate = deps.generateTextImpl ?? generateText;
   try {
+    const providerOptions = input.disableReasoning
+      ? {
+          google: { thinkingConfig: { thinkingBudget: 0 } },
+          openai: { reasoningEffort: "low" },
+        }
+      : undefined;
     const result = await generate({
       model: lm,
       prompt: input.prompt,
       abortSignal: signal,
+      ...(typeof input.maxOutputTokens === "number" && input.maxOutputTokens > 0
+        ? { maxOutputTokens: input.maxOutputTokens }
+        : {}),
+      ...(providerOptions ? { providerOptions } : {}),
     });
     return {
       text: typeof result.text === "string" ? result.text : "",

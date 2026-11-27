@@ -3,10 +3,12 @@
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import {
+  AGENT_ROLE_KEYS,
   AGENT_ROSTER_LEGEND_KEY,
   copyFor,
-  rosterSelfLines,
 } from "@/lib/agent/roleCopy";
+import { AGENT_ROLES } from "@/lib/agent/agentRoles";
+import { AgentRoleAvatar } from "@/components/agent/AgentRoleAvatar";
 import { suggestionsForRole } from "@/lib/agent/roleSuggestions";
 import { useI18n } from "@/i18n";
 import { useState } from "react";
@@ -21,21 +23,24 @@ import styles from "./empty-state.module.css";
 export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotionState }) {
   const { t, locale } = useI18n();
   const { freshNativeFull } = useCareerSurfaces();
-  const { fillComposer, activeRole, context, requestAddContext } =
+  const { fillComposer, context, requestAddContext } =
     useAgentChat();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
-  // Resume Evidence is hosted by Pilot only (contract D1); NULL role = Pilot slot.
-  const isPilot = (activeRole ?? "pilot") === "pilot";
+  // Unified chat surfaces Resume Evidence directly from the single empty state.
+  const isPilot = true;
   const copy = copyFor(t, locale);
-  const self = rosterSelfLines(activeRole, copy);
   const items = context?.items ?? [];
   const job = items.find((item) => item.kind === "job");
   const resume = items.find((item) => item.kind === "resume");
 
-  // Four static items per role. A click only fills the composer (D8): no
-  // /api/ai/chat request, no conversation creation, no model call — and it
-  // stays clickable while AI is unavailable, because nothing here sends.
-  const suggestions = suggestionsForRole(activeRole, { freshNativeFull });
+  // Four static starter prompts covering Pilot/Insight/Reflect capabilities.
+  // Clicking only fills the composer (D8): no /api/ai/chat request or model call.
+  const suggestions = [
+    suggestionsForRole("pilot", { freshNativeFull })[0],
+    suggestionsForRole("insight", { freshNativeFull })[0],
+    suggestionsForRole("insight", { freshNativeFull })[1],
+    suggestionsForRole("reflect", { freshNativeFull })[0],
+  ];
 
   return (
     <div data-testid="agent-empty-state" className={`${styles.container} flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-4 text-center`}>
@@ -48,8 +53,18 @@ export function AgentChatEmptyState({ state = "idle" }: { state?: VocatryaMotion
             : t("agent.emptyStart")}
       </p>
       <div data-testid="agent-empty-self" className="grid max-w-md gap-1 text-sm text-muted-foreground">
-        <p>{self.lead}</p>
-        <p>{self.handoff}</p>
+        <p>{copy("agent.roster.unifiedLead")}</p>
+        <p>{copy("agent.roster.unifiedHandoff")}</p>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground">
+        {AGENT_ROLES.map((role) => (
+          <span key={role} className="inline-flex items-center gap-1.5">
+            <AgentRoleAvatar role={role} size={20} />
+            <span className="font-medium text-foreground">
+              {copy(AGENT_ROLE_KEYS.name[role])}
+            </span>
+          </span>
+        ))}
       </div>
       <Suggestions className={`${styles.actions} w-full`}>
         {suggestions.map((item) => (

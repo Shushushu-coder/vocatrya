@@ -114,6 +114,8 @@ import {
   scheduleLongTermMemoryExtraction,
   scheduleNativeMemoryExtractionAfterRelease,
 } from "@/lib/agent/longTermMemoryExtractor.server";
+import { unifiedChatResponse } from "@/lib/agent/unifiedTurnOrchestrator.server";
+import { userHasUnifiedModelConfig } from "@/lib/agent/unifiedModelResolver.server";
 
 // The one terminal tool whose stop condition is not "was it called" — see
 // addJobSettled.
@@ -600,7 +602,12 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
 
   const { conversationId } = parsed.data;
   const nativeCandidate = await getOwnedChatConversation(userId, conversationId);
-  if (nativeCandidate?.executionPath === "NATIVE_CODEX_V1" && (parsed.data.operation !== "send" || parsed.data.newMessage.parts.some(part => part.type !== "text"))) {
+  if (
+    nativeCandidate?.executionPath === "NATIVE_CODEX_V1" &&
+    nativeCandidate.chatMode !== "UNIFIED" &&
+    (parsed.data.operation !== "send" ||
+      parsed.data.newMessage.parts.some(part => part.type !== "text"))
+  ) {
     throw new AIBusinessError("NATIVE_TEXT_ONLY", "Native sessions do not regenerate or replay tools");
   }
   const request = await admitConversationRequest({ ...parsed.data, userId });
@@ -620,6 +627,57 @@ const executePost = async (req: NextRequest, admitted: (request: ConversationReq
   }
   const preferences = await loadAgentPreferences(userId);
   const permissionMode = permissionModeOfContext(conversation.context);
+  const unifiedHeader = req.headers?.get?.("x-vocatrya-unified-chat") === "1";
+  const shouldRunUnified =
+    conversation.chatMode === "UNIFIED" ||
+    parsed.data.operation === "retry_step" ||
+    parsed.data.operation === "reanswer" ||
+    (unifiedHeader &&
+      conversation.executionPath !== "NATIVE_CODEX_V1" &&
+      (await userHasUnifiedModelConfig(userId)));
+  if (shouldRunUnified) {
+    const unifiedConversationContext = contextOfRow(conversation);
+    const [unifiedTaskSession, unifiedCareerRuntime, unifiedNotionTools, unifiedFeishuTools] =
+      await Promise.all([
+        resolveTaskSessionContext(prisma, {
+          userId,
+          agentTaskId: conversation.agentTaskId,
+          agentRole: conversation.activeRole ?? conversation.agentRole ?? "pilot",
+          locale: normalizeLocale(req.cookies?.get?.(LOCALE_COOKIE_NAME)?.value),
+        }),
+        resolveCareerRuntimeMode(prisma),
+        resolveNotionAgentToolNames(userId).catch(() => []),
+        resolveFeishuAgentToolNames(userId).catch(() => []),
+      ]);
+    const unifiedFreshNativeFull = isFreshNativeFullSurface(unifiedCareerRuntime);
+    const unifiedCanonicalJobs = isFullAbCapabilityEnabled(
+      unifiedCareerRuntime.mode,
+      unifiedCareerRuntime.rolloutScope,
+    );
+    return unifiedChatResponse({
+      req,
+      userId,
+      conversationId,
+      conversation,
+      request,
+      operation: parsed.data.operation,
+      forcedRole: parsed.data.operation === "reanswer" ? parsed.data.role : null,
+      retryTurnId: parsed.data.operation === "retry_step" ? parsed.data.turnId : undefined,
+      retryStepIndex: parsed.data.operation === "retry_step" ? parsed.data.stepIndex : undefined,
+      reanswerTargetMessageId:
+        parsed.data.operation === "reanswer" ? parsed.data.targetMessageId : undefined,
+      permissionMode,
+      personalInstructions: preferences.personalInstructions,
+      pastedText,
+      fileTexts,
+      conversationContext: unifiedConversationContext,
+      freshNativeFull: unifiedFreshNativeFull,
+      canonicalJobs: unifiedCanonicalJobs,
+      notionTools: unifiedNotionTools,
+      feishuTools: unifiedFeishuTools,
+      taskSession: unifiedTaskSession,
+    });
+  }
   let lock: ReturnType<typeof chatLockFromRow>;
   let managedTurn: import("@/lib/agent/accountTurn").ManagedTurnContext | undefined;
   try {

@@ -171,7 +171,11 @@ export async function runCareerDialogueTurn(
   const lastMessage = messages[messages.length - 1];
   const messageId =
     input.request?.responseMessageId ?? (lastMessage?.role === "assistant" ? lastMessage.id : generateId());
-  writer.write({ type: "start", messageId });
+  writer.write({
+    type: "start",
+    messageId,
+    ...(input.messageMetadata ? { messageMetadata: input.messageMetadata } : {}),
+  });
 
   const rendered = renderCareerDialoguePrompt({
     profile: "FAST_CHAT",

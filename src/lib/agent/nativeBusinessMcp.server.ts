@@ -171,6 +171,11 @@ export interface NativeBusinessTicketRecord {
   provider: string | null;
   pageJobId: string | null;
   pageResumeId: string | null;
+  /** D08: active ChatTurnStep id on unified turns for live step-role verification. */
+  stepId: string | null;
+  unified: boolean;
+  /** D06: compound Step 2 code guard forcing today_plan add -> suggest draft card. */
+  forceTodayPlanSuggestOnly: boolean;
   /** Proposal IDs genuinely created by THIS turn's MCP calls — prevents spoofed approval cards. */
   mintedProposalIds: Set<string>;
   expiresAt: number;
@@ -210,6 +215,9 @@ export function mintNativeBusinessTicket(input: {
   pageJobId?: string | null;
   pageResumeId?: string | null;
   taskExtraTools?: readonly string[] | null;
+  stepId?: string | null;
+  unified?: boolean;
+  forceTodayPlanSuggestOnly?: boolean;
   now?: number;
 }): NativeBusinessTicketRecord {
   const now = input.now ?? Date.now();
@@ -260,6 +268,9 @@ export function mintNativeBusinessTicket(input: {
     provider: typeof input.provider === "string" ? input.provider : null,
     pageJobId: typeof input.pageJobId === "string" ? input.pageJobId : null,
     pageResumeId: typeof input.pageResumeId === "string" ? input.pageResumeId : null,
+    stepId: typeof input.stepId === "string" ? input.stepId : null,
+    unified: input.unified === true,
+    forceTodayPlanSuggestOnly: input.forceTodayPlanSuggestOnly === true,
     mintedProposalIds: new Set<string>(),
     expiresAt: now + NATIVE_BUSINESS_TICKET_TTL_MS,
   };
@@ -538,14 +549,30 @@ export async function executeNativeBusinessToolCall(input: {
     return { ok: false, error: "tool not allowed for this turn" };
   }
 
-  // Re-check persisted role surface if the row exposes an agentRole.
-  const liveRole = owned.agentRole !== undefined ? normalizeAgentRole(owned.agentRole) : record.agentRole;
+  // Re-check persisted role surface: on unified turns verify against the active
+  // ChatTurnStep's locked role (D08); on legacy rows verify against owned.agentRole.
+  let liveRole: string | null = record.agentRole;
+  if (record.stepId) {
+    const liveStep = await db.chatTurnStep.findFirst({
+      where: {
+        id: record.stepId,
+        userId: record.userId,
+        conversationId: record.conversationId,
+      },
+      select: { role: true },
+    });
+    if (!liveStep) return { ok: false, error: "step context revoked" };
+    liveRole = normalizeAgentRole(liveStep.role);
+  } else if (!record.unified && owned.agentRole !== undefined) {
+    liveRole = normalizeAgentRole(owned.agentRole);
+  }
   if (liveRole) {
     const roleAllowed = effectiveAgentToolNames({
       agentRole: liveRole,
       freshNativeFull: record.freshNativeFull,
       notionTools: NOTION_ALL_TOOL_NAMES,
       feishuTools: FEISHU_ALL_TOOL_NAMES,
+      unified: record.unified,
     });
     if (!roleAllowed.includes(name)) {
       return { ok: false, error: "tool forbidden for conversation role" };
@@ -645,9 +672,17 @@ export async function executeNativeBusinessToolCall(input: {
     }
   }
 
-  // 2. today_plan (`suggest` always approval-gated; direct actions write immediately)
+  // 2. today_plan (`suggest` always approval-gated; direct actions write immediately;
+  // compound Step 2 forces `add` -> `suggest` draft card per D06).
   if (name === "today_plan") {
-    const validated = validateLocalProposalInput("today_plan", args ?? {});
+    const coercedArgs =
+      record.forceTodayPlanSuggestOnly &&
+      args &&
+      typeof args === "object" &&
+      (args as { action?: unknown }).action === "add"
+        ? { ...(args as Record<string, unknown>), action: "suggest" }
+        : (args ?? {});
+    const validated = validateLocalProposalInput("today_plan", coercedArgs);
     if (!validated.ok) {
       return { ok: false, error: `invalid input: ${validated.error}` };
     }

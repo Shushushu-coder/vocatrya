@@ -87,12 +87,31 @@ export function stubConsumedPastes(messages: UIMessage[]): UIMessage[] {
   })) as UIMessage[];
 }
 
+// D04/D06: today_plan(action="suggest") is a non-blocking draft card — the user
+// may ignore it and continue chatting or switching roles without adopting it.
+export function isTodayPlanSuggestApprovalPart(part: unknown): boolean {
+  if (!part || typeof part !== "object") return false;
+  if (!isToolUIPart(part as never)) return false;
+  const toolPart = part as { state?: string; input?: unknown };
+  if (toolPart.state !== "approval-requested") return false;
+  if (getToolName(part as never) !== "today_plan") return false;
+  const action =
+    toolPart.input && typeof toolPart.input === "object"
+      ? (toolPart.input as { action?: unknown }).action
+      : undefined;
+  return action === "suggest";
+}
+
 // Derived from the messages array rather than live useChat state, so it works
-// identically on a transcript rehydrated from the DB.
+// identically on a transcript rehydrated from the DB. Non-blocking today_plan
+// draft cards do not block sending a follow-up message (D04).
 export function hasPendingApproval(messages: UIMessage[]): boolean {
   return messages.some((message) =>
     (message.parts ?? []).some(
-      (part) => isToolUIPart(part) && part.state === "approval-requested",
+      (part) =>
+        isToolUIPart(part) &&
+        part.state === "approval-requested" &&
+        !isTodayPlanSuggestApprovalPart(part),
     ),
   );
 }

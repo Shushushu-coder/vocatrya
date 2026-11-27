@@ -6,6 +6,7 @@ import {
   type PageContext,
 } from "@/models/agent.model";
 import { agentFilePlaceholder } from "./agentFiles";
+import { readMessageAgentRole, roleAttributionTag } from "./unifiedChatTypes";
 import {
   CAREER_DIALOGUE_ASSEMBLED_CAP_TOKENS,
   resolveCareerDialogueBudgets,
@@ -434,9 +435,11 @@ function renderTurn(
   const text = userText(turn.user);
   if (text) lines.push({ kind: "dialogue", text: `User: ${text}` });
   for (const message of turn.assistants) {
+    const tag = roleAttributionTag(readMessageAgentRole(message));
+    const prefix = tag ? `Assistant ${tag}` : "Assistant";
     for (const part of message.parts ?? []) {
       if (part.type === "text") {
-        if (part.text) lines.push({ kind: "dialogue", text: `Assistant: ${part.text}` });
+        if (part.text) lines.push({ kind: "dialogue", text: `${prefix}: ${part.text}` });
         continue;
       }
       if (!isToolUIPart(part)) continue;

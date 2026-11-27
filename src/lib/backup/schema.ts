@@ -12,8 +12,8 @@ export class BackupError extends Error {
   }
 }
 
-export const BACKUP_FORMAT_VERSION = 14;
-export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] as const;
+export const BACKUP_FORMAT_VERSION = 15;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
 export type SupportedBackupFormatVersion =
   (typeof SUPPORTED_BACKUP_FORMAT_VERSIONS)[number];
 
@@ -35,6 +35,7 @@ export const ManifestSchema = z.object({
     z.literal(12),
     z.literal(13),
     z.literal(14),
+    z.literal(15),
   ]),
   appVersion: z.string(),
   appName: z.string().optional(),
@@ -410,12 +411,49 @@ const ChatConversation = z.object({
   // and undefined restores as NULL (the general assistant, slotted under
   // Pilot). insight/pilot/reflect round-trip unchanged.
   agentRole: optStr.optional(),
+  // Optional: backups taken before unified multi-agent (v15) omit these;
+  // defaults keep historical LEGACY_ROLE_BOUND semantics.
+  chatMode: str.optional(),
+  activeRole: optStr.optional(),
   // Optional: backups taken before conversation archive have no such key,
   // and undefined restores as NULL (unarchived).
   archivedAt: optDt.optional(),
   // Optional: backups taken before agent long tasks have no such key, and
   // undefined restores as NULL (ordinary chat). Patched after AgentTask exists.
   agentTaskId: optId.optional(),
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const ChatTurn = z.object({
+  id,
+  conversationId: id,
+  requestId: optStr.optional(),
+  userMessageId: optStr.optional(),
+  operation: str.optional(),
+  routeLayer: str.optional(),
+  routeReason: optStr.optional(),
+  plannedStepCount: z.number().int().positive().optional(),
+  status: str.optional(),
+  createdAt: dt,
+  updatedAt: dt,
+});
+
+const ChatTurnStep = z.object({
+  id,
+  conversationId: id,
+  turnId: id,
+  stepIndex: z.number().int().nonnegative(),
+  role: str,
+  objective: optStr.optional(),
+  resolvedConnectionId: optId.optional(),
+  resolvedModel: optStr.optional(),
+  executionPath: str.optional(),
+  configSource: str.optional(),
+  status: str.optional(),
+  messageId: optStr.optional(),
+  handoffJson: optStr.optional(),
+  errorCode: optStr.optional(),
   createdAt: dt,
   updatedAt: dt,
 });
@@ -1497,6 +1535,8 @@ export const BackupDataSchema = z.object({
   AIConnection: group(AIConnection),
   AIBusinessAssignment: group(AIBusinessAssignment),
   ChatConversation: group(ChatConversation),
+  ChatTurn: group(ChatTurn),
+  ChatTurnStep: group(ChatTurnStep),
   TodayPlanItem: group(TodayPlanItem),
   TodayPlanOperation: group(TodayPlanOperation),
   AgentOperationProposal: group(AgentOperationProposal),

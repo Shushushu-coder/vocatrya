@@ -23,6 +23,20 @@ const part = (overrides: Record<string, unknown> = {}) =>
 const longPaste = Array.from({ length: 200 }, () => "word").join(" ");
 
 describe("AgentApprovalCard", () => {
+  it("labels a suggested checklist as a plan to adopt and submits its approval", async () => {
+    const onRespond = vi.fn();
+    render(
+      <AgentApprovalCard
+        part={part({ type: "tool-today_plan", input: { action: "suggest", items: ["Prepare interview examples"], target: "today" } })}
+        onRespond={onRespond}
+      />,
+    );
+    expect(screen.getByText("Update today's checklist")).toBeInTheDocument();
+    expect(screen.getByText("Prepare interview examples")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Adopt plan" }));
+    expect(onRespond).toHaveBeenCalledWith({ id: "ap1", approved: true });
+  });
+
   it("renders the arguments as labelled rows under a Needs approval pill", () => {
     render(<AgentApprovalCard part={part()} onRespond={vi.fn()} />);
     expect(screen.getByText("Needs approval")).toBeInTheDocument();

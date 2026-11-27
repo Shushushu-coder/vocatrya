@@ -79,6 +79,8 @@ export type BackupModel =
   | "AIConnection"
   | "AIBusinessAssignment"
   | "ChatConversation"
+  | "ChatTurn"
+  | "ChatTurnStep"
   | "TodayPlanItem"
   | "TodayPlanOperation"
   | "AgentOperationProposal"
@@ -419,6 +421,24 @@ export const MODEL_SPECS: Record<BackupModel, ModelSpec> = {
     delegate: "chatConversation",
     owner: "userId",
     fks: { resolvedConnectionId: "AIConnection" },
+    scope: byUser,
+  },
+  // Unified multi-agent turn & step provenance: user-visible routing and
+  // model provenance history; never re-executes on restore.
+  ChatTurn: {
+    delegate: "chatTurn",
+    owner: "userId",
+    fks: { conversationId: "ChatConversation" },
+    scope: byUser,
+  },
+  ChatTurnStep: {
+    delegate: "chatTurnStep",
+    owner: "userId",
+    fks: {
+      conversationId: "ChatConversation",
+      turnId: "ChatTurn",
+      resolvedConnectionId: "AIConnection",
+    },
     scope: byUser,
   },
   // TODAY-PLAN: user state bound to the conversation + task it joins. Both
@@ -957,6 +977,8 @@ export const INSERT_ORDER: BackupModel[] = [
   "AIConnection",
   "AIBusinessAssignment",
   "ChatConversation",
+  "ChatTurn",
+  "ChatTurnStep",
   // Plan rows need Task (earlier) and ChatConversation; the ledger only
   // needs the conversation. Both wipe before their parents in reverse order.
   "TodayPlanItem",

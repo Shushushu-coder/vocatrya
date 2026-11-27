@@ -1,6 +1,6 @@
 import { effectiveAgentToolNames, agentToolApproval } from "@/lib/agent/toolPermissions";
 it("intersects role, runtime and extension availability", () => {
-  expect(effectiveAgentToolNames({ agentRole: "reflect", freshNativeFull: true, notionTools: ["notion_read", "notion_create_page"] })).toEqual(["list_jobs", "get_job", "read_webpage", "notion_read", "suggest_role"]);
+  expect(effectiveAgentToolNames({ agentRole: "reflect", freshNativeFull: true, notionTools: ["notion_read", "notion_create_page"] })).toEqual(["list_jobs", "get_job", "read_webpage", "get_resume", "today_plan_read", "notion_read", "suggest_role"]);
   const general = effectiveAgentToolNames({ agentRole: null, freshNativeFull: true });
   expect(general).not.toContain("generate_cover_letter");
   // A sibling handoff needs siblings: the general assistant never gets it.

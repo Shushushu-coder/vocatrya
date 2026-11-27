@@ -50,6 +50,12 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
   AgentRole,
   readonly string[]
 > = {
+  // D02 frozen boundary: all 3 roles share read-only tools (list_jobs,
+  // get_job, get_resume, read_webpage, today_plan_read, Notion/Feishu reads).
+  // Write & specialized tools are strictly scoped:
+  // - insight: match_job + review_resume
+  // - pilot: today_plan (write) + add_job + Notion/Feishu writes
+  // - reflect: read-only only
   insight: [
     "list_jobs",
     "get_job",
@@ -62,13 +68,13 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "feishu_search_docs",
     "feishu_read_doc",
     "today_plan_read",
-    "today_plan",
     "suggest_role",
   ],
   pilot: [
     "list_jobs",
     "get_job",
     "read_webpage",
+    "get_resume",
     "add_job",
     "notion_search",
     "notion_read",
@@ -90,12 +96,12 @@ export const AGENT_ROLE_TOOL_ALLOWLIST: Record<
     "list_jobs",
     "get_job",
     "read_webpage",
+    "get_resume",
     "notion_search",
     "notion_read",
     "feishu_search_docs",
     "feishu_read_doc",
     "today_plan_read",
-    "today_plan",
     "suggest_role",
   ],
 };

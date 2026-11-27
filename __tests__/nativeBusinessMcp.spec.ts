@@ -156,7 +156,7 @@ describe('ticket lifecycle, allowlist & fail-closed isolation', () => {
       allowedTools: ['list_jobs', 'today_plan', 'add_job', 'review_resume', 'notion_create_page'],
     });
     expect(reflectTicket.permissionMode).toBe('ask');
-    expect(reflectTicket.allowedTools).toEqual(['list_jobs', 'today_plan']);
+    expect(reflectTicket.allowedTools).toEqual(['list_jobs']);
   });
 
   it('expires tickets past the turn window', () => {
@@ -203,7 +203,8 @@ describe('ticket lifecycle, allowlist & fail-closed isolation', () => {
     });
     expect(insight).toContain('review_resume');
     expect(insight).toContain('match_job');
-    expect(insight).toContain('today_plan');
+    expect(insight).toContain('today_plan_read');
+    expect(insight).not.toContain('today_plan');
     expect(insight).not.toContain('add_job');
     expect(insight).not.toContain(NOTION_TOOL.createPage);
     expect(NATIVE_BUSINESS_TOOLS_MAX).toBeGreaterThanOrEqual(20);

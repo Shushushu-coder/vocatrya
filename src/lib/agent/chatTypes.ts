@@ -15,6 +15,10 @@ export type ChatConversationSummary = {
   updatedAt: string;
   /** Fixed at creation; NULL on pre-multi-agent rows renders as 通用. */
   agentRole: AgentRole | null;
+  /** D08 unified chat mode: UNIFIED | LEGACY_ROLE_BOUND. */
+  chatMode?: string;
+  /** D08 sticky active role pointer (does not mutate historical agentRole). */
+  activeRole?: AgentRole | null;
 };
 
 export type ChatLockKind = "account" | "legacy" | "managed";

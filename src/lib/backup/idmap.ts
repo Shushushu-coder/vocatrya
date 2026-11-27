@@ -92,6 +92,7 @@ const OPTIONAL_FKS = new Set<string>([
 // legacy. Remapped normally when the connection IS in the backup.
 const PRESERVE_DANGLING_FKS = new Set<string>([
   "ChatConversation.resolvedConnectionId",
+  "ChatTurnStep.resolvedConnectionId",
 ]);
 
 export class IdMap {

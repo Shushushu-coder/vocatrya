@@ -13,7 +13,7 @@ const FEISHU_CONFIRM_WRITES = ["feishu_create_doc", "feishu_append_content", "fe
  * only re-admit tools the runtime already registers (the base list below), and
  * only for Pilot; every other role/conversation is filtered exactly as before.
  */
-export function effectiveAgentToolNames(input: { agentRole?: string | null; freshNativeFull?: boolean; notionTools?: readonly string[]; feishuTools?: readonly string[]; taskExtraTools?: readonly string[] | null }) {
+export function effectiveAgentToolNames(input: { agentRole?: string | null; freshNativeFull?: boolean; notionTools?: readonly string[]; feishuTools?: readonly string[]; taskExtraTools?: readonly string[] | null; unified?: boolean }) {
   const role = normalizeAgentRole(input.agentRole);
   const notion = new Set<string>(NOTION_ALL_TOOL_NAMES);
   const feishu = new Set<string>(FEISHU_ALL_TOOL_NAMES);
@@ -22,9 +22,9 @@ export function effectiveAgentToolNames(input: { agentRole?: string | null; fres
     ...(input.freshNativeFull ? [] : ["generate_cover_letter"]),
     ...(input.notionTools ?? []).filter(name => notion.has(name)),
     ...(input.feishuTools ?? []).filter(name => feishu.has(name)),
-    // A sibling handoff only exists where there are siblings to hand to —
-    // the general assistant registers the full registry instead.
-    ...(role ? ["suggest_role"] : []),
+    // Unified chat replaces manual suggest_role handoff cards with automatic
+    // routing (D01/D08); legacy non-unified named roles keep suggest_role.
+    ...(role && !input.unified ? ["suggest_role"] : []),
   ];
   const extra = role === "pilot" ? input.taskExtraTools ?? [] : [];
   return names.filter(name => !role || AGENT_ROLE_TOOL_ALLOWLIST[role].includes(name) || extra.includes(name));

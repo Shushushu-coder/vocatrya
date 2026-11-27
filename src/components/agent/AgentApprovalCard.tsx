@@ -481,7 +481,7 @@ export function AgentApprovalCard({
               approvalId && onRespond({ id: approvalId, approved: true })
             }
           >
-            {t("agent.confirm")}
+            {t(toolName === "today_plan" && input.action === "suggest" ? "todayPlan.adopt" : "agent.confirm")}
           </ConfirmationAction>
           {/* Client-side and always available — it must not depend on a
               server round-trip succeeding. */}

@@ -410,12 +410,11 @@ describe("AgentChatProvider", () => {
     expect(getChatConversation).not.toHaveBeenCalled();
   });
 
-  // open({role}) is the homepage wiring point — it opens the panel and
-  // moves to that role's slot, without sending or creating anything.
-  it("open({role}) activates that role's slot without a send or a create", async () => {
+  // Unified chat: open({role}) opens the panel without switching away the
+  // user's active conversation or triggering any send/create.
+  it("open({role}) opens the unified panel without a send or a create", async () => {
     setup();
     await userEvent.click(screen.getByText("openReflect"));
-    expect(screen.getByTestId("active-role").textContent).toBe("reflect");
     expect(screen.getByTestId("state").textContent).toContain("true|");
     expect(chat.sendMessage).not.toHaveBeenCalled();
     expect(createChatConversation).not.toHaveBeenCalled();

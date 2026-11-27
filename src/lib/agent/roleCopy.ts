@@ -15,6 +15,12 @@ export const AGENT_ROLE_KEYS = {
     reflect: "agent.roles.reflect.name",
     general: "agent.roles.general.name",
   },
+  badge: {
+    insight: "agent.roles.insight.badge",
+    pilot: "agent.roles.pilot.badge",
+    reflect: "agent.roles.reflect.badge",
+    general: "agent.roles.general.badge",
+  },
   subtitle: {
     insight: "agent.roles.insight.subtitle",
     pilot: "agent.roles.pilot.subtitle",
@@ -25,21 +31,25 @@ export const AGENT_ROLE_KEYS = {
 } as const;
 
 export const AGENT_ROLE_FALLBACKS: Record<string, { "zh-CN": string; en: string }> = {
-  "agent.roles.insight.name": { "zh-CN": "Voca Insight", en: "Voca Insight" },
-  "agent.roles.pilot.name": { "zh-CN": "Voca Pilot", en: "Voca Pilot" },
-  "agent.roles.reflect.name": { "zh-CN": "Voca Reflect", en: "Voca Reflect" },
+  "agent.roles.insight.name": { "zh-CN": "职业顾问", en: "Career Advisor" },
+  "agent.roles.pilot.name": { "zh-CN": "执行助手", en: "Action Pilot" },
+  "agent.roles.reflect.name": { "zh-CN": "复盘教练", en: "Reflection Coach" },
   "agent.roles.general.name": { "zh-CN": "通用", en: "General" },
+  "agent.roles.insight.badge": { "zh-CN": "Insight", en: "Insight" },
+  "agent.roles.pilot.badge": { "zh-CN": "Pilot", en: "Pilot" },
+  "agent.roles.reflect.badge": { "zh-CN": "Reflect", en: "Reflect" },
+  "agent.roles.general.badge": { "zh-CN": "", en: "" },
   "agent.roles.insight.subtitle": {
-    "zh-CN": "求职分析师",
-    en: "Job analyst",
+    "zh-CN": "职位与简历分析",
+    en: "Job & resume analysis",
   },
   "agent.roles.pilot.subtitle": {
-    "zh-CN": "工作台助手",
-    en: "Workspace assistant",
+    "zh-CN": "职位记录、待办与扩展操作",
+    en: "Job tracking, to-dos & actions",
   },
   "agent.roles.reflect.subtitle": {
-    "zh-CN": "对话教练",
-    en: "Conversation coach",
+    "zh-CN": "面试复盘与策略陪聊",
+    en: "Interview reflection & strategy",
   },
   "agent.roles.general.subtitle": {
     "zh-CN": "通用助手",
@@ -59,8 +69,16 @@ export const AGENT_ROLE_FALLBACKS: Record<string, { "zh-CN": string; en: string 
     en: "Ask {name} — {duty}",
   },
   "agent.roster.legend": {
-    "zh-CN": "Insight 帮你看 · Pilot 帮你干 · Reflect 陪你聊——顶部图标随时换",
-    en: "Insight analyzes · Pilot does · Reflect talks — switch anytime from the icons up top",
+    "zh-CN": "一个对话自动调度：执行助手帮你做 · 职业顾问帮你看 · 复盘教练陪你聊",
+    en: "One unified chat: Pilot acts · Insight analyzes · Reflect coaches — routed automatically",
+  },
+  "agent.roster.unifiedLead": {
+    "zh-CN": "直接说出你想做的事，我会按你的意图自动安排最合适的助手来回应。",
+    en: "Tell me what you need — I will route your request to the right specialist automatically.",
+  },
+  "agent.roster.unifiedHandoff": {
+    "zh-CN": "先分析再行动也能在同一次回复里接力完成；写操作与待办都会先经你确认。",
+    en: "Multi-step analysis and actions run seamlessly in one turn, with confirmation before any write.",
   },
   "agent.roster.insight.duty": {
     "zh-CN": "帮你看看职位要什么人、简历怎么改",
@@ -71,20 +89,20 @@ export const AGENT_ROLE_FALLBACKS: Record<string, { "zh-CN": string; en: string 
     en: "I read jobs and resumes and tell you how well they fit — match checks, resume reviews.",
   },
   "agent.roster.insight.selfHandoff": {
-    "zh-CN": "我也能管理本次对话的待办；记职位、操作扩展找 Pilot。",
-    en: "I can manage this conversation's to-do list; job and extension writes are Pilot's job.",
+    "zh-CN": "需要记职位或更新待办时，执行助手会自动承接。",
+    en: "When you need job or to-do writes, Pilot steps in automatically.",
   },
   "agent.roster.pilot.duty": {
-    "zh-CN": "帮你记职位、盯投递，动手前先给你确认",
-    en: "log jobs, track applications, always confirms first",
+    "zh-CN": "帮你记职位、管待办、执行操作，动手前先给你确认",
+    en: "log jobs, manage to-dos, run actions — always confirms first",
   },
   "agent.roster.pilot.selfLead": {
-    "zh-CN": "我帮你打理职位：查、记、跟进，动数据前都先给你确认。",
-    en: "I keep your job list in shape — look jobs up, log new ones, and always confirm before touching your data.",
+    "zh-CN": "我帮你打理职位和待办：查、记、跟进，动数据前都先给你确认。",
+    en: "I keep your jobs and to-dos in shape — look up, log, and always confirm before touching your data.",
   },
   "agent.roster.pilot.selfHandoff": {
-    "zh-CN": "想分析简历？找 Insight。",
-    en: "For resume analysis, ask Insight.",
+    "zh-CN": "想分析匹配度或诊断简历时，职业顾问会自动接手。",
+    en: "For match checks or resume reviews, Insight steps in automatically.",
   },
   "agent.roster.reflect.duty": {
     "zh-CN": "陪你聊聊面试、捋捋下一步",
@@ -95,8 +113,8 @@ export const AGENT_ROLE_FALLBACKS: Record<string, { "zh-CN": string; en: string 
     en: "I help you think it through — how the interview went, which offer to pick, what next.",
   },
   "agent.roster.reflect.selfHandoff": {
-    "zh-CN": "我也能管理本次对话的待办；记职位找 Pilot，分析找 Insight。",
-    en: "I can manage this conversation's to-do list; job writes are Pilot's, analysis is Insight's.",
+    "zh-CN": "需要记职位或深度分析时，对应助手会在同一对话里承接。",
+    en: "When you need job writes or deep analysis, the right specialist steps in within the same thread.",
   },
 };
 
