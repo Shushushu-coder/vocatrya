@@ -264,8 +264,8 @@ describe("AgentRoleSwitcher", () => {
   it("keeps full role names on the accessible labels", () => {
     render(<AgentRoleSwitcher />);
     const buttons = within(screen.getByTestId("agent-role-switcher")).getAllByRole("button");
-    expect(buttons[1].textContent).not.toContain("Voca Pilot");
-    expect(buttons[1]).toHaveAttribute("aria-label", "Voca Pilot");
+    expect(buttons[1].textContent).not.toContain("Action Pilot");
+    expect(buttons[1]).toHaveAttribute("aria-label", "Action Pilot");
   });
 });
 
@@ -285,7 +285,7 @@ describe("AgentChatHistory role badges", () => {
   it("badges each row with its role and NULL rows as General", async () => {
     render(<AgentChatHistory onClose={() => {}} />);
     expect(await screen.findByText("分析对话")).toBeInTheDocument();
-    for (const label of ["Voca Insight", "Voca Pilot", "Voca Reflect"]) {
+    for (const label of ["Career Advisor", "Action Pilot", "Reflection Coach"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     const legacy = screen.getByText("旧版对话").closest("li")!;

@@ -245,6 +245,7 @@ describe("POST /api/ai/chat: task sessions", () => {
     expect(system.startsWith(buildAgentChatSystemPrompt("zh-CN", { agentRole: "pilot", freshNativeFull: false, notionTools: [] }))).toBe(true);
     const names = Object.keys(streamArgs().tools).sort();
     expect(names).not.toContain("match_job");
-    expect(names).not.toContain("get_resume");
+    // D02: read-only get_resume is shared across all three roles; match_job stays task-extended only.
+    expect(names).toContain("get_resume");
   });
 });

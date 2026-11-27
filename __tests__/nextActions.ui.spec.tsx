@@ -174,13 +174,13 @@ describe("JourneySection", () => {
     const act = screen.getByTestId("journey-agent-act");
     const review = screen.getByTestId("journey-agent-review");
     expect(prepare).toHaveTextContent(
-      "Ask Voca Insight — what the job wants, how to fix your resume",
+      "Ask Career Advisor — what the job wants, how to fix your resume",
     );
     expect(act).toHaveTextContent(
-      "Ask Voca Pilot — log jobs, track applications, always confirms first",
+      "Ask Action Pilot — log jobs, manage to-dos, run actions — always confirms first",
     );
     expect(review).toHaveTextContent(
-      "Ask Voca Reflect — talk through interviews and next steps",
+      "Ask Reflection Coach — talk through interviews and next steps",
     );
     for (const button of [prepare, act, review]) {
       expect(button.textContent).not.toMatch(/notion/i);

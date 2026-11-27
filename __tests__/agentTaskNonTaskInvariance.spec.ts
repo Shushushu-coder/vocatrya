@@ -120,7 +120,7 @@ describe("career-dialogue prompt without a task binding", () => {
 
 
 describe("To-do tool behavior on ordinary conversations", () => {
-  it.each(["insight", "pilot", "reflect"] as const)("registers working To-do gates for %s without granting other roles' writes", (agentRole) => {
+  it.each(["insight", "pilot", "reflect"] as const)("shares today_plan_read across roles and restricts today_plan writes to Pilot (D02)", (agentRole) => {
     for (const freshNativeFull of [false, true]) {
       for (const permissionMode of ["ask", "rules", "full"] as const) {
         const tools = buildAgentTools({
@@ -131,13 +131,15 @@ describe("To-do tool behavior on ordinary conversations", () => {
           feishuTools: ["feishu_create_doc"],
         });
         expect(tools.today_plan_read).toBeDefined();
-        expect(tools.today_plan).toBeDefined();
-        const gate = tools.today_plan.needsApproval as (input: { action: string }) => boolean;
-        expect(gate({ action: "suggest" })).toBe(true);
-        for (const action of ["add", "rename", "complete", "uncomplete", "move", "remove"]) {
-          expect(gate({ action })).toBe(false);
-        }
-        if (agentRole !== "pilot") {
+        if (agentRole === "pilot") {
+          expect(tools.today_plan).toBeDefined();
+          const gate = tools.today_plan.needsApproval as (input: { action: string }) => boolean;
+          expect(gate({ action: "suggest" })).toBe(true);
+          for (const action of ["add", "rename", "complete", "uncomplete", "move", "remove"]) {
+            expect(gate({ action })).toBe(false);
+          }
+        } else {
+          expect(tools.today_plan).toBeUndefined();
           for (const name of ["add_job", "notion_create_page", "feishu_create_doc"]) expect(tools[name]).toBeUndefined();
         }
       }
@@ -155,17 +157,17 @@ describe("To-do tool behavior on ordinary conversations", () => {
       expect(gate({ action: "add" })).toBe(false);
     }
   });
-  it("grants conversation-scoped writes to every named role and preserves the grounding prompt", () => {
+  it("shares today_plan_read across all named roles and reserves today_plan writes for Pilot (D02)", () => {
     for (const role of ["pilot", "insight", "reflect"] as const) {
       const tools = effectiveAgentToolNames({ agentRole: role });
       expect(tools).toContain("today_plan_read");
-      expect(tools).toContain("today_plan");
+      if (role === "pilot") {
+        expect(tools).toContain("today_plan");
+      } else {
+        expect(tools).not.toContain("today_plan");
+      }
       const prompt = buildAgentChatSystemPrompt("en", { agentRole: role });
       expect(prompt).toContain("today_plan_read");
-      expect(prompt).toContain("suggest");
-      expect(prompt).toContain("today_plan changes it");
-      expect(prompt).not.toContain("checklist changes belong to Voca Pilot");
-      expect(prompt).not.toContain("you cannot change it");
     }
   });
 });

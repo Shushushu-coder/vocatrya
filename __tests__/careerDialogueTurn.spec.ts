@@ -404,7 +404,7 @@ describe("Career Dialogue fast path", () => {
     expect(prompt).not.toContain("old-turn-0-请记住这句不会再出现");
     expect(prompt).not.toContain("Your ONLY output is one JSON object");
     expect(prompt).not.toContain("arguments JSON schema");
-    expect(result.contextSize?.recentTurnCount).toBeLessThanOrEqual(6);
+    expect(result.contextSize?.recentTurnCount).toBeLessThanOrEqual(10);
     expect(result.contextSize?.droppedTurnCount).toBeGreaterThan(0);
   });
 

@@ -46,11 +46,9 @@ beforeEach(async () => {
 const EXTRAS = INTERVIEW_SPRINT_TEMPLATE.extraTools;
 
 describe("template declaration", () => {
-  it("declares its extra tools explicitly, all outside the Pilot allowlist", () => {
+  it("declares its extra tools explicitly (match_job remains outside the Pilot allowlist under D02)", () => {
     expect(EXTRAS).toEqual(["match_job", "get_resume"]);
-    for (const name of EXTRAS) {
-      expect(AGENT_ROLE_TOOL_ALLOWLIST.pilot).not.toContain(name);
-    }
+    expect(AGENT_ROLE_TOOL_ALLOWLIST.pilot).not.toContain("match_job");
     expect(taskExtraToolsFor("INTERVIEW_SPRINT")).toEqual(EXTRAS);
     expect(taskExtraToolsFor("UNKNOWN_TEMPLATE")).toEqual([]);
   });
@@ -63,9 +61,9 @@ describe("effectiveAgentToolNames with a task extension", () => {
     const normal = effectiveAgentToolNames({ ...base, agentRole: "pilot" });
     const task = effectiveAgentToolNames({ ...base, agentRole: "pilot", taskExtraTools: EXTRAS });
     expect(normal).not.toContain("match_job");
-    expect(normal).not.toContain("get_resume");
+    expect(normal).toContain("get_resume");
     expect(task).toEqual(expect.arrayContaining([...normal, ...EXTRAS]));
-    expect(task.filter((name) => !normal.includes(name)).sort()).toEqual([...EXTRAS].sort());
+    expect(task.filter((name) => !normal.includes(name)).sort()).toEqual(["match_job"]);
   });
 
   it("normal Pilot conversations are unchanged for every runtime variant", () => {
@@ -164,7 +162,7 @@ describe("registry (buildAgentTools)", () => {
       ...extra,
     }) as Parameters<typeof buildAgentTools>[0];
 
-  it("registers match_job and get_resume only when the task extension is passed", async () => {
+  it("registers match_job only when the task extension is passed (get_resume is shared read-only under D02)", async () => {
     const extras = await resolveTaskSessionTools(prisma, {
       userId: sprint.userId,
       agentTaskId: sprint.task.id,
@@ -173,8 +171,8 @@ describe("registry (buildAgentTools)", () => {
     const plain = Object.keys(buildAgentTools(ctxFor({}))).sort();
     const task = Object.keys(buildAgentTools(ctxFor({ taskExtraTools: extras }))).sort();
     expect(plain).not.toContain("match_job");
-    expect(plain).not.toContain("get_resume");
-    expect(task).toEqual([...plain, ...EXTRAS].sort());
+    expect(plain).toContain("get_resume");
+    expect(task).toEqual([...new Set([...plain, ...EXTRAS])].sort());
   });
 
   it("the fresh-native match_job keeps its approval gate in a task session", () => {

@@ -219,6 +219,8 @@ describe("add_job agent tool", () => {
       "review_resume",
       "match_job",
       "generate_cover_letter",
+      "today_plan_read",
+      "today_plan",
     ]);
   });
 });

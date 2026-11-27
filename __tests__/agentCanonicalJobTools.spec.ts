@@ -41,6 +41,8 @@ describe("list_jobs and get_job", () => {
       "review_resume",
       "match_job",
       "generate_cover_letter",
+      "today_plan_read",
+      "today_plan",
     ]);
     expect(buildListJobsTool("user-1").needsApproval).toBeUndefined();
     expect(buildGetJobTool("user-1").needsApproval).toBeUndefined();

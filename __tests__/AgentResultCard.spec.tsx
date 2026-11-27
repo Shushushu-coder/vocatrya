@@ -411,7 +411,7 @@ describe("AgentResultCard", () => {
       />,
     );
     expect(screen.getByText(/better fit/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Voca Insight/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Career Advisor/).length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole("button"));
     expect(transferToRole).toHaveBeenCalledWith(
       "insight",

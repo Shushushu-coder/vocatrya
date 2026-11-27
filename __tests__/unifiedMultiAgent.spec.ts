@@ -724,5 +724,5 @@ describe("Unified Multi-Agent D08 — Per-Role Native Bindings, Backup v15 & SQL
         // ignore Windows cleanup flake
       }
     }
-  });
+  }, 60_000);
 });

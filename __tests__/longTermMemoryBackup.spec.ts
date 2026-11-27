@@ -72,15 +72,15 @@ async function unzipJson(buffer: Buffer, name: string) {
 }
 
 describe("UserMemoryEntry backup", () => {
-  it("is classified as backed up and ships in the v14 format with provenance", async () => {
+  it("is classified as backed up and ships in the v15 format with provenance", async () => {
     expect(backupCoverageStatus("UserMemoryEntry")).toBe(BACKUP_COVERAGE_STATUS.BACKED_UP);
-    expect(BACKUP_FORMAT_VERSION).toBe(14);
+    expect(BACKUP_FORMAT_VERSION).toBe(15);
 
     const { buffer } = await buildBackupZip(sourceUserId, "memory-backup-src@example.com");
     const manifest = await unzipJson(buffer, "manifest.json");
     const data = await unzipJson(buffer, "data.json");
 
-    expect(manifest.formatVersion).toBe(14);
+    expect(manifest.formatVersion).toBe(15);
     expect(manifest.counts.UserMemoryEntry).toBe(2);
     expect(data.UserMemoryEntry).toHaveLength(2);
     // Ownership is stripped on export; restore re-injects it.
